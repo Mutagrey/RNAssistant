@@ -108,6 +108,9 @@
           expander.setAttribute("aria-label", (node.expanded ? "Свернуть " : "Развернуть ") + node.title);
           expander.innerHTML = window.RNAssistantIcons.render(node.expanded ? "down" : "right");
           row.appendChild(expander);
+        } else if (options.reserveToggleSpace) {
+          var placeholder = element("span", "navigation-tree-expander");
+          placeholder.setAttribute("aria-hidden", "true"); row.appendChild(placeholder);
         }
 
         if (node.iconHtml) {
@@ -225,6 +228,7 @@
       item.setAttribute("aria-selected", "true");
       item.firstElementChild.classList.add("selected");
       item.firstElementChild.querySelector(".navigation-tree-label").setAttribute("aria-current", "page");
+      if (options.toggleOnSelect && isParent(node)) toggle(item, !node.expanded);
     }
     function on(type, handler) { root.addEventListener(type, handler, { signal: record.events.signal }); }
     on("click", function (event) {

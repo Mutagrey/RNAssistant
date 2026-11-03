@@ -1932,7 +1932,7 @@ artifact names/metadata, single selection, inline JSON values, left-aligned even
 and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally set
 `BROWSER_EXECUTABLE` and `LAYOUT_SCREENSHOT`. This is not Office/WebView2 qualification.
 `tests/web/chat-history-layout.test.js` uses the real preview shell with saved-event
-fixtures: run/step/action hierarchy, exact result/argument subtrees, model composition
+fixtures: run/request/action hierarchy, immediate bounded group overviews, exact result/argument subtrees, model composition
 and return, shared NavigationTree typography/selection/density, every alternate view,
 wide/narrow light/dark layouts, zoom, multiple-run selection and one adjacent reader,
 exact navigation/back and scope, close/reopen/move/split/restore, lazy bodies, empty/error

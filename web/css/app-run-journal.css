@@ -20,6 +20,12 @@
 .rn-run-journal-detail-meta { margin: var(--space-2) 0; }
 .rn-run-journal-result-summary, .rn-run-journal-note { margin: var(--space-2) 0; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
 .rn-run-journal-note { color: var(--ink-muted); }
+.rn-run-journal-overview { margin-top: var(--space-3); }
+.rn-run-journal-overview .rna-table { table-layout: fixed; }
+.rn-run-journal-overview th:first-child { width: 38%; }
+.rn-run-journal-overview td { vertical-align: top; overflow-wrap: anywhere; }
+.rn-run-journal-overview small { display: block; margin-top: var(--space-1); }
+.rn-run-journal-overview-summary { margin-top: var(--space-1); }
 .rn-run-journal-part-controls { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 var(--space-2); }
 .rn-json-toolbar .rn-run-journal-part-controls { display: contents; }
 .rn-run-journal-json, .rn-run-journal-payload { min-width: 0; }

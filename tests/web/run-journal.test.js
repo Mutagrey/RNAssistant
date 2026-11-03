@@ -200,11 +200,50 @@ function selectTree(key) {
   ];
   context.RNAssistantRunJournal.render(root, correlated, options);
   const ancestors = i => treeEntries().find(item => item.node.key === correlated[i].Id).parents.map(key => JSON.parse(key.slice(6)));
-  assert.ok(ancestors(1).some(key => key[0] === "step" && key[2] === "s"));
-  assert.ok(ancestors(3).some(key => key[0] === "step" && key[2] === ""), "ambiguous call never picks an adjacent step");
-  assert.ok(ancestors(5).some(key => key[0] === "step" && key[2] === ""), "attempt correlation stays inside its exact run");
-  assert.equal(ancestors(6).some(key => key[0] === "step"), false, "run bookkeeping stays in the run group");
+  assert.deepEqual(ancestors(1).find(key => key[0] === "exchange"), ancestors(0).find(key => key[0] === "exchange"));
+  assert.equal(ancestors(3).some(key => key[0] === "exchange"), false, "ambiguous call never picks an adjacent request");
+  assert.notDeepEqual(ancestors(5).find(key => key[0] === "exchange"), ancestors(0).find(key => key[0] === "exchange"), "attempt correlation stays inside its exact run");
+  assert.equal(ancestors(6).some(key => key[0] === "exchange"), false, "run bookkeeping stays in the run group");
   assert.equal(treeNodes.length, 3, "uncorrelated events remain explicitly separate");
+
+  const exchanges = [
+    row(1, "step.started", "running", { RunId: "trace", StepId: "transport-1", DataJson: '{"requestId":"q1"}' }),
+    row(2, "model.request.prepared", "prepared", { RunId: "trace", StepId: "logical", ModelAttemptId: "a1", DataJson: '{"requestId":"q1"}' }),
+    row(3, "llm.response", "received", { RunId: "trace", StepId: "logical", ModelAttemptId: "a1", DataJson: '{"requestId":"q1"}' }),
+    row(4, "step.ended", "completed", { RunId: "trace", StepId: "transport-1", DataJson: '{"requestId":"q1"}' }),
+    row(5, "model.attempt.rejected", "rejected", { RunId: "trace", StepId: "logical", ModelAttemptId: "a1", Summary: "Некорректные аргументы" }),
+    row(6, "step.started", "running", { RunId: "trace", StepId: "transport-2", DataJson: '{"requestId":"q2"}' }),
+    row(7, "llm.request", "prepared", { RunId: "trace", StepId: "logical", ModelAttemptId: "a2", DataJson: '{"requestId":"q2"}' }),
+    row(8, "llm.response", "received", { RunId: "trace", StepId: "logical", ModelAttemptId: "a2", DataJson: '{"requestId":"q2"}' }),
+    row(9, "step.ended", "completed", { RunId: "trace", StepId: "transport-2", DataJson: '{"requestId":"q2"}' }),
+    row(10, "tool.call.recorded", "accepted", { RunId: "trace", StepId: "logical", ModelAttemptId: "a2", ToolCallId: "read", ToolId: "core.read" }),
+    row(11, "tool.execution.finished", "completed", { RunId: "trace", ToolCallId: "read", Summary: "Прочитано 12 строк" }),
+    row(12, "step.started", "running", { RunId: "trace", StepId: "bookkeeping-only" }),
+    row(13, "step.ended", "completed", { RunId: "trace", StepId: "bookkeeping-only" })
+  ];
+  mounts.length = 0;
+  let openedRequest;
+  options.onOpenModelContext = target => { openedRequest = target; };
+  context.RNAssistantRunJournal.render(root, exchanges, options);
+  assert.deepEqual(Array.from(treeNodes[0].children, node => node.title), ["Запрос 1", "Запрос 2", "Служебные события"], "lifecycle steps do not create groups; retries remain separate exchanges");
+  assert.equal(treeEntries().filter(item => !item.node.key.startsWith("group:")).length, exchanges.length);
+  assert.match(root.querySelector(".rn-run-journal-detail").textContent, /Некорректные аргументы.*Прочитано 12 строк/);
+  assert.equal(mounts.length, 0, "overview is metadata only");
+  selectTree(treeNodes[0].children[0].key);
+  findButton(root, "Открыть запрос").click();
+  assert.equal(openedRequest.requestEventId, "evt-2", "prepared-request groups open their exact saved request");
+  const secondRequest = treeNodes[0].children[1];
+  selectTree(secondRequest.key);
+  assert.match(root.querySelector(".rn-run-journal-overview").textContent, /Запрос.*Ответ.*Прочитано 12 строк/);
+  const actionId = treeEntries().find(entry => entry.node.title === "Чтение источника").node.key;
+  findButton(root.querySelector(".rn-run-journal-overview"), "Чтение источника").click();
+  assert.equal(root.querySelector(".rn-run-journal-detail").dataset.selectionId, actionId, "overview links select the existing tree node");
+  assert.equal(expanded[secondRequest.key], true, "overview navigation reveals the selected path");
+  const manyRequests = Array.from({ length: 70 }, (_, i) => row(i + 1, "llm.request", "prepared", { RunId: "many", ModelAttemptId: "attempt-" + i }));
+  context.RNAssistantRunJournal.render(root, manyRequests, options);
+  assert.equal(root.querySelector(".rn-run-journal-overview").querySelectorAll("tr").length, 31, "overview has a bounded first page");
+  findButton(root.querySelector(".rn-run-journal-overview"), "Ещё").click();
+  assert.equal(root.querySelector(".rn-run-journal-overview").querySelectorAll("tr").length, 61);
 
   const parts = [row(1, "tool.call.recorded", "accepted", { RunId: "parts", StepId: "s", ToolCallId: "c", DataJson: '{"arguments":{"id":9007199254740993123456789}}' }),
     row(2, "tool.execution.finished", "completed", { RunId: "parts", StepId: "s", ToolCallId: "c", DataJson: '{"resultData":{"count":9007199254740993123456789,"count":3}}' })];

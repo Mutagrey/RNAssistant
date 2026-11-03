@@ -480,7 +480,7 @@
     journalStateChatId = responseScope;
     selected = null;
     root.setAttribute("role", "region");
-    root.setAttribute("aria-label", "Дерево запусков и шагов");
+    root.setAttribute("aria-label", "Дерево запусков, запросов и действий");
     if (!adapter || typeof adapter.render !== "function") {
       root.replaceChildren();
       var unavailable = document.createElement("div");

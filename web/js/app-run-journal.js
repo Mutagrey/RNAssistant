@@ -3,6 +3,7 @@
 
   var MAX_RENDERED_ROWS = 1000;
   var MAX_BULK_EXPANDED_ROWS = 50;
+  var OVERVIEW_PAGE_SIZE = 30;
   var FILTERS = [
     { id: "all", label: "Все" },
     { id: "problems", label: "Проблемы" },
@@ -451,10 +452,25 @@
     return labels[tool] || tool || "Действие";
   }
 
-  // Presentation only. A missing correlation can be resolved only through a unique,
-  // recorded call/attempt -> step link inside this exact run, never by adjacency.
+  function isRequest(row) { return /^(model.request.prepared|llm.request)$/.test(rowKind(row)); }
+  function isReply(row) { return /^(llm.response|llm.failure|model.response.accepted|model.attempt.rejected|agent.response.rejected)$/.test(rowKind(row)); }
+
+  // Only recorded request/attempt/call identities link an exchange. A unique
+  // logical step may attach metadata, but lifecycle rows never create exchanges.
   function buildTree(rows) {
-    var runs = new Map();
+    var runs = new Map(), trace = new Map();
+    function identity(row) {
+      if (trace.has(row)) return trace.get(row);
+      var fields = { attempt: correlation(row, "ModelAttemptId"), request: "", step: correlation(row, "StepId") };
+      if ((isRequest(row) || isReply(row) || /^step\./.test(rowKind(row))) && !value(row, "DataTruncated", "dataTruncated", false) && window.RNAssistantJsonViewer) {
+        var parsed = RNAssistantJsonViewer.parse(value(row, "DataJson", "dataJson", ""));
+        if (parsed.ok && parsed.root.type === "object") {
+          var matches = parsed.root.entries.filter(function (entry) { return entry.key.value === "requestId" || entry.key.value === "RequestId"; });
+          if (matches.length === 1 && matches[0].value.type === "string") fields.request = matches[0].value.value;
+        }
+      }
+      trace.set(row, fields); return fields;
+    }
     rows.forEach(function (row) {
       var id = correlation(row, "RunId");
       if (!runs.has(id)) runs.set(id, group("run", ["run", id], []));
@@ -462,89 +478,107 @@
     });
     runs.forEach(function (run, runId) {
       run.runId = runId;
-      var links = new Map(), steps = new Map(), boundaries = [];
-      run.rows.forEach(function (row) {
-        var step = correlation(row, "StepId");
-        if (!step || isRunBoundary(row)) return;
-        ["ToolCallId", "ModelAttemptId"].forEach(function (field) {
-          var id = correlation(row, field);
-          if (!id) return;
-          var key = JSON.stringify([field, id]);
-          if (!links.has(key)) links.set(key, new Set());
-          links.get(key).add(step);
+      var exchanges = new Map(), seeds = new Map(), links = { request: new Map(), attempt: new Map(), step: new Map() }, calls = new Map();
+      function register(node, fields) {
+        ["request", "attempt", "step"].forEach(function (field) {
+          var id = fields[field]; if (!id || !runId) return;
+          node.identities[field].add(id);
+          if (!links[field].has(id)) links[field].set(id, new Set());
+          links[field].get(id).add(node);
         });
-      });
-      run.rows.forEach(function (row) {
-        if (isRunBoundary(row)) { boundaries.push(row); return; }
-        var step = correlation(row, "StepId");
-        if (!step && runId) {
-          var candidates = new Set();
-          ["ToolCallId", "ModelAttemptId"].forEach(function (field) {
-            var known = links.get(JSON.stringify([field, correlation(row, field)]));
-            if (known) known.forEach(function (id) { candidates.add(id); });
+      }
+      function resolve(fields, allowStep) {
+        if (!runId) return null;
+        var candidates = null;
+        ["request", "attempt"].forEach(function (field) {
+          var known = fields[field] && links[field].get(fields[field]);
+          if (known) candidates = candidates === null ? Array.from(known) : candidates.filter(function (node) { return known.has(node); });
+        });
+        if (candidates !== null) {
+          candidates = candidates.filter(function (node) {
+            return ["request", "attempt"].every(function (field) {
+              return !fields[field] || !node.identities[field].size || node.identities[field].has(fields[field]);
+            });
           });
-          if (candidates.size === 1) step = Array.from(candidates)[0];
+          return candidates.length === 1 ? candidates[0] : null;
         }
-        if (!steps.has(step)) {
-          var branch = group("step", ["step", runId, step], [], step ? "Шаг " + (Array.from(steps.keys()).filter(Boolean).length + 1) : "Без привязки к шагу");
-          branch.stepId = step;
-          steps.set(step, branch);
+        if (fields.request || fields.attempt || !allowStep) return null;
+        var steps = links.step.get(fields.step);
+        return steps && steps.size === 1 ? Array.from(steps)[0] : null;
+      }
+      function seed(row, request) {
+        var fields = identity(row), node = resolve(fields, !request);
+        if (!node) {
+          var id = runId && (fields.request || fields.attempt) || rowId(row);
+          var key = JSON.stringify([request ? "request" : "unbound-response", fields.request ? "requestId" : fields.attempt ? "attemptId" : "event", id]);
+          if (!exchanges.has(key)) {
+            node = group("exchange", ["exchange", runId, key], []);
+            node.identities = { request: new Set(), attempt: new Set(), step: new Set() };
+            exchanges.set(key, node);
+          }
+          node = exchanges.get(key);
         }
-        steps.get(step).rows.push(row);
+        if (request && !node.request) node.request = row;
+        register(node, fields); seeds.set(row, node);
+      }
+      run.rows.filter(isRequest).forEach(function (row) { seed(row, true); });
+      run.rows.filter(isReply).forEach(function (row) { seed(row, false); });
+      run.rows.forEach(function (row) {
+        var call = correlation(row, "ToolCallId"); if (!call || !runId) return;
+        var fields = identity(row), owner = resolve(fields, true);
+        if (!calls.has(call)) calls.set(call, new Set());
+        if (owner || fields.attempt || fields.request || fields.step) calls.get(call).add(owner);
       });
-      steps.forEach(function (step) {
-        var actions = new Map(), models = new Map(), secondary = [];
-        step.rows.forEach(function (row) {
-          var call = correlation(row, "ToolCallId"), attempt = correlation(row, "ModelAttemptId");
+      var bookkeeping = [], unbound = [];
+      run.rows.forEach(function (row) {
+        if (isRunBoundary(row)) { bookkeeping.push(row); return; }
+        var fields = identity(row), owner = seeds.get(row) || resolve(fields, true);
+        if (!owner && !fields.attempt && !fields.request) {
+          var known = calls.get(correlation(row, "ToolCallId"));
+          if (known && known.size === 1) owner = Array.from(known)[0];
+        }
+        if (owner) owner.rows.push(row);
+        else if (isTool(row)) unbound.push(row);
+        else bookkeeping.push(row);
+      });
+      function children(parent) {
+        var actions = new Map(), secondary = [];
+        parent.rows.forEach(function (row) {
           if (isTool(row)) {
-            var key = call && runId ? call : rowId(row);
-            if (!actions.has(key)) {
-              var action = group("action", ["action", runId, step.stepId, key], []);
-              action.toolCallId = call;
-              actions.set(key, action);
+            var call = correlation(row, "ToolCallId"), id = call && runId ? call : rowId(row);
+            if (!actions.has(id)) {
+              var action = group("action", ["action", runId, parent.id, id], []);
+              action.toolCallId = call; actions.set(id, action);
             }
-            actions.get(key).rows.push(row);
-          } else if (isModel(row) && !/^step\./.test(rowKind(row))) {
-            // Uncorrelated model events share a clearly labelled bucket, not an invented attempt.
-            var modelKey = runId ? attempt : rowId(row);
-            if (!models.has(modelKey)) models.set(modelKey, group("model", ["model", runId, step.stepId, modelKey], []));
-            models.get(modelKey).rows.push(row);
-          } else secondary.push(row);
+            actions.get(id).rows.push(row);
+          } else if (isRequest(row) || /^(llm.response|llm.failure)$/.test(rowKind(row))) parent.children.push(eventNode(row));
+          else secondary.push(row);
         });
         actions.forEach(function (action) {
-          action.title = actionTitle(action.rows);
-          action.children = action.rows.map(eventNode);
-          step.children.push(action);
+          action.title = actionTitle(action.rows); action.children = action.rows.map(eventNode); parent.children.push(action);
         });
-        if (models.size) {
-          var modelRows = [];
-          models.forEach(function (model) { modelRows = modelRows.concat(model.rows); });
-          modelRows.sort(function (a, b) { return firstSequence(a) - firstSequence(b); });
-          var modelBranch = group("models", ["models", runId, step.stepId], modelRows, "Обмен с моделью");
-          models.forEach(function (model, id) {
-            model.title = id ? "Попытка " + (modelBranch.children.length + 1) : "Без привязки к попытке";
-            model.children = model.rows.map(eventNode);
-            modelBranch.children.push(model);
-          });
-          // A single attempt does not need another disclosure level.
-          if (models.size === 1) modelBranch.children = modelRows.map(eventNode);
-          step.children.push(modelBranch);
-        }
+        parent.children.sort(function (a, b) { return firstSequence(a.rows[0]) - firstSequence(b.rows[0]); });
         if (secondary.length) {
-          var service = group("service", ["service", runId, step.stepId], secondary, "Служебные события");
-          service.children = secondary.map(eventNode);
-          step.children.push(service);
+          var service = group("service", ["service", runId, parent.id], secondary, "Служебные события");
+          service.children = secondary.map(eventNode); parent.children.push(service);
         }
-        step.children.sort(function (a, b) {
-          if (a.type === "service" || b.type === "service") return a.type === b.type ? 0 : a.type === "service" ? 1 : -1;
-          return firstSequence(a.rows[0]) - firstSequence(b.rows[0]);
-        });
-        run.children.push(step);
+      }
+      var number = 0;
+      Array.from(exchanges.values()).sort(function (a, b) {
+        return firstSequence(a.request || a.rows[0]) - firstSequence(b.request || b.rows[0]);
+      }).forEach(function (exchange) {
+        exchange.title = exchange.request ? "Запрос " + (++number) : "Ответ без привязки к запросу";
+        exchange.stepIds = Array.from(exchange.identities.step);
+        delete exchange.identities;
+        children(exchange); run.children.push(exchange);
       });
-      if (boundaries.length) {
-        var lifecycle = group("service", ["lifecycle", runId], boundaries, "События запуска");
-        lifecycle.children = boundaries.map(eventNode);
-        run.children.push(lifecycle);
+      if (unbound.length) {
+        var unlinked = group("unlinked", ["unlinked", runId], unbound, "Действия без привязки к запросу");
+        children(unlinked); run.children.push(unlinked);
+      }
+      if (bookkeeping.length) {
+        var service = group("service", ["lifecycle", runId], bookkeeping, "Служебные события");
+        service.children = bookkeeping.map(eventNode); run.children.push(service);
       }
     });
     return Array.from(runs.values());
@@ -553,7 +587,8 @@
   function representative(node) {
     var issue = node.rows.filter(isProblem).sort(function (a, b) { return issuePriority(b) - issuePriority(a); })[0];
     if (node.type === "run") return terminalRow(node.rows, ["turn.ended", "run.ended"]);
-    if (node.type === "step") return terminalRow(node.rows, ["step.ended"]);
+    if (node.type === "exchange") return terminalRow(node.rows, ["model.response.accepted", "model.attempt.rejected", "agent.response.rejected", "llm.failure"]) ||
+      terminalRow(node.rows, ["llm.response"]) || node.request;
     if (node.type === "action") return issue || terminalRow(node.rows,
       ["tool.execution.completed", "tool.execution.finished", "tool.result.recorded", "domain.effect.verified"]) || node.rows[node.rows.length - 1];
     return node.rows.slice().sort(function (a, b) { return issuePriority(b) - issuePriority(a); })[0];
@@ -567,9 +602,16 @@
   function groupStatus(node) {
     var row = representative(node), problem = node.rows.some(isProblem);
     if (node.type === "service") return node.rows.some(hasUnknownEffect) ? "Не подтверждено" : problem ? "Есть проблемы" : countLabel(node.rows.length, ["событие", "события", "событий"]);
-    if (node.type === "run" || node.type === "step") {
+    if (node.type === "exchange") {
+      if (!node.request) return "Запрос не найден в выборке";
+      if (!row || isRequest(row)) return "Ответ не найден в выборке";
+      if (rowKind(row) === "model.response.accepted") return "Ответ принят";
+      if (rowStatus(row) === "rejected") return "Ответ отклонён";
+      return rowKind(row) === "llm.response" ? "Ответ получен" : statusLabel(rowStatus(row));
+    }
+    if (node.type === "run") {
       if (row) return statusLabel(rowStatus(row)) + (node.rows.some(hasUnknownEffect) && !hasUnknownEffect(row) ? " · эффект не подтверждён" : !isProblem(row) && problem ? " · были проблемы" : "");
-      return node.rows.some(hasUnknownEffect) ? "Эффект не подтверждён" : problem ? "Есть проблемы" : (node.type === "run" ? "Итог не найден в выборке" : "");
+      return node.rows.some(hasUnknownEffect) ? "Эффект не подтверждён" : problem ? "Есть проблемы" : "Итог не найден в выборке";
     }
     if (node.rows.some(hasUnknownEffect)) return "Не подтверждено";
     if (problem) return "Есть проблемы";
@@ -718,15 +760,15 @@
       var button = actionButton(label, action);
       root.rnaJournalCommands.push(button); expand.appendChild(button);
     }
-    var stepIds = [], allIds = [], problemPaths = new Set();
+    var exchangeIds = [], allIds = [], problemPaths = new Set();
     var limitedProblems = rows.filter(isProblem).slice(0, MAX_BULK_EXPANDED_ROWS).map(rowId);
     visitTree(tree, function (node, path) {
       if (node.type !== "event") allIds.push(node.id);
-      if (node.type === "run" || node.type === "step") stepIds.push(node.id);
+      if (node.type === "run" || node.type === "exchange") exchangeIds.push(node.id);
       if (limitedProblems.indexOf(node.id) >= 0) path.concat(node.id).forEach(function (id) { problemPaths.add(id); });
     });
-    command("Развернуть шаги", function () {
-      if (typeof options.onExpandedSet === "function") options.onExpandedSet(stepIds, true);
+    command("Развернуть запросы", function () {
+      if (typeof options.onExpandedSet === "function") options.onExpandedSet(exchangeIds, true);
     });
     var problemIds = Array.from(problemPaths);
     var expandLabel = problems > MAX_BULK_EXPANDED_ROWS
@@ -747,7 +789,7 @@
       var date = new Date(value(node.rows[0], "CreatedUtc", "createdUtc", ""));
       return node.runId ? "Запуск" + (isNaN(date.getTime()) ? "" : " · " + date.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) : "Без привязки к запуску";
     }
-    return node.type === "models" ? "Модель" : node.title;
+    return node.title;
   }
 
   function navigationNode(node, filter, options, latestRun, selectedId, selectedPath) {
@@ -755,48 +797,109 @@
     var targeted = !!((options.activeStepId && node.rows.some(function (item) { return correlation(item, "StepId") === options.activeStepId; })) ||
       (options.activeToolCallId && node.rows.some(function (item) { return correlation(item, "ToolCallId") === options.activeToolCallId; })));
     var defaultOpen = filter !== "all" || node.type === "run" && (node.runId === options.activeRunId || node === latestRun) ||
-      targeted && (node.type === "run" || node.type === "step") || selectedPath.indexOf(node.id) >= 0;
+      targeted && (node.type === "run" || node.type === "exchange" || node.type === "unlinked") || selectedPath.indexOf(node.id) >= 0;
     var open = options.expanded && Object.prototype.hasOwnProperty.call(options.expanded, node.id) ? !!options.expanded[node.id] : defaultOpen;
     var uncertain = node.rows.some(hasUnknownEffect), problem = node.rows.some(isProblem);
     var title = node.type === "event" ? titleLabel(node.row) : navigatorTitle(node);
     var status = node.type === "event" ? statusLabel(rowStatus(node.row)) : groupStatus(node);
     return { key: node.id, kind: children.length ? "parent" : "item", selectable: true,
       title: title, tooltip: [title, status].filter(Boolean).join(" · "), ariaLabel: [title, status].filter(Boolean).join(". "),
-      iconHtml: window.RNAssistantIcons.render(node.type === "run" ? "clock" : node.type === "step" ? "layers" : node.type === "action" ? "tool" : node.type === "event" ? "file" : "code"),
+      iconHtml: window.RNAssistantIcons.render(node.type === "run" ? "clock" : node.type === "exchange" ? "code" : node.type === "action" ? "tool" : node.type === "event" ? "file" : "layers"),
       badge: uncertain ? "?" : problem ? "!" : "", badgeKind: uncertain ? "warning" : problem ? "critical" : "",
       badgeTitle: status, selected: node.id === selectedId, expanded: open,
       children: children.map(function (child) { return navigationNode(child, filter, options, latestRun, selectedId, selectedPath); }) };
   }
 
+  function groupSummary(node) {
+    var row = representative(node), summary = row && displayCause(row);
+    if (summary) return summary;
+    if (node.type === "run" || node.type === "exchange") return "";
+    var problem = node.rows.find(function (item) { return isProblem(item) && (displayCause(item) || effectExplanation(item)); });
+    if (problem) return displayCause(problem) || effectExplanation(problem);
+    if (node.type === "action") return row && (effectExplanation(row) || rowNote(row)) || "";
+    var explanation = terminalRow(node.rows.filter(function (item) { return !!displayCause(item); }), ["model.response.accepted", "tool.call.recorded"]);
+    return explanation ? displayCause(explanation) : "";
+  }
+
+  function structureEntries(node) {
+    function item(child) {
+      var row = child.type === "event" ? child.row : representative(child);
+      return { id: child.id, title: child.type === "event" ? titleLabel(row) : navigatorTitle(child),
+        meta: child.type === "exchange" ? timeLabel(child.request || row) : child.type === "action" ?
+          child.rows.map(function (entry) { return correlation(entry, "Target"); }).filter(Boolean)[0] : row && timeLabel(row),
+        status: child.type === "event" ? statusLabel(rowStatus(row)) : groupStatus(child),
+        summary: child.type === "event" ? displayCause(row) || effectExplanation(row) : groupSummary(child),
+        actions: child.type === "exchange" ? child.children.filter(function (entry) { return entry.type === "action"; }) : [] };
+    }
+    if (node.type === "run") return node.children.filter(function (child) { return child.type !== "service"; }).map(item);
+    if (node.type === "exchange") {
+      var response = terminalRow(node.rows, ["llm.response", "llm.failure", "model.attempt.rejected", "agent.response.rejected"]) ||
+        terminalRow(node.rows, ["model.response.accepted"]);
+      var entries = [[node.request, "Запрос"], [response, "Ответ"]].map(function (pair) {
+        var row = pair[0];
+        return { id: row && rowId(row), title: pair[1], meta: row && timeLabel(row),
+          status: row ? pair[1] === "Ответ" && node.request ? groupStatus(node) : statusLabel(rowStatus(row)) : "Нет в загруженной выборке",
+          summary: row && (displayCause(row) || (pair[1] === "Ответ" ? groupSummary(node) : "") || effectExplanation(row)), actions: [] };
+      });
+      return entries.concat(node.children.filter(function (child) { return child.type === "action"; }).map(item));
+    }
+    return node.children.map(item);
+  }
+
+  function renderStructure(host, node, options) {
+    var entries = structureEntries(node);
+    if (!entries.length) return;
+    var wrap = appendText(host, "div", "rna-table-wrap rn-run-journal-overview", "");
+    var table = appendText(wrap, "table", "rna-table", "");
+    table.setAttribute("aria-label", node.type === "run" ? "Запросы и результаты" : "Состав и результаты");
+    var header = appendText(appendText(table, "thead", "", ""), "tr", "", "");
+    [node.type === "run" ? "Запрос" : "Состав", "Результат"].forEach(function (label) { appendText(header, "th", "", label).setAttribute("scope", "col"); });
+    var body = appendText(table, "tbody", "", ""), count = 0;
+    var more = actionButton("Ещё", page);
+    function page() {
+      var end = Math.min(entries.length, count + OVERVIEW_PAGE_SIZE);
+      for (; count < end; count++) {
+        var entry = entries[count], row = appendText(body, "tr", "", "");
+        var label = appendText(row, "td", "", ""), result = appendText(row, "td", "", "");
+        if (entry.id) {
+          (function (target) {
+            var link = actionButton(target.title, function () { options.onInspect(target.id); });
+            link.className = "rna-table-link"; label.appendChild(link);
+          })(entry);
+        } else appendText(label, "span", "", entry.title);
+        if (entry.meta) appendText(label, "small", "", entry.meta);
+        appendText(result, "span", "", entry.status);
+        if (entry.summary) appendText(result, "div", "rn-run-journal-overview-summary", entry.summary);
+        (entry.actions || []).slice(0, 3).forEach(function (action) {
+          appendText(result, "small", "", [action.title, groupStatus(action), groupSummary(action)].filter(Boolean).join(" · "));
+        });
+        if (entry.actions && entry.actions.length > 3) appendText(result, "small", "", "Ещё действий: " + (entry.actions.length - 3));
+      }
+      more.hidden = count >= entries.length;
+    }
+    page(); wrap.appendChild(more);
+  }
+
   function renderGroupDetail(host, node, options) {
-    var row = representative(node);
-    detailHeading(host, navigatorTitle(node), groupStatus(node));
-    var steps = node.type === "run" ? node.children.filter(function (child) { return child.type === "step" && child.stepId; }).length : 0;
-    var tools = node.type === "run" || node.type === "step" ? uniqueToolCallCount(node.rows) : 0;
-    var counts = [steps ? countLabel(steps, ["шаг", "шага", "шагов"]) : "",
+    var heading = detailHeading(host, navigatorTitle(node), node.type === "exchange" ? "" : groupStatus(node));
+    var requests = node.type === "run" ? node.children.filter(function (child) { return child.type === "exchange" && child.request; }).length : 0;
+    var tools = node.type === "run" || node.type === "exchange" || node.type === "unlinked" ? uniqueToolCallCount(node.rows) : 0;
+    var counts = [requests ? countLabel(requests, ["запрос", "запроса", "запросов"]) : "",
       tools ? countLabel(tools, ["действие", "действия", "действий"]) : ""].filter(Boolean).join(" · ");
     if (counts) appendText(host, "p", "rn-run-journal-detail-meta", counts);
-    var cause = row && (displayCause(row) || (node.type === "action" ? effectExplanation(row) || rowNote(row) : ""));
-    if (!cause && node.type === "step") {
-      var explanation = terminalRow(node.rows.filter(function (item) { return !!displayCause(item); }), ["model.response.accepted", "tool.call.recorded"]);
-      cause = explanation && displayCause(explanation);
+    if (node.type === "run" || node.type === "action") {
+      var summary = groupSummary(node);
+      if (summary) appendText(host, "p", "rn-run-journal-result-summary", summary);
     }
-    var notes = new Set(cause ? [cause] : []);
-    if (node.type === "run" || node.type === "step") node.rows.filter(isProblem).forEach(function (item) {
-      var problem = displayCause(item) || effectExplanation(item);
-      if (problem && notes.size < 3) notes.add(problem);
-    });
-    notes.forEach(function (text) { appendText(host, "p", "rn-run-journal-result-summary", text); });
-    var target = node.type === "action" && node.rows.map(function (item) { return correlation(item, "Target"); }).filter(Boolean)[0];
+    var target = node.type === "action" && node.rows.map(function (row) { return correlation(row, "Target"); }).filter(Boolean)[0];
     if (target) appendText(host, "p", "rn-run-journal-detail-meta", target);
     if (node.type === "action") { actionContent(host, node, options); return; }
-    if ((node.type === "step" || node.type === "models" || node.type === "model") && typeof options.onOpenModelContext === "function") {
-      var requests = node.rows.filter(function (item) { return rowKind(item) === "llm.request" && sourceIds(item).length === 1; });
-      var request = requests[requests.length - 1];
-      if (request) host.appendChild(actionButton(requests.length > 1 ? "Открыть последний запрос" : "Открыть запрос", function () {
-        options.onOpenModelContext({ runId: correlation(request, "RunId"), stepId: correlation(request, "StepId"), requestEventId: sourceIds(request)[0] });
+    if (node.type === "exchange" && node.request && sourceIds(node.request).length === 1 && typeof options.onOpenModelContext === "function") {
+      heading.appendChild(actionButton("Открыть запрос", function () {
+        options.onOpenModelContext({ runId: correlation(node.request, "RunId"), stepId: correlation(node.request, "StepId"), requestEventId: sourceIds(node.request)[0] });
       }));
     }
+    renderStructure(host, node, options);
   }
 
   function renderError(root, error) {
@@ -860,7 +963,7 @@
       tree.forEach(function (node) { indexNode(node, ""); });
       var latestRun = tree[tree.length - 1], selectedId = options.selectedId && nodes[options.selectedId] && visibleNode(nodes[options.selectedId], filter)
         ? options.selectedId : options.activeToolCallId && Object.keys(nodes).find(function (id) { return nodes[id].toolCallId === options.activeToolCallId && visibleNode(nodes[id], filter); }) ||
-          options.activeStepId && Object.keys(nodes).find(function (id) { return nodes[id].stepId === options.activeStepId && nodes[id].type === "step" && visibleNode(nodes[id], filter); }) ||
+          options.activeStepId && Object.keys(nodes).reverse().find(function (id) { return nodes[id].type === "exchange" && nodes[id].stepIds.indexOf(options.activeStepId) >= 0 && visibleNode(nodes[id], filter); }) ||
           (tree.filter(function (node) { return visibleNode(node, filter); }).slice(-1)[0] || {}).id;
       function select(id) {
         if (!nodes[id] || !options.isAlive()) return;
@@ -874,6 +977,22 @@
         root.rnaPayloadPauses = [];
         var selectionToken = {}; root.rnaJournalSelection = selectionToken;
         var viewerOptions = Object.assign({}, options, { payloadCleanups: root.rnaPayloadCleanups, payloadPauses: root.rnaPayloadPauses,
+          onInspect: function (targetId) {
+            if (!nodes[targetId]) return;
+            if (!visibleNode(nodes[targetId], filter)) {
+              if (options.onSelect) options.onSelect(targetId);
+              if (options.onFilterChange) { options.onFilterChange("all"); return; }
+              filter = "all";
+            }
+            var parent = parents[targetId];
+            while (parent) {
+              if (!options.expanded) options.expanded = {};
+              options.expanded[parent] = true;
+              if (options.onExpandedChange) options.onExpandedChange(parent, true);
+              parent = parents[parent];
+            }
+            select(targetId); renderTree();
+          },
           isAlive: function () { return options.isAlive() && root.rnaJournalSelection === selectionToken; } });
         detail.dataset.selectionId = id;
         if (node.type === "event") renderEventDetail(detail, node.row, viewerOptions);
@@ -884,13 +1003,13 @@
         while (parent) { selectedPath.push(parent); parent = parents[parent]; }
         RNAssistantNavigationTree.render(list, tree.filter(function (node) { return visibleNode(node, filter); }).map(function (node) {
           return navigationNode(node, filter, options, latestRun, selectedId, selectedPath);
-        }), { label: "Запуски, шаги и действия", emptyText: "Для выбранного фильтра строк нет.",
+        }), { label: "Запуски, запросы и действия", emptyText: "Для выбранного фильтра строк нет.", toggleOnSelect: true, reserveToggleSpace: true,
           onSelect: function (item) { select(item.key); },
           onToggle: function (item, expanded) { if (typeof options.onExpandedChange === "function") options.onExpandedChange(item.key, expanded); } });
       }
       renderTree();
       if (selectedId) select(selectedId);
-      else appendText(detail, "p", "rn-run-journal-empty", "Выберите запуск или шаг слева.");
+      else appendText(detail, "p", "rn-run-journal-empty", "Выберите запуск или запрос слева.");
       return {
         displayed: visible.length,
         loaded: rows.length,

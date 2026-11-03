@@ -9,7 +9,8 @@ domain owners. Стратегия и продолжение общего chat-с
 2026-11-03). `app-diagnostics-navigation` владеет маршрутом и scope,
 `app-trajectory` — bounded чтением и выбором, `app-run-journal` — presentation
 дерева и одного reader. Дерево рисует общий NavigationTree, данные — существующие
-JSON/payload viewers; прежний inline renderer удалён. Hide отменяет pending read,
+JSON/payload viewers. Выбор с переключением раскрытия принадлежит опции
+NavigationTree; прежний inline renderer удалён. Hide отменяет pending read,
 close освобождает viewers, reopen читает метаданные с сохранённым выбором;
 move/split/restore сохраняют DOM. Закрытие UI не отменяет domain run.
 Источник чтения закреплён за owner/workspace/chat вкладки, а не текущим composer.
@@ -17,6 +18,10 @@ move/split/restore сохраняют DOM. Закрытие UI не отменя
 Явный вход из rail/status bar или строки другого чата меняет scope и отменяет
 предыдущий запрос; response scope и generation по-прежнему проверяются.
 Экспорт сохраняет дополнительную отмену при смене активного источника.
+RunJournal группирует обмены по записанным request/attempt IDs внутри exact run;
+уникальные step/call связи присоединяют метаданные и действия. Lifecycle events
+не создают самостоятельных обменов. Отсутствующая/неоднозначная связь показывается
+явно. Обзор строится из той же bounded projection, по 30 строк, без body reads.
 
 Основание: запрос «UI Strategy Transition» и сохранённый без изменений
 [исходный документ](reference/RNAssistant_UI_Architecture_and_Agent_Rules.md), v1.0 от 2026-11-01.
