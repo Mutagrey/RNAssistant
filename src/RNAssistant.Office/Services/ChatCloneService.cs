@@ -517,6 +517,7 @@ namespace RNAssistant.Office.Services
                 Sequence = activity.Sequence,
                 StepId = activity.StepId,
                 StepMessage = activity.StepMessage,
+                StepReason = activity.StepReason,
                 Kind = activity.Kind,
                 Title = activity.Title,
                 Display = activity.Display,

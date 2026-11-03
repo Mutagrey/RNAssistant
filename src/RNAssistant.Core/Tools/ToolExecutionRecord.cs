@@ -66,6 +66,7 @@ namespace RNAssistant.Core.Tools
         public string ResultFingerprint { get; private set; }
         public bool IndependentLocalRead { get; private set; }
         public bool OpaqueAction { get; private set; }
+        public bool OpaqueActionCompleted { get; private set; }
         public EvidenceEligibility EvidenceEligibility { get; private set; }
         public DateTime? CompletedUtc { get; private set; }
         public string AdmissionRevision { get; private set; }
@@ -73,7 +74,8 @@ namespace RNAssistant.Core.Tools
         [JsonConstructor]
         public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
             string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null,
-            DateTime? completedUtc = null, bool opaqueAction = false, EvidenceEligibility evidenceEligibility = EvidenceEligibility.None)
+            DateTime? completedUtc = null, bool opaqueAction = false, EvidenceEligibility evidenceEligibility = EvidenceEligibility.None,
+            bool opaqueActionCompleted = false)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
             CompletedUtc = completedUtc;
@@ -81,6 +83,9 @@ namespace RNAssistant.Core.Tools
             if (!Enum.IsDefined(typeof(EvidenceEligibility), evidenceEligibility)) throw new ArgumentOutOfRangeException(nameof(evidenceEligibility));
             EvidenceEligibility = evidenceEligibility;
             OpaqueAction = opaqueAction;
+            if (opaqueActionCompleted && (!opaqueAction || outcome != ToolExecutionOutcome.Unknown))
+                throw new ArgumentException("Normal opaque completion must retain unknown effect health.");
+            OpaqueActionCompleted = opaqueActionCompleted;
             AdmissionRevision = admissionRevision;
         }
 
@@ -97,7 +102,9 @@ namespace RNAssistant.Core.Tools
                 record.Context.Policy.IndependentLocalRead,
                 record.Context.Policy.AdmissionRevision ?? record.Context.Policy.Revision, record.CompletedUtc,
                 record.Context.Policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction,
-                record.Context.Policy.Policy?.EvidenceEligibility ?? EvidenceEligibility.None);
+                record.Context.Policy.Policy?.EvidenceEligibility ?? EvidenceEligibility.None,
+                record.Context.Policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction &&
+                    record.Outcome == ToolExecutionOutcome.Unknown && record.Evidence.InvocationCompleted);
         }
     }
 

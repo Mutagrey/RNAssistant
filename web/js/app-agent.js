@@ -190,10 +190,11 @@ function groupAgentRunSteps(timeline) {
   var current = null;
   var seenSteps = Object.create(null);
 
-  function startStep(stepId, message) {
+  function startStep(stepId, message, reason) {
     current = {
       id: stepId || ("unscoped-" + steps.length),
       message: message || "",
+      reason: reason || "",
       items: [],
       ambient: null
     };
@@ -207,6 +208,7 @@ function groupAgentRunSteps(timeline) {
     var kind = activityKind(activity);
     var stepId = activityStepId(activity);
     var stepMessage = activityStepMessage(activity);
+    var stepReason = activityStepReason(activity);
 
     if (kind === "notice" && !stepId && isActiveTimelineStatus(activityStatus(activity))) {
       if (!current) startStep("ambient", "");
@@ -224,24 +226,27 @@ function groupAgentRunSteps(timeline) {
       if (stepId && seenSteps[stepId]) {
         var existingStep = seenSteps[stepId];
         existingStep.marker = item;
-        if (!existingStep.message) existingStep.message = stepMessage || activityTitle(activity);
+        if (!existingStep.message) existingStep.message = stepMessage;
+        if (!existingStep.reason) existingStep.reason = stepReason;
         return;
       }
       if (!current || !stepId || current.id !== stepId) {
-        startStep(stepId, stepMessage || activityTitle(activity));
+        startStep(stepId, stepMessage, stepReason);
       } else if (!current.message) {
-        current.message = stepMessage || activityTitle(activity);
+        current.message = stepMessage;
       }
+      if (!current.reason) current.reason = stepReason;
       current.marker = item;
       current.ambient = null;
       return;
     }
 
     if (!current || (stepId && current.id !== stepId)) {
-      startStep(stepId, stepMessage);
+      startStep(stepId, stepMessage, stepReason);
     } else if (!current.message && stepMessage) {
       current.message = stepMessage;
     }
+    if (!current.reason) current.reason = stepReason;
     current.items.push(item);
     current.ambient = null;
   });
@@ -290,11 +295,20 @@ function appendAgentStepMessage(parent, text, marker) {
   enhanceMarkdown(message, { enableVisuals: true, enableJsonViewer: true, sourceText: text });
 }
 
+function appendAgentStepReason(parent, step) {
+  var reason = String(step.reason || "").trim();
+  if (!reason || reason === String(step.message || "").trim()) return;
+  var line = document.createElement("div");
+  line.className = "agent-step-reason";
+  line.textContent = reason;
+  parent.appendChild(line);
+}
+
 // Presentation groups follow comments; model-step and call identities stay intact.
 function groupAgentRunUpdates(steps) {
   var groups = [];
   (steps || []).forEach(function (step) {
-    var silent = !String(step.message || "").trim();
+    var silent = !String(step.message || "").trim() && !String(step.reason || "").trim();
     var previous = groups[groups.length - 1];
     if (previous && silent) {
       previous.items = previous.items.concat(step.items || []);
@@ -302,7 +316,7 @@ function groupAgentRunUpdates(steps) {
       if (!previous.marker || activityTitle(previous.marker.activity) !== "Промежуточное решение")
         previous.marker = step.marker || previous.marker;
     } else {
-      groups.push({ id: step.id, message: step.message, items: (step.items || []).slice(),
+      groups.push({ id: step.id, message: step.message, reason: step.reason, items: (step.items || []).slice(),
         ambient: step.ambient, marker: step.marker });
     }
   });
@@ -351,12 +365,12 @@ function appendAgentActionStage(parent, actions, stats) {
   parent.appendChild(details);
 }
 
-function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts, terminal, workspace) {
+function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts, terminal, workspace, suppressReasoning) {
   var actions = [];
   function append(item, activity, nested) {
     if (activityKind(activity) !== "step" && activityKind(activity) !== "group") {
       actions.push({ message: item.message, index: item.index, activity: activity,
-        reasoningMessage: item.reasoningMessage, includeReasoning: !nested });
+        reasoningMessage: item.reasoningMessage, includeReasoning: !nested && !suppressReasoning });
     }
     activityChildren(activity).forEach(function (child) { append(item, child, true); });
   }
@@ -424,13 +438,11 @@ function appendAgentRunSummaryState(summary, status) {
 
 function appendAgentRunOverview(parent, steps, timeline, stats) {
   var actionCount = agentToolCallCount(timeline);
-  if (!(steps || []).some(function (step) { return (step.items && step.items.length) || String(step.message || "").trim(); })) return null;
+  if (!actionCount && !(steps || []).some(function (step) { return (step.items || []).length; })) return null;
   var details = document.createElement("details");
   details.className = "agent-run-history agent-run-overview status-" + stats.status;
   details.setAttribute("data-disclosure-key", "overview");
-  details.open = (steps || []).some(function (step) {
-    return step.marker && activityTitle(step.marker.activity) === "Промежуточное решение";
-  });
+  details.open = false;
 
   var summary = document.createElement("summary");
   summary.className = "agent-run-history-summary";
@@ -447,8 +459,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
     summary.appendChild(count);
   }
   if (!actionCount) summary.appendChild(title);
-  if ((stats.runViewState && stats.runViewState.executionHealth !== "clean") ||
-      timeline.some(function (item) { return ["failed", "warning", "unknown", "partial"].indexOf(activityPresentationState(item.activity)) >= 0; })) {
+  if (timeline.some(function (item) { return ["failed", "warning", "unknown", "partial"].indexOf(activityPresentationState(item.activity)) >= 0; })) {
     var issues = document.createElement("span");
     issues.className = "agent-run-history-issues";
     issues.textContent = "Есть замечания";
@@ -474,10 +485,9 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       var historyItems = (step.items || []).filter(function (item) {
         return activityKind(item.activity) !== "step";
       });
-      if (!historyItems.length && !String(step.message || "").trim()) return;
+      if (!historyItems.length) return;
       var section = document.createElement("section");
       section.className = "agent-model-step agent-model-step-history";
-      appendAgentStepMessage(section, step.message, step.marker);
       appendLiveAgentStep(section, { items: historyItems }, false, true, true, true, stats.workspace);
       content.appendChild(section);
     });
@@ -507,92 +517,19 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   return details;
 }
 
-function runNoticeIncludesModelResults(runViewState) {
-  if (!runViewState || runViewState.lifecycle !== "completed" ||
-      !Array.isArray(runViewState.modelResults) || !runViewState.modelResults.length) return false;
-  return ["partial", "unable_to_complete"].indexOf(runViewState.modelOutcome) >= 0 ||
-    runViewState.executionHealth !== "clean" && runViewState.modelResults.some(function (item) {
-      return item.assessment !== "satisfied";
-    });
-}
-
-function appendAgentRunViewState(parent, runViewState, runId, showJournal) {
-  var health = runViewState ? runViewState.executionHealth : "unknown";
-  var uncertain = health === "unknown";
-  var modelResults = runViewState && runViewState.modelResults || [];
-  var modelConcern = runViewState &&
-    ["partial", "unable_to_complete"].indexOf(runViewState.modelOutcome) >= 0;
-  // Goal verification stays in the typed state; an ordinary answer is not an alert.
-  if (health === "clean" && !modelConcern && runViewState &&
-      ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
-  var cause = runViewState && runViewState.lifecycle === "failed"
-    ? window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason)
-    : runViewState && runViewState.lifecycle === "cancelled" ? "Выполнение отменено." : "";
+function appendAgentRunViewState(parent, runViewState) {
+  // Effects and assessments remain in details. Only an actual interruption
+  // needs a separate line, and a visible diagnostic already supplies that line.
+  if (!runViewState || ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
+  var diagnostic = parent.querySelector(".kind-diagnostic");
+  if (diagnostic && diagnostic.getAttribute("data-failure-reason") === runViewState.reason) return;
   var note = document.createElement("div");
-  note.className = "message-outcome agent-run-notice " + (uncertain ? "status-warning" : runViewState && runViewState.lifecycle === "failed" ? "status-failed" :
-    health === "errors" || modelConcern ? "status-warning" : "status-history");
-  note.setAttribute("data-runtime-health", health);
-  note.setAttribute("role", uncertain ? "alert" : "status");
-  if (window.RNAssistantIcons) {
-    var icon = document.createElement("span");
-    icon.className = "agent-run-notice-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.innerHTML = window.RNAssistantIcons.render("warning");
-    note.appendChild(icon);
-  }
-  var copy = document.createElement("div");
-  copy.className = "agent-run-notice-copy";
-  var text = document.createElement("span");
-  if (!runViewState) {
-    text.textContent = "Сведения о выполнении недоступны. Результат изменений не подтверждён.";
-  } else if (uncertain) {
-    text.textContent = (cause ? cause + " " : "") + "Есть действия с неподтверждённым результатом: " + runViewState.unknownEffects +
-      ". Проверьте фактическое состояние перед повторной записью.";
-  } else if (cause) {
-    text.textContent = cause;
-  } else if (modelConcern) {
-    text.textContent = window.RNAssistantRunViewState.outcomeLabel(runViewState) +
-      ". Это оценка модели; достижение цели отдельно не проверено.";
-  } else {
-    text.textContent = "В ходе работы были неудачные попытки: " + runViewState.failedCalls + ".";
-  }
-  copy.appendChild(text);
-  if (runNoticeIncludesModelResults(runViewState)) {
-    var details = document.createElement("details");
-    details.className = "agent-model-results";
-    details.open = modelResults.some(function (item) { return item.assessment !== "satisfied"; });
-    var heading = document.createElement("summary");
-    heading.textContent = "Оценка модели и ссылки на результаты";
-    details.appendChild(heading);
-    var list = document.createElement("ol");
-    modelResults.forEach(function (item) {
-      var row = document.createElement("li");
-      row.textContent = item.summary + " · " +
-        window.RNAssistantRunViewState.assessmentLabel(item.assessment);
-      if (item.evidence.length) {
-        var refs = document.createElement("small");
-        refs.textContent = " · результаты: " + item.evidence.join(", ");
-        row.appendChild(refs);
-      }
-      list.appendChild(row);
-    });
-    details.appendChild(list);
-    copy.appendChild(details);
-  }
-  if (runId && showJournal !== false) {
-    var openJournal = document.createElement("button");
-    openJournal.type = "button";
-    openJournal.className = "agent-details-link";
-    openJournal.textContent = uncertain ? "Что проверить" : "Подробности";
-    var sourceChatId = state.activeChatId;
-    openJournal.addEventListener("click", function () {
-      if (state.activeChatId !== sourceChatId || typeof window.openRunJournal !== "function") return;
-      window.openRunJournal({ chatId: sourceChatId, runId: runId,
-        filter: modelConcern && health === "clean" ? "model" : "problems" });
-    });
-    copy.appendChild(openJournal);
-  }
-  note.appendChild(copy);
+  note.className = "message-outcome agent-run-notice " +
+    (runViewState.lifecycle === "failed" ? "status-failed" : "status-history");
+  note.setAttribute("role", "status");
+  note.setAttribute("data-runtime-health", runViewState.executionHealth);
+  note.textContent = runViewState.lifecycle === "failed"
+    ? window.RNAssistantRunViewState.failureReasonLabel(runViewState.reason) : "Выполнение отменено.";
   parent.appendChild(note);
 }
 
@@ -623,19 +560,23 @@ function renderAgentRunArticle(run, presentation) {
   var process = document.createElement("div");
   process.className = "agent-run-actions" + (finalMessage && agentToolCallCount(timeline) ? " has-actions" : "");
   var expanded = !finalMessage || run.live || (runViewState && ["running", "awaiting_user", "awaiting_confirmation"].indexOf(runViewState.lifecycle) >= 0);
-  // A step's narration and actions share the same disclosure. Final answers and
-  // pending interactions remain outside the completed history.
-  var updates = expanded ? groupAgentRunUpdates(steps) : [];
+  // Accepted commentary and reasons stay visible; only completed action details
+  // fold into history. A terminal transition must not erase accepted text.
+  var updates = groupAgentRunUpdates(steps);
   updates.forEach(function (step, stepIndex) {
     var section = document.createElement("section");
     section.className = "agent-model-step";
     section.agentReconcileKey = step.id;
-    section.agentReconcileSignature = JSON.stringify([step.message, step.items, step.ambient, step.marker,
+    section.agentReconcileSignature = JSON.stringify([step.message, step.reason, step.items, step.ambient, step.marker,
       stepIndex === updates.length - 1, !!run.hasLiveDraft, !!run.live, !!run.workspace,
       runViewState && runViewState.lifecycle]);
+    var reasoningMessage = step.marker && (step.marker.reasoningMessage || step.marker.message);
+    var hasStepReasoning = typeof messageHasReasoning === "function" && messageHasReasoning(reasoningMessage);
+    if (hasStepReasoning && typeof appendMessageReasoning === "function") appendMessageReasoning(section, reasoningMessage);
     appendAgentStepMessage(section, step.message, step.marker);
-    appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
-      !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, run.workspace);
+    appendAgentStepReason(section, step);
+    if (expanded) appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
+      !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, run.workspace, hasStepReasoning);
     if (section.childNodes.length) process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);
@@ -646,8 +587,8 @@ function renderAgentRunArticle(run, presentation) {
     paintLiveModelOutput(stream, run.workspaceProgress);
     process.appendChild(stream);
   }
-  // This warning is outside collapsed trace and never derived from the model's prose.
-  if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage), !run.workspace);
+  // A terminal interruption stays visible even when the action trace is collapsed.
+  if (!run.live) appendAgentRunViewState(body, runViewState);
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";

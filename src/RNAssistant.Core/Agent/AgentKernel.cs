@@ -283,7 +283,11 @@ namespace RNAssistant.Core.Agent
         {
             if (_input == null) return false;
             var messages = await _input.TakeInputAsync(token).ConfigureAwait(false);
-            if (messages.Count > 0) { state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false; }
+            if (messages.Count > 0)
+            {
+                state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false;
+                state.Progress.ObserveUserInput();
+            }
             foreach (var message in messages)
                 state.Messages.Add(message);
             return messages.Count > 0;

@@ -1,5 +1,26 @@
 # Stabilization progress
 
+## Нормализация ответов, макросы и лента — 2026-11-03
+
+Owners: Core parser/ToolRuntime/AgentProgressTracker, Office macro handler и message
+projections, общий Web transcript. Однозначные singleton-массивы нормализуются до
+admission. Штатный возврат макроса разрешает новый вызов при сохранённом unknown
+effect; сбой/прерывание не разрешают автоматический повтор. Broad invalidation
+opaque-вызова больше не создаёт невыполнимую inspection-обязанность. Новое сообщение
+пользователя сбрасывает счётчики повторов, сохраняя guards неизвестных эффектов.
+Prompt schema 70 согласует инструкции модели с разрешённым новым вызовом после
+штатного возврата; применяется существующая миграция prompts с recovery copy.
+
+В ленте сохранены принятые пояснения и `reason`, исправлен переход live → saved с
+сохранением узлов/раскрытий/фокуса; большие unknown-карточки и дубли notices убраны.
+Адресные parser/kernel/runtime, Office/workspace projection и Web/Chromium проверки
+прошли host-neutral; архив prompts и dispatch после миграции — 2/2.
+Известный `settings: prompt schema migrates automatically` по-прежнему падает на
+старой текстовой фразе, см. [baseline gaps](RISK_REGISTER.md#json-profile-audit-baseline-gaps--2026-11-02).
+[UI остаётся In Review](../ui/UI_MIGRATION_PLAN.md#лента-reason-и-штатный-возврат-макроса--in-review-2026-11-03).
+Реальные модели, повторные макросы и мерцание в Windows/Office/WebView2 остаются
+открытым evidence; прежние baseline gaps не закрыты.
+
 ## Инструкции, роли и source tools — 2026-11-02
 
 Owner: Core ModelProtocol/context compiler, Office built-in skills и resource mutation.

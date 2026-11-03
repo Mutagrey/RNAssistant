@@ -303,6 +303,8 @@ namespace RNAssistant.Core.Tools
             var result = completed.Result;
             var effect = completed.Effect;
             var dispatched = handlerContext.MayHaveDispatched;
+            var invocationCompleted = completed.InvocationCompleted && dispatched && policy.ExecutionClass == ToolExecutionClass.OpaqueAction &&
+                result.Status == ToolResultStatus.Ok;
             if (!dispatched && (effect == ToolEffectEvidence.VerifiedChange || effect == ToolEffectEvidence.Unknown))
             {
                 // Contradictory evidence must never certify non-dispatch.
@@ -319,7 +321,10 @@ namespace RNAssistant.Core.Tools
             }
             else if (policy.ExecutionClass == ToolExecutionClass.OpaqueAction && dispatched)
             {
-                result = ToolResult.Unknown(result.Message, result.DataJson, result.Resources);
+                result = ToolResult.Unknown(result.Message + (invocationCompleted
+                    ? " The invocation returned normally; its effects remain unverified. A new invocation is allowed when the task requires it, subject to the current execution policy. Inspect relevant state to assess the result."
+                    : " The invocation did not return a confirmed normal result. Do not automatically repeat it; inspect the affected state."),
+                    result.DataJson, result.Resources);
                 effect = ToolEffectEvidence.Unknown;
             }
             else if (result.Status == ToolResultStatus.Unknown || effect == ToolEffectEvidence.Unknown ||
@@ -340,7 +345,7 @@ namespace RNAssistant.Core.Tools
             var record = Record(context, outcome, result, dispatched, effect,
                 awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok,
                 resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack,
-                recovery: completed.Recovery, resourceEffect: completed.ResourceEffect);
+                recovery: completed.Recovery, resourceEffect: completed.ResourceEffect, invocationCompleted: invocationCompleted);
             return completed.AuthorityCommit == null ? record : record.WithAuthorityCommit(completed.AuthorityCommit, false);
         }
 
@@ -400,13 +405,14 @@ namespace RNAssistant.Core.Tools
             string message = null, string preparedStateJson = null, string confirmationDataJson = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null, bool wasCancelled = false, RNAssistant.Core.Models.ResourceEffect resourceEffect = null)
+            ToolRecoveryContract recovery = null, bool wasCancelled = false, RNAssistant.Core.Models.ResourceEffect resourceEffect = null,
+            bool invocationCompleted = false)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
             return new ToolExecutionRecord(context, outcome, completed, message ?? (result == null ? string.Empty : result.Message),
                 mayHaveDispatched: dispatched, pendingId: pendingId, awaitingUser: awaitingUser,
-                evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
+                evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect, invocationCompleted),
                 result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
                 resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack,
                 recovery: recovery, wasCancelled: wasCancelled, resourceEffect: resourceEffect);

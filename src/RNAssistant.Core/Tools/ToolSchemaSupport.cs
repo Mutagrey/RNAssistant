@@ -276,6 +276,37 @@ namespace RNAssistant.Core.Tools
             }
         }
 
+        // Model input only. Do not coerce scalars, source text, nullable/union
+        // values or branch-dependent schemas. The caller validates the whole tree.
+        internal static void NormalizeSingletonArrays(JToken value, JObject schema)
+        {
+            if (value == null || schema == null || schema["anyOf"] != null) return;
+            var array = value as JArray;
+            if (array != null)
+            {
+                foreach (var item in array) NormalizeSingletonArrays(item, schema["items"] as JObject);
+                return;
+            }
+            var obj = value as JObject;
+            var properties = schema["properties"] as JObject;
+            if (obj == null || properties == null) return;
+            foreach (var property in obj.Properties())
+            {
+                var child = properties[property.Name] as JObject;
+                if (child == null || child["anyOf"] != null) continue;
+                if (child["type"]?.Type == JTokenType.String && (string)child["type"] == "array" &&
+                    !(property.Value is JArray) && property.Value.Type != JTokenType.Null &&
+                    child["items"] is JObject)
+                {
+                    var candidate = new JArray(property.Value.DeepClone());
+                    NormalizeSingletonArrays(candidate, child);
+                    string error;
+                    if (ValidateValue(candidate, child, "$", false, out error)) property.Value = candidate;
+                }
+                NormalizeSingletonArrays(property.Value, child);
+            }
+        }
+
         public static bool ValidateArguments(JObject arguments, JObject schema, bool applyDefaults, out string error)
         {
             arguments = arguments ?? new JObject();

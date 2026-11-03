@@ -28,6 +28,15 @@ storage contracts остаются в domain docs из [README](../README.md).
 
 ## Единый чат: обязательная целевая граница
 
+Срез ленты 2026-11-03, In Review: существующие Messages / ConversationView владеют
+сохранением принятых пояснений и `reason`, обновлением live-узлов и раскрытиями.
+`ChatActivity.StepReason` поступает из принятого ответа через Office и
+Workspace/plugin projections; результат инструмента не подменяет его.
+Materialization/clone сохраняют поле. Новый store, renderer или Shell не вводится.
+Новый live-шаг использует существующий patch общего run article; завершённые calls,
+раскрытия и фокус сохраняются. Saved successor вставляется до удаления live-узла,
+чтобы временная потеря высоты не сбрасывала прокрутку. Token paints остаются leaf-only.
+
 Исправление по фото 2026-11-02: Application workspace projection использует общий
 скрытый DTO для protocol results с ролью `user`; Web project/plugin adapter
 обрабатывает stale Stop через один addressed refresh/retry. Общие renderer/composer

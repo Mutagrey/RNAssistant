@@ -117,6 +117,8 @@ namespace RNAssistant.Harness
                                 message.RunId == first.Summary.RunId && message.Activity != null && calls.Any(call => call.ToolCallId == message.Activity.ToolCallId))
                                 .Select(message => message.Activity).ToArray();
                             AssertEqual(2, activities.Length, "each accepted attempt retains its own activity");
+                            AssertTrue(activities.All(activity => activity.StepReason == "Inspect available resources."),
+                                "workspace preserves one accepted reason on every call of the batch");
                             AssertTrue(activities.Take(failedRead ? 1 : 2).All(activity => activity.Display?.Action == "Поиск" &&
                                 activity.ResultSummary?.Kind == "resource-find" && activity.Status == "completed"),
                                 "workspace uses the shared catalog and typed result summary");

@@ -658,10 +658,6 @@
 .chat-notice-copy strong { display: block; font-weight: 500; }
 .chat-notice-copy p { margin: 3px 0 0; font-size: 11px; }
 .agent-run-notice { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.5; }
-.agent-run-notice-icon { display: flex; flex: 0 0 14px; margin-top: 2px; }
-.agent-run-notice-icon svg { width: 14px; height: 14px; }
-.agent-run-notice-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
-.agent-run-notice .agent-details-link { display: inline; margin: 0; padding: 0; font: inherit; }
 .agent-model-results { flex-basis: 100%; min-width: 0; }
 .agent-model-results summary { cursor: pointer; }
 .agent-model-results.is-compact { flex-basis: auto; color: var(--muted); font-size: 11px; line-height: 1.5; }

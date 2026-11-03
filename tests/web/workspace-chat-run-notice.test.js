@@ -99,6 +99,7 @@ const root = path.resolve(__dirname, '../..');
       assert.equal((await page.locator('#messages').textContent()).includes('Unaccepted draft after failure.'), false,
         owner + ': terminal kernel state suppresses stale model preview');
       await page.locator('#messages .agent-reflection-step').getByText('Inspect the exact source first.').waitFor();
+      await page.locator('#messages .agent-model-results > summary').click();
       await page.locator('#messages .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
       assert.equal(await page.locator('#messages').getByText('core.read').count() > 0, true,
         owner + ': saved tool activity uses the common message renderer');
@@ -107,7 +108,13 @@ const root = path.resolve(__dirname, '../..');
         owner + ': protocol body stays hidden');
       await page.locator('#messages .chat-history-more').click();
       await page.locator('#messages').getByText('Earlier answer.').waitFor();
-      await page.locator('#messages .agent-run-notice').getByText('Есть действия с неподтверждённым результатом', { exact: false }).waitFor();
+      const historical = page.locator('#messages article.message').filter({ hasText: 'Earlier answer.' });
+      assert.equal(await historical.locator('.agent-run-notice').count(), 0,
+        owner + ': unknown effects add no warning card');
+      assert.equal(await historical.locator('.agent-model-results').evaluate(node => node.open), false,
+        owner + ': runtime facts start collapsed');
+      await historical.locator('.agent-model-results > summary').click();
+      await historical.locator('.agent-run-effect-facts').getByText('с неизвестным эффектом: 1', { exact: false }).waitFor();
       assert.equal(await page.locator('#messages .agent-details-link').count(), 0,
         owner + ': historical workspace outcome cannot open an Office-only journal');
       assert.equal(await page.locator('#messages .chat-history-more').count(), 0,

@@ -10,6 +10,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   try {
     const page = await browser.newPage({ viewport: { width: 740, height: 920 } });
+    const pageErrors = [];
+    page.on("pageerror", error => pageErrors.push(error.message));
     const css = [...read("index.html").matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)]
       .map(match => read(match[1])).join("\n");
     await page.setContent(`<style>${css}</style><main style="padding:24px;max-width:680px;margin:auto">
@@ -29,8 +31,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.enhanceActivity = () => {};
       window.logOnce = () => {};
       window.appendMessageArtifactCards = () => {};
+      window.send = (type, payload) => Promise.resolve(Object.assign({}, payload, { blocks: [], rawJson: "{}" }));
     });
-    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-icons.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-conversation-view.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
+    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-icons.js", "app-run-view-state.js", "app-agent-model.js", "app-reasoning.js", "app-agent.js", "app-conversation-view.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
@@ -227,7 +230,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator("#markdown-assistant .markdown p").count(), 2);
       assert.equal(await page.locator("#failed-run .agent-run-outcome, #failed-run .agent-diagnostic-message").count(), 0);
       assert.equal(await page.locator("#failed-no-calls .agent-run-overview").count(), 0);
-      assert.equal(await page.locator("#failed-no-calls [data-runtime-health]").count(), 1, "zero actions still explains failure");
+      assert.equal(await page.locator("#failed-no-calls .agent-run-notice").count(), 0, "the diagnostic already explains failure without a duplicate notice");
       assert.match(await page.locator("#failed-no-calls").innerText(), /Не удалось получить ответ/);
       assert.equal(await page.locator("#failed-run .agent-step-message:visible").count(), 1,
         "a failed run without a final answer retains its commentary");
@@ -448,8 +451,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     for (const width of [740, 360]) {
       await page.setViewportSize({ width, height: 920 });
       const run = page.locator("#sparse-run");
-      assert.equal(await run.locator(".agent-step-message:visible").count(), 0,
-        "completion folds progress comments and actions together");
+      assert.equal(await run.locator(".agent-step-message:visible").count(), 2,
+        "completion retains accepted commentary and folds only action details");
       assert.equal(await run.locator(".agent-run-final:visible").count(), 1);
       assert.equal(await run.locator(".kind-tool:visible").count(), 0);
       await run.locator(".agent-run-overview > summary").click();
@@ -464,7 +467,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         const restored = renderAgentRunArticle(JSON.parse(JSON.stringify(savedCommentRun))); restored.id = "sparse-run";
         previous.replaceWith(restored);
       });
-      assert.equal(await run.locator(".agent-step-message:visible").count(), 0, "reload keeps progress and actions folded together");
+      assert.equal(await run.locator(".agent-step-message:visible").count(), 2, "reload retains accepted commentary");
     }
     // Real DOM reconciliation must retain nested expansions and keyboard focus.
     await page.evaluate(() => {
@@ -507,6 +510,74 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#chatCopyFeedback").getAttribute("role"), "alert");
     await page.locator("#chatCopyFeedback button").click();
     assert.equal(await page.locator("#chatCopyFeedback").isVisible(), false);
-    console.log("PASS activity layout: action/target/result, Markdown, diagnostics, narrow wrapping and complete step disclosures");
+    await page.evaluate(() => {
+      const host = document.createElement("div"); host.id = "stable-feed";
+      document.querySelector("main").appendChild(host);
+      const view = messageView(host);
+      window.feedPresentation = { view, data: { live: { runId: "feed", content: "", reasoning: "", activities: [] } } };
+      window.feedMarker = (id, reason) => ({ Kind: "step", RunId: "feed", StepId: id,
+        StepMessage: "", StepReason: reason, Title: "Выполняю действие", Status: "running" });
+      window.paintFeed = () => reconcileMessageUnits(host, buildLiveMessageUnits(feedPresentation), false);
+      const marker = feedMarker("s1", "Проверю повторный запуск макроса на тех же данных.");
+      marker.__reasoningMessage = { ReasoningContent: "Сопоставляю результаты вызовов." };
+      feedPresentation.data.live.activities.push(marker);
+      paintFeed();
+    });
+    const feed = page.locator("#stable-feed");
+    assert.equal(await feed.locator(".agent-step-reason:visible").count(), 1, "accepted reason is visible before tool dispatch");
+    assert.equal(await feed.locator(".reasoning-block").count(), 1, "accepted reasoning does not disappear at the step handoff");
+    assert.doesNotMatch(await feed.innerText(), /Выполняю действие/, "silent accepted steps have no flickering placeholder message");
+    await page.evaluate(() => {
+      feedPresentation.data.live.activities.push({ Kind: "tool", RunId: "feed", StepId: "s1", ToolCallId: "macro1",
+        ToolId: "office.macro.run", Status: "failed", StepReason: feedPresentation.data.live.activities[0].StepReason,
+        Subtitle: "Module1.RefreshReport", Display: { action: "Выполнение макроса", operation: "Command" },
+        ArgumentsJson: '{"macroName":"Module1.RefreshReport"}',
+        ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown", InvocationCompleted: true } });
+      paintFeed();
+      window.keptFeed = document.querySelector("#stable-feed .agent-run");
+      window.keptCall = keptFeed.querySelector(".agent-transcript-entry");
+    });
+    assert.match(await feed.innerText(), /Вызов завершён/);
+    assert.equal(await feed.locator(".agent-run-notice, .presentation-unknown").count(), 0,
+      "normal macro return has no warning card while unknown effect remains in its evidence");
+    const keptSummary = feed.locator(".agent-activity-toggle > summary").first();
+    await keptSummary.click(); await keptSummary.focus();
+    await feed.locator(".agent-tool-message").first().waitFor({ state: "visible" });
+    assert.match(await feed.innerText(), /Его эффект отдельно не проверен/);
+    await page.evaluate(() => {
+      feedPresentation.data.live.activities.push(feedMarker("s2", "Сравню значения отчёта после выполнения."));
+      paintFeed();
+    });
+    assert.equal(await page.evaluate(() => document.querySelector("#stable-feed .agent-run") === keptFeed &&
+      document.querySelector("#stable-feed .agent-transcript-entry") === keptCall), true,
+      "a new live step preserves the run and completed call nodes");
+    assert.equal(await keptSummary.evaluate(node => document.activeElement === node && node.parentElement.open), true,
+      "live patch preserves disclosure and keyboard focus");
+    await page.evaluate(() => {
+      const items = feedPresentation.data.live.activities.map((activity, index) => ({ activity, index,
+        message: { Id: "feed-" + index, RunId: "feed", Activity: activity } }));
+      const final = { Id: "feed-final", RunId: "feed", Role: "assistant", Content: "Макрос завершил вызов. Для оценки изменений нужно сопоставить данные отчёта.",
+        RunViewState: { RunId: "feed", TurnId: "feed", Lifecycle: "completed", ExecutionHealth: "unknown", Reason: "model_finish",
+          SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 1, FailedCalls: 0, UnknownEffects: 1,
+          ModelOutcome: "partial", ModelResults: [{ Summary: "Проверка результата", Evidence: ["E1"], Assessment: "unverified" }] } };
+      window.completedFeed = { items, finalMessage: { message: final, index: items.length } };
+      reconcileMessageUnits(document.getElementById("stable-feed"), [{ key: "run:feed", signature: "final",
+        render: () => renderAgentRunArticle(completedFeed) }], false);
+    });
+    assert.equal(await feed.locator(".agent-step-reason:visible").count(), 2, "accepted reasons remain visible after finish");
+    assert.equal(await feed.locator(".agent-run-notice").count(), 0, "unknown and partial results do not add warning cards");
+    assert.equal(await feed.locator(".agent-model-results").evaluate(node => node.open), false, "assessment and counters start collapsed");
+    for (const width of [740, 360]) for (const dark of [false, true]) {
+      await page.setViewportSize({ width, height: 920 });
+      await page.evaluate(dark => document.documentElement.setAttribute("data-theme", dark ? "dark" : "light"), dark);
+      await feed.evaluate(node => { node.style.zoom = "1.25"; });
+      assert.ok(await feed.evaluate(node => node.scrollWidth <= node.clientWidth + 1), "reason and final answer fit narrow/zoom in both themes");
+    }
+    await feed.evaluate(node => { node.style.zoom = ""; });
+    await page.setViewportSize({ width: 740, height: 920 });
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    if (process.env.CHAT_FEED_SCREENSHOT) await feed.screenshot({ path: process.env.CHAT_FEED_SCREENSHOT });
+    assert.deepEqual(pageErrors, [], "the transcript has no browser errors");
+    console.log("PASS activity layout: action/target/result, Markdown, diagnostics, narrow wrapping, stable reasons and live disclosures");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

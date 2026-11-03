@@ -578,6 +578,53 @@ namespace RNAssistant.Harness
             AssertEqual("repeated_unknown_tool_call", reason, "automatic repeat remains blocked");
         }
 
+        private static async Task KernelOpaqueNormalReturnAllowsNewCalls()
+        {
+            foreach (var returned in new[] { true, false })
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("external")),
+                    KernelResponse(KernelCall("external")), KernelResponse());
+                f.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
+                    ToolExecutionOutcome.Unknown, context.StartedUtc.AddMilliseconds(1), "Opaque result",
+                    evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,
+                        ToolEffectEvidence.Unknown, invocationCompleted: returned),
+                    result: RNAssistant.Core.Tools.Contracts.ToolResult.Unknown("Opaque result", "{\"output\":null}"),
+                    resourceEffect: new ResourceEffect("invalidation-" + context.Call.Id, "external",
+                        ResourceEffectOutcome.UnknownAfterDispatch, new[] {
+                            new ResourceImpact(InspectionTarget, ResourceImpactRelation.Subtree) })));
+                var result = await f.RunAsync(limits: new AgentRunLimits(4, 5));
+                AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                    "broad opaque invalidation is not an impossible full-resource inspection gate");
+                AssertEqual(returned ? 2 : 1, f.Tools.Calls.Count,
+                    "only normal return allows a newly proposed invocation under the same policy");
+                AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "normal return never verifies effects");
+                AssertEqual<string>(null, f.Model.Requests[1].CompletionFeedback, "no impossible inspection feedback");
+                var messages = result.AcceptedMessages.Select(item => item.Kind != AgentMessageKind.ToolResult ? item :
+                    AgentMessage.AcceptedToolResult(item.ToolCallId, item.Text, item.ResultJson,
+                        Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(
+                            Newtonsoft.Json.JsonConvert.SerializeObject(item.Progress)), item.ResourceEvidence, item.ResourceEffect)).ToArray();
+                var tracker = new AgentProgressTracker(); tracker.Restore(messages);
+                string reason, message; int delay;
+                AssertEqual(returned, tracker.CanDispatch(new ToolCall("next", "external", "{}"), out reason,
+                    out message, out delay, f.Tools.Policies["external"]), "replay preserves normal-return versus interruption");
+                if (returned)
+                {
+                    var terminal = messages.First(item => item.Kind == AgentMessageKind.ToolResult);
+                    tracker.Observe(new ToolCall("third", "external", "{}"), terminal.Progress, "same", null, null);
+                    AssertTrue(!tracker.CanDispatch(new ToolCall("fourth", "external", "{}"), out reason,
+                        out message, out delay, f.Tools.Policies["external"]), "three identical returns without new information stay bounded");
+                    AssertEqual("repeated_tool_no_progress", reason, "normal return uses the progress limit, not uncertain-dispatch protection");
+                }
+                tracker.ObserveUserInput();
+                AssertEqual(returned, tracker.CanDispatch(new ToolCall("after-input", "external", "{}"), out reason,
+                    out message, out delay, f.Tools.Policies["external"]), "new user input clears stale repetition counters, never uncertain-dispatch protection");
+                tracker = new AgentProgressTracker();
+                tracker.Restore(messages.Concat(new[] { AgentMessage.User("Investigate another run.") }));
+                AssertEqual(returned, tracker.CanDispatch(new ToolCall("after-replay", "external", "{}"), out reason,
+                    out message, out delay, f.Tools.Policies["external"]), "replay applies the same input boundary");
+            }
+        }
+
         private static async Task KernelReadsAreSequentialAndBounded()
         {
             var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall("read")), KernelResponse());

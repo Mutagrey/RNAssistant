@@ -504,7 +504,7 @@ function appendWorkspaceRunOutcome(node, message, runView) {
   if (runView && ["completed", "failed", "cancelled"].indexOf(runView.lifecycle) >= 0 &&
       (runView.lifecycle !== "completed" || runView.executionHealth !== "clean" ||
         ["partial", "unable_to_complete"].indexOf(runView.modelOutcome) >= 0)) {
-    appendAgentRunViewState(node, runView, messageRunId(message), false);
+    appendAgentRunViewState(node, runView);
   }
 }
 
@@ -512,34 +512,33 @@ function appendAcceptedResponseDetails(node, message, runView) {
   if (message.ReflectionDecision) {
     appendAgentReflectionStep(node, message.ReflectionDecision, messageContent(message));
   }
-  var claimsInRunNotice = runNoticeIncludesModelResults(runView);
   var results = runView && runView.modelResults.length ? runView.modelResults.map(function (item) {
     return { Summary: item.summary, Assessment: item.assessment, Evidence: item.evidence };
   }) : message.Results;
-  if (results && results.length && !claimsInRunNotice)
-    node.appendChild(renderModelResults(results));
+  var details = results && results.length ? renderModelResults(results) : null;
+  if (details) node.appendChild(details);
   var facts = window.RNAssistantRunViewState.effectFacts(runView);
   if (facts) {
     var evidence = document.createElement("div");
     evidence.className = "agent-run-effect-facts";
     evidence.textContent = facts;
-    node.appendChild(evidence);
+    if (!details) {
+      details = document.createElement("details"); details.className = "agent-model-results is-compact";
+      var summary = document.createElement("summary"); summary.textContent = "Данные выполнения";
+      details.appendChild(summary); node.appendChild(details);
+    }
+    details.appendChild(evidence);
   }
 }
 
 function renderModelResults(results) {
-  var incomplete = results.some(function (item) { return item.Assessment !== "satisfied"; });
-  var details = document.createElement("details"); details.className = "agent-model-results";
-  details.open = incomplete;
+  var details = document.createElement("details"); details.className = "agent-model-results is-compact";
   var summary = document.createElement("summary");
-  summary.textContent = incomplete ? "Утверждения и ссылки на результаты" : "Оценка модели и источники";
+  summary.textContent = "Оценка модели и источники";
   details.appendChild(summary);
-  if (!incomplete) {
-    details.classList.add("is-compact");
-    var caveat = document.createElement("p");
-    caveat.textContent = "Достижение цели отдельно не проверено.";
-    details.appendChild(caveat);
-  }
+  var caveat = document.createElement("p");
+  caveat.textContent = "Достижение цели отдельно не проверено.";
+  details.appendChild(caveat);
   var list = document.createElement("ol");
   results.forEach(function (item) {
     var row = document.createElement("li");
@@ -552,14 +551,7 @@ function renderModelResults(results) {
     list.appendChild(row);
   });
   details.appendChild(list);
-  if (!incomplete) return details;
-  var note = document.createElement("div"); note.className = "message-outcome agent-run-notice status-warning";
-  note.setAttribute("role", "status");
-  var copy = document.createElement("div"); copy.className = "agent-run-notice-copy";
-  var heading = document.createElement("span");
-  heading.textContent = "Итоги по оценке модели. Достижение цели отдельно не проверено.";
-  copy.append(heading, details); note.appendChild(copy);
-  return note;
+  return details;
 }
 
 function appendChatMessageText(node, message) {
@@ -858,6 +850,14 @@ function buildLiveMessageUnits(presentation, pendingUnits) {
       JSON.stringify({ stream: "agent", runId: presentation.data.live.runId, value: activities,
         base: cache.liveBaseSignature, hasOutput: hasLiveAgentOutput(presentation), hasDraft: hasLiveAgentDraft(presentation) }),
       function () { return renderLiveAgentRun(presentation); }, "", null, function (node) { refreshLiveAgentOutput(node, presentation); });
+    units[units.length - 1].patch = function (node) {
+      var replacement = renderLiveAgentRun(presentation);
+      patchAgentRunArticle(node, null, presentation, replacement);
+      node.liveOutputVisible = replacement.liveOutputVisible;
+      node.liveDraftVisible = replacement.liveDraftVisible;
+      node.liveRunId = replacement.liveRunId;
+      refreshLiveAgentOutput(node, presentation);
+    };
   }
 
   return units.concat(pendingUnits || []);
@@ -893,8 +893,8 @@ function restoreMessageDisclosures(node, snapshot) {
   });
 }
 
-function patchAgentRunArticle(node, run, presentation) {
-  var replacement = renderAgentRunArticle(run, presentation);
+function patchAgentRunArticle(node, run, presentation, replacement) {
+  replacement = replacement || renderAgentRunArticle(run, presentation);
   function release(part) {
     if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(part);
     if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(part);
@@ -912,7 +912,7 @@ function patchAgentRunArticle(node, run, presentation) {
       part.replaceWith(saved);
     });
   }
-  // Keep completed steps and calls attached while the active step changes.
+  // Reuse completed step and call nodes while the active step changes.
   reuse(".agent-model-step");
   reuse(".agent-transcript-entry");
   var priorGroups = Object.create(null);
@@ -955,7 +955,9 @@ function reconcileMessageUnits(box, units, liveOnly) {
           Array.prototype.indexOf.call(cached.node.querySelectorAll("details"), focusedSummary.parentNode)) : null;
       unit.patch(cached.node);
       restoreMessageDisclosures(cached.node, savedDisclosures);
-      if (focusedKey && !focusedSummary.isConnected) {
+      if (focusedSummary && cached.node.contains(focusedSummary) && document.activeElement !== focusedSummary) {
+        focusedSummary.focus({ preventScroll: true });
+      } else if (focusedKey && document.activeElement !== focusedSummary) {
         Array.prototype.some.call(cached.node.querySelectorAll("details"), function (details, index) {
           if (messageDisclosureKey(details, index) !== focusedKey) return false;
           details.querySelector("summary").focus({ preventScroll: true });
@@ -996,15 +998,6 @@ function reconcileMessageUnits(box, units, liveOnly) {
     }
     nextCache[unit.key] = { signature: unit.signature, actionsSignature: unit.actionsSignature, node: node };
   });
-  Object.keys(previousCache).forEach(function (key) {
-    if (!nextCache[key] && previousCache[key].node) {
-      var removed = previousCache[key].node;
-      if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(removed);
-      if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(removed);
-      if (removed.parentNode === box) box.removeChild(removed);
-    }
-  });
-
   // Keep unchanged nodes attached: detaching the transcript restarts embedded
   // viewers and invalidates layout/selection even when all signatures match.
   var cursor = box.firstChild;
@@ -1028,6 +1021,16 @@ function reconcileMessageUnits(box, units, liveOnly) {
     }
     if (node !== cursor) box.insertBefore(node, cursor);
     else cursor = cursor.nextSibling;
+  });
+  // Attach the saved successor before retiring a live unit with a different key.
+  // Otherwise the temporary height loss clamps the reader's scroll position.
+  Object.keys(previousCache).forEach(function (key) {
+    if (!nextCache[key] && previousCache[key].node) {
+      var removed = previousCache[key].node;
+      if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(removed);
+      if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(removed);
+      if (removed.parentNode === box) box.removeChild(removed);
+    }
   });
   view.cache.units = nextCache;
   return nextCache;

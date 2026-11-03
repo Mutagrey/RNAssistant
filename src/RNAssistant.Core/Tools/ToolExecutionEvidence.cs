@@ -16,17 +16,23 @@ namespace RNAssistant.Core.Tools
         public ToolDispatchEvidence Dispatch { get; private set; }
         [JsonProperty(Required = Required.Always)]
         public ToolEffectEvidence Effect { get; private set; }
+        // A normal handler return is a dispatch fact, never proof of its effects.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool InvocationCompleted { get; private set; }
 
         [JsonConstructor]
-        public ToolExecutionEvidence(ToolDispatchEvidence dispatch, ToolEffectEvidence effect)
+        public ToolExecutionEvidence(ToolDispatchEvidence dispatch, ToolEffectEvidence effect, bool invocationCompleted = false)
         {
             if (!Enum.IsDefined(typeof(ToolDispatchEvidence), dispatch)) throw new ArgumentOutOfRangeException(nameof(dispatch));
             if (!Enum.IsDefined(typeof(ToolEffectEvidence), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
             if (dispatch == ToolDispatchEvidence.NotDispatched &&
                 (effect == ToolEffectEvidence.VerifiedChange || effect == ToolEffectEvidence.Unknown))
                 throw new ArgumentException("Changed or unknown effects cannot certify no dispatch.");
+            if (invocationCompleted && dispatch != ToolDispatchEvidence.MayHaveDispatched)
+                throw new ArgumentException("A completed invocation requires dispatch evidence.");
             Dispatch = dispatch;
             Effect = effect;
+            InvocationCompleted = invocationCompleted;
         }
     }
 }

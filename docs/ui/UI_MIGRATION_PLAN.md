@@ -1,5 +1,35 @@
 # План модернизации production UI
 
+## Лента, reason и штатный возврат макроса — In Review, 2026-11-03
+
+Scope — запрос пользователя о неверных формах ответа, повторных макросах,
+завершении и исчезающей/шумной ленте. Owners: Core parser/ToolRuntime/AgentProgressTracker;
+Office macro handler и existing message projections; Web Messages/ConversationView.
+Это исправление действующего чата, не новый этап Shell или завершение S2.
+
+Baseline: `agent-activity-layout`, `live-run-projection`, `agent-timeline-order`
+и `run-view-state` до UI-правок. Было: общий live article заменялся при новом
+действии; пустой step временно показывал служебный title; принятые пояснения
+исчезали в закрытой истории при finish; unknown/partial создавали лишние notices.
+Теперь: общий patch, сохранение раскрытий/фокуса, видимые `message`/`reason`,
+одни детали оценок/счётчиков. Старые warning wrappers удалены.
+
+Адресные проверки покрывают нормализацию без ослабления admission, нормальный
+возврат/сбой/replay, broad invalidation, bounded repeats, Office reopen и workspace
+projection. Web: сохранение узлов, accepted reasoning, late deltas, cap/coalescing,
+скрытые claims/facts, общая лента проекта/плагина, 740/360 px, light/dark и 125%.
+Реальные модели и Windows/Office/
+WebView2 остаются отдельным открытым evidence; dock placement не менялся.
+
+Ревью: `python3 -B prototypes/serve_ui.py`, `/preview/web/?scenario=ready`.
+1. Во время ответа раскрыть вызов, затем дождаться следующего шага: раскрытие и
+   фокус сохраняются, `reason` виден в ленте.
+2. Дождаться finish и открыть чат заново: принятые пояснения остаются, история
+   calls и «Оценка модели и источники» раскрываются отдельно.
+3. На Windows запустить разрешённый макрос повторно после штатного возврата;
+   проверить данные через Office tools. После сбоя автоповтор по-прежнему запрещён.
+Откат — этот scoped diff; миграции/удаления истории и выпуска сборки нет.
+
 ## Исправления чата по трём фото — принято, 2026-11-02
 
 Принято пользователем по «Коммит пуш».

@@ -38,6 +38,7 @@ namespace RNAssistant.Office
             ToolInvocation command, ToolRunResult result, string stepId, string stepMessage)
         {
             var completed = CreateLocalResultMessage(command, result, stepId, stepMessage);
+            completed.Activity.StepReason = activityMessage.Activity?.StepReason;
             activityMessage.Content = completed.Content;
             activityMessage.Activity = completed.Activity;
             activityMessage.ResourceRefs = CloneResourceRefs(result.ModelResourceRefs);

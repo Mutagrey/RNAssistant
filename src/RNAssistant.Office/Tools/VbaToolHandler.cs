@@ -119,7 +119,8 @@ namespace RNAssistant.Office.Tools
             return new ToolHandlerResult(Result(outcome), Effect(outcome, context.MayHaveDispatched),
                 resourceReadBack: outcome.Status == VbaNativeOutcomeStatus.Ok && context.MayHaveDispatched
                     ? _executor.CaptureMutationReadBack(_session, context.PreparedStateJson) : null,
-                recovery: outcome.Recovery);
+                recovery: outcome.Recovery,
+                invocationCompleted: _toolId == VbaToolCatalog.RunMacro && outcome.Status == VbaNativeOutcomeStatus.Ok);
         }
 
         private static RuntimeResult Result(VbaNativeOutcome outcome)

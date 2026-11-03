@@ -75,6 +75,7 @@ namespace RNAssistant.Office.Services
                                 Activity = new ChatActivity
                                 {
                                     Kind = "step", StepId = fact.StepId, StepMessage = visibleDecision,
+                                    StepReason = fact.Response.Reason,
                                     Title = "Промежуточное решение", Status = "completed"
                                 }
                             };
@@ -112,16 +113,21 @@ namespace RNAssistant.Office.Services
             }
             if (activity?.Activity?.ToolCallId != null)
             {
-                // Protocol records stay hidden. Put accepted display metadata on
-                // the first call's visible activity, including resumed/non-dispatched calls.
+                // Protocol records stay hidden. Every call retains its step reason;
+                // only the first carries reasoning, including resumed/non-dispatched calls.
                 var accepted = _session.Messages.FirstOrDefault(message => message.ProtocolMessage &&
                     message.Role == "assistant" && message.ToolCallId == activity.Activity.ToolCallId &&
-                    message.AcceptedCallOrigin?.CallIndex == 0);
+                    message.RunId == run.RunId);
                 if (accepted != null)
                 {
-                    activity.ReasoningContent = accepted.ReasoningContent;
-                    activity.ReasoningTokens = accepted.ReasoningTokens;
-                    activity.ReasoningTruncated = accepted.ReasoningTruncated;
+                    var decision = ConversationResponseHistoryReader.Read(accepted);
+                    if (decision.Success) activity.Activity.StepReason = decision.Response.Reason;
+                    if (accepted.AcceptedCallOrigin?.CallIndex == 0)
+                    {
+                        activity.ReasoningContent = accepted.ReasoningContent;
+                        activity.ReasoningTokens = accepted.ReasoningTokens;
+                        activity.ReasoningTruncated = accepted.ReasoningTruncated;
+                    }
                 }
             }
             var appended = _session.Messages.Where(message => !previousMessages.Contains(message.Id)).ToArray();
@@ -297,6 +303,7 @@ namespace RNAssistant.Office.Services
                     ? fact.Response.Decision : _stepMessage, activity.Activity);
             else if (fact.Kind == AgentRunEventKind.ResponseAccepted && !fact.Response.Final)
                 _progress("acting", _stepMessage, new ChatActivity { StepId = fact.StepId, StepMessage = _stepMessage,
+                    StepReason = fact.Response.Reason,
                     Kind = "step", Title = string.IsNullOrWhiteSpace(_stepMessage) ? "Выполняю действие" : _stepMessage, Status = "running" });
             else if (activity != null)
                 _progress(fact.Kind == AgentRunEventKind.ToolStarted ? "tool_running" : "tool_result",

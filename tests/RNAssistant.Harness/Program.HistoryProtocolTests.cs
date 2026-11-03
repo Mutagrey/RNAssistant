@@ -77,11 +77,12 @@ namespace RNAssistant.Harness
                 value.Remove("message");
                 if (variant != "omitted") value["message"] = variant == "null" ? JValue.CreateNull() : new JValue(variant == "empty" ? "" : "Ready.");
                 var expected = action == "finish" ? variant == "text" : variant != "null";
+                var normalized = action != "finish" && variant == "null";
                 string error;
                 var parsed = new ConversationResponseParser().Parse(value.ToString(Formatting.None), new[] { tool }, new[] { tool }, context);
-                AssertEqual(expected, parsed.Success, action + "/" + variant + " parser");
+                AssertEqual(expected || normalized, parsed.Success, action + "/" + variant + " parser");
                 AssertEqual(expected, ToolSchemaSupport.ValidateArguments(SchemaTransport(value), schema, false, out error), action + "/" + variant + " schema: " + error);
-                if (expected) AssertEqual(variant != "omitted", JObject.Parse(parsed.Response.ToJson()).Property("message") != null, "presence survives accepted serialization");
+                if (parsed.Success) AssertEqual(variant != "omitted" && !normalized, JObject.Parse(parsed.Response.ToJson()).Property("message") != null, "presence survives accepted serialization except optional null");
             }
         }
 

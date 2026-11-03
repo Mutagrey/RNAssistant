@@ -175,6 +175,8 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolEffectEvidence.Unknown,
                     completed.Evidence.Effect,
                     "macro carries unknown effect evidence");
+                AssertTrue(completed.Evidence.InvocationCompleted && ToolExecutionProgress.Capture(completed).OpaqueActionCompleted,
+                    "the native macro handler records normal return without verifying its effects");
                 AssertEqual(1,
                     adapter.CountVbaCalls(FakeVbaOperation.RunMacro),
                     "macro backend dispatches exactly once");

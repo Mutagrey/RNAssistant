@@ -7,6 +7,7 @@ function renderActivityNode(activity, nested, current, context) {
   var operation = activityOperation(activity);
   node.className = "agent-activity kind-" + kind + " operation-" + operation +
     (nested ? " nested" : "") + (current ? " current" : "") + " status-" + status + " presentation-" + activityPresentationState(activity);
+  if (kind === "diagnostic") node.setAttribute("data-failure-reason", activityValue(activity, "ExecutionStatus", "executionStatus", ""));
 
   var expandable = activityHasDetails(activity, context);
   if (expandable) {
@@ -85,7 +86,7 @@ function renderActivityRow(activity, current, expandable, context) {
   var time = activityTimeText(context);
   var presentation = activityPresentationState(activity);
   var resultText = context && context.terminal && isActiveTimelineStatus(status) ? "Остановлено" : activityDisplayResult(activity);
-  if (activityToolId(activity) && (status === "failed" || status === "completed_with_errors") && presentation !== "unknown") {
+  if (activityToolId(activity) && (status === "failed" || status === "completed_with_errors") && presentation !== "unknown" && !activityInvocationCompleted(activity)) {
     var failureMessage = String(activityResultMessage(activity) || "").replace(/\s+/g, " ").trim();
     if (failureMessage) resultText = failureMessage.length > 170 ? failureMessage.slice(0, 167) + "…" : failureMessage;
   }
@@ -380,10 +381,15 @@ var activityNoEffectWarningCodes = {
   document_session_unavailable: true
 };
 
+function activityInvocationCompleted(activity) {
+  return activityValue(activityValue(activity, "ExecutionEvidence", "executionEvidence", null),
+    "InvocationCompleted", "invocationCompleted", false) === true;
+}
+
 function activityPresentationState(activity) {
   var evidence = activityValue(activity, "ExecutionEvidence", "executionEvidence", null);
   var effect = activityValue(evidence, "Effect", "effect", "");
-  if (effect === "Unknown") return "unknown";
+  if (effect === "Unknown") return activityInvocationCompleted(activity) ? "completed" : "unknown";
   var status = activityStatus(activity);
   if (status === "completed") {
     var summary = activityTypedResultSummary(activity) || activityReadSummary(activity);
@@ -405,7 +411,7 @@ function activityDisplayResult(activity) {
   var evidence = activityValue(activity, "ExecutionEvidence", "executionEvidence", null);
   var effect = activityValue(evidence, "Effect", "effect", "");
   var dispatch = activityValue(evidence, "Dispatch", "dispatch", "");
-  if (effect === "Unknown") return "Результат не подтверждён — нужна проверка";
+  if (effect === "Unknown") return activityInvocationCompleted(activity) ? "Вызов завершён" : "Результат не подтверждён — нужна проверка";
   if (status === "running") return "";
   if (status === "pending") return "В очереди";
   if (status === "waiting") return activityValue(activity, "ExecutionStatus", "executionStatus", "") === "awaiting_user"
@@ -531,7 +537,7 @@ function createAgentTextButton(label, className, onClick) {
 }
 
 function appendActivityErrorActions(node, activity, context) {
-  if (activityStatus(activity) !== "failed") {
+  if (activityStatus(activity) !== "failed" || activityInvocationCompleted(activity)) {
     return;
   }
 
@@ -695,6 +701,11 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
   var resultSlot = document.createElement("div");
   resultSlot.className = "agent-tool-result-content";
   result.panel.appendChild(resultSlot);
+  if (activityInvocationCompleted(activity)) {
+    var effectNote = document.createElement("div"); effectNote.className = "agent-tool-message";
+    effectNote.textContent = "Вызов штатно завершён. Его эффект отдельно не проверен.";
+    resultSlot.appendChild(effectNote);
+  }
   var message = String(activityResultMessage(activity) || "").trim();
   var failed = activityStatus(activity) === "failed" || activityStatus(activity) === "completed_with_errors";
   if (message && (failed || message !== outcome)) {
@@ -791,6 +802,11 @@ function appendActivityDetailsContent(node, activity, context) {
 
   var body = document.createElement("div");
   body.className = "agent-activity-detail-body";
+  var reason = activityStepReason(activity);
+  if (reason) {
+    var reasonLine = document.createElement("div"); reasonLine.className = "agent-step-reason";
+    reasonLine.textContent = reason; body.appendChild(reasonLine);
+  }
   var toolId = activityToolId(activity);
   var outcome = activityDisplayResult(activity);
   if (!toolId && outcome && !activityDetailTexts(activity, context).length) {

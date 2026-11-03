@@ -254,6 +254,8 @@ namespace RNAssistant.Harness
                 var visible = ChatCloneService.CloneMessagesForBridge(reopened, reopened.Messages);
                 AssertEqual(1, visible.Count(message => !message.ProtocolMessage && message.ReasoningContent == "Accepted tool reasoning."),
                     "accepted tool reasoning survives the next step and reopen exactly once");
+                AssertEqual("Inspect available resources.", visible.Single(message => message.Activity?.ToolId == "core.find").Activity.StepReason,
+                    "accepted reason survives Office persistence and browser projection");
             });
         }
 
@@ -457,6 +459,7 @@ namespace RNAssistant.Harness
             AssertEqual("run", view.RunId, "message belongs to exact run");
             AssertEqual("Saved reasoning.", view.ReasoningContent, "workspace retains accepted reasoning");
             AssertEqual("Read before changing.", view.ReflectionDecision, "reflection survives projection");
+            AssertEqual("Choose a safe approach.", view.Activity.StepReason, "workspace exposes the accepted reason in the shared feed");
             AssertEqual(RunViewLifecycles.Failed, view.RunViewState?.Lifecycle,
                 "workspace projection retains the per-message outcome for history paging");
             message.ResponseProtocolVersion = 7;

@@ -2126,6 +2126,17 @@ namespace RNAssistant.Runtime
                 view.Kind = "tool";
                 view.Title = context.Call.Name;
                 view.ArgumentsJson = context.Call.ArgumentsJson;
+                var accepted = _session.Messages.LastOrDefault(item => item.ProtocolMessage && item.Role == "assistant" &&
+                    item.ToolCallId == context.Call.Id && item.RunId == context.RunId);
+                if (accepted != null)
+                {
+                    var decision = ConversationResponseHistoryReader.Read(accepted);
+                    if (decision.Success)
+                    {
+                        view.StepReason = decision.Response.Reason;
+                        view.StepMessage = decision.Response.Message;
+                    }
+                }
                 view.Display = ToolDisplayCatalog.Resolve(_catalog.FirstOrDefault(tool => tool.Id == context.Call.Name));
                 view.Subtitle = ToolDisplayCatalog.Target(new ToolInvocation { ToolId = context.Call.Name,
                     Display = view.Display, Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(

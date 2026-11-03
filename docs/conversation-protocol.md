@@ -71,7 +71,7 @@ executes a pending call nor changes subsequent calls in that run. A pending Ask
 call still needs explicit approval, and the rest of that run stays Ask. The next
 run captures the saved setting. Missing opt-in is false; no history is rewritten.
 Preparation, target guards, mutation journaling, cancellation, read-back and the
-prohibition on repeating unknown effects all remain in force. Model output,
+prohibition on automatically retrying uncertain invocations all remain in force. Model output,
 document contents and tool results cannot change the setting.
 
 CLI `run` and `answer` accept `--auto-confirm on|off`, defaulting to **off for each
@@ -185,14 +185,14 @@ Prompt schema 30 requires one mutation per model response; only independent loca
 reads may share a batch. The next mutation is proposed after the previous result
 reaches the model. Reuse its included complete current after-state; read again only
 when the required source body is absent or invalidated.
-Unknown mutation effects remain visible in cumulative run health and the terminal
-summary, but do not stop the current run by themselves. Schema 41 and v7 require
+Unknown mutation effects remain in cumulative run health and terminal details,
+but do not stop the current run by themselves. Schema 41 and v7 require
 an explicit model action: `tool`, `done`, `blocked` or `needs_input`.
 `ToolExecutionOutcome.NotDispatched` alone is not a cancellation. The runtime's
 explicit `WasCancelled` fact identifies cancelled/superseded calls; rejected
 replays and other undispatched work retain their error code and explanation in
 Office/Web. These presentation distinctions do not change dispatch, counts or
-the prohibition on repeating an unknown effect.
+the prohibition on automatically retrying an uncertain invocation.
 The model is directed to inspect affected current state after `unknown` and
 continue feasible authorized work. Core rejects finish while target inspection
 is unresolved, returning completion feedback under the existing run budgets.
@@ -203,11 +203,23 @@ whole coverage, non-immutable evidence and ObservedAt later than that completion
 Unrelated catalog reads, partial/stale/historical evidence, failed reads, writes,
 confirmations and rejected replays do not satisfy this floor. Multiple unknown
 resources require each target. A managed mutation with missing identity/time
-remains unresolved rather than inferring authority from text. An opaque external
-action with no typed resource target has no satisfiable inspection gate: the model
-may finish with unknown health, and an identical call needs a new explicit user
-confirmation. Auto-confirmed calls cannot repeat it. Continuation reconstructs
-these boundaries from terminal facts.
+remains unresolved rather than inferring authority from text. Opaque actions do
+not create this inspection gate: their broad document/subtree impacts invalidate
+potentially affected resources, not a finite read-back contract. They may finish
+honestly with unknown health, including when those impacts name cached resources.
+
+Since 2026-11-03, the macro handler explicitly records a normal backend return as
+`InvocationCompleted`. Runtime still records `Unknown` effect/outcome; kernel
+progress persists `OpaqueActionCompleted` separately. The user approved new
+model-proposed macro calls after normal return, under the same confirmation policy
+and run limits. Three identical results without new information retain the normal
+no-progress limit. A generic handler's `ok`, old records without the fact, errors,
+exceptions and interruptions do not grant this exception: an identical uncertain
+call still needs fresh explicit confirmation, never automatic retry. Recovery
+does not replay anything. Continuation reconstructs these facts without clearing
+cumulative uncertainty. New runs start their own counters; accepted user input
+within a run clears no-progress repetition counters, while preserving uncertain
+dispatch and failed-call recovery guards. Replay applies the same boundary.
 This is an inspection prerequisite, not proof of goal success or reconciliation.
 The model still compares actual state with the requested result; questions use the
 typed question tool and unresolved outcomes must be reported honestly. Inspection
@@ -216,8 +228,8 @@ never clears cumulative uncertainty or permits automatic replay of the uncertain
 goal check occurred. It remains separate from verified write/no-change counts in
 the typed state; clean execution health never certifies the requested outcome or
 Office/browser behavior. An ordinary `model_finish` answer adds no completion or
-goal-verification card. Failed attempts, cancellation, failure and unknown effects
-remain visible outside collapsed history, independently of goal verification.
+goal-verification card. Cancellation/failure stays visible; unknown effects and
+failed-attempt counts remain in tool/result details without a generic yellow card.
 `ModelProtocolWire.MessageGuidance` gives defaults, response schema and repair one
 communication policy. Visible update frequency is independent of tool-call and
 Task List note frequency: a brief initial approach, then only new relevant
@@ -2017,30 +2029,32 @@ late per-chat projection instead of replacing newer history/outcome. The old
 `RunExecutionSummary` type, fields, getter and JS readers are removed. Unknown old
 JSON fields are ignored and grant no authority; a run without current
 `KernelState` requires explicit new-chat/reset. UI never computes effects from
-narrative or retained `ResponseStatus`. Unknown/errors retain an independent
-warning, and a clean no-write answer does not certify applied changes.
+narrative or retained `ResponseStatus`. Unknown/errors remain in typed action
+details and completion facts; a clean no-write answer does not certify applied changes.
 
 Chat presentation keeps lifecycle separate from execution health. Earlier failed
-calls remain in history and a compact warning; they do not turn a
-running, waiting or completed header into a failed run. Unknown possible effects
-retain a visible verification warning outside collapsed history. A pre-dispatch
+calls remain in history; they do not turn a running, waiting or completed header
+into a failed run. Unknown possible effects do not create a separate run card or
+composer warning. Their facts stay in action details and the expandable model
+assessment. A pre-dispatch
 `excel_sheet_already_exists` is displayed as a quiet conflict, never as proof that
 the sheet satisfies the request or that a later call resolved the conflict.
 
 For `model_needs_input` and `model_blocked`, the chat card contains the terminal
 model message once, without effect counts, Task List progress or a previous step
 recap. Other outcomes have no generic result card or standalone counter summary.
-Typed question tools retain their own question forms. Execution-health warnings
-stay separate and visible; the composer reply prompt remains available.
+Typed question tools retain their own question forms. Actual terminal failures and
+cancellation retain one concise cause; the composer reply prompt remains available.
 
 Activities show **action → semantic target → result** in a naturally wrapping,
 muted 12 px flow. Action, icon, target and ordinary outcome share the muted color.
-Unknown effects and incomplete reads are amber. A failed action is amber only for
+Unconfirmed invocations and incomplete reads are amber. A normally returned opaque
+macro uses the neutral caption «Вызов завершён» and explains its unverified effect
+inside details. A failed action is amber only for
 an exact actionable error code with source-owned no-effect/undispatched evidence;
 missing evidence, access failures, tool defects and other failures remain red.
-An unknown effect stays amber even when it stopped the run; the stopped lifecycle
-remains explicit. A completed run with failed calls shows a compact amber warning,
-while a failed run without unknown effects remains red. Targets use literal
+The stopped lifecycle remains explicit. A completed run with failed calls does not
+add a duplicate warning; a failed run retains its cause. Targets use literal
 inline-code styling (not Markdown or HTML interpretation) and remain readable
 without extra UI truncation; distinct
 icons identify search, read, write, capability study, delete, questions, plans,
@@ -2063,7 +2077,8 @@ the recorded operation outcome. Preview has its own display limits and never
 authorizes a model write.
 
 Short Russian result captions use typed status/error/effect evidence. Unknown effects
-win over success/error wording; failed no-ops remain failures. The UI uses the typed
+never claim verified success; `InvocationCompleted` proves only a normal return.
+Failed no-ops remain failures. The UI uses the typed
 summary for returned element/row counts, text/source/structure and explicit
 incompleteness; it does not parse Resource/Capability business JSON. Metadata says
 the body was not loaded; media says it is prepared for the next model request only
@@ -2092,10 +2107,10 @@ specific timeout based on exception text. Per-action diagnostic rows remain in t
 history, but raw error text is rendered only in their details, never again as model
 narration or a separate outcome row. Identical `Content`/`ResultMessage` within one
 diagnostic is shown once; distinct bodies and independent calls remain intact.
-A body-only diagnostic is still expandable. Unknown-effect warnings retain priority,
-and failed/cancelled zero-call runs keep their explanation without an empty action
-card. A failed/cancelled run with unknown effects combines the cause and verification
-warning in that same visible note. The message footer does not repeat the outcome
+A body-only diagnostic is still expandable. Failed/cancelled zero-call runs keep
+their explanation without an empty action card. An already visible diagnostic for
+the same terminal reason suppresses the duplicate run-level note. Unverified effects
+remain in details. The message footer does not repeat the outcome
 already shown by the run. Diagnostic links retain the originating chat.
 
 User Markdown preserves entered single line breaks, including CRLF; model Markdown
@@ -2113,11 +2128,13 @@ was sent unchanged to the model. Exact tool ids and arguments remain available.
 Consecutive transcript groups
 require the same runtime `RunId`; confirmation segments keep their own grouping
 while their typed state retains the logical turn's counts. During a live or restored
-active run, a nonempty comment starts a visible group; following steps without a
-comment continue that group. Completed tool/control rows in such groups fold into
+active run, a nonempty comment or accepted `reason` starts a visible group; following
+steps without either continue that group. `reason` uses the shared muted small-text
+style above calls and is omitted only when it exactly duplicates the comment.
+Completed tool/control rows in such groups fold into
 `Действия · N` under the comment (or without a heading before the first comment).
 Contiguous completed rows are grouped in place: current/queued actions, waiting
-questions or confirmations, failures, warnings, partial results and unknown effects
+questions or confirmations, failures, warnings, partial results and unconfirmed invocations
 stay outside the disclosure in chronological order, including nested calls. Consecutive
 identical visible comments share one paragraph and a repeat count; intervening
 silent steps preserve that group. Distinct comments start a new group. Explicit expansion survives
@@ -2127,13 +2144,13 @@ The current running action owns the text shimmer; an icon-free model status
 appears between calls. Its repeated notice moves to the current timeline tail;
 historical warnings retain their positions. Waiting typed lifecycles keep the feed open. On completion,
 failure, cancellation, reload and an applied user input that splits the run,
-accepted progress comments fold with their technical activities into the existing
-`Действия · N` overview. Expanding it restores each original comment with its own
-step's actions. The final answer, required interaction and runtime warning are
-separate visible elements. Silent steps add no paragraph, and live repeat grouping
+accepted comments and reasons remain visible; only technical activities fold into
+the existing history overview. Accepted reasoning keeps its original step identity
+through the transient-to-saved handoff. The final answer, required interaction and
+terminal cause are separate visible elements. Silent steps add no paragraph, and live repeat grouping
 changes only presentation, retaining every original step and call.
 A zero-call run emits no empty
-overview. Independent runtime warnings remain visible. Progress phase names
+overview. Actual terminal causes remain visible. Progress phase names
 (`thinking`, `working`) are not target captions. A nonempty action block gains a thin
 divider and a 6 px gap only before an accepted final answer. Streaming drafts remain
 inside the live run at normal text contrast with the current request stage beneath them; they

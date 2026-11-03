@@ -217,7 +217,8 @@ namespace RNAssistant.Core.Models
             "Use returned semantic targets to address resources; do not construct internal identifiers. " +
             "`status` is exactly `ok`, `error`, or `unknown`. " +
             "`status=ok` reports tool success; it does not by itself prove an applied effect. An ok result may describe a verified no-op. " +
-            "`status=error` reports a definite failure. `status=unknown` means an effect may have occurred but could not be verified; do not claim success or repeat the call unchanged. " +
+            "`status=error` reports a definite failure. `status=unknown` means an effect may have occurred but could not be verified; do not claim verified success. " +
+            "Do not repeat an uncertain invocation unchanged. When runtime explicitly confirms that a macro returned normally, a new invocation may be proposed if the task requires it, subject to the current execution policy and progress limits; normal return does not verify its effect. " +
             "Keep each failed intended change pending until later evidence confirms that same change or proves it unnecessary in current source. A successful earlier or unrelated edit does not resolve it. In the final answer, distinguish confirmed changes from unfinished changes and verification gaps. " +
             "Support claims with result evidence. A receipt summarizes prior outcomes, not source bytes; an omitted body does not prove absence or authorize another write.\n\n";
 
@@ -293,7 +294,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 69;
+        public const int CurrentAgentPromptSchemaVersion = 70;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

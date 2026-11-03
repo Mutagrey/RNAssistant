@@ -56,6 +56,7 @@ namespace RNAssistant.Core.ModelProtocol
                     return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidToolSchema, "Invalid callable tool schema for " + tool.Id + ": " + error);
                 var arguments = call.Arguments;
                 ToolSchemaSupport.RemoveOptionalNulls(arguments, schema);
+                ToolSchemaSupport.NormalizeSingletonArrays(arguments, schema);
                 if (!ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error))
                     return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidArguments, "Invalid arguments for " + tool.Id + ": " + error);
                 validatedCalls.Add(call);

@@ -280,6 +280,8 @@ namespace RNAssistant.Core.Models
         public int? Sequence { get; set; }
         public string StepId { get; set; }
         public string StepMessage { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string StepReason { get; set; }
         public string Kind { get; set; }
         public string Title { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

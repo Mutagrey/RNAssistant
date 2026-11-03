@@ -357,6 +357,14 @@ message/run/bridge fields are removed; retained unknown JSON fields are ignored 
 cannot seed UI authority or confirmation execution. A run without current
 `KernelState` requires the explicit new-chat/reset path.
 
+Normal macro return (2026-11-03) adds source-owned `InvocationCompleted` to the
+existing execution evidence and `OpaqueActionCompleted` to `ToolExecutionProgress`.
+Missing values remain false. These facts survive terminal materialization and
+continuation without promoting `Unknown` effect to verified success or replaying
+an operation. `ChatActivity.StepReason` is an accepted-response presentation field;
+cloning, result materialization and bridge projection preserve it alongside the
+existing step identity, without another store or new event envelope.
+
 `ChatRunRecord.SelectedSkills` also travels through `run.updated`: exact package
 revision, publication dependency, selection call and tool pins. Successful load or
 removal is persisted with the existing accepted tool terminal. Compaction keeps this
@@ -687,15 +695,16 @@ tool/control activities and the terminal diagnostic form one transcript segment
 for that run. Its final `RunViewState` determines the displayed lifecycle; earlier
 running markers cannot leave separate active cards after failure. A changed
 `RunViewState` on an existing message also invalidates its rendered unit. Step
-narration is rendered once. During active work, silent steps continue the preceding
-comment and completed actions may be collapsed below it; current work and attention
-states stay visible. On completion, failure, cancellation, reload or a split at
-applied user input, progress comments fold together with their actions. Expanding
-the history renders each original comment beside its step's calls. Final answers,
-pending questions and runtime warnings stay visible. This presentation preserves original step/call identities and
+narration and accepted `StepReason` are rendered once. During active work, silent
+steps continue the preceding comment and completed actions may be collapsed below
+it; current work and attention states stay visible. On completion, failure,
+cancellation, reload or a split at applied user input, comments and reasons remain
+visible while technical actions fold into the history. Accepted reasoning remains
+on the same step during the live-to-saved handoff. Final answers, pending questions
+and terminal causes stay visible. This presentation preserves original step/call identities and
 the terminal run's full expandable activity history; see [Conversation protocol](conversation-protocol.md).
 An applied user input splits the transcript into ordered segments of the same run.
-Earlier segments and their expandable comments stay before that input; only the last
+Earlier segments and their comments stay before that input; only the last
 segment merges with live activities, excluding already represented prefix steps. A full history refresh
 restores the same run's transient output before painting, and applies its inbox
 projection with the messages in one render. Pending echoes bridge the interval

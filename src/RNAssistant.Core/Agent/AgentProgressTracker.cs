@@ -44,6 +44,15 @@ namespace RNAssistant.Core.Agent
 
         internal bool RecoveryIgnored => _stepRejected && !_stepDispatched && _rejectedSteps >= 2;
 
+        internal void ObserveUserInput()
+        {
+            // New instructions can require revisiting identical observations.
+            // They never resolve uncertain dispatch or a failed-call recovery.
+            _seenResults.Clear(); _unchanged.Clear();
+            _rejectedSteps = 0;
+            _stepRejected = _stepDispatched = false;
+        }
+
         // A workflow floor, not proof that the requested state was achieved.
         // Reconstructed from terminal facts; never clears unknown replay guards.
         internal bool InspectionRequired => _inspections.Count != 0;
@@ -98,8 +107,11 @@ namespace RNAssistant.Core.Agent
             var key = Signature(call);
             if (progress.Outcome == ToolExecutionOutcome.Unknown)
             {
-                _unknown.Add(key);
-                if (progress.OpaqueAction) _opaqueUnknown.Add(key);
+                if (!progress.OpaqueActionCompleted)
+                {
+                    _unknown.Add(key);
+                    if (progress.OpaqueAction) _opaqueUnknown.Add(key);
+                }
                 var targets = (effect?.Impacts ?? new ResourceImpact[0]).Select(impact => impact.Identity)
                     .Concat(progress.Recovery?.ResourceIdentity == null ? new ResourceIdentity[0] :
                         new[] { progress.Recovery.ResourceIdentity }).Distinct().ToArray();
@@ -112,13 +124,18 @@ namespace RNAssistant.Core.Agent
                         _unchanged.Remove(read.Key);
                         _seenResults.Remove(read.Key);
                     }
-                // An opaque action has no inspectable target. Requiring a read
-                // here would make finish impossible and cause a model loop.
-                if (targets.Length == 0 && !progress.OpaqueAction)
-                    targets = new ResourceIdentity[] { null };
-                foreach (var target in targets)
-                    _inspections.Add(new PendingInspection { Target = target, AfterUtc = progress.CompletedUtc });
-                return;
+                // Opaque impacts invalidate potentially affected caches; they are
+                // not a finite read-back contract. Document/subtree invalidation
+                // must not become an impossible full-resource finish requirement.
+                if (!progress.OpaqueAction)
+                {
+                    if (targets.Length == 0) targets = new ResourceIdentity[] { null };
+                    foreach (var target in targets)
+                        _inspections.Add(new PendingInspection { Target = target, AfterUtc = progress.CompletedUtc });
+                }
+                if (!progress.OpaqueActionCompleted) return;
+                // A new model-proposed invocation after normal return is allowed
+                // by policy, still bounded by ordinary no-progress/run limits.
             }
             if (progress.Outcome == ToolExecutionOutcome.Error)
             {
@@ -173,6 +190,7 @@ namespace RNAssistant.Core.Agent
             var calls = new Dictionary<string, ToolCall>(StringComparer.Ordinal);
             foreach (var message in messages)
             {
+                if (message.Kind == AgentMessageKind.User) ObserveUserInput();
                 if (message.Kind == AgentMessageKind.Assistant) BeginStep();
                 foreach (var call in message.ToolCalls) calls[call.Id] = call;
                 ToolCall completed;

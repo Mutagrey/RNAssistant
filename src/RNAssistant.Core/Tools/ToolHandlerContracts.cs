@@ -299,11 +299,13 @@ namespace RNAssistant.Core.Tools
         public ToolRecoveryContract Recovery { get; private set; }
         public ResourceAuthorityCommit AuthorityCommit { get; private set; }
         public ResourceEffect ResourceEffect { get; private set; }
+        public bool InvocationCompleted { get; private set; }
 
         public ToolHandlerResult(ToolResult result, ToolEffectEvidence effect = ToolEffectEvidence.Unreported,
             bool awaitingUser = false, IEnumerable<ResourceEvidence> resourceEvidence = null,
             IEnumerable<ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null, ResourceAuthorityCommit authorityCommit = null, ResourceEffect resourceEffect = null)
+            ToolRecoveryContract recovery = null, ResourceAuthorityCommit authorityCommit = null, ResourceEffect resourceEffect = null,
+            bool invocationCompleted = false)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (!Enum.IsDefined(typeof(ToolEffectEvidence), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
@@ -311,6 +313,9 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Only a successful interaction can await user input.", nameof(awaitingUser));
             if (result.Status == ToolResultStatus.Ok && recovery != null)
                 throw new ArgumentException("A successful result cannot require recovery.", nameof(recovery));
+            if (invocationCompleted && result.Status != ToolResultStatus.Ok)
+                throw new ArgumentException("Normal invocation completion requires an explicit successful return.", nameof(invocationCompleted));
+            InvocationCompleted = invocationCompleted;
             Effect = effect;
             AwaitingUser = awaitingUser;
             ResourceEvidence = Array.AsReadOnly((resourceEvidence ?? new ResourceEvidence[0]).ToArray());

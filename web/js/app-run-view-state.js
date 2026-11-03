@@ -219,11 +219,6 @@
     if (!viewState) return null;
     if (viewState.lifecycle === "failed")
       return { title: "Работа остановлена", text: failureReasonLabel(viewState.reason), warning: false };
-    // Completed runs already show the typed outcome beside the answer. Repeating
-    // the same generic warning in the composer obscures the next user message.
-    if (viewState.lifecycle !== "completed" && viewState.executionHealth === "unknown" && viewState.unknownEffects > 0)
-      return { title: "Результат действия неизвестен",
-        text: "Проверьте фактическое состояние перед повторной записью.", warning: true };
     return null;
   }
 
@@ -248,8 +243,10 @@
   }
 
   function effectFacts(viewState) {
-    if (!viewState || viewState.lifecycle !== "completed" ||
-        !viewState.modelResults || !viewState.modelResults.length) return "";
+    if (!viewState || viewState.lifecycle !== "completed") return "";
+    if ((!viewState.modelResults || !viewState.modelResults.length) &&
+        !viewState.verifiedWrites && !viewState.noChangeWrites &&
+        !viewState.failedCalls && !viewState.unknownEffects) return "";
     var facts = ["Действий с подтверждённым изменением: " + viewState.verifiedWrites];
     if (viewState.noChangeWrites) facts.push("без изменений: " + viewState.noChangeWrites);
     if (viewState.failedCalls) facts.push("с ошибкой: " + viewState.failedCalls);

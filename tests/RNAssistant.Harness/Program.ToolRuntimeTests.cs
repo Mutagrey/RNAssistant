@@ -542,17 +542,33 @@ namespace RNAssistant.Harness
                     context.MarkDispatchPossible();
                     return Task.FromResult(new ToolHandlerResult(
                         RuntimeResult.Ok("Claimed success", "{\"returnValue\":true}"),
-                        ToolEffectEvidence.VerifiedChange));
+                        ToolEffectEvidence.VerifiedChange, invocationCompleted: true));
                 };
                 var result = await f.Runtime.ExecuteAsync(f.Context(), CancellationToken.None);
                 AssertEqual(ToolExecutionOutcome.Unknown, result.Outcome,
                     "opaque dispatch cannot certify its own effect");
                 AssertEqual(ToolEffectEvidence.Unknown, result.Evidence.Effect,
                     "opaque dispatch retains unknown effect evidence");
+                AssertTrue(result.Evidence.InvocationCompleted && ToolExecutionProgress.Capture(result).OpaqueActionCompleted,
+                    "normal opaque return is recorded separately from effect verification");
                 AssertEqual("{\"returnValue\":true}", result.Result.DataJson,
                     "opaque classification preserves domain diagnostics");
                 AssertEqual(1, f.Handler.Calls,
                     "opaque actions are never retried automatically");
+                f.Handler.Run = (context, token) => {
+                    context.MarkDispatchPossible();
+                    return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("unqualified success"), ToolEffectEvidence.Unknown));
+                };
+                var unqualified = await f.Runtime.ExecuteAsync(f.Context(), CancellationToken.None);
+                AssertTrue(!unqualified.Evidence.InvocationCompleted,
+                    "an arbitrary opaque handler's ok alone cannot enable repeated invocation");
+                f.Handler.Run = (context, token) => {
+                    context.MarkDispatchPossible();
+                    return Task.FromResult(new ToolHandlerResult(RuntimeResult.Unknown("interrupted"), ToolEffectEvidence.Unknown));
+                };
+                var interrupted = await f.Runtime.ExecuteAsync(f.Context(), CancellationToken.None);
+                AssertTrue(!interrupted.Evidence.InvocationCompleted && !ToolExecutionProgress.Capture(interrupted).OpaqueActionCompleted,
+                    "uncertain return cannot acquire normal-return evidence");
             }
             var missing = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write, ToolVerification.Tool)));
             var noEvidence = await missing.Runtime.ExecuteAsync(missing.Context(), CancellationToken.None);

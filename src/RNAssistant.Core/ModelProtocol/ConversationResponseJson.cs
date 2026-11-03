@@ -72,11 +72,13 @@ namespace RNAssistant.Core.ModelProtocol
                 return Fail(ConversationResponseError.WrongActionFields, "action=" + action + " forbids root field " + unsupported.Name + ".");
             if (!Nonblank(root["reason"]))
                 return Fail(ConversationResponseError.MissingReason, "A nonblank string reason is required.");
+            if (action != ConversationResponse.FinishAction && root["message"]?.Type == JTokenType.Null)
+                root.Remove("message"); // Optional narration: null and omission carry no content.
             if (root["message"] != null && root["message"].Type != JTokenType.String ||
                 action == ConversationResponse.FinishAction && root["message"] == null)
                 return Fail(ConversationResponseError.MissingMessage, action == ConversationResponse.FinishAction
                     ? "finish requires a nonblank string message containing the answer."
-                    : "message is optional; omit it when no update is needed, or provide a string. null is invalid.");
+                    : "message is optional; omit it when no update is needed, or provide a string.");
             var reason = (string)root["reason"];
             var message = (string)root["message"];
             if (action == ConversationResponse.ExecuteAction) return ReadExecute(root, reason, message,
@@ -89,7 +91,7 @@ namespace RNAssistant.Core.ModelProtocol
 
         private static ConversationResponseParseResult ReadExecute(JObject root, string reason, string message, string callsPath)
         {
-            var calls = root["tool_calls"] as JArray;
+            var calls = ReadArray(root["tool_calls"], JTokenType.Object);
             if (calls == null || calls.Count == 0)
                 return Fail(ConversationResponseError.EmptyExecuteCalls,
                     "execute requires a nonempty tool_calls array inside the decision JSON. action/reason/message alone is invalid.");
@@ -145,7 +147,7 @@ namespace RNAssistant.Core.ModelProtocol
             if (root["outcome"] == null || root["outcome"].Type != JTokenType.String ||
                 !ConversationFinishContract.TryRead((string)root["outcome"], out outcome))
                 return Fail(ConversationResponseError.InvalidOutcome, "finish requires outcome: completed, partial or unable_to_complete. This is a model claim, not runtime proof.");
-            var results = root["results"] as JArray;
+            var results = ReadArray(root["results"], JTokenType.Object);
             if (results == null)
                 return Fail(ConversationResponseError.MissingFinishResults, "finish requires a results array, even for a direct answer without tools.");
             var claims = new List<ConversationResultClaim>();
@@ -154,7 +156,7 @@ namespace RNAssistant.Core.ModelProtocol
                 var claim = token as JObject;
                 if (claim == null || claim.Properties().Any(property => property.Name != "criterion" && property.Name != "evidence" && property.Name != "assessment"))
                     return Fail(ConversationResponseError.InvalidFinishResults, "Each result contains only criterion, evidence and assessment.");
-                var evidence = claim["evidence"] as JArray;
+                var evidence = ReadArray(claim["evidence"], JTokenType.String);
                 if (!Nonblank(claim["criterion"]) || evidence == null || evidence.Any(item => !Nonblank(item)))
                     return Fail(ConversationResponseError.InvalidFinishResults, "Each result requires a nonblank criterion and evidence array of nonblank strings.");
                 if (evidence.Values<string>().Distinct(StringComparer.OrdinalIgnoreCase).Count() != evidence.Count)
@@ -174,6 +176,13 @@ namespace RNAssistant.Core.ModelProtocol
         private static bool Nonblank(JToken token)
         {
             return token != null && token.Type == JTokenType.String && !string.IsNullOrWhiteSpace((string)token);
+        }
+
+        // Repair only an unambiguous missing array wrapper. All item, authority,
+        // count and cross-field checks still run; null/missing is never an empty list.
+        private static JArray ReadArray(JToken token, JTokenType itemType)
+        {
+            return token as JArray ?? (token?.Type == itemType ? new JArray(token) : null);
         }
 
         private static ConversationResponseParseResult Fail(ConversationResponseError kind, string message)

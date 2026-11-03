@@ -112,8 +112,8 @@ assert.equal(walk(box).filter(n => n.classList.contains("agent-final-step")).len
 const completedOverview = walk(box).find(n => n.classList.contains("agent-run-overview"));
 assert.ok(completedOverview, "completed run keeps its expandable action history");
 assert.equal(completedOverview.open, false);
-assert.deepEqual(visibleStepMessages(box), [],
-  "completing a run folds progress comments with their actions");
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
+  "completion keeps accepted commentary visible while folding action details");
 completedOverview.open = true; completedOverview.listeners.toggle();
 assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
   "expanding actions restores each original model comment once");
@@ -125,8 +125,8 @@ completedOverview.open = true; completedOverview.listeners.toggle();
 assert.equal(walk(completedOverview).filter(n => n.classList.contains("agent-model-step-history")).length, 2,
   "every saved step can be reopened after completion");
 ctx.resetRenderedMessageUnits(box); render();
-assert.deepEqual(visibleStepMessages(box), [],
-  "restoring the saved transcript folds completed progress without prior DOM state");
+assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
+  "reload keeps accepted commentary without prior DOM state");
 const restoredOverview = walk(box).find(n => n.classList.contains("agent-run-overview"));
 restoredOverview.open = true; restoredOverview.listeners.toggle();
 assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
@@ -285,7 +285,8 @@ for (const lifecycle of ["completed", "cancelled"]) {
   const article = ctx.renderAgentRunArticle({ items: preparation.concat({ activity: nextFinding }),
     finalMessage: { message: { Id: "terminal", Role: "assistant", RunId: "r", Content: "Final answer",
       RunViewState: Object.assign({}, view, { Lifecycle: lifecycle }) }, index: 4 } });
-  assert.deepEqual(visibleStepMessages(article), [], "progress is folded after " + lifecycle);
+  assert.deepEqual(visibleStepMessages(article), preparation.map(item => item.activity.StepMessage)
+    .filter(Boolean).concat(nextFinding.StepMessage), "accepted commentary stays visible after " + lifecycle);
   const history = walk(article).find(n => n.classList.contains("agent-run-overview"));
   history.open = true; history.listeners.toggle();
   assert.deepEqual(visibleStepMessages(article), preparation.map(item => item.activity.StepMessage)
@@ -297,8 +298,8 @@ const reflection = { Kind: "step", RunId: "r", StepId: "reflection-1", StepMessa
   Title: "Промежуточное решение", Status: "completed" };
 const reflectedArticle = ctx.renderAgentRunArticle({ items: [{ activity: reflection, message: message(reflection, 0), index: 0 }],
   finalMessage: { message: { Id: "reflected-final", Role: "assistant", RunId: "r", Content: "Ответ готов." }, index: 1 } });
-assert.equal(reflectedArticle.querySelector(".agent-run-overview").open, true,
-  "accepted reflection is expanded after the final answer");
+assert.equal(reflectedArticle.querySelector(".agent-run-overview"), null,
+  "a reflection without actions needs no empty history disclosure");
 assert.deepEqual(visibleStepMessages(reflectedArticle), ["Проверю результат ещё раз."],
   "accepted reflection remains visible in the transcript");
 const reflections = ["Проверю исходные данные.", "Проверю исходные данные."].map(function (text, index) {

@@ -98,6 +98,9 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
       { Summary: "write uncertain", Assessment: "unverified", Evidence: ["E2"] }]
   }));
   assert.match(runView.effectFacts(uncertain), /подтверждённым изменением: 0.*с ошибкой: 1.*неизвестным эффектом: 1/);
+  assert.match(runView.effectFacts(runView.normalize(Object.assign(state("facts-only"), {
+    UnknownEffects: 1, ExecutionHealth: "unknown"
+  }))), /неизвестным эффектом: 1/, "runtime facts remain available without model claims");
   assert.equal(runView.sessionRevision({ sessionRevision: 0 }), 0);
   assert.equal(runView.sessionRevision({ SessionRevision: 4 }), null);
   assert.equal(runView.chatRevision({ Revision: 0 }), 0);
@@ -264,20 +267,22 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   ui.document = { createElement: () => new Node() };
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8"), ui,
     { filename: "app-agent.js" });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-messages.js"), "utf8"), ui);
   const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish", ModelOutcome: "partial",
     ModelResults: [{ Summary: "Chart unfinished", Assessment: "partially_satisfied",
       Evidence: ["call-1"] }] }));
   const parent = new Node();
   ui.appendAgentRunViewState(parent, partial, "run-partial");
+  assert.equal(parent.children.length, 0, "partial claims do not create an extra warning card");
+  ui.appendAcceptedResponseDetails(parent, {}, partial);
   const flatten = node => [node.textContent, ...node.children.flatMap(flatten)].join(" ");
   assert.match(flatten(parent), /Chart unfinished/);
   assert.match(flatten(parent), /call-1/);
-  assert.match(flatten(parent), /достижение цели отдельно не проверено/);
+  assert.match(flatten(parent), /Достижение цели отдельно не проверено/);
   const unable = new Node();
   ui.appendAgentRunViewState(unable, runView.normalize(Object.assign(state("unable"), {
     Reason: "model_finish", ModelOutcome: "unable_to_complete" })), "unable");
-  assert.match(flatten(unable), /не выполнена по оценке модели/,
-    "an incomplete direct answer remains visible even without result claims");
+  assert.equal(unable.children.length, 0, "the answer supplies its limitation without a duplicate service card");
   const ordinary = new Node();
   ui.appendAgentRunViewState(ordinary, runView.normalize(state("ordinary")), "run-ordinary");
   assert.equal(ordinary.children.length, 0, "ordinary completed answers have no service card");

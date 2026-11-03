@@ -76,6 +76,10 @@ function activityStepMessage(activity) {
   return activityValue(activity, "StepMessage", "stepMessage", "") || "";
 }
 
+function activityStepReason(activity) {
+  return activityValue(activity, "StepReason", "stepReason", "") || "";
+}
+
 function activityToolId(activity) {
   return activityValue(activity, "ToolId", "toolId", "") || "";
 }
@@ -186,6 +190,7 @@ function recordActivityTimeline(items, activity) {
     if (activityToolCallId(copy) && !isActiveTimelineStatus(existingStatus) && isActiveTimelineStatus(nextStatus)) return existing;
     if (activityToolCallId(copy) || activityKind(copy) === "step" || isActiveTimelineStatus(existingStatus) ||
         (existingStatus === nextStatus && activityResultMessage(existing) === activityResultMessage(copy))) {
+      if (!copy.__reasoningMessage && existing.__reasoningMessage) copy.__reasoningMessage = existing.__reasoningMessage;
       items[i] = copy;
       return copy;
     }

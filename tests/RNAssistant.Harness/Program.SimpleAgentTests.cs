@@ -656,6 +656,41 @@ namespace RNAssistant.Harness
             AssertEqual(1, strictNulls.Response.ToolCalls[0].Arguments.Count, "optional nulls removed, no execution defaults applied by protocol");
         }
 
+        private static void ConversationV8NormalizesSingletonArrays()
+        {
+            foreach (var strict in new[] { false, true })
+            {
+                Func<JObject, ConversationResponseParseResult> parse = root => new ConversationResponseParser().Parse(
+                    (strict ? new JObject { ["response"] = root } : root).ToString(),
+                    new[] { V8StructuredReadTool() }, new[] { V8StructuredReadTool() },
+                    new ModelProtocolCallContext(new[] { "test.read" }), strict);
+                var call = JObject.Parse(V8Envelope(V8Call(arguments: new JObject
+                {
+                    ["query"] = "unchanged", ["items"] = new JObject { ["name"] = "literal \\n $value" }
+                })));
+                call["tool_calls"] = call["tool_calls"][0].DeepClone();
+                call["message"] = JValue.CreateNull();
+                var accepted = parse(call);
+                AssertTrue(accepted.Success, "single call/object array item and optional null narration normalize in both transports: " + accepted.Error);
+                AssertEqual("literal \\n $value", (string)accepted.Response.ToolCalls[0].Arguments["items"][0]["name"], "normalization preserves source text");
+                AssertTrue(JObject.Parse(accepted.Response.ToJson())["tool_calls"] is JArray, "accepted history is canonical");
+                var finish = JObject.Parse(V8Envelope());
+                finish["results"] = new JObject { ["criterion"] = "Read", ["evidence"] = "E1", ["assessment"] = "satisfied" };
+                var parsed = parse(finish);
+                AssertTrue(parsed.Success, "single result and evidence normalize: " + parsed.Error);
+                AssertEqual("E1", parsed.Response.Results.Single().Evidence.Single(), "reference is preserved for admission");
+                foreach (var invalid in new JToken[] { JValue.CreateNull(), new JValue(1), new JObject(), new JArray("E1", "e1") })
+                {
+                    finish["results"]["evidence"] = invalid;
+                    AssertTrue(!parse(finish).Success, "normalization does not hide invalid/duplicate evidence");
+                }
+                call["tool_calls"]["arguments"]["items"] = new JObject { ["name"] = 42 };
+                AssertTrue(!parse(call).Success, "wrong item types are still rejected");
+                finish["results"] = JValue.CreateNull();
+                AssertTrue(!parse(finish).Success, "null is not guessed to be an empty results list");
+            }
+        }
+
         private static void ConversationV8BoundsCallCount()
         {
             var tool = V8ReadTool();

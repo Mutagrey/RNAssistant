@@ -17,7 +17,21 @@ routine steps. If supplied it is a string (including `""`), never null.
 `finish.message` must contain a nonblank answer.
 No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
 
-Prompt schema 69 shares the fresh-call rule between object output, strict-schema
+Local shape normalization (2026-11-03) accepts a single object in `tool_calls` or
+`results`, a single string in `results[].evidence`, and optional nonfinal
+`message:null` as omission. Accepted history always writes the canonical arrays.
+Tool arguments may wrap one item only when the exact schema declares `type:array`
+and the wrapped value passes all constraints; unions/`anyOf` are not guessed.
+Missing/null required lists, wrong item types, duplicate evidence, encoded JSON,
+unknown fields and authority violations still fail. Source strings and scalar
+types are never rewritten. Generated schemas and model instructions retain the
+canonical shape; normalization is local parsing, not a second wire protocol.
+
+Prompt schema 70 allows newly proposed macro invocations after runtime-confirmed
+normal return, under the current policy and progress limits. An uncertain invocation
+is still not retried automatically; normal return never proves its effect.
+The existing prompt-schema migration applies these defaults with its recovery copy.
+It retains the fresh-call rule shared between object output, strict-schema
 instructions/field descriptions and format repair: only `name` and object
 `arguments` belong to a new call. Historical `id`, `tool_call_id`, `type` and
 `function` are runtime/transport fields, not response examples to copy. This
@@ -341,11 +355,15 @@ context; its accepted protocol record retains the decision and attempt origin
 as model history. The visible step retains accepted provider reasoning; an execute
 response stores that metadata on its first visible tool activity, once per batch. A typed
 reflection progress handoff retires the provisional attempt before the next one;
-rejected drafts are never promoted into accepted history. Ordinary completed answers need no service card; partial,
-unverified and unsatisfied claims receive a separate notice. The run journal
+rejected drafts are never promoted into accepted history. The shared feed keeps
+accepted `message` and typed `ChatActivity.StepReason` visible after completion.
+Ordinary completed answers, partial/unverified claims and cumulative unknown
+effects add no warning card: assessments and counters share one collapsed details
+block. Actual failure/cancellation stays visible without a duplicate diagnostic.
+The run journal
 retains the exact accepted wire and tool-result correlation.
 For a finish with result claims, the shared Office/Workspace final renderer also
-shows the runtime count of actions with a confirmed change (including zero after
+retains in those details the runtime count of actions with a confirmed change (including zero after
 read-only work), verified no-ops, failed calls and unknown effects. A direct information answer
 with no result claims gets no effect row. These counts describe tool effects, not
 independent verification of the user's whole task.

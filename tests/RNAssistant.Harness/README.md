@@ -14,6 +14,16 @@ The tool-schema subset validator expands the generated response's single local
 with an explicitly declared local Jinja adapter, never model weights or inference.
 Web: `agent-history-settings` and `model-diagnostics-layout` reuse production DOM.
 
+`conversation v8: normalizes unambiguous singleton arrays` checks envelope/tool
+arrays in both transports while retaining strict invalid-type/evidence checks.
+`kernel: opaque` and the write-effects runtime case distinguish normal macro return
+from uncertain dispatch, bounded repeats, new user input and replay without making
+unknown effects verified. `v8 recovery:` and workspace accepted-call cases retain
+`StepReason` through materialization/reopen. Web `agent-activity-layout` checks live
+DOM/focus/disclosure retention, accepted narration/reasons and quiet effect details;
+`live-run-projection`, `run-view-state` and `stream-render-cost` cover projection and
+incremental rendering. These are host-neutral checks, not Office qualification.
+
 Follow-up audit of `601283cf`: the focused history suite also cold-loads a revision-3
 batch without CallCount and rejects its execution; repeated-rejection coverage
 includes intervening truncation and null content. `v8 recovery:` checks that Office
