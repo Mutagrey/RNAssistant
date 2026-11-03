@@ -106,6 +106,11 @@ lifecycle. DockWorkspace хранит экземпляры в существую
 Workspace adapter предоставляют source/commands; ProjectChats теперь каталог и
 навигация, не владелец второго composer или переносимого DOM.
 
+Приветствие Office/Workspace/plugin строит один `renderChatEmptyState`;
+геометрия принадлежит общим chat tokens/CSS, действия — общему Button.
+ConversationView начинает пустую ленту сверху, сохраняя обычный follow после
+появления сообщений. Высота своей ленты определяет компактность приветствия.
+
 У каждого view свои SnapshotOwner, composer/edit, history/scroll, preferences,
 ошибки и observers. Drafts/receipts/runs остаются у прежних domain owners.
 Команды и callbacks захватывают target и lifetime экземпляра. Close очищает
@@ -403,7 +408,9 @@ Dockview — единственный владелец групп, вкладо�
 в [Migration Map](../stabilization/MIGRATION_MAP.md).
 
 Геометрия Shell имеет общий источник в production tokens; ShellLayout читает их
-при инициализации. Размер navigation устанавливается до создания Dockview, чтобы
+при инициализации. Размеры controls StatusBar принадлежат Shell chrome
+(`app-product-navigation.css`), включая ограничение высоты внутри нижней строки.
+Размер navigation устанавливается до создания Dockview, чтобы
 начальная ширина Inspector не менялась вслед за поздним применением defaults.
 NavigationTree остаётся одним renderer для Office/Workspace/plugin и других
 деревьев; feature owners передают данные/действия, не свои размеры и состояния строк.

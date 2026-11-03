@@ -35,6 +35,15 @@ nodes с уникальными DOM IDs и `data-chat-node`; стили общи
 В chooser добавлены реальные chat targets. Лимит 12 вкладок и точная presentation
 этой точки остаются In Review до пользовательского согласования.
 
+Приветствие — один `renderChatEmptyState` для всех sources. Общие
+`--chat-empty-*` в `app-product-tokens.css` переносят P2: акцентный `chat` SVG
+29 px без плашки, заголовок 20 px/1.35, блок до 440 px, padding 32/16 px,
+отступы иконки/заголовка 16/12 px, пояснение 12 px/1.7 и внешний отступ 8vh.
+Кнопки используют `button compact`; отдельные dark/narrow overrides удалены.
+При высоте ленты до 360 px общий container rule убирает внешний отступ и
+уменьшает вертикальный padding до 16 px. Блок не сжимается с потерей начала,
+текст и действия остаются в прокручиваемой ленте. Presentation — In Review.
+
 ## Эталон оболочки: завершённый Dockview Demo
 
 Пользователь уточнил 2026-11-02: **Demo — эталон стиля и компоновки Dockview**,
@@ -80,6 +89,11 @@ P1/P2 (`95afa3b8`, `3e2433c9`), после возврата оформления
 Dockview adapter/chooser. Feature CSS экранов сохраняет отдельного владельца.
 Размеры hit targets и знаков разделены; точные production breakpoints и поведение
 на реальной Office-панели ещё проверяются.
+
+StatusBar использует `--shell-status-height`; его controls имеют `height: 100%`
+и `min-height: 0`. Общий минимум кнопки 34 px не должен растягивать control внутри
+строки 24 px. В Chromium после исправления по фото от 2026-11-03 высота кнопки
+23 px с учётом границы строки совпадает с Demo; внешний overflow устранён.
 
 ## Источники tokens
 

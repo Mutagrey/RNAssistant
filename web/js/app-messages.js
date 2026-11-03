@@ -161,7 +161,7 @@ function applyPromptSuggestion(text) {
 function promptSuggestionButton(text) {
   var button = document.createElement("button");
   button.type = "button";
-  button.className = "chat-empty-suggestion";
+  button.className = "button compact chat-empty-suggestion";
   button.textContent = text;
   button.addEventListener("click", function () {
     applyPromptSuggestion(text);
@@ -198,7 +198,7 @@ function renderChatEmptyState(options) {
   if (options) {
     var customButtons = options.buttons || (options.button ? [options.button] : []);
     if (customButtons.length) { var customSuggestions = document.createElement("div"); customSuggestions.className = "chat-empty-suggestions";
-      customButtons.forEach(function (button) { customSuggestions.appendChild(button); }); empty.appendChild(customSuggestions); }
+      customButtons.forEach(function (button) { button.classList.add("button", "compact", "chat-empty-suggestion"); customSuggestions.appendChild(button); }); empty.appendChild(customSuggestions); }
     return empty;
   }
   if (state.bridgeUnavailable) {
@@ -207,7 +207,7 @@ function renderChatEmptyState(options) {
       retryActions.className = "chat-empty-suggestions";
       var retry = document.createElement("button");
       retry.type = "button";
-      retry.className = "chat-empty-suggestion";
+      retry.className = "button compact chat-empty-suggestion";
       retry.textContent = "Повторить загрузку";
       retry.addEventListener("click", function () { initialize(); });
       retryActions.appendChild(retry);

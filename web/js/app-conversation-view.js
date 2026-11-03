@@ -48,6 +48,10 @@
       frames[name] = frame;
       frame.id = frame.raf ? window.requestAnimationFrame(callback) : window.setTimeout(callback, 16);
     }
+    function emptyState() {
+      var node = box.children.length === 1 && box.children[0];
+      return node && node.classList && node.classList.contains("chat-empty");
+    }
     function distance() { return Math.max(0, box.scrollHeight - box.scrollTop - box.clientHeight); }
     function shouldFollow() {
       var atBottom = distance() <= 2;
@@ -57,13 +61,14 @@
     }
     function updateButton() {
       if (!button || disposed) return;
-      var show = box.scrollHeight > box.clientHeight + 2 && (distance() > 64 || !following && distance() > 2);
+      var show = !emptyState() && box.scrollHeight > box.clientHeight + 2 && (distance() > 64 || !following && distance() > 2);
       button.classList.toggle("is-visible", show);
       button.setAttribute("aria-hidden", show ? "false" : "true"); button.tabIndex = show ? 0 : -1;
     }
     function bottom(smooth) {
       following = true;
-      if (smooth && typeof box.scrollTo === "function" &&
+      if (emptyState()) box.scrollTop = 0;
+      else if (smooth && typeof box.scrollTo === "function" &&
           !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches))
         box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
       else box.scrollTop = box.scrollHeight;

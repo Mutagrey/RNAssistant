@@ -215,21 +215,6 @@
     width: auto;
   }
 
-  .chat-empty {
-    padding: 24px 10px;
-  }
-
-  .chat-empty-suggestions {
-    align-items: stretch;
-    flex-direction: column;
-    width: 100%;
-    max-width: 280px;
-  }
-
-  .chat-empty-suggestion {
-    width: 100%;
-  }
-
   .message.user .markdown,
   .message.user .message-footer,
   .message.assistant .markdown,

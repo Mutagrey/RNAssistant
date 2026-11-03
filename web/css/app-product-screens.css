@@ -47,7 +47,7 @@
 .shell .chat-inspector-action svg { width: 15px; height: 15px; }
 
 .shell .chatbar { flex-basis: 52px; min-height: 52px; margin: 0; padding: 0 var(--panel-toggle-inset); border-bottom-color: var(--line); }
-.shell .chat-main .messages { padding: 22px var(--page-inset) 16px; }
+.shell .chat-main .messages { padding: var(--space-5) var(--page-inset) var(--space-4); }
 .shell .chat-utility-dock,
 .shell .agent-approval-dock { width: calc(100% - 36px); margin-inline: auto; }
 .shell .chat-main .composer {

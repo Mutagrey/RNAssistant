@@ -1016,6 +1016,25 @@ qualification открыта. Полный S2 не закрыт: очередь/
 адресной интеграции. Следующая работа — по найденному поведению и этой конечной
 карте; отдельный подготовительный helper не объявляется переносом Chat View.
 
+### Общее приветствие по Demo — In Review, 2026-11-03
+
+Owner: Web Messages / ConversationView / общие chat tokens. По запросу пользователя
+перенесены иконка, типографика и spacing P2 (`3e2433c9`) в существующий renderer.
+Удалены отдельные dark/narrow styles и оформление кнопок подсказок; они используют
+общий Button. Низкий split больше не сжимает приветствие с недоступным верхом;
+empty follow начинается сверху, после сообщения действует прежний follow.
+
+Сравнение Chromium при 1280×900: Demo/production имеют одинаковые 29 px иконки,
+20 px заголовка, 440 px ширины, padding 32/16 px и позиции иконки/заголовка/текста.
+Office/Workspace/plugin проверены вместе, включая низкую ленту, адресную подсказку,
+light/dark, 420/360 px, font 130% / CSS zoom 125% и переход к первому ответу.
+`conversation-view`, `bridge-bootstrap`, `independent-chat-views` прошли;
+новых bridge/storage/runtime paths нет. Windows/Office/WebView2 evidence открыт.
+
+Ревью: `/preview/web/?scenario=ready` → пустая «Сводка по регионам» → разделить
+область снизу и прокрутить приветствие → нажать подсказку и отправить сообщение.
+Откат — Web diff этого приветствия и cache keys, без миграции данных.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Текущее состояние / остаток | Что удаляется после проверки |
@@ -1449,6 +1468,23 @@ P3 iframe adapter остаётся только в замороженном Demo
 consumer с проверкой старых route aliases и deactivation side effects.
 
 ## Проверка S1b и визуальное ревью
+
+### Фото: внешний скролл Shell — 2026-11-03
+
+Owner: Web Shell chrome. Воспроизведён вертикальный overflow 6 px: общий
+`min-height: 34px` кнопки диагностики превышал строку StatusBar 24 px.
+Снят минимум у controls этой строки, обновлён CSS cache key; размеры 24/23 px
+совпадают с Demo при одинаковом viewport. Прокрутка материалов сохранена.
+Chromium/mock: шесть основных разделов, пять групп, 360/420/768/1280 px,
+light/dark, UI font 100/130% и CSS zoom 125% — внешний overflow 0;
+`material-object-views` прошёл (move/restore, late cleanup, format/scroll/focus).
+Найденное [обрезание низкого пустого чата](../stabilization/BACKLOG.md#низкая-панель-пустого-чата--2026-11-03)
+исправлено в срезе общего приветствия выше.
+Ревью: `/preview/web/?scenario=ready` → длинный Markdown → разделить область
+→ уменьшить окно: прокрутка документа доступна, StatusBar остаётся на месте.
+Откат — правило StatusBar и cache key. Windows/Office/WebView2 остаются непроверенными.
+
+### Исходная проверка S1b
 
 Сравнение на Chrome/macOS, одинаковый ready fixture, 1280×900, один начальный чат
 и закрытый Inspector (в S1b сохранён single-view preset), по три свежих страницы.

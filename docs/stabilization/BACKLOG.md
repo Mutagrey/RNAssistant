@@ -1,5 +1,17 @@
 # RNAssistant backlog
 
+## Низкая панель пустого чата — 2026-11-03
+
+Owner: Web ConversationPanel / общий `.chat-empty` в `app-chat.css`.
+В Chromium/mock при 1280×900 и пяти Dockview-группах пустой чат в нижней
+панели получает 64 px для ленты. Grid приветствия с `align-content: center`
+сжимается до 68 px, его заголовок выходит выше ленты даже при `scrollTop = 0`;
+follow-bottom дополнительно прокручивает приветствие вниз. Верх нельзя прочитать.
+Исправлено отдельным срезом приветствия по Demo: блок не сжимается, компактные
+отступы зависят от высоты ленты, empty follow открывает начало. Chromium/mock
+подтвердил доступность верха/действий и обычный follow после первого сообщения
+для общего компонента Office/Workspace/plugin. UI In Review; Office evidence открыт.
+
 ## UI audit follow-ups — 2026-11-02
 
 Owner: Web presentation; catalog protocol — соответствующий domain owner.

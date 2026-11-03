@@ -207,6 +207,7 @@
 }
 
 .messages {
+  container: chat-transcript / size;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -557,75 +558,56 @@
 }
 
 .chat-empty {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  min-height: 100%;
-  padding: 34px 18px;
-  color: var(--muted);
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: var(--chat-empty-width);
+  margin: var(--chat-empty-offset) auto;
+  padding: var(--space-6) var(--space-4);
+  color: var(--ink);
+  font: var(--text-sm)/1.5 var(--font);
   text-align: center;
 }
 
 .chat-empty-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  margin-bottom: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink-muted);
-  box-shadow: 0 6px 18px rgba(16, 24, 39, 0.07);
+  width: var(--chat-empty-icon-size);
+  height: var(--chat-empty-icon-size);
+  margin: 0 auto var(--space-4);
+  color: var(--accent);
 }
 
 .chat-empty-mark svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .chat-empty-title {
-  color: var(--text);
-  font-size: 15px;
-  font-weight: var(--title-font-weight);
+  margin-bottom: var(--space-3);
+  font-size: var(--chat-empty-title-size);
+  font-weight: 600;
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--chat-empty-title-spacing);
 }
 
 .chat-empty-text {
-  max-width: 340px;
-  margin-top: 5px;
-  font-size: 12px;
-  line-height: 1.45;
+  margin-bottom: var(--space-3);
+  color: var(--ink-muted);
+  line-height: var(--chat-empty-line-height);
 }
 
 .chat-empty-suggestions {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: var(--space-2);
   justify-content: center;
-  margin-top: 14px;
 }
 
 .chat-empty-suggestion {
-  border-color: var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink);
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: var(--button-font-weight);
-  box-shadow: none;
+  max-width: 100%;
 }
 
-.chat-empty-suggestion:hover {
-  border-color: var(--button-accent-border);
-  background: var(--button-accent-bg-hover);
-  color: var(--accent);
+@container chat-transcript (max-height: 360px) {
+  .chat-empty { margin-block: 0; padding-block: var(--space-4); }
 }
 
 .message-meta {

@@ -282,9 +282,7 @@ html[data-theme="dark"] .chat-sidebar {
   background: var(--surface-subtle);
 }
 
-html[data-theme="dark"] .chat-search,
-html[data-theme="dark"] .chat-empty-mark,
-html[data-theme="dark"] .chat-empty-suggestion {
+html[data-theme="dark"] .chat-search {
   border-color: var(--line);
   background: var(--panel);
   color: var(--text);
@@ -313,8 +311,7 @@ html[data-theme="dark"] .chat-scroll-button {
   box-shadow: var(--shadow);
 }
 
-html[data-theme="dark"] .chat-scroll-button:hover,
-html[data-theme="dark"] .chat-empty-suggestion:hover {
+html[data-theme="dark"] .chat-scroll-button:hover {
   border-color: var(--button-accent-border);
   background: var(--button-accent-bg-hover);
   color: var(--accent-strong);
