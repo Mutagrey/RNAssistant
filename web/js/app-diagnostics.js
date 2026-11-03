@@ -17,7 +17,7 @@ var performanceDiagnostics = (function () {
     if (list.length > limit) list.length = limit;
   }
   function visible() {
-    return $("tab-diagnostics").classList.contains("active") && state.diagnosticsTab === "application" &&
+    return window.RNAssistantDiagnostics.isVisible() && state.diagnosticsTab === "application" &&
       $("diagnosticsAppView").value === "health";
   }
   function duration(value) { return value !== null && value !== undefined && Number.isFinite(Number(value))

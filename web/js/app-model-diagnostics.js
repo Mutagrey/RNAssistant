@@ -128,7 +128,7 @@ async function openModelDiagnosticsLab(force, resetModel) {
   } catch (error) { lab.catalog = null; $("modelLabStatus").textContent = "Сценарии недоступны: " + error.message; }
   finally {
     lab.loading = false; updateModelLabControls();
-    if (revision !== lab.catalogRevision && state.diagnosticsTab === "model-lab" && $("tab-diagnostics").classList.contains("active")) openModelDiagnosticsLab(true);
+    if (revision !== lab.catalogRevision && state.diagnosticsTab === "model-lab" && window.RNAssistantDiagnostics.isVisible()) openModelDiagnosticsLab(true);
   }
 }
 
@@ -137,7 +137,7 @@ function refreshModelDiagnosticsSettings() {
     $("modelLabModel").value = "";
   modelDiagnosticsLab.catalogRevision++;
   modelDiagnosticsLab.catalog = null;
-  if (state.diagnosticsTab === "model-lab" && $("tab-diagnostics").classList.contains("active")) openModelDiagnosticsLab(true);
+  if (state.diagnosticsTab === "model-lab" && window.RNAssistantDiagnostics.isVisible()) openModelDiagnosticsLab(true);
 }
 
 function updateModelLabControls() {
@@ -356,7 +356,7 @@ async function runModelDiagnosticsLab() {
   } finally {
     lab.request = null; lab.running = false;
     renderModelLabResults(); renderModelLabInspector(); updateModelLabControls();
-    if (!lab.catalog && state.diagnosticsTab === "model-lab" && $("tab-diagnostics").classList.contains("active")) openModelDiagnosticsLab(true);
+    if (!lab.catalog && state.diagnosticsTab === "model-lab" && window.RNAssistantDiagnostics.isVisible()) openModelDiagnosticsLab(true);
   }
 }
 

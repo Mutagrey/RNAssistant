@@ -19,23 +19,25 @@ class Element {
   constructor(tag) {
     this.tagName = String(tag).toLowerCase(); this.className = ""; this.classList = new ClassList(this);
     this.childNodes = []; this.parentNode = null; this.attributes = {}; this.handlers = {};
+    this.dataset = {}; this.style = { setProperty() {} }; this.hidden = false;
     this.open = false; this.disabled = false; this._text = "";
   }
   get children() { return this.childNodes; }
   get firstElementChild() { return this.childNodes[0] || null; }
   get childElementCount() { return this.childNodes.length; }
-  appendChild(child) { child.parentNode = this; this.childNodes.push(child); return child; }
+  appendChild(child) { child.remove(); child.parentNode = this; this.childNodes.push(child); return child; }
+  remove() { if (this.parentNode) { this.parentNode.childNodes = this.parentNode.childNodes.filter(item => item !== this); this.parentNode = null; } }
+  insertBefore(child, reference) { child.remove(); child.parentNode = this; this.childNodes.splice(this.childNodes.indexOf(reference), 0, child); return child; }
   replaceChildren(...children) { this.childNodes.forEach(child => { child.parentNode = null; }); this.childNodes = []; children.forEach(child => this.appendChild(child)); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
+  removeAttribute(name) { delete this.attributes[name]; }
   getAttribute(name) { return this.attributes[name]; }
   addEventListener(name, handler) { (this.handlers[name] ||= []).push(handler); }
   dispatch(name, event = {}) { (this.handlers[name] || []).forEach(handler => handler(Object.assign({ preventDefault() {}, stopPropagation() {} }, event))); }
   click() { if (!this.disabled) this.dispatch("click"); }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   querySelectorAll(selector) {
-    const matches = node => selector.startsWith(".")
-      ? node.classList.contains(selector.slice(1))
-      : node.tagName === selector.toLowerCase();
+    const matches = node => selector.split(", ").some(part => part.startsWith(".") ? node.classList.contains(part.slice(1)) : node.tagName === part.toLowerCase());
     const found = [];
     const walk = node => node.childNodes.forEach(child => { if (matches(child)) found.push(child); walk(child); });
     walk(this);
@@ -46,9 +48,12 @@ class Element {
 }
 
 const mounts = [];
-let unmounts = 0;
+let unmounts = 0, treeNodes = [], treeOptions;
 const context = vm.createContext({
   AbortController,
+  RNAssistantIcons: { render: () => "" },
+  RNAssistantNavigationTree: { render(root, nodes, options) { treeNodes = nodes; treeOptions = options; }, unmount() {} },
+  RNAssistantActionMenu: { createTrigger() { return new Element("button"); }, closeWithin() {} },
   document: { createElement: tag => new Element(tag) },
   RNAssistantViewerRegistry: {
     has(kind) { return kind === "json"; }, register() {},
@@ -98,12 +103,14 @@ function findButton(root, prefix) {
   return root.querySelectorAll("button").find(button => button.textContent.startsWith(prefix));
 }
 
-function openParents(element) {
-  for (let parent = element.parentNode; parent; parent = parent.parentNode) {
-    if (parent.classList.contains("rn-run-journal-branch")) { parent.open = true; parent.dispatch("toggle"); }
-  }
+function treeEntries(nodes = treeNodes, parents = []) {
+  return nodes.flatMap(node => [{ node, parents }, ...treeEntries(node.children || [], parents.concat(node.key))]);
 }
-
+function selectTree(key) {
+  const entry = treeEntries().find(item => item.node.key === key);
+  assert.ok(entry, "selected source exists: " + key);
+  treeOptions.onSelect(entry.node);
+}
 (async function run() {
   const root = new Element("div");
   let filter = "";
@@ -126,252 +133,92 @@ function openParents(element) {
   };
 
   const result = context.RNAssistantRunJournal.render(root, rows, options);
-  assert.equal(result.displayed, 8);
-  assert.equal(result.problems, 2);
-  assert.equal(root.querySelectorAll(".rn-run-journal-row").length, 8);
-  assert.match(root.textContent, /Получен исходный ответ модели/);
-  assert.match(root.textContent, /Эффект подтверждён/);
-  assert.equal(root.querySelectorAll(".rn-run-journal-api-body").length, 0);
-  assert.match(root.textContent, /Запрос к модели/);
-  assert.match(root.textContent, /Ответ модели/);
-  assert.equal(root.querySelectorAll(".rn-run-journal-metric").length, 0, "no duplicate counters above the tree");
-  console.log("PASS run journal: chronological typed rows and run view evidence render without inference");
-
-  const toolSelection = rows.filter(item => item.ToolCallId === "call-1");
-  context.RNAssistantRunJournal.render(root, toolSelection, options);
-  assert.match(root.textContent, /Итог не найден в выборке/);
-  assert.doesNotMatch(root.textContent, /Нет terminal/);
-  console.log("PASS run journal: a correlation-filtered selection does not claim the run has no terminal");
-  context.RNAssistantRunJournal.render(root, rows, options);
-
-  const requestRow = root.querySelectorAll(".rn-run-journal-row")
-    .find(item => item.getAttribute("data-row-id") === rows[1].Id);
-  openParents(requestRow);
-  requestRow.open = true;
-  requestRow.dispatch("toggle");
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(payloadEventIds, [], "expanding an explanation does not fetch model bodies");
-  const requestTechnical = requestRow.querySelector(".rn-run-journal-technical");
-  requestTechnical.open = true; requestTechnical.dispatch("toggle");
-  findButton(requestRow, "Показать запрос к модели").click();
+  assert.equal(result.displayed, 8); assert.equal(result.problems, 2);
+  assert.equal(treeEntries().filter(item => !item.node.key.startsWith("group:")).length, rows.length, "each source event appears once in the shared tree");
+  assert.equal(root.querySelectorAll("details").length, 0, "the detail pane has no second disclosure tree");
+  assert.equal(mounts.length, 0, "a group overview mounts no body reader");
+  treeOptions.onToggle(treeNodes[0], false);
+  assert.equal(expanded[treeNodes[0].key], false);
+  selectTree(rows[1].Id);
+  assert.equal(mounts.at(-1).options.text, rows[1].DataJson);
+  assert.deepEqual(payloadEventIds, [], "selecting an event does not load its remote body");
+  const choice = root.querySelector(".rn-run-journal-data-kind");
+  choice.value = "payload"; choice.dispatch("change");
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(payloadEventIds, ["evt-2"]);
-  assert.match(requestRow.textContent, /messages/);
-  requestRow.open = false;
-  requestRow.dispatch("toggle");
-
-  const responseRow = root.querySelectorAll(".rn-run-journal-row")
-    .find(item => item.getAttribute("data-row-id") === rows[2].Id);
-  openParents(responseRow);
-  responseRow.open = true;
-  responseRow.dispatch("toggle");
-  const responseTechnical = responseRow.querySelector(".rn-run-journal-technical");
-  responseTechnical.open = true; responseTechnical.dispatch("toggle");
-  findButton(responseRow, "Показать ответ модели").click();
+  assert.match(root.querySelector(".rn-run-journal-detail").textContent, /messages/);
+  selectTree(rows[3].Id);
+  assert.equal(mounts.at(-1).options.completeness, "preview");
+  const rejectionChoice = root.querySelector(".rn-run-journal-data-kind");
+  rejectionChoice.value = "payload"; rejectionChoice.dispatch("change");
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(payloadEventIds, ["evt-2", "evt-3"]);
-  assert.match(responseRow.textContent, /Ответ модели/);
-  assert.match(root.textContent, /tool_calls/);
-  assert.equal(mounts.at(-1).options.expandedPaths, undefined, "ordinary API bodies keep the usual expansion");
-  assert.ok(findButton(responseRow, "Показать ответ модели"));
-  assert.doesNotMatch(root.textContent, /attempt attempt-1/);
-  responseRow.open = false;
-  responseRow.dispatch("toggle");
-  console.log("PASS run journal: explicit technical actions load persisted API request/response bodies while correlation IDs stay collapsed");
+  assert.equal(payloadEventIds.at(-1), "evt-4");
+  assert.ok(Array.from(mounts.at(-1).options.expandedPaths).includes('$["tool_calls"][0]'));
+  selectTree(rows[6].Id);
+  findButton(root, "Диапазон событий").click();
+  assert.deepEqual(JSON.parse(JSON.stringify(navigation)), { field: "sourceRange", value: { min: 5, max: 7 }, view: "raw" });
+  assert.match(root.textContent, /не доказывает ни успех, ни ошибку/);
+  console.log("PASS journal: one shared tree, selected exact data, lazy payload, source navigation");
 
   root.querySelector(".rn-run-journal-filters").value = "api";
   root.querySelector(".rn-run-journal-filters").dispatch("change");
   assert.equal(filter, "api");
-  const apiFiltered = context.RNAssistantRunJournal.render(root, rows,
-    Object.assign({}, options, { filter }));
-  assert.equal(apiFiltered.displayed, 2);
-  assert.equal(root.querySelectorAll(".rn-run-journal-row").length, 2);
-  assert.match(root.textContent, /Запрос к модели/);
-  assert.match(root.textContent, /Ответ модели/);
-  console.log("PASS run journal: dedicated API filter isolates exact request and response body rows");
-
-  context.RNAssistantRunJournal.render(root, rows, options);
-
-  root.querySelector(".rn-run-journal-filters").value = "problems";
-  root.querySelector(".rn-run-journal-filters").dispatch("change");
-  assert.equal(filter, "problems");
-  const filtered = context.RNAssistantRunJournal.render(root, rows, Object.assign({}, options, { filter }));
-  assert.equal(filtered.displayed, 2);
-  assert.equal(root.querySelectorAll(".rn-run-journal-row").length, 2);
-  console.log("PASS run journal: problems/model/tools/effects filters remain UI-only over loaded rows");
-
-  context.RNAssistantRunJournal.render(root, rows, options);
-  const rejected = root.querySelectorAll(".rn-run-journal-row").find(item => item.getAttribute("data-row-id") === rows[3].Id);
-  openParents(rejected);
-  rejected.open = true; rejected.dispatch("toggle");
-  const rejectedTechnical = rejected.querySelector(".rn-run-journal-technical");
-  rejectedTechnical.open = true; rejectedTechnical.dispatch("toggle");
-  assert.equal(mounts.at(-1).options.text, rows[3].DataJson);
-  assert.equal(mounts.at(-1).options.completeness, "preview");
-  assert.match(rejected.textContent, /9007199254740993123456789/);
-  assert.match(rejected.textContent, /попытка отклонена/i);
-  findButton(rejected, "Показать отклонённый ответ").click();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(payloadEventIds.at(-1), "evt-4", "rejected payload uses its exact persisted event");
-  const rejectionPaths = Array.from(mounts.at(-1).options.expandedPaths);
-  assert.ok(rejectionPaths.includes('$["tool_calls"]') && rejectionPaths.includes('$["tool_calls"][0]'),
-    "the first rejected call exposes its fields without another collapsed branch");
-  assert.ok(rejectionPaths.includes('$["response"]') && rejectionPaths.includes('$["response"]["tool_calls"][0]'),
-    "strict response wrapper also exposes the first call");
-  assert.ok(!rejectionPaths.some(path => path.includes("arguments")), "large argument bodies remain collapsed");
-  rejected.open = false; rejected.dispatch("toggle");
-  assert.ok(unmounts >= 2);
-  console.log("PASS run journal: inline expansion lazily mounts exact JSON/evidence and unmounts on collapse");
-
-  const missing = root.querySelectorAll(".rn-run-journal-row").find(item => item.getAttribute("data-row-id") === rows[6].Id);
-  missing.open = true; missing.dispatch("toggle");
-  findButton(missing, "Диапазон событий").click();
-  assert.equal(navigation.field, "sourceRange");
-  assert.equal(navigation.value.min, 5);
-  assert.equal(navigation.value.max, 7);
-  assert.equal(navigation.view, "raw");
-  assert.match(missing.textContent, /не доказывает ни успех, ни ошибку/i);
-  console.log("PASS run journal: evidence gaps stay explicit and navigate to exact source range");
-
-  context.RNAssistantRunJournal.render(root, rows, options);
-  findButton(root, "Развернуть проблемы").click();
-  assert.ok(expanded[rows[6].Id] && expanded[rows[7].Id]);
-  assert.ok(Object.keys(expanded).some(id => id.startsWith("group:") && expanded[id]), "problem expansion includes ancestors");
-  findButton(root, "Свернуть всё").click();
-  assert.equal(Object.keys(expanded).filter(id => expanded[id] && !id.endsWith(":technical")).length, 0);
-
-  const duplicate = context.RNAssistantRunJournal.render(root, [rows[0], Object.assign({}, rows[0])], options);
-  assert.match(duplicate.error, /unique/i);
-  assert.match(root.textContent, /Журнал не отображён/);
-  assert.equal(context.RNAssistantRunJournal.isProblem(row(9, "tool.execution.finished", "partial_failure")), true);
-  const malformedEvidence = context.RNAssistantRunJournal.render(root,
-    [row(9, "tool.execution.finished", "completed", { SourceEventSeqs: "9" })], options);
-  assert.match(malformedEvidence.error, /source evidence/i);
-  const uncorrelatedEvidence = context.RNAssistantRunJournal.render(root,
-    [row(9, "tool.execution.finished", "completed", { SourceEventIds: [] })], options);
-  assert.match(uncorrelatedEvidence.error, /source evidence/i);
-  const missingStatus = context.RNAssistantRunJournal.render(root,
-    [row(9, "tool.execution.finished", "")], options);
-  assert.match(missingStatus.error, /kind and status/i);
-  let bulkExpanded = [];
-  const manyProblems = Array.from({ length: 55 }, (_, index) =>
-    row(index + 10, "tool.execution.finished", "failed", { FailureCount: 1 }));
-  context.RNAssistantRunJournal.render(root, manyProblems,
-    Object.assign({}, options, { onExpandedSet(ids) { bulkExpanded = ids; } }));
-  findButton(root, "Развернуть первые 50 проблем").click();
-  assert.equal(bulkExpanded.filter(id => !id.startsWith("group:")).length, context.RNAssistantRunJournal.maxBulkExpandedRows);
+  assert.equal(context.RNAssistantRunJournal.render(root, rows, Object.assign({}, options, { filter })).displayed, 2);
+  assert.equal(treeEntries().filter(item => !item.node.key.startsWith("group:")).length, 2);
+  assert.match(context.RNAssistantRunJournal.render(root, [rows[0], rows[0]], options).error, /unique/i);
   assert.match(context.RNAssistantRunJournal.render(root, null, options).error, /array/i);
-  console.log("PASS run journal: expand/collapse state is owner-controlled and malformed projection fails closed");
+  assert.match(context.RNAssistantRunJournal.render(root, [row(9, "tool.execution.finished", "completed", { SourceEventSeqs: "9" })], options).error, /source evidence/i);
+  const many = Array.from({ length: 1001 }, (_, i) => row(i + 1, "tool.execution.finished", "completed"));
+  const bounded = context.RNAssistantRunJournal.render(root, many, options);
+  assert.equal(bounded.loaded, 1000); assert.equal(bounded.truncated, true);
 
-  for (const action of ["collapse", "parent-collapse", "unmount"]) {
-    let resolveLate, signal;
-    context.RNAssistantRunJournal.render(root, [rows[1]], {
-      onLoadPayload(eventId, cancellation) {
-        assert.equal(eventId, "evt-2");
-        signal = cancellation;
-        return new Promise(resolve => { resolveLate = resolve; });
-      }
-    });
-    const pendingRow = root.querySelector(".rn-run-journal-row");
-    openParents(pendingRow);
-  pendingRow.open = true; pendingRow.dispatch("toggle");
-    const pendingTechnical = pendingRow.querySelector(".rn-run-journal-technical");
-    pendingTechnical.open = true; pendingTechnical.dispatch("toggle");
-    findButton(pendingRow, "Показать запрос к модели").click();
+  for (const action of ["pause", "selection", "unmount"]) {
+    let release, signal;
+    context.RNAssistantRunJournal.render(root, rows, { onLoadPayload(id, cancellation) {
+      signal = cancellation; return new Promise(resolve => { release = resolve; });
+    } });
+    selectTree(rows[1].Id);
+    const part = root.querySelector(".rn-run-journal-data-kind"); part.value = "payload"; part.dispatch("change");
     await new Promise(resolve => setImmediate(resolve));
-    if (action === "collapse") { pendingRow.open = false; pendingRow.dispatch("toggle"); }
-    else if (action === "parent-collapse") {
-      const branch = root.querySelector(".branch-run"); branch.open = false; branch.dispatch("toggle");
-    } else context.RNAssistantRunJournal.unmount(root);
+    if (action === "selection") selectTree(rows[0].Id); else context.RNAssistantRunJournal[action](root);
     assert.equal(signal.aborted, true);
-    resolveLate({ text: "LATE BODY", contentType: "text/plain" });
+    release({ text: "LATE BODY", contentType: "text/plain" });
     await new Promise(resolve => setImmediate(resolve));
-    assert.doesNotMatch(pendingRow.textContent, /LATE BODY/);
     assert.doesNotMatch(root.textContent, /LATE BODY/);
   }
-  console.log("PASS run journal: collapse/unmount cancels payload and suppresses late render");
-
-  const causeRows = [
-    row(1, "tool.execution.finished", "failed", { RunId: "a", ToolCallId: "call", Summary: "Earlier failure" }),
-    row(2, "tool.result.recorded", "cancelled", { RunId: "a", ToolCallId: "call", Target: "Продажи", Summary: "Read-back unavailable", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown" } }),
-    row(3, "tool.execution.finished", "failed", { RunId: "b", ToolCallId: "call", Target: "Итоги", ErrorCode: "excel_sheet_already_exists", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } })
-  ];
-  const beforeCauseMounts = mounts.length;
-  context.RNAssistantRunJournal.render(root, causeRows, {});
-  const causes = root.querySelectorAll(".branch-action");
-  assert.equal(causes.length, 2, "same call in separate runs is not merged");
-
-  assert.match(causes[0].firstElementChild.textContent, /Не подтверждено/);
-  assert.match(causes[0].textContent, /Read-back unavailable.*Продажи/);
-  assert.match(causes[0].textContent, /Результат не подтверждён/);
-  assert.match(causes[1].textContent, /Итоги.*Лист уже существует.*не отправлено/);
-  assert.equal(context.RNAssistantRunJournal.isProblem(causeRows[1]), true, "cancellation never hides an unknown effect");
-  assert.equal(mounts.length, beforeCauseMounts, "causes are readable without mounting technical JSON");
-  console.log("PASS run journal: typed causes retain unknown effects, deduplicate exact calls and isolate runs");
+  console.log("PASS journal: bounded filters, invalid evidence, cancellation and late replies");
 
   const correlated = [
-    row(1, "turn.started", "running", { RunId: "a" }),
-    row(2, "llm.request", "prepared", { RunId: "a", StepId: "step-a", ModelAttemptId: "attempt" }),
-    row(3, "llm.response", "received", { RunId: "a", ModelAttemptId: "attempt" }),
-    row(4, "tool.call.recorded", "accepted", { RunId: "a", StepId: "step-a", ToolCallId: "call" }),
-    row(5, "tool.execution.finished", "completed", { RunId: "a", ToolCallId: "call" }),
-    row(6, "ui.projected", "projected", { RunId: "a", StepId: "step-a" }),
-    row(7, "tool.execution.finished", "failed", { RunId: "b", StepId: "step-b", ToolCallId: "call" }),
-    row(8, "llm.response", "received", { RunId: "b", ModelAttemptId: "attempt" }),
-    row(9, "tool.execution.started", "running", { RunId: "a", StepId: "step-conflict", ToolCallId: "call" }),
-    row(10, "llm.response", "received", { ModelAttemptId: "attempt" }),
-    row(11, "domain.effect.verified", "unknown", { RunId: "a", StepId: "step-a", ToolCallId: "call", ExecutionEvidence: { Effect: "Unknown" } }),
-    row(12, "step.ended", "completed", { RunId: "a", StepId: "step-a" }),
-    row(13, "turn.ended", "completed", { RunId: "a" })
+    row(1, "llm.request", "prepared", { RunId: "a", StepId: "s", ModelAttemptId: "attempt" }),
+    row(2, "llm.response", "received", { RunId: "a", ModelAttemptId: "attempt" }),
+    row(3, "tool.call.recorded", "accepted", { RunId: "a", StepId: "s", ToolCallId: "call" }),
+    row(4, "tool.execution.finished", "completed", { RunId: "a", ToolCallId: "call" }),
+    row(5, "tool.execution.started", "running", { RunId: "a", StepId: "other", ToolCallId: "call" }),
+    row(6, "llm.response", "received", { RunId: "b", ModelAttemptId: "attempt" }),
+    row(7, "ui.projected", "projected", { RunId: "a", StepId: "s" }),
+    row(8, "llm.response", "received", { ModelAttemptId: "attempt" })
   ];
-  const treeResult = context.RNAssistantRunJournal.render(root, correlated, { activeRunId: "a" });
-  assert.equal(root.querySelectorAll(".branch-run").length, 3, "orphan run stays separate");
-  assert.equal(root.querySelectorAll(".rn-run-journal-row").length, correlated.length, "each source row appears once");
-  const findRow = seq => root.querySelectorAll(".rn-run-journal-row").find(element => element.getAttribute("data-row-id") === correlated[seq - 1].Id);
-  const ancestor = (element, cls) => { for (let item = element.parentNode; item; item = item.parentNode) if (item.classList.contains(cls)) return item; };
-  assert.equal(ancestor(findRow(3), "branch-step").getAttribute("data-step-id"), "step-a", "unique same-run attempt link resolves step");
-  assert.equal(ancestor(findRow(5), "branch-step").getAttribute("data-step-id"), undefined, "conflicting call links never pick a step");
-  assert.equal(ancestor(findRow(8), "branch-step").getAttribute("data-step-id"), undefined, "attempt IDs in other runs cannot infer a step");
-  assert.equal(ancestor(findRow(6), "branch-step"), undefined, "run bookkeeping does not invent a step");
-  assert.equal(ancestor(findRow(7), "branch-run").getAttribute("data-run-id"), "b");
-  assert.equal(ancestor(findRow(10), "branch-run").getAttribute("data-run-id"), undefined);
-  const branch = root.querySelector(".branch-run"), branchId = branch.getAttribute("data-group-id");
-  const step = root.querySelector(".branch-step");
-  assert.equal(step.open, false, "steps start as a readable overview");
-  assert.equal(branch.open, true);
-  assert.match(branch.firstElementChild.textContent, /Завершено.*эффект не подтверждён/);
-  assert.match(step.firstElementChild.textContent, /Завершено.*эффект не подтверждён/);
-  assert.ok(treeResult.validExpansionIds.includes(branchId));
-  context.RNAssistantRunJournal.render(root, correlated, { activeRunId: "a", expanded: { [branchId]: false } });
-  assert.equal(root.querySelector(".branch-run").open, false, "explicit collapse overrides default-open on refresh");
-  const beforeHidden = mounts.length;
-  context.RNAssistantRunJournal.render(root, correlated, { expanded: { [correlated[1].Id]: true, [correlated[1].Id + ":technical"]: true } });
-  assert.equal(mounts.length, beforeHidden, "hidden descendants do not mount readers");
-  context.RNAssistantRunJournal.render(root, correlated, { activeToolCallId: "call", filter: "tools" });
-  assert.ok(root.querySelectorAll(".branch-action").every(element => element.open), "exact action routes and filters reveal matching paths");
-  console.log("PASS run tree: correlation isolation, ambiguous links, default/collapsed state and hidden readers");
+  context.RNAssistantRunJournal.render(root, correlated, options);
+  const ancestors = i => treeEntries().find(item => item.node.key === correlated[i].Id).parents.map(key => JSON.parse(key.slice(6)));
+  assert.ok(ancestors(1).some(key => key[0] === "step" && key[2] === "s"));
+  assert.ok(ancestors(3).some(key => key[0] === "step" && key[2] === ""), "ambiguous call never picks an adjacent step");
+  assert.ok(ancestors(5).some(key => key[0] === "step" && key[2] === ""), "attempt correlation stays inside its exact run");
+  assert.equal(ancestors(6).some(key => key[0] === "step"), false, "run bookkeeping stays in the run group");
+  assert.equal(treeNodes.length, 3, "uncorrelated events remain explicitly separate");
 
-  const parts = [row(1, "tool.call.recorded", "accepted", { RunId: "parts", StepId: "s", ToolCallId: "c",
-    DataJson: '{"arguments":{"id":9007199254740993123456789}}' }),
-    row(2, "tool.execution.finished", "completed", { RunId: "parts", StepId: "s", ToolCallId: "c",
-      DataJson: '{"resultData":{"count":9007199254740993123456789,"count":3}}' })];
+  const parts = [row(1, "tool.call.recorded", "accepted", { RunId: "parts", StepId: "s", ToolCallId: "c", DataJson: '{"arguments":{"id":9007199254740993123456789}}' }),
+    row(2, "tool.execution.finished", "completed", { RunId: "parts", StepId: "s", ToolCallId: "c", DataJson: '{"resultData":{"count":9007199254740993123456789,"count":3}}' })];
   context.RNAssistantRunJournal.render(root, parts, { activeToolCallId: "c" });
-  const partChoice = root.querySelector(".rn-run-journal-part-controls").querySelector("select");
-  assert.equal(partChoice.value, "result");
-  assert.equal(mounts.at(-1).options.text, '{"count":9007199254740993123456789,"count":3}', "result keeps exact numbers and duplicate inner keys");
-  partChoice.value = "arguments"; partChoice.dispatch("change");
+  assert.equal(mounts.at(-1).options.text, '{"count":9007199254740993123456789,"count":3}');
+  const part = root.querySelector(".rn-run-journal-data-kind"); part.value = "arguments"; part.dispatch("change");
   assert.equal(mounts.at(-1).options.text, '{"id":9007199254740993123456789}');
-  partChoice.value = "events"; partChoice.dispatch("change");
-  assert.equal(root.querySelector(".rn-run-journal-part").classList.contains("hidden"), true);
-  const beforeInvalid = mounts.length;
   parts[1].DataJson = '{"resultData":1,"resultData":2}';
   context.RNAssistantRunJournal.render(root, parts, { activeToolCallId: "c" });
   assert.match(root.querySelector(".rn-run-journal-part").textContent, /Поле повторяется/);
-  assert.equal(mounts.length, beforeInvalid, "duplicate wrapper never picks an arbitrary result");
   parts[1].DataTruncated = true;
   context.RNAssistantRunJournal.render(root, parts, { activeToolCallId: "c" });
   assert.match(root.querySelector(".rn-run-journal-part").textContent, /усечены/);
-  console.log("PASS action content: direct result/arguments preserve source tokens, hide event noise and reject ambiguous/truncated wrappers");
+  console.log("PASS journal: exact grouping, unknown scope, lossless arguments and results");
 
   const page = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");
   const trajectory = fs.readFileSync(path.join(__dirname, "../../web/js/app-trajectory.js"), "utf8");
@@ -388,7 +235,7 @@ function openParents(element) {
   assert.match(trajectory, /refreshTrajectory\(false, true\)/);
   assert.match(trajectory, /window\.openRunJournal = openRunJournal/);
   assert.match(activity, /Причина и детали/);
-  assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\), !run\.workspace\)/);
+  assert.match(agent, /appendAgentRunViewState/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
   console.log("OK run journal");

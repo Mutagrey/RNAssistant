@@ -13,6 +13,7 @@
   var trajectoryQuery = null, pausedQuery = null;
   var detailRequestId = 0;
   var journalFilter = "all";
+  var journalSelectedId = "";
   var expandedJournalRows = {}, journalParts = {};
   var journalStateChatId = "";
   var activeExport = null;
@@ -96,7 +97,7 @@
 
   function latestKnownRunId() {
     var source = selectedSource();
-    if (trajectoryChatId && trajectoryChatId !== source.chatId) return "";
+    if (trajectoryChatId && (trajectoryChatId !== source.chatId || trajectoryWorkspaceId !== (source.workspaceId || null) || trajectoryOwner !== source.owner)) return "";
     if (source.owner !== "office") return source.runId || "";
     var active = state.chatRuns && state.activeChatId ? state.chatRuns[state.activeChatId] : null;
     if (active && active.runId) return active.runId;
@@ -160,10 +161,11 @@
   }
 
   function captureRoute() {
-    return { scope: scopeKey(), selection: sourceSelectionKey(), view: $("trajectoryViewInput").value,
+    return { scope: scopeKey(), view: $("trajectoryViewInput").value,
       filter: Object.assign({}, correlationFilter), journalFilter: journalFilter,
       expanded: Object.assign({}, expandedJournalRows), parts: Object.assign({}, journalParts),
-      selectedId: selected && itemId(selected), scroll: $("trajectoryEvents").scrollTop, count: Math.min(events.length, 1000),
+      selectedId: selected && itemId(selected), journalSelectedId: journalSelectedId,
+      scroll: isRunJournal() ? currentJournalScrollTop() : $("trajectoryEvents").scrollTop, count: Math.min(events.length, 1000),
       detailScroll: $("trajectoryEventData").scrollTop,
       type: $("trajectoryTypeInput").value, visibility: $("trajectoryVisibilityInput").value };
   }
@@ -173,8 +175,9 @@
   async function goBack() {
     var route = routeHistory.pop();
     updateBackButton();
-    if (!route || route.scope !== scopeKey() || route.selection !== sourceSelectionKey()) return;
-    correlationFilter = route.filter; journalFilter = route.journalFilter; expandedJournalRows = route.expanded; journalParts = route.parts || {};
+    if (!route || route.scope !== scopeKey()) return;
+    correlationFilter = route.filter; journalFilter = route.journalFilter; journalSelectedId = route.journalSelectedId || "";
+    expandedJournalRows = route.expanded; journalParts = route.parts || {};
     $("trajectoryViewInput").value = route.view;
     $("trajectoryTypeInput").value = route.type; $("trajectoryVisibilityInput").value = route.visibility;
     nextCursor = null; updateViewControls();
@@ -183,11 +186,12 @@
       var count = events.length;
       if (!await refreshTrajectory(true) || events.length <= count) return;
     }
-    if (route.scope !== scopeKey() || route.selection !== sourceSelectionKey()) return;
+    if (route.scope !== scopeKey()) return;
     var item = route.selectedId && events.find(function (entry) { return itemId(entry) === route.selectedId; });
     var row = Array.from($("trajectoryEvents").querySelectorAll(".trajectory-event")).find(function (node) { return node.dataset.trajectoryId === route.selectedId; });
     if (item && row) selectEvent(item, row);
-    $("trajectoryEvents").scrollTop = route.scroll;
+    if (isRunJournal() && $("trajectoryEvents").querySelector(".rn-run-journal-nav")) $("trajectoryEvents").querySelector(".rn-run-journal-nav").scrollTop = route.scroll;
+    else $("trajectoryEvents").scrollTop = route.scroll;
     $("trajectoryEventData").scrollTop = route.detailScroll;
   }
 
@@ -217,9 +221,9 @@
     button.type = "button";
     button.textContent = label;
     button.title = typeof filterValue === "object" ? "#" + filterValue.min + "…#" + filterValue.max : String(filterValue);
-    var route = scopeKey(), selection = sourceSelectionKey();
+    var route = scopeKey();
     button.addEventListener("click", function () {
-      if (scopeKey() !== route || sourceSelectionKey() !== selection) return;
+      if (scopeKey() !== route) return;
       navigateCorrelation(field, filterValue, targetView, sourceChatId);
     });
     root.appendChild(button);
@@ -334,12 +338,12 @@
     if (costUsd !== null) number("Стоимость провайдера", "$" + costUsd);
     if (activeView === "model-replay") {
       number("Попытки", value(item, "AttemptCount", "attemptCount", null));
-      if (selectedSource().chatId === selectedChatId() && value(item, "RunId", "runId", "")) {
+      if (value(item, "RunId", "runId", "")) {
         var contextButton = document.createElement("button"); contextButton.type = "button"; contextButton.className = "button compact";
         contextButton.textContent = "Состав запроса и ответа";
-        var origin = scopeKey(), source = sourceSelectionKey();
+        var origin = scopeKey();
         contextButton.addEventListener("click", function () {
-          if (scopeKey() !== origin || sourceSelectionKey() !== source) return;
+          if (scopeKey() !== origin) return;
           openModelContextFromHistory({ runId: value(item, "RunId", "runId", ""), stepId: value(item, "StepId", "stepId", "") });
         });
         overview.appendChild(contextButton);
@@ -459,14 +463,19 @@
       runId: target.runId, stepId: target.stepId, requestEventId: target.requestEventId });
   }
 
+  function currentJournalScrollTop() {
+    var nav = $("trajectoryEvents").querySelector(".rn-run-journal-nav");
+    return nav ? nav.scrollTop : 0;
+  }
+
   function renderRunJournal(response, previousScroll, loadedLimitReached) {
     var root = $("trajectoryEvents");
     var adapter = window.RNAssistantRunJournal;
     previousScroll = Number(previousScroll || 0);
     var responseChatId = value(response, "ChatId", "chatId", selectedChatId() || "");
-    var responseScope = scopeKey(), responseWorkspace = trajectoryWorkspaceId, sourceSelection = sourceSelectionKey();
+    var responseScope = scopeKey(), responseWorkspace = trajectoryWorkspaceId;
     if (journalStateChatId && journalStateChatId !== responseScope) {
-      expandedJournalRows = {}; journalParts = {};
+      expandedJournalRows = {}; journalParts = {}; journalSelectedId = "";
     }
     journalStateChatId = responseScope;
     selected = null;
@@ -484,11 +493,14 @@
     }
     var result;
     function rerender(keepScroll) {
-      renderRunJournal(response, keepScroll !== false ? root.scrollTop : 0, loadedLimitReached);
+      renderRunJournal(response, keepScroll !== false ? currentJournalScrollTop() : 0, loadedLimitReached);
     }
     result = adapter.render(root, events, {
+      controls: $("trajectoryJournalControls"), commands: $("trajectoryCommands"),
       filter: journalFilter,
+      selectedId: journalSelectedId,
       expanded: expandedJournalRows, parts: journalParts,
+      onSelect: function (id) { journalSelectedId = id; },
       onPartChange: function (id, part) { journalParts[id] = part; },
       onOpenModelContext: openModelContextFromHistory,
       activeRunId: correlationFilter.runId || "",
@@ -508,12 +520,12 @@
         rerender(true);
       },
       onNavigate: function (field, filterValue, targetView) {
-        if (scopeKey() !== responseScope || sourceSelectionKey() !== sourceSelection) return;
+        if (scopeKey() !== responseScope) return;
         navigateCorrelation(field, filterValue, targetView, selectedChatId());
       },
       onLoadPayload: function (eventId, signal) {
         return readPayload(responseChatId, eventId, signal, function () {
-          return isRunJournal() && scopeKey() === responseScope && sourceSelectionKey() === sourceSelection;
+          return isRunJournal() && scopeKey() === responseScope;
         }, responseWorkspace);
       }
     });
@@ -522,7 +534,7 @@
       Object.keys(expandedJournalRows).forEach(function (id) { if (!validIds.has(id)) delete expandedJournalRows[id]; });
       Object.keys(journalParts).forEach(function (id) { if (!validIds.has(id)) delete journalParts[id]; });
     }
-    root.scrollTop = previousScroll;
+    var nav = root.querySelector(".rn-run-journal-nav"); if (nav) nav.scrollTop = previousScroll;
     nextCursor = value(response, "NextCursor", "nextCursor", null);
     var hasMore = !!value(response, "HasMore", "hasMore", false);
     var total = value(response, "TotalRows", "totalRows", events.length);
@@ -873,7 +885,7 @@
     var vba = requestedView === "vba-mutations";
     var chatId = selectedChatId();
     var journalScrollTop = requestedView === "run-causal" && (append || preserveJournalScroll)
-      ? $("trajectoryEvents").scrollTop : 0;
+      ? currentJournalScrollTop() : 0;
     if (!append) clearTrajectoryRows();
     if (!vba && !chatId) {
       $("trajectoryStatus").textContent = "Нет активного чата.";
@@ -882,7 +894,7 @@
     var requestId = ++trajectoryRequestId;
     var operation = { append: append, preserveScroll: preserveJournalScroll, requestId: null };
     trajectoryQuery = operation;
-    var requestedScope = scopeKey(), workspaceId = trajectoryWorkspaceId, sourceSelection = sourceSelectionKey();
+    var requestedScope = scopeKey(), workspaceId = trajectoryWorkspaceId;
     try {
       setTrajectoryBusy(true);
       if (vba && workspaceId) throw new Error("Журнал VBA доступен только из Office-чата.");
@@ -893,12 +905,12 @@
       if (requestId !== trajectoryRequestId ||
         requestedView !== ($("trajectoryViewInput").value || "raw") ||
         (!vba && selectedChatId() !== chatId)) return;
-      if (requestedScope !== scopeKey() || sourceSelectionKey() !== sourceSelection) return;
+      if (requestedScope !== scopeKey()) return;
       if (!vba && !matchesScope(response, chatId, workspaceId)) throw new Error("Ответ журнала относится к другому чату или проекту.");
       renderEvents(response, !!append, journalScrollTop);
       return true;
     } catch (error) {
-      if (requestId !== trajectoryRequestId || sourceSelectionKey() !== sourceSelection) return;
+      if (requestId !== trajectoryRequestId || requestedScope !== scopeKey()) return;
       $("trajectoryStatus").textContent = "Не удалось прочитать диагностику: " + error.message;
       $("trajectoryWorkspace").classList.add("hidden");
     } finally {
@@ -916,10 +928,10 @@
     var requestId = ++detailRequestId;
     if (activePayload) activePayload.abort();
     var operation = new AbortController();
-    var payloadScope = scopeKey(), sourceSelection = sourceSelectionKey();
+    var payloadScope = scopeKey();
     activePayload = operation;
     function isCurrent() {
-      return !operation.signal.aborted && scopeKey() === payloadScope && sourceSelectionKey() === sourceSelection && requestId === detailRequestId && activeView === "raw" &&
+      return !operation.signal.aborted && scopeKey() === payloadScope && requestId === detailRequestId && activeView === "raw" &&
         selected && eventId(selected) === selectedId && selectedChatId() === chatId;
     }
     try {
@@ -1061,6 +1073,8 @@
   function clearCorrelation() {
     routeHistory = routeHistory.concat([captureRoute()]).slice(-20); updateBackButton();
     correlationFilter = {};
+    journalFilter = "all";
+    $("trajectoryViewInput").value = "run-causal";
     updateViewControls();
     nextCursor = null;
     refreshTrajectory(false);
@@ -1092,8 +1106,9 @@
     $("trajectoryTitle").textContent = "Запуски";
     var scope = correlationFilter.toolCallId ? "Выбранное действие" : correlationFilter.stepId ? "Выбранный шаг" :
       correlationFilter.runId ? "Выбранный запуск" : correlationFilter.minSequence ? "Выбранные события" : "Весь чат";
-    $("trajectoryDescription").textContent = [trajectoryLabel, vba ? "Операции текущего документа" : scope].filter(Boolean).join(" · ");
+    $("trajectoryDescription").textContent = vba ? "Операции текущего документа" : scope;
     $("trajectoryDescription").title = activeFilterText();
+    $("clearTrajectoryCorrelationButton").classList.toggle("hidden", !Object.keys(correlationFilter).length);
     $("trajectoryFiltersButton").classList.toggle("hidden", !raw && !vba);
     if (!raw && !vba) { $("trajectoryAdvancedOptions").open = false; $("trajectoryAdvancedOptions").classList.add("hidden"); }
     updateBackButton();
@@ -1120,12 +1135,13 @@
     if (options.owner === "office" && options.chatId && !options.workspaceId ||
         (options.owner === "project" || options.owner === "plugin") && options.workspaceId && options.sessionId) {
       source = { owner: options.owner, workspaceId: options.workspaceId || null, chatId: options.chatId || options.sessionId,
-        label: options.label || options.chatId || options.sessionId, document: options.document };
+        label: options.label || options.chatId || options.sessionId, document: options.document, pluginId: options.pluginId };
     } else if (source.owner !== "office" || options.workspaceId || options.owner && options.owner !== "office") return false;
     else source.chatId = options.chatId || source.chatId;
     if (!source.chatId) return false;
     RNAssistantDiagnostics.showJournal(Object.assign({}, source, { runId: options.runId }));
     invalidateTrajectoryRequest();
+    routeHistory = [];
     correlationFilter = {};
     useSource(source);
     $("trajectoryViewInput").value = exportWholeChat ? "raw" : "run-causal";
@@ -1145,7 +1161,7 @@
       if (latestRunId) correlationFilter.runId = latestRunId;
     }
     journalFilter = exportWholeChat ? "all" : options.filter || "all";
-    expandedJournalRows = {}; journalParts = {};
+    expandedJournalRows = {}; journalParts = {}; journalSelectedId = "";
     nextCursor = null;
     updateViewControls();
     refreshTrajectory(false);
@@ -1203,10 +1219,16 @@
     updateViewControls();
   };
   window.RNAssistantTrajectory = {
+    hasRun: function (runId) { return !!runId && events.some(function (item) { return value(item, "RunId", "runId", "") === runId; }); },
     pause: function () {
       var interrupted = trajectoryQuery || pausedQuery;
       invalidateTrajectoryRequest(); pausedQuery = interrupted;
       if (activePayload) activePayload.abort();
+      if (window.RNAssistantRunJournal) RNAssistantRunJournal.pause($("trajectoryEvents"));
+    },
+    dispose: function () {
+      window.RNAssistantTrajectory.pause();
+      clearTrajectoryRows(); pausedQuery = { append: false, preserveScroll: true };
     },
     resume: function () {
       var interrupted = pausedQuery; pausedQuery = null;

@@ -199,7 +199,7 @@ const { chromium } = require("playwright");
     await page.locator("#modelContextBody .rn-text-viewer").first().waitFor();
     await capture("project-response-wide");
     await page.locator("#closeModelContextButton").click();
-    await page.locator("#diagnosticsReturnChat").click();
+    await page.locator('[data-tab-panel-id="conversation"]').click();
     assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Текущий запуск");
     await page.evaluate(() => { window.holdWorkspaceModel = new Promise(resolve => { window.releaseWorkspaceModel = resolve; }); });
     await openRequest.click();
@@ -258,7 +258,7 @@ const { chromium } = require("playwright");
     await input();
 
     await page.locator("#closeModelContextButton").click();
-    await page.locator("#diagnosticsReturnChat").click();
+    await page.locator('[data-tab-panel-id="conversation"]').click();
     await page.evaluate(() => document.documentElement.dataset.theme = "dark");
     await resize({ width: 390, height: 844 });
     await page.locator('[data-tab-panel-id="inspector"]').click();
@@ -279,7 +279,7 @@ const { chromium } = require("playwright");
       "request controls leave room for reading in a narrow pane");
     assert.equal(await page.locator("#modelContextDialog").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
     await page.locator("#closeModelContextButton").click();
-    await page.locator("#diagnosticsReturnChat").click();
+    await page.locator('[data-tab-panel-id="conversation"]').click();
     // The full pointer route remains regression coverage for the pending S3b
     // preview placement; do not substitute a programmatic open for this check.
     await view("preview");
@@ -312,8 +312,7 @@ const { chromium } = require("playwright");
     await capture("plugin-journal");
     assert.deepEqual(await page.locator('#trajectoryViewInput option[value="vba-mutations"]').evaluate(node =>
       ({ hidden: node.hidden, disabled: node.disabled })), { hidden: true, disabled: true });
-    await page.locator("#trajectoryActionsMenu").click();
-    await page.getByRole("menuitem", { name: "Показать весь чат", exact: true }).click();
+    await page.getByRole("button", { name: "Все запуски", exact: true }).click();
     await page.waitForFunction(() => !document.getElementById("refreshTrajectoryButton").disabled);
     assert.equal(await page.evaluate(() => workspaceJournalRequests.at(-1).workspaceId), pluginTarget.workspaceId,
       "showing the whole chat does not fall back to Office");

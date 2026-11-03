@@ -1,84 +1,36 @@
+/* Placement only. NavigationTree, ActionMenu and JSON viewer own their controls. */
 .trajectory-panel.is-run-journal .trajectory-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-.trajectory-panel.is-run-journal .trajectory-events { border-right: 0; }
 .trajectory-panel.is-run-journal .trajectory-workspace > .splitter,
 .trajectory-panel.is-run-journal .trajectory-detail { display: none; }
-.agent-run-journal-actions { margin-top: 6px; }
-
-.rn-run-journal-summary { position: sticky; z-index: 4; top: 0; display: flex; align-items: center; min-height: 32px; padding: 2px; border-bottom: 1px solid var(--line); background: var(--surface); }
-.rn-run-journal-toolbar, .rn-run-journal-actions { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.trajectory-panel.is-run-journal .trajectory-events { display: flex; flex-direction: column; overflow: hidden; border-right: 0; container-type: inline-size; }
+.trajectory-journal-controls { display: flex; flex: 0 1 190px; min-width: 0; }
+.trajectory-journal-controls select { width: 100%; min-width: 0; }
+.trajectory-panel.is-run-journal .trajectory-head { flex-wrap: nowrap; }
+.trajectory-panel.is-run-journal .trajectory-scope { display: none; }
+.trajectory-panel.is-run-journal #refreshTrajectoryButton { margin-left: auto; }
+.trajectory-panel:not(.is-run-journal) .trajectory-journal-controls { display: none; }
 .rn-run-journal-filters, .rn-run-journal-data-kind { max-width: 190px; }
-.rn-run-journal-toolbar { width: 100%; justify-content: space-between; }
-.rn-run-journal-actions { flex-wrap: wrap; }
-.rn-run-journal-action { justify-self: start; text-align: left; }
-.rn-run-journal-empty, .rn-run-journal-limit { padding: 20px 8px; color: var(--ink-muted); font-size: 12px; }
-.rn-run-journal-empty.is-error { color: var(--danger); }
-
-/* Native disclosures form the tree. The pane is its only vertical scroll owner. */
-.rn-run-journal-tree { min-width: 0; padding: 8px 2px 16px; }
-.rn-run-journal-branch, .rn-run-journal-row { min-width: 0; position: relative; }
-.rn-run-journal-branch-summary { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.5; }
-.rn-run-journal-row-summary { display: flex; align-items: start; min-height: 28px; padding: 3px 2px; cursor: pointer; list-style: none; border-radius: 5px; }
-.rn-run-journal-row-summary::-webkit-details-marker { display: none; }
-.rn-run-journal-row-summary:hover { background: var(--surface-hover); }
-.rn-run-journal-row-summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.rn-run-journal-symbol { display: grid; flex: 0 0 16px; place-items: center; width: 16px; height: 16px; }
-.rn-run-journal-symbol svg, .rn-run-journal-menu-icon svg { width: 13px; height: 13px; }
-.rn-run-journal-chevron { display: grid; flex: 0 0 12px; place-items: center; width: 12px; height: 16px; color: var(--ink-muted); }
-.rn-run-journal-chevron svg { width: 12px; height: 12px; }
-.rn-run-journal-branch[open] > summary > .rn-run-journal-chevron,
-.rn-run-journal-row[open] > summary > .rn-run-journal-chevron { transform: rotate(90deg); }
-.rn-run-journal-children { min-width: 0; margin: 2px 0 4px 8px; padding-left: 14px; border-left: 1px solid var(--line); }
-.branch-run { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-.branch-run > summary .rn-run-journal-title, .branch-step > summary .rn-run-journal-title { font-weight: 400; }
-.branch-step { margin-top: 8px; }
-.branch-models > summary, .branch-model > summary, .branch-service > summary { font-size: 12px; }
-.rn-run-journal-action-body { margin: 5px 0 10px 22px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-subtle); }
-.rn-run-journal-result-summary { margin: 0 0 8px; color: var(--ink); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-.rn-run-journal-action-body > .rn-run-journal-target { display: block; margin-bottom: 8px; font-family: var(--mono); font-size: var(--text-xs); }
-.rn-run-journal-outcome { display: grid; gap: 4px; padding: 8px 0 12px; font-size: var(--text-base); line-height: 1.6; overflow-wrap: anywhere; }
-.rn-run-journal-outcome p { margin: 0; color: var(--ink); }
-.rn-run-journal-outcome-label { color: var(--ink-muted); font-size: var(--text-xs); }
-.rn-run-journal-row-summary { gap: 6px; }
-.rn-run-journal-marker { width: 4px; height: 4px; margin-top: 6px; border-radius: 50%; background: var(--ink-faint, var(--ink-muted)); }
-.tone-problem > summary .rn-run-journal-marker { background: var(--danger); }
-.tone-waiting > summary .rn-run-journal-marker { background: var(--warning); }
-.tone-verified > summary .rn-run-journal-marker { background: var(--success); }
-.rn-run-journal-row-main { display: grid; min-width: 0; gap: 2px; }
-.rn-run-journal-row-head { display: flex; flex-wrap: wrap; min-width: 0; gap: 2px 6px; align-items: baseline; }
-.rn-run-journal-title { min-width: 0; font-size: inherit; font-weight: 400; color: inherit; overflow-wrap: anywhere; }
-.rn-run-journal-status { flex: 0 1 auto; font-size: var(--text-xs); line-height: 1.5; color: var(--ink-muted); overflow-wrap: anywhere; }
-.tone-problem > summary .rn-run-journal-status, .tone-problem > summary > .rn-run-journal-symbol { color: var(--danger); }
-.tone-uncertain > summary .rn-run-journal-status, .tone-uncertain > summary > .rn-run-journal-symbol { color: var(--warning); }
-.tone-uncertain > summary .rn-run-journal-marker { background: var(--warning); }
-.tone-verified > summary .rn-run-journal-status { color: var(--success); }
-.rn-run-journal-row-meta { color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.45; overflow-wrap: anywhere; }
-.rn-run-journal-target, .rn-run-journal-reason { color: var(--ink-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
-.branch-action > summary .rn-run-journal-target { color: var(--ink); }
-.rn-run-journal-row-body { display: grid; min-width: 0; gap: 6px; margin: 0 4px 10px 8px; }
-.rn-run-journal-note { margin: 0; color: var(--ink-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.rn-run-journal-technical { min-width: 0; }
-.rn-run-journal-technical > summary { padding: 6px 0; cursor: pointer; font-size: 11px; color: var(--ink-muted); }
-.rn-run-journal-data-kind { margin-bottom: 5px; }
-.rn-run-journal-json, .rn-run-journal-payload { min-width: 0; }
-.rn-run-journal-payload h4 { margin: 3px 0; font-size: 11px; font-weight: 500; }
-.rn-run-journal-payload-host { min-width: 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.rn-run-journal-tree .rn-json-viewer { max-height: none; overflow: visible; }
-.rn-run-journal-tree .rn-json-body { overflow: visible; }
-.rn-run-journal-tree .rn-json-status { white-space: normal; overflow-wrap: anywhere; }
-@media (max-width: 620px) {
-  .rn-run-journal-summary { align-items: start; flex-wrap: wrap; gap: 4px; }
-  .rn-run-journal-toolbar { width: 100%; justify-content: space-between; }
-  .rn-run-journal-children { margin-left: 6px; padding-left: 8px; }
-  .rn-run-journal-row-head { gap: 2px 6px; }
-  .rn-run-journal-row-body { margin-left: 0; margin-right: 0; }
-}
-
-.rn-run-journal-part-controls { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; }
-.rn-run-journal-part-controls select { margin: 0; }
-.rn-run-journal-part { padding-bottom: 6px; }
-.rn-run-journal-source-events { min-width: 0; }
-.rn-run-journal-children > .rn-run-journal-action { margin: 2px 0 4px; }
-
+.rn-run-journal-layout { display: grid; grid-template-columns: minmax(190px, 36%) minmax(0, 1fr); flex: 1; min-width: 0; min-height: 0; }
+.rn-run-journal-nav, .rn-run-journal-detail { min-width: 0; min-height: 0; overflow: auto; }
+.rn-run-journal-nav.navigation-tree { padding: var(--space-2); border-right: 1px solid var(--line); background: var(--surface-subtle); }
+.rn-run-journal-detail { padding: var(--space-3); }
+.rn-run-journal-detail-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2); }
+.rn-run-journal-detail-heading h3 { flex: 1; margin: 0; font-size: var(--text-base); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.rn-run-journal-status, .rn-run-journal-detail-meta { color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.rn-run-journal-detail-meta { margin: var(--space-2) 0; }
+.rn-run-journal-result-summary, .rn-run-journal-note { margin: var(--space-2) 0; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.rn-run-journal-note { color: var(--ink-muted); }
+.rn-run-journal-part-controls { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 var(--space-2); }
 .rn-json-toolbar .rn-run-journal-part-controls { display: contents; }
-
-.rn-run-journal-row { font-size: var(--text-sm); }
+.rn-run-journal-json, .rn-run-journal-payload { min-width: 0; }
+.rn-run-journal-payload-host { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-sm); }
+.rn-run-journal-detail .rn-json-viewer { max-height: none; overflow: visible; }
+.rn-run-journal-detail .rn-json-body { overflow: visible; }
+.rn-run-journal-empty, .rn-run-journal-limit { padding: var(--space-3); color: var(--ink-muted); font-size: var(--text-sm); }
+.rn-run-journal-empty.is-error { color: var(--danger); }
+.agent-run-journal-actions { margin-top: var(--space-2); }
+@container (max-width: 620px) {
+  .rn-run-journal-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 38%) minmax(0, 1fr); }
+  .rn-run-journal-nav.navigation-tree { border-right: 0; border-bottom: 1px solid var(--line); }
+  .rn-run-journal-detail { padding: var(--space-2); }
+}

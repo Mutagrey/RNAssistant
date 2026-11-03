@@ -120,13 +120,13 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree-list { list-style: none; margin: 0; padding: 0; }
 .navigation-tree-list .navigation-tree-list { margin-left: var(--space-3); }
 .navigation-tree-item { list-style: none; margin: 0; padding: 0; outline: none; }
-.navigation-tree-item[aria-expanded] { margin-bottom: var(--space-2); }
+.navigation-tree-item[aria-level="1"][aria-expanded] { margin-bottom: var(--space-2); }
 .navigation-tree-row, .rna-nav-button { box-sizing: border-box; display: flex; align-items: center; gap: var(--tree-gap); min-height: var(--tree-row-height); padding: var(--tree-parent-inset) var(--space-2); border-radius: var(--shell-radius); position: relative; color: var(--ink-muted); }
-.navigation-tree-item[aria-expanded] > .navigation-tree-row { padding: var(--tree-gap) var(--tree-parent-inset); font-weight: 500; color: var(--ink); }
+.navigation-tree-item[aria-level="1"][aria-expanded] > .navigation-tree-row { padding: var(--tree-gap) var(--tree-parent-inset); font-weight: 500; color: var(--ink); }
 .rna-nav-button { justify-content: flex-start; width: 100%; margin-top: var(--space-1); border: 0; background: transparent; font-size: var(--tree-text); font-weight: 400; line-height: 1.5; text-align: left; }
 :is(.navigation-tree-row, .rna-nav-button):hover { background: var(--surface-hover); }
-.navigation-tree-row.selected, .rna-nav-button[aria-current="page"] { background: var(--surface-selected); color: var(--accent); }
-.navigation-tree-row.selected:hover, .rna-nav-button[aria-current="page"]:hover { background: var(--surface-selected); }
+.navigation-tree .navigation-tree-row.selected, .rna-nav-button[aria-current="page"] { background: var(--surface-selected); color: var(--accent); }
+.navigation-tree .navigation-tree-row.selected:hover, .rna-nav-button[aria-current="page"]:hover { background: var(--surface-selected); }
 @media (prefers-reduced-motion: no-preference) { .navigation-tree-row, .rna-nav-button { transition: background-color var(--motion-fast) var(--motion-ease); } }
 .navigation-tree-item:focus-visible > .navigation-tree-row { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* The row owns hover/selection; nested buttons must not inherit the generic button fill or minimum height. */
@@ -134,7 +134,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree-expander svg { width: var(--tree-expander); height: var(--tree-expander); }
 .navigation-tree-icon { display: grid; place-items: center; flex: 0 0 var(--tree-icon); color: inherit; }
 .navigation-tree-icon svg { width: var(--tree-icon); height: var(--tree-icon); fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
-.navigation-tree-item[aria-expanded] > .navigation-tree-row > .navigation-tree-icon { --tree-icon: var(--tree-parent-icon); }
+.navigation-tree-item[aria-level="1"][aria-expanded] > .navigation-tree-row > .navigation-tree-icon { --tree-icon: var(--tree-parent-icon); }
 .office-app-mark {
   position: relative;
   display: block;

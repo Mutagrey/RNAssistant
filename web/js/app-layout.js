@@ -28,8 +28,10 @@
       document.getElementById("toggleChatInspectorButton").hidden = !layout.visible;
       text("workspaceLayoutStatus", layout.visible ? "Вкладки: " + layout.panels + " · группы: " + layout.groups : "");
       if (layout.visible) {
-        ["settings", "chat"].forEach(function (section) {
-          var selected = section === "settings" ? layout.activeView === "settings" : layout.section === "chat" && layout.activeView !== "settings";
+        ["settings", "diagnostics", "chat"].forEach(function (section) {
+          var selected = section === "settings" ? layout.activeView === "settings" :
+            section === "diagnostics" ? layout.activeView === "diagnostics" :
+              layout.section === "chat" && layout.activeView !== "settings" && layout.activeView !== "diagnostics";
           var button = document.querySelector('.section-rail [data-section="' + section + '"]');
           button.classList.toggle("active", selected);
           if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
@@ -383,7 +385,7 @@
       }
     });
     document.getElementById("productNavigationScrim").addEventListener("click", dismissNavigation);
-    document.getElementById("workspaceDiagnostics").addEventListener("click", function () { switchTab("diagnostics"); });
+    document.getElementById("workspaceDiagnostics").addEventListener("click", function () { RNAssistantDiagnostics.openCurrent(); });
     document.addEventListener("rna-navigation-select", function (event) {
       if (event.target.closest(".global-nav")) dismissNavigation();
     });

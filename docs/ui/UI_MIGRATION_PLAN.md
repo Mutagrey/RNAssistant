@@ -1,5 +1,38 @@
 # План модернизации production UI
 
+## Диагностика и дерево запусков — In Review, 2026-11-03
+
+Scope — прямой запрос пользователя: Dock-вкладка, общие стили дерева, сокращение
+дублирования и удобный выбор запуска/шага с компактными деталями. Owner — Web
+diagnostics/trajectory; runtime, Bridge и storage не меняются.
+
+Baseline: собственные вложенные disclosures RunJournal, действия/переходы внутри
+строк, повторный заголовок экрана и скрытая команда снятия scope. Теперь один
+NavigationTree и соседний reader, явные «Все запуски», общий ActionMenu/JSON viewer.
+Старый renderer/CSS удалён. Группировка использует записанные run/step/call/attempt
+IDs; неоднозначные связи не достраиваются по соседству. Bounds 200/1000 и lazy
+payload сохранены. Изменения обратимы без миграции данных и второго UI path.
+
+Минимальная проверка: run-journal, trajectory-json-viewer, chat-history-layout,
+diagnostics-navigation, model-diagnostics-layout, performance-diagnostics,
+shared-navigation-tree и json-viewer.
+Browser fixture проверяет каждое событие ровно один раз, выбор нескольких запусков,
+общие вычисленные font/color/height/selection, возврат из запроса, payload по действию,
+close/reopen, move/split/restore, light/dark 390/1440 px и 125% zoom. Unit fixtures
+проверяют bounds, неоднозначные корреляции, cancellation/late replies и lossless JSON.
+Ускорение не заявляется; latency и память Office здесь не измерялись.
+
+Ревью: открыть запуск → «Все запуски» → выбрать шаг/действие → открыть запрос
+и вернуться. Проверить спокойную иерархию дерева и полезность деталей.
+Визуальное принятие пользователем и Windows/Office/WebView2 evidence остаются открытыми.
+
+Уточнение источника: rail/status bar явно открывают текущий чат и последний ход;
+Dock-вкладка сохраняет прежний разбор. Source caption ведёт в исходный чат,
+действие строки существующего дерева открывает диагностику любого выбранного
+чата без смены composer. `diagnostics-navigation` проверяет эти маршруты,
+обновление закреплённого источника после смены активного чата и отсутствие
+переноса run ID между разными чатами. Runtime/store не меняются.
+
 ## Лента, reason и штатный возврат макроса — In Review, 2026-11-03
 
 Scope — запрос пользователя о неверных формах ответа, повторных макросах,

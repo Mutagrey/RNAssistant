@@ -1007,6 +1007,9 @@ function chatTreeNode(chat) {
     statusLabel: presence.status === "running" && state.activeSends[id] && state.activeSends[id].canceling
       ? "Запрос останавливается" : terminalRun && queuedWork ? "Запускается следующая задача" : presence.label,
     actions: [
+      { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("chart"),
+        onClick: function () { window.openRunJournal({ owner: "office", chatId: id, label: chatTitle(chat),
+          document: chatDocumentTitle(chat), runId: persistedRun && persistedRun.runId }); } },
       { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
         onClick: function () { renameChat(id); } },
       { title: hasActiveRun ? "Сначала остановите запрос" : "Удалить чат",

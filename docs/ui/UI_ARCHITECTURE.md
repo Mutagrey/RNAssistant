@@ -1,9 +1,22 @@
 # Архитектура UI RNAssistant
 
-Обновлено: 2026-11-02. Owner: Web presentation; host/runtime contracts — их текущие
+Обновлено: 2026-11-03. Owner: Web presentation; host/runtime contracts — их текущие
 domain owners. Стратегия и продолжение общего chat-среза разрешены пользователем;
 детали визуальных решений остаются на ревью.
 Это canonical document владения, зависимостей и lifecycle UI.
+
+Диагностика — singleton `diagnostics` в существующем Dockview (In Review,
+2026-11-03). `app-diagnostics-navigation` владеет маршрутом и scope,
+`app-trajectory` — bounded чтением и выбором, `app-run-journal` — presentation
+дерева и одного reader. Дерево рисует общий NavigationTree, данные — существующие
+JSON/payload viewers; прежний inline renderer удалён. Hide отменяет pending read,
+close освобождает viewers, reopen читает метаданные с сохранённым выбором;
+move/split/restore сохраняют DOM. Закрытие UI не отменяет domain run.
+Источник чтения закреплён за owner/workspace/chat вкладки, а не текущим composer.
+Смена активного чата не переадресует чтения/переходы открытой диагностики.
+Явный вход из rail/status bar или строки другого чата меняет scope и отменяет
+предыдущий запрос; response scope и generation по-прежнему проверяются.
+Экспорт сохраняет дополнительную отмену при смене активного источника.
 
 Основание: запрос «UI Strategy Transition» и сохранённый без изменений
 [исходный документ](reference/RNAssistant_UI_Architecture_and_Agent_Rules.md), v1.0 от 2026-11-01.

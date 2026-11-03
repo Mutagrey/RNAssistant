@@ -237,6 +237,10 @@
           status: presence.status, statusLabel: presence.label,
           actions: (entry.pluginId ? [{ title: "Открыть чат в плагине", iconHtml: window.RNAssistantNavigationTree.icon("code"),
             disabled: !entry.available, onClick: function () { window.RNAssistantPlugins.select(entry.pluginId, chat.Id); } }] : []).concat([
+            { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("chart"), disabled: !entry.available,
+              onClick: function () { window.openRunJournal({ owner: entry.pluginId ? "plugin" : "project", workspaceId: entry.workspaceId,
+                sessionId: chat.Id, pluginId: entry.pluginId, label: chat.Title, document: entry.name,
+                runId: field(current, "runId", "RunId") || field(field(chat, "runViewState", "RunViewState"), "runId", "RunId") }); } },
             { title: "Переименовать чат «" + chat.Title + "»", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
               disabled: !entry.available, onClick: function () { rename(entry, chat); } },
             { title: "Удалить чат «" + chat.Title + "»", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,

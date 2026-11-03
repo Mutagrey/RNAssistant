@@ -89,12 +89,25 @@ const rawResponse = {
   }]
 };
 let trajectoryResponse = rawResponse;
+let journalNodes = [], journalOptions, menuActions;
+const journalEntries = (nodes = journalNodes) => nodes.flatMap(node => [node, ...journalEntries(node.children || [])]);
 const trajectoryQueries = [];
 let downloads = 0, downloadReads = 0, exportResponse;
 const leaseCloses = [], exportRequests = [], windowEvents = new EventTarget();
 
 const context = vm.createContext({
   AbortController, Uint8Array, TextDecoder, setTimeout, clearTimeout,
+  RNAssistantIcons: { render: () => "" },
+  RNAssistantNavigationTree: { render(root, nodes, options) { journalNodes = nodes; journalOptions = options; }, unmount() {} },
+  RNAssistantActionMenu: { createTrigger() { return new Element("button"); }, closeWithin() {}, open(trigger, actions) { menuActions = actions; } },
+  RNAssistantDiagnostics: { show() {}, showJournal() {}, source() {
+    const workspace = context.RNAssistantWorkspaceChat;
+    if (workspace && workspace.owner() !== "office") {
+      const snapshot = workspace.snapshot();
+      return { owner: workspace.owner(), workspaceId: snapshot.project.workspaceId, chatId: snapshot.sessionId, label: snapshot.state.title, runId: snapshot.state.runId };
+    }
+    return { owner: "office", workspaceId: null, chatId: context.state.activeChatId };
+  } },
   addEventListener: windowEvents.addEventListener.bind(windowEvents),
   removeEventListener: windowEvents.removeEventListener.bind(windowEvents),
   fetch() { throw new Error("read utility is supplied below"); },
@@ -139,6 +152,7 @@ for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.j
 
 function settle() { return new Promise(resolve => setImmediate(() => setImmediate(resolve))); }
 function button(root, text) { return root.querySelectorAll("button").find(node => node.textContent === text); }
+function copyAll(root) { button(root, "⋯").click(); menuActions.find(action => action.label === "Копировать всё").onSelect(); }
 
 (async function () {
   context.bindTrajectoryActions();
@@ -158,7 +172,7 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.match(dataHost.textContent, /evt-31/);
   assert.match(dataHost.textContent, /blob-1/);
   get("trajectoryDetailPart").value = "data"; get("trajectoryDetailPart").dispatch("change");
-  button(dataHost, "Копировать всё").click();
+  copyAll(dataHost);
   await settle();
   assert.equal(clipboard.at(-1), rawResponse.Events[0].DataJson);
   assert.equal(dataHost.querySelectorAll(".rn-json-viewer").length, 1);
@@ -179,7 +193,7 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   await settle();
   assert.ok(payloadHost.firstElementChild.classList.contains("rn-json-viewer"));
   assert.match(payloadHost.textContent, /<main onclick=evil\(\)>safe<\/main>/);
-  button(payloadHost, "Копировать всё").click();
+  copyAll(payloadHost);
   await settle();
   assert.equal(clipboard.at(-1), payloadText);
   assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-payload");
@@ -222,19 +236,16 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(lastQuery.pageSize, 200);
   assert.equal(lastQuery.runId, "run-1");
   assert.equal(panel.classList.contains("is-run-journal"), true);
-  assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 3);
-  get("trajectoryEvents").querySelector(".rn-run-journal-filters").value = "problems";
-  get("trajectoryEvents").querySelector(".rn-run-journal-filters").dispatch("change");
-  assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 1);
-  get("trajectoryEvents").querySelector(".rn-run-journal-filters").value = "attempts";
-  get("trajectoryEvents").querySelector(".rn-run-journal-filters").dispatch("change");
-  const rejected = get("trajectoryEvents").querySelectorAll(".rn-run-journal-row")[0];
-  rejected.open = true; rejected.dispatch("toggle");
-  assert.doesNotMatch(rejected.textContent, /duplicate id/);
-  const technical = rejected.querySelector(".rn-run-journal-technical");
-  technical.open = true; technical.dispatch("toggle");
-  assert.match(rejected.textContent, /duplicate id/);
-  assert.match(rejected.textContent, /<\/script><img onerror=1>/);
+  assert.equal(journalEntries().filter(node => !node.key.startsWith("group:")).length, 3);
+  get("trajectoryJournalControls").querySelector(".rn-run-journal-filters").value = "problems";
+  get("trajectoryJournalControls").querySelector(".rn-run-journal-filters").dispatch("change");
+  assert.equal(journalEntries().filter(node => !node.key.startsWith("group:")).length, 1);
+  get("trajectoryJournalControls").querySelector(".rn-run-journal-filters").value = "attempts";
+  get("trajectoryJournalControls").querySelector(".rn-run-journal-filters").dispatch("change");
+  assert.doesNotMatch(get("trajectoryEvents").textContent, /duplicate id/);
+  journalOptions.onSelect(journalEntries().find(node => node.key === "run-row-2"));
+  assert.match(get("trajectoryEvents").textContent, /duplicate id/);
+  assert.match(get("trajectoryEvents").textContent, /<\/script><img onerror=1>/);
   console.log("PASS run journal integration: latest persisted run opens bounded causal rows with lazy exact JSON");
   exportResponse = { chatId: "chat-1", contentType: "application/zip", fileName: "trace.zip", byteLength: 2,
     bundleSha256: "b".repeat(64), data: { leaseId: "a".repeat(64), payload: { byteLength: 2, sha256: "b".repeat(64), contentType: "application/zip" } } };
@@ -270,12 +281,19 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(trajectoryQueries.at(-1).workspaceId, workspaceId, "full history keeps the same project");
   assert.equal(trajectoryQueries.at(-1).chatId, "chat-1");
   assert.equal(context.openRunJournal({ chatId: "chat-1" }), false, "Office route cannot open over the project");
+  assert.equal(context.openRunJournal({ owner: "project", workspaceId: "another-project", sessionId: "chat-1" }), true);
+  await settle();
+  assert.equal(trajectoryQueries.at(-1).runId, undefined, "the same chat ID in another workspace cannot inherit the active run");
+  context.openRunJournal({ owner: "project", workspaceId, sessionId: "chat-1", runId: "run-1" }); await settle();
   get("trajectoryTypeInput").value = "llm.request";
   get("trajectoryVisibilityInput").value = "hidden";
   get("trajectoryExportRedactionInput").value = "none";
   get("trajectoryExportCasInput").checked = true;
   const beforeHandoffExports = exportRequests.length;
-  assert.equal(context.openTrajectoryExport({ owner: "project", workspaceId: "foreign", sessionId: "chat-1" }), false);
+  assert.equal(context.openTrajectoryExport({ owner: "project", workspaceId: "foreign", sessionId: "chat-1" }), true, "an explicit route pins its own source");
+  await settle();
+  assert.equal(trajectoryQueries.at(-1).workspaceId, "foreign");
+  assert.match(get("trajectoryStatus").textContent, /другому чату или проекту/, "a reply from another source cannot populate the reader");
   assert.equal(context.openTrajectoryExport({ owner: "project", workspaceId, sessionId: "chat-1" }), true);
   await settle();
   assert.equal(exportRequests.length, beforeHandoffExports, "opening export options does not create an archive");

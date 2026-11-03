@@ -12,6 +12,8 @@
     conversation: { title: "Чат", icon: "chat", section: "chat" },
     inspector: { title: "Инспектор", icon: "panel" },
     request: { title: "Запрос модели", icon: "code" },
+    diagnostics: { title: "Диагностика", icon: "chart", onVisible: function (shown) { RNAssistantDiagnostics.onVisible(shown); },
+      onClose: function () { RNAssistantDiagnostics.onClose(); } },
     settings: { title: "Настройки", icon: "settings", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
   function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && !views[id].perObject; }); }
@@ -104,6 +106,7 @@
     var nextSettings = visible("settings"), activateSettings = nextSettings && !settingsVisible;
     var deactivateSettings = !nextSettings && settingsVisible;
     settingsVisible = nextSettings; roots.settings.inert = !nextSettings;
+    roots.diagnostics.inert = !visible("diagnostics");
     if (deactivateSettings) RNAssistantSettingsView.deactivate();
     if (activateSettings) RNAssistantSettingsView.activate();
     roots.request.inert = !visible("request");
@@ -176,7 +179,7 @@
     if (views[id].prepare) views[id].prepare();
     var item = panel(id);
     // The gear opens in the main group; repeat clicks activate without relocating it.
-    if ((id === "settings" || id === "request") && !item && !group) {
+    if ((id === "settings" || id === "request" || id === "diagnostics") && !item && !group) {
       group = panel("conversation") ? panel("conversation").group : api.activeGroup;
       direction = "within";
     }
@@ -373,6 +376,7 @@
     roots.inspector = document.getElementById("chatInspector"); roots.inspector.hidden = false;
     roots.settings = document.getElementById("settingsView");
     roots.request = document.getElementById("modelContextDialog"); roots.request.classList.remove("hidden");
+    roots.diagnostics = document.getElementById("tab-diagnostics");
     Object.keys(views).forEach(function (id) {
       if (views[id].element) roots[id] = views[id].element();
     });

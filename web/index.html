@@ -33,12 +33,12 @@
   <link rel="stylesheet" href="css/app-workspace.css?v=request-dock-20261102">
   <link rel="stylesheet" href="css/app-plugins.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-preview-surface.css?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1-browser-s3b3b">
-  <link rel="stylesheet" href="css/app-json-viewer.css?v=request-dock-20261102">
+  <link rel="stylesheet" href="css/app-json-viewer.css?v=diagnostics-source-20261103">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-resource-viewer.css?v=agent-planning-20261002-2">
   <link rel="stylesheet" href="css/app-trajectory.css?v=request-dock-20261102">
-  <link rel="stylesheet" href="css/app-run-journal.css?v=request-dock-20261102">
+  <link rel="stylesheet" href="css/app-run-journal.css?v=diagnostics-source-20261103">
   <link rel="stylesheet" href="css/app-tools.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-vba.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
@@ -54,13 +54,13 @@
   <link rel="stylesheet" href="css/app-theme.css?v=request-dock-20261102">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=request-dock-20261102">
   <link rel="stylesheet" href="css/app-product-navigation.css?v=navigation-s3b1-20261102">
-  <link rel="stylesheet" href="css/app-product-components.css?v=navigation-s3b1-20261102">
+  <link rel="stylesheet" href="css/app-product-components.css?v=diagnostics-source-20261103">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=navigation-s3b1-20261102-materials-s3b2-browser-s3b3b">
   <link rel="stylesheet" href="css/app-product-screens.css?v=navigation-s3b1-20261102-materials-s3b2">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
-  <link rel="stylesheet" href="css/app-diagnostics.css?v=request-dock-20261102">
+  <link rel="stylesheet" href="css/app-diagnostics.css?v=diagnostics-source-20261103">
   <link rel="stylesheet" href="css/app-dock-workspace.css?v=shell-reference-20261102-materials-s3b2">
 </head>
 <body>
@@ -86,11 +86,11 @@
       <span class="rail-divider" role="separator"></span>
       <span id="pluginRail" class="plugin-rail"></span>
       <button class="rail-button" id="pluginAdd" data-rail-popover="plugin-add" data-rail-label="Добавить плагин" title="Добавить плагин" aria-label="Добавить плагин"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-      <button class="rail-button" data-section="diagnostics" data-tab="diagnostics" aria-label="Диагностика" title="Диагностика"><svg data-rna-icon="chart" aria-hidden="true"></svg></button>
+      <button class="rail-button" data-section="diagnostics" data-tab="diagnostics" aria-label="Диагностика" title="Диагностика текущего чата"><svg data-rna-icon="chart" aria-hidden="true"></svg></button>
       <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
-    <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="workspaceDiagnostics"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
+    <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="workspaceDiagnostics" title="Диагностика текущего чата"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
     <button type="button" class="navigation-scrim" id="productNavigationScrim" aria-label="Закрыть навигацию" tabindex="-1" hidden></button>
     <main class="content">
       <section class="panel active" id="tab-chat">
@@ -882,10 +882,9 @@
         </div>
       </section>
 
-      <section class="panel" id="tab-diagnostics" aria-label="Диагностика">
-        <header class="diagnostics-heading"><h2>Диагностика</h2><div class="diagnostic-links"><button type="button" class="button compact hidden" id="diagnosticsReturnRequest">К запросу</button><button type="button" class="button compact" id="diagnosticsReturnChat">К чату</button></div></header>
+      <section class="dock-diagnostics" id="tab-diagnostics" aria-label="Диагностика">
         <div data-rna-editor-tabs="diagnostics"></div>
-        <p id="diagnosticsScope" class="diagnostics-scope"></p>
+        <div id="diagnosticsScopeBar" class="diagnostics-scope-bar"><button type="button" id="diagnosticsScope" class="button compact ghost diagnostics-scope"></button><button class="button compact ghost hidden" id="clearTrajectoryCorrelationButton" type="button"><svg data-rna-icon="left" aria-hidden="true"></svg><span>Все запуски</span></button></div>
         <div id="diagnosticsAppControls" class="hidden form-grid"><label><span>Состояние приложения</span><select id="diagnosticsAppView"><option value="log">Журнал этой панели</option><option value="health">Задержки и хранилище</option></select></label></div>
 
 
@@ -959,11 +958,11 @@
                   <button class="icon-btn compact hidden" id="trajectoryBackButton" type="button" aria-label="Назад к предыдущей выборке" title="Назад"><svg data-rna-icon="left" aria-hidden="true"></svg></button>
                   <h3 id="trajectoryTitle" hidden>История чата</h3>
                   <label class="trajectory-field" id="trajectoryViewField"><select class="rna-form-control compact" id="trajectoryViewInput" aria-label="Представление истории"><option value="raw">Исходные события</option><option value="run-causal">Ход запуска</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Действия</option><option value="artifact-lineage">Артефакты</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations">Журнал VBA</option></select></label>
+                  <div class="trajectory-journal-controls" id="trajectoryJournalControls"></div>
                   <span class="trajectory-scope" id="trajectoryDescription">Весь чат</span>
                   <button class="icon-btn compact" id="refreshTrajectoryButton" type="button" aria-label="Обновить историю" title="Обновить историю"><svg data-rna-icon="refresh" aria-hidden="true"></svg></button>
                   <button type="button" class="icon-btn compact" id="trajectoryActionsMenu" aria-label="Действия с историей" title="Действия с историей" aria-haspopup="menu"><svg data-rna-icon="more" aria-hidden="true"></svg></button>
                     <div id="trajectoryCommands" hidden>
-                      <button class="hidden" id="clearTrajectoryCorrelationButton" type="button"><svg data-rna-icon="chat" aria-hidden="true"></svg><span>Показать весь чат</span></button>
                       <button id="trajectoryFiltersButton" type="button"><svg data-rna-icon="search" aria-hidden="true"></svg><span>Фильтры событий</span></button>
                       <button id="trajectoryExportOptionsButton" type="button"><svg data-rna-icon="download" aria-hidden="true"></svg><span>Экспорт диагностики</span></button>
                     </div>
@@ -1091,7 +1090,7 @@
   <script src="js/app-navigation-pane.js?v=navigation-20261102"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
-  <script src="js/app-layout.js?v=host-icon-20261102-materials-s3b2"></script>
+  <script src="js/app-layout.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-chat-inspector.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
@@ -1099,9 +1098,9 @@
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
   <script src="js/app-settings.js?v=chat-models-s2a-20261102"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
-  <script src="js/app-diagnostics-navigation.js?v=request-dock-20261102"></script>
-  <script src="js/app-diagnostics.js?v=diagnostics-20261101"></script>
-  <script src="js/app-model-diagnostics.js?v=diagnostics-20261101"></script>
+  <script src="js/app-diagnostics-navigation.js?v=diagnostics-source-20261103"></script>
+  <script src="js/app-diagnostics.js?v=diagnostics-source-20261103"></script>
+  <script src="js/app-model-diagnostics.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2-materials-s3b2"></script>
   <script src="js/app-browser-viewer.js?v=browser-s3b3a-20261102"></script>
   <script src="js/app-viewer-ui.js?v=request-dock-20261102-materials-s3b2-browser-s3b3b"></script>
@@ -1109,11 +1108,11 @@
   <script src="js/app-text-viewer.js?v=request-dock-20261102"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=agent-planning-20261002-2-image-display-1"></script>
-  <script src="js/app-run-journal.js?v=request-dock-20261102"></script>
+  <script src="js/app-run-journal.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-resource-download.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-resource-upload.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1-workspace-diagnostics-20261025-1"></script>
-  <script src="js/app-trajectory.js?v=request-dock-20261102"></script>
+  <script src="js/app-trajectory.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-prompts.js?v=navigation-s3b1-20261102"></script>
   <script src="js/app-model-data.js?v=chat-models-s2a-20261102-preferences-s2b5"></script>
   <script src="js/app-model-picker.js?v=chat-models-s2a-20261102"></script>
@@ -1121,7 +1120,7 @@
   <script src="js/app-model-render.js?v=chat-models-s2a-20261102-preferences-s2b5"></script>
   <script src="js/app-models.js?v=chat-models-s2a-20261102-preferences-s2b5-source-s2b7-office-projection-s2b9"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chat-composer-s2b2-20261102-draft-s2b6-source-s2b7-office-projection-s2b9-context-s2b10-live-s2b11-source-s2b12"></script>
+  <script src="js/app-chat-state.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1175,14 +1174,14 @@
   <script src="js/app-chat-edit.js?v=chat-composer-s2b2-20261102-live-s2b11"></script>
   <script src="js/app-workspace-chat.js?v=chat-composer-s2b2-20261102-scope-s2b3-observe-s2b4-preferences-s2b5-draft-s2b6-source-s2b7-projection-s2b8"></script>
   <script src="js/app-plugins.js?v=dock-sidebar-20261102-browser-s3b3b"></script>
-  <script src="js/app-project-chats.js?v=chat-composer-s2b2-20261102-observe-s2b4-preferences-s2b5-source-s2b7-projection-s2b8-stop"></script>
+  <script src="js/app-project-chats.js?v=diagnostics-source-20261103"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
   <script src="js/app-browser-object-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-html-artifact-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-plugin-release-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-material-view.js?v=object-views-20261102-browser-s3b3b"></script>
-  <script src="js/app-dock-workspace.js?v=navigation-s3b1-20261102-materials-s3b2-browser-s3b3b"></script>
-  <script src="js/app.js?v=navigation-s3b1-20261102-materials-s3b2"></script>
+  <script src="js/app-dock-workspace.js?v=diagnostics-source-20261103"></script>
+  <script src="js/app.js?v=diagnostics-source-20261103"></script>
 </body>
 </html>

@@ -15,7 +15,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const errors = []; page.on("pageerror", error => errors.push(error.message));
     const index = read("index.html");
     const css = [...index.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)].map(match => read(match[1])).join("\n");
-    const panel = index.slice(index.indexOf('      <section class="panel" id="tab-artifacts">'), index.indexOf('      <section class="panel" id="tab-diagnostics"'));
+    const panel = index.slice(index.indexOf('      <section class="panel" id="tab-artifacts">'), index.indexOf('      <section class="dock-diagnostics" id="tab-diagnostics"'));
     await page.setContent(`<style>${css}\nbody{display:block;height:100vh}</style><div class="shell app-shell"><header class="workspace-topbar"><button id="productMobileMenuButton"></button></header><button id="productNavigationScrim" class="navigation-scrim"></button><button id="workspaceDiagnostics" hidden></button><main class="content">${panel.replace('class="panel"', 'class="panel active"')}</main></div>`);
     await page.evaluate(() => {
       window.$ = id => document.getElementById(id);

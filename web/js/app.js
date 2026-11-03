@@ -3,8 +3,8 @@ function setMobileNavigationOpen(open) {
 }
 
 function switchTab(name, options) {
-  var workspaceView = RNAssistantDockWorkspace.sectionView(name) || (name === "settings" || name === "request" ? name : null);
-  if (name === "settings" || name === "request") {
+  var workspaceView = RNAssistantDockWorkspace.sectionView(name) || (["settings", "request", "diagnostics"].indexOf(name) >= 0 ? name : null);
+  if (["settings", "request", "diagnostics"].indexOf(name) >= 0) {
     // These are workspace views. Keep existing callers, with one placement path.
     name = "chat";
     options = { preserveChatOwner: true };
@@ -41,7 +41,6 @@ function switchTab(name, options) {
   if (typeof refreshSplitPanes === "function") {
     refreshSplitPanes();
   }
-  if (changed && window.RNAssistantDiagnostics) RNAssistantDiagnostics.onTabChange(name);
   if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.onTabChange(name);
   if (!changed) {
     if (workspaceView) RNAssistantDockWorkspace.show(workspaceView);
@@ -92,6 +91,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   Array.prototype.slice.call(document.querySelectorAll(".shell [data-section]")).forEach(function (tab) {
     tab.addEventListener("click", function () {
+      if (tab.dataset.tab === "diagnostics") { RNAssistantDiagnostics.openCurrent(); return; }
       if (tab.dataset.tab === "settings") { switchTab("settings"); return; }
       RNAssistantShellLayout.selectSection(function () { switchTab(tab.dataset.defaultTab || tab.dataset.tab); }, tab.getAttribute("aria-current") === "page");
     });

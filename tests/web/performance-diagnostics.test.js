@@ -9,7 +9,7 @@ const result = {textContent: ''};
 const active = {value: 'health', classList: {contains: name => name === 'active'}};
 let longTaskCallback;
 const context = vm.createContext({
-  window: {}, state: { diagnosticsTab: "application" },
+  window: { RNAssistantDiagnostics: { isVisible: () => true } }, state: { diagnosticsTab: "application" },
   $: id => id === 'performanceDiagnosticsResults' ? result : active,
   document: {
     getElementById: id => id === 'performanceDiagnosticsResults' ? result : active,
