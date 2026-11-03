@@ -16,10 +16,14 @@ namespace RNAssistant.Office
         internal RNAssistant.Core.Storage.AppDataPaths StoragePaths { get; }
         internal IReadOnlyList<RNAssistant.Application.Conversations.ConversationActiveSnapshot> ActiveChatRuns()
         { return new RNAssistant.Application.Conversations.ConversationActiveSnapshot[0]; }
-        internal void ConfigureAgentCommunication(RNAssistant.Application.Conversations.AgentCommunicationService service) { }
+        internal RNAssistant.Application.Conversations.AgentCommunicationService AgentCommunication { get; private set; }
+        internal Func<string, string, Action<string, string, string, ChatActivity>, Action<ChatStateResponse>,
+            RNAssistant.Application.Conversations.AgentConversationEndpoint> AgentEndpointFactory { get; set; }
+        internal void ConfigureAgentCommunication(RNAssistant.Application.Conversations.AgentCommunicationService service) { AgentCommunication = service; }
         internal RNAssistant.Application.Conversations.AgentConversationEndpoint AgentEndpoint(string chatId, string viewId,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
-        { throw new NotSupportedException("Office endpoint requires the real controller."); }
+        { return AgentEndpointFactory?.Invoke(chatId, viewId, progress, changed) ??
+            throw new NotSupportedException("Office endpoint requires the real controller."); }
         internal bool StopActiveChatRun(string chatId, string runId) { return false; }
         public AssistantController() : this(RNAssistant.Core.Storage.AppDataPaths.CreateDefault()) { }
         public AssistantController(RNAssistant.Core.Storage.AppDataPaths paths) { StoragePaths = paths; }

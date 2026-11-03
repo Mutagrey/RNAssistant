@@ -35,6 +35,12 @@ chat/chain/operation. Runtime, очередь и исполнение не за�
 runtime повторно проверяет текущую настройку перед новой отправкой. Ноль проходит
 через существующий typed `SettingsControlsDto`, без UI-only выключателя.
 
+Office agent-started runs передают progress тем же `inbox:<chatId>` маршрутом, что
+обычная очередь, с exact chat/run identity. Отдельный `agents:` маршрут удалён:
+общий Chat View показывает reasoning, streaming и шаг «Жду сообщения агентов».
+Короткий sender ID вычисляет Core; Web только отображает его рядом с названием.
+Ожидание/пробуждение и terminal scheduling принадлежат общему Inbox, не UI.
+
 Обновлено: 2026-11-03. Owner: Web presentation; host/runtime contracts — их текущие
 domain owners. Стратегия и продолжение общего chat-среза разрешены пользователем;
 детали визуальных решений остаются на ревью.

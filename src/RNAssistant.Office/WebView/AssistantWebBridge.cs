@@ -559,7 +559,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.SubmitChatInput:
                         var inboxInput = Payload<SubmitChatInputPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _controller.SubmitChatInput(inboxInput,
-                            (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxInput.ChatId, inboxInput.ChatId, nextRun, phase, message, activity),
+                            (nextRun, phase, message, activity) => ReportInboxProgress(inboxInput.ChatId, nextRun, phase, message, activity),
                             ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.EditChatInput:
@@ -568,13 +568,13 @@ namespace RNAssistant.Office.WebView
                         var inboxUpdate = Payload<UpdateChatInputPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _controller.UpdateChatInput(inboxUpdate,
                             type == BridgeOperationId.RemoveChatInput ? "remove" : type == BridgeOperationId.SteerChatInput ? "steer" : "edit",
-                            (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxUpdate.ChatId, inboxUpdate.ChatId, nextRun, phase, message, activity),
+                            (nextRun, phase, message, activity) => ReportInboxProgress(inboxUpdate.ChatId, nextRun, phase, message, activity),
                             ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ResumeChatInbox:
                         var inboxChat = Payload<ChatPayload>(payload).ChatId;
                         responsePayload = await RunBridgeWorkAsync(() => _controller.ResumeChatInbox(inboxChat,
-                            (nextRun, phase, message, activity) => ReportProgress("inbox:" + inboxChat, inboxChat, nextRun, phase, message, activity),
+                            (nextRun, phase, message, activity) => ReportInboxProgress(inboxChat, nextRun, phase, message, activity),
                             ReportChatState), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.BeginChatResourceUpload:
@@ -1145,6 +1145,9 @@ namespace RNAssistant.Office.WebView
         {
             ReportProgress(id, null, null, phase, message, null);
         }
+
+        private void ReportInboxProgress(string chatId, string runId, string phase, string message, ChatActivity activity)
+        { ReportProgress("inbox:" + chatId, chatId, runId, phase, message, activity); }
 
         private void ReportProgress(string id, string phase, string message, ChatActivity activity)
         {

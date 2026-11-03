@@ -22,9 +22,7 @@ namespace RNAssistant.Office
         {
             try
             {
-                var summary = session.LastRun == null || session.LastRun.KernelState == null ? null : session.LastRun.KernelState.Summary;
-                _inbox.End(session, summary != null && summary.Lifecycle == RunLifecycle.Completed && summary.ExecutionHealth == ExecutionHealth.Clean,
-                    summary != null && summary.Lifecycle == RunLifecycle.AwaitingConfirmation);
+                _inbox.EndRun(session);
             }
             finally { ReleaseControllerRun(lease, ref trace); }
         }

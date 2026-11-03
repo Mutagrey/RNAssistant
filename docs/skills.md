@@ -34,11 +34,14 @@ authority.
 ## Current implementation
 
 `skills.agents.communication` (Common, `AgentCommunicationSkillProvider`) is shared
-by Office, Workspace and plugin chats. It requires `agents.list` and `agents.send`;
+by Office, Workspace and plugin chats. Version 2 requires `agents.list/send` v2 and `agents.wait` v1;
 the existing `core.skills.load` path exposes its complete instructions. It covers
-peer discovery, self-contained requests, explicit replies, finish while waiting,
+all-chat discovery with `is_self`, stable short addresses, self-contained requests,
+explicit replies, independent work after sending and bounded event-driven waiting,
 human authority, budget/disabled/unknown handling and stopping resolved exchanges.
-Peer metadata includes no task description or private history; ask for details.
+It tracks parallel requests by agent ID and subject, prioritizes answering before
+waiting, and distinguishes a finished turn from a completed user task. Peer metadata
+includes no task description or private history; ask for details.
 
 There are 17 unique built-in skill IDs across Office and Workspace; host catalogs
 overlap and custom packages are counted separately. The current Workspace files ID

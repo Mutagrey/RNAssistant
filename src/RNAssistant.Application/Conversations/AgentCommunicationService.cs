@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using RNAssistant.Core.Models;
@@ -33,8 +35,10 @@ namespace RNAssistant.Application.Conversations
 
     internal sealed class AgentPeer
     {
-        [JsonProperty("chat_id")]
-        public string ChatId { get; set; }
+        [JsonProperty("agent_id")]
+        public string AgentId { get; set; }
+        [JsonProperty("is_self")]
+        public bool IsSelf { get; set; }
         public string Title { get; set; }
         public string ScopeTitle { get; set; }
         public string Source { get; set; }
@@ -54,9 +58,20 @@ namespace RNAssistant.Application.Conversations
     internal sealed class AgentDeliveryReceipt
     {
         public string Status { get; set; }
-        public string ChatId { get; set; }
+        [JsonProperty("agent_id")]
+        public string AgentId { get; set; }
         public string Title { get; set; }
         public string Text { get; set; }
+    }
+
+    [JsonConverter(typeof(StringEnumConverter))]
+    internal enum AgentWaitStatus { MessagesReady, TimedOut, InputPending, BudgetExhausted }
+
+    internal sealed class AgentWaitResult
+    {
+        public AgentWaitStatus Status { get; set; }
+        public int RemainingWaitSeconds { get; set; }
+        public IReadOnlyList<AgentPeer> Peers { get; set; }
     }
 
     internal sealed class AgentCommunicationException : InvalidOperationException
@@ -66,7 +81,8 @@ namespace RNAssistant.Application.Conversations
     }
 
     // Only live endpoint registrations are retained here. Inputs, receipts and budgets
-    // are canonical conversation events. No model wait or Office gate is held by this owner.
+    // are canonical conversation events. Waiting uses the existing Inbox input boundary;
+    // no service lock or Office document gate is held while awaiting a message.
     internal sealed class AgentCommunicationService
     {
         private readonly object _sync = new object();
@@ -98,13 +114,26 @@ namespace RNAssistant.Application.Conversations
         private AgentConversationEndpoint Find(string chatId)
         { return _open.Values.LastOrDefault(item => item.Address.ChatId == chatId); }
 
+        private AgentConversationEndpoint FindAgent(string agentId)
+        {
+            var matches = _open.Values.Where(item => item.Address.AgentId == agentId)
+                .GroupBy(item => item.Address.ChatId, StringComparer.Ordinal).Select(group => group.Last()).ToArray();
+            if (matches.Length > 1) throw new AgentCommunicationException("agent_address_ambiguous",
+                "Короткий адрес неоднозначен. Сообщение не отправлено.");
+            return matches.SingleOrDefault();
+        }
+
         internal IReadOnlyList<AgentPeer> List(string senderId, int limit = AppSettings.DefaultMaxAgentMessages)
         {
             lock (_sync)
             {
                 RequireEnabled(limit);
-                return _open.Values.GroupBy(item => item.Address.ChatId, StringComparer.Ordinal).Select(group => group.Last()).Where(item => item.Address.ChatId != senderId)
-                    .Select(item => item.Inbox.AgentPeer(item.Address)).ToArray();
+                return _open.Values.GroupBy(item => item.Address.ChatId, StringComparer.Ordinal).Select(group => group.Last())
+                    .Select(item => {
+                        var peer = item.Inbox.AgentPeer(item.Address);
+                        peer.IsSelf = item.Address.ChatId == senderId;
+                        return peer;
+                    }).OrderByDescending(peer => peer.IsSelf).ToArray();
             }
         }
 
@@ -113,6 +142,17 @@ namespace RNAssistant.Application.Conversations
             return new AgentChatAddress { ChatId = session.Id, Title = session.Title,
                 Source = session.WorkspaceId == null ? "office" : "workspace", WorkspaceId = session.WorkspaceId,
                 ScopeTitle = session.DocumentTitle };
+        }
+
+        internal async Task<AgentWaitResult> WaitAsync(ConversationInboxService inbox, ChatSession session,
+            int limit, string runId, int timeoutSeconds, CancellationToken token)
+        {
+            RequireEnabled(limit);
+            if (timeoutSeconds < 1 || timeoutSeconds > 10)
+                throw new AgentCommunicationException("agent_wait_invalid", "Ожидание: от 1 до 10 секунд.");
+            var status = await inbox.WaitForAgentsAsync(session, runId, timeoutSeconds, token).ConfigureAwait(false);
+            return new AgentWaitResult { Status = status, RemainingWaitSeconds = inbox.AgentWaitRemainingSeconds(session),
+                Peers = List(session.Id, limit) };
         }
 
         internal static AgentCommunicationContext Context(ChatSession session, int limit)
@@ -160,7 +200,7 @@ namespace RNAssistant.Application.Conversations
         }
 
         internal AgentDeliveryReceipt Send(ConversationInboxService sourceInbox, ChatSession source, int limit,
-            string runId, string operationId, string targetId, string text, Action dispatch)
+            string runId, string operationId, string agentId, string text, Action dispatch)
         {
             AgentConversationEndpoint target = null;
             ChatSession recipient = null;
@@ -173,20 +213,20 @@ namespace RNAssistant.Application.Conversations
                 RequireEnabled(limit);
                 if (string.IsNullOrWhiteSpace(text) || text.Length > 128 * 1024)
                     throw new AgentCommunicationException("agent_message_invalid", "Требуется текст до 128 КиБ.");
-                if (targetId == source.Id)
+                if (agentId == AgentChatAddress.IdFor(source.Id))
                     throw new AgentCommunicationException("agent_self_send", "Нельзя отправить сообщение своему чату.");
                 var chain = Context(source, limit);
                 var facts = sourceInbox.AgentEvents(source);
-                var fingerprint = ConversationInputJournal.Fingerprint(new AgentDeliveryReceipt { ChatId = targetId, Text = text });
+                var fingerprint = ConversationInputJournal.Fingerprint(new AgentDeliveryReceipt { AgentId = agentId, Text = text });
                 var existing = facts.FirstOrDefault(item => item.OperationId == operationId);
                 if (existing != null && existing.Fingerprint != fingerprint)
                     throw new AgentCommunicationException("agent_operation_conflict", "Операция уже принадлежит другому сообщению.");
                 if (existing != null && facts.Any(item => item.OperationId == operationId && item.State == AgentDeliveryState.Accepted))
-                    return new AgentDeliveryReceipt { Status = "queued", ChatId = existing.Target.ChatId,
+                    return new AgentDeliveryReceipt { Status = "queued", AgentId = existing.Target.AgentId,
                         Title = existing.Target.Title, Text = text };
-                if ((target = Find(targetId)) == null)
-                    throw new AgentCommunicationException(existing == null ? "agent_chat_closed" : "agent_delivery_unknown",
-                        existing == null ? "Чат получателя закрыт или недоступен." : "Получатель недоступен для проверки прежней доставки. Повтор запрещён.");
+                if ((target = existing == null ? FindAgent(agentId) : Find(existing.Target.ChatId)) == null)
+                    throw new AgentCommunicationException(existing == null ? "agent_chat_not_found" : "agent_delivery_unknown",
+                        existing == null ? "Открытый агент с указанным agent_id не найден. Обновите agents.list и скопируйте короткий ID адресата; этот отказ не доказывает, что чат закрыт." : "Получатель недоступен для проверки прежней доставки. Повтор запрещён.");
                 var budget = State(facts, chain);
                 if (existing == null && budget.LimitReached)
                     throw new AgentCommunicationException("agent_message_limit", "Лимит общения исчерпан. Пользователь может продолжить общение в чате.");
@@ -239,7 +279,7 @@ namespace RNAssistant.Application.Conversations
         }
 
         private static AgentDeliveryReceipt Receipt(AgentConversationEndpoint target, string text)
-        { return new AgentDeliveryReceipt { Status = "queued", ChatId = target.Address.ChatId, Title = target.Address.Title, Text = text }; }
+        { return new AgentDeliveryReceipt { Status = "queued", AgentId = target.Address.AgentId, Title = target.Address.Title, Text = text }; }
 
         internal AgentCommunicationState Continue(string chatId, string chainId, string operationId, int limit)
         {

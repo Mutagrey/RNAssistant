@@ -40,14 +40,14 @@ namespace RNAssistant.Application.Conversations
         }
 
         public CancellationToken InterruptToken { get { return _inbox.InterruptToken(_session); } }
-        public bool HasPendingInput { get { return _inbox.HasSteer(_session); } }
+        public bool HasPendingInput { get { return _inbox.HasRunInput(_session); } }
         public bool TryCloseInput() { return _inbox.TryClose(_session); }
 
         public async Task<IReadOnlyList<AgentMessage>> TakeInputAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             var messages = new List<AgentMessage>();
-            foreach (var input in _inbox.TakeSteer(_session))
+            foreach (var input in _inbox.TakeRunInput(_session))
             {
                 var message = await _apply(input, token).ConfigureAwait(false);
                 if (message == null) throw new InvalidOperationException("Input preparation returned no user message.");
@@ -63,10 +63,7 @@ namespace RNAssistant.Application.Conversations
             if (!_ownsBinding) return;
             try
             {
-                var summary = _session.LastRun?.KernelState?.Summary;
-                _inbox.End(_session, summary?.Lifecycle == RunLifecycle.Completed &&
-                    summary.ExecutionHealth == ExecutionHealth.Clean,
-                    summary?.Lifecycle == RunLifecycle.AwaitingConfirmation);
+                _inbox.EndRun(_session);
             }
             finally
             {

@@ -19,11 +19,14 @@ Library/VBA header имеет minimum из `--page-header-height`, а факти
 
 Общий bubble сохраняет геометрию и типографику user bubble. Отличие — семантические
 `--agent-bubble-bg`/`--agent-bubble-border`, основанные на общей violet palette и surface,
-и текстовая ссылка «Агент · название чата». Цвет не является единственным признаком.
+и текстовая ссылка «Агент a-… · название чата». Короткий стабильный ID отличает
+одинаковые названия. Цвет не является единственным признаком.
 История и pending Inbox используют один renderer; заголовок выводится через textContent.
 Панель исчерпанного лимита использует общие spacing/text tokens, переносит кнопку и
 не захватывает фокус. Отдельных значений для Office/Workspace/plugin нет.
 Общее numeric-поле принимает 0; подпись явно поясняет «0 — отключить».
+Активная работа/ожидание используют общие status/activity/tool components;
+для `agents.wait` — подпись «Жду сообщения агентов», без отдельного spinner/style.
 Сравнение computed padding/radius с обычным bubble на одинаковом viewport прошло;
 общий Shell zoom overflow отмечен отдельно в RISK_REGISTER.
 

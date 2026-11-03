@@ -317,7 +317,7 @@ namespace RNAssistant.Harness
                             "exact-run input cannot become a queued new task");
                         recovered.LastRun = new ChatRunRecord { RunId = "another-run" };
                         inbox.Bind(recovered);
-                        AssertTrue(!inbox.HasSteer(recovered) && inbox.TakeSteer(recovered).Count == 0,
+                        AssertTrue(!inbox.HasRunInput(recovered) && inbox.TakeRunInput(recovered).Count == 0,
                             "a later run cannot consume retained steering");
                     }
                 }

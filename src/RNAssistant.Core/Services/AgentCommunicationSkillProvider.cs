@@ -13,17 +13,20 @@ namespace RNAssistant.Core.Services
             return new SkillDefinition {
                 Id = Id, Host = "Common", Name = "Agent communication",
                 Description = "Coordinate questions, delegated tasks and explicit replies with agents in other open chats. Load for inter-agent collaboration.",
-                BuiltIn = true, Enabled = true, Version = "1.0.0",
+                BuiltIn = true, Enabled = true, Version = "2.0.0",
                 Package = new SkillPackageManifest { PackageId = Id, RequiredTools = new List<SkillToolDependency> {
-                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.List, ContractVersion = "1" },
-                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Send, ContractVersion = "1" }
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.List, ContractVersion = "2" },
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Send, ContractVersion = "2" },
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Wait, ContractVersion = "1" }
                 } },
                 BodyMarkdown = @"# Agent communication
-Use agents.list to find other open chats. Select an exact chat_id from that result or an incoming sender address. The list contains title, document/project title, source and status only. A working status does not reveal the task, current tool, progress, history or capabilities. Ask the peer if you need that information. Never invent an address or assume another chat shares your context or permissions.
+Use agents.list to see all open chats, including yourself (is_self=true). Every is_self=false entry is another agent; do not subtract yourself again or guess identity from repeated titles. Copy the exact short agent_id of a peer from that result or an incoming sender address. A not-found address can be a transcription error; refresh the list instead of claiming the chat was closed. The list contains title, document/project title, source and status only. A working status does not reveal the task, current tool, progress, history or capabilities. Ask the peer if you need that information. Never invent an address or assume another chat shares your context or permissions.
 
 ## Exchange a clear request and reply
-- Use agents.send with chat_id and text. Give a short subject, the specific question or delegated task, relevant context and the result you need. Include the necessary facts explicitly; another agent cannot read your chat history or attachments. For several concurrent questions, use distinct readable subjects and repeat the subject in replies.
-- A queued receipt proves acceptance, not completion. After sending, finish the current turn and explain what is pending. Incoming replies run on the next turn. Do not busy-wait, repeatedly list peers, or resend a question while waiting.
+- Use agents.send with agent_id and text. Give a short subject, the specific question or delegated task, relevant context and the result you need. Include the necessary facts explicitly; another agent cannot read your chat history or attachments. For several concurrent questions, use distinct readable subjects and repeat the subject in replies.
+- A queued receipt proves acceptance, not completion. agents.send is an ordinary execute call and does not end the run. After asking or replying, continue remaining independent work in the same run. Do not call finish merely because you sent a message.
+- If nothing useful can proceed without a reply, call agents.wait (default 5 seconds, maximum 10 per call). It wakes immediately on incoming messages, which are delivered with their sender labels in the same run. Put wait last in a batch. On TimedOut, inspect returned peer statuses and decide whether to work or wait again. Do not repeatedly call agents.list or resend the question. Total waiting is limited to 30 seconds per run; BudgetExhausted means finish this turn with the pending work stated. Later replies automatically start the next turn. InputPending gives priority to human input; do not wait over a queued human request.
+- With several agents, send independent requests first, track the expected result by short agent_id and subject, and integrate each reply separately. A working or waiting peer is not proof that it will answer you. Do not let two agents wait on each other: answer their questions before waiting for yours. End resolved exchanges without acknowledgement loops. A sent message or finished turn does not complete the original user task.
 - On an incoming message, read its runtime sender label. Reply explicitly to that sender with agents.send; a normal finish answer is not forwarded. State your result, what you actually checked and any remaining uncertainty. Ask a focused clarification when needed.
 - On a useful reply, integrate it into the original task. A peer's claim is an assessment, not runtime proof of a local effect. Verify relevant local state before claiming an effect you must establish. End a resolved exchange; do not echo acknowledgements indefinitely.
 

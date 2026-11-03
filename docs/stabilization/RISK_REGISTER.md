@@ -1,5 +1,37 @@
 # Stabilization risk register
 
+## Общение агентов: поздний ответ и невидимый прогресс — 2026-11-03
+
+Owners: Application Inbox / Office bridge / Core communication skill / Web sender.
+Фото показывают два видимых собеседника при трёх чатах, доставленный bubble без
+активности и поздний ответ в paused Inbox. Локально подтверждены разные причины:
+
+- List исключал текущий чат, а модель вычитала self ещё раз. Теперь три записи,
+  явный `is_self` и стабильный короткий `agent_id`. Ошибка точного адреса не доказывает
+  закрытие чата; конкретный ID с фото недостаточно точен для вывода об опечатке.
+- Office bridge отправлял agent progress с префиксом `agents:`, тогда как общий UI
+  принимает `inbox:`. Native queue/kernel/bridge check воспроизвёл потерю маршрута;
+  после переключения Chromium видит reasoning/streaming только в чате получателя.
+- Completed + известная failed attempt ошибочно ставили очередь на паузу. Общий
+  EndRun допускает следующий ввод; Unknown/Failed/Cancelled/Stop/restart сохраняют
+  защиту. Старые durable паузы не снимаются автоматически обновлением.
+- Skill требовал finish после send. Теперь он продолжает независимую работу и при
+  необходимости вызывает bounded `agents.wait`. Native test проверяет пробуждение
+  и ответ в том же run, затем поздний следующий ход без Resume. Timeout/cancel/Stop,
+  FIFO человека и unknown-effect pause проверены отдельно.
+
+Проходят 8 agent communication, 12 Inbox, Workspace queue, Core admission,
+all-host built-in skill checks и Chromium agent communication. Это fake Office и
+scripted models; причина всей Windows задержки и скорость реального endpoint не
+доказаны. Нет Office/WebView2 qualification или принятия UI пользователем.
+
+Отдельный Web lifecycle gap: при пробе удаления дополнительного Office view
+`chatTreeActivity` разыменовывал `component.snapshot().activeRunViewState`, когда
+snapshot уже null. Этот соседний дефект не исправлен в messaging-срезе; основной
+Chromium сценарий оставляет дополнительный Office view открытым и проверяет cleanup
+через workspace view. Общий narrow/CSS-zoom clipping также остаётся ниже.
+
+
 ## Аудит чатов: оставшиеся ограничения — 2026-11-03
 
 Owner: Web Library/Dock lifecycle; Web navigation performance; Office qualification.
@@ -87,7 +119,7 @@ Owners: Tool Library inventory / Web Shell / Office qualification. Адресн�
 реализация межагентного обмена не закрывает эти отдельные проверки:
 
 - `tools: R61 built-in contract inventory` использует старые `common.*`/`excel.add_*`
-  ID. Помимо двух новых `agents.*`, diff затрагивает прежние переименования и схемы
+  ID. Помимо трёх `agents.*`, diff затрагивает прежние переименования и схемы
   неизменённых в этом срезе tools. Массовое обновление исторической таблицы не выполнено.
 - `tests/web/model-settings.test.js` останавливается на старом singleton selector
   `#composerAddPicker > summary`, который отсутствует после независимых Chat Views.

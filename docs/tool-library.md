@@ -24,23 +24,34 @@ generation from overwriting it, even if the chosen text matches a draft/placehol
 
 ## Agent communication tools — 2026-11-03
 
-`agents.list` and `agents.send` are built-in direct tools of the initial profile
+`agents.list`, `agents.send` and `agents.wait` are built-in direct tools of the initial profile
 when the application messaging owner is available and `MaxAgentMessages > 0`.
 Zero removes them from new catalogs and rejects old handlers before dispatch;
 an inherited nonzero chain budget cannot override the switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires these two tools; zero makes that package unavailable for loading.
-List publishes peer metadata
-without history or effect evidence. Send accepts only `chat_id` and `text` (up to
+and requires all three tools; zero makes that package unavailable for loading.
+List publishes all open chats, with `is_self` identifying the caller and stable short
+`agent_id` addresses, without history or effect evidence. Send accepts only `agent_id` and `text` (up to
 131072 characters), returns a queued receipt with recipient/title/text, and cannot
 send to its own chat. A queued receipt proves intake only, never execution of the
 requested task. Closed/unavailable peers, exhausted budget, conflicting operations
 and unresolved delivery have explicit error codes; no automatic retry is allowed.
+Not-found is not evidence that a chat closed. Sending is nonterminal: continue work
+or wait for the needed reply, rather than calling finish just because a message was sent.
 
-Bindings: `conversation.agents.list.v1`, `conversation.agents.send.v1`. Sending is a
+`agents.wait(timeout_seconds?)` is an event-driven read with no effect evidence.
+It defaults to 5 seconds, accepts 1–10, and shares a 30-second wait budget per run.
+It returns typed status, remaining wait seconds and current peers. Ready messages
+enter the current run through the common input channel; human FIFO/Stop take priority.
+No model polling or document gate is held. After the budget ends, finish the turn
+with pending work stated; later messages automatically start another turn.
+
+Bindings: `conversation.agents.list.v2`, `conversation.agents.send.v2`,
+`conversation.agents.wait.v1`. The v1 raw `chat_id` send schema is removed; stale
+admissions must explicitly reload the current contract. Sending is a
 managed conversation write available in Agent and Plan; it has no document authority
 observer or per-message approval. Recipient actions retain their own exact policies.
-The `chat_id` property is an explicitly approved public peer address, not a resource
+The `agent_id` property is an explicitly approved public peer address, not a resource
 handle, revision or permission. The existing ToolRuntime/Inbox own dispatch and
 read-back. Details and settings: [conversation protocol](conversation-protocol.md#межагентное-общение--2026-11-03).
 
@@ -54,7 +65,7 @@ a tool/model never supplies it. See [reference revision 4](protocols/CONVERSATIO
 Исторический [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
 включая условные и manual-only записи. Начальный профиль модели — 10 доступных
-Core tools плюс `chat.rename`; `agents.list/send` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
+Core tools плюс `chat.rename`; `agents.list/send/wait` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
 78 не входят. Общая грамматика patch принадлежит его schema; skills дополняют её
 предметными правилами без копирования всего контракта.
 

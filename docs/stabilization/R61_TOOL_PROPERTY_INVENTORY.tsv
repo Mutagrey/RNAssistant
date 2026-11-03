@@ -11,8 +11,9 @@
 # 2026-10-21: excel.add_table sourceRange is required and nonblank; generated table name and default headers remain optional.
 # 2026-10-21: excel.upsert_chart requires an explicit nonblank sourceRange on creation; omission on update preserves the existing source; supported chartType values are explicit.
 # 2026-10-21: new built-in structural reads and HTML bindings expose table; historical records remain an internal saved-binding/transfer view.
-agents.list	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.agents.list.v1	cc764a1ae6bdf7f7b9475032bfe6b9b7c0d9a426b681090834e1d9c69a8bde39		-
-agents.send	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.agents.send.v1	2cd761993bf474208717973732aee0c72763c26635f4b5d6419e5ca1f867a8d4	chat_id,text	chat_id=approved public peer address; no resource authority or history access
+agents.list	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.agents.list.v2	64fd7ce099ca22830baebbc9cd4c7bc5c185f88320c70f82017825818ead0e9d		-
+agents.send	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.agents.send.v2	bd8d5688a75bd3dbd13262ea3e31e03c629a7238df36087c3fcd4a9e0d3e425a	agent_id,text	agent_id=stable short public peer address; no resource authority or history access
+agents.wait	Excel,Outlook,PowerPoint,Word	agent,plan	conversation.agents.wait.v1	6535d4432579d7bd0a3019f2659896a817ec71972487e5aa263544064b59794c	timeout_seconds	-
 common.capabilities_read	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.read.intent.v1	83a5377df41216258264626ccd93d35427348bde31354a064bb27ff1355be73f	action,id,referencePath	id=semantic-capability-identity
 common.capabilities_search	Excel,Outlook,PowerPoint,Word	agent,plan	capabilities.search.intent.v1	7e647d1a4ae13887d52348b154210db01e9dd818346404a316105e88d68b5e48	kind,query	-
 common.file_copy	Excel,Outlook,PowerPoint,Word	agent	common.file_copy.intent.v1	034ef9cfe3d49557561570695666f29adbab02da1c2e2366a806a83433f8d647	name,source	-

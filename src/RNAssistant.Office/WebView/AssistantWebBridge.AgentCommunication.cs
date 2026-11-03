@@ -22,7 +22,7 @@ namespace RNAssistant.Office.WebView
             AgentConversationEndpoint endpoint;
             if (request.Source == "office")
                 endpoint = _controller.AgentEndpoint(request.SessionId, request.ViewId,
-                    (run, phase, text, activity) => ReportProgress("agents:" + request.SessionId, request.SessionId, run, phase, text, activity),
+                    (run, phase, text, activity) => ReportInboxProgress(request.SessionId, run, phase, text, activity),
                     ReportChatState);
             else
             {

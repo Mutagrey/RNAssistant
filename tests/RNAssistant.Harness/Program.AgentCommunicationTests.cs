@@ -11,13 +11,16 @@ using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Office;
+using RNAssistant.Office.Services;
 using RNAssistant.Office.WebView;
+using RNAssistant.Core.Llm;
 using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Harness
@@ -35,6 +38,160 @@ namespace RNAssistant.Harness
         private static AgentConversationEndpoint AgentEndpoint(ChatSession session, ConversationInboxService inbox, Action<ChatSession> start = null)
         { return new AgentConversationEndpoint { ViewId = session.Id, Address = AgentCommunicationService.Address(session),
             Load = () => session, Inbox = inbox, Validate = current => current.DocumentKey, Start = start ?? (_ => { }) }; }
+
+        private static void AgentOfficeQueueProgress()
+        {
+            WithTempExecutor((executor, adapter) => {
+                var paths = FixturePaths.Value; var store = new ChatStore(paths);
+                var inbox = new ConversationInboxService(EventStore(store));
+                var application = new ConversationApplicationService(inbox,
+                    new ConversationRunOwner(ConversationLeaseService.ForOffice(paths)));
+                var a = AgentChat(store, "A"); var b = AgentChat(store, "B"); var c = AgentChat(store, "C");
+                var ports = new System.Collections.Generic.Dictionary<string, ConversationQueueFake>();
+                var frames = new System.Collections.Concurrent.ConcurrentQueue<JObject>();
+                var controller = new AssistantController(paths); var aCalls = 0; var bCalls = 0;
+                var followupAllowed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                string aWaitingRun = null;
+                var lateReplyProcessed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using (var bridge = new AssistantWebBridge(controller, json => frames.Enqueue(JObject.Parse(json))))
+                {
+                    executor.AgentCommunication = controller.AgentCommunication; executor.AgentInbox = inbox;
+                    controller.AgentEndpointFactory = (chatId, viewId, progress, changed) => {
+                        var session = store.Load(chatId); inbox.Get(session);
+                        var port = new ConversationQueueFake(inbox, store);
+                        port.Execute = async (current, input, token) => {
+                            var settings = new AppSettings { AgentResponseMode = "json_object", StreamResponses = true,
+                                SmartChatTitles = false, AutoCompressContext = false, MaxAgentIterations = 8 };
+                            LlmCompletionDelegate completion = async (config, messages, options, stream, ct) => {
+                                var fromB = current.Id == b.Id;
+                                var number = fromB ? Interlocked.Increment(ref bCalls) : Interlocked.Increment(ref aCalls);
+                                AssertContains(FlattenSimple(messages), "not the human user", "Office model receives agent provenance");
+                                if (fromB && number == 3) await followupAllowed.Task.ConfigureAwait(false);
+                                if (!fromB && number == 1) aWaitingRun = current.LastRun.RunId;
+                                if (!fromB && number == 2)
+                                {
+                                    AssertEqual(aWaitingRun, current.LastRun.RunId, "wait receives the answer without ending the run");
+                                    AssertContains(FlattenSimple(messages), "OFFICE_PEER_FOLLOWUP", "wait delivers incoming text before the next model step");
+                                    AssertContains(FlattenSimple(messages), AgentChatAddress.IdFor(b.Id), "incoming answer names the exact short sender");
+                                }
+                                var verifiedCalls = current.Messages.Where(m => m.RunId == current.LastRun.RunId &&
+                                    m.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok).Select(m => m.ToolCallId).ToArray();
+                                var references = current.Messages.Where(m => m.EvidenceReference != null &&
+                                    verifiedCalls.Contains(m.ToolCallId ?? m.Activity?.ToolCallId))
+                                    .Select(m => m.EvidenceReference.Alias).Distinct(StringComparer.Ordinal).ToArray();
+                                var response = fromB && number == 1
+                                    ? ModelProtocolWire.WriteAcceptedCall("Attempt copied address", null, new ConversationToolCall {
+                                        Name = "agents.send", Arguments = new JObject { ["agent_id"] = "a-missing000", ["text"] = "Bad address" } })
+                                    : fromB && number == 2
+                                    ? ModelProtocolWire.WriteAcceptedCall("Reply to sender", null, new ConversationToolCall {
+                                        Name = "agents.send", Arguments = new JObject { ["agent_id"] = AgentChatAddress.IdFor(a.Id), ["text"] = "OFFICE_PEER_REPLY" } })
+                                    : fromB && number == 3
+                                    ? ModelProtocolWire.WriteAcceptedCall("Continue the discussion", null, new ConversationToolCall {
+                                        Name = "agents.send", Arguments = new JObject { ["agent_id"] = AgentChatAddress.IdFor(a.Id), ["text"] = "OFFICE_PEER_FOLLOWUP" } })
+                                    : fromB && number <= 5 ? ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                        "Reply queued after an address error", "B awaits further discussion",
+                                        results: new[] { new ConversationResultClaim("Reply accepted; discussion still pending", references,
+                                            ConversationAssessment.PartiallySatisfied) }, outcome: ConversationOutcome.Partial)
+                                    : !fromB && number == 1 ? ModelProtocolWire.WriteAcceptedCall("Wait for the remaining result", null,
+                                        new ConversationToolCall { Name = "agents.wait", Arguments = new JObject { ["timeout_seconds"] = 10 } })
+                                    : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Reply received", "A completed",
+                                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                                stream?.Invoke(new LlmStreamUpdate { ReasoningDelta = "Considering peer request" });
+                                stream?.Invoke(new LlmStreamUpdate { ContentDelta = response, Completed = true });
+                                if (fromB && number == 6) lateReplyProcessed.TrySetResult(true);
+                                return new LlmCompletionResult { Content = response };
+                            };
+                            var runtime = new ConversationRunService(adapter, executor, ConversationStore(store), EventStore(store),
+                                completion, null, inbox: inbox);
+                            await runtime.ExecuteAsync(ChatModes.Agent, input.Text, current, NewContext(adapter), settings,
+                                executor.GetControllerTools().ToList(), null,
+                                (phase, text, activity) => progress(current.LastRun.RunId, phase, text, activity),
+                                null, BuiltInSkillProvider.GetSkills(adapter), token, appendUserMessage: false).ConfigureAwait(false);
+                        };
+                        ports.Add(chatId, port);
+                        return new AgentConversationEndpoint { Address = AgentCommunicationService.Address(session), ViewId = viewId,
+                            Inbox = inbox, Load = () => store.Load(chatId), Validate = current => current.DocumentKey,
+                            Start = current => application.StartQueue(current, port) };
+                    };
+                    try
+                    {
+                        var bridgeToken = BridgeToken(bridge);
+                        foreach (var chat in new[] { a, b, c })
+                        {
+                            var presence = WorkspaceBridgeCall(bridge, bridgeToken, "setAgentChatPresence", new {
+                                source = "office", sessionId = chat.Id, viewId = chat.Id, open = true });
+                            AssertTrue((bool)presence["ok"], "Office presence registered through the real bridge");
+                        }
+                        controller.AgentCommunication.Send(inbox, a, 20, "sender-run", "office-question", AgentChatAddress.IdFor(b.Id), "Please reply", () => { });
+                        AssertTrue(SpinWait.SpinUntil(() => controller.AgentCommunication.List(a.Id).Any(p =>
+                            p.IsSelf && p.Status == "waiting"), 10000), "recipient is visibly waiting before the peer replies");
+                        followupAllowed.TrySetResult(true);
+                        AssertTrue(ports[b.Id].Completed.Task.Wait(10000) && ports[a.Id].Completed.Task.Wait(10000) &&
+                            application.Drained.Wait(10000), "Office queue automatically starts both native model turns");
+                        AssertEqual(5, bCalls, "recipient recovers a known address error, sends replies and finishes");
+                        AssertEqual(2, aCalls, "sender wakes and continues the same run");
+                        AssertEqual(1, store.Load(a.Id).Messages.Count(m => m.Content == "OFFICE_PEER_REPLY"), "reply is durable once");
+                        var finishedB = store.Load(b.Id); var finishedInbox = inbox.Snapshot(finishedB);
+                        AssertTrue(!finishedInbox.Paused, "completed turn with a known failed attempt does not pause the inbox: " +
+                            finishedInbox.PauseReason + " " + JsonConvert.SerializeObject(finishedB.LastRun?.KernelState?.Summary));
+                        controller.AgentCommunication.Send(inbox, store.Load(a.Id), 20, "later-sender", "office-late-reply", AgentChatAddress.IdFor(b.Id), "Continue the discussion", () => { });
+                        AssertTrue(lateReplyProcessed.Task.Wait(10000) && application.Drained.Wait(10000), "late peer input starts automatically without Resume");
+                        var progressFrames = frames.Where(f => (string)f["type"] == "progress").ToArray();
+                        AssertTrue(progressFrames.Any(f => (string)f["payload"]["chatId"] == b.Id &&
+                            !string.IsNullOrWhiteSpace((string)f["payload"]["reasoningDelta"])), "recipient model progress reaches the bridge");
+                        AssertTrue(progressFrames.All(f => (string)f["id"] == "inbox:" + (string)f["payload"]["chatId"] &&
+                            !string.IsNullOrWhiteSpace((string)f["payload"]["runId"])), "agent-started Office progress uses the common inbox route");
+                    }
+                    finally { followupAllowed.TrySetResult(true); application.CloseAsync().Wait(5000); }
+                }
+            });
+        }
+
+        private static void AgentWaitBoundaries()
+        {
+            WithTempPaths(paths => {
+                var store = new ChatStore(paths); var inbox = new ConversationInboxService(EventStore(store));
+                var service = new AgentCommunicationService();
+                var a = AgentChat(store, "Same name"); var b = AgentChat(store, "Same name");
+                a.LastRun = new ChatRunRecord { RunId = "wait-run", TurnId = "wait-turn" };
+                inbox.Bind(a); service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
+                var timeout = service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(AgentWaitStatus.TimedOut, timeout.Status, "timeout returns control rather than ending the run");
+                AssertTrue(timeout.RemainingWaitSeconds < 30 && inbox.Snapshot(a).ActiveRun, "elapsed wait is charged and run stays active");
+                using (var cancel = new CancellationTokenSource())
+                {
+                    var waiting = service.WaitAsync(inbox, a, 20, "wait-run", 10, cancel.Token);
+                    AssertEqual("waiting", service.List(a.Id).Single(p => p.IsSelf).Status, "wait has a distinct visible peer status");
+                    cancel.Cancel(); var cancelled = false;
+                    try { waiting.GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
+                    AssertTrue(cancelled && service.List(a.Id).Single(p => p.IsSelf).Status == "working", "cancellation wakes and cleans up the waiter");
+                }
+                inbox.Get(a).AgentWaitMilliseconds = 30000;
+                AssertEqual(AgentWaitStatus.BudgetExhausted, service.WaitAsync(inbox, a, 20, "wait-run", 10,
+                    CancellationToken.None).GetAwaiter().GetResult().Status, "exhausted budget does not sleep or reset on another call");
+                inbox.Get(a).AgentWaitMilliseconds = 0;
+                var waitingForStop = service.WaitAsync(inbox, a, 20, "wait-run", 10, CancellationToken.None);
+                inbox.Pause(a, "stop"); var stopped = false;
+                try { waitingForStop.GetAwaiter().GetResult(); }
+                catch (AgentCommunicationException error) { stopped = error.Code == "agent_wait_unavailable"; }
+                AssertTrue(stopped, "Stop wakes the waiter without waiting for its timer");
+                a.LastRun.KernelState = new AgentRunState(new RunSummary("wait-run", "wait-turn", RunLifecycle.Completed,
+                    new ToolCounts(), 1, 0, "Done", null, null), new AgentRunLimits(4, 4));
+                inbox.EndRun(a);
+                AssertTrue(inbox.Snapshot(a).Paused, "completed turn cannot undo explicit Stop");
+
+                inbox.Resume(a); inbox.Bind(a);
+                inbox.Submit(a, InboxInput("human-first", "next user task", InputDelivery.Queue));
+                service.Send(inbox, b, 20, "b-run", "peer-after-human", AgentChatAddress.IdFor(a.Id), "peer result", () => { });
+                AssertEqual(AgentWaitStatus.InputPending, service.WaitAsync(inbox, a, 20, "wait-run", 1,
+                    CancellationToken.None).GetAwaiter().GetResult().Status, "queued human input takes priority");
+                AssertTrue(!inbox.HasRunInput(a), "wait does not steal the peer input past the human FIFO entry");
+                a.LastRun.KernelState = new AgentRunState(new RunSummary("wait-run", "wait-turn", RunLifecycle.Completed,
+                    new ToolCounts(writeUnknown: 1), 1, 1, "Inspect result", null, null), new AgentRunLimits(4, 4));
+                inbox.EndRun(a);
+                AssertTrue(inbox.Snapshot(a).Paused, "unknown effects still pause subsequent work");
+            });
+        }
 
         private static void AgentCommunicationZeroDisables()
         {
@@ -54,14 +211,14 @@ namespace RNAssistant.Harness
                 var service = new AgentCommunicationService(() => settingsStore.Load().MaxAgentMessages);
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
                 service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
-                service.Send(inbox, a, 1, "run", "before-disable", b.Id, "Already accepted", () => { });
+                service.Send(inbox, a, 1, "run", "before-disable", AgentChatAddress.IdFor(b.Id), "Already accepted", () => { });
                 var before = service.State(inbox, a, 1);
                 AssertTrue(before.LimitReached, "old chain has exhausted its pinned budget");
                 var settings = settingsStore.Load(); settings.MaxAgentMessages = 0; settingsStore.Save(settings);
                 var dispatched = false;
                 foreach (Action operation in new Action[] {
                     () => service.List(a.Id),
-                    () => service.Send(inbox, a, 20, "captured-running-turn", "disabled", b.Id, "Must not arrive", () => dispatched = true),
+                    () => service.Send(inbox, a, 20, "captured-running-turn", "disabled", AgentChatAddress.IdFor(b.Id), "Must not arrive", () => dispatched = true),
                     () => service.Continue(a.Id, before.ChainId, "disabled-grant", 20)
                 })
                 {
@@ -79,7 +236,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), config, (executor, adapter) => {
                 AssertTrue(!executor.GetControllerTools().Any(t => AgentCommunicationToolCatalog.Owns(t.Id)), "disabled tools are absent from Office request catalog");
                 config.MaxAgentMessages = 20;
-                AssertEqual(2, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
+                AssertEqual(3, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
                 var office = RNAssistant.Office.Services.BuiltInSkillProvider.GetSkills(adapter).Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 var workspace = WorkspaceSkillProvider.GetSkills().Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 AssertEqual(office.BodyMarkdown, workspace.BodyMarkdown, "Office and Workspace use the same communication skill");
@@ -94,12 +251,20 @@ namespace RNAssistant.Harness
                 var inbox = new ConversationInboxService(events); var service = new AgentCommunicationService();
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B"); var c = AgentChat(store, "C");
                 service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox)); service.Open(AgentEndpoint(c, inbox));
-                AssertEqual(2, service.List(a.Id).Count, "only other open chats are discovered");
+                var peers = service.List(a.Id);
+                AssertEqual(3, peers.Count, "all three open chats are discovered");
+                AssertEqual(AgentChatAddress.IdFor(a.Id), peers.Single(peer => peer.IsSelf).AgentId, "current chat is explicitly identified");
+                AssertEqual(2, peers.Count(peer => !peer.IsSelf), "two distinct other agents are available");
+                AssertTrue(peers.All(peer => peer.AgentId.Length == 12) && peers.Select(peer => peer.AgentId).Distinct().Count() == 3,
+                    "short addresses distinguish all three agents");
+                AssertEqual(AgentChatAddress.IdFor(a.Id), AgentCommunicationService.Address(store.Load(a.Id)).AgentId,
+                    "address survives storage reload without reassignment");
+                AssertTrue(!JsonConvert.SerializeObject(peers).Contains(a.Id), "discovery does not expose storage chat IDs");
                 inbox.Get(b); b.Title = "Renamed B";
-                AssertEqual(b.Title, service.List(a.Id).Single(peer => peer.ChatId == b.Id).Title, "discovery follows the live conversation title");
+                AssertEqual(b.Title, service.List(a.Id).Single(peer => peer.AgentId == AgentChatAddress.IdFor(b.Id)).Title, "discovery follows the live conversation title");
                 var dispatches = 0;
-                service.Send(inbox, a, 2, "a-run", "a1", b.Id, "QUESTION", () => dispatches++);
-                service.Send(inbox, a, 99, "a-run", "a1", b.Id, "QUESTION", () => dispatches++);
+                service.Send(inbox, a, 2, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
+                service.Send(inbox, a, 99, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
                 AssertEqual(1, dispatches, "retry observes one accepted operation");
                 var question = inbox.TakeNext(b);
                 var received = new ChatMessage { Id = question.Id, Role = "user", Content = question.Text,
@@ -107,10 +272,12 @@ namespace RNAssistant.Harness
                 b.Messages.Add(received); store.Commit(b, ConversationCommit.UserInput(received)); inbox.Applied(b, received.Id);
                 AssertEqual(a.Id, ChatMessageViewDto.From(store.Load(b.Id).Messages.Last()).AgentSender.ChatId, "provenance survives history reload");
                 AssertContains(ConversationInputMessage.ModelText(received), "not the human user", "model sees sender authority");
-                service.Send(inbox, b, 100, "b-run", "b1", a.Id, "ANSWER", () => { });
-                service.Send(inbox, a, 99, "a-run2", "a2", c.Id, "JOIN", () => { });
+                AssertContains(ConversationInputMessage.ModelText(received), AgentChatAddress.IdFor(a.Id), "model sees the same short sender address");
+                AssertTrue(!ConversationInputMessage.ModelText(received).Contains(a.Id), "incoming label keeps storage IDs runtime-only");
+                service.Send(inbox, b, 100, "b-run", "b1", AgentChatAddress.IdFor(a.Id), "ANSWER", () => { });
+                service.Send(inbox, a, 99, "a-run2", "a2", AgentChatAddress.IdFor(c.Id), "JOIN", () => { });
                 var failed = false;
-                try { service.Send(inbox, a, 99, "a-run2", "a3", b.Id, "EXCESS", () => { }); }
+                try { service.Send(inbox, a, 99, "a-run2", "a3", AgentChatAddress.IdFor(b.Id), "EXCESS", () => { }); }
                 catch (AgentCommunicationException e) { failed = e.Code == "agent_message_limit"; }
                 AssertTrue(failed, "setting changes and extra recipients cannot reset the pinned budget");
                 AssertEqual(1, service.State(inbox, b, 99).Remaining, "recipient has an independent budget in the same chain");
@@ -136,7 +303,7 @@ namespace RNAssistant.Harness
                 var service = new AgentCommunicationService(); var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
                 service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
                 inbox.Pause(b, "Остановлено пользователем");
-                service.Send(inbox, a, 20, "run", "stop-message", b.Id, "Pending task", () => { });
+                service.Send(inbox, a, 20, "run", "stop-message", AgentChatAddress.IdFor(b.Id), "Pending task", () => { });
                 AssertTrue(inbox.Snapshot(b).Paused && inbox.TakeNext(b) == null, "agent cannot resume a stopped chat");
                 var item = inbox.Snapshot(b).Items.Single();
                 foreach (var action in new[] { "edit", "steer" })
@@ -149,14 +316,14 @@ namespace RNAssistant.Harness
                 service.Close(b.Id);
                 var reopenedView = AgentEndpoint(b, inbox); reopenedView.ViewId = "reopened-view";
                 service.Open(reopenedView); service.Close(b.Id);
-                AssertEqual(1, service.List(a.Id).Count, "late close cannot remove a recreated view");
+                AssertEqual(2, service.List(a.Id).Count, "late close cannot remove a recreated view");
                 service.Close(reopenedView.ViewId);
-                AssertEqual(0, service.List(a.Id).Count, "closed recipient disappears");
+                AssertTrue(service.List(a.Id).Single().IsSelf, "closed recipient disappears but current chat remains");
                 var closed = false;
-                try { service.Send(inbox, a, 20, "run", "closed", b.Id, "new", () => { }); }
-                catch (AgentCommunicationException e) { closed = e.Code == "agent_chat_closed"; }
+                try { service.Send(inbox, a, 20, "run", "closed", AgentChatAddress.IdFor(b.Id), "new", () => { }); }
+                catch (AgentCommunicationException e) { closed = e.Code == "agent_chat_not_found"; }
                 AssertTrue(closed, "closed recipient refuses new messages");
-                AssertEqual("queued", service.Send(inbox, a, 20, "run", "stop-message", b.Id, "Pending task", () => {
+                AssertEqual("queued", service.Send(inbox, a, 20, "run", "stop-message", AgentChatAddress.IdFor(b.Id), "Pending task", () => {
                     throw new Exception("Duplicate dispatch"); }).Status, "recorded acceptance remains readable after close");
                 inbox.Resume(b);
                 AssertEqual(item.Id, inbox.TakeNext(b).Id, "accepted work survives view close");
@@ -180,12 +347,12 @@ namespace RNAssistant.Harness
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
                 service.Open(AgentEndpoint(b, target)); failing.Fail = true;
                 var dispatches = 0; var failed = false;
-                try { service.Send(source, a, 20, "run", "uncertain", b.Id, "Task", () => dispatches++); }
+                try { service.Send(source, a, 20, "run", "uncertain", AgentChatAddress.IdFor(b.Id), "Task", () => dispatches++); }
                 catch (System.IO.IOException) { failed = true; }
                 AssertTrue(failed && dispatches == 1, "uncertain attempt crosses dispatch exactly once");
                 failing.Fail = false;
                 var unknown = false;
-                try { service.Send(source, a, 20, "run", "uncertain", b.Id, "Task", () => dispatches++); }
+                try { service.Send(source, a, 20, "run", "uncertain", AgentChatAddress.IdFor(b.Id), "Task", () => dispatches++); }
                 catch (AgentCommunicationException e) { unknown = e.Code == "agent_delivery_unknown"; }
                 AssertTrue(unknown && dispatches == 1 && target.Snapshot(b).Items.Count == 0, "recovery does not replay a possible delivery");
                 AssertEqual(19, service.State(source, a, 20).Remaining, "unknown reservation remains charged conservatively");
@@ -216,10 +383,10 @@ namespace RNAssistant.Harness
                 var target = new ConversationInboxService(events); var service = new AgentCommunicationService();
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B"); var starts = 0;
                 service.Open(AgentEndpoint(b, target, _ => starts++));
-                try { service.Send(source, a, 20, "run", "receipt-failure", b.Id, "Accepted", () => { }); }
+                try { service.Send(source, a, 20, "run", "receipt-failure", AgentChatAddress.IdFor(b.Id), "Accepted", () => { }); }
                 catch (IOException) { }
                 AssertTrue(starts == 1 && target.Snapshot(b).Items.Count == 1, "accepted work is scheduled even if sender receipt fails");
-                AssertEqual("queued", service.Send(source, a, 20, "run", "receipt-failure", b.Id, "Accepted", () => {
+                AssertEqual("queued", service.Send(source, a, 20, "run", "receipt-failure", AgentChatAddress.IdFor(b.Id), "Accepted", () => {
                     throw new Exception("Duplicate dispatch"); }).Status, "destination reconciles an uncertain acknowledgement without replay");
                 AssertEqual(1, starts, "reconciliation does not schedule twice");
             });
@@ -275,10 +442,10 @@ namespace RNAssistant.Harness
                             else if (!fromB && number == 3 || fromB && number == 1)
                             {
                                 if (fromB) AssertContains(body.ToString(), "not the human user", "actual recipient model request carries origin");
-                                else AssertContains(body.ToString(), b.SessionId, "discovery exposes recipient address on actual wire");
+                                else AssertContains(body.ToString(), AgentChatAddress.IdFor(b.SessionId), "discovery exposes recipient address on actual wire");
                                 response = new ConversationResponse(ConversationResponse.ExecuteAction, "Send to peer", null,
                                     calls: new[] { new ConversationToolCall { Name = "agents.send", Arguments = new JObject {
-                                        ["chat_id"] = fromB ? a.SessionId : b.SessionId, ["text"] = fromB ? "ANSWER_FROM_B" : "QUESTION_FROM_A" } } }).ToJson();
+                                        ["agent_id"] = AgentChatAddress.IdFor(fromB ? a.SessionId : b.SessionId), ["text"] = fromB ? "ANSWER_FROM_B" : "QUESTION_FROM_A" } } }).ToJson();
                             }
                             else if (!fromB && number == 5)
                             {

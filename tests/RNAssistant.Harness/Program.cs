@@ -229,6 +229,8 @@ namespace RNAssistant.Harness
                 Test("workspace snapshots: exact browser diagnostics and CAS retention", WorkspaceWebDiagnosticsStayExact),
                 Test("agent communication: accepted work survives receipt failure", AgentAcceptedWorkSurvivesReceiptFailure),
                 Test("agent communication: workspace round trip", AgentWorkspaceRoundTrip),
+                Test("agent communication: Office queue starts model and routes progress", AgentOfficeQueueProgress),
+                Test("agent communication: wait timeout cancellation FIFO and stop", AgentWaitBoundaries),
                 Test("agent communication: chain budget and recovery", AgentChainBudgetAndRecovery),
                 Test("agent communication: zero disables settings and live sends", AgentCommunicationZeroDisables),
                 Test("agent communication: queue stop close and provenance", AgentQueueStopCloseAndProvenance),

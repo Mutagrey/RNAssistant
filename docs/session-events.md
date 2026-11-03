@@ -894,6 +894,17 @@ the existing input event and kernel summary, without a second lifecycle store.
 Missing CAS input bodies fail explicitly. Old event streams need no backfill;
 absence of input events means an empty queue.
 
+`ConversationInboxService.EndRun` owns the common terminal scheduling policy:
+Completed with known failed attempts permits later input; Failed/Cancelled and
+unknown effects pause it. Completion never clears explicit Stop or a replay pause.
+`agents.wait` keeps only transient wake signals, per-run elapsed wait and ready input
+IDs in this same Inbox projection. It selects the leading queued agent inputs without
+skipping human FIFO; the existing run input channel claims, persists and applies each
+message before the next model step. No delivery mode/provenance is rewritten and no
+second durable queue is created. Cancellation/restart cannot replay an unresolved
+delivery or recreate the wait automatically. Ready messages retain individual sender
+identity and arrive in the existing run; non-waiting runs keep ordinary FIFO scheduling.
+
 Application `ConversationInboxService` owns persisted-delivery reconciliation for
 both consumers and updates its live projection with the same appended event. Before
 recovery it incorporates newer canonical input events into an already loaded

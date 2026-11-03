@@ -17,6 +17,12 @@ immutable sender provenance, uncertain delivery and accepted work after sender
 receipt failure. The real model wire also loads the shared communication skill.
 Zero is checked through typed settings and disk persistence, live old-handler denial,
 Office/Workspace catalogs, continuation and re-enable without budget reset.
+The native Office queue check uses real Application/Kernel/bridge owners with a fake
+Office adapter and scripted model: bad-address recovery, same-run `agents.wait` wakeup,
+late next-turn delivery and exact inbox progress routing. Wait boundaries cover timeout,
+cancellation, total budget, Stop, human FIFO and unknown-effect pause. Stable short
+addresses, self discovery and individual sender provenance are checked across reload.
+This does not qualify real Office/COM or remote-model latency.
 Quota reads use existing indexed canonical events without trace
 materialization. Relevant regressions: `inbox:`, `workspace: queue`, `unified policy:`,
 `tool pack: core`, `settings: invalid numeric`, `storage: indexed input journal`.
@@ -25,7 +31,9 @@ Each Harness invocation accepts **one** substring filter.
 `node tests/web/agent-communication.test.js` uses Playwright (bundled `NODE_PATH`,
 optional `BROWSER_EXECUTABLE`) to compare agent/human bubble geometry, exercise budget
 settings/continuation, reload races and late presence ACK cleanup, and inspect narrow/zoom.
-Zero rendering and hiding continuation against a stale response are covered as well. Temporary
+Zero rendering and hiding continuation against a stale response are covered as well.
+Office inbox reasoning/streaming is injected into a separate mounted recipient; short
+sender labels are checked with the common bubble. Temporary
 screenshots go to `/tmp/rnassistant-agent-communication*.png`. It checks bubble bounds,
 not full Shell zoom qualification; the existing retained-overlay clipping remains
 in RISK_REGISTER. `independent-chat-views` passes; `model-settings` still has a

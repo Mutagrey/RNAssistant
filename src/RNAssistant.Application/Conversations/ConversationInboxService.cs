@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -70,6 +71,11 @@ namespace RNAssistant.Application.Conversations
                 new Dictionary<string, AcceptedInput>(StringComparer.Ordinal);
             internal ChatSession Session;
             internal CancellationTokenSource Interrupt = new CancellationTokenSource();
+            internal TaskCompletionSource<bool> InputChanged = NewInputSignal();
+            internal readonly HashSet<string> ReadyAgentInputs = new HashSet<string>(StringComparer.Ordinal);
+            internal string AgentWaitRunId;
+            internal long AgentWaitMilliseconds;
+            internal bool AgentWaiting;
             internal bool Running, Accepting, Worker, Paused;
             internal string PauseReason;
             internal long Revision, ViewRevision;
@@ -103,11 +109,11 @@ namespace RNAssistant.Application.Conversations
         {
             Inbox box;
             lock (_sync) box = _inboxes.Values.FirstOrDefault(item => item.Session.Id == address.ChatId);
-            if (box == null) return new AgentPeer { ChatId = address.ChatId, Title = address.Title,
+            if (box == null) return new AgentPeer { AgentId = address.AgentId, Title = address.Title,
                 ScopeTitle = address.ScopeTitle, Source = address.Source, Status = "idle" };
-            lock (box.Sync) return new AgentPeer { ChatId = address.ChatId, Title = box.Session.Title,
+            lock (box.Sync) return new AgentPeer { AgentId = address.AgentId, Title = box.Session.Title,
                 ScopeTitle = box.Session.DocumentTitle, Source = address.Source,
-                Status = box.Running || box.Worker ? "working" :
+                Status = box.AgentWaiting ? "waiting" : box.Running || box.Worker ? "working" :
                     box.Paused ? "paused" : PendingConfirmationId(box.Session) != null ? "awaiting_approval" : "idle" };
         }
 
@@ -201,9 +207,22 @@ namespace RNAssistant.Application.Conversations
                 box.Session = session;
                 box.Running = false;
                 box.Accepting = false;
+                box.ReadyAgentInputs.Clear();
+                box.AgentWaiting = false;
+                SignalInputChanged(box);
                 box.ViewRevision++;
                 if (!completed && !awaiting) PauseLocked(box, "Работа остановлена или завершилась с ошибкой");
             }
+        }
+        internal void EndRun(ChatSession session)
+        {
+            var summary = session.LastRun?.KernelState?.Summary;
+            // A finished turn may contain rejected/failed attempts that the agent
+            // already handled. Their counters must not freeze later user/peer input.
+            // Unknown effects, failed/cancelled runs and explicit Stop still pause.
+            End(session, summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Completed &&
+                summary.ExecutionHealth != RNAssistant.Core.Agent.ExecutionHealth.Unknown,
+                summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.AwaitingConfirmation);
         }
         internal ConversationInboxSnapshot Snapshot(ChatSession session, IReadOnlyList<string> receiptOperationIds = null)
         {
@@ -447,6 +466,7 @@ namespace RNAssistant.Application.Conversations
                 // Recovery also pauses unconditionally, so no durable replay is authorized.
                 box.Paused = true; box.PauseReason = reason;
                 box.ExplicitInputs.Clear(); box.ViewRevision++;
+                SignalInputChanged(box);
             }
         }
         internal void Resume(ChatSession session)
@@ -532,16 +552,19 @@ namespace RNAssistant.Application.Conversations
                 Write(box, copy, clearRecoveryPause && index == persisted.Length - 1 ? (bool?)false : null);
             }
         }
-        internal bool HasSteer(ChatSession session)
+        internal bool HasRunInput(ChatSession session)
         {
             var box = Get(session);
-            lock (box.Sync) return HasSteerLocked(box);
+            lock (box.Sync) return HasRunInputLocked(box);
         }
-        private static bool HasSteerLocked(Inbox box)
+        private static bool HasRunInputLocked(Inbox box)
         {
-            return box.Accepting && box.Inputs.Any(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending && i.Delivery == InputDelivery.Steer &&
-                (!box.Paused || box.ExplicitInputs.Contains(i.Id)));
+            return box.Accepting && box.Inputs.Any(i => IsRunInput(box, i));
         }
+        private static bool IsRunInput(Inbox box, ConversationInput input)
+        { return AppliesToRun(box, input) && input.Status == ConversationInputStatus.Pending &&
+            (input.Delivery == InputDelivery.Steer || box.ReadyAgentInputs.Contains(input.Id)) &&
+            (!box.Paused || box.ExplicitInputs.Contains(input.Id)); }
         internal CancellationToken InterruptToken(ChatSession session)
         {
             var box = Get(session);
@@ -552,28 +575,105 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
-                if (HasSteerLocked(box)) return false;
+                if (HasRunInputLocked(box)) return false;
                 box.Accepting = false;
                 return true;
             }
         }
-        internal List<ConversationInput> TakeSteer(ChatSession session)
+        internal List<ConversationInput> TakeRunInput(ChatSession session)
         {
             var box = Get(session);
             lock (box.Sync)
             {
-                var pending = box.Accepting ? box.Inputs.Where(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending &&
-                    i.Delivery == InputDelivery.Steer && (!box.Paused || box.ExplicitInputs.Contains(i.Id))).Select(Clone).ToList() : new List<ConversationInput>();
+                var pending = box.Accepting ? box.Inputs.Where(i => IsRunInput(box, i)).Select(Clone).ToList() : new List<ConversationInput>();
                 foreach (var input in pending)
                 {
                     input.Status = ConversationInputStatus.Delivering;
                     input.Revision++;
                     Write(box, input);
+                    box.ReadyAgentInputs.Remove(input.Id);
                 }
                 box.Interrupt.Dispose();
                 box.Interrupt = new CancellationTokenSource();
                 return pending;
             }
+        }
+
+        internal async Task<AgentWaitStatus> WaitForAgentsAsync(ChatSession session, string runId,
+            int timeoutSeconds, CancellationToken token)
+        {
+            var box = Get(session);
+            long milliseconds;
+            lock (box.Sync)
+            {
+                RequireAgentWaitRun(box, runId);
+                if (box.AgentWaitRunId != runId)
+                { box.AgentWaitRunId = runId; box.AgentWaitMilliseconds = 0; box.ReadyAgentInputs.Clear(); }
+                milliseconds = Math.Min(timeoutSeconds * 1000L, 30000 - box.AgentWaitMilliseconds);
+                box.AgentWaiting = milliseconds > 0;
+                box.ViewRevision++;
+            }
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            using (var delayCancellation = CancellationTokenSource.CreateLinkedTokenSource(token))
+            {
+                var timeout = Task.Delay((int)milliseconds, delayCancellation.Token);
+                try
+                {
+                    while (true)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        Task changed;
+                        lock (box.Sync)
+                        {
+                            RequireAgentWaitRun(box, runId);
+                            if (HasRunInputLocked(box)) return AgentWaitStatus.InputPending;
+                            var pending = box.Inputs.Where(i => i.Status == ConversationInputStatus.Pending &&
+                                i.AcceptedRunId == null && i.Delivery == InputDelivery.Queue).ToArray();
+                            // Keep FIFO: a queued human request is not skipped to reach later peers.
+                            var ready = pending.TakeWhile(i => i.AgentCommunication?.Sender != null).ToArray();
+                            if (ready.Length > 0)
+                            {
+                                foreach (var input in ready) box.ReadyAgentInputs.Add(input.Id);
+                                return AgentWaitStatus.MessagesReady;
+                            }
+                            if (pending.Length > 0) return AgentWaitStatus.InputPending;
+                            if (timeout.IsCompleted) return milliseconds <= 0 ? AgentWaitStatus.BudgetExhausted : AgentWaitStatus.TimedOut;
+                            changed = box.InputChanged.Task;
+                        }
+                        await Task.WhenAny(changed, timeout).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    delayCancellation.Cancel();
+                    lock (box.Sync)
+                    {
+                        box.AgentWaitMilliseconds = Math.Min(30000, box.AgentWaitMilliseconds + elapsed.ElapsedMilliseconds);
+                        box.AgentWaiting = false;
+                        box.ViewRevision++;
+                    }
+                }
+            }
+        }
+
+        private static void RequireAgentWaitRun(Inbox box, string runId)
+        {
+            if (string.IsNullOrWhiteSpace(runId) || !box.Running || !box.Accepting || box.Paused ||
+                box.Session.LastRun?.RunId != runId)
+                throw new AgentCommunicationException("agent_wait_unavailable", "Ожидание доступно только в текущем активном запуске без паузы.");
+        }
+        internal int AgentWaitRemainingSeconds(ChatSession session)
+        {
+            var box = Get(session);
+            lock (box.Sync) return (int)Math.Max(0, (30000 - box.AgentWaitMilliseconds + 999) / 1000);
+        }
+        private static TaskCompletionSource<bool> NewInputSignal()
+        { return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); }
+        private static void SignalInputChanged(Inbox box)
+        {
+            var previous = box.InputChanged;
+            box.InputChanged = NewInputSignal();
+            previous.TrySetResult(true);
         }
         internal void Applied(ChatSession session, string id)
         {
@@ -674,6 +774,7 @@ namespace RNAssistant.Application.Conversations
             Apply(box, change, fact);
             box.Revision = fact.Sequence;
             box.ViewRevision++;
+            SignalInputChanged(box);
             return fact;
         }
         private static void Apply(Inbox box, ConversationInputEvent change, SessionEvent fact)

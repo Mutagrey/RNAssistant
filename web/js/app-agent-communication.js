@@ -10,7 +10,7 @@
     var from = sender(message); if (!from) return;
     node.classList.add("agent-message");
     var link = document.createElement("button"); link.type = "button"; link.className = "agent-message-origin";
-    link.textContent = "Агент · " + (field(from, "Title") || "Чат");
+    link.textContent = "Агент " + field(from, "AgentId") + " · " + (field(from, "Title") || "Чат");
     link.title = "Открыть чат отправителя";
     link.addEventListener("click", function () {
       RNAssistantConversationPanel.open({ source: field(from, "Source"), workspaceId: field(from, "WorkspaceId"), sessionId: field(from, "ChatId") });

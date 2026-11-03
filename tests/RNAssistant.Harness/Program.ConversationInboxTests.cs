@@ -411,7 +411,7 @@ namespace RNAssistant.Harness
                 inbox.Submit(session, InboxInput("a", "steer", InputDelivery.Steer, "doc-1"));
                 AssertTrue(inbox.InterruptToken(session).IsCancellationRequested, "steer interrupts model");
                 inbox.Pause(session, "stop");
-                AssertTrue(!inbox.HasSteer(session), "stop freezes earlier steer");
+                AssertTrue(!inbox.HasRunInput(session), "stop freezes earlier steer");
                 inbox.End(session, false, false);
                 AssertTrue(!inbox.TryStartWorker(session), "stop does not restart queued work");
                 inbox.Submit(session, InboxInput("b", "new explicit request", InputDelivery.Steer, "doc-1"));
@@ -552,6 +552,7 @@ namespace RNAssistant.Harness
             internal readonly ConversationInboxService Inbox;
             internal readonly ChatStore Store;
             internal int ReloadCount;
+            internal Func<ChatSession, ConversationInput, CancellationToken, Task> Execute;
             internal ConversationQueueFake(ConversationInboxService inbox, ChatStore store)
             { Inbox = inbox; Store = store; }
             public bool IsClosing { get { return false; } }
@@ -559,18 +560,24 @@ namespace RNAssistant.Harness
             public void ValidateBinding(ChatSession session, ConversationInput input) { }
             public Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token)
             { throw new InvalidOperationException("No pending confirmation in the queue fixture."); }
-            public Task StartTurnAsync(ChatSession session, ConversationInput input, CancellationToken token)
+            public async Task StartTurnAsync(ChatSession session, ConversationInput input, CancellationToken token)
             {
                 Seen.Add(input.Id);
                 // Domain execution reloads under its run lease after the claim.
                 session = Store.Load(session.Id);
                 Inbox.Bind(session);
-                var message = new ChatMessage { Id = input.Id, Role = "user", Content = input.Text };
+                var message = new ChatMessage { Id = input.Id, Role = "user", Content = input.Text,
+                    AgentCommunication = input.AgentCommunication };
                 session.Messages.Add(message);
                 Store.Commit(session, ConversationCommit.UserInput(message));
                 Inbox.Applied(session, input.Id);
-                Inbox.End(session, completed: true, awaiting: false);
-                return Task.FromResult(0);
+                if (Execute != null)
+                {
+                    using (var channel = new ConversationRunInputChannel(Inbox, session,
+                        (_, __) => Task.FromException<AgentMessage>(new InvalidOperationException("No steer in this fixture.")), ownsBinding: true))
+                        await Execute(session, input, token).ConfigureAwait(false);
+                }
+                else Inbox.End(session, completed: true, awaiting: false);
             }
             public void Changed(ChatSession session) { Completed.TrySetResult(true); }
             public void Failed(Exception error) { Completed.TrySetException(error); }

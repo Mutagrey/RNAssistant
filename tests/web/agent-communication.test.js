@@ -10,6 +10,16 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   page.on('pageerror', error=>errors.push(error.message));
   await page.goto(url+'preview/web/?scenario=ready');
   await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise&&RNAssistantConversationPanel.office('preview-chat'));
+  await page.evaluate(()=>RNAssistantConversationPanel.open({source:'office',sessionId:'preview-summary'},{direction:'right'}));
+  await page.waitForFunction(()=>{const c=RNAssistantConversationPanel.office('preview-summary');return c&&!c.loading;});
+  await page.evaluate(()=>{
+   applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'thinking',message:'Preparing peer reply'},null,'inbox:preview-summary');
+   applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'reasoning',reasoningDelta:'Peer reasoning'},null,'inbox:preview-summary');
+   applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'streaming',contentDelta:'Visible peer answer'},null,'inbox:preview-summary');
+  });
+  await page.waitForFunction(()=>RNAssistantConversationPanel.office('preview-summary').node('messages').textContent.includes('Visible peer answer'));
+  assert.equal(await page.evaluate(()=>state.chatRuns['preview-summary'].reasoning),'Peer reasoning','recipient reasoning uses the common progress route');
+  assert.equal(await page.evaluate(()=>RNAssistantConversationPanel.office('preview-chat').node('messages').textContent.includes('Visible peer answer')),false,'recipient progress stays in its own chat');
   assert.deepEqual(await page.evaluate(()=>{
    renderSettings({committed:true});
    const initial=readSettings().MaxAgentMessages;
@@ -39,13 +49,13 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
    const component=RNAssistantConversationPanel.office('preview-chat'); component.communication.rebind();
    const plugin=await send('getPluginChat',{pluginId:'data-templates'});
    window.agentTarget={source:'workspace',workspaceId:plugin.project.workspaceId,sessionId:plugin.sessionId};
-   const incoming={Id:'agent-incoming',Role:'user',Content:'Проверь расчёт и сообщи результат.',AgentSender:{Source:'workspace',WorkspaceId:agentTarget.workspaceId,ChatId:agentTarget.sessionId,Title:'Проверка расчётов'}};
+   const incoming={Id:'agent-incoming',Role:'user',Content:'Проверь расчёт и сообщи результат.',AgentSender:{AgentId:'a-7mh2p4x9qd',Source:'workspace',WorkspaceId:agentTarget.workspaceId,ChatId:agentTarget.sessionId,Title:'Проверка расчётов'}};
    const node=renderMessageArticle(incoming,0,{workspace:false}); node.id='agent-test-bubble'; component.node('messages').append(node);
    const normal=renderMessageArticle({Id:'human-incoming',Role:'user',Content:'Обычный запрос'},1,{}); normal.id='human-test-bubble';component.node('messages').append(normal);
    window.agentTestMessage=incoming;
   });
   await page.waitForSelector('.agent-communication-status:not([hidden])');
-  assert.equal(await page.locator('#agent-test-bubble .agent-message-origin').textContent(),'Агент · Проверка расчётов');
+  assert.equal(await page.locator('#agent-test-bubble .agent-message-origin').textContent(),'Агент a-7mh2p4x9qd · Проверка расчётов');
   const styles=await page.evaluate(()=>['agent-test-bubble','human-test-bubble'].map(id=>{const s=getComputedStyle(document.querySelector('#'+id+' .markdown'));return {bg:s.backgroundColor,padding:s.padding,border:s.borderRadius};}));
   assert.notEqual(styles[0].bg,styles[1].bg);assert.equal(styles[0].padding,styles[1].padding);assert.equal(styles[0].border,styles[1].border);
   await page.evaluate(()=>{window.holdAgentState=true;RNAssistantAgentCommunication.settingsChanged();});
