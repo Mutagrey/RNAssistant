@@ -895,15 +895,20 @@ Missing CAS input bodies fail explicitly. Old event streams need no backfill;
 absence of input events means an empty queue.
 
 `ConversationInboxService.EndRun` owns the common terminal scheduling policy:
-Completed with known failed attempts permits later input; Failed/Cancelled and
-unknown effects pause it. Completion never clears explicit Stop or a replay pause.
-`agents.wait` keeps only transient wake signals, per-run elapsed wait and ready input
-IDs in this same Inbox projection. It selects the leading queued agent inputs without
+Completed permits later input even with historical failed/unknown attempts;
+Failed/Cancelled pause it. Effect verification remains a kernel/tool responsibility.
+Completion never clears explicit Stop or a replay pause.
+Kernel boundaries and `agents.wait` use transient wake signals and ready input
+IDs in this same Inbox projection. They select the leading queued agent inputs without
 skipping human FIFO; the existing run input channel claims, persists and applies each
 message before the next model step. No delivery mode/provenance is rewritten and no
 second durable queue is created. Cancellation/restart cannot replay an unresolved
 delivery or recreate the wait automatically. Ready messages retain individual sender
-identity and arrive in the existing run; non-waiting runs keep ordinary FIFO scheduling.
+identity and arrive in the existing run after the current model request/tool call,
+before the next dispatch. Peer input never cancels an in-flight call. Undispatched
+accepted calls receive terminal NotDispatched facts. Each wait has its own timeout;
+there is no separate cumulative waiting quota. Office queued binding uses the existing
+exact runtime-session guard; a stale path after Save As cannot override that identity.
 
 Application `ConversationInboxService` owns persisted-delivery reconciliation for
 both consumers and updates its live projection with the same appended event. Before

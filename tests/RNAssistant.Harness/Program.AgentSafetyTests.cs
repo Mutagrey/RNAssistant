@@ -1026,11 +1026,15 @@ namespace RNAssistant.Harness
             var prompts = new List<string>();
             var trace = new List<LlmTraceRecord>();
             var attempts = new HashSet<string>();
+            var causes = new List<ModelRequestCause>();
+            var orderedAttempts = new List<string>();
             request.Options.TraceSink = trace.Add;
             var delays = new List<TimeSpan>();
             var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
             {
                 prompts.Add(JsonConvert.SerializeObject(messages));
+                causes.Add(options.TraceRequestCause);
+                orderedAttempts.Add(options.TraceModelAttemptId);
                 AssertTrue(attempts.Add(options.TraceModelAttemptId), "every raw request has a distinct model attempt id");
                 options.TraceRequestId = "recovered-request-" + prompts.Count;
                 if (prompts.Count == 1 || prompts.Count == 3)
@@ -1043,6 +1047,16 @@ namespace RNAssistant.Harness
             AssertTrue(result.Failure == null, "two transient failures do not consume either protocol response slot");
             AssertEqual("Recovered.", result.Response.Message, "valid second response accepts");
             AssertEqual(4, prompts.Count, "two responses plus two provider retries");
+            AssertTrue(causes[0] == null, "initial request is not labelled a retry");
+            AssertEqual(ModelRequestCauseKind.ProviderRetry, causes[1].Kind, "API recovery is distinct from repair");
+            AssertEqual("Timeout", causes[1].FailureKind, "timeout cause stays visible");
+            AssertEqual(1000, causes[1].DelayMilliseconds.Value, "existing backoff is recorded");
+            AssertEqual(ModelRequestCauseKind.FormatRepair, causes[2].Kind, "invalid response explains format repair");
+            AssertTrue(!string.IsNullOrWhiteSpace(causes[2].Feedback), "parser feedback is available in diagnostics");
+            AssertEqual(ModelRequestCauseKind.ProviderRetry, causes[3].Kind, "API error during repair stays a transport retry");
+            for (var index = 1; index < causes.Count; index++)
+                AssertEqual(orderedAttempts[index - 1], causes[index].SourceModelAttemptId, "retry names its exact source attempt");
+            AssertTrue(request.Options.TraceRequestCause == null, "retry cause cannot leak into a later logical step");
             AssertEqual(prompts[0], prompts[1], "initial provider retry keeps the exact accepted prompt");
             AssertEqual(prompts[2], prompts[3], "repair provider retry keeps the exact repair prompt");
             AssertEqual("1,2", string.Join(",", delays.Select(delay => delay.TotalSeconds)), "provider budget is not reset by a protocol rejection");

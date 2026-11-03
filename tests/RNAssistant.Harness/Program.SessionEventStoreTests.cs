@@ -2554,7 +2554,8 @@ namespace RNAssistant.Harness
                 TrajectoryEvent(4, SessionEventTypes.AgentResponseRejected, started.AddSeconds(3), "run-1", "turn-1", "transport-1",
                     new JObject { ["Stage"] = "model.attempt.rejected", ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-1", ["FailureKind"] = "invalid_agent_response", ["Error"] = "duplicate model call id" }),
                 TrajectoryEvent(5, SessionEventTypes.LlmRequest, started.AddSeconds(4), "run-1", "turn-1", "transport-2",
-                    new JObject { ["Stage"] = "model.request.prepared", ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["RequestId"] = "transport-2" }),
+                    new JObject { ["Stage"] = "model.request.prepared", ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["RequestId"] = "transport-2",
+                        ["RequestCause"] = JObject.FromObject(new ModelRequestCause(ModelRequestCauseKind.FormatRepair, "attempt-1", "duplicate model call id")) }),
                 TrajectoryEvent(6, SessionEventTypes.LlmResponse, started.AddSeconds(5), "run-1", "turn-1", "transport-2",
                     new JObject
                     {
@@ -2625,7 +2626,9 @@ namespace RNAssistant.Harness
                             ["Data"] = new JObject { ["Value"] = new JObject
                             {
                                 ["ToolCallId"] = "call-1", ["ToolName"] = "html.source.write",
-                                ["Content"] = "TOOL_RESULT:\n{\"version\":1,\"tool_call_id\":\"call-1\",\"name\":\"html.source.write\",\"status\":\"ok\",\"message\":\"Workspace updated.\",\"data\":{\"changed\":true}}"
+                                ["ToolResultProtocolVersion"] = ToolResultWire.CurrentVersion,
+                                ["Content"] = ToolResultWire.Write("call-1", "html.source.write",
+                                    TerminalToolResult.Ok("Workspace updated.", "{\"changed\":true}"))
                             } }
                         })
                     }),
@@ -2695,6 +2698,11 @@ namespace RNAssistant.Harness
                 PageSize = 200
             }).Rows;
             var rejected = run.Single(item => item.ModelAttemptId == "attempt-1" && item.Status == "rejected");
+            var repeated = run.Single(item => item.ModelAttemptId == "attempt-2" && item.Kind == "model.request.prepared");
+            var repeatedDto = TrajectoryViewRowDto.From(repeated);
+            AssertEqual(ModelRequestCauseKind.FormatRepair, repeatedDto.RequestCause.Kind, "repeat cause reaches the existing typed journal contract");
+            AssertEqual("attempt-1", repeatedDto.RequestCause.SourceModelAttemptId, "source attempt survives projection without adjacency guessing");
+            AssertEqual("duplicate model call id", repeatedDto.RequestCause.Feedback, "diagnostics retain the parser feedback");
             var accepted = run.Single(item => item.Kind == SessionOperationTypes.ToolCallRecorded && item.ToolCallId == "call-1");
             AssertTrue(rejected.LastSequence < accepted.FirstSequence, "rejected repair attempt remains before accepted call mapping");
             AssertEqual("attempt-2", accepted.ModelAttemptId, "accepted call links the exact raw model attempt");

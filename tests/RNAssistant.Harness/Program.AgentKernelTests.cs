@@ -112,7 +112,7 @@ namespace RNAssistant.Harness
             const string unmet = "Current complete file reads: 0/1.";
             var f = new KernelFixture();
             var responses = new Queue<AgentModelResult>(new[] {
-                AgentModelResult.RejectCompletion(unmet),
+                AgentModelResult.RejectCompletion(unmet, "finish-attempt"),
                 AgentModelResult.Accepted(KernelResponse(KernelCall("read"))),
                 AgentModelResult.Accepted(KernelResponse()) });
             f.Model.OnSend = (request, token) => Task.FromResult(responses.Dequeue());
@@ -122,6 +122,10 @@ namespace RNAssistant.Harness
             AssertEqual(1, result.Summary.ToolStepsUsed, "rejection does not fabricate a tool step");
             AssertEqual(1, f.Model.Requests[1].AcceptedMessages.Count, "rejected done never enters accepted history");
             AssertEqual(unmet, f.Model.Requests[1].CompletionFeedback, "next fresh request receives the concrete requirements");
+            AssertEqual(ModelRequestCauseKind.CompletionRejected, f.Model.Requests[1].RequestCause.Kind, "finish correction is distinct from an API retry");
+            AssertEqual("finish-attempt", f.Model.Requests[1].RequestCause.SourceModelAttemptId, "diagnostics retain the exact rejected finish source");
+            AssertEqual(unmet, f.Model.Requests[1].RequestCause.Feedback, "diagnostics expose the same feedback sent to the model");
+            AssertTrue(f.Model.Requests[2].RequestCause == null, "ordinary next action is not a retry");
             AssertEqual<string>(null, f.Model.Requests[2].CompletionFeedback, "a useful accepted response clears the previous rejection");
             var rejection = f.Store.Events.Single(e => e.Summary.Reason == "completion_requirements_unmet");
             AssertEqual(RunLifecycle.Running, rejection.Summary.Lifecycle, "rejection is durable nonterminal evidence");

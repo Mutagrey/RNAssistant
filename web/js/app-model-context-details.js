@@ -40,6 +40,7 @@
     facts(settings, [["Модель", trace.Model], ["Формат нового ответа", frozen.ResponseFormat || trace.ResponseFormat],
       ["История результатов инструментов", frozen.ToolResultRole === "tool" ? "Native tool history" : frozen.ToolResultRole],
       ["Роль инструкций", frozen.InstructionRole], ["Лимит ответа", frozen.MaxOutputTokens],
+      ["Тайм-аут запроса", frozen.RequestTimeoutSeconds == null ? null : frozen.RequestTimeoutSeconds + " с"],
       ["Температура / top_p", frozen.Temperature == null ? null : frozen.Temperature + " / " + frozen.TopP],
       ["Поток", trace.Streaming == null ? null : trace.Streaming ? "SSE" : "JSON"]]);
     if (!trace.Settings) settings.appendChild(node("p", "Подробный снимок настроек в этой записи отсутствует. Текущие настройки не подставляются; отправленные параметры доступны в исходнике.", "diagnostic-body-note"));

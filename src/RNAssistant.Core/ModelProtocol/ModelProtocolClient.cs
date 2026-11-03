@@ -94,6 +94,8 @@ namespace RNAssistant.Core.ModelProtocol
                             cancellationToken.ThrowIfCancellationRequested();
                             TimeSpan delay;
                             if (!budget.TryTakeProviderRetry(ex, out delay)) throw;
+                            options.TraceRequestCause = new ModelRequestCause(ModelRequestCauseKind.ProviderRetry,
+                                options.TraceModelAttemptId, ex.Message, ex.Kind.ToString(), ex.StatusCode, (int)delay.TotalMilliseconds);
                             await _delayAsync(delay, cancellationToken).ConfigureAwait(false);
                         }
                     }
@@ -127,6 +129,8 @@ namespace RNAssistant.Core.ModelProtocol
                         // the same token-limited generation ten times cannot make progress.
                         cancellationToken.ThrowIfCancellationRequested();
                         if (truncatedResponses >= 2) break;
+                        options.TraceRequestCause = new ModelRequestCause(ModelRequestCauseKind.FormatRepair,
+                            sourceModelAttemptId, lastError);
                         continue;
                     }
                     if (completion.Termination == LlmCompletionTermination.Filtered)
@@ -157,6 +161,8 @@ namespace RNAssistant.Core.ModelProtocol
                     if (parsed.ErrorKind == ConversationResponseError.ReflectionDisabled)
                         return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ReflectionDisabled,
                             "Рефлексия отключена для этого запуска, но модель вернула reflection. Ответ отклонён без запроса на корректировку."), contextUsage);
+                    options.TraceRequestCause = new ModelRequestCause(ModelRequestCauseKind.FormatRepair,
+                        sourceModelAttemptId, parsed.ErrorCode + ": " + lastError);
                 }
                 if (lastTruncated)
                     return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.OutputTruncated,
@@ -181,6 +187,7 @@ namespace RNAssistant.Core.ModelProtocol
             finally
             {
                 options.TraceMessageContentChanged = null;
+                options.TraceRequestCause = null;
             }
         }
 

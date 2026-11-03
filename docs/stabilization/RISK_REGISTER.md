@@ -1,5 +1,44 @@
 # Stabilization risk register
 
+## Повторы, накопление peer input и потеря сессии — 2026-11-03
+
+Фото сделаны после обновления; последнее содержит короткие ID и причину паузы
+«Исходная сессия документа недоступна». Это не доказательство неизвестного эффекта
+записи или сбоя API. Owners: Application Inbox / Office queue binding / Core
+ModelProtocol / Web RunJournal.
+
+Локально исправлены и проверены:
+- Peer input без `agents.wait` мог оставаться до следующего run. Теперь граница
+  после model request/tool call принимает его в тот же run; текущая запись завершается,
+  последующие незапущенные reads получают NotDispatched. Finish race проверен.
+- Суммарные 30 секунд wait порождали мгновенный BudgetExhausted при последующих
+  ожиданиях. Отдельная квота удалена; каждый вызов сохраняет свой timeout, свежие
+  peer statuses и Stop/cancellation. Взаимное ожидание возвращает управление моделям.
+- Completed с историческим unknown больше не блокирует Inbox; эффекты продолжает
+  проверять kernel. Explicit Stop, реальные Failed/Cancelled и restart pause сохраняются.
+- Queue binding повторно проверял путь через CaptureExpectedRuntimeDocumentKey.
+  После Save As старый путь мог не совпадать при прежней runtime identity. Consumer
+  переключён на существующий exact-session guard; closed/reopened session не допускается.
+- Причина нового запроса записывается в существующий request trace с source attempt:
+  provider retry, format repair, rejected finish/partial/reflection или incoming input.
+  RunJournal показывает feedback и exact исходный ответ через lazy reader; timeout
+  виден в снимке настроек. Новых лимитов повторов нет.
+
+Проверки: 10 communication, 12 Inbox, 3 completion rejection, 4 provider/repair,
+bound session lifetime, built-in skill dependencies, causal projection;
+run-journal, stream-render-cost и Chromium diagnostics-navigation (wide/narrow,
+lazy source, missing evidence, отмена/stale responses). Это host-neutral проверки.
+Controller delivery не включён в Harness (bridge stub); реальная Windows/Office/
+WebView2 квалификация открыта. Save As воспроизводит дефект сравнения, но не доказывает
+причину конкретного фото. Старые durable паузы автоматически не снимаются.
+
+Открыто: на фото Gomoku unknown-write сопровождается частичным read; такой read
+может не удовлетворять требованию complete/whole exact-target inspection и вызвать
+новый rejected finish. Конкретный ответ модели/ошибка API с фото не известны; теперь
+они доступны на экране диагностики. Настроенный HTTP timeout по умолчанию 1800 секунд
+за запрос не менялся; он также может объяснять долгое отсутствие ответа. Не заявлять,
+что Windows задержка или все причины повторов устранены.
+
 ## Общение агентов: поздний ответ и невидимый прогресс — 2026-11-03
 
 Owners: Application Inbox / Office bridge / Core communication skill / Web sender.
@@ -13,12 +52,12 @@ Owners: Application Inbox / Office bridge / Core communication skill / Web sende
   принимает `inbox:`. Native queue/kernel/bridge check воспроизвёл потерю маршрута;
   после переключения Chromium видит reasoning/streaming только в чате получателя.
 - Completed + известная failed attempt ошибочно ставили очередь на паузу. Общий
-  EndRun допускает следующий ввод; Unknown/Failed/Cancelled/Stop/restart сохраняют
-  защиту. Старые durable паузы не снимаются автоматически обновлением.
+  EndRun допускает следующий ввод; исторический unknown также больше не блокирует
+  Completed (см. дополнение выше). Failed/Cancelled/Stop/restart сохраняют паузу.
 - Skill требовал finish после send. Теперь он продолжает независимую работу и при
   необходимости вызывает bounded `agents.wait`. Native test проверяет пробуждение
   и ответ в том же run, затем поздний следующий ход без Resume. Timeout/cancel/Stop,
-  FIFO человека и unknown-effect pause проверены отдельно.
+  FIFO человека проверены отдельно; прежняя unknown-effect pause заменена выше.
 
 Проходят 8 agent communication, 12 Inbox, Workspace queue, Core admission,
 all-host built-in skill checks и Chromium agent communication. Это fake Office и

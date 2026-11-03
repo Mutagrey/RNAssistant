@@ -38,7 +38,6 @@ namespace RNAssistant.Application.Conversations
                     return new ToolHandlerResult(RuntimeResult.Ok(
                         result.Status == AgentWaitStatus.MessagesReady ? "Сообщения поступили; они будут переданы в этом запуске перед следующим шагом модели."
                         : result.Status == AgentWaitStatus.InputPending ? "Есть пользовательский ввод. Обработайте уточнение или завершите ход для очередного запроса."
-                        : result.Status == AgentWaitStatus.BudgetExhausted ? "Бюджет ожидания исчерпан. Продолжите самостоятельную работу или завершите ход с указанием ожидаемого ответа."
                         : "Время ожидания истекло. Проверьте состояния собеседников и выберите дальнейшее действие.",
                         JsonConvert.SerializeObject(result)), ToolEffectEvidence.None);
                 }

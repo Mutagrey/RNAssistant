@@ -69,9 +69,17 @@ Rollback — обратный diff среза, без удаления поль�
 
 ## Диагностика и дерево запусков — In Review, 2026-11-03
 
+Дополнение по фото повторов: runtime передаёт typed RequestCause в существующем
+trace/trajectory contract. Журнал показывает причину и feedback, exact исходный
+ответ — по кнопке через прежний reader; API timeout виден в настройках запроса.
+Минимальные проверки дополнения: run-journal, stream-render-cost и
+diagnostics-navigation (wide/narrow, lazy payload, точные связи, cleanup).
+Windows/WebView2 evidence и пользовательское принятие остаются открытыми.
+
 Scope — прямой запрос пользователя: Dock-вкладка, общие стили дерева, сокращение
 дублирования и удобный выбор запуска/шага с компактными деталями. Owner — Web
-diagnostics/trajectory; runtime, Bridge и storage не меняются.
+diagnostics/trajectory. Исходный UI-срез не менял runtime/Bridge/storage; дополнение
+выше расширяет диагностические метаданные существующих trace/trajectory контрактов.
 
 Baseline: собственные вложенные disclosures RunJournal, действия/переходы внутри
 строк, повторный заголовок экрана и скрытая команда снятия scope. Теперь один

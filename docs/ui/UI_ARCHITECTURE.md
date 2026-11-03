@@ -60,7 +60,10 @@ move/split/restore сохраняют DOM. Закрытие UI не отменя
 предыдущий запрос; response scope и generation по-прежнему проверяются.
 Экспорт сохраняет дополнительную отмену при смене активного источника.
 RunJournal группирует обмены по записанным request/attempt IDs внутри exact run;
-уникальные step/call связи присоединяют метаданные и действия. Lifecycle events
+уникальные step/call связи присоединяют метаданные и действия. Typed `RequestCause`
+связывает повтор с исходной attempt и feedback; исходный ответ читает существующий
+lazy payload reader. Core ModelProtocol/Kernel владеют причиной, UI её не выводит из соседства
+событий и не добавляет свой retry controller. Lifecycle events
 не создают самостоятельных обменов. Отсутствующая/неоднозначная связь показывается
 явно. Обзор строится из той же bounded projection, по 30 строк, без body reads.
 NavigationTree откладывает DOM свёрнутых веток журнала до раскрытия; модель дерева

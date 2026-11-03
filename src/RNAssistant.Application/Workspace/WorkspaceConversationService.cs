@@ -1625,6 +1625,7 @@ namespace RNAssistant.Runtime
                 var options = preparation.Options;
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
+                options.TraceRequestCause = request.RequestCause;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                 var messages = snapshot.Messages;
                 _lastRequest = request;
@@ -1658,7 +1659,7 @@ namespace RNAssistant.Runtime
                     _catalog.Any(item => item.Id == "plugins.check") &&
                     PluginSourceHasUncheckedChanges(_session, request.RunId))
                     return AgentModelResult.RejectCompletion("Plugin source changed, but no successful plugins.check followed the last file change. " +
-                        "Run plugins.check on the current source; repair its reported error before claiming completion.");
+                        "Run plugins.check on the current source; repair its reported error before claiming completion.", result.SourceModelAttemptId);
                 if (result.Response.Action == ConversationResponse.FinishAction && _acceptance?.Requested == true)
                 {
                     // Refresh after the model wait, including externally changed dependencies.
@@ -1669,7 +1670,7 @@ namespace RNAssistant.Runtime
                     // satisfy the acceptance contract or turn CLI exit into 0.
                     var admitsIncomplete = result.Response.Outcome != ConversationOutcome.Completed;
                     if (unmet != null && !admitsIncomplete)
-                        return AgentModelResult.RejectCompletion(unmet);
+                        return AgentModelResult.RejectCompletion(unmet, result.SourceModelAttemptId);
                 }
                 return AgentModelResult.Accepted(new AgentResponseDraft(result.Response.Action,
                     result.Response.Reason, result.Response.Message,

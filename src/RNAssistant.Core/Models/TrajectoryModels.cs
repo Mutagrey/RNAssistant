@@ -132,6 +132,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class TrajectoryViewRow
     {
+        public RNAssistant.Core.ModelProtocol.ModelRequestCause RequestCause { get; set; }
         public string Summary { get; set; }
         public string Target { get; set; }
         public string ErrorCode { get; set; }

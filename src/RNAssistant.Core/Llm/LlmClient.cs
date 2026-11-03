@@ -124,6 +124,7 @@ namespace RNAssistant.Core.Llm
                 Trace(requestOptions, new LlmTraceRecord
                 {
                     Type = "request",
+                    RequestCause = requestOptions.TraceRequestCause,
                     Streaming = settings.StreamResponses,
                     ContextMessages = wireMessages,
                     RequestComposition = LlmRequestCompositionBuilder.Describe(apiBuild, messageList,
@@ -135,6 +136,8 @@ namespace RNAssistant.Core.Llm
                     Model = settings.Model,
                     ResponseFormat = requestOptions.ResponseFormat,
                     Settings = new LlmRequestSettingsSnapshot {
+                        RequestTimeoutSeconds = settings.RequestTimeoutSeconds <= 0
+                            ? AppSettings.DefaultRequestTimeoutSeconds : settings.RequestTimeoutSeconds,
                         ResponseFormat = requestOptions.ResponseFormat,
                         ToolResultRole = ToolResultRoles.Normalize(settings.ToolResultRole),
                         InstructionRole = settings.SystemPromptRole,

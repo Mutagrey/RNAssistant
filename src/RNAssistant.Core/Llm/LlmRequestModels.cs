@@ -106,6 +106,8 @@ namespace RNAssistant.Core.Llm
         [JsonIgnore]
         public string TraceModelAttemptId { get; set; }
         [JsonIgnore]
+        public ModelRequestCause TraceRequestCause { get; set; }
+        [JsonIgnore]
         public string TraceRequestId { get; set; }
         [JsonIgnore]
         public ContextReceipt TraceContextReceipt { get; set; }
@@ -130,6 +132,8 @@ namespace RNAssistant.Core.Llm
         public string TurnId { get; set; }
         public string StepId { get; set; }
         public string ModelAttemptId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ModelRequestCause RequestCause { get; set; }
         public string ContextSnapshotId { get; set; }
         public string DocumentRuntimeId { get; set; }
         public List<ContextMessagePresentation> ContextMessages { get; set; }
@@ -195,6 +199,7 @@ namespace RNAssistant.Core.Llm
     // Absent on older traces; consumers must never substitute current settings.
     public sealed class LlmRequestSettingsSnapshot
     {
+        public int? RequestTimeoutSeconds { get; set; }
         public string ResponseFormat { get; set; }
         public string ToolResultRole { get; set; }
         public string InstructionRole { get; set; }

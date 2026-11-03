@@ -9,6 +9,35 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.ModelProtocol
 {
+    public enum ModelRequestCauseKind
+    {
+        ProviderRetry, FormatRepair, CompletionRejected, PartialFinishRecheck, ReflectionLimit, InputReceived
+    }
+
+    // Diagnostic provenance only. It never changes dispatch, limits or accepted history.
+    public sealed class ModelRequestCause
+    {
+        [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public ModelRequestCauseKind Kind { get; private set; }
+        public string SourceModelAttemptId { get; private set; }
+        public string Feedback { get; private set; }
+        public string FailureKind { get; private set; }
+        public int? StatusCode { get; private set; }
+        public int? DelayMilliseconds { get; private set; }
+
+        [Newtonsoft.Json.JsonConstructor]
+        public ModelRequestCause(ModelRequestCauseKind kind, string sourceModelAttemptId, string feedback,
+            string failureKind = null, int? statusCode = null, int? delayMilliseconds = null)
+        {
+            Kind = kind;
+            SourceModelAttemptId = sourceModelAttemptId;
+            Feedback = feedback;
+            FailureKind = failureKind;
+            StatusCode = statusCode;
+            DelayMilliseconds = delayMilliseconds;
+        }
+    }
+
     // One instance per conversation run. Only endpoint-format compatibility is
     // retained between steps. The latest rejected content is a bounded diagnostic
     // within this request's repair only; no rejected response becomes accepted history.

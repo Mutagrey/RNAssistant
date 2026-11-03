@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Межагентная очередь и причины повторов — 2026-11-03, In Review
+
+Owners: Application Inbox, Core ModelProtocol/Kernel, Web RunJournal.
+Peer input автоматически доставляется на границе после model request/tool call,
+без отмены выполняющегося инструмента; незапущенные calls перепланируются.
+Убраны отдельная 30-секундная квота wait и пауза Completed по историческому unknown
+счётчику. Stop/approval/recovery и проверки реальных эффектов сохранены.
+Office queue проверяет exact runtime session существующим guard, без повторной
+path-only проверки, которая расходится с ним после Save As.
+Request trace/typed journal передают причину повтора и source attempt; UI показывает
+feedback, исходный ответ по кнопке и сохранённый HTTP timeout. Новых retry limits нет.
+Локальные проверки очереди, модельного протокола и UI пройдены; Windows-причина
+потери сессии и задержки реального API остаются открытыми в [Risk Register](RISK_REGISTER.md).
+
 ## HTML views и редакторы в Dockview — 2026-11-03, In Review
 
 Live HTML перенесён в независимые per-chat views: код, dirty/source guards, preview,

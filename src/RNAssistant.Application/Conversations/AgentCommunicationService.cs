@@ -65,12 +65,11 @@ namespace RNAssistant.Application.Conversations
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
-    internal enum AgentWaitStatus { MessagesReady, TimedOut, InputPending, BudgetExhausted }
+    internal enum AgentWaitStatus { MessagesReady, TimedOut, InputPending }
 
     internal sealed class AgentWaitResult
     {
         public AgentWaitStatus Status { get; set; }
-        public int RemainingWaitSeconds { get; set; }
         public IReadOnlyList<AgentPeer> Peers { get; set; }
     }
 
@@ -151,8 +150,7 @@ namespace RNAssistant.Application.Conversations
             if (timeoutSeconds < 1 || timeoutSeconds > 10)
                 throw new AgentCommunicationException("agent_wait_invalid", "Ожидание: от 1 до 10 секунд.");
             var status = await inbox.WaitForAgentsAsync(session, runId, timeoutSeconds, token).ConfigureAwait(false);
-            return new AgentWaitResult { Status = status, RemainingWaitSeconds = inbox.AgentWaitRemainingSeconds(session),
-                Peers = List(session.Id, limit) };
+            return new AgentWaitResult { Status = status, Peers = List(session.Id, limit) };
         }
 
         internal static AgentCommunicationContext Context(ChatSession session, int limit)

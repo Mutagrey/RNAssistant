@@ -74,6 +74,7 @@ namespace RNAssistant.Core.Services
 
             var row = new TrajectoryViewRow
             {
+                RequestCause = ReadRequestCause(Property(data, "RequestCause")),
                 Id = RowId(item.Sequence, "event", item.EventId),
                 View = TrajectoryViews.RunCausal,
                 Kind = stage,
@@ -98,6 +99,14 @@ namespace RNAssistant.Core.Services
             };
             ApplySource(row, new[] { item });
             return row;
+        }
+
+        private static RNAssistant.Core.ModelProtocol.ModelRequestCause ReadRequestCause(JToken data)
+        {
+            var cause = data?.ToObject<RNAssistant.Core.ModelProtocol.ModelRequestCause>();
+            return cause == null ? null : new RNAssistant.Core.ModelProtocol.ModelRequestCause(cause.Kind,
+                cause.SourceModelAttemptId, DisplayText(cause.Feedback, 2000), cause.FailureKind,
+                cause.StatusCode, cause.DelayMilliseconds);
         }
 
         private static void AddCommitRows(ICollection<TrajectoryViewRow> rows, SessionEvent item)

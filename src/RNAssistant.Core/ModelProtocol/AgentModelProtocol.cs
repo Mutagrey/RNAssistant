@@ -21,18 +21,20 @@ namespace RNAssistant.Core.ModelProtocol
         public string StepId { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
         public string CompletionFeedback { get; private set; }
+        public ModelRequestCause RequestCause { get; private set; }
         public int? ReflectionLimit { get; private set; }
         public int ReflectionsUsed { get; private set; }
 
         internal AgentModelRequest(string runId, string turnId, string stepId,
             IEnumerable<AgentMessage> messages, string completionFeedback = null,
-            int? reflectionLimit = null, int reflectionsUsed = 0)
+            int? reflectionLimit = null, int reflectionsUsed = 0, ModelRequestCause requestCause = null)
         {
             RunId = runId;
             TurnId = turnId;
             StepId = stepId;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             CompletionFeedback = completionFeedback;
+            RequestCause = requestCause;
             ReflectionLimit = reflectionLimit;
             ReflectionsUsed = reflectionsUsed;
         }
@@ -57,10 +59,11 @@ namespace RNAssistant.Core.ModelProtocol
 
         // A valid finish failed explicit application-owned postconditions. This is
         // a fresh kernel step, never a format repair or accepted assistant answer.
-        public static AgentModelResult RejectCompletion(string message)
+        public static AgentModelResult RejectCompletion(string message, string sourceModelAttemptId = null)
         {
             if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("Unmet requirements are required.", nameof(message));
-            return new AgentModelResult { CompletionRejected = true, Message = message };
+            return new AgentModelResult { CompletionRejected = true, Message = message,
+                SourceModelAttemptId = sourceModelAttemptId };
         }
 
         public static AgentModelResult Failed(ModelProtocolFailureKind kind, string message)

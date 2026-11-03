@@ -40,6 +40,9 @@ namespace RNAssistant.Harness
             Load = () => session, Inbox = inbox, Validate = current => current.DocumentKey, Start = start ?? (_ => { }) }; }
 
         private static void AgentOfficeQueueProgress()
+        { AgentOfficePeerProgress(true); }
+
+        private static void AgentOfficePeerProgress(bool explicitWait)
         {
             WithTempExecutor((executor, adapter) => {
                 var paths = FixturePaths.Value; var store = new ChatStore(paths);
@@ -51,6 +54,8 @@ namespace RNAssistant.Harness
                 var frames = new System.Collections.Concurrent.ConcurrentQueue<JObject>();
                 var controller = new AssistantController(paths); var aCalls = 0; var bCalls = 0;
                 var followupAllowed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var modelStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var followupDelivered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 string aWaitingRun = null;
                 var lateReplyProcessed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 using (var bridge = new AssistantWebBridge(controller, json => frames.Enqueue(JObject.Parse(json))))
@@ -67,7 +72,12 @@ namespace RNAssistant.Harness
                                 var number = fromB ? Interlocked.Increment(ref bCalls) : Interlocked.Increment(ref aCalls);
                                 AssertContains(FlattenSimple(messages), "not the human user", "Office model receives agent provenance");
                                 if (fromB && number == 3) await followupAllowed.Task.ConfigureAwait(false);
-                                if (!fromB && number == 1) aWaitingRun = current.LastRun.RunId;
+                                if (fromB && number == 4) followupDelivered.TrySetResult(true);
+                                if (!fromB && number == 1)
+                                {
+                                    aWaitingRun = current.LastRun.RunId; modelStarted.TrySetResult(true);
+                                    if (!explicitWait) await followupDelivered.Task.ConfigureAwait(false);
+                                }
                                 if (!fromB && number == 2)
                                 {
                                     AssertEqual(aWaitingRun, current.LastRun.RunId, "wait receives the answer without ending the run");
@@ -92,7 +102,7 @@ namespace RNAssistant.Harness
                                         "Reply queued after an address error", "B awaits further discussion",
                                         results: new[] { new ConversationResultClaim("Reply accepted; discussion still pending", references,
                                             ConversationAssessment.PartiallySatisfied) }, outcome: ConversationOutcome.Partial)
-                                    : !fromB && number == 1 ? ModelProtocolWire.WriteAcceptedCall("Wait for the remaining result", null,
+                                    : !fromB && number == 1 && explicitWait ? ModelProtocolWire.WriteAcceptedCall("Wait for the remaining result", null,
                                         new ConversationToolCall { Name = "agents.wait", Arguments = new JObject { ["timeout_seconds"] = 10 } })
                                     : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Reply received", "A completed",
                                         results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
@@ -123,13 +133,16 @@ namespace RNAssistant.Harness
                             AssertTrue((bool)presence["ok"], "Office presence registered through the real bridge");
                         }
                         controller.AgentCommunication.Send(inbox, a, 20, "sender-run", "office-question", AgentChatAddress.IdFor(b.Id), "Please reply", () => { });
-                        AssertTrue(SpinWait.SpinUntil(() => controller.AgentCommunication.List(a.Id).Any(p =>
-                            p.IsSelf && p.Status == "waiting"), 10000), "recipient is visibly waiting before the peer replies");
+                        AssertTrue(explicitWait ? SpinWait.SpinUntil(() => controller.AgentCommunication.List(a.Id).Any(p =>
+                            p.IsSelf && p.Status == "waiting"), 10000) : modelStarted.Task.Wait(10000), "recipient is active before the peer replies");
                         followupAllowed.TrySetResult(true);
                         AssertTrue(ports[b.Id].Completed.Task.Wait(10000) && ports[a.Id].Completed.Task.Wait(10000) &&
                             application.Drained.Wait(10000), "Office queue automatically starts both native model turns");
                         AssertEqual(5, bCalls, "recipient recovers a known address error, sends replies and finishes");
                         AssertEqual(2, aCalls, "sender wakes and continues the same run");
+                        var finishedA = store.Load(a.Id);
+                        AssertEqual(aWaitingRun, finishedA.LastRun.RunId, "a queued peer reply is consumed before finishing the active run");
+                        AssertEqual(RunLifecycle.Completed, finishedA.LastRun.KernelState.Summary.Lifecycle, "recipient processes the complete exchange");
                         AssertEqual(1, store.Load(a.Id).Messages.Count(m => m.Content == "OFFICE_PEER_REPLY"), "reply is durable once");
                         var finishedB = store.Load(b.Id); var finishedInbox = inbox.Snapshot(finishedB);
                         AssertTrue(!finishedInbox.Paused, "completed turn with a known failed attempt does not pause the inbox: " +
@@ -142,7 +155,46 @@ namespace RNAssistant.Harness
                         AssertTrue(progressFrames.All(f => (string)f["id"] == "inbox:" + (string)f["payload"]["chatId"] &&
                             !string.IsNullOrWhiteSpace((string)f["payload"]["runId"])), "agent-started Office progress uses the common inbox route");
                     }
-                    finally { followupAllowed.TrySetResult(true); application.CloseAsync().Wait(5000); }
+                    finally { followupAllowed.TrySetResult(true); followupDelivered.TrySetResult(true); application.CloseAsync().Wait(5000); }
+                }
+            });
+        }
+
+        private static void AgentReplyDuringToolCompletesCurrentAction()
+        {
+            foreach (var tool in new[] { "write", "read" })
+            WithTempPaths(paths => {
+                var store = new ChatStore(paths); var inbox = new ConversationInboxService(EventStore(store));
+                var service = new AgentCommunicationService(); var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
+                a.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn" };
+                inbox.Bind(a); service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
+                var f = new KernelFixture(KernelResponse(tool == "write" ? new[] { KernelCall(tool) } :
+                    new[] { KernelCall(tool), KernelCall(tool, "{\"next\":true}") }), KernelResponse());
+                using (var channel = new ConversationRunInputChannel(inbox, a, (input, token) => {
+                    var message = new ChatMessage { Id = input.Id, RunId = "run", Role = "user", Content = input.Text,
+                        AgentCommunication = input.AgentCommunication };
+                    a.Messages.Add(message); store.Commit(a, ConversationCommit.UserInput(message));
+                    return Task.FromResult(AgentMessage.User(ConversationInputMessage.ModelText(message)));
+                }))
+                {
+                    f.Tools.OnExecute = (context, token) => {
+                        service.Send(inbox, b, 20, "peer-run", "during-write", AgentChatAddress.IdFor(a.Id), "PEER_UPDATE_DURING_WRITE", () => { });
+                        AssertTrue(!token.IsCancellationRequested && !channel.InterruptToken.IsCancellationRequested,
+                            "peer delivery never interrupts the current tool or its read-back");
+                        return Task.FromResult(KernelRecord(context));
+                    };
+                    var result = new AgentKernel(f.Model, f.Tools, f.Store, input: channel).RunAsync(
+                        new AgentRunRequest("run", "turn", "Original task", new AgentRunLimits(5, 5)), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "peer input continues the same run: " +
+                        result.Summary.Reason + " " + result.Summary.AssistantMessage);
+                    AssertEqual(1, f.Tools.Calls.Count, "unstarted actions are replanned after the message");
+                    AssertEqual(1, tool == "write" ? result.Summary.ToolCounts.WriteOk : result.Summary.ToolCounts.ReadOk,
+                        "the completed action is retained, not repeated");
+                    AssertContains(string.Join("\n", f.Model.Requests.Last().AcceptedMessages.Select(m => m.Text)),
+                        "PEER_UPDATE_DURING_WRITE", "peer message reaches the next model step automatically");
+                    if (tool == "read") AssertTrue(f.Store.Events.Any(e => e.Execution?.Outcome == ToolExecutionOutcome.NotDispatched),
+                        "every superseded accepted read has an explicit terminal record");
+                    AssertEqual(ConversationInputStatus.Applied, inbox.Get(a).Inputs.Single().Status, "reply does not remain queued");
                 }
             });
         }
@@ -157,7 +209,14 @@ namespace RNAssistant.Harness
                 inbox.Bind(a); service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
                 var timeout = service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(AgentWaitStatus.TimedOut, timeout.Status, "timeout returns control rather than ending the run");
-                AssertTrue(timeout.RemainingWaitSeconds < 30 && inbox.Snapshot(a).ActiveRun, "elapsed wait is charged and run stays active");
+                AssertTrue(inbox.Snapshot(a).ActiveRun, "timeout keeps the run active");
+                b.LastRun = new ChatRunRecord { RunId = "b-wait-run", TurnId = "b-wait-turn" }; inbox.Bind(b);
+                var bothWaiting = new[] { service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None),
+                    service.WaitAsync(inbox, b, 20, "b-wait-run", 1, CancellationToken.None) };
+                AssertTrue(service.List(a.Id).All(p => p.Status == "waiting"), "both agents can wait without holding each other's locks");
+                AssertTrue(Task.WaitAll(bothWaiting, 3000) && bothWaiting.All(w => w.Result.Status == AgentWaitStatus.TimedOut),
+                    "mutual waiting returns control to both models within the bounded interval");
+                inbox.End(b, true, false);
                 using (var cancel = new CancellationTokenSource())
                 {
                     var waiting = service.WaitAsync(inbox, a, 20, "wait-run", 10, cancel.Token);
@@ -166,10 +225,6 @@ namespace RNAssistant.Harness
                     try { waiting.GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
                     AssertTrue(cancelled && service.List(a.Id).Single(p => p.IsSelf).Status == "working", "cancellation wakes and cleans up the waiter");
                 }
-                inbox.Get(a).AgentWaitMilliseconds = 30000;
-                AssertEqual(AgentWaitStatus.BudgetExhausted, service.WaitAsync(inbox, a, 20, "wait-run", 10,
-                    CancellationToken.None).GetAwaiter().GetResult().Status, "exhausted budget does not sleep or reset on another call");
-                inbox.Get(a).AgentWaitMilliseconds = 0;
                 var waitingForStop = service.WaitAsync(inbox, a, 20, "wait-run", 10, CancellationToken.None);
                 inbox.Pause(a, "stop"); var stopped = false;
                 try { waitingForStop.GetAwaiter().GetResult(); }
@@ -189,7 +244,7 @@ namespace RNAssistant.Harness
                 a.LastRun.KernelState = new AgentRunState(new RunSummary("wait-run", "wait-turn", RunLifecycle.Completed,
                     new ToolCounts(writeUnknown: 1), 1, 1, "Inspect result", null, null), new AgentRunLimits(4, 4));
                 inbox.EndRun(a);
-                AssertTrue(inbox.Snapshot(a).Paused, "unknown effects still pause subsequent work");
+                AssertTrue(!inbox.Snapshot(a).Paused, "historical unknown effects do not block new input after a completed run");
             });
         }
 
@@ -449,9 +504,12 @@ namespace RNAssistant.Harness
                             }
                             else if (!fromB && number == 5)
                             {
-                                AssertContains(body.ToString(), "ANSWER_FROM_B", "reply reaches the next A turn");
-                                response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Reply received", "Готово",
-                                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                                AssertContains(body.ToString(), "ANSWER_FROM_B", "reply reaches A in the current or next turn");
+                                var receiving = store.Load(a.SessionId);
+                                response = receiving.Messages.Any(m => m.RunId == receiving.LastRun.RunId && m.AcceptedCallOrigin != null && m.ToolName == "agents.send")
+                                    ? ScriptedVerifiedFinish(receiving, "Reply received", "Готово", "Question queued and peer reply received", "agents.send")
+                                    : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Reply received", "Готово",
+                                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                             }
                             else
                             {

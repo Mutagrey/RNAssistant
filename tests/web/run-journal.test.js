@@ -188,6 +188,39 @@ function selectTree(key) {
   }
   console.log("PASS journal: bounded filters, invalid evidence, cancellation and late replies");
 
+  const retryRows = [
+    row(1, "llm.request", "prepared", { RunId: "retry-run", ModelAttemptId: "original" }),
+    row(2, "llm.response", "received", { RunId: "retry-run", ModelAttemptId: "original" }),
+    row(3, "llm.response", "received", { RunId: "another-run", ModelAttemptId: "original" }),
+    row(4, "llm.request", "prepared", { RunId: "retry-run", ModelAttemptId: "corrective", RequestCause: {
+      Kind: "CompletionRejected", SourceModelAttemptId: "original", Feedback: "READ_BACK_REQUIRED: inspect the written range."
+    } })
+  ];
+  context.RNAssistantRunJournal.render(root, retryRows, Object.assign({}, options, { filter: "attempts", activeRunId: "retry-run" }));
+  const corrective = treeEntries().find(item => item.node.title.includes("Завершение отклонено"));
+  assert.ok(corrective, "retry cause is visible in the tree and the attempts filter");
+  const beforeRetryPayload = payloadEventIds.length;
+  selectTree(corrective.node.key);
+  assert.match(root.textContent, /READ_BACK_REQUIRED/);
+  assert.equal(payloadEventIds.length, beforeRetryPayload, "selecting a retry does not eagerly read its source body");
+  findButton(root, "Ответ модели, вызвавший повтор").click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(payloadEventIds.at(-1), "evt-2", "source answer is resolved by exact run and attempt, never a reused ID in another run");
+  context.RNAssistantRunJournal.render(root, retryRows.slice(3), options);
+  selectTree(retryRows[3].Id);
+  assert.match(root.textContent, /Исходный ответ не найден/);
+  assert.equal(findButton(root, "Ответ модели, вызвавший повтор"), undefined);
+  const apiRows = [row(1, "llm.failure", "failed", { RunId: "api-run", ModelAttemptId: "failed" }),
+    row(2, "llm.request", "prepared", { RunId: "api-run", ModelAttemptId: "retry", RequestCause: {
+      Kind: "ProviderRetry", SourceModelAttemptId: "failed", Feedback: "Provider timeout", FailureKind: "Timeout", DelayMilliseconds: 1000
+    } })];
+  context.RNAssistantRunJournal.render(root, apiRows, options);
+  selectTree(apiRows[1].Id);
+  assert.match(root.textContent, /Повтор после сбоя API/);
+  assert.match(root.textContent, /1000 мс/);
+  assert.match(root.textContent, /Ответ модели для неё не записан/);
+  console.log("PASS journal: explicit retry cause, exact lazy source answer, missing evidence and API failure");
+
   const correlated = [
     row(1, "llm.request", "prepared", { RunId: "a", StepId: "s", ModelAttemptId: "attempt" }),
     row(2, "llm.response", "received", { RunId: "a", ModelAttemptId: "attempt" }),

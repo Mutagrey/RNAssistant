@@ -393,6 +393,10 @@ namespace RNAssistant.Harness
 
                     AssertTrue(runtime.ExecuteForExpectedDocument(target, true, action).Success, "initial bound access succeeds");
                     dispatcher.Invoke(() => document.StableId = "Excel:Path:saved-as.xlsx");
+                    AssertTrue(OfficeDocumentExecutionGuardState.Validate(adapter,
+                        new OfficeDocumentExecutionExpectation { Host = target.Host, DocumentKey = target.DocumentKey }) != null,
+                        "a stale path-only check cannot establish the original queue binding after Save As");
+                    OfficeDocumentExecutionGuardState.ThrowIfMismatch(adapter, target);
                     AssertTrue(runtime.ExecuteForExpectedDocument(target, true, action).Success,
                         "Save As does not invalidate the matching runtime lifetime");
 

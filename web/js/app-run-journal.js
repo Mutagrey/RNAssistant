@@ -82,7 +82,7 @@
 
   function matchesFilter(row, filter) {
     if (filter === "problems") return isProblem(row);
-    if (filter === "attempts") return ["cancelled", "rejected"].indexOf(rowStatus(row)) >= 0;
+    if (filter === "attempts") return !!requestCause(row) || ["cancelled", "rejected"].indexOf(rowStatus(row)) >= 0;
     if (filter === "api") {
       var payload = payloadAction(row);
       return !!(payload && payload.api);
@@ -178,7 +178,7 @@
       "llm.failure": "Запрос модели завершился ошибкой",
       "agent.response.rejected": "Ответ модели отклонён",
       "model.attempt.rejected": "Попытка модели отклонена",
-      "model.response.accepted": "Ответ модели принят",
+      "model.response.accepted": "Формат ответа модели принят",
       "tool.call.recorded": "Действие принято",
       "tool.execution.started": "Действие начато",
       "tool.execution.completed": "Получен результат действия",
@@ -401,6 +401,47 @@
     return boundedText(value(row, "Summary", "summary", ""), 2000);
   }
 
+  function requestCause(row) { return value(row, "RequestCause", "requestCause", null); }
+  function requestCauseLabel(cause) {
+    return {
+      ProviderRetry: "Повтор после сбоя API", FormatRepair: "Исправление формата ответа",
+      CompletionRejected: "Завершение отклонено", PartialFinishRecheck: "Перепроверка частичного результата",
+      ReflectionLimit: "Обратная связь после рефлексии", InputReceived: "Продолжение после входящего сообщения"
+    }[value(cause, "Kind", "kind", "")] || "Повторный запрос";
+  }
+
+  function renderRequestCause(host, row, options, includeTitle) {
+    var cause = requestCause(row);
+    if (!cause) return;
+    var section = appendText(host, "section", "rn-run-journal-request-cause", "");
+    if (includeTitle !== false) appendText(section, "h4", "", requestCauseLabel(cause));
+    appendText(section, "p", "rn-run-journal-note", boundedText(value(cause, "Feedback", "feedback", ""), 4000));
+    var status = value(cause, "StatusCode", "statusCode", null);
+    var delay = value(cause, "DelayMilliseconds", "delayMilliseconds", null);
+    var details = [value(cause, "FailureKind", "failureKind", ""), status === null ? "" : "HTTP " + status,
+      delay === null ? "" : "Пауза перед повтором: " + delay + " мс"].filter(Boolean).join(" · ");
+    if (details) appendText(section, "p", "rn-run-journal-detail-meta", details);
+    var attempt = value(cause, "SourceModelAttemptId", "sourceModelAttemptId", "");
+    var run = correlation(row, "RunId");
+    var source = attempt && run ? (options.sourceRows || []).filter(function (item) {
+      return correlation(item, "RunId") === run && correlation(item, "ModelAttemptId") === attempt;
+    }) : [];
+    var rejected = source.filter(function (item) { return /^(model.attempt.rejected|agent.response.rejected)$/.test(rowKind(item)); });
+    var replies = rejected.length ? rejected : source.filter(function (item) { return rowKind(item) === "llm.response"; });
+    var payload = replies.length === 1 ? createPayloadView(replies[0], options) : null;
+    if (payload) {
+      section.appendChild(actionButton(value(cause, "Kind", "kind", "") === "InputReceived"
+        ? "Ответ модели до входящего сообщения" : "Ответ модели, вызвавший повтор", function () { payload.load(); }));
+      section.appendChild(payload.section);
+    } else appendText(section, "p", "rn-run-journal-detail-meta",
+      source.some(function (item) { return rowKind(item) === "llm.failure"; })
+        ? "Попытка завершилась ошибкой API. Ответ модели для неё не записан."
+        : "Исходный ответ не найден в загруженной выборке. Связь по соседству событий не подставляется.");
+    var requests = source.filter(isRequest);
+    if (requests.length === 1 && options.onInspect)
+      section.appendChild(actionButton("Исходный запрос", function () { options.onInspect(rowId(requests[0])); }));
+  }
+
   function hasUnknownEffect(row) {
     var evidence = value(row, "ExecutionEvidence", "executionEvidence", null);
     return value(evidence, "Effect", "effect", "") === "Unknown" ||
@@ -568,6 +609,7 @@
         return firstSequence(a.request || a.rows[0]) - firstSequence(b.request || b.rows[0]);
       }).forEach(function (exchange) {
         exchange.title = exchange.request ? "Запрос " + (++number) : "Ответ без привязки к запросу";
+        if (requestCause(exchange.request)) exchange.title += " · " + requestCauseLabel(requestCause(exchange.request));
         exchange.stepIds = Array.from(exchange.identities.step);
         delete exchange.identities;
         children(exchange); run.children.push(exchange);
@@ -701,6 +743,7 @@
       duration === null ? "" : Number(duration) + " мс", identityText(row), correlation(row, "Target")].filter(Boolean).join(" · "));
     var note = displayCause(row) || effectExplanation(row) || rowNote(row);
     if (note) appendText(host, "p", "rn-run-journal-note", note);
+    renderRequestCause(host, row, options);
     var controls = appendText(host, "div", "rn-run-journal-part-controls", "");
     var choice = appendText(controls, "select", "rna-form-control compact rn-run-journal-data-kind", "");
     choice.setAttribute("aria-label", "Содержимое события");
@@ -811,6 +854,8 @@
   }
 
   function groupSummary(node) {
+    var cause = node.type === "exchange" && requestCause(node.request);
+    if (cause) return requestCauseLabel(cause) + ": " + boundedText(value(cause, "Feedback", "feedback", ""), 2000);
     var row = representative(node), summary = row && displayCause(row);
     if (summary) return summary;
     if (node.type === "run" || node.type === "exchange") return "";
@@ -899,6 +944,7 @@
         options.onOpenModelContext({ runId: correlation(node.request, "RunId"), stepId: correlation(node.request, "StepId"), requestEventId: sourceIds(node.request)[0] });
       }));
     }
+    if (node.type === "exchange") renderRequestCause(host, node.request, options, false);
     renderStructure(host, node, options);
   }
 
@@ -976,7 +1022,7 @@
         var node = nodes[id];
         root.rnaPayloadPauses = [];
         var selectionToken = {}; root.rnaJournalSelection = selectionToken;
-        var viewerOptions = Object.assign({}, options, { payloadCleanups: root.rnaPayloadCleanups, payloadPauses: root.rnaPayloadPauses,
+        var viewerOptions = Object.assign({}, options, { sourceRows: rows, payloadCleanups: root.rnaPayloadCleanups, payloadPauses: root.rnaPayloadPauses,
           onInspect: function (targetId) {
             if (!nodes[targetId]) return;
             if (!visibleNode(nodes[targetId], filter)) {

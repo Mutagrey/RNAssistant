@@ -210,9 +210,10 @@ namespace RNAssistant.Office
 
             public void ValidateBinding(ChatSession session, ConversationInput input)
             {
-                if (!string.IsNullOrEmpty(input.DocumentRuntimeKey) &&
-                    input.DocumentRuntimeKey != _owner.CaptureExpectedRuntimeDocumentKey(session))
-                    throw new InvalidOperationException("Исходная сессия документа недоступна. Очередь приостановлена.");
+                if (!string.IsNullOrEmpty(input.DocumentRuntimeKey))
+                    OfficeDocumentExecutionGuardState.ThrowIfMismatch(_owner._adapter,
+                        new OfficeDocumentExecutionExpectation { Host = session.Host,
+                            DocumentKey = session.DocumentKey, RuntimeDocumentKey = input.DocumentRuntimeKey });
             }
 
             public Task ContinuePendingAsync(ChatSession session, string pendingId, System.Threading.CancellationToken token)

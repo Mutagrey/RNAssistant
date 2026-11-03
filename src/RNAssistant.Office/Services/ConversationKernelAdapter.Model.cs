@@ -53,6 +53,7 @@ namespace RNAssistant.Office.Services
                     preparedRequest = await PrepareRequestAsync(request, cancellationToken).ConfigureAwait(false);
                 }
                 var requestMs = contextTimer.ElapsedMilliseconds - authorityMs - sessionMs;
+                preparedRequest.Options.TraceRequestCause = request.RequestCause;
                 preparedRequest.Options.ContextPreparation = new LlmContextPreparationTiming
                 {
                     TotalMs = contextTimer.ElapsedMilliseconds,

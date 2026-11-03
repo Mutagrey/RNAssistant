@@ -24,7 +24,7 @@ const { chromium } = require("playwright");
       const original = send, originalDownload = RNAssistantResourceDownload.read;
       window.diagnosticCalls = []; window.holdRequest = null;
       state.activeRunViewState = { runId: "preview-run", lifecycle: "failed" };
-      const settings = { ResponseFormat: "json_object", ToolResultRole: "tool", InstructionRole: "developer", MaxOutputTokens: 2048, Temperature: 0, TopP: 1 };
+      const settings = { ResponseFormat: "json_object", ToolResultRole: "tool", InstructionRole: "developer", MaxOutputTokens: 2048, Temperature: 0, TopP: 1, RequestTimeoutSeconds: 1800 };
       const make = (id, sequence, type, trace = {}) => ({ eventId: id, sequence, type, alias: "Q" + sequence, createdUtc: "2026-10-30T10:00:00Z", hasPayload: true,
         trace: { RunId: "preview-run", StepId: "preview-step", ModelAttemptId: "attempt", RequestId: id, Model: "synthetic-" + "long-model-name-".repeat(12), Streaming: false, MessageCount: 3, RequestComposition: { Version: 1, Method: "base_text_media_v1", HasMedia: false, TotalEstimatedTokens: 60, Items: [{ Group: "InstructionsAndCatalog", MessageIndex: 0, EstimatedTokens: 10 }, { Group: "Conversation", MessageIndex: 1, EstimatedTokens: 20 }, { Group: "Conversation", MessageIndex: 2, EstimatedTokens: 30 }] }, ResponseFormat: "json_object", Settings: settings, ...trace } });
       const requests = [make("q1", 1, "llm.request"), make("q2", 4, "llm.request", { StepId: "retry-step" })];
@@ -58,13 +58,21 @@ const { chromium } = require("playwright");
         if (type === "getModelContextPayload") return Promise.resolve({ chatId: payload.chatId, workspaceId: payload.workspaceId, eventId: payload.eventId,
           data: { leaseId: payload.eventId, payload: { contentType: "application/json" } } });
         if (type === "resourceDataClose") return Promise.resolve({});
+        if (type === "getChatEventPayload" && diagnosticBodies[payload.eventId]) {
+          const text = diagnosticBodies[payload.eventId], bytes = new TextEncoder().encode(text).length, sha256 = "a".repeat(64);
+          return Promise.resolve({ chatId: payload.chatId, workspaceId: payload.workspaceId, eventId: payload.eventId,
+            sha256, byteLength: bytes, returnedCharacters: text.length, textTruncated: false, contentType: "application/json",
+            data: { leaseId: payload.eventId, payload: { contentType: "text/plain; charset=utf-8", byteLength: bytes, sha256 } } });
+        }
         if (type === "getChatTrajectory" && window.holdTrajectory) {
           const pending = new Promise(resolve => window.releaseTrajectory = resolve); pending.requestId = "held-journal"; return pending;
         }
         if (type === "getChatTrajectory") return Promise.resolve({ chatId: payload.chatId, workspaceId: payload.workspaceId, view: "run-causal", rows: [
           { id: "request-row", kind: "model.request.prepared", runId: "preview-run", stepId: "preview-step", modelAttemptId: "attempt", title: "Запрос модели", status: "prepared", firstSequence: 1, lastSequence: 1, sourceEventIds: ["q1"], sourceEventSeqs: [1], dataJson: "{}" },
-          { id: "reject-row", kind: "model.response.rejected", runId: "preview-run", stepId: "preview-step", modelAttemptId: "attempt", title: rejection, status: "rejected", firstSequence: 2, lastSequence: 2, sourceEventIds: ["reject"], sourceEventSeqs: [2], dataJson: "{}" }
-        ], hasMore: false, totalRows: 2, totalMatches: 2 });
+          { id: "reject-row", kind: "model.attempt.rejected", runId: "preview-run", stepId: "preview-step", modelAttemptId: "attempt", title: rejection, status: "rejected", firstSequence: 2, lastSequence: 2, sourceEventIds: ["reject"], sourceEventSeqs: [2], dataJson: "{}" },
+          { id: "retry-row", kind: "model.request.prepared", runId: "preview-run", stepId: "preview-step", modelAttemptId: "retry-attempt", title: "Повторный запрос", status: "prepared", firstSequence: 4, lastSequence: 4, sourceEventIds: ["q2"], sourceEventSeqs: [4], dataJson: "{}",
+            requestCause: { Kind: "FormatRepair", SourceModelAttemptId: "attempt", Feedback: rejection } }
+        ], hasMore: false, totalRows: 3, totalMatches: 3 });
         return original(type, payload);
       };
       RNAssistantResourceDownload.read = (data, options) => diagnosticBodies[data.leaseId] ? Promise.resolve(new TextEncoder().encode(diagnosticBodies[data.leaseId])) : originalDownload(data, options);
@@ -92,6 +100,16 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#promptContextInspector").count(), 0);
     assert.equal(await page.evaluate(() => diagnosticCalls.filter(call => /runModel|testModel/.test(call.type)).length), 0);
     await screenshot("run-wide-light");
+    await page.locator("#trajectoryEvents .rn-run-journal-tree").getByText("Запрос 2 · Исправление формата ответа", { exact: true }).click();
+    assert.match(await page.locator("#trajectoryEvents .rn-run-journal-detail").innerText(), /tool_calls\[0\]\.arguments/);
+    await page.getByRole("button", { name: "Ответ модели, вызвавший повтор", exact: true }).click();
+    await page.locator("#trajectoryEvents .rn-run-journal-payload .rn-json-viewer").waitFor();
+    assert.equal(await page.evaluate(() => diagnosticCalls.filter(call => call.type === "getChatEventPayload").at(-1).payload.eventId), "reject");
+    await screenshot("retry-cause-wide");
+    await page.setViewportSize({ width: 480, height: 900 });
+    await screenshot("retry-cause-narrow");
+    assert.equal(await page.locator("#trajectoryEvents .rn-run-journal-detail").evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
+    await page.setViewportSize({ width: 1440, height: 900 });
     const pinnedSource = await page.locator('#diagnosticsScope').textContent();
     assert.match(pinnedSource, /Продажи.*Что изменилось за сентябрь/);
     await page.evaluate(() => selectChat('preview-summary'));
@@ -134,6 +152,7 @@ const { chromium } = require("playwright");
     await screenshot("before-settings");
     await page.getByText("Настройки этого запроса", { exact: true }).click();
     assert.match(await page.locator("#modelContextBody").innerText(), /Native tool history/);
+    assert.match(await page.locator("#modelContextBody").innerText(), /1800 с/);
     await page.getByText("Настройки этого запроса", { exact: true }).click();
     assert.equal(await page.evaluate(() => diagnosticCalls.filter(call => call.type === "getModelContextPayload").length), 0, "summary is metadata only");
     await screenshot("rejected-wide-light");

@@ -73,8 +73,6 @@ namespace RNAssistant.Application.Conversations
             internal CancellationTokenSource Interrupt = new CancellationTokenSource();
             internal TaskCompletionSource<bool> InputChanged = NewInputSignal();
             internal readonly HashSet<string> ReadyAgentInputs = new HashSet<string>(StringComparer.Ordinal);
-            internal string AgentWaitRunId;
-            internal long AgentWaitMilliseconds;
             internal bool AgentWaiting;
             internal bool Running, Accepting, Worker, Paused;
             internal string PauseReason;
@@ -219,9 +217,9 @@ namespace RNAssistant.Application.Conversations
             var summary = session.LastRun?.KernelState?.Summary;
             // A finished turn may contain rejected/failed attempts that the agent
             // already handled. Their counters must not freeze later user/peer input.
-            // Unknown effects, failed/cancelled runs and explicit Stop still pause.
-            End(session, summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Completed &&
-                summary.ExecutionHealth != RNAssistant.Core.Agent.ExecutionHealth.Unknown,
+            // Historical unknown counters do not gate delivery: the kernel owns
+            // inspection/replay safety. Failed/cancelled runs and explicit Stop still pause.
+            End(session, summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Completed,
                 summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.AwaitingConfirmation);
         }
         internal ConversationInboxSnapshot Snapshot(ChatSession session, IReadOnlyList<string> receiptOperationIds = null)
@@ -555,7 +553,13 @@ namespace RNAssistant.Application.Conversations
         internal bool HasRunInput(ChatSession session)
         {
             var box = Get(session);
-            lock (box.Sync) return HasRunInputLocked(box);
+            lock (box.Sync)
+            {
+                // Queried by the kernel between requests/tool calls, never by
+                // the running tool. Peer intake does not cancel InterruptToken.
+                ReadyQueuedAgentsLocked(box);
+                return HasRunInputLocked(box);
+            }
         }
         private static bool HasRunInputLocked(Inbox box)
         {
@@ -575,6 +579,7 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
+                ReadyQueuedAgentsLocked(box);
                 if (HasRunInputLocked(box)) return false;
                 box.Accepting = false;
                 return true;
@@ -585,6 +590,9 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
+                // Peer inputs are sampled only at a kernel boundary. They never
+                // cancel model inference or an in-flight tool call.
+                ReadyQueuedAgentsLocked(box);
                 var pending = box.Accepting ? box.Inputs.Where(i => IsRunInput(box, i)).Select(Clone).ToList() : new List<ConversationInput>();
                 foreach (var input in pending)
                 {
@@ -599,24 +607,29 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
+        private static void ReadyQueuedAgentsLocked(Inbox box)
+        {
+            if (!box.Running || !box.Accepting || box.Paused || PendingConfirmationId(box.Session) != null) return;
+            foreach (var input in PendingQueuedInputs(box).TakeWhile(i => i.AgentCommunication?.Sender != null))
+                box.ReadyAgentInputs.Add(input.Id);
+        }
+        private static IEnumerable<ConversationInput> PendingQueuedInputs(Inbox box)
+        { return box.Inputs.Where(i => i.Status == ConversationInputStatus.Pending &&
+            i.AcceptedRunId == null && i.Delivery == InputDelivery.Queue); }
+
         internal async Task<AgentWaitStatus> WaitForAgentsAsync(ChatSession session, string runId,
             int timeoutSeconds, CancellationToken token)
         {
             var box = Get(session);
-            long milliseconds;
             lock (box.Sync)
             {
                 RequireAgentWaitRun(box, runId);
-                if (box.AgentWaitRunId != runId)
-                { box.AgentWaitRunId = runId; box.AgentWaitMilliseconds = 0; box.ReadyAgentInputs.Clear(); }
-                milliseconds = Math.Min(timeoutSeconds * 1000L, 30000 - box.AgentWaitMilliseconds);
-                box.AgentWaiting = milliseconds > 0;
+                box.AgentWaiting = true;
                 box.ViewRevision++;
             }
-            var elapsed = System.Diagnostics.Stopwatch.StartNew();
             using (var delayCancellation = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
-                var timeout = Task.Delay((int)milliseconds, delayCancellation.Token);
+                var timeout = Task.Delay(timeoutSeconds * 1000, delayCancellation.Token);
                 try
                 {
                     while (true)
@@ -626,9 +639,9 @@ namespace RNAssistant.Application.Conversations
                         lock (box.Sync)
                         {
                             RequireAgentWaitRun(box, runId);
-                            if (HasRunInputLocked(box)) return AgentWaitStatus.InputPending;
-                            var pending = box.Inputs.Where(i => i.Status == ConversationInputStatus.Pending &&
-                                i.AcceptedRunId == null && i.Delivery == InputDelivery.Queue).ToArray();
+                            if (box.Inputs.Any(i => IsRunInput(box, i) && i.AgentCommunication?.Sender == null))
+                                return AgentWaitStatus.InputPending;
+                            var pending = PendingQueuedInputs(box).ToArray();
                             // Keep FIFO: a queued human request is not skipped to reach later peers.
                             var ready = pending.TakeWhile(i => i.AgentCommunication?.Sender != null).ToArray();
                             if (ready.Length > 0)
@@ -637,7 +650,7 @@ namespace RNAssistant.Application.Conversations
                                 return AgentWaitStatus.MessagesReady;
                             }
                             if (pending.Length > 0) return AgentWaitStatus.InputPending;
-                            if (timeout.IsCompleted) return milliseconds <= 0 ? AgentWaitStatus.BudgetExhausted : AgentWaitStatus.TimedOut;
+                            if (timeout.IsCompleted) return AgentWaitStatus.TimedOut;
                             changed = box.InputChanged.Task;
                         }
                         await Task.WhenAny(changed, timeout).ConfigureAwait(false);
@@ -648,7 +661,6 @@ namespace RNAssistant.Application.Conversations
                     delayCancellation.Cancel();
                     lock (box.Sync)
                     {
-                        box.AgentWaitMilliseconds = Math.Min(30000, box.AgentWaitMilliseconds + elapsed.ElapsedMilliseconds);
                         box.AgentWaiting = false;
                         box.ViewRevision++;
                     }
@@ -661,11 +673,6 @@ namespace RNAssistant.Application.Conversations
             if (string.IsNullOrWhiteSpace(runId) || !box.Running || !box.Accepting || box.Paused ||
                 box.Session.LastRun?.RunId != runId)
                 throw new AgentCommunicationException("agent_wait_unavailable", "Ожидание доступно только в текущем активном запуске без паузы.");
-        }
-        internal int AgentWaitRemainingSeconds(ChatSession session)
-        {
-            var box = Get(session);
-            lock (box.Sync) return (int)Math.Max(0, (30000 - box.AgentWaitMilliseconds + 999) / 1000);
         }
         private static TaskCompletionSource<bool> NewInputSignal()
         { return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); }

@@ -91,6 +91,8 @@ function applyOfficeChatProgress(progress, progressPending, requestId) {
     if ((activityPhase === "thinking" || activityPhase === "preparing_context") && !progress.activity && progressChatId) {
       // The next request is being compiled; the previous request is no longer current.
       state.chatRuns[progressChatId].requestContext = { phase: "preparing_context" };
+      state.chatRuns[progressChatId].modelAttemptActive = false;
+      state.chatRuns[progressChatId].streamRetrying = false;
       if (selected && typeof renderContextMeter === "function") renderContextMeter();
     }
     var acceptedStepReasoning = null;

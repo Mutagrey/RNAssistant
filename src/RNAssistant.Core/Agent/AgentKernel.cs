@@ -94,6 +94,8 @@ namespace RNAssistant.Core.Agent
                 return await FinishAsync(state, RunLifecycle.Failed, "restored_no_progress",
                     "The checkpoint already exhausted its no-progress allowance.").ConfigureAwait(false);
             string completionFeedback = state.ReflectionFeedbackIssued ? ReflectionLimitFeedback(state) : null;
+            ModelRequestCause requestCause = completionFeedback == null ? null :
+                new ModelRequestCause(ModelRequestCauseKind.ReflectionLimit, null, completionFeedback);
             var partialFinishRechecked = false;
             while (state.Iterations < state.Limits.MaxIterations)
             {
@@ -102,6 +104,9 @@ namespace RNAssistant.Core.Agent
                 if (await TakeInputAsync(state, cancellationToken).ConfigureAwait(false))
                 {
                     completionFeedback = null;
+                    requestCause = new ModelRequestCause(ModelRequestCauseKind.InputReceived,
+                        requestCause?.Kind == ModelRequestCauseKind.InputReceived ? requestCause.SourceModelAttemptId : null,
+                        "New input arrived. Reconsider the next action using the received messages and completed tool results.");
                     partialFinishRechecked = false;
                 }
                 state.Iterations++;
@@ -117,7 +122,7 @@ namespace RNAssistant.Core.Agent
                         model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
                             state.Messages, completionFeedback ?? (state.Progress.InspectionRequired
                                 ? ModelProtocolWire.UnknownEffectGuidance : null), state.Limits.MaxConsecutiveReflections,
-                            state.ConsecutiveReflections), requestCancellation.Token).ConfigureAwait(false);
+                            state.ConsecutiveReflections, requestCause), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -131,7 +136,12 @@ namespace RNAssistant.Core.Agent
                 }
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
-                if (_input != null && _input.HasPendingInput) continue;
+                if (_input != null && _input.HasPendingInput)
+                {
+                    requestCause = new ModelRequestCause(ModelRequestCauseKind.InputReceived,
+                        model?.SourceModelAttemptId, "New input arrived before this response was accepted; no tools from this response were dispatched.");
+                    continue;
+                }
                 if (model == null)
                     return await FinishAsync(state, RunLifecycle.Failed, "missing_model_result", "Model returned no result.").ConfigureAwait(false);
                 if (model.FailureKind.HasValue)
@@ -144,11 +154,14 @@ namespace RNAssistant.Core.Agent
                 if (model.CompletionRejected)
                 {
                     completionFeedback = model.Message;
+                    requestCause = new ModelRequestCause(ModelRequestCauseKind.CompletionRejected,
+                        model.SourceModelAttemptId, completionFeedback);
                     await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                         state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
                     continue;
                 }
                 completionFeedback = null;
+                requestCause = null;
                 if (model.Response == null)
                     return await FinishAsync(state, RunLifecycle.Failed, "invalid_accepted_response", "Accepted response is missing.").ConfigureAwait(false);
                 AgentResponse response;
@@ -183,6 +196,8 @@ namespace RNAssistant.Core.Agent
                     {
                         state.ReflectionFeedbackIssued = true;
                         completionFeedback = ReflectionLimitFeedback(state);
+                        requestCause = new ModelRequestCause(ModelRequestCauseKind.ReflectionLimit,
+                            model.SourceModelAttemptId, completionFeedback);
                         await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                             state.Summary(reason: "reflection_limit_feedback", message: completionFeedback), stepId)).ConfigureAwait(false);
                         continue;
@@ -191,6 +206,8 @@ namespace RNAssistant.Core.Agent
                 if (response.Final && state.Progress.InspectionRequired)
                 {
                     completionFeedback = ModelProtocolWire.UnknownEffectGuidance;
+                    requestCause = new ModelRequestCause(ModelRequestCauseKind.CompletionRejected,
+                        model.SourceModelAttemptId, completionFeedback);
                     await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                         state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
                     continue;
@@ -213,6 +230,8 @@ namespace RNAssistant.Core.Agent
                     if (!admission.Accepted)
                     {
                         completionFeedback = admission.Code + ": " + admission.Message;
+                        requestCause = new ModelRequestCause(ModelRequestCauseKind.CompletionRejected,
+                            model.SourceModelAttemptId, completionFeedback);
                         await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                             state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
                         continue;
@@ -225,11 +244,18 @@ namespace RNAssistant.Core.Agent
                     {
                         partialFinishRechecked = true;
                         completionFeedback = ModelProtocolWire.PartialFinishRecheckGuidance;
+                        requestCause = new ModelRequestCause(ModelRequestCauseKind.PartialFinishRecheck,
+                            model.SourceModelAttemptId, completionFeedback);
                         await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                             state.Summary(reason: "partial_finish_recheck", message: completionFeedback), stepId)).ConfigureAwait(false);
                         continue;
                     }
-                    if (_input != null && !_input.TryCloseInput()) continue;
+                    if (_input != null && !_input.TryCloseInput())
+                    {
+                        requestCause = new ModelRequestCause(ModelRequestCauseKind.InputReceived,
+                            model.SourceModelAttemptId, "New input arrived before finish was accepted.");
+                        continue;
+                    }
                 }
                 if (response.Action == ConversationResponse.ReflectionAction) state.ConsecutiveReflections++;
                 foreach (var call in response.ToolCalls) state.AcceptedIds.Add(call.Id);
@@ -250,7 +276,7 @@ namespace RNAssistant.Core.Agent
                     {
                         for (var rest = index; rest < response.ToolCalls.Count; rest++)
                             await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
-                                "Superseded by a new user message before dispatch.").ConfigureAwait(false);
+                                "Superseded by a new incoming message before dispatch.").ConfigureAwait(false);
                         break;
                     }
                     var result = await ExecuteOneAsync(state, response.ToolCalls[index], policies[index], stepId,
