@@ -84,30 +84,24 @@ ui.selectOfficeChatProjection("chat-a");
       files: [{ id: file.id, path: file.path, kind: file.kind, source: { ...source },
         characters: file.characters, byteLength: file.byteLength, sha256: file.sha256 }],
       dataSources: [{ name: "current" }] } });
-  assert.equal(ui.state.htmlWorkspace, workspace, "same exact snapshot keeps in-flight workspace identity");
-  assert.equal(ui.state.htmlWorkspace.files[0], file, "verified source stays loaded");
+  assert.notEqual(ui.state.htmlWorkspace, workspace, "navigation receives fresh metadata, independent of live editor working copies");
+  assert.equal(ui.state.htmlWorkspace.files[0].content, undefined, "navigation does not keep another source body cache");
   assert.equal(ui.state.htmlWorkspace.dataSources[0].name, "current", "fresh binding metadata still applies");
-  const conflicting = { revisionArtifactId: "html-r1", files: [{ ...file, sha256: "b".repeat(64) }] };
-  assert.equal(ui.retainHtmlWorkspaceSources(workspace, conflicting), conflicting,
-    "changed source metadata cannot reuse a verified body");
   ui.applyChatState({ activeChatId: "chat-a", sessionRevision: 6, activeHtmlArtifactId: "html-r2",
     htmlWorkspace: { revisionArtifactId: "html-r2", files: [{ ...file, sourceReadKey: undefined, content: undefined }] } });
   assert.notEqual(ui.state.htmlWorkspace, workspace, "new revision cannot borrow old source");
-  console.log("PASS artifact commit: unchanged HTML source survives full chat projections");
+  console.log("PASS artifact commit: chat projections carry navigation metadata without borrowing editor buffers");
 }
 
 {
-  const draft = { revisionArtifactId: "html-old", files: [{ content: "unsaved" }] };
-  ui.state.htmlWorkspace = draft; ui.state.htmlWorkspaceDirty = true;
+  ui.state.htmlWorkspace = { revisionArtifactId: "html-old", files: [] };
   ui.applyPushedChatState({ type: "chatState", scope: "full", payload: {
     activeChatId: "chat-a", sessionRevision: 7, activeHtmlArtifactId: "html-new",
     htmlWorkspace: { revisionArtifactId: "html-new", files: [{ source: { uri: "exact-new", revision: "2" } }] }
   } });
   assert.equal(ui.state.activeHtmlArtifactId, "html-new", "published head advances normally");
-  assert.equal(ui.state.htmlWorkspace, draft, "new metadata cannot replace a dirty source draft");
-  assert.equal(ui.state.htmlWorkspaceDirty, true, "draft remains pinned to its original workspace, never silently rebased");
-  ui.state.htmlWorkspaceDirty = false;
-  console.log("PASS artifact commit: new metadata preserves dirty HTML source and its original revision guard");
+  assert.equal(ui.state.htmlWorkspace.revisionArtifactId, "html-new", "navigation advances with the published head; editor guards are scoped separately");
+  console.log("PASS artifact commit: navigation receives the new HTML metadata");
 }
 
 {

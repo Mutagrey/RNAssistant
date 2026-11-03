@@ -104,7 +104,6 @@
     var panel=window.RNAssistantConversationPanel&&RNAssistantConversationPanel.selected();
     pluginDraftBox=panel&&panel.target.source==='workspace'?panel.node('pluginAnnotationDrafts'):null;
     if(!pluginDraftBox||!ownsChat())return;
-    window.RNAssistantPluginAnnotations=pluginAnnotations;
     pluginDraftBox.replaceChildren();
     var visible=ownsChat()&&pluginAnnotations&&pluginChatTarget();
     var items=visible?pluginAnnotations.visibleDrafts():[];
@@ -169,11 +168,10 @@
         if(index>=0)send('discardPluginVisualSelection',{workspaceId:target.workspaceId,
           sessionId:target.sessionId,id:attachmentId(replacing)}).catch(function(error){chatStatus(error.message,true);});
         return attachment;}});
-    if(ownsChat())window.RNAssistantPluginAnnotations=pluginAnnotations;
     pluginInspector.reset();
     renderVisualDrafts();
   }
-  function disposeVisual(){if(window.RNAssistantPluginAnnotations===pluginAnnotations)window.RNAssistantPluginAnnotations=null;if(pluginAnnotations){pluginAnnotations.dispose();pluginAnnotations=null;}if(pluginInspector){pluginInspector.dispose();pluginInspector=null;}}
+  function disposeVisual(){if(pluginAnnotations){pluginAnnotations.dispose();pluginAnnotations=null;}if(pluginInspector){pluginInspector.dispose();pluginInspector=null;}}
   async function closeView(){frameReady=false;pendingNavigation=null;disposeVisual();previewSurface.clear();var old=view;view=null;el('PreviewFrameHost').replaceChildren();syncPanelView();if(old)await send('closePlugin',{instanceId:old.instanceId});}
   async function showView(preview){var current=epoch,previous=view,opened;
     var label={title:selected.name,path:preview?'Неприменённые исходники':'Активная версия'};
@@ -325,6 +323,7 @@
     }
     controls();
     return {element:mount,pluginId:target.pluginId,ready:ready,updateItem:updateItem,
+      showAnnotation:function(item){if(pluginAnnotations)pluginAnnotations.showSent(item);},
       activate:function(){previewOpen=true;root.hidden=false;browserView.activate();syncPanelView();controls();renderVisualDrafts();ready();},
       deactivate:function(){previewOpen=false;if(startup||previewTask)epoch++;stopSourceWatch();browserView.deactivate();syncPanelView();if(pluginAnnotations)pluginAnnotations.collapseEditor();},
       layout:browserView.layout,

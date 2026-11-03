@@ -164,17 +164,15 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
   const index = read("index.html");
   ["source", "model", "editor", "actions"].map(part => "app-html-workspace-" + part + ".js")
     .forEach(file => {
-      const version = file === "app-html-workspace-editor.js" ? "html-memory-20261002-1" :
-        file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" :
-        file === "app-html-workspace-source.js" ? "html-memory-20261002-1" : "html-read-20260906-1";
-      assert.ok(index.includes(file + "?v=" + version), file);
+      assert.ok(index.includes(file + "?v="), file);
     });
   assert.ok(index.includes("app-html-workspace-preview.js?v=binary-chunks-20260906-1"));
   assert.ok(index.includes("app-html-workspace-source.js?v=html-memory-20261002-1-scope-20261102"));
   assert.match(index, /app-html-workspace\.js\?v=[^"\s]+/);
   assert.match(index, /app-chat-state\.js\?v=[^"\s]+/);
   assert.match(index, /app-chat-session\.js\?v=[^"\s]+/);
-  assert.ok(index.includes('id="reloadHtmlWorkspaceSourceButton"'));
+  assert.ok(index.includes('data-html-node="reloadHtmlWorkspaceSourceButton"'));
+  assert.ok(index.indexOf("app-html-workspace-view.js?v=") < index.indexOf("app-html-workspace.js?v="));
   assert.ok(index.indexOf("app-resource-download.js?v=") < index.indexOf("app-html-workspace-source.js?v="));
   console.log("PASS HTML source: source/editor/preview/export and lifecycle delivery graph is switched together");
   console.log("OK 9/9");

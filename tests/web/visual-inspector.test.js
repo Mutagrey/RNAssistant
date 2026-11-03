@@ -151,27 +151,26 @@ const { chromium } = require("playwright");
     const html = fs.readFileSync(path.resolve(__dirname, "../../web/index.html"), "utf8");
     const css = [...html.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)]
       .map(match => fs.readFileSync(path.resolve(__dirname, "../../web", match[1]), "utf8")).join("\n");
-    const panel = html.slice(html.indexOf('<section class="panel" id="tab-artifacts">'),
-      html.indexOf('<section class="panel" id="tab-settings">'));
+    const panel = html.match(/<template id="htmlWorkspaceEditorTemplate">([\s\S]*?)<\/template>/)[1];
     const layout = await browser.newPage();
-    await layout.setContent('<style>' + css + '\nbody{display:block}#tab-artifacts{display:flex;height:100vh}</style>' + panel);
-    const toggle = layout.locator("#inspectHtmlWorkspaceButton");
+    await layout.setContent('<style>' + css + '\nbody{display:block;height:100vh}</style>' + panel);
+    const toggle = layout.locator('[data-html-node="inspectHtmlWorkspaceButton"]');
     const offBackground = await toggle.evaluate(node => getComputedStyle(node).backgroundColor);
     await toggle.evaluate(node => node.setAttribute("aria-pressed", "true"));
     assert.notEqual(await toggle.evaluate(node => getComputedStyle(node).backgroundColor), offBackground,
       "the shared toggle style also marks selection in Materials");
     for (const width of [1100, 760, 420]) {
       await layout.setViewportSize({ width, height: 760 });
-      const bounds = await layout.locator("#htmlWorkspaceEditor").boundingBox();
-      for (const id of ["inspectHtmlWorkspaceButton", "attachHtmlWorkspaceSelectionButton", "htmlWorkspaceMoreActions"]) {
-        const box = await layout.locator("#" + id).boundingBox();
+      const bounds = await layout.locator('[data-html-node="htmlWorkspaceEditor"]').boundingBox();
+      for (const id of ["inspectHtmlWorkspaceButton", "htmlWorkspaceMoreActions"]) {
+        const box = await layout.locator('[data-html-node="' + id + '"]').boundingBox();
         assert.ok(box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width + 1,
           id + " fits at " + width + "px");
       }
-      await layout.locator("#htmlWorkspaceMoreActions > summary").click();
-      const menu = await layout.locator("#reloadHtmlWorkspaceSourceButton").boundingBox();
+      await layout.locator("[data-html-node=\"htmlWorkspaceMoreActions\"] > summary").click();
+      const menu = await layout.locator("[data-html-node=\"reloadHtmlWorkspaceSourceButton\"]").boundingBox();
       assert.ok(menu.x >= 0 && menu.x + menu.width <= width, "existing actions menu fits at " + width + "px");
-      await layout.locator("#htmlWorkspaceMoreActions > summary").click();
+      await layout.locator("[data-html-node=\"htmlWorkspaceMoreActions\"] > summary").click();
     }
     console.log("PASS visual inspector: isolated preview, bounded selection, sensitive descendants, click/Escape, scroll, generation");
   } finally { await browser.close(); }

@@ -7,8 +7,7 @@
     toolReadmeInput: { mode: "markdown", minHeight: 150, lineWrapping: true },
     skillBodyInput: { mode: "markdown", minHeight: 0, lineWrapping: true },
     promptEditInput: { mode: "markdown", minHeight: 0, lineWrapping: true },
-    vbaCodeInput: { mode: "vb", minHeight: 0 },
-    htmlWorkspaceEditorInput: { mode: "javascript", minHeight: 0, lineWrapping: true }
+    vbaCodeInput: { mode: "vb", minHeight: 0 }
   };
   var positions = {
     skillBodyInput: "skillEditorPosition",
@@ -43,13 +42,27 @@
   window.RNAssistantCodeEditor = {
     mount: function (root, options) {
       var mode = sourceMode(options.path) || options.mode || null;
-      var cm = CodeMirror(root, { value: options.text, mode: mode, readOnly: true,
-        lineNumbers: true, firstLineNumber: options.startLine || 1, lineWrapping: false,
-        viewportMargin: 10, tabSize: 2, matchBrackets: true });
+      var changing = false, documentKey;
+      var cm = CodeMirror(root, { value: options.text || "", mode: mode, readOnly: options.readOnly !== false,
+        lineNumbers: true, firstLineNumber: options.startLine || 1, lineWrapping: !!options.lineWrapping,
+        viewportMargin: 10, tabSize: 2, matchBrackets: true,
+        extraKeys: { "Ctrl-S": function () { if (options.save) options.save(); }, "Cmd-S": function () { if (options.save) options.save(); } } });
       addEditorClass(cm, "source", { minHeight: 0 });
-      cm.getInputField().setAttribute("aria-label", "Исходный код — только чтение");
+      cm.getInputField().setAttribute("aria-label", options.label || (options.readOnly === false ? "Редактор исходного кода" : "Исходный код — только чтение"));
+      cm.on("change", function (_, change) { if (!changing && change.origin !== "setValue" && options.change) options.change(); });
       var observer = new ResizeObserver(function () { cm.refresh(); }); observer.observe(root);
-      return { editor: cm, destroy: function () { observer.disconnect(); root.replaceChildren(); } };
+      return { editor: cm, getValue: function () { return cm.getValue(); },
+        setValue: function (text, key) {
+          changing = true;
+          try {
+            if (documentKey !== key) { cm.swapDoc(new CodeMirror.Doc(text || "", cm.getOption("mode"))); documentKey = key; }
+            else if (cm.getValue() !== (text || "")) cm.setValue(text || "");
+          } finally { changing = false; }
+        },
+        source: function (path) { var next = sourceMode(path); if (cm.getOption("mode") !== next) cm.setOption("mode", next); },
+        readOnly: function (value) { cm.setOption("readOnly", !!value); },
+        refresh: function () { cm.refresh(); }, focus: function () { cm.focus(); },
+        destroy: function () { observer.disconnect(); root.replaceChildren(); } };
     }
   };
 
@@ -71,17 +84,11 @@
         if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
           saveVbaModule();
         }
-        if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
-          saveHtmlWorkspaceSelection();
-        }
       },
       "Cmd-S": function (editor) {
         editor.save();
         if (id === "vbaCodeInput" && typeof saveVbaModule === "function") {
           saveVbaModule();
-        }
-        if (id === "htmlWorkspaceEditorInput" && typeof saveHtmlWorkspaceSelection === "function") {
-          saveHtmlWorkspaceSelection();
         }
       }
     };
@@ -126,9 +133,6 @@
       if (id === "vbaCodeInput" && typeof markVbaEditorDirty === "function") {
         markVbaEditorDirty();
       }
-      if (id === "htmlWorkspaceEditorInput" && typeof markHtmlWorkspaceDirty === "function") {
-        markHtmlWorkspaceDirty();
-      }
       if (id === "promptEditInput" && typeof markPromptEditorDirty === "function") {
         markPromptEditorDirty();
       }
@@ -155,7 +159,6 @@
 
   window.activateCodeEditorsForTab = function (name) {
     var ids = {
-      artifacts: ["htmlWorkspaceEditorInput"],
       vba: ["vbaCodeInput"],
       instructions: [
         "toolSchemaInput", "toolRunArgsInput", "toolCodeInput", "toolReadmeInput",

@@ -39,7 +39,7 @@
   .preview-surface-status { grid-row:3; }
 }
 
-#htmlWorkspacePreviewLink[hidden] { display:none; }
+[data-html-node="htmlWorkspacePreviewLink"][hidden] { display:none; }
 
 /* Addressed saved content uses the same Browser surface and existing controls. */
 .browser-object-view, .browser-object-content, .browser-html-document { display:flex; flex-direction:column; min-width:0; min-height:0; }

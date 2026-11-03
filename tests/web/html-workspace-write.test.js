@@ -153,11 +153,10 @@ function fixture(text = "<main>before</main>") {
   ["app-chat-state.js", "app-chat-session.js"].forEach(file =>
     assert.match(index, new RegExp(file.replace(/\./g, "\\.") + "\\?v=[^\"\\s]+")));
   ["app-html-workspace-actions.js", "app-html-workspace.js"]
-    .forEach(file => assert.ok(index.includes(file + "?v=" + (
-      file === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-memory-20261002-1"))));
+    .forEach(file => assert.ok(index.includes(file + "?v=")));
   assert.ok(index.indexOf("app-resource-upload.js?v=") < index.indexOf("app-html-workspace-actions.js?v="));
-  assert.match(read("js/app-html-workspace.js"), /addEventListener\("pagehide", workspaceActions.cancelWrite\)/);
-  ["app-chat-state.js", "app-chat-session.js"].forEach(file => assert.match(read("js/" + file), /window.cancelHtmlWorkspaceWrite\(\)/));
-  console.log("PASS HTML write: cache graph and chat/page lifecycle are wired");
+  assert.match(read("js/app-html-workspace-view.js"), /workspaceActions.cancelWrite\(\)/);
+  assert.doesNotMatch(read("js/app-chat-state.js"), /window.cancelHtmlWorkspaceWrite\(\)/);
+  console.log("PASS HTML write: scoped lifecycle owns cancellation; chat selection preserves independent writes");
   console.log("OK 9/9");
 }()).catch(error => { console.error(error.stack || error); process.exitCode = 1; });

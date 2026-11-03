@@ -1,8 +1,8 @@
 (function () {
-  var htmlPreview = window.RNAssistantHtmlWorkspacePreview;
-  var workspaceArtifacts = window.RNAssistantHtmlWorkspaceArtifacts;
-  var workspaceTree = window.RNAssistantHtmlWorkspaceTree;
-  var workspaceModel = window.RNAssistantHtmlWorkspaceModel.create(state);
+  "use strict";
+  // Catalog metadata is selected; editable working copies belong to addressed Dock views.
+  var htmlPreview = RNAssistantHtmlWorkspacePreview, workspaceArtifacts = RNAssistantHtmlWorkspaceArtifacts;
+  var workspaceTree = RNAssistantHtmlWorkspaceTree, workspaceModel = RNAssistantHtmlWorkspaceModel.create(state);
   var prop = workspaceModel.prop;
   var workspace = workspaceModel.workspace;
   var files = workspaceModel.files;
@@ -20,8 +20,6 @@
   var filePath = workspaceModel.filePath;
   var fileKind = workspaceModel.fileKind;
   var fileContent = workspaceModel.fileContent;
-  var workspaceSource = window.RNAssistantHtmlWorkspaceSource.create({ state: state, send: send,
-    cancelRequest: function (id) { return cancelBridgeRequest(id); }, changed: function () { renderHtmlWorkspace(); } });
   var dataId = workspaceModel.dataId;
   var dataName = workspaceModel.dataName;
   var dataJson = workspaceModel.dataJson;
@@ -30,349 +28,6 @@
   var selectedItem = workspaceModel.selectedItem;
   var ensureSelection = workspaceModel.ensureSelection;
   var refreshLibraryHeadSelection = workspaceModel.refreshLibraryHeadSelection;
-  var workspaceActions = null;
-  var resourceHandles = new Map();
-  var resourcePreviewEpoch = 0;
-
-  window.handleResourceAuthorityChanged = function (notice) {
-    var frame = $("htmlWorkspacePreviewFrame");
-    if (!frame || !frame.contentWindow) return;
-    var sources = dataSources();
-    var names = sources.filter(function (source) {
-      var binding = dataBinding(source) || {};
-      var reference = binding.resource || binding.Resource || {};
-      var uri = reference.uri || reference.Uri || "";
-      var identity = uri.replace(/\/revision\/[^/]+(?=\/|$)/, "");
-      return (binding.policy || binding.Policy) === "head" &&
-        ((notice.resources || []).indexOf(identity) >= 0 || notice.allInScope === true);
-    }).map(function (source) { return source.Name || source.name; });
-    if (names.length) frame.contentWindow.postMessage({ type: "rnassistant-resource-changed",
-      names: names, generation: notice.generation }, "*");
-  };
-
-  function closePreviewResources() {
-    resourcePreviewEpoch += 1;
-    resourceHandles.forEach(function (owner, leaseId) {
-      send("resourceDataClose", { chatId: owner.chatId, workspaceId: owner.workspaceId, leaseId: leaseId }).catch(function () {});
-    });
-    resourceHandles.clear();
-  }
-
-  window.addEventListener("message", function (event) {
-    var frame = $("htmlWorkspacePreviewFrame"), request = event.data || {};
-    if (!frame || event.source !== frame.contentWindow || request.type !== "rnassistant-resource-control" ||
-        !event.ports || event.ports.length !== 1) return;
-    var port = event.ports[0];
-    var requestEpoch = resourcePreviewEpoch;
-    var owner = { chatId: state.activeChatId, workspaceId: state.activeHtmlArtifactId };
-    var work;
-    if (request.operation === "open" && typeof request.bindingName === "string" && request.bindingName.length <= 128) {
-      work = send("resourceDataOpen", { chatId: owner.chatId, workspaceId: owner.workspaceId, bindingName: request.bindingName })
-        .then(function (lease) {
-          if (requestEpoch !== resourcePreviewEpoch || state.activeChatId !== owner.chatId || state.activeHtmlArtifactId !== owner.workspaceId) {
-            send("resourceDataClose", { chatId: owner.chatId, workspaceId: owner.workspaceId, leaseId: lease.leaseId }).catch(function () {});
-            throw new Error("RESOURCE_WORKSPACE_CHANGED");
-          }
-          resourceHandles.set(lease.leaseId, owner); return lease;
-        });
-    } else if (request.operation === "close" && resourceHandles.has(request.leaseId)) {
-      owner = resourceHandles.get(request.leaseId); resourceHandles.delete(request.leaseId);
-      work = send("resourceDataClose", { chatId: owner.chatId, workspaceId: owner.workspaceId, leaseId: request.leaseId });
-    } else work = Promise.reject(new Error("RESOURCE_ACCESS_DENIED"));
-    work.then(function (value) { port.postMessage({ ok: true, value: value }); },
-      function (error) { port.postMessage({ ok: false, error: error.detail || error.message }); })
-      .finally(function () { port.close(); });
-  });
-
-  function submitPlanHandoff() {
-    if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
-    switchTab("chat");
-    var input = $("chatInput");
-    var form = $("chatForm");
-    if (!input || !form || typeof form.requestSubmit !== "function") return false;
-    input.value = "Выполни утверждённый активный план. Перед началом найди его через " +
-      "core.find и прочитай возвращённую семантическую цель через core.read.";
-    updateComposerInputState();
-    form.requestSubmit();
-    return true;
-  }
-
-  var stagingVisualSelection = false;
-  var visualAnnotations = null;
-  var visualInspector = window.RNAssistantVisualInspector.createHost({
-    frame: $("htmlWorkspacePreviewFrame"), button: $("inspectHtmlWorkspaceButton"),
-    status: $("htmlWorkspaceInspectStatus"),
-    onSelectionChanged: function (selected, reason) {
-      $("attachHtmlWorkspaceSelectionButton").disabled = !selected || stagingVisualSelection;
-      if (visualAnnotations) visualAnnotations.onSelection(selected ? visualInspector.selectionRecord() : null, reason);
-    },
-    onLocations: function (locations) { if (visualAnnotations) visualAnnotations.onLocations(locations); },
-    onReveal: function (result) { if (visualAnnotations) visualAnnotations.onReveal(result); }
-  });
-  window.deactivateHtmlWorkspaceInspector = visualInspector.deactivate;
-  async function stageVisualSelection(record, comment, number, replacing, stayInBrowser) {
-    if (stagingVisualSelection) return null;
-    var chat = state.activeChatId, sourceId = state.activeHtmlArtifactId;
-    var queue = state.chatResourceIngestions || (state.chatResourceIngestions = {});
-    if (state.bridgeUnavailable || state.chatReadOnly || state.chatDetailPending ||
-        state.chatNavigationPending || queue[chat] ||
-        window.RNAssistantConversationInput.isPending("office", { chatId: chat }) || hasActiveMessageEdit()) {
-      $("htmlWorkspaceInspectStatus").textContent = "Дождитесь завершения текущего действия с чатом.";
-      return null;
-    }
-    var source = (state.artifacts || []).filter(function (item) {
-      return artifactId(item) === sourceId && artifactKind(item) === "html_workspace";
-    });
-    var revision = source.length === 1 ? Number(prop(source[0], "Revision", "revision", 0)) : 0;
-    if (!record || !chat || !sourceId || !Number.isSafeInteger(revision) || revision < 1 ||
-        (record.sourceId && (record.sourceId !== sourceId || record.sourceRevision !== revision))) {
-      $("htmlWorkspaceInspectStatus").textContent = "Источник выделения недоступен. Обновите просмотр.";
-      return null;
-    }
-    var completeIngestion;
-    var ingestion = new Promise(function (resolve) { completeIngestion = resolve; });
-    queue[chat] = ingestion;
-    stagingVisualSelection = true;
-    $("attachHtmlWorkspaceSelectionButton").disabled = true;
-    updateComposerInputState();
-    var attachment = null, attached = false, succeeded = false;
-    try {
-      var response = await send("stageHtmlVisualSelection", { chatId: chat, artifactId: sourceId,
-        artifactRevision: revision, previewGeneration: record.generation, selection: record.selection,
-        comment: number ? String(comment || "") : null, annotationNumber: number || 0 });
-      attachment = response && (response.resource || response.Resource);
-      if (!attachment) throw new Error("Приложение не вернуло подготовленный элемент.");
-      if (number) attachment.visualAnnotation = { selection: record.selection,
-        comment: String(comment || ""), annotationNumber: number };
-      if (number) {
-        attachment.visualSourceArtifactId = sourceId;
-        attachment.visualSourceRevision = revision;
-      }
-      if (chat !== state.activeChatId || sourceId !== state.activeHtmlArtifactId ||
-          record.generation !== visualInspector.generation())
-        throw new Error("Просмотр изменился. Выберите элемент заново.");
-      var currentDraft = readOfficeDraft(chat);
-      var attachments = currentDraft && currentDraft.attachments || [];
-      var replaceIndex = replacing ? attachments.findIndex(function (item) {
-        return attachmentId(item) === attachmentId(replacing);
-      }) : -1;
-      if (replacing && replaceIndex < 0) throw new Error("Аннотация больше не находится в черновике.");
-      if (!replacing && attachments.length >= ATTACHMENT_MAX_FILES)
-        throw new Error("В одном сообщении можно выбрать не более 10 элементов и файлов.");
-      var updated = attachments.slice();
-      if (replacing) updated[replaceIndex] = attachment;
-      else updated.push(attachment);
-      saveOfficeDraft(chat, officeChatDraftText(), updated, true,
-        currentDraft && currentDraft.nextAnnotationNumber, number ? null : undefined);
-      attached = true;
-      await window.RNAssistantChatDrafts.flushOffice(chat);
-      if (replacing) {
-        try { await send("discardChatResourceDraft", { chatId: chat, id: attachmentId(replacing) }); }
-        catch (_) { setAttachmentStatus(chat, "Старый снимок аннотации не удалён; новый черновик сохранён.", "warning"); }
-      }
-      if (chat !== state.activeChatId || sourceId !== state.activeHtmlArtifactId ||
-          record.generation !== visualInspector.generation()) {
-        succeeded = true; return attachment;
-      }
-      restoreChatDraft(chat);
-      if (!stayInBrowser) {
-        visualInspector.deactivate();
-        if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
-        switchTab("chat");
-        $("chatInput").focus();
-      }
-      succeeded = true;
-      return attachment;
-    } catch (error) {
-      if (attachment && !attached)
-        await send("discardChatResourceDraft", { chatId: chat, id: attachmentId(attachment) }).catch(function () {});
-      var message = error.detail || error.message || "Не удалось добавить элемент.";
-      if (attached && state.activeChatId === chat) {
-        if (!stayInBrowser) {
-          visualInspector.deactivate();
-          if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
-          switchTab("chat");
-        }
-        restoreChatDraft(chat);
-        setAttachmentStatus(chat, message, "error");
-      } else if (attached) setAttachmentStatus(chat, message, "error");
-      else $("htmlWorkspaceInspectStatus").textContent = message;
-      if (stayInBrowser) throw error;
-      return null;
-    } finally {
-      completeIngestion(succeeded);
-      if (queue[chat] === ingestion) delete queue[chat];
-      stagingVisualSelection = false;
-      $("attachHtmlWorkspaceSelectionButton").disabled = !visualInspector.selectionRecord();
-      updateComposerInputState();
-    }
-  }
-  $("attachHtmlWorkspaceSelectionButton").addEventListener("click", function () {
-    return stageVisualSelection(visualInspector.selectionRecord(), null, 0, null, false);
-  });
-  if (window.RNAssistantVisualAnnotations) visualAnnotations = window.RNAssistantVisualAnnotations.create({
-    frame: $("htmlWorkspacePreviewFrame"), inspector: visualInspector, stage: stageVisualSelection
-  });
-  window.RNAssistantHtmlWorkspaceAnnotations = visualAnnotations;
-  var previewSurface = window.RNAssistantPreviewSurface.attach($("htmlWorkspacePreview"), {
-    reload: function () { window.RNAssistantHtmlWorkspaceSurface.reload(); },
-    canReload: function () { return !!browserBinding && !state.htmlWorkspaceDirty; },
-    reloadLabel: "Обновить HTML"
-  });
-  var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
-    state: state,
-    model: workspaceModel,
-    preview: htmlPreview,
-    previewSurface: previewSurface,
-    inspector: visualInspector,
-    source: workspaceSource,
-    closeResources: closePreviewResources,
-    artifacts: workspaceArtifacts,
-    artifactActions: {
-      artifactImageThumbnailState: function (uri) {
-        return workspaceActions && workspaceActions.artifactImageThumbnailState(uri);
-      },
-      artifactViewerState: function (uri) {
-        return workspaceActions && workspaceActions.artifactViewerState(uri);
-      },
-      changeArtifactPdfPage: function (request) {
-        return workspaceActions && workspaceActions.changeArtifactPdfPage(request);
-      },
-      selectArtifactPdfPage: function (request) {
-        return workspaceActions && workspaceActions.selectArtifactPdfPage(request);
-      },
-      changeArtifactViewerPage: function (request) {
-        return workspaceActions && workspaceActions.changeArtifactViewerPage(request);
-      },
-      downloadArtifactViewer: function (request) {
-        return workspaceActions && workspaceActions.downloadArtifactViewer(request);
-      },
-      handoffPlan: function (request) {
-        return workspaceActions && workspaceActions.handoffPlan(request);
-      },
-      restorePlanRevision: function (request) {
-        return workspaceActions && workspaceActions.restorePlanRevision(request);
-      },
-      importUploadedHtml: function (request) {
-        return workspaceActions && workspaceActions.importUploadedHtml(request);
-      },
-      loadArtifactImage: function (request) {
-        return workspaceActions && workspaceActions.loadArtifactImage(request);
-      },
-      loadArtifactImageThumbnail: function (request) {
-        return workspaceActions && workspaceActions.loadArtifactImageThumbnail(request);
-      },
-      loadArtifactPdf: function (request) {
-        return workspaceActions && workspaceActions.loadArtifactPdf(request);
-      },
-      loadArtifactPdfThumbnail: function (request) {
-        return workspaceActions && workspaceActions.loadArtifactPdfThumbnail(request);
-      },
-      loadArtifactViewer: function (request) {
-        return workspaceActions && workspaceActions.loadArtifactViewer(request);
-      },
-      loadArtifactViewerFull: function (request) {
-        return workspaceActions && workspaceActions.loadArtifactViewerFull(request);
-      },
-      collectionItems: function (collectionId) {
-        return typeof window.artifactCollectionItems === "function"
-          ? window.artifactCollectionItems(collectionId)
-          : [];
-      },
-      openCollectionArtifact: function (artifact, collectionItems, collectionId) {
-        return typeof window.openArtifactResource === "function"
-          ? window.openArtifactResource(artifact, collectionItems, "library:" + String(collectionId || ""))
-          : false;
-      },
-      imageGalleryContext: function (artifact) {
-        return typeof window.artifactImageGalleryContext === "function"
-          ? window.artifactImageGalleryContext(artifact)
-          : null;
-      },
-      selectImageGalleryItem: function (index) {
-        return typeof window.selectArtifactImageGalleryItem === "function"
-          ? window.selectArtifactImageGalleryItem(index)
-          : false;
-      }
-    }
-  });
-  var syncHtmlEditorToState = workspaceEditor.sync;
-  var markHtmlWorkspaceDirty = workspaceEditor.markDirty;
-  var confirmDiscardHtmlChanges = workspaceEditor.confirmDiscard;
-  var updateHtmlWorkspaceStatus = workspaceEditor.updateStatus;
-  var setHtmlWorkspaceMode = workspaceEditor.setMode;
-  var applyHtmlWorkspaceMode = workspaceEditor.applyMode;
-  var renderHtmlWorkspaceEditor = workspaceEditor.render;
-  workspaceActions = window.RNAssistantHtmlWorkspaceActions.create({
-    state: state,
-    send: send,
-    log: log,
-    cancelRequest: function (requestId) { return cancelBridgeRequest(requestId); },
-    getSelection: workspaceActionSelection,
-    deleteDocumentArtifact: function (artifact) {
-      return window.RNAssistantArtifactCatalog.remove(prop(artifact, "ResourceUri", "resourceUri", ""));
-    },
-    getActionState: workspaceActionState,
-    syncEditor: syncHtmlEditorToState,
-    applyWorkspaceResponse: applyHtmlWorkspaceResponse,
-    applyPlanRefresh: applyPlanRefresh,
-    hasRefreshableData: function (policy) {
-      return boundDataSources(policy === "on_preview" ? "on_preview" : "").length > 0;
-    },
-    refreshableDataNames: function (policy) {
-      return boundDataSources(policy === "on_preview" ? "on_preview" : "")
-        .map(dataName);
-    },
-    switchChatMode: function (mode) {
-      return typeof window.saveChatMode === "function" ? window.saveChatMode(mode) : false;
-    },
-    submitPlanHandoff: submitPlanHandoff,
-    downloadHtmlExport: downloadHtmlWorkspaceExport,
-    downloadArtifactText: downloadArtifactText,
-    applyArtifactViewerText: applyArtifactViewerText,
-    validatePlanDraft: workspaceArtifacts.validatePlanDraft,
-    hideCreate: hideHtmlWorkspaceCreate,
-    onArtifactThumbnailChange: function (uri, thumbnail) {
-      if (typeof window.updateArtifactThumbnailViews === "function") {
-        window.updateArtifactThumbnailViews(uri, thumbnail);
-      }
-    },
-    render: function () {
-      renderHtmlWorkspace();
-    }
-  });
-  window.RNAssistantHtmlWorkspaceViewerActions = workspaceActions;
-
-  window.addEventListener("message", function (event) {
-    var frame = $("htmlWorkspacePreviewFrame");
-    var data = event.data || {};
-    if (!frame || event.source !== frame.contentWindow || data.type !== "rnassistant-html-fetch") return;
-    var payload = data.request || {};
-    function reply(ok, value) {
-      if (frame.contentWindow) frame.contentWindow.postMessage({ type: "rnassistant-html-fetch-result", requestId: data.requestId, ok: ok, value: value }, "*");
-    }
-    function execute() {
-      return send("htmlFetch", payload).then(function (response) { reply(true, response); });
-    }
-    execute().catch(function (error) {
-      var message = error.detail || error.message || "HTTP request failed";
-      var origin = "";
-      try { origin = new URL(payload.url).origin; } catch (ignore) {}
-      var deniedOrigin = String(message).match(/not allowed:\s*(https?:\/\/[^\s]+)/i);
-      if (deniedOrigin) origin = deniedOrigin[1].replace(/[.,;]+$/, "");
-      if (origin && /not allowed|не разреш/i.test(message) && window.confirm("HTML workspace запрашивает доступ к сети:\n" + origin + "\n\nРазрешить этот origin?")) {
-        send("allowHtmlNetworkOrigin", { origin: origin }).then(function () {
-          var list = state.settings.HtmlNetworkAllowedOrigins || state.settings.htmlNetworkAllowedOrigins || [];
-          if (list.indexOf(origin) < 0) list.push(origin);
-          state.settings.HtmlNetworkAllowedOrigins = list;
-          return execute();
-        }).catch(function (allowError) { reply(false, allowError.detail || allowError.message); });
-        return;
-      }
-      reply(false, message);
-    });
-  });
-
   function workspaceTreeFile(file) {
     return { id: fileId(file), path: filePath(file), kind: fileKind(file), content: fileContent(file) };
   }
@@ -420,437 +75,86 @@
     });
   }
 
+
+  function view(chatId) { return RNAssistantDockWorkspace.getView(RNAssistantHtmlWorkspaceView.key({ chatId: chatId })); }
+  function target(chatId) {
+    var chat = (state.chats || []).find(function (entry) { return (entry.Id || entry.id) === chatId; }) || {};
+    return { view: "html-editor", chatId: chatId, documentId: chat.DocumentAuthorityId || chat.documentAuthorityId || "",
+      documentKey: chatDocumentKey(chat), host: chatHost(chat),
+      title: "Редактор · " + (chat.Title || chat.title || "Материалы") };
+  }
+  function affected(scope) {
+    var editors = [];
+    RNAssistantDockWorkspace.eachView("html-editor", function (editor) {
+      if (scope.chatId ? editor.target.chatId === scope.chatId :
+          editor.target.host === scope.host && editor.target.documentKey === scope.documentKey) editors.push(editor);
+    }); return editors;
+  }
+  function open(chatId, options) {
+    if (!chatId) return false; options = options || {};
+    if (!RNAssistantDockWorkspace.isSectionVisible("artifacts") && !document.getElementById("tab-chat").classList.contains("active"))
+      switchTab("artifacts");
+    if (!RNAssistantDockWorkspace.openTarget(target(chatId))) return false;
+    var editor = view(chatId);
+    editor.ready().then(function (loaded) {
+      if (!loaded) return;
+      if (options.selection && !editor.select(options.selection.type, options.selection.id)) return;
+      if (options.mode) editor.mode(options.mode);
+      if (options.create) editor.createItem(options.create);
+    });
+    return true;
+  }
   function selectHtmlWorkspaceItem(type, id) {
-    var selected = state.htmlWorkspaceSelection || {};
-    var changingSelection = String(selected.type || "") !== String(type || "") || String(selected.id || "") !== String(id || "");
-    if (state.htmlWorkspaceDirty && changingSelection) {
-      window.alert("Сначала сохраните изменения текущего артефакта.");
-      return false;
-    }
-    state.artifactImageGalleryContext = null;
     state.htmlWorkspaceSelection = { type: type, id: id };
-    renderHtmlWorkspaceEditor();
-    applyHtmlWorkspaceMode();
-    updateHtmlWorkspaceStatus();
-    return true;
+    return open(state.activeChatId, { selection: { type: type, id: id }, mode: "edit" });
   }
-
-  function applyHtmlWorkspaceResponse(response, expectedChatId) {
-    if (expectedChatId && state.activeChatId !== expectedChatId) return false;
-    response = response || {};
-    var responseChatId = response.activeChatId || response.ActiveChatId || state.activeChatId;
-    var revision = window.RNAssistantRunViewState.sessionRevision(response);
-    if (!window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, responseChatId, revision)) return false;
-    if (response.artifacts !== undefined || response.Artifacts !== undefined) {
-      state.artifacts = response.artifacts || response.Artifacts || [];
-    }
-    if (response.artifactLibrary !== undefined || response.ArtifactLibrary !== undefined) {
-      state.artifactLibrary = response.artifactLibrary || response.ArtifactLibrary || { sessionRevision: revision || 0, heads: [] };
-    }
-    if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined) {
-      state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
-    }
-    state.htmlWorkspacePreflight = response.staticPreflight || response.StaticPreflight ||
-      { status: "ok", passed: true, errorCount: 0, warningCount: 0, issues: [] };
-    state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
-    state.htmlWorkspaceDirty = false;
-    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
-    renderHtmlWorkspace();
-    return true;
-  }
-
-  function workspaceActionSelection(type, id) {
-    var selected = null;
-    if (!type) {
-      selected = selectedItem();
-    } else if (type === "plan" || type === "artifact") {
-      (state.artifacts || []).forEach(function (item) {
-        if (artifactId(item) === id) selected = { type: type, item: item };
-      });
-    } else if (type === "data") {
-      dataSources().forEach(function (item) {
-        if (dataId(item) === id) selected = { type: "data", item: item };
-      });
-    } else if (type === "file") {
-      files().forEach(function (item) {
-        if (fileId(item) === id) selected = { type: "file", item: item };
-      });
-    }
-    if (!selected) return null;
-    var result = { type: selected.type, item: selected.item };
-    if (selected.type === "plan") {
-      result.label = artifactTitle(selected.item);
-      result.planId = planStableId(selected.item);
-      result.expectedRevisionArtifactId = artifactId(selected.item);
-    } else if (selected.type === "data") {
-      result.label = dataName(selected.item);
-      result.name = dataName(selected.item);
-      result.json = dataJson(selected.item);
-      result.binding = dataBinding(selected.item);
-    } else if (selected.type === "file") {
-      result.label = filePath(selected.item);
-      result.path = filePath(selected.item);
-      result.kind = fileKind(selected.item);
-      result.content = fileContent(selected.item);
-    }
-    return result;
-  }
-
   function deleteHtmlWorkspaceTreeItem(type, id) {
-    var current = state.htmlWorkspaceSelection || {};
-    var changingSelection = String(current.type || "") !== String(type || "") || String(current.id || "") !== String(id || "");
-    if (state.htmlWorkspaceDirty && changingSelection) {
-      window.alert("Сначала сохраните изменения текущего артефакта.");
-      return;
-    }
-    return workspaceActions.deleteSelection(workspaceActionSelection(type, id));
+    if (!open(state.activeChatId)) return;
+    var editor = view(state.activeChatId); editor.ready().then(function (loaded) { if (loaded) editor.remove(type, id); });
   }
-
-  function confirmDiscardArtifactChanges(action) {
-    if (!confirmDiscardHtmlChanges(action)) return false;
-    if (!state.vbaEditorDirty) return true;
-    var accepted = window.confirm(
-      "В VBA-модуле есть несохранённые изменения. " +
-      (action || "Продолжить") +
-      " и потерять их?"
-    );
-    if (accepted) state.vbaEditorDirty = false;
-    return accepted;
-  }
-
-  function workspaceActionState() {
-    var undo = historyItems()[0];
-    var branches = redoBranches();
-    var redoSelect = $("redoHtmlWorkspaceBranchSelect");
-    var recoverySelect = $("htmlWorkspaceRecoverySelect");
-    var redoId = branches.length > 1 && redoSelect ? redoSelect.value : (branches[0] ? prop(branches[0], "Id", "id", "") : "");
-    return {
-      bridgeUnavailable: !!state.bridgeUnavailable,
-      chatId: state.activeChatId,
-      dirty: !!state.htmlWorkspaceDirty,
-      recoverySnapshotId: recoverySelect ? recoverySelect.value : "",
-      undoSnapshotId: undo ? prop(undo, "Id", "id", "") : "",
-      redoSnapshotId: redoId
-    };
-  }
-
-  function applyPlanRefresh(planId, response, expectedChatId) {
-    if (typeof applyChatStateForChat === "function" &&
-        !applyChatStateForChat(response, expectedChatId)) return false;
-    var latest = latestPlanArtifacts().filter(function (artifact) { return planStableId(artifact) === planId; })[0] || null;
-    state.htmlWorkspaceSelection = latest
-      ? { type: "plan", id: artifactId(latest) }
-      : { type: "file", id: "" };
-    state.htmlWorkspaceDirty = false;
-    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
-    renderHtmlWorkspace();
-    return true;
-  }
-
-  function addHtmlWorkspaceFile(kind) {
-    if (state.bridgeUnavailable || recoveryBlocked()) return;
-    var fallback = kind === "css" ? "styles.css" : (kind === "script" ? "app.js" : "index.html");
-    showHtmlWorkspaceCreate(kind, fallback);
-  }
-
-  function showHtmlWorkspaceCreate(kind, fallback) {
-    state.htmlWorkspaceCreateKind = kind;
-    var box = $("htmlWorkspaceCreateBox");
-    var input = $("htmlWorkspaceCreateNameInput");
-    if (!box || !input) {
-      return;
-    }
-
-    box.classList.remove("hidden");
-    input.value = fallback || "";
-    input.placeholder = kind === "data" ? "Имя data source" : "Путь файла";
-    input.focus();
-    input.select();
-  }
-
-  function hideHtmlWorkspaceCreate() {
-    state.htmlWorkspaceCreateKind = "";
-    if ($("htmlWorkspaceCreateBox")) {
-      $("htmlWorkspaceCreateBox").classList.add("hidden");
-    }
-  }
-
-  async function confirmHtmlWorkspaceCreate() {
-    if (state.bridgeUnavailable || recoveryBlocked()) {
-      return;
-    }
-    var kind = state.htmlWorkspaceCreateKind || "html";
-    var input = $("htmlWorkspaceCreateNameInput");
-    var path = input ? input.value : "";
-    if (!path || !path.trim()) {
-      return;
-    }
-    if (kind === "data") {
-      await workspaceActions.createData(path.trim());
-      return;
-    }
-
-    await workspaceActions.createFile(kind, path.trim());
-  }
-
-  async function addHtmlWorkspaceData() {
-    if (state.bridgeUnavailable || recoveryBlocked()) {
-      return;
-    }
-    showHtmlWorkspaceCreate("data", "data");
-  }
-
   function renderHtmlWorkspace() {
-    syncBrowserSource();
-    if (browserBinding && browserVisible && !state.htmlWorkspaceDirty) workspaceEditor.renderPreview();
     if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;
-    workspace();
-    ensureSelection();
-    renderHtmlWorkspaceList();
-    if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.isVisible("materials")) return;
-    if ($("htmlWorkspaceEditor").hidden) return;
-    renderHtmlWorkspaceEditor();
-    applyHtmlWorkspaceMode();
-    updateHtmlWorkspaceStatus();
+    workspace(); ensureSelection(); renderHtmlWorkspaceList();
   }
-
-  function refreshArtifactsTabProjection() {
-    refreshLibraryHeadSelection();
-    renderHtmlWorkspace();
-  }
-
-  var sourceReloadPending = false;
-  async function reloadHtmlWorkspaceSources() {
-    if (sourceReloadPending || state.bridgeUnavailable || state.htmlWorkspaceExportPending || !state.activeChatId) return;
-    if (state.htmlWorkspaceDirty && !window.confirm("Перезагрузить workspace и отбросить несохранённые правки? Сначала скопируйте нужный текст.")) return;
-    var chatId = state.activeChatId, editVersion = state.htmlWorkspaceEditVersion || 0;
-    sourceReloadPending = true; workspaceSource.release(); workspaceActions.cancelWrite();
-    try {
-      var response = await send("getHtmlWorkspace", { chatId: chatId });
-      if (state.activeChatId !== chatId) return;
-      if ((state.htmlWorkspaceEditVersion || 0) !== editVersion) throw new Error("Появились новые правки. Workspace не заменён.");
-      applyHtmlWorkspaceResponse(response, chatId);
-    } catch (error) { log(error.message, "error"); }
-    finally { sourceReloadPending = false; }
-  }
-
-  function refreshArtifactsTab() {
-    refreshArtifactsTabProjection();
-    var synchronization = !state.htmlWorkspaceDirty && typeof synchronizeChatState === "function"
-      ? synchronizeChatState(true)
-      : null;
-    return Promise.resolve(synchronization).then(function () {
-      if (refreshLibraryHeadSelection()) renderHtmlWorkspace();
-      var selected = selectedItem();
-      return selected && (selected.type === "file" || selected.type === "data")
-        ? workspaceActions.refreshAuto()
-        : null;
-    });
-  }
-
-  async function downloadHtmlWorkspaceExport(exportState) {
-    exportState = exportState || {};
-    var exportedWorkspace = exportState.workspace || {};
-    var exportedFiles = prop(exportedWorkspace, "Files", "files", []) || [];
-    var exportedData = prop(exportedWorkspace, "DataSources", "dataSources", []) || [];
-    if (!exportedFiles.some(function (file) { return fileKind(file) === "html"; })) {
-      throw new Error("HTML export checkpoint has no HTML entry file.");
-    }
-    function isCurrent() {
-      return state.activeChatId === exportState.chatId && state.activeHtmlArtifactId === exportState.revisionArtifactId && !state.htmlWorkspaceDirty;
-    }
-    await workspaceSource.exportSources(exportedWorkspace, isCurrent);
-    await htmlPreview.ensureVendors(exportedFiles);
-    var snapshot = await window.RNAssistantHtmlResourceExport.capture(exportState.resourceExport, {
-      fetch: window.fetch.bind(window), isCurrent: isCurrent
-    });
-    snapshot.workspace = { resourceUri: exportState.resourceUri, contentSha256: exportState.contentSha256 };
-    var html = htmlPreview.build({
-      activeFileId: prop(exportedWorkspace, "ActiveFileId", "activeFileId", ""),
-      dataSources: exportedData,
-      files: exportedFiles,
-      resourceSnapshot: snapshot,
-      hostBridge: false
-    });
-    if (!isCurrent()) throw new Error("RESOURCE_EXPORT_CANCELLED");
-    var url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = "rnassistant-workspace.html";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-  }
-
-  function applyArtifactViewerText(resourceUri, contentSha256, text) {
-    var applied = false;
-    (state.artifacts || []).forEach(function (artifact) {
-      if (applied || artifactKind(artifact) !== "plan") return;
-      var uri = prop(artifact, "ResourceUri", "resourceUri", "") || "";
-      var hash = prop(artifact, "ContentSha256", "contentSha256", "") || "";
-      if (uri !== resourceUri || (hash && hash.toLowerCase() !== String(contentSha256 || "").toLowerCase())) return;
-      workspaceModel.setArtifactInlineProjection(artifact, String(text || ""));
-      applied = true;
-    });
-    return applied;
-  }
-
-  function downloadArtifactText(download) {
-    download = download || {};
-    if (!download.resourceUri || !/^[a-f0-9]{64}$/i.test(download.contentSha256 || "")) {
-      throw new Error("Artifact download has no exact revision evidence.");
-    }
-    var title = String(download.title || "artifact.txt").split(/[\\/]/).pop().replace(/[<>:"|?*\u0000-\u001f]/g, "_");
-    if (!title) title = "artifact.txt";
-    var mimeType = String(download.mimeType || "text/plain").split(";", 1)[0] + ";charset=utf-8";
-    var url = URL.createObjectURL(new Blob([String(download.text || "")], { type: mimeType }));
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = title;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    return true;
-  }
-
   function bindHtmlWorkspaceActions() {
-    var menus = Array.prototype.slice.call(document.querySelectorAll(".html-workspace-menu"));
-    document.addEventListener("click", function (event) {
-      menus.forEach(function (menu) {
-        if (!menu.contains(event.target) || event.target.closest("button")) menu.open = false;
-      });
+    [["addPlanButton", "plan"], ["addHtmlFileButton", "html"], ["addCssFileButton", "css"],
+      ["addJsFileButton", "script"], ["addHtmlDataButton", "data"]].forEach(function (item) {
+      $(item[0]).addEventListener("click", function () { open(state.activeChatId, { create: item[1] }); });
     });
-    document.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape") return;
-      menus.forEach(function (menu) {
-        if (!menu.open) return;
-        menu.open = false;
-        menu.querySelector("summary").focus();
-      });
-    });
-    $("artifactNavSearch").addEventListener("input", function () {
-      renderHtmlWorkspaceList();
-      if (selectedItem() && selectedItem().type === "collection") renderHtmlWorkspaceEditor();
-    });
-    $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
-    $("reloadHtmlWorkspaceSourceButton").addEventListener("click", reloadHtmlWorkspaceSources);
-    $("deleteHtmlWorkspaceButton").addEventListener("click", workspaceActions.deleteSelection);
-    $("undoHtmlWorkspaceButton").addEventListener("click", workspaceActions.undo);
-    $("redoHtmlWorkspaceButton").addEventListener("click", workspaceActions.redo);
-    $("recoverHtmlWorkspaceButton").addEventListener("click", workspaceActions.recoverRevision);
-    $("refreshHtmlDataButton").addEventListener("click", workspaceActions.refreshAll);
-    $("exportHtmlWorkspaceButton").addEventListener("click", workspaceActions.exportWorkspace);
-    $("addPlanButton").addEventListener("click", workspaceActions.createPlan);
-    $("addHtmlFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("html"); });
-    $("addCssFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("css"); });
-    $("addJsFileButton").addEventListener("click", function () { addHtmlWorkspaceFile("script"); });
-    $("addHtmlDataButton").addEventListener("click", addHtmlWorkspaceData);
-    $("confirmHtmlCreateButton").addEventListener("click", confirmHtmlWorkspaceCreate);
-    $("cancelHtmlCreateButton").addEventListener("click", hideHtmlWorkspaceCreate);
-    $("htmlWorkspaceCreateNameInput").addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        confirmHtmlWorkspaceCreate();
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        hideHtmlWorkspaceCreate();
-      }
-    });
-    Array.prototype.slice.call(document.querySelectorAll(".html-workspace-mode-button")).forEach(function (button) {
-      button.addEventListener("click", function () {
-        setHtmlWorkspaceMode(button.getAttribute("data-html-mode"));
-        if (button.getAttribute("data-html-mode") === "preview") workspaceActions.refreshAuto();
-      });
-    });
-    $("copyHtmlWorkspaceButton").addEventListener("click", function () {
-      var status = $("htmlWorkspaceCopyStatus");
-      status.textContent = "";
-      workspaceEditor.copySelectedSource().then(function () { status.textContent = "Скопировано"; })
-        .catch(function () { status.textContent = "Не удалось скопировать"; });
-    });
-    var artifactsTab = document.querySelector('.section-rail [data-tab="artifacts"]');
-    if (artifactsTab) artifactsTab.addEventListener("click", refreshArtifactsTab);
+    $("artifactNavSearch").addEventListener("input", renderHtmlWorkspaceList);
   }
-
+  var thumbnails = RNAssistantArtifactViewerActions.create({ state: state, send: send, log: log,
+    onArtifactThumbnailChange: function (uri, value) { if (window.updateArtifactThumbnailViews) updateArtifactThumbnailViews(uri, value); } });
+  window.closeArtifactViewerResources = thumbnails.closeAll;
+  window.RNAssistantArtifactThumbnailRuntime = { load: thumbnails.loadArtifactImageThumbnail, state: thumbnails.artifactImageThumbnailState };
   window.renderHtmlWorkspace = renderHtmlWorkspace;
-  // Temporary live-editor provider. Source authority stays here until exact HTML targets land in S3b.3b.
-  var browserBinding = null, browserVisible = false, browserView = null;
-  function releaseBrowser() {
-    browserBinding = null;
-    visualInspector.deactivate(); visualAnnotations.collapseEditor();
-    workspaceEditor.suspendPreview();
-    previewSurface.waiting({ title: "HTML", path: "Материалы" }, "Откройте HTML из материалов.");
-  }
-  function syncBrowserSource() {
-    if (browserBinding && (browserBinding.chatId !== state.activeChatId || browserBinding.artifactId !== state.activeHtmlArtifactId)) {
-      releaseBrowser();
-      previewSurface.waiting({ title: "HTML", path: "Источник изменился" }, "Выберите HTML в материалах и откройте просмотр.");
-    }
-    if (browserBinding && state.htmlWorkspaceDirty)
-      previewSurface.waiting({ title: "HTML", path: "Последняя сохранённая версия" }, "Есть несохранённые изменения.");
-  }
-  function openBrowser(fromArtifact) {
-      var selectedPreview = selectedItem();
-      if (fromArtifact !== true && selectedPreview && (selectedPreview.type === "plan" || selectedPreview.type === "artifact")) {
-        // Saved objects retain their existing reader route until the exact HTML provider is migrated.
-        return window.RNAssistantMaterialView.openArtifact(selectedPreview.item);
-      }
-      if (state.htmlWorkspaceDirty || !state.activeChatId || !state.activeHtmlArtifactId) return null;
-      var available = files(), selected = selectedItem();
-      if (!available.some(function (file) { return fileKind(file) === "html"; })) return null;
-      if (!selected || selected.type !== "file") {
-        var entry = available.find(function (file) { return fileId(file) === workspace().activeFileId; }) ||
-          available.find(function (file) { return fileKind(file) === "html"; });
-        state.htmlWorkspaceSelection = { type: "file", id: fileId(entry) };
-      }
-      state.htmlWorkspaceMode = "preview";
-      workspaceSource.ensure(available);
-      syncBrowserSource();
-      browserBinding = { chatId: state.activeChatId, artifactId: state.activeHtmlArtifactId };
-      RNAssistantDockWorkspace.show("html-browser");
-      workspaceEditor.renderPreview();
-      return true;
-  }
-  window.RNAssistantHtmlWorkspaceSurface = {
-    register: function (dock) {
-      var root = $("htmlWorkspacePreview"), mount = document.createElement("div");
-      mount.className = "browser-view";
-      var detail = $("artifactDetailPreview");
-      detail.classList.add("html-workspace-view"); detail.dataset.htmlView = "preview";
-      root.before(detail);
-      root.classList.remove("html-workspace-view"); root.classList.add("preview-side-panel");
-      previewSurface.actions.prepend($("inspectHtmlWorkspaceButton"));
-      root.appendChild($("htmlWorkspaceInspectStatus"));
-      browserView = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell") });
-      dock.registerView("html-browser", { title: "HTML", icon: "panel", placement: "within", renderer: "onlyWhenVisible", element: function () { return mount; },
-        onVisible: function (shown) {
-          browserVisible = shown;
-          if (shown) { browserView.activate(); syncBrowserSource(); if (browserBinding) workspaceEditor.renderPreview(); }
-          else { browserView.deactivate(); visualInspector.deactivate(); visualAnnotations.collapseEditor(); }
-        }, onLayout: browserView.layout, onClose: releaseBrowser });
-      $("openHtmlWorkspaceBrowserButton").addEventListener("click", openBrowser);
-      releaseBrowser();
-      window.addEventListener("pagehide", function (event) { if (!event.persisted) browserView.deactivate(); });
-    },
-    openCurrent: openBrowser,
-    openArtifact: function (artifact) { return String(artifact && (artifact.Id || artifact.id) || "") === String(state.activeHtmlArtifactId) && openBrowser(true); },
-    hasSource: function () { return !!browserBinding; },
-    isVisible: function () { return browserVisible; },
-    reload: function () { syncBrowserSource(); if (browserBinding && !state.htmlWorkspaceDirty) workspaceEditor.reloadPreview(); }
-  };
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
-  window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
-  window.cancelHtmlWorkspaceWrite = workspaceActions.cancelWrite;
-  window.cancelHtmlWorkspaceRead = workspaceSource.release;
-  if (typeof window.addEventListener === "function") window.addEventListener("pagehide", workspaceSource.release);
-  if (typeof window.addEventListener === "function") window.addEventListener("pagehide", workspaceActions.cancelWrite);
-  window.closeArtifactViewerResources = workspaceActions.closeArtifactViewers;
-  window.markHtmlWorkspaceDirty = markHtmlWorkspaceDirty;
-  window.confirmDiscardHtmlWorkspaceChanges = confirmDiscardArtifactChanges;
-  window.RNAssistantArtifactThumbnailRuntime = {
-    load: workspaceActions.loadArtifactImageThumbnail,
-    state: workspaceActions.artifactImageThumbnailState
+  window.handleResourceAuthorityChanged = function (notice) { RNAssistantDockWorkspace.eachView("html-editor", function (editor) { editor.authorityChanged(notice); }); };
+  window.RNAssistantHtmlWorkspaceSurface = {
+    register: function (dock) { dock.registerView("html-editor", { perObject: true, maximumInstances: 4, renderer: "onlyWhenVisible",
+      accepts: function (target) { return target && target.view === "html-editor" && typeof target.chatId === "string" && !!target.chatId &&
+        target.chatId.length <= 256 && typeof target.title === "string" && target.title.length <= 1024; },
+      key: RNAssistantHtmlWorkspaceView.key, create: RNAssistantHtmlWorkspaceView.create, titleFor: function (target) { return target.title; } }); },
+    open: open,
+    openCurrent: function () { return open(state.activeChatId, { mode: "preview" }); },
+    openArtifact: function (artifact, options) {
+      if (!artifact) return false;
+      var kind = artifactKind(artifact);
+      if (kind === "html_workspace" && artifactId(artifact) !== state.activeHtmlArtifactId) return false;
+      return open(state.activeChatId, { mode: options && options.purpose === "edit" ? "edit" : "preview",
+        selection: kind === "html_workspace" ? null : { type: kind === "plan" ? "plan" : "artifact", id: artifactId(artifact) } });
+    },
+    showAnnotation: async function (item, chatId) {
+      if (!open(chatId, { mode: "preview" })) return;
+      var editor = view(chatId); if (await editor.ready()) editor.annotations.showSent(item);
+    },
+    isDirty: function (chatId) { var editor = view(chatId); return !!editor && editor.dirty(); },
+    canDelete: function (scope) {
+      if (!affected(scope).some(function (editor) { return editor.dirty() || editor.busy(); })) return true;
+      window.alert("Сохраните правки или закройте HTML-редактор перед удалением его чата."); return false;
+    },
+    closeDeleted: function (scope) { affected(scope).forEach(function (editor) { RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key(editor.target)); }); },
+    annotations: function (chatId) { var editor = view(chatId); return editor && editor.annotations; },
+    onSnapshot: function (snapshot) { var editor = view(snapshot.activeChatId); if (editor) editor.onSnapshot(snapshot); }
   };
 }());

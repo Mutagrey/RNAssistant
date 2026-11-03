@@ -281,6 +281,7 @@
         syncSelectedInstruction(); selectInstructionRow({ kind: target.kind, index: index });
         if (typeof isPanelActive === "function" && !isPanelActive("instructions")) switchTab("instructions");
         else renderInstructions();
+        RNAssistantDockWorkspace.show("library");
         return true;
       }
     });
@@ -288,7 +289,7 @@
   }
 
   function renderInstructions(navigationOnly) {
-    if (typeof isPanelActive === "function" && !isPanelActive("instructions")) return;
+    if (typeof isPanelActive === "function" && !isPanelActive("instructions") && !RNAssistantDockWorkspace.isVisible("library")) return;
     var list = $("instructionsList");
     if (!list) return;
     var navigation = libraryNavigation();
@@ -368,7 +369,7 @@
   }
 
   function mountUnifiedLibrary() {
-    var layout = $("instructionsLayout");
+    var layout = $("libraryEditorView");
     var toolPanel = $("toolEditorPanel");
     if (layout && toolPanel && toolPanel.parentNode !== layout) layout.appendChild(toolPanel);
   }
@@ -657,4 +658,19 @@
   };
   window.renderInstructionEditor = renderInstructionEditor;
   window.syncSelectedLibraryItem = syncSelectedInstruction;
+  window.RNAssistantLibraryView = { register: function (dock) {
+    dock.registerView("library", { title: "Библиотека", icon: "book", section: "instructions", placement: "within", renderer: "onlyWhenVisible",
+      layout: function () { return $("instructionsLayout"); },
+      element: function () {
+        var root = document.createElement("div"); root.id = "libraryEditorView"; root.className = "library-editor-view";
+        root.appendChild($("instructionEditorPanel")); root.appendChild($("toolEditorPanel")); return root;
+      },
+      prepare: function () { renderInstructions(); },
+      onVisible: function (visible) {
+        if (visible) { activateCodeEditorsForTab("instructions"); renderInstructions(); }
+        else { syncSelectedInstruction(); cancelPromptSourceRead(); cancelSkillSourceRead(); cancelToolSourceRead(); cancelToolDocumentationRead(); }
+      },
+      onLayout: function () { refreshCodeEditors(["promptEditInput", "skillBodyInput", "toolCodeInput", "toolSchemaInput", "toolReadmeInput", "toolRunArgsInput"]); }
+    });
+  } };
 }());

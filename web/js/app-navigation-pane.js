@@ -51,6 +51,7 @@
     search.innerHTML = RNAssistantIcons.render("search");
     input.classList.add("product-nav-search-input"); input.hidden = true;
     toolbar.append(search, input);
+    if (options.actions) toolbar.appendChild(options.actions);
     if (options.commands) {
       var create = node("button", "icon-btn"); create.type = "button";
       create.title = options.commandLabel; create.setAttribute("aria-label", options.commandLabel);

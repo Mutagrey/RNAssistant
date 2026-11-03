@@ -176,8 +176,13 @@
     }finally{busy=false;controls();}
   }
   window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){el('Manager').hidden=false;},select:select,item:item,
+    showAnnotation:async function(annotation,target){
+      var plugin=items.find(function(item){return item.sourceWorkspaceId===target.workspaceId;});
+      if(!plugin||!await openSourceChat(target.sessionId,plugin)||!await select(plugin.pluginId))return;
+      var view=RNAssistantDockWorkspace.getView(RNAssistantPluginView.key(plugin));if(view)view.showAnnotation(annotation);
+    },
     applyAppearance:applyAppearance,restoreVersion:restoreVersion,openSourceChat:openSourceChat,
-    onChatSnapshot:function(snapshot){window.RNAssistantPluginAnnotations=null;each(function(view){view.onChatSnapshot(snapshot);});},
+    onChatSnapshot:function(snapshot){each(function(view){view.onChatSnapshot(snapshot);});},
     isChatBusy:function(target){var pending=busy;each(function(view){pending=pending||view.isBusy(target);});return pending;},
     sourceWorkspaceId:function(){var source=sourcePlugin();return source&&source.sourceWorkspaceId;},selectedId:selectedId};
 })();

@@ -13,24 +13,25 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
     const html = read("index.html");
     const css = [...html.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)].map(match => read(match[1])).join("\n");
-    const panel = html.slice(html.indexOf('<section class="panel" id="tab-artifacts">'), html.indexOf('<section class="panel" id="tab-settings">'));
-    await page.setContent(`<style>${css}\nbody{display:block}#tab-artifacts{display:flex;height:100vh}</style>${panel}`);
+    const panel = html.match(/<template id="htmlWorkspaceEditorTemplate">([\s\S]*?)<\/template>/)[1];
+    await page.setContent(`<style>${css}\nbody{display:block;height:100vh}</style>${panel}`);
     for (const file of ["vendor/codemirror/codemirror.min.js", "vendor/codemirror/mode/javascript/javascript.min.js",
       "vendor/codemirror/mode/xml/xml.min.js", "vendor/codemirror/mode/css/css.min.js", "vendor/codemirror/mode/htmlmixed/htmlmixed.min.js",
       "app-editors.js", "app-html-workspace-model.js", "app-html-workspace-editor.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     const history = await page.evaluate(() => {
-      window.$ = id => document.getElementById(id);
+      const root = document.querySelector('[data-html-node="htmlWorkspaceEditor"]');
+      window.$ = id => root.querySelector('[data-html-node="' + id + '"]') || (id === 'htmlWorkspaceEditor' ? root : null);
       const sourceText = "<main>HTML workspace</main>\n".repeat(4000);
       const file = { id: "index", path: "pages/dashboard.html", kind: "html", content: sourceText, sourceReadKey: "r1" };
       window.state = { activeChatId: "chat", activeHtmlArtifactId: "r1", htmlWorkspaceMode: "edit",
         htmlWorkspace: { activeFileId: "index", revisionArtifactId: "r1", files: [file], dataSources: [], history: [{ id: "r0", label: "Начальная версия" }] },
         htmlWorkspaceSelection: { type: "file", id: "index" }, artifacts: [] };
-      window.workspaceEditor = RNAssistantHtmlWorkspaceEditor.create({ state,
+      const code = RNAssistantCodeEditor.mount($("htmlWorkspaceEdit"), { text: "", readOnly: false });
+      window.workspaceEditor = RNAssistantHtmlWorkspaceEditor.create({ state, node: $, root, code, previewVisible: () => true,
         model: RNAssistantHtmlWorkspaceModel.create(state), artifacts: {},
         source: { current: () => true, ready: () => true, ensure: () => true, message: () => "" },
         preview: { missingVendors: () => [], build: () => '<html><body style="font:16px system-ui;padding:32px;color:#344054"><h1>Отчёт по продажам</h1><p>Текущая версия HTML</p></body></html>' } });
-      initializeCodeEditors(["htmlWorkspaceEditorInput"]);
       workspaceEditor.render();
       const cm = document.querySelector(".CodeMirror").CodeMirror;
       for (let revision = 2; revision <= 160; revision++) {

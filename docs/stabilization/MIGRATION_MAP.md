@@ -31,14 +31,12 @@ gate S2b.9–12 ниже, а не заявление об удалении вс�
 находит прежних project-file upload handlers/DTO/bridge/include. Это удаление
 мёртвых остатков, а не закрытие живых consumers ниже.
 
-Plugin source/candidate/watch уже instance-owned (S3b.3c ниже).
-`RNAssistantPluginAnnotations` пока остаётся selected façade для команды показа
-аннотации из общего чата; staged selection проверяет exact source/session.
-Removal gate: перевести оставшиеся live HTML source/annotation, выбранный annotation entrypoint и
-material/model-context consumers на explicit providers (S3b.3c / соответствующие
-срезы), проверить dirty/stale/close и убрать selected entrypoints после последнего
-consumer. Нельзя расширять facade новыми chat features. Runtime/drafts/receipts
-остаются у прежних owners. Визуальная контрольная точка — In Review.
+Plugin source/candidate/watch и live HTML/source/annotations уже instance-owned
+(S3b.3c, 2026-11-03). `RNAssistantPluginAnnotations` и выбранный HTML annotation
+entrypoint удалены: карточка сообщения передаёт exact conversation/source.
+Оставшийся gate selected accessors — вторичные material/model-context consumers;
+новые chat features через них не добавляются. Runtime/drafts/receipts остаются
+у прежних owners. Визуальная контрольная точка — In Review.
 
 ## JSON-профиль: старые настройки — 2026-11-02
 
@@ -64,14 +62,16 @@ HTML/release factories используют общий Browser lifetime/renderer
 transport. Catalog/download/source viewer не имеют второй реализации.
 S3b.3c (2026-11-03) удалил singleton Plugins: PluginView владеет mutable
 source/candidate/watch/annotations по pluginId, template имеет локальные роли.
-Временный singleton adapter остаётся у HtmlWorkspace (live editor/source/annotations).
-Owner: Web HtmlWorkspace;
-условие удаления в S3b.3c — scoped live providers с exact session/source ownership,
-annotation authority, close/stale и реальным UI evidence. Их глобальный state не
-клонируется. Сохранённый HTML не расширяет annotation права активной версии чата.
-S4 подключает Library/VBA и остальные navigation adapters
-к тому же Pane и descriptors; не создаёт отдельную VBA Shell. Cold restart viewer
-mementos (mode/search/scroll) остаются явным gap; target уже восстанавливается.
+Live HTML editor/source/annotations также перенесены в HtmlWorkspaceView по chatId:
+локальный DOM/рабочая копия/generations, exact source guard, close/dispose и общий Browser.
+Сохранённый HTML не расширяет annotation права активной версии исходного чата.
+
+S4a разместил Library/VBA в том же Dockview и подключил VBA к NavigationPane.
+Временный `library-object` route выбирает объект в одном retained Library editor;
+VBA тоже сохраняет одного действующего editor owner. Owner: Web Library/VBA.
+Removal gate: предметные per-object factories с независимыми dirty/save scopes и
+эквивалентными typed reads/writes; не размножать globals и не клонировать store.
+Cold restart mode/search/scroll и несохранённый код остаются явным gap.
 
 
 ## Conversation composer S2b.2 — 2026-11-02

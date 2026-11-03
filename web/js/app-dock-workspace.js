@@ -138,6 +138,10 @@
     refreshPresentation();
     Object.keys(views).forEach(function (id) {
       var view = views[id], shown = visible(id);
+      // Retained singleton editors still use their canonical DOM controls while
+      // hidden (draft capture, late write ACK). Keep them connected in parking.
+      if (!shown && view.renderer === "onlyWhenVisible" && roots[id] && roots[id].parentElement !== parking)
+        parking.appendChild(roots[id]);
       if (view.onVisible && view.active !== shown) { view.active = shown; view.onVisible(shown); }
       if (shown && view.onLayout) view.onLayout();
     });
@@ -182,7 +186,10 @@
       element: content,
       init: function (parameters) {
         content.appendChild(roots[id]);
-        visibility = parameters.api.onDidVisibilityChange(function () { sync(); });
+        visibility = parameters.api.onDidVisibilityChange(function () {
+          if (parameters.api.isVisible && roots[id].parentElement !== content) content.appendChild(roots[id]);
+          sync();
+        });
       },
       dispose: function () {
         if (visibility) visibility.dispose();
@@ -245,7 +252,10 @@
     changed();
   }
   function canClose(items) {
-    return items.every(function (item) { return !views[item.id] || !views[item.id].canClose || views[item.id].canClose(); });
+    return items.every(function (item) {
+      var record = objectViews[item.id], owner = record ? record.view : views[item.id];
+      return !owner || !owner.canClose || owner.canClose();
+    });
   }
   function close(id) {
     var item = panel(id); if (!item) return;

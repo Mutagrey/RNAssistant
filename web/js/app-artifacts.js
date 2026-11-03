@@ -418,37 +418,7 @@
     if ((!options || options.purpose !== "edit") && window.RNAssistantMaterialView &&
         value(artifact, "ResourceUri", "resourceUri", ""))
       return window.RNAssistantMaterialView.openArtifact(artifact);
-    if (state.htmlWorkspaceDirty) {
-      window.alert("Сначала сохраните или отмените изменения текущего артефакта.");
-      return false;
-    }
-    var kind = artifactKind(artifact);
-    if (isImageArtifact(artifact)) {
-      createImageGalleryContext(
-        gallerySource || (Array.isArray(galleryArtifacts) ? "chat" : "library:" + collectionIdForArtifact(artifact)),
-        Array.isArray(galleryArtifacts) ? galleryArtifacts : artifactCollectionItems(collectionIdForArtifact(artifact)),
-        artifact);
-    } else {
-      state.artifactImageGalleryContext = null;
-    }
-    if (kind === "html_workspace" && artifactId(artifact) === state.activeHtmlArtifactId) {
-      var workspace = state.htmlWorkspace || {};
-      var activeFileId = value(workspace, "ActiveFileId", "activeFileId", "") || "";
-      var workspaceFiles = value(workspace, "Files", "files", []) || [];
-      var fallbackFile = workspaceFiles.filter(function (file) {
-        return String(value(file, "Kind", "kind", "")).toLowerCase() === "html";
-      })[0] || workspaceFiles[0];
-      if (!activeFileId && fallbackFile) activeFileId = value(fallbackFile, "Id", "id", value(fallbackFile, "Path", "path", ""));
-      state.htmlWorkspaceSelection = activeFileId
-        ? { type: "file", id: activeFileId }
-        : { type: "artifact", id: artifactId(artifact) };
-    } else {
-      state.htmlWorkspaceSelection = { type: kind === "plan" ? "plan" : "artifact", id: artifactId(artifact) };
-    }
-    switchTab("artifacts");
-    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor(artifact);
-    if (typeof renderHtmlWorkspace === "function") renderHtmlWorkspace();
-    return true;
+    return RNAssistantHtmlWorkspaceSurface.openArtifact(artifact, options);
   }
 
   function artifactCard(artifact) {

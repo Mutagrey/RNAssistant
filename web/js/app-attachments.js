@@ -204,11 +204,11 @@ async function removeDraftAttachment(item) {
   if (component) component.controls(); else renderAttachmentDrafts();
 }
 
-function attachmentCard(item, removable, lifecycle, removeAction) {
+function attachmentCard(item, removable, lifecycle, removeAction, target) {
   lifecycle = lifecycle || (removable ? "draft" : "committed");
   var visual = window.RNAssistantVisualAnnotations;
   if (!removable && lifecycle === "committed" && visual && visual.annotation(item))
-    return visual.messageCard(item);
+    return visual.messageCard(item, target);
   var card = document.createElement("div");
   card.className = (removable ? "attachment-draft" : "message-attachment") + " lifecycle-" + lifecycle;
   var thumb = document.createElement("div");
@@ -275,7 +275,7 @@ function renderAttachmentDrafts() {
   if (!box) return;
   box.innerHTML = "";
   var visual = window.RNAssistantVisualAnnotations;
-  var controller = window.RNAssistantHtmlWorkspaceAnnotations;
+  var controller = window.RNAssistantHtmlWorkspaceSurface && RNAssistantHtmlWorkspaceSurface.annotations(state.activeChatId);
   var annotations = controller ? controller.visibleDrafts() :
     visual ? state.draftAttachments.filter(function (item) { return !!visual.annotation(item); }) : [];
   box.classList.toggle("hidden", !state.draftAttachments.length && !annotations.length);

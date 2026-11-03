@@ -358,7 +358,7 @@ function renderActivityArticle(message, index, activity, options) {
       attachmentBox.className = "message-attachments";
       attachments.forEach(function (attachment) {
         attachmentBox.appendChild(attachmentCard(attachment, false,
-          message.Local ? (message.Pending ? "preparing" : "draft") : "committed"));
+          message.Local ? (message.Pending ? "preparing" : "draft") : "committed", null, options.presentation && options.presentation.target));
       });
       node.appendChild(attachmentBox);
     }
@@ -478,7 +478,7 @@ function renderMessageArticle(message, index, options) {
     attachmentBox.className = "message-attachments";
     attachments.forEach(function (attachment) {
       attachmentBox.appendChild(attachmentCard(attachment, false,
-        message.Local ? (message.Pending ? "preparing" : "draft") : "committed"));
+        message.Local ? (message.Pending ? "preparing" : "draft") : "committed", null, options.presentation && options.presentation.target));
     });
     node.appendChild(attachmentBox);
   }
@@ -1131,7 +1131,6 @@ function renderMessages(options, component) {
       retry.addEventListener("click", component ? component.refresh : retryChatDetail);
       box.appendChild(retry);
     }
-    if (!component && window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return;
   }
   var pendingUnits = component ? component.pendingUnits() : typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : [];
@@ -1142,7 +1141,6 @@ function renderMessages(options, component) {
     view.follow();
     if (!component) { renderAgentPlanDock(); renderAgentApprovalDock(); }
     syncChatScroll(false, false, box);
-    if (!component && window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return;
   }
 
@@ -1155,5 +1153,4 @@ function renderMessages(options, component) {
     view.positionChanged();
   } else if (!shouldScroll && viewport) restoreMessageViewport(box, viewport);
   syncChatScroll(shouldScroll, false, box);
-  if (!component && window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
 }

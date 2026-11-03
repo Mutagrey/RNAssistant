@@ -1,5 +1,15 @@
 var vbaModuleRead = null;
 var vbaModuleReadPending = 0;
+var vbaNavigation = null;
+
+function vbaNavigationPane() {
+  if (!vbaNavigation) vbaNavigation = RNAssistantNavigationPane.mount({
+    root: $("vbaModuleList").parentElement,
+    heading: $("vbaModuleSearchInput").closest(".product-nav-heading"), tree: $("vbaModuleList"),
+    search: $("vbaModuleSearchInput"), title: "VBA", status: $("vbaStatus"), actions: $("refreshVbaButton")
+  }, { onQuery: renderVbaProject, onRetry: refreshVbaProject });
+  return vbaNavigation;
+}
 
 function closeVbaModuleRead(operation) {
   if (!operation || operation.closed || !operation.data || !/^[a-f0-9]{64}$/.test(operation.data.leaseId)) return Promise.resolve();
@@ -104,7 +114,7 @@ function renderVbaModuleList(modules, query) {
       })
     };
   });
-  tree.render(list, nodes, {
+  vbaNavigationPane().render(nodes, {
     label: "VBA модули",
     emptyText: state.bridgeUnavailable ? "Office bridge недоступен." : (query ? "Модули не найдены." : "Модули не загружены."),
     onToggle: function (node, expanded) {
@@ -119,6 +129,7 @@ function renderVbaModuleList(modules, query) {
       renderVbaModuleList(modules, query);
       renderSelectedVbaModule();
       loadSelectedVbaModule();
+      RNAssistantDockWorkspace.show("vba");
     }
   });
 }

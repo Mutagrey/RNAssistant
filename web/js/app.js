@@ -18,9 +18,6 @@ function switchTab(name, options) {
   var section = name === "instructions" ? "library" : name;
   var active = document.querySelector(".panel.active");
   var changed = !active || active.id !== "tab-" + name;
-  if (changed && active && active.id === "tab-artifacts" && typeof deactivateHtmlWorkspaceInspector === "function") {
-    deactivateHtmlWorkspaceInspector();
-  }
   Array.prototype.slice.call(document.querySelectorAll(".shell [data-section]")).forEach(function (tab) {
     var selected = tab.dataset.section === section && (!tab.dataset.pluginId || window.RNAssistantPlugins.selectedId() === tab.dataset.pluginId);
     tab.classList.toggle("active", selected);
@@ -114,6 +111,8 @@ document.addEventListener("DOMContentLoaded", function () {
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
   window.RNAssistantMaterialView.register(window.RNAssistantDockWorkspace);
   window.RNAssistantHtmlWorkspaceSurface.register(window.RNAssistantDockWorkspace);
+  window.RNAssistantLibraryView.register(window.RNAssistantDockWorkspace);
+  window.RNAssistantVbaView.register(window.RNAssistantDockWorkspace);
   window.RNAssistantConversationPanel.register(window.RNAssistantDockWorkspace);
   window.RNAssistantDockWorkspace.bind();
   window.RNAssistantShellLayout.refresh();

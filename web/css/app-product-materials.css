@@ -58,8 +58,7 @@
 .artifact-detail-tabs .material-copy-button { margin-left: auto; }
 .html-workspace-editor { background: var(--surface); }
 .html-workspace-editor .resource-editor-head { min-height: 52px; border-bottom-color: var(--line); }
-#artifactCatalogActions:not([hidden]) ~ #htmlWorkspaceEditor .resource-editor-titlebox { display: none; }
-#htmlWorkspaceEditor.is-readonly-artifact .html-workspace-head { display: none; }
+.html-workspace-editor.is-readonly-artifact .html-workspace-head { display: none; }
 .artifact-detail-preview:not(.is-media-preview) { padding: 16px 18px 24px; }
 .artifact-detail-preview .rn-markdown-viewer { width: 100%; max-width: none; margin: 0; }
 .artifact-detail-preview .rn-markdown-viewer-rendered { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }

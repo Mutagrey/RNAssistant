@@ -42,7 +42,7 @@
 .shell.navigation-closed .split-layout[data-navigation],
 .shell.navigation-overlay .split-layout[data-navigation] { --navigation-column: 0px; --navigation-divider: 0px; }
 .shell .panel.active .split-layout[data-navigation]:not(.chat-workspace) { display: grid; gap: 0; grid-template-columns: var(--navigation-column) var(--navigation-divider) minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr); }
-.shell .panel.active :is(.instruction-editor, .vba-editor, .html-workspace-editor, .artifact-workspace-content, .product-dt-main) { grid-column: 3 !important; grid-row: 1; min-width: 0; }
+.shell .panel.active .split-layout[data-navigation] > :is(.artifact-workspace-content, .product-dt-main) { grid-column: 3; grid-row: 1; min-width: 0; }
 .shell.navigation-closed .panel.active .global-nav { visibility: hidden; opacity: 0; pointer-events: none; }
 .shell:is(.navigation-closed, .navigation-overlay) .global-nav + .splitter { display: none !important; }
 .shell.navigation-overlay .panel.active .global-nav { position: fixed; top: var(--shell-top-height); bottom: var(--shell-status-height); left: calc(var(--shell-rail-width) + 1px); z-index: 25; width: min(var(--split-left, var(--nav-width)), calc(100% - var(--shell-rail-width) - var(--navigation-overlay-inset))); height: auto; max-height: none; box-shadow: var(--shadow); border-right: 1px solid var(--line); }

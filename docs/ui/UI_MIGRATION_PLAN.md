@@ -16,6 +16,26 @@ remaining projection`. Ревью: восстановить раскладку �
 дождаться истории, удалить чат и наблюдать строку до ответа. Windows/Office и
 реальное время операций на пользовательском хранилище остаются открытыми.
 
+## Продолжение HTML и editor placement — In Review, 2026-11-03
+
+Scope: S3b.3c live HTML/source/annotations и S4a размещение действующих Library/VBA
+редакторов. Owners: HtmlWorkspaceView, Library/VBA и DockWorkspace; runtime/Bridge/storage
+не меняются. Удалены singleton HTML workbench/browser, global dirty/read/write hooks
+на смену выбранного чата и selected annotation facades. HTML — per-chat view;
+Library/VBA — retained singletons с явным ограничением, без клонирования globals.
+
+Адресные проверки: `html-editor-views`, `html-workspace-layout`, source/write/actions,
+`editor-dock`; Browser и аннотации проверяются отдельными browser fixtures. Проверять
+две HTML-вкладки, правки/сохранение в исходный чат, аннотацию при другом активном чате,
+dirty close, stale source, move/restore/late close и narrow/dark/125%.
+
+Ревью: открыть HTML двух чатов → изменить код одного → перейти ко второму и обратно;
+закрыть грязную вкладку с отказом; открыть Библиотеку/VBA через «+», перенести и вернуть
+раскладку; при узкой ширине проверить header и полноразмерный редактор.
+
+Остаток: независимые Library/VBA object editors, cold-start presentation mementos и
+Windows/Office/WebView2 evidence. S4 целиком и формальный выпуск не закрыты.
+
 ## Общение агентов — In Review, 2026-11-03
 
 Самостоятельный согласованный срез поверх независимых Chat View, не автоматический
@@ -1462,8 +1482,8 @@ Scope: независимый live plugin по pluginId; rail selection/офор
 документ/source-chat группировка и одно меню строки Материалов; общий редактор
 исходников без внешних рамок/отступов. Owners: Web ShellLayout, Plugins/PluginView,
 ArtifactCatalog, CodeEditor; Core отдаёт provenance существующей retained record.
-Singleton plugin-browser удалён. Live HTML source/annotations и остальные S4
-owners остаются отдельной очередью; весь перенос экранов не объявляется завершённым.
+Singleton plugin-browser удалён. Продолжение live HTML source/annotations и S4a
+placement описано в начале документа; независимые Library/VBA objects остаются в S4.
 
 Baseline: `browser-saved-views` до изменения — HTML 2 reads и plugin 2 opens при
 A/B/A/B/A; готовый ввод сохраняется. После изменения bounds и эти счётчики прежние.
@@ -1473,8 +1493,9 @@ move/restore, адресные аннотации, поздний close, SVG/п�
 `tool-library-layout`; pure text/JSON/working-set и
 vendor gate. Один host-neutral Harness case проверил provenance между чатами и
 stale session/writer guards. Windows/Office/WebView2 остаётся открытым evidence.
-Старый `browser-views` пока упирается в HTML annotation hit testing до plugin-части;
-этот сценарий не записан как пройденный.
+При продолжении S3b.3c Browser/annotation fixtures переключены на адресные views
+и keyed drafts. Hit testing и повторный выбор исправлены в общем annotation owner;
+актуальные проверки и оставшиеся ограничения перечислены в начале документа.
 
 Локальный запуск: `python3 -B prototypes/serve_ui.py --port 8877`,
 `http://127.0.0.1:8877/preview/web/?scenario=ready`.
@@ -1490,7 +1511,7 @@ stale session/writer guards. Windows/Office/WebView2 остаётся откры
 Материалы/Библиотека/будущие Файлы используют общую навигацию; HTML/plugin — общий
 browser; остальные форматы — независимые экземпляры действующих viewers.
 Прежний plugin-only порядок заменён. S3b.1 и S3b.2 реализованы и проходят ревью;
-Browser S3b.3a и сохранённые providers S3b.3b реализованы; live scoping S3b.3c открыт. Исходный audit/iframe probe — `c01daa34`;
+Browser S3b.3a, сохранённые providers S3b.3b и live scoping S3b.3c реализованы host-neutral; пользовательское ревью и Windows evidence открыты. Исходный audit/iframe probe — `c01daa34`;
 S3a завершён (`c01daa34`),
 S2a model/capability work имеет свой scope и не смешивается с этой миграцией.
 

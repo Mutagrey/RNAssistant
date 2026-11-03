@@ -28,8 +28,6 @@ async function createOfficeHostChat(host) {
     renderChatSessions();
     return;
   }
-  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-      !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) return;
   state.officeHostChatPending = true;
   state.officeHostChatTarget = host;
   state.officeHostChatError = "";

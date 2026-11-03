@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## HTML views и редакторы в Dockview — 2026-11-03, In Review
+
+Live HTML перенесён в независимые per-chat views: код, dirty/source guards, preview,
+аннотации и cleanup адресуют исходный чат. Library/VBA размещены в общем Dockview,
+VBA использует NavigationPane; пока по одному retained редактору каждого семейства.
+Проверены bounded source/write/actions, отдельные HTML drafts/сохранение, stale source,
+close/restore и полноразмерный код в narrow/dark/125%. Остаток S4 и Windows evidence
+явно сохранён в [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md).
+
 ## Подключение skills и восстановление tools — 2026-11-03
 
 Owners: Core CapabilityCatalog/CallableToolSet; Office и Workspace — consumers.

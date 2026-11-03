@@ -39,8 +39,10 @@ const path = require("node:path");
       state.htmlWorkspaceSelection = { type: "file", id: "file1" };
       state.htmlWorkspaceMode = "preview";
       window.annotationCalls = [];
+      const workspace = { activeChatId: "preview-chat", sessionRevision: 1, activeHtmlArtifactId: "html-r1", artifacts: state.artifacts, workspace: state.htmlWorkspace };
       const originalSend = window.send;
       window.send = function (type, payload) {
+        if (type === "getHtmlWorkspace") return Promise.resolve(workspace);
         if (type === "stageHtmlVisualSelection") {
           annotationCalls.push({ type, payload });
           const id = "annotation-" + annotationCalls.filter(call => call.type === type).length;
@@ -51,36 +53,36 @@ const path = require("node:path");
           annotationCalls.push({ type, payload });
           return Promise.resolve({});
         }
-        return originalSend(type, payload);
+        return originalSend(type, payload).then(value => value && value.activeChatId === "preview-chat" ? Object.assign({}, value, { activeHtmlArtifactId: "html-r1", artifacts: workspace.artifacts }) : value);
       };
     }, fixtureHtml);
     await seedWorkspace();
     await page.evaluate(() => { switchTab("artifacts"); RNAssistantArtifactCatalog.editor(); RNAssistantHtmlWorkspaceSurface.openCurrent(); });
-    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").waitFor();
-    const browserTab = await page.locator('[data-tab-panel-id="html-browser"]').boundingBox();
+    await page.frameLocator("[data-html-node=\"htmlWorkspacePreviewFrame\"]").locator("#target").waitFor();
+    const browserTab = await page.locator('[data-tab-panel-id="html-editor:preview-chat"]').boundingBox();
     const inspectorTab = await page.locator('[data-tab-panel-id="inspector"]').boundingBox();
     await page.mouse.move(browserTab.x + 20, browserTab.y + 15); await page.mouse.down();
     await page.mouse.move(inspectorTab.x + 30, inspectorTab.y + 15, { steps: 15 }); await page.mouse.up();
     await page.evaluate(() => { switchTab("chat"); RNAssistantDockWorkspace.show("conversation"); });
 
-    await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
-    assert.equal(await page.locator("#inspectHtmlWorkspaceButton").textContent(), "Аннотировать",
+    await page.waitForFunction(() => !document.querySelector('[data-html-node="inspectHtmlWorkspaceButton"]').disabled);
+    assert.equal(await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").textContent(), "Аннотировать",
       "Materials exposes the same annotation control");
-    await page.locator("#inspectHtmlWorkspaceButton").click();
-    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").click({ position: { x: 20, y: 28 } });
-    await page.locator("#htmlWorkspacePreview .visual-annotation-editor textarea").waitFor();
-    await page.locator("#htmlWorkspacePreview .visual-annotation-editor button").first().click();
-    await page.locator("#inspectHtmlWorkspaceButton").click();
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
+    await page.frameLocator("[data-html-node=\"htmlWorkspacePreviewFrame\"]").locator("#target").click({ position: { x: 20, y: 28 } });
+    await page.locator("[data-html-node=\"htmlWorkspacePreview\"] .visual-annotation-editor textarea").waitFor();
+    await page.locator("[data-html-node=\"htmlWorkspacePreview\"] .visual-annotation-editor button").first().click();
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
     await page.evaluate(() => switchTab("chat"));
     assert.equal(await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.openCurrent()), true);
-    const frame = page.frameLocator("#htmlWorkspacePreviewFrame");
+    const frame = page.frameLocator("[data-html-node=\"htmlWorkspacePreviewFrame\"]");
     await frame.locator("#target").waitFor();
-    await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
+    await page.waitForFunction(() => !document.querySelector('[data-html-node="inspectHtmlWorkspaceButton"]').disabled);
     await page.waitForFunction(() => !document.getElementById("chatLayout").classList.contains("browser-transition"));
-    const offToggle = await page.locator("#inspectHtmlWorkspaceButton").evaluate(node => getComputedStyle(node).backgroundColor);
-    await page.locator("#inspectHtmlWorkspaceButton").click();
-    await page.waitForFunction(() => document.getElementById("inspectHtmlWorkspaceButton").getAttribute("aria-pressed") === "true");
-    const onToggle = await page.locator("#inspectHtmlWorkspaceButton").evaluate(node => getComputedStyle(node).backgroundColor);
+    const offToggle = await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").evaluate(node => getComputedStyle(node).backgroundColor);
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
+    await page.waitForFunction(() => document.querySelector('[data-html-node="inspectHtmlWorkspaceButton"]').getAttribute("aria-pressed") === "true");
+    const onToggle = await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").evaluate(node => getComputedStyle(node).backgroundColor);
     assert.notEqual(onToggle, offToggle, "annotation toggle has a distinct selected fill");
     await frame.locator("#target").hover({ position: { x: 5, y: 5 } });
     assert.match(await frame.locator("[data-rna-visual-tooltip]").textContent(), /h1#target\s+\d+ × \d+/);
@@ -95,7 +97,7 @@ const path = require("node:path");
     await page.locator(".visual-annotation-list > summary").waitFor();
     await page.locator(".visual-annotation-marker").waitFor();
     assert.equal(await page.locator(".visual-annotation-marker").textContent(),
-      await page.evaluate(() => String(state.draftAttachments[0].visualAnnotation.annotationNumber)));
+      await page.evaluate(() => String(RNAssistantChatDrafts.readOffice("preview-chat").attachments[0].visualAnnotation.annotationNumber)));
     const markerSize = await page.locator(".visual-annotation-marker").evaluate(node => {
       const bounds = node.getBoundingClientRect(); return [bounds.width, bounds.height];
     });
@@ -104,7 +106,7 @@ const path = require("node:path");
       const bounds = node.getBoundingClientRect(); return [bounds.width, bounds.height];
     });
     assert.ok(Math.abs(badgeSize[0] - badgeSize[1]) < 1, "composer number stays circular");
-    assert.equal(await page.evaluate(() => state.draftAttachments.length), 1);
+    assert.equal(await page.evaluate(() => RNAssistantChatDrafts.readOffice("preview-chat").attachments.length), 1);
     await page.locator(".visual-annotation-marker").click();
     await page.locator(".visual-annotation-editor textarea").waitFor();
     assert.equal(await page.locator(".visual-annotation-editor textarea").inputValue(), "Сделай заголовок зелёным",
@@ -115,7 +117,7 @@ const path = require("node:path");
     assert.match(await page.locator(".visual-annotation-editor .visual-annotation-target").textContent(), /button/,
       "a nearby element can be selected immediately after the first annotation");
     await page.locator(".visual-annotation-editor button").first().click();
-    assert.equal(await page.evaluate(() => state.draftAttachments.length), 1,
+    assert.equal(await page.evaluate(() => RNAssistantChatDrafts.readOffice("preview-chat").attachments.length), 1,
       "canceling the second selection keeps the first annotation");
     if (process.env.RNA_ANNOTATION_LIST_SCREENSHOT) await page.screenshot({
       path: process.env.RNA_ANNOTATION_LIST_SCREENSHOT, animations: "disabled" });
@@ -137,7 +139,7 @@ const path = require("node:path");
     assert.ok(await frame.locator("body").evaluate(node => node.ownerDocument.defaultView.scrollY) < 700,
       "Show returns to the exact watched element");
     await page.locator(".visual-annotation-list > summary").click();
-    await page.locator("#inspectHtmlWorkspaceButton").click();
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
     assert.equal(await page.locator(".visual-annotation-marker").count(), 0,
       "switching annotation mode off clears numbers from the HTML");
     await frame.locator("#action").click();
@@ -146,26 +148,26 @@ const path = require("node:path");
     await page.locator(".visual-annotation-list-row button").nth(1).click();
     await page.locator(".visual-annotation-editor textarea").fill("Сделай заголовок синим");
     await page.locator(".visual-annotation-editor .primary").click();
-    await page.waitForFunction(() => state.draftAttachments[0] && state.draftAttachments[0].Id === "annotation-2");
+    await page.waitForFunction(() => RNAssistantChatDrafts.readOffice("preview-chat").attachments[0] && RNAssistantChatDrafts.readOffice("preview-chat").attachments[0].Id === "annotation-2");
     assert.equal(await page.evaluate(() => annotationCalls.filter(call => call.type === "stageHtmlVisualSelection").length), 2);
     assert.equal(await page.evaluate(() => annotationCalls.some(call => call.type === "discardChatResourceDraft" &&
       call.payload.id === "annotation-1")), true, "replaced CAS draft is discarded after persistence");
     await page.locator(".visual-annotation-list > summary").click();
     assert.match(await page.locator(".visual-annotation-list-body").textContent(), /Сделай заголовок синим/);
     await page.locator(".visual-annotation-list-row button").last().click();
-    await page.waitForFunction(() => state.draftAttachments.length === 0);
+    await page.waitForFunction(() => RNAssistantChatDrafts.readOffice("preview-chat").attachments.length === 0);
     assert.equal(await page.locator(".visual-annotation-marker").count(), 0);
     assert.equal(await page.locator(".visual-annotation-list").count(), 0);
-    await page.locator("#inspectHtmlWorkspaceButton").click();
-    await page.waitForFunction(() => document.getElementById("inspectHtmlWorkspaceButton").getAttribute("aria-pressed") === "true");
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
+    await page.waitForFunction(() => document.querySelector('[data-html-node="inspectHtmlWorkspaceButton"]').getAttribute("aria-pressed") === "true");
     await frame.locator("#target").click();
     await page.locator(".visual-annotation-editor textarea").fill("Комментарий после перезапуска");
     await page.locator(".visual-annotation-editor textarea").press("Escape");
     assert.equal(await page.locator(".visual-annotation-editor").count(), 0);
-    assert.equal(await page.locator("#inspectHtmlWorkspaceButton").getAttribute("aria-pressed"), "true",
+    assert.equal(await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").getAttribute("aria-pressed"), "true",
       "first Escape collapses the editor and keeps selection mode");
-    await page.locator("#inspectHtmlWorkspaceButton").press("Escape");
-    assert.equal(await page.locator("#inspectHtmlWorkspaceButton").getAttribute("aria-pressed"), "false",
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").press("Escape");
+    assert.equal(await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").getAttribute("aria-pressed"), "false",
       "second Escape exits selection mode");
     assert.equal(await page.locator(".visual-annotation-marker").count(), 0,
       "unfinished annotation stays in the draft but no longer covers HTML outside selection mode");
@@ -176,38 +178,40 @@ const path = require("node:path");
     await page.waitForFunction(() => state.activeChatId === "preview-chat" && !state.initializePromise);
     assert.equal(await page.evaluate(() => RNAssistantChatDrafts.readOffice(state.activeChatId).pendingVisualAnnotation.Comment),
       "Комментарий после перезапуска", "unfinished annotation survives WebView recreation");
-    await page.locator("#chatInput").fill("Сообщение с аннотацией");
-    assert.equal(await page.locator("#sendButton").isDisabled(), true,
+    await page.locator('[data-chat-node="chatInput"]').fill("Сообщение с аннотацией");
+    assert.equal(await page.locator('[data-chat-node="sendButton"]').isDisabled(), true,
       "an unfinished annotation cannot be silently omitted from the message");
     await seedWorkspace();
     assert.equal(await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.openCurrent()), true);
     await frame.locator("#target").waitFor();
-    await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
+    await page.waitForFunction(() => !document.querySelector('[data-html-node="inspectHtmlWorkspaceButton"]').disabled);
     assert.equal(await page.locator(".visual-annotation-marker").count(), 0);
     await page.locator(".visual-annotation-list > summary").click();
     await page.locator(".visual-annotation-list-row button").nth(1).click();
     assert.equal(await page.locator(".visual-annotation-editor textarea").inputValue(),
       "Комментарий после перезапуска");
     await page.locator(".visual-annotation-editor .primary").click();
-    await page.waitForFunction(() => state.draftAttachments.length === 1 &&
+    await page.waitForFunction(() => RNAssistantChatDrafts.readOffice("preview-chat").attachments.length === 1 &&
       !RNAssistantChatDrafts.readOffice(state.activeChatId).pendingVisualAnnotation);
     await page.evaluate(() => {
-      const committed = Object.assign({}, state.draftAttachments[0]);
+      const committed = Object.assign({}, RNAssistantChatDrafts.readOffice("preview-chat").attachments[0]);
       saveOfficeDraft(state.activeChatId, "", [], true, 1, null);
-      state.draftAttachments = [];
-      state.messages = (state.messages || []).concat({ Id: "sent-annotation", Role: "user",
+
+      const panel = RNAssistantConversationPanel.office("preview-chat"), snapshot = panel.snapshot();
+      const messages = (snapshot.messages || []).concat({ Id: "sent-annotation", Role: "user",
         Content: "Исправь выбранный элемент", Attachments: [committed] });
-      state.messageTotalCount = state.messages.length;
-      renderAttachmentDrafts(); renderMessages({ fullReset: true });
+      panel.accept(Object.assign({}, snapshot, { sessionRevision: snapshot.sessionRevision + 1, messages, messageTotalCount: messages.length }));
+      panel.render({ fullReset: true });
     });
     await page.locator(".visual-annotation-message").waitFor();
     assert.match(await page.locator(".visual-annotation-message").textContent(), /Комментарий после перезапуска/);
     assert.equal(await page.locator(".visual-annotation-marker.is-sent").count(), 0,
       "sent annotation numbers remain hidden while selection mode is off");
-    await page.locator("#inspectHtmlWorkspaceButton").click();
+    if (await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").getAttribute("aria-pressed") !== "true")
+      await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
     await page.locator(".visual-annotation-marker.is-sent").waitFor();
     assert.equal(await page.locator(".visual-annotation-marker.is-sent").textContent(),
-      await page.evaluate(() => String(state.messages.at(-1).Attachments[0].visualAnnotation.annotationNumber)));
+      await page.evaluate(() => String(RNAssistantConversationPanel.office("preview-chat").snapshot().messages.at(-1).Attachments[0].visualAnnotation.annotationNumber)));
     await page.locator(".visual-annotation-message button").click();
     await page.locator(".visual-annotation-sent").waitFor();
     if (process.env.RNA_SENT_ANNOTATION_SCREENSHOT) await page.screenshot({
@@ -216,23 +220,24 @@ const path = require("node:path");
       "sent annotations open read-only from the immutable message");
     await page.locator(".visual-annotation-sent button").click();
     await page.evaluate(() => { switchTab("artifacts"); RNAssistantArtifactCatalog.editor(); RNAssistantHtmlWorkspaceSurface.openCurrent(); });
-    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").waitFor();
-    await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
-    await page.locator("#inspectHtmlWorkspaceButton").click();
-    await page.locator("#tab-artifacts .visual-annotation-marker.is-sent").waitFor();
-    await page.locator("#inspectHtmlWorkspaceButton").click();
-    assert.equal(await page.locator("#tab-artifacts .visual-annotation-marker").count(), 0,
+    await page.frameLocator("[data-html-node=\"htmlWorkspacePreviewFrame\"]").locator("#target").waitFor();
+    await page.waitForFunction(() => !document.querySelector('[data-html-node="inspectHtmlWorkspaceButton"]').disabled);
+    if (await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").getAttribute("aria-pressed") !== "true")
+      await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
+    await page.locator(".visual-annotation-marker.is-sent").waitFor();
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
+    assert.equal(await page.locator(".visual-annotation-marker").count(), 0,
       "Materials is clean after exiting annotation mode following a right-panel round trip");
-    await page.locator("#inspectHtmlWorkspaceButton").click();
-    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").click();
+    await page.locator("[data-html-node=\"inspectHtmlWorkspaceButton\"]").click();
+    await page.frameLocator("[data-html-node=\"htmlWorkspacePreviewFrame\"]").locator("#target").click();
     await page.locator(".visual-annotation-editor textarea").press("Enter");
-    await page.waitForFunction(() => state.draftAttachments.length === 1 &&
+    await page.waitForFunction(() => RNAssistantChatDrafts.readOffice("preview-chat").attachments.length === 1 &&
       !RNAssistantChatDrafts.readOffice(state.activeChatId).pendingVisualAnnotation);
-    assert.equal(await page.evaluate(() => state.draftAttachments[0].visualAnnotation.comment), "",
+    assert.equal(await page.evaluate(() => RNAssistantChatDrafts.readOffice("preview-chat").attachments[0].visualAnnotation.comment), "",
       "Enter stages an element-only annotation without inventing a comment");
+    await page.evaluate(() => { switchTab("chat"); RNAssistantConversationPanel.open({ source: "office", sessionId: "preview-chat" }); });
     assert.match(await page.locator(".visual-annotation-list-body").textContent(), /Только элемент/);
-    await page.evaluate(() => switchTab("chat"));
-    assert.equal(await page.locator("#sendButton").isEnabled(), true,
+    assert.equal(await page.locator('[data-chat-node="sendButton"]').isEnabled(), true,
       "an element-only annotation can be submitted without typed chat text");
     assert.deepEqual(errors, []);
     console.log("PASS HTML annotations: editor, CAS, draft and sent markers, immutable message view, protected pending recovery");

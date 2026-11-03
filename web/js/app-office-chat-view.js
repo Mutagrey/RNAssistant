@@ -17,6 +17,7 @@
     function accept(response, options) {
       if (!owner || !owner.isCurrent()) return false;
       owner.accept(response, options);
+      if (window.RNAssistantHtmlWorkspaceSurface) RNAssistantHtmlWorkspaceSurface.onSnapshot(snapshot());
       snapshot().liveRun = state.chatRuns[id] || null;
       component.loading = !!response.detailDeferred; component.loadError = "";
       if (response.inbox) applyChatInbox(response.inbox, true);
@@ -173,7 +174,7 @@
       if (node("contextStrip").context !== snapshot().context) {
         node("contextStrip").context = snapshot().context; renderContext(component);
       }
-      var controller = RNAssistantConversationPanel.selected() === component && window.RNAssistantHtmlWorkspaceAnnotations;
+      var controller = window.RNAssistantHtmlWorkspaceSurface && RNAssistantHtmlWorkspaceSurface.annotations(id);
       renderConversationAttachments(component, draft(), async function (item) {
         try {
           if (!item.unavailable) await send("discardChatResourceDraft", { chatId: id, id: attachmentId(item) });

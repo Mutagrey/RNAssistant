@@ -342,7 +342,6 @@
         if (!options.applyWorkspaceResponse(response, chatId)) return false;
         state.htmlWorkspaceSelection = { type: "file", id: importedPath.toLowerCase() };
         state.htmlWorkspaceMode = "preview";
-        if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
         if (options.render) options.render();
         options.log("HTML импортирован: " + importedPath);
         return true;
@@ -460,11 +459,13 @@
     }
 
     async function createPlan() {
-      if (state.bridgeUnavailable || detailUnavailable()) return;
+      if (state.bridgeUnavailable || detailUnavailable() || planMutationPending) return;
+      if (state.htmlWorkspaceDirty) { window.alert("Сначала сохраните изменения текущего артефакта."); return; }
       var chatId = state.activeChatId;
       var title = window.prompt("Название нового плана (для отдельного плана укажите новое название):", "Новый план");
       if (!title || !title.trim() || state.activeChatId !== chatId) return;
       title = title.trim();
+      planMutationPending = true;
       try {
         var result = await options.send("runTool", {
           chatId: chatId,
@@ -487,7 +488,7 @@
       } catch (error) {
         options.log(error.detail || error.message, "error");
         window.alert(error.message || "План не создан.");
-      }
+      } finally { planMutationPending = false; }
     }
 
     async function createFile(kind, path) {
@@ -547,6 +548,7 @@
     }
 
     return {
+      isBusy: function () { return !!workspaceWrite || htmlActionPending || planMutationPending || planHandoffPending || refreshPending || !!state.htmlWorkspaceExportPending; },
       cancelWrite: cancelWrite,
       createData: createData,
       createFile: createFile,

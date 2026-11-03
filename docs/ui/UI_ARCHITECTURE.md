@@ -1,5 +1,23 @@
 # Архитектура UI RNAssistant
 
+## Live HTML и размещение редакторов — In Review, 2026-11-03
+
+`HtmlWorkspaceView` — адресный owner по chatId (до четырёх вкладок). Он владеет
+рабочей копией файлов, CodeMirror, preview/leases, поколениями запросов и аннотациями.
+Это локальная модель редактора; история, draft и authority остаются у прежних owners.
+Save/delete/export используют исходный chatId/revision. Переключение чата не отменяет
+запись; новая версия источника не заменяет несохранённый текст. Dockview проверяет
+`canClose` адресного view; dispose отменяет чтения и освобождает ресурсы.
+
+`HtmlWorkspaceSurface` оставлен маршрутизатором; singleton HTML editor/browser и
+selected annotation facades удалены. Карточки аннотаций передают exact conversation
+и source; pending/staged draft принадлежит исходному чату.
+
+Library/VBA размещены в том же Dockview как по одному retained editor. Их действующие
+domain/dirty/write owners сохранены; несколько независимых Library/VBA объектов этим
+не объявляются реализованными. VBA использует общий NavigationPane. `onlyWhenVisible`
+сохраняет editor DOM при переносе, не создавая scaled overlay при CSS zoom.
+
 ## Межагентные сообщения — In Review, 2026-11-03
 
 Scope утверждён пользователем; owner — Application/Conversations для доставки и
@@ -186,8 +204,8 @@ DOM; фоновые tokens не обновляют чужие composer/Inspector
 facade для ещё не перенесённых вторичных consumers**, а не singleton Chat View.
 Они возвращают существующий component/source, не создают копию store. Chat commands
 ими не выбирают адрес. Owner и removal gate — [MIGRATION_MAP](../stabilization/MIGRATION_MAP.md#независимые-chat-view--2026-11-03).
-Plugin source workbench уже принадлежит PluginView по exact pluginId. HTML live
-editor и selected annotation entrypoint ещё требуют scoping в S3b.3c. Inspector остаётся общим
+Plugin source workbench принадлежит PluginView по exact pluginId, HTML live editor —
+HtmlWorkspaceView по chatId. Selected annotation entrypoints удалены; Inspector остаётся общим
 инструментом выбранного чата. Native document activation остаётся у Office services.
 
 ### S2b.1: состояние отрисовки и lifecycle представления
@@ -953,8 +971,9 @@ policy: снимок retained data берётся при открытии/явн
 
 Удалены Catalog preview/read/source renderer/CSS и historical browsingRelease mode
 в plugin workbench. Материалы из дерева, таблицы и ленты используют один descriptor.
-Live HTML editor/annotation остаётся singleton adapter до своего среза S3b.3c;
-plugin source/candidate/watch перенесены в instances ниже; Library/VBA редакторы и cold-start presentation mementos — S4/открытый gap.
+Live HTML editor/annotation и plugin source/candidate/watch перенесены в instances
+(S3b.3c, текущий статус в начале документа). Library/VBA уже размещены в Dockview;
+их per-object scope и cold-start presentation mementos остаются открытыми.
 
 
 ### Plugin views и материалы — In Review, 2026-11-03

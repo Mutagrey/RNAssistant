@@ -31,8 +31,9 @@
       var section = layout.section === "instructions" ? "library" : layout.section;
       if (layout.visible) {
         if (layout.activeView === "settings" || layout.activeView === "diagnostics") section = layout.activeView;
+        else if (layout.activeView === "library" || layout.activeView === "vba") section = layout.activeView;
         else if (pluginId) section = "plugins";
-        else if (target && (target.view === "material" || target.view === "materials")) section = "artifacts";
+        else if (target && (target.view === "material" || target.view === "materials" || target.view === "html-editor")) section = "artifacts";
         else if (target && target.view === "conversation") section = "chat";
       }
       document.querySelectorAll('.section-rail [data-section], #pluginAdd').forEach(function (button) {

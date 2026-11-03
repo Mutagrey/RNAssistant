@@ -7,63 +7,35 @@
     return selection.tag + (selection.stableUiId ? " · " + selection.stableUiId : "") +
       (selection.textExcerpt ? " · " + selection.textExcerpt.slice(0, 55) : "");
   }
-  function messageCard(item) {
+  function messageCard(item, target) {
     var data = annotation(item), selection = data && (data.selection || data.Selection);
     if (!selection) return null;
     var card = document.createElement("div"); card.className = "visual-annotation-message";
     var badge = document.createElement("span"); badge.className = "visual-annotation-number";
     badge.textContent = String(data.annotationNumber || data.AnnotationNumber);
     var copy = document.createElement("div"); copy.className = "visual-annotation-message-copy";
-    var target = document.createElement("strong"); target.textContent = targetLabel(selection);
+    var label = document.createElement("strong"); label.textContent = targetLabel(selection);
     var comment = document.createElement("span"); comment.textContent = data.comment || data.Comment || "Только элемент";
     var source = document.createElement("small");
     var sourceId = value(item, "visualSourceArtifactId", "VisualSourceArtifactId");
-    var plugin = window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() === "plugin";
+    var plugin = target && target.source === "workspace";
     source.textContent = plugin ? "Отправлено · релиз " + String(sourceId || "").slice(0, 16) :
       "Отправлено · версия " + value(item, "visualSourceRevision", "VisualSourceRevision");
     if (plugin) source.title = String(sourceId || "");
-    copy.append(target, comment, source);
+    copy.append(label, comment, source);
     var show = document.createElement("button"); show.type = "button"; show.textContent = "На странице";
     show.addEventListener("click", function () {
-      var controller = window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() === "plugin"
-        ? window.RNAssistantPluginAnnotations : window.RNAssistantHtmlWorkspaceAnnotations;
-      if (controller) controller.showSent(item);
+      if (!target) return;
+      if (plugin) RNAssistantPlugins.showAnnotation(item, target);
+      else RNAssistantHtmlWorkspaceSurface.showAnnotation(item, target.sessionId);
     });
     card.append(badge, copy, show);
     return card;
   }
   function create(options) {
     var frame = options.frame, inspector = options.inspector;
-    var context = options.context || {
-      mount: document.getElementById("htmlWorkspacePreview"),
-      browser: document.getElementById("htmlWorkspacePreview"),
-      button: document.getElementById("inspectHtmlWorkspaceButton"),
-      statusNode: document.getElementById("htmlWorkspaceInspectStatus"),
-      isOpen: function () {
-        return !!this.source() && !frame.classList.contains("hidden") &&
-          frame.getBoundingClientRect().width > 0 && frame.getBoundingClientRect().height > 0;
-      },
-      source: function () {
-        var matches = (state.artifacts || []).filter(function (artifact) {
-          return (artifact.Id || artifact.id) === state.activeHtmlArtifactId &&
-            (artifact.Kind || artifact.kind) === "html_workspace";
-        });
-        return matches.length === 1 ? { id: state.activeHtmlArtifactId,
-          revision: Number(matches[0].Revision || matches[0].revision || 0) } : null;
-      },
-      pending: function () { var draft = readOfficeDraft(state.activeChatId); return draft && draft.pendingVisualAnnotation || null; },
-      setPending: function (value) { window.RNAssistantChatDrafts.setPendingOfficeAnnotation(state.activeChatId, value); },
-      drafts: function () { var draft = readOfficeDraft(state.activeChatId); return draft && draft.attachments || []; },
-      messages: function () { return state.chatDetailPending || state.chatDetailError ? [] : state.messages || []; },
-      updated: function () { if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts(); },
-      remove: function (item) { removeDraftAttachment(item); },
-      reserve: function () { return window.RNAssistantChatDrafts.reserveOfficeAnnotationNumber(state.activeChatId); },
-      openSource: function () {
-        return document.getElementById("tab-artifacts").classList.contains("active") && this.isOpen() ||
-          window.RNAssistantHtmlWorkspaceSurface.openCurrent();
-      },
-      status: function (message) { setAttachmentStatus(state.activeChatId, message, "warning"); }
-    };
+    var context = options.context;
+    if (!context) throw new Error("Annotation context is required");
     var mount = context.mount, browser = context.browser;
     var layer = document.createElement("div"), editor = null, sentPopup = null;
     var locations = Object.create(null), pinnedSent = null;
@@ -168,7 +140,7 @@
     function closeEditor(cancel) {
       if (!editor) return;
       var number = editor.number;
-      editor.root.remove(); editor = null; frame.classList.remove("annotation-editing");
+      editor.root.remove(); editor = null;
       if (cancel && pending() && pending().Number === number) {
         context.setPending(null);
         context.updated();
@@ -232,7 +204,6 @@
       actions.append(cancel, done); root.append(head, textarea, actions); layer.appendChild(root);
       editor = { root: root, textarea: textarea, record: record, number: number,
         item: item || null, cancel: cancel, done: done, busy: false };
-      frame.classList.add("annotation-editing");
       cancel.addEventListener("click", function () { closeEditor(true); });
       done.addEventListener("click", finish);
       textarea.addEventListener("input", function () {
@@ -240,7 +211,7 @@
         if (!saved || saved.Number !== number) return;
         context.setPending(
           Object.assign({}, saved, { Comment: textarea.value }));
-        document.querySelectorAll(".visual-annotation-list-row[data-pending-visual='true'] .visual-annotation-comment")
+        if (context.draftBox) context.draftBox.querySelectorAll(".visual-annotation-list-row[data-pending-visual='true'] .visual-annotation-comment")
           .forEach(function (node) { node.textContent = "Не готово · " + (textarea.value || "Только элемент"); });
       });
       textarea.addEventListener("keydown", function (event) {
@@ -331,9 +302,11 @@
         var key = Math.round(position.x / 16) + ":" + Math.round(position.y / 16);
         var offset = overlaps[key] || 0; overlaps[key] = offset + 1;
         var left = position.x - 30 - offset * 25;
-        var right = position.x + position.width + 4 + offset * 25;
-        var x = Math.max(8, Math.min(mount.clientWidth - 30, left >= 8 ? left : right)) + "px";
-        var y = Math.max(55, Math.min(mount.clientHeight - 30, position.y - 11)) + "px";
+        // Near a clipped left edge, keep the badge above/below the target.
+        // Clamping it onto the right edge can cover a neighbouring page control.
+        var x = Math.max(8, Math.min(mount.clientWidth - 30, left >= 8 ? left : position.x + offset * 25)) + "px";
+        var top = left >= 8 ? position.y - 11 : position.y - 30 >= 55 ? position.y - 30 : position.y + position.height + 4;
+        var y = Math.max(55, Math.min(mount.clientHeight - 30, top)) + "px";
         if (marker.style.left !== x) marker.style.left = x;
         if (marker.style.top !== y) marker.style.top = y;
         marker.onclick = function () { if (entry.sent) showSent(item); else edit(item); };
@@ -345,7 +318,8 @@
       placeSent();
     }
     function updateTargetStates() {
-      (context.draftBox || document).querySelectorAll(".visual-annotation-target-state").forEach(function (node) {
+      if (!context.draftBox) return;
+      context.draftBox.querySelectorAll(".visual-annotation-target-state").forEach(function (node) {
         var location = locations[node.dataset.annotationId];
         node.textContent = location && location.status === "missing" ? "Цель не найдена" :
           location && location.status === "outside" ? "Вне экрана" : "";

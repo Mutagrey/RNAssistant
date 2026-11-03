@@ -4,6 +4,14 @@
   function create(options) {
     options = options || {};
     var state = options.state;
+    var $ = options.node || window.$, root = options.root || document;
+    var code = options.code;
+    var getCodeEditorValue = code ? function () { return code.getValue(); } : window.getCodeEditorValue;
+    var setCodeEditorValue = code ? function (_, value, key) { code.setValue(value, key); } : window.setCodeEditorValue;
+    var setCodeEditorSource = code ? function (_, path) { code.source(path); } : window.setCodeEditorSource;
+    var setCodeEditorReadOnly = code ? function (_, value) { code.readOnly(value); } : window.setCodeEditorReadOnly;
+    var syncCodeEditors = code ? function () {} : window.syncCodeEditors;
+    var refreshCodeEditors = code ? code.refresh : window.refreshCodeEditors;
     var model = options.model;
     var htmlPreview = options.preview;
     var source = options.source;
@@ -165,7 +173,7 @@
         } else if (!files().length && !dataSources().length && !(state.artifacts || []).length) {
           status.textContent = "Ресурсов пока нет.";
         } else {
-          var resourceCount = typeof artifactResourceHeads === "function" ? artifactResourceHeads().length : (state.artifacts || []).length;
+          var resourceCount = (state.artifacts || []).length;
           var preflight = state.htmlWorkspacePreflight || {};
           var errors = Number(preflight.errorCount || preflight.ErrorCount || 0);
           var warnings = Number(preflight.warningCount || preflight.WarningCount || 0);
@@ -272,15 +280,15 @@
       state.htmlWorkspaceMode = mode === "edit" ? "edit" : "preview";
       applyHtmlWorkspaceMode();
       renderHtmlWorkspaceEditor();
-      if (mode === "preview" && window.RNAssistantHtmlWorkspaceSurface) window.RNAssistantHtmlWorkspaceSurface.openCurrent();
+      if (options.modeChanged) options.modeChanged();
     }
 
     function applyHtmlWorkspaceMode() {
       var mode = state.htmlWorkspaceMode === "edit" ? "edit" : "preview";
-      Array.prototype.slice.call(document.querySelectorAll(".html-workspace-mode-button")).forEach(function (button) {
+      Array.prototype.slice.call(root.querySelectorAll(".html-workspace-mode-button")).forEach(function (button) {
         button.classList.toggle("active", button.getAttribute("data-html-mode") === mode);
       });
-      Array.prototype.slice.call(document.querySelectorAll(".html-workspace-view")).forEach(function (view) {
+      Array.prototype.slice.call(root.querySelectorAll(".html-workspace-view")).forEach(function (view) {
         view.classList.toggle("hidden", view.getAttribute("data-html-view") !== mode);
       });
       if (mode === "edit" && typeof refreshCodeEditors === "function") {
@@ -321,11 +329,13 @@
       var isPlan = !!selected && selected.type === "plan";
       var isArtifact = !!selected && selected.type === "artifact";
       var isCollection = !!selected && selected.type === "collection";
+      var titlebox = root.querySelector(".resource-editor-titlebox");
       $("htmlWorkspacePreviewLink").hidden = isPlan || isArtifact || isCollection;
       var blocked = recoveryBlocked();
       var wanted = isPlan || isArtifact || isCollection || !selected ? [] :
         state.htmlWorkspaceMode === "edit" ? (selected.type === "file" ? [selected.item] : []) : files();
       var sourcesReady = source.ensure(wanted);
+      if (titlebox) titlebox.hidden = sourcesReady && !!selected && (selected.type === "file" || selected.type === "data");
       if (editor) {
         editor.classList.toggle("is-empty", !hasItems);
         editor.classList.toggle("is-readonly-artifact", isArtifact || isCollection);
@@ -350,8 +360,8 @@
         meta.title = binding ? dataJson(selected.item) : "";
         if (wanted.length && !sourcesReady) meta.textContent += " · " + source.message();
       }
-      var previewButton = document.querySelector('.html-workspace-mode-button[data-html-mode="preview"]');
-      var editButton = document.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');
+      var previewButton = root.querySelector('.html-workspace-mode-button[data-html-mode="preview"]');
+      var editButton = root.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');
       if (previewButton) previewButton.textContent = isPlan ? "План" : "Просмотр";
       if (editButton) {
         editButton.textContent = isPlan ? "Источник" : "Код";
@@ -372,9 +382,6 @@
           selected && selected.type === "file" && !source.ready(selected.item);
       }
       var isWorkspace = !!selected && !isPlan && !isArtifact && !isCollection;
-      var openBrowser = $("openHtmlWorkspaceBrowserButton");
-      if (openBrowser) openBrowser.disabled = !isWorkspace || state.htmlWorkspaceMode !== "preview" ||
-        !files().some(function (file) { return fileKind(file) === "html"; });
       ["refreshHtmlDataButton", "reloadHtmlWorkspaceSourceButton", "exportHtmlWorkspaceButton"].forEach(function (id) {
         if ($(id)) $(id).classList.toggle("hidden", !isWorkspace);
       });
@@ -396,7 +403,7 @@
       renderedFile = editing && selected && selected.type === "file" && source.ready(selected.item) ? selected.item : null;
       renderedSourceKey = renderedFile ? renderedFile.sourceReadKey : null;
       if (typeof setCodeEditorReadOnly === "function") setCodeEditorReadOnly("htmlWorkspaceEditorInput",
-        isArtifact || isCollection || selected && selected.type === "data" || (blocked && !isPlan) ||
+        state.chatDetailPending || isArtifact || isCollection || selected && selected.type === "data" || (blocked && !isPlan) ||
         selected && selected.type === "file" && !source.ready(selected.item));
       renderHtmlWorkspacePreview();
     }
@@ -411,13 +418,12 @@
       var special = selected && (selected.type === "plan" || selected.type === "artifact" || selected.type === "collection");
       detail.classList.toggle("hidden", !special);
       if (special) {
-        if (window.RNAssistantDockWorkspace.isVisible("materials"))
+        if (options.previewVisible && options.previewVisible())
           workspaceArtifacts.renderDetail(detail, selected, selectedEditorValue(selected), options.artifactActions);
         return;
       }
       detail.replaceChildren();
-      if (!window.RNAssistantHtmlWorkspaceSurface || !window.RNAssistantHtmlWorkspaceSurface.hasSource() ||
-          !window.RNAssistantHtmlWorkspaceSurface.isVisible() || state.htmlWorkspaceDirty) return;
+      if (!options.previewVisible || !options.previewVisible() || state.htmlWorkspaceDirty) return;
       frame.classList.remove("hidden");
       var workspaceFiles = files();
       if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {
@@ -435,7 +441,7 @@
         previewCleared = false;
         htmlPreview.ensureVendors(workspaceFiles).then(function () {
           if (vendorEpoch !== previewEpoch) return;
-          if (typeof window.renderHtmlWorkspace === "function") window.renderHtmlWorkspace();
+          if (options.changed) options.changed();
           else renderHtmlWorkspacePreview();
         }).catch(function (error) {
           if (vendorEpoch !== previewEpoch) return;
@@ -474,6 +480,7 @@
     }
 
     return {
+      dispose: function () { clearTimeout(htmlPreviewRefreshTimer); clearPreview($("htmlWorkspacePreviewFrame")); },
       suspendPreview: function () { clearPreview($("htmlWorkspacePreviewFrame")); },
       reloadPreview: function () { renderedPreviewKey = null; renderedPreviewContents = null; renderHtmlWorkspacePreview(); },
       applyMode: applyHtmlWorkspaceMode,

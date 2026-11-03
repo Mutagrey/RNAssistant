@@ -252,7 +252,12 @@
           if (matches.length === 1 && matches[0].localName === watched.tag &&
               (!watched.stableUiId || matches[0].getAttribute("data-ui-id") === watched.stableUiId)) found = matches[0];
         } catch (_) { /* The selector no longer resolves. */ }
-        if (found) { found.scrollIntoView({ block: "center", inline: "nearest" }); refresh(); }
+        if (found) {
+          var bounds = found.getBoundingClientRect();
+          if (bounds.top < 0 || bounds.left < 0 || bounds.bottom > innerHeight || bounds.right > innerWidth)
+            found.scrollIntoView({ block: "nearest", inline: "nearest" });
+          refresh();
+        }
         emit("revealed", { id: message.id, found: !!found });
       } else if (message.operation === "dispose") {
         stop(); disposed = true; window.removeEventListener("message", onControl);

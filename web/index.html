@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="css/app-models.css?v=settings-dock-20261102">
   <link rel="stylesheet" href="css/app-workspace.css?v=request-dock-20261102">
   <link rel="stylesheet" href="css/app-plugins.css?v=plugin-materials-20261103">
-  <link rel="stylesheet" href="css/app-preview-surface.css?v=plugin-materials-20261103">
+  <link rel="stylesheet" href="css/app-preview-surface.css?v=plugin-materials-20261103-html-editors-20261103-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=diagnostics-source-20261103">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
@@ -46,20 +46,20 @@
   <link rel="stylesheet" href="css/app-model-diagnostics.css?v=request-dock-20261102">
 
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=navigation-s3b1-20261102-browser-s3b3b">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=navigation-s3b1-20261102">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=navigation-s3b1-20261102-browser-s3b3b-html-editors-20261103-1">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=navigation-s3b1-20261102-html-editors-20261103-1">
   <link rel="stylesheet" href="css/app-responsive.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-agent.css?v=feed-stability-20261103">
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=chat-welcome-20261103">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=plugin-materials-20261103">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=plugin-materials-20261103-html-editors-20261103-1">
   <link rel="stylesheet" href="css/app-product-components.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=plugin-materials-20261103">
-  <link rel="stylesheet" href="css/app-product-materials.css?v=plugin-materials-20261103">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=plugin-materials-20261103">
+  <link rel="stylesheet" href="css/app-product-materials.css?v=plugin-materials-20261103-html-editors-20261103-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=plugin-materials-20261103-html-editors-20261103-1">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
-  <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
+  <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1-live-annotation-20261103">
   <link rel="stylesheet" href="css/app-diagnostics.css?v=diagnostics-source-20261103">
   <link rel="stylesheet" href="css/app-dock-workspace.css?v=chat-views-20261103">
 </head>
@@ -533,20 +533,10 @@
                   <button id="addHtmlDataButton" type="button"><svg data-rna-icon="json" viewBox="0 0 24 24" aria-hidden="true"></svg>Данные JSON</button>
             </div>
             <input type="file" id="artifactCatalogFile" hidden>
-            <div class="tool-list-controls">
-              <div class="html-workspace-create hidden" id="htmlWorkspaceCreateBox">
-                <input class="tool-search" id="htmlWorkspaceCreateNameInput" autocomplete="off">
-                <div class="tool-list-actions">
-                  <button class="accent-soft" id="confirmHtmlCreateButton" type="button">Создать</button>
-                  <button class="secondary" id="cancelHtmlCreateButton" type="button">Отмена</button>
-                </div>
-              </div>
-            </div>
             <button type="button" id="artifactCatalogAll" class="rna-nav-button" aria-current="page"><span class="navigation-tree-expander" aria-hidden="true"></span><span class="navigation-tree-icon" aria-hidden="true"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg></span><span class="navigation-tree-label">Все материалы</span></button>
             <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Артефакты"></div>
             <p id="artifactCatalogStatus"></p>
             <button type="button" class="link-button" id="artifactCatalogMore" hidden>Показать ещё 50</button>
-            <span id="htmlWorkspaceStatus" hidden></span>
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
           <div class="artifact-workspace-content" id="artifactCatalog">
@@ -562,13 +552,14 @@
                 <p id="artifactCatalogOverviewEmpty" class="artifact-overview-empty" role="status">Материалов пока нет.</p>
               </div>
             </section>
-            <div id="artifactCatalogActions" class="artifact-catalog-actions" hidden></div>
-          <section class="html-workspace-editor surface-panel padded tool-editor" id="htmlWorkspaceEditor">
+          <template id="htmlWorkspaceEditorTemplate">
+          <section class="html-workspace-editor surface-panel padded tool-editor" data-html-node="htmlWorkspaceEditor">
             <div class="resource-editor-head html-workspace-head">
+              <select class="rna-form-control compact" data-html-node="htmlWorkspaceFileSelect" aria-label="Файл проекта"></select>
               <div class="html-workspace-titlebar">
                 <div class="resource-editor-titlebox">
-                  <div class="resource-editor-title" id="htmlWorkspaceTitle">Артефакт не выбран</div>
-                  <div class="resource-editor-meta" id="htmlWorkspaceMeta"></div>
+                  <div class="resource-editor-title" data-html-node="htmlWorkspaceTitle">Артефакт не выбран</div>
+                  <div class="resource-editor-meta" data-html-node="htmlWorkspaceMeta"></div>
                 </div>
               </div>
               <div class="html-workspace-toolbar">
@@ -576,57 +567,63 @@
                   <button class="button compact html-workspace-mode-button active" type="button" data-html-mode="preview">Просмотр</button>
                   <button class="button compact html-workspace-mode-button" type="button" data-html-mode="edit">Код</button>
                 </div>
-                <button class="button compact html-workspace-inspect-button" id="inspectHtmlWorkspaceButton" type="button" data-browser-control="true" aria-pressed="false" disabled>Аннотировать</button>
-                <button class="button compact html-workspace-inspect-button" id="attachHtmlWorkspaceSelectionButton" type="button" hidden disabled>В чат</button>
-                <span class="html-workspace-inspect-status" id="htmlWorkspaceInspectStatus" role="status"></span>
+                <button class="button compact html-workspace-inspect-button" data-html-node="inspectHtmlWorkspaceButton" type="button" data-browser-control="true" aria-pressed="false" disabled>Аннотировать</button>
+                <span class="html-workspace-inspect-status" data-html-node="htmlWorkspaceInspectStatus" role="status"></span>
                 <div class="resource-editor-actions">
-                  <button class="icon-btn html-workspace-icon" id="copyHtmlWorkspaceButton" type="button" title="Копировать исходный текст" aria-label="Копировать исходный текст"><svg data-rna-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-                  <button class="icon-btn html-workspace-icon" id="undoHtmlWorkspaceButton" type="button" title="Восстановить предыдущую версию" aria-label="Восстановить предыдущую версию">
+                  <button class="icon-btn html-workspace-icon" data-html-node="copyHtmlWorkspaceButton" type="button" title="Копировать исходный текст" aria-label="Копировать исходный текст"><svg data-rna-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                  <button class="icon-btn html-workspace-icon" data-html-node="undoHtmlWorkspaceButton" type="button" title="Восстановить предыдущую версию" aria-label="Восстановить предыдущую версию">
                     <svg data-rna-icon="rotateLeft" viewBox="0 0 24 24" aria-hidden="true"></svg>
                   </button>
-                  <select class="html-redo-branch hidden" id="redoHtmlWorkspaceBranchSelect" aria-label="Ветка повтора"></select>
-                  <button class="icon-btn html-workspace-icon" id="redoHtmlWorkspaceButton" type="button" title="Вернуть отменённую версию" aria-label="Вернуть отменённую версию">
+                  <select class="html-redo-branch hidden" data-html-node="redoHtmlWorkspaceBranchSelect" aria-label="Ветка повтора"></select>
+                  <button class="icon-btn html-workspace-icon" data-html-node="redoHtmlWorkspaceButton" type="button" title="Вернуть отменённую версию" aria-label="Вернуть отменённую версию">
                     <svg data-rna-icon="rotateRight" viewBox="0 0 24 24" aria-hidden="true"></svg>
                   </button>
-                  <button class="icon-btn html-workspace-icon" id="exportHtmlWorkspaceButton" type="button" title="Скачать HTML" aria-label="Скачать HTML">
+                  <button class="icon-btn html-workspace-icon" data-html-node="exportHtmlWorkspaceButton" type="button" title="Скачать HTML" aria-label="Скачать HTML">
                     <svg data-rna-icon="download" viewBox="0 0 24 24" aria-hidden="true"></svg>
                   </button>
-                  <button class="button primary icon-text-button" id="saveHtmlWorkspaceButton" type="button"><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
-                  <details class="html-workspace-menu" id="htmlWorkspaceMoreActions">
+                  <button class="button primary icon-text-button" data-html-node="saveHtmlWorkspaceButton" type="button"><svg data-rna-icon="check" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Сохранить</span></button>
+                  <details class="html-workspace-menu" data-html-node="htmlWorkspaceMoreActions">
                     <summary class="html-workspace-icon" title="Другие действия" aria-label="Другие действия">
                       <svg data-rna-icon="more" viewBox="0 0 24 24" aria-hidden="true"></svg>
                     </summary>
                     <div class="html-workspace-menu-items">
-                      <button id="reloadHtmlWorkspaceSourceButton" type="button" title="Загрузить текущую версию и повторить чтение исходников"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg>Перезагрузить исходники</button>
-                      <button id="refreshHtmlDataButton" type="button"><svg data-rna-icon="rotateRight" viewBox="0 0 24 24" aria-hidden="true"></svg>Обновить данные</button>
-                      <button class="danger-soft" id="deleteHtmlWorkspaceButton" type="button"><svg data-rna-icon="trash" viewBox="0 0 24 24" aria-hidden="true"></svg>Удалить выбранное</button>
+                      <button data-html-node="reloadHtmlWorkspaceSourceButton" type="button" title="Загрузить текущую версию и повторить чтение исходников"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg>Перезагрузить исходники</button>
+                      <button data-html-node="refreshHtmlDataButton" type="button"><svg data-rna-icon="rotateRight" viewBox="0 0 24 24" aria-hidden="true"></svg>Обновить данные</button>
+                      <button class="danger-soft" data-html-node="deleteHtmlWorkspaceButton" type="button"><svg data-rna-icon="trash" viewBox="0 0 24 24" aria-hidden="true"></svg>Удалить выбранное</button>
                     </div>
                   </details>
-                  <span class="material-copy-status" id="htmlWorkspaceCopyStatus" role="status"></span>
+                  <span class="material-copy-status" data-html-node="htmlWorkspaceCopyStatus" role="status"></span>
                 </div>
               </div>
             </div>
-            <div class="html-workspace-recovery hidden" id="htmlWorkspaceRecovery" role="status">
+              <div class="html-workspace-create hidden" data-html-node="htmlWorkspaceCreateBox">
+                <input class="tool-search" data-html-node="htmlWorkspaceCreateNameInput" autocomplete="off">
+                <div class="tool-list-actions">
+                  <button class="accent-soft" data-html-node="confirmHtmlCreateButton" type="button">Создать</button>
+                  <button class="secondary" data-html-node="cancelHtmlCreateButton" type="button">Отмена</button>
+                </div>
+              </div>
+            <div class="html-workspace-recovery hidden" data-html-node="htmlWorkspaceRecovery" role="status">
               <div class="html-workspace-recovery-copy">
                 <strong>Восстановление HTML</strong>
-                <span id="htmlWorkspaceRecoveryMessage"></span>
+                <span data-html-node="htmlWorkspaceRecoveryMessage"></span>
               </div>
-              <select id="htmlWorkspaceRecoverySelect" aria-label="Ревизия HTML для восстановления"></select>
-              <button class="accent-soft" id="recoverHtmlWorkspaceButton" type="button">Восстановить</button>
+              <select data-html-node="htmlWorkspaceRecoverySelect" aria-label="Ревизия HTML для восстановления"></select>
+              <button class="accent-soft" data-html-node="recoverHtmlWorkspaceButton" type="button">Восстановить</button>
             </div>
-            <div class="resource-editor-empty" id="htmlWorkspaceEmptyState">
+            <div class="resource-editor-empty" data-html-node="htmlWorkspaceEmptyState">
               <div class="resource-editor-empty-title">Артефакт не выбран</div>
               <div class="resource-editor-empty-text">Создайте план или HTML, либо выберите артефакт слева.</div>
             </div>
-            <div class="resource-editor-empty html-workspace-view" id="htmlWorkspacePreviewLink" data-html-view="preview"><p>Просмотр открывается в отдельной вкладке.</p><button class="button compact" id="openHtmlWorkspaceBrowserButton" type="button">Открыть просмотр</button></div>
-            <div class="html-workspace-preview html-workspace-view" id="htmlWorkspacePreview" data-html-view="preview">
-              <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer"></iframe>
-              <div class="artifact-detail-preview product-viewer hidden" id="artifactDetailPreview"></div>
+            <div class="browser-view html-workspace-view" data-html-node="htmlWorkspacePreviewLink" data-html-view="preview"></div>
+            <div class="html-workspace-preview html-workspace-view" data-html-node="htmlWorkspacePreview" data-html-view="preview">
+              <iframe class="html-workspace-frame" data-html-node="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer"></iframe>
+              <div class="artifact-detail-preview product-viewer hidden" data-html-node="artifactDetailPreview"></div>
             </div>
-            <div class="html-workspace-edit html-workspace-view hidden" id="htmlWorkspaceEdit" data-html-view="edit">
-              <textarea id="htmlWorkspaceEditorInput" spellcheck="false" placeholder="Выберите HTML файл или JSON источник."></textarea>
-            </div>
+            <div class="html-workspace-edit html-workspace-view hidden" data-html-node="htmlWorkspaceEdit" data-html-view="edit"></div>
+            <p class="html-editor-status" data-html-node="htmlWorkspaceStatus" role="status"></p>
           </section>
+          </template>
           </div>
         </div>
       </section>
@@ -1078,7 +1075,7 @@
   <script src="js/vendor/viewer.min.js"></script>
   <script src="js/app-editor-tabs.js?v=diagnostics-20261101"></script>
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
-  <script src="js/app-core.js?v=chat-views-20261103-chat-audit-20261103"></script>
+  <script src="js/app-core.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
   <script src="js/app-icons.js?v=diagnostics-icon-20261103"></script>
   <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
@@ -1090,13 +1087,13 @@
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=20261029-first-group-1"></script>
   <script src="js/app-action-menu.js?v=navigation-s3b1-20261102-browser-s3b3b"></script>
-  <script src="js/app-navigation-pane.js?v=navigation-20261102"></script>
+  <script src="js/app-navigation-pane.js?v=navigation-20261102-html-editors-20261103-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
-  <script src="js/app-layout.js?v=plugin-materials-20261103"></script>
+  <script src="js/app-layout.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-chat-inspector.js?v=chat-views-20261103"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
-  <script src="js/app-editors.js?v=plugin-materials-20261103"></script>
+  <script src="js/app-editors.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
   <script src="js/app-settings.js?v=chat-models-s2a-20261102"></script>
@@ -1116,14 +1113,14 @@
   <script src="js/app-resource-upload.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1-workspace-diagnostics-20261025-1"></script>
   <script src="js/app-trajectory.js?v=journal-loading-20261103"></script>
-  <script src="js/app-prompts.js?v=navigation-s3b1-20261102"></script>
+  <script src="js/app-prompts.js?v=navigation-s3b1-20261102-html-editors-20261103-1"></script>
   <script src="js/app-model-data.js?v=chat-models-s2a-20261102-preferences-s2b5"></script>
   <script src="js/app-model-picker.js?v=chat-views-20261103"></script>
   <script src="js/app-model-capabilities.js?v=chat-models-s2a-20261102"></script>
   <script src="js/app-model-render.js?v=chat-views-20261103"></script>
   <script src="js/app-models.js?v=chat-views-20261103"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chat-views-20261103-chat-audit-20261103"></script>
+  <script src="js/app-chat-state.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1131,23 +1128,24 @@
   <script src="js/app-skills.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-text-diff.js?v=compact-tool-card-20261029-2"></script>
   <script src="js/app-vba-actions.js?v=vba-upload-20260906-1"></script>
-  <script src="js/app-vba-project.js?v=vba-upload-20260906-1"></script>
-  <script src="js/app-vba.js?v=shared-editor-tabs-20261019-1"></script>
+  <script src="js/app-vba-project.js?v=vba-upload-20260906-1-html-editors-20261103-1"></script>
+  <script src="js/app-vba.js?v=shared-editor-tabs-20261019-1-html-editors-20261103-1"></script>
   <script src="js/app-html-resource-export.js?v=binary-chunks-20260906-1-browser-s3b3b"></script>
-  <script src="js/app-visual-inspector.js?v=annotate-hover-20261024-1"></script>
-  <script src="js/app-visual-annotations.js?v=chat-views-20261103"></script>
+  <script src="js/app-visual-inspector.js?v=annotate-hover-20261024-1-live-annotation-20261103"></script>
+  <script src="js/app-visual-annotations.js?v=chat-views-20261103-html-editors-20261103-1"></script>
   <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1-vendors-1-visual-inspector-1"></script>
   <script src="js/app-artifact-viewers.js?v=plugin-materials-20261103"></script>
   <script src="js/app-sequence-document-viewer.js?v=object-views-20261102"></script>
   <script src="js/app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1-annotation-surface-20261026-1-shared-source-20261029-1-materials-s3b2"></script>
   <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1-scope-20261102"></script>
   <script src="js/app-html-workspace-model.js?v=html-read-20260906-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=plugin-materials-20261103"></script>
+  <script src="js/app-html-workspace-editor.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-tree-adapter.js?v=plugin-materials-20261103"></script>
   <script src="js/app-html-workspace-tree.js?v=plugin-materials-20261103"></script>
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1-materials-s3b2"></script>
-  <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1"></script>
-  <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1-materials-s3b2-browser-s3b3b"></script>
+  <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1-html-editors-20261103-1"></script>
+  <script src="js/app-html-workspace-view.js?v=html-editors-20261103-1"></script>
+  <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1-materials-s3b2-browser-s3b3b-html-editors-20261103-1"></script>
   <script src="js/app-context.js?v=chat-views-20261103"></script>
   <script src="js/app-model-context-contents.js?v=request-dock-20261102"></script>
   <script src="js/app-model-context.js?v=request-dock-20261102"></script>
@@ -1157,39 +1155,39 @@
   <script src="js/app-agent-data.js?v=compact-tool-json-20261029-1"></script>
   <script src="js/app-agent-model.js?v=feed-stability-20261103"></script>
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
-  <script src="js/app-artifacts.js?v=chat-view-s2-20261102-materials-s3b2-browser-s3b3b"></script>
+  <script src="js/app-artifacts.js?v=chat-view-s2-20261102-materials-s3b2-browser-s3b3b-html-editors-20261103-1"></script>
   <script src="js/app-artifact-versions.js?v=artifact-versions-20261014-1-materials-s3b2"></script>
-  <script src="js/app-artifact-catalog.js?v=plugin-materials-20261103"></script>
+  <script src="js/app-artifact-catalog.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-task-list.js?v=chat-views-20261103"></script>
   <script src="js/app-questions.js?v=questions-pager-20261023-2"></script>
   <script src="js/app-agent-activity.js?v=feed-stability-20261103"></script>
   <script src="js/app-agent-approval.js?v=chat-views-20261103"></script>
   <script src="js/app-run-changes.js?v=compact-tool-card-20261029-2"></script>
   <script src="js/app-agent.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-messages.js?v=chat-welcome-20261103"></script>
+  <script src="js/app-messages.js?v=chat-welcome-20261103-html-editors-20261103-1"></script>
   <script src="js/app-reasoning.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-attachments.js?v=chat-views-20261103"></script>
-  <script src="js/app-chat-session.js?v=chat-views-20261103-chat-audit-20261103"></script>
+  <script src="js/app-attachments.js?v=chat-views-20261103-html-editors-20261103-1"></script>
+  <script src="js/app-chat-session.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
   <script src="js/app-chat-composer.js?v=chat-views-20261103-chat-audit-20261103"></script>
   <script src="js/app-chat-inbox.js?v=chat-views-20261103"></script>
   <script src="js/app-chat-run.js?v=chat-views-20261103"></script>
-  <script src="js/app-chat.js?v=chat-views-20261103-chat-audit-20261103"></script>
+  <script src="js/app-chat.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
   <script src="js/app-chat-edit.js?v=chat-views-20261103"></script>
   <script src="js/app-workspace-chat.js?v=chat-views-20261103-chat-audit-20261103"></script>
-  <script src="js/app-office-chat-view.js?v=chat-views-20261103-chat-audit-20261103"></script>
+  <script src="js/app-office-chat-view.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
   <script src="js/app-agent-communication.js?v=20261103"></script>
   <script src="js/app-conversation-panel.js?v=chat-views-20261103"></script>
-  <script src="js/app-plugin-view.js"></script>
-  <script src="js/app-plugins.js?v=plugin-materials-20261103"></script>
+  <script src="js/app-plugin-view.js?v=html-editors-20261103-1"></script>
+  <script src="js/app-plugins.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-project-chats.js?v=plugin-materials-20261103"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
   <script src="js/app-browser-object-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-html-artifact-view.js?v=plugin-materials-20261103"></script>
   <script src="js/app-plugin-release-view.js?v=plugin-materials-20261103"></script>
-  <script src="js/app-material-view.js?v=plugin-materials-20261103"></script>
-  <script src="js/app-dock-workspace.js?v=plugin-materials-20261103"></script>
+  <script src="js/app-material-view.js?v=plugin-materials-20261103-chat-audit-20261103"></script>
+  <script src="js/app-dock-workspace.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-active-runs.js?v=chat-parity-20261103"></script>
-  <script src="js/app.js?v=chat-views-20261103"></script>
+  <script src="js/app.js?v=chat-views-20261103-html-editors-20261103-1"></script>
 </body>
 </html>

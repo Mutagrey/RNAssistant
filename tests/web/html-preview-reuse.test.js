@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 let builds = 0, closes = 0, loads = 0, resets = 0, ready = true;
-const frame = { classList: { toggle() {}, add() {} }, removeAttribute() {},
+const frame = { classList: { toggle() {}, add() {}, remove() {} }, removeAttribute() {},
   set srcdoc(value) { loads++; } };
 const detail = { classList: { toggle() {}, remove() {} }, replaceChildren() {} };
 const state = { activeChatId: "chat1", activeHtmlArtifactId: "workspace1", htmlWorkspaceMode: "preview", artifacts: [] };
@@ -14,7 +14,7 @@ const context = vm.createContext({ console, state, $: id => id === "htmlWorkspac
 context.window = context;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-html-workspace-editor.js"), "utf8"), context);
 let watches = 0;
-const editor = context.RNAssistantHtmlWorkspaceEditor.create({ state,
+const editor = context.RNAssistantHtmlWorkspaceEditor.create({ state, root: {}, previewVisible: () => state.htmlWorkspaceMode === "preview",
   previewSurface: { watch: () => { watches++; }, clear() {}, waiting() {}, fail() {} },
   source: { current: () => ready, ready: () => ready, message: () => "Loading" },
   preview: { missingVendors: () => [], build: options => {
@@ -37,10 +37,10 @@ ready = false; editor.renderPreview(); ready = true; editor.renderPreview();
 assert.deepEqual([builds, closes, loads], [6, 7, 7], "source invalidation cannot reuse an old preview");
 state.htmlWorkspaceMode = "edit"; editor.renderPreview();
 for (let i = 0; i < 200; i++) editor.renderPreview();
-assert.deepEqual([builds, closes, loads], [6, 8, 8], "edit updates do not repeatedly navigate an empty iframe");
+assert.deepEqual([builds, closes, loads], [6, 7, 7], "editing retains the hidden iframe and its exact leases");
 state.htmlWorkspaceMode = "preview"; editor.renderPreview();
-assert.deepEqual([builds, closes, loads], [7, 9, 9], "return from cleared edit preview rebuilds");
+assert.deepEqual([builds, closes, loads], [6, 7, 7], "return to unchanged preview preserves the page");
 editor.reloadPreview();
-assert.deepEqual([builds, closes, loads, watches], [8, 10, 10, 8], "explicit reload rebuilds once through the same preview owner");
+assert.deepEqual([builds, closes, loads, watches], [7, 8, 8, 7], "explicit reload rebuilds once through the same preview owner");
 assert.equal(resets, closes, "each invalidation revokes the old inspector generation once");
 console.log("PASS HTML preview: unchanged updates reuse iframe; source/binding/owner/mode invalidation replaces it");

@@ -127,10 +127,6 @@ async function attachOutlookMailbox(key, chatIdValue, createNew) {
 
 async function createChat() {
   if (state.chatNavigationPending) return;
-  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-      !confirmDiscardHtmlWorkspaceChanges("Создать новый чат")) {
-    return;
-  }
   setControlBusy("newChatButton", true);
   try {
     await navigateChat("createChat", { title: "Новый чат" });
@@ -144,9 +140,7 @@ async function createChat() {
 }
 
 async function createDocumentChat(documentItem) {
-  if (state.chatNavigationPending || !documentItem || !documentItem.documentKey ||
-      (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-       !confirmDiscardHtmlWorkspaceChanges("Создать новый чат"))) {
+  if (state.chatNavigationPending || !documentItem || !documentItem.documentKey) {
     return;
   }
 
@@ -173,11 +167,6 @@ async function createDocumentChat(documentItem) {
 async function selectChat(id) {
   if (!id) return;
   var alreadySelected = id === state.activeChatId && !state.chatNavigationPending && activeChatUsesCurrentDocument();
-  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-      !confirmDiscardHtmlWorkspaceChanges("Открыть другой чат")) {
-    renderChatSessions();
-    return;
-  }
 
   // Placement follows the clicked target immediately. Native selection still
   // serializes document binding/persistence, but does not block an existing view.
@@ -222,10 +211,6 @@ async function openActiveDocument(chatIdValue) {
 
 async function activateDocument(documentKey) {
   if (!documentKey) return;
-  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-      !confirmDiscardHtmlWorkspaceChanges("Переключить документ")) {
-    return;
-  }
   try {
     if (isOutlookMailboxKey(documentKey)) {
       await attachOutlookMailbox(documentKey, "", false);
@@ -241,14 +226,14 @@ async function activateDocument(documentKey) {
 
 async function deleteDocument(host, documentKey, title) {
   if (!host || !documentKey ||
-      (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-       !confirmDiscardHtmlWorkspaceChanges("Удалить историю документа")) ||
+      !RNAssistantHtmlWorkspaceSurface.canDelete({ host: host, documentKey: documentKey }) ||
       !window.confirm("Удалить документ «" + (title || "Документ") + "» из истории вместе со всеми чатами? Сам Office-файл удалён не будет.")) {
     return;
   }
 
   try {
     await navigateChat("deleteDocument", { host: host, documentKey: documentKey });
+    RNAssistantHtmlWorkspaceSurface.closeDeleted({ host: host, documentKey: documentKey });
     clearSendError();
     log("История документа удалена.");
   } catch (error) {
@@ -303,9 +288,7 @@ async function compactChatContext() {
 async function deleteChat(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
   if (!targetChatId || state.chatDeletions[targetChatId] ||
-      (targetChatId === state.activeChatId &&
-       typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-       !confirmDiscardHtmlWorkspaceChanges("Удалить чат")) ||
+      !RNAssistantHtmlWorkspaceSurface.canDelete({ chatId: targetChatId }) ||
       !window.confirm("Удалить этот чат?")) {
     return;
   }
@@ -316,6 +299,7 @@ async function deleteChat(chatIdValue) {
     await window.RNAssistantChatDrafts.flushOffice(targetChatId);
     await navigateChat("deleteChat", { chatId: targetChatId });
     RNAssistantConversationPanel.closeDeleted({ source: "office", sessionId: targetChatId });
+    RNAssistantHtmlWorkspaceSurface.closeDeleted({ chatId: targetChatId });
     window.RNAssistantChatDrafts.forgetOffice(targetChatId);
     clearSendError();
     log("Чат удален.");
@@ -357,8 +341,6 @@ function applyInitState(init, options) {
   if (typeof resetModelCatalog === "function") resetModelCatalog();
   state.prompts = init.prompts;
   if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
-  if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
-  if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
   state.hasApiKey = !!(init.hasApiKey);
   state.hasHistorySecret = !!(init.hasHistorySecret);
   if (typeof cancelToolLibraryWrite === "function") cancelToolLibraryWrite();
@@ -377,7 +359,6 @@ function applyInitState(init, options) {
   state.chatProjectionRevisions = {};
   state.chats = [];
   state.htmlWorkspace = null;
-  state.htmlWorkspaceDirty = false;
   if (options && options.preserveSelection) applyChatCatalogState(init);
   else { clearOfficeChatProjection(); applyChatState(init); }
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
@@ -409,8 +390,6 @@ function applyBridgeUnavailableState(error) {
   state.bridgeToken = "";
   state.bridgeOperations = null;
   if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
-  if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
-  if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
   document.body.classList.add("bridge-unavailable");
   resetMessageEditState();
   state.appVersion = "";
@@ -434,7 +413,6 @@ function applyBridgeUnavailableState(error) {
   state.toolsPath = "";
   state.skillsPath = "";
   state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
-  state.htmlWorkspaceDirty = false;
   restoreChatDraft("");
 
   $("toolsPath").textContent = "";
@@ -592,10 +570,6 @@ async function synchronizeChatState(force) {
 
 async function initialize() {
   if (state.initializePromise) return state.initializePromise;
-  if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
-      !confirmDiscardHtmlWorkspaceChanges("Обновить состояние")) {
-    return;
-  }
   state.initializePromise = (async function () {
     try {
       var init = await navigateChat("init");

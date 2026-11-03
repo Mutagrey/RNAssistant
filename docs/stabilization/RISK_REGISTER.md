@@ -4,14 +4,11 @@
 
 Owner: Web Library/Dock lifecycle; Web navigation performance; Office qualification.
 
-- В текущем незавершённом переносе редакторов `library.onVisible(false)` вызывает
-  `syncSelectedSkillFromEditor` после отсоединения DOM. `skillIdInput` уже отсутствует:
-  `null.value` в `app-skills.js:675` прерывает DockWorkspace.sync. Воспроизведение:
-  открыть Library → skill → другой раздел; `shared-navigation-tree` доходит до
-  последнего assertion и фиксирует этот pageerror. Это отдельный дефект owner
-  редактора, не ошибка chat target/cache; отсутствие потери несохранённых полей
-  этим не доказано. Изолированный chat diff проходит `shared-navigation-tree`: gap
-  относится к рабочему editor diff, его исправление остаётся у HTML/Library owner.
+- Library deactivate defect закрыт адресно в текущем срезе: DockWorkspace переносит
+  скрытый retained singleton в connected parking до capture/deactivate, а при
+  показе возвращает прежний root. `shared-navigation-tree` и `editor-dock` проходят;
+  async ACK и поля навыка доступны и при скрытом editor. Несколько независимых
+  Library/VBA objects и Windows qualification остаются вне этого закрытия.
 - Повторная постройка дерева на фоновые tokens устранена. Начальная постройка
   500 раскрытых строк остаётся синхронной (в нагрузочной пробе был long task около
   124 мс); изменение состава/статусов каталога тоже может потребовать rebuild.
@@ -123,15 +120,25 @@ Owners: Application Workspace steering / Core source patch / Web Inbox fixtures.
 pending-approval Steer, PDF/media read parity и secondary selected consumers остаются
 открытыми. Windows/Office/WebView2 и реальные модели не квалифицированы.
 
-## Plugin views: адресная проверка и оставшийся HTML gate — 2026-11-03
+## Live HTML/plugin и editor scope — 2026-11-03, In Review
 
-Owner: Web Plugins / HtmlWorkspace. Singleton live plugin заменён адресными views;
-`plugin-view-selection` проходит переключение двух iframe, move/restore, точную
-аннотацию source chat, поздний close и единственное выделение Shell rail.
-Это уточняет прежние записи S3b.3a/b ниже. Широкий `browser-views` по-прежнему
-нестабилен на pointer hit-test live HTML annotation до plugin-части: `.shell`
-перехватывает клик. Причинность не установлена; live HTML scoping и реальный
-Windows/Office/WebView2 остаются открытыми. Адресные проверки не закрывают этот gate.
+Owner: Web HtmlWorkspaceView / PluginView / Library / VBA. Live HTML и plugin
+используют независимые providers; exact source/chat привязан к аннотации и записи.
+`html-editor-views` проверяет два буфера, source guard, close/restore и late reply.
+HTML annotation fixture переведён на реальные scoped views/drafts: пройдены CAS
+replacement/removal, pending recovery, immutable sent view и выбор соседнего элемента.
+Убрано переключение `pointer-events` всего iframe при редакторе комментария:
+compositor мог поглотить следующий клик после закрытия. Reveal видимой цели не
+прокручивает страницу; badge у обрезанного края не накрывает правую кнопку.
+
+Library/VBA размещены в Dockview, но пока по одному retained owner. Per-object editor
+scope и cold-start mode/search/scroll/несохранённый код остаются gap. Реальные
+Windows/Office/WebView2, модели и release qualification не проверены.
+
+Соседний старый fixture `artifact-commit-projection` проходит UI projection checks,
+но останавливается на статическом поиске прежнего порядка вызовов в
+`AssistantController.ChatExecution.cs` (durable save → UI queue → helper → primary).
+Этот C#-путь в UI-срезе не менялся; native assertion не объявляется пройденным.
 
 ## Фото: document lock timeout в диагностике — 2026-11-03
 

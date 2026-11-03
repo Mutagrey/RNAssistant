@@ -2,7 +2,7 @@
   "use strict";
   if (!document.getElementById("artifactCatalog")) return;
   var generation = 0, pending = false, response = null, next = null, chat = null;
-  var selected = null, editorNavigation = false, collapsed = {}, loading = false, overviewRequested = true;
+  var selected = null, editorNavigation = false, collapsed = {}, loading = false;
   var overviewLoading = false, overviewError = "", queryDirty = false, catalogNotice = "";
   var maximumCatalogItems = 500;
   var overviewSort = { key: "updated", descending: true };
@@ -67,11 +67,10 @@
   function renderOverview() {
     var overview = el("Overview"), rows = el("OverviewRows");
     if (!overview) return;
-    overview.hidden = !overviewRequested;
-    if (overviewRequested) el("All").setAttribute("aria-current", "page");
+    overview.hidden = false;
+    if (!selected) el("All").setAttribute("aria-current", "page");
     else el("All").removeAttribute("aria-current");
-    if (!overviewRequested) return;
-    $("htmlWorkspaceEditor").hidden = true;
+
     rows.replaceChildren();
     document.querySelectorAll("#artifactCatalogOverviewTable [data-artifact-sort-head]").forEach(function (head) {
       var key = head.getAttribute("data-artifact-sort-head");
@@ -109,15 +108,15 @@
     if (!canMutate()) return false;
     if (scope) el("Scope").value = scope;
     if (scope) {
-      selected = null; overviewRequested = true; $("htmlWorkspaceEditor").hidden = false; actions();
+      selected = null;   renderOverview();
     }
     load();
     return true;
   }
   function backToOverview() {
     if (!canMutate()) return false;
-    selected = null; overviewRequested = true;
-    $("htmlWorkspaceEditor").hidden = false; actions(); render();
+    selected = null;
+     renderOverview(); render();
     return true;
   }
   function editorItem(artifact) {
@@ -131,16 +130,15 @@
     }) || null;
   }
   function editor(artifact, preserveOverview) {
-    if (!preserveOverview) overviewRequested = false;
-    $("htmlWorkspaceEditor").hidden = false;
+
     selected = editorItem(artifact); editorNavigation = true;
-    actions(); renderOverview();
+    renderOverview(); renderOverview();
   }
   function sync() {
     if (chat !== state.activeChatId) {
       chat = state.activeChatId; generation++; response = null; selected = null; next = null;
-      overviewRequested = true; overviewError = ""; overviewLoading = false; catalogNotice = "";
-      $("htmlWorkspaceEditor").hidden = false; actions();
+       overviewError = ""; overviewLoading = false; catalogNotice = "";
+       renderOverview();
       if (typeof isPanelActive === "function" && isPanelActive("artifacts")) load();
     } else if (queryDirty && !loading && typeof isPanelActive === "function" && isPanelActive("artifacts")) {
       load();
@@ -153,7 +151,7 @@
   async function load(cursor) {
     var id = state.activeChatId, nav = state.chatNavigationVersion, version = ++generation;
     if (!id) { response = null; next = null; loading = false; selected = null; overviewError = ""; overviewLoading = false; catalogNotice = "";
-      $("htmlWorkspaceEditor").hidden = false; actions(); status("Откройте или создайте чат документа."); render(); return; }
+       renderOverview(); status("Откройте или создайте чат документа."); render(); return; }
     if (!cursor) next = null;
     queryDirty = false; chat = id; loading = true; overviewLoading = !cursor; overviewError = ""; catalogNotice = "";
     status("Загрузка…"); el("More").hidden = true; renderOverview();
@@ -173,7 +171,7 @@
       catalogNotice = limited ? "Показаны первые " + maximumCatalogItems + " материалов. Уточните поиск или фильтр." : "";
       status(result.items.length ? "" : "Артефакты не найдены.");
       if (!selected) editor(null, true);
-      actions(); render();
+      renderOverview(); render();
     } catch (error) {
       if (current(id, nav) && version === generation) {
         overviewError = error.detail || error.message || "Не удалось загрузить материалы.";
@@ -185,21 +183,21 @@
   }
   function canMutate() {
     if (pending) return false;
-    if (state.htmlWorkspaceDirty) { status("Сохраните или отмените правки перед изменением артефактов."); return false; }
+    if (RNAssistantHtmlWorkspaceSurface.isDirty(state.activeChatId)) { status("Сохраните или отмените правки перед изменением артефактов."); return false; }
     return true;
   }
   async function mutate(command, args, button) {
     if (!canMutate()) return;
-    var id = state.activeChatId, nav = state.chatNavigationVersion, edit = state.htmlWorkspaceEditVersion || 0;
-    pending = true; actions(); if (button) button.disabled = true;
+    var id = state.activeChatId, nav = state.chatNavigationVersion;
+    pending = true; renderOverview(); if (button) button.disabled = true;
     try {
       var result = await send(command, args);
-      if (!current(id, nav) || edit !== (state.htmlWorkspaceEditVersion || 0)) return;
+      if (!current(id, nav)) return;
       applyChatStateForChat(result, id); await load(); return true;
     } catch (error) {
       if (current(id, nav)) { await load(); status(error.detail || error.message); }
     }
-    finally { pending = false; actions(); }
+    finally { pending = false; renderOverview(); }
   }
   async function changeLink(id, revision, uri, detached, button) {
     if (id !== state.activeChatId) return;
@@ -217,8 +215,8 @@
     return mutate("deleteDocumentArtifact", { chatId: listed.chatId, expectedSessionRevision: listed.sessionRevision,
       resourceUri: item.resourceUri, confirmed: true }, button).then(function (removed) {
         if (removed && selected && selected.resourceUri === item.resourceUri) {
-          selected = null; overviewRequested = true;
-      $("htmlWorkspaceEditor").hidden = false; actions(); render();
+          selected = null;
+       renderOverview(); render();
         }
         return removed;
       });
@@ -249,41 +247,12 @@
     if (artifact && (!requiresSelection || item.selected) && ["html_workspace", "plan_document", "markdown"].indexOf(item.kind) >= 0)
       add("Редактировать", "edit", function () {
         if (!canMutate()) return;
-        state.htmlWorkspaceMode = "edit"; window.openArtifactResource(artifact, null, null, { purpose: "edit" }); render();
+        window.openArtifactResource(artifact, null, null, { purpose: "edit" }); render();
       });
     if (item.canTransfer) add("Независимая копия", "copy", function (button) { return copyItem(item, button, listed); });
     if (item.kind === "html_workspace" && item.canTransfer) add("Экспорт проекта", "download", function () { return download(item); });
     if (item.canDelete) add("Удалить из документа…", "trash", function (button) { return remove(item, listed, button); }, false, true);
     return items;
-  }
-  function actions() {
-    var item = editorItem(), root = el("Actions"); root.replaceChildren(); root.hidden = !item || overviewRequested;
-    if (!item || !response) return;
-    var listed = response, id = state.activeChatId, nav = state.chatNavigationVersion;
-    function action(parent, label, iconName, fn, disabled, className) {
-      var b = node("button", label, className); b.type = "button"; b.disabled = pending || !!disabled;
-      b.insertAdjacentHTML("afterbegin", RNAssistantIcons.render(iconName));
-      b.addEventListener("click", function () { if (!b.disabled && current(id, nav)) fn(b); }); parent.appendChild(b);
-    }
-    var heading = node("div", "", "artifact-detail-heading");
-    heading.appendChild(node("span", "Материалы / " + (item.linked ? "Этот чат" :
-      item.documentId === listed.documentId ? "В документе" : item.documentTitle || "Все документы")));
-    heading.appendChild(node("h2", item.title));
-    root.appendChild(heading);
-    var menu = node("details", "", "html-workspace-menu artifact-action-menu");
-    var summary = node("summary", "⋯");
-    summary.setAttribute("aria-label", "Действия с материалом"); menu.appendChild(summary);
-    var options = node("div", "", "html-workspace-menu-items"); menu.appendChild(options);
-    var artifact = localArtifact(item);
-    var head = artifact && window.RNAssistantArtifactVisuals && window.RNAssistantArtifactVisuals.libraryHead(artifact);
-    if (window.RNAssistantArtifactVersions) window.RNAssistantArtifactVersions.append(options, head, null, function (revision) {
-      if (editorItem() !== item || response !== listed || !current(id, nav)) return false;
-      return openItem(item, revision);
-    });
-    itemCommands(item, listed).forEach(function (entry) {
-      action(options, entry.label, entry.icon, entry.onSelect, entry.disabled, entry.danger ? "danger-soft" : "");
-    });
-    if (options.children.length) root.appendChild(menu);
   }
   function localArtifact(item) {
     return (state.artifacts || []).find(function (a) { return (a.ResourceUri || a.resourceUri) === item.resourceUri; });
@@ -352,7 +321,7 @@
     });
     var roots = Object.keys(documents).map(function (id) { return documents[id]; });
     var selection = options.selected || {}, selectedKey = selected ? "catalog::" + selected.resourceUri : null;
-    if (editorNavigation && !overviewRequested && selection.id) {
+    if (editorNavigation && selection.id) {
       selectedKey = byId[selection.id] ? "catalog::" + byId[selection.id] : null;
     }
     return { nodes: roots, selectedKey: selectedKey };
@@ -365,20 +334,19 @@
   async function importFile(file) {
     if (!file || !canMutate()) return;
     var id = state.activeChatId, nav = state.chatNavigationVersion, lease;
-    pending = true; actions();
+    pending = true; renderOverview();
     try {
       var catalogState = await send("listArtifactCatalog", { chatId: id, scope: "chat" });
       if (!current(id, nav)) return;
       status("Загрузка файла…");
       lease = await send("beginArtifactImport", { chatId: id, fileName: file.name, contentType: file.type || "application/octet-stream", byteLength: file.size });
       await window.RNAssistantResourceUpload.write(lease, file, { maxBytes: Number.MAX_SAFE_INTEGER, isCurrent: function () { return current(id, nav); } });
-      if (!current(id, nav) || state.htmlWorkspaceDirty) return;
-      var edit = state.htmlWorkspaceEditVersion || 0;
+      if (!current(id, nav) || RNAssistantHtmlWorkspaceSurface.isDirty(state.activeChatId)) return;
       var result = await send("importArtifact", { chatId: id, expectedSessionRevision: catalogState.sessionRevision, uploadLeaseId: lease.leaseId, operationId: operationId() });
-      if (!current(id, nav) || edit !== (state.htmlWorkspaceEditVersion || 0)) return;
+      if (!current(id, nav)) return;
       applyChatStateForChat(result, id); editor(); show("chat");
     } catch (error) { if (current(id, nav)) status(error.detail || error.message); }
-    finally { pending = false; actions(); if (lease) await send("closeArtifactTransfer", { chatId: id, leaseId: lease.leaseId }).catch(function () {}); }
+    finally { pending = false; renderOverview(); if (lease) await send("closeArtifactTransfer", { chatId: id, leaseId: lease.leaseId }).catch(function () {}); }
   }
   ["Scope", "Kind"].forEach(function (name) { el(name).addEventListener("change", function () { show(); }); });
   document.querySelectorAll("#artifactCatalogOverviewTable [data-artifact-sort]").forEach(function (button) {

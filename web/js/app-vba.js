@@ -254,7 +254,6 @@ function runVbaMacro() {
 function bindVbaActions() {
   $("refreshVbaButton").addEventListener("click", refreshVbaProject);
   $("refreshVbaEmptyButton").addEventListener("click", refreshVbaProject);
-  $("vbaModuleSearchInput").addEventListener("input", renderVbaProject);
   $("vbaModuleSelect").addEventListener("change", function () {
     renderSelectedVbaModule();
     loadSelectedVbaModule();
@@ -283,3 +282,15 @@ function bindVbaActions() {
   applyVbaMode();
   updateVbaMacroRunState();
 }
+
+window.RNAssistantVbaView = { register: function (dock) {
+  dock.registerView("vba", { title: "VBA", icon: "code", section: "vba", placement: "within", renderer: "onlyWhenVisible",
+    layout: function () { return $("vbaLayout"); },
+    element: function () { var root = document.querySelector(".vba-editor"); root.id = "vbaEditorView"; return root; },
+    onVisible: function (visible) {
+      if (visible) { activateCodeEditorsForTab("vba"); renderVbaProject(); loadSelectedVbaModule(); }
+      else cancelVbaModuleRead();
+    },
+    onLayout: function () { refreshCodeEditors(["vbaCodeInput"]); }
+  });
+} };
