@@ -1,5 +1,19 @@
 # Stabilization risk register
 
+## VBA patch shown as changed, source reported absent — 2026-11-03
+
+Owner: Office VBA mutation/read-back and resource authority; model guidance for
+`core.patch`. On the supplied Windows photo, `core.patch` for `VBA module: Module1`
+shows a `+33` diff after the user manually changed VBA, but the user reports that
+the added code was absent in the module. The photo does not show the VBE project,
+current module source or a fresh `core.read` after the patch, so the cause and live
+state remain unverified. Code review shows patch diff is read from an exact retained
+after-revision; a fresh semantic VBA read uses the bound live document. Guidance now
+requires observed, unique procedure context instead of a generic `End Function`
+anchor. This does not qualify or explain the reported missing live code. Compare a
+fresh live read and the VBE project/module on screen when photographic evidence is
+available; retain Windows/Office qualification open.
+
 ## Три фото: workspace transcript, Stop и preview — 2026-11-02
 
 Owner: Application plugin/workspace projection, Web project adapter. Воспроизведено:

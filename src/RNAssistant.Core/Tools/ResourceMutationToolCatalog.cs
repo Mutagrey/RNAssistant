@@ -32,7 +32,7 @@ namespace RNAssistant.Core.Tools
                     properties.Remove("target"); required.Clear();
                     var lines = new JObject { ["type"] = "array", ["maxItems"] = 100, ["items"] = new JObject { ["type"] = "string", ["pattern"] = "^[^\\r\\n]*$" } };
                     var edit = Object(new JObject {
-                        ["old"] = String("Exact nonempty substring or multiline fragment from delivered current source."),
+                        ["old"] = String("Exact nonempty fragment from delivered current source. For a repeated VBA terminator, prefer a distinctive procedure tail including that terminator."),
                         ["new"] = String("Literal replacement; empty deletes. For insertion, include old plus added text and explicit newlines.", false),
                         ["anchors_before"] = lines.DeepClone(), ["anchors_after"] = lines.DeepClone()
                     }, new JArray("old", "new"));
@@ -44,8 +44,8 @@ namespace RNAssistant.Core.Tools
                     required.Add("targets");
                     description = "Edit existing observed source. Each edit has exact nonempty old and literal replacement new; new: \"\" deletes. " +
                         "For insertion, replace a unique existing nearby fragment with itself plus inserted text, including intended newlines. " +
-                        "If old is ambiguous, use a longer unique old or ordered full-line anchors_before and/or anchors_after. Anchor occurrences must lie strictly outside old; never reuse the replaced occurrence as its own anchor. " +
-                        "Anchors can be distant or repeated, but the final edit location must be unique; a procedure header alone does not scope a repeated End Sub/End Function. " +
+                        "Copy old and full-line anchors from delivered current source. Anchors may be distant but must lie strictly before or after old; never invent lines or reuse old as its own anchor. " +
+                        "For repeated VBA End Sub/End Function, prefer a unique procedure tail in old. Otherwise put the procedure header in anchors_before and add a distinctive line near its end in anchors_before or the next declaration in anchors_after. A header does not scope a terminator; require one matching location and read more source if unsure. " +
                         "All edits for each target resolve against one original observed snapshot, not intermediate edits. No line numbers, regex or operation types. " +
                         "Read current source or reuse delivered verified after-source. Use core.write for creation/full overwrite and core.replace for bulk replacement. " +
                         "At most 262144 JSON characters. All targets prepare before sequential writes. Wait for tool_results and inspect each target: " +
@@ -90,8 +90,8 @@ namespace RNAssistant.Core.Tools
                 if (schema["description"] == null)
                     schema["description"] = property.Name == "targets" ? "Existing sources and their structured edits." :
                         property.Name == "edits" ? "Edits against one original snapshot." :
-                        property.Name == "anchors_before" ? "Ordered complete source lines without EOL, strictly before the start of old. Do not include the occurrence being replaced. Gaps/repeats allowed; empty strings are literal empty lines." :
-                        "Ordered complete source lines without EOL, strictly after the end of old. Do not include the occurrence being replaced. Gaps/repeats allowed; empty strings are literal empty lines.";
+                        property.Name == "anchors_before" ? "Observed complete lines without EOL, in order before old; may be distant. For VBA, a function header can be one anchor but does not scope End Function. Add a distinguishing line if needed; never invent lines or include old itself." :
+                        "Observed complete lines without EOL, in order after old; may be distant. A following declaration can distinguish a repeated VBA terminator. Never invent lines or include old itself.";
                 foreach (var child in schema.DescendantsAndSelf().OfType<JObject>().Where(o => o["properties"] is JObject).ToArray())
                     DescribePatchProperties((JObject)child["properties"]);
             }
