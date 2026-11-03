@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Подключение skills и восстановление tools — 2026-11-03
+
+Owners: Core CapabilityCatalog/CallableToolSet; Office и Workspace — consumers.
+Для skills один путь подключения: `core.skills.load` сразу выбирает инструкции и
+зависимости. `core.tools.read` оставлен только для схем tools; исходники читаются
+через общий `core.read`, прежний Office capability source reader удалён.
+Tool admissions v2 восстанавливают точные descriptor/policy/binding отдельно для
+каждого tool: постороннее изменение каталога не сбрасывает остальные. Старые v1
+admissions явно сбрасываются и требуют повторного подключения без удаления истории.
+Выбор skills сохраняется в прежних run events; проверены следующий run, cold reload,
+полные инструкции и budget refusal. 27 адресных host-neutral checks проходят;
+strict VBA 32K budget gap, Windows/Office и точная причина прерванного load на фото
+остаются открытыми.
+[Границы проверки](RISK_REGISTER.md#tools-и-skills-восстановление-по-фото--2026-11-03).
+
 ## Общение агентов между чатами — 2026-11-03, In Review
 
 Application/Conversations добавляет `agents.list/send` для открытых

@@ -282,7 +282,7 @@ namespace RNAssistant.Office.Runtime
                     binding = CapabilityToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new CapabilityToolHandler(
                         registration.Descriptor.Id, capabilityTools,
-                        discoveryCatalog, skillCatalog, session, manualRun);
+                        discoveryCatalog, skillCatalog, manualRun);
                 }
                 else if (ToolAuthoringCatalog.Owns(
                     registration.Descriptor.Id))

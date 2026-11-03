@@ -1,5 +1,33 @@
 # Stabilization risk register
 
+## Tools и skills: восстановление по фото — 2026-11-03
+
+Owners: Core capability admission/skill task state; Office/Workspace composition.
+Воспроизведён сброс неизменённых direct tools при изменении общей schema каталога.
+Исправлен v2 pins каждого полного descriptor/policy/binding; изменение одного tool
+не отзывает остальные. v1 admissions явно reset, без скрытого восстановления по
+истории результатов. Для skills убран второй source-read путь через
+`core.tools.read`: подключение только `core.skills.load`, инспекция — `core.read`.
+
+Сохранение выбранного skill между runs/cold reload и полное включение инструкций
+проверены. На фото load помечен `Superseded by a new user message before dispatch`:
+такой вызов не был выполнен и не доказывает потерю уже выбранного skill.
+Точный Windows run/photo не воспроизведён; live-model поведение и Office/WebView2
+остаются отдельным evidence. Изменённые tool/skill contracts требуют явного reload.
+
+Адресный итог на `d7f26ec1` с изменениями: 27 passes, один открытый strict VBA
+32K case. Чистый `d7f26ec1` тоже не проходит этот case (load refused); здесь load
+допущен, но последующий запрос после schema inspection превышает message budget.
+Автоматическое снятие выбора/обрезка инструкций не добавлялись. Этот budget gap
+не закрыт исправлением сохранения; JSON-object VBA load/restart и tight-budget
+refusal проходят. Windows/Office и живые модели не запускались.
+
+Отдельный старый fixture `skills: CRUD preserves omitted fields` ожидает четыре
+публичных authoring tools, хотя reference writes уже перенесены в общий resource
+owner и публичных tools два. Он падает до чтения skill; эта проверка не закрыта и
+не смешивается с исправлением восстановления. Актуальные source/reference reads,
+подключение, публикация в текущем run и admission/restart покрыты адресно.
+
 ## Agent communication: отдельные gaps — 2026-11-03
 
 Owners: Tool Library inventory / Web Shell / Office qualification. Адресная

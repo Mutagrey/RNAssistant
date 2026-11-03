@@ -124,6 +124,14 @@ existing direct admissions and selected dependencies. The compiler injects compl
 `SELECTED_SKILL` instructions alongside exactly those schemas. Words in Markdown,
 a source read, attached files and historical results cannot select a skill.
 
+`core.skills.load` is the single activation operation: it selects the complete
+instructions and compatible dependency tools together. Call it directly; no
+`core.tools.read` or source read is required first. `core.tools.read` accepts only
+tool IDs. Inspection/editing uses `core.read` with a skill or skill-reference target
+and does not report `loaded` or change selection. There is no separately persisted
+"loaded but unselected" skill state. A call superseded before dispatch never selects
+anything; earlier successful selections remain subject to their exact pins.
+
 Prompt schema 60 materializes each selected body once. An exact, complete historical
 read of that same published skill becomes a paired receipt pointing to the selected
 instruction. Partial reads, supporting files, different resources/revisions and
@@ -140,7 +148,7 @@ retains its skill-only exposure. VBA source editing now uses the common Core wri
 `skills.vba.code.editing` and `skills.vba.userform.authoring` packages supply
 VBA-specific guidance and optional lifecycle/macro dependencies, not duplicate
 source tool schemas. A direct
-`capabilities_read` returns bounded `loadSkill` guidance before or after selection
+`core.tools.read` returns bounded `loadSkill` guidance before or after selection
 but cannot admit a skill-only tool. The selected request owns its exact schema;
 discovery does not duplicate it into history or create a cached `skill_required`
 failure that would block another inspection after selection.

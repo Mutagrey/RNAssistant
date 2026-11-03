@@ -489,7 +489,9 @@ namespace RNAssistant.Harness
                 AssertContains(reader.ArgumentSchemaJson, "excel.sheet.add", "reader enum contains exact tool id");
                 AssertContains(reader.ArgumentSchemaJson, ExcelReadToolIds.SummarizeColumns,
                     "reader enum permits loading the column-analysis schema");
-                AssertContains(reader.ArgumentSchemaJson, "excel.review_workbook", "reader enum contains exact skill id");
+                AssertTrue(!reader.ArgumentSchemaJson.Contains("excel.review_workbook"), "tool reader excludes skill ids");
+                AssertTrue(JObject.Parse(reader.ArgumentSchemaJson).SelectToken("properties.referencePath") == null,
+                    "tool reader has no skill-reference arguments");
                 var capabilityDefinitions = catalog
                     .Where(tool => CapabilityToolCatalog.Owns(tool.Id))
                     .ToArray();
@@ -618,9 +620,15 @@ namespace RNAssistant.Harness
                     null,
                     AppSettings.DefaultMaxAgentToolSteps,
                     skills);
-                AssertTrue(skillRead.Success, "same reader loads a skill");
-                AssertEqual("skill", (string)JObject.Parse(skillRead.DataJson)["kind"],
-                    "skill read returns discriminated kind");
+                AssertTrue(!skillRead.Success, "tool reader cannot inspect or select a skill");
+                AssertTrue(!((skillRead.DataJson ?? "") + skillRead.Message).Contains(skill.BodyMarkdown),
+                    "rejected skill id never returns instruction bytes");
+                var discovery = new CapabilityCatalogService(new SkillCatalogService(adapter.HostName,
+                    () => new SkillCatalogSnapshot(skills)));
+                var routed = discovery.Execute(CapabilityToolCatalog.ReadToolId,
+                    new Dictionary<string, object> { ["id"] = skill.Id }, catalog, skills, false);
+                AssertEqual("skill_requires_load", routed.ErrorCode, "unbound/manual discovery explicitly routes to selection");
+                AssertContains(routed.Message, "core.skills.load", "one operation selects the complete skill");
 
                 var collisionDetected = false;
                 try
@@ -682,7 +690,7 @@ namespace RNAssistant.Harness
                 var htmlCatalog = CapabilityCatalogService.BuildPromptCatalog(catalog,
                     new RNAssistant.Core.Services.SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills).GetVisibleSkills(), new ToolCatalogEntry[0]);
                 var htmlTool = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item =>
-                    (string)item["id"] == "html.source.patch");
+                    (string)item["id"] == "html.data.write");
                 AssertTrue(((JArray)htmlTool["loadSkill"]).Values<string>().Contains("skills.html.workspace.authoring"),
                     "unexposed specialized tool identifies the skill to load");
                 var authoring = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item => (string)item["id"] == "tools.upsert");
@@ -1001,23 +1009,14 @@ namespace RNAssistant.Harness
                         session.LastRun.RunId;
                     var command = Command(CapabilityToolCatalog.ReadToolId, "id", skillId);
                     command.ToolCallId = callId;
-                    var result = executor.ExecuteManual(
-                        command,
-                        catalog,
-                        settings,
-                        false,
-                        false,
-                        session,
-                        AppSettings.DefaultMaxAgentToolSteps,
-                        skills);
-                    AssertTrue(result.Success,
-                        "provider returns complete oversized skill evidence before projection: " +
-                        result.ErrorCode + " " + result.Message + " " +
-                        result.DataJson);
+                    // Retained pre-cutover read evidence must remain bounded when replayed.
+                    // The current tool reader cannot produce skill-source results.
                     modelSession.AppendToolResult(command, new ConversationModelSession.PreparedToolResult(
-                        new ToolResultMaterialization(TerminalToolResult.Ok(
-                            result.Message, result.DataJson,
-                            result.ModelResourceRefs)), null));
+                        new ToolResultMaterialization(TerminalToolResult.Ok("Historical skill source read.",
+                            new JObject { ["kind"] = "skill", ["id"] = skillId, ["loaded"] = true,
+                                ["revision"] = SkillRevision.Compute(skills.Single()),
+                                ["complete"] = true, ["truncated"] = false,
+                                ["bodyMarkdown"] = skills.Single().BodyMarkdown }.ToString(Newtonsoft.Json.Formatting.None))), null));
 
                     store.Save(session);
                     modelSession.EndResponse("after-oversized-capability");
@@ -1736,9 +1735,9 @@ namespace RNAssistant.Harness
                     "accepted extension pins the exact resulting callable revision");
                 AssertEqual(optional.Id, durableData.RequestedSchemas.Single().Id,
                     "accepted extension persists only the exact requested delta");
-                AssertEqual(CapabilityCatalogService.Revision(optional),
+                AssertEqual(ToolPackSnapshotFactory.Capture(ChatModes.Agent, adapter.HostName, new[] { optional }).Revision,
                     durableData.RequestedSchemas.Single().Revision,
-                    "accepted extension pins the requested descriptor revision");
+                    "accepted extension pins the complete requested registration");
                 var secondEvidence = ReadSchemaEvidence(executor, catalog, secondOptional.Id, "durable-read-2");
                 secondEvidence.RunId = session.LastRun.RunId;
                 AssertTrue(live.StageReadResult(secondEvidence), "second exact delta stages independently");
@@ -1793,6 +1792,39 @@ namespace RNAssistant.Harness
                     AssertContains(available, "`" + optional.Id + "`", "first carried schema is available now");
                     AssertContains(available, "`" + secondOptional.Id + "`", "second carried schema is available now");
                 }
+                var savedAdmissions = new ToolPackAdmissionJournal(EventStore(store), reloaded).ReadAccepted();
+                var expanded = catalog.Select(tool => tool.Clone()).ToList();
+                var unrelated = optional.Clone(); unrelated.Id = "fixture.unrelated"; expanded.Add(unrelated);
+                expanded.Add(executor.GetControllerTools().Single(tool => tool.Id == "core.find"));
+                CapabilityCatalogService.BindReadSchema(expanded, new[] { new SkillDefinition {
+                    Id = "fixture.unrelated_skill", Host = "Excel", Enabled = true, BodyMarkdown = "Unrelated instructions" } });
+                var expandedPack = CallableToolPack.Create(ChatModes.Agent, adapter.HostName, "expanded-run", expanded, savedAdmissions);
+                AssertEqual(2, expandedPack.OptionalSchemaCount,
+                    "adding unrelated tools, Core tools and skills retains both exact admissions");
+                AssertTrue(!expandedPack.Tools.Any(tool => tool.Id == unrelated.Id), "catalog addition never admits the new optional tool");
+                AssertEqual(null, expandedPack.RestorationStateMessage, "catalog growth produces no false restoration failure");
+                foreach (var changeBinding in new[] { true, false })
+                {
+                    var drifted = catalog.Select(tool => tool.Clone()).ToList();
+                    var changedTool = drifted.Single(tool => tool.Id == optional.Id);
+                    if (changeBinding) changedTool.Binding = new ToolBinding("fixture.changed-binding");
+                    else changedTool.Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" });
+                    AssertEqual(CapabilityCatalogService.Revision(optional), CapabilityCatalogService.Revision(changedTool),
+                        "descriptor-only revision cannot detect the fixture's binding/policy change");
+                    var driftedPack = CallableToolPack.Create(ChatModes.Agent, adapter.HostName, "drifted-run", drifted, savedAdmissions);
+                    AssertTrue(!driftedPack.Tools.Any(tool => tool.Id == optional.Id) && driftedPack.Tools.Any(tool => tool.Id == secondOptional.Id),
+                        "binding or policy drift revokes only the changed registration");
+                }
+                var removedPack = CallableToolPack.Create(ChatModes.Agent, adapter.HostName, "removed-run",
+                    catalog.Where(tool => tool.Id != optional.Id).ToArray(), savedAdmissions);
+                AssertTrue(removedPack.Tools.Any(tool => tool.Id == secondOptional.Id), "removing one tool retains the other admission");
+                var legacyAdmission = JObject.FromObject(durableData).ToObject<ToolPackExtensionEventData>();
+                legacyAdmission.ContractVersion = 1;
+                var legacyPack = CallableToolPack.Create(ChatModes.Agent, adapter.HostName, "legacy-run", catalog, new[] { legacyAdmission });
+                AssertEqual(0, legacyPack.OptionalSchemaCount, "descriptor-only legacy admissions cannot restore authority");
+                AssertEqual("tool_pack_contract_changed", (string)ModelProtocolWire.ReadServiceMessage(legacyPack.RestorationStateMessage,
+                    "tool_pack_state")?["code"], "incompatible admission format is an explicit reset");
+
                 var inspected = new PromptContextInspectorService(adapter, FixturePaths.Value,
                     executor.ResourceAuthority, executor.Payloads, EventStore(store)).Inspect(reloaded,
                     NewContext(adapter), settings, catalog, new SkillDefinition[0], new ChatAttachment[0],
@@ -1827,7 +1859,9 @@ namespace RNAssistant.Harness
                 {
                     var request = changed.CreateRequest("changed-step", new ModelProtocolCallContext(new string[0]));
                     AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id),
-                        "changed pinned schema fails closed to the deterministic core");
+                        "changed pinned schema is not callable");
+                    AssertTrue(request.CallableTools.Any(tool => tool.Id == secondOptional.Id),
+                        "a different unchanged admission remains callable");
                     var restore = request.AcceptedMessages.Single(message =>
                         (string)ModelProtocolWire.ReadServiceMessage(message, "tool_pack_state")?["stage"] == "restore");
                     AssertEqual("user", restore.Role, "schema drift is supplied runtime data");
@@ -1837,12 +1871,12 @@ namespace RNAssistant.Harness
                 var rebase = CallableToolPack.Create(ChatModes.Agent, adapter.HostName,
                     reloaded.LastRun.RunId, changedCatalog,
                     new ToolPackAdmissionJournal(EventStore(store), reloaded).ReadAccepted());
-                var rebaseEvidence = ReadSchemaEvidence(executor, changedCatalog, secondOptional.Id, "rebase-read");
+                var rebaseEvidence = ReadSchemaEvidence(executor, changedCatalog, optional.Id, "rebase-read");
                 rebaseEvidence.RunId = reloaded.LastRun.RunId;
                 AssertTrue(rebase.StageReadResult(rebaseEvidence), "fresh exact evidence can stage after drift");
                 var rebaseAdmission = rebase.PreparePending((tools, state) => true);
                 AssertEqual(ToolPackSnapshotFactory.Capture(ChatModes.Agent, adapter.HostName, rebase.Tools).Revision,
-                    rebaseAdmission.PreviousRevision, "fresh admission rebases from the current deterministic core");
+                    rebaseAdmission.PreviousRevision, "fresh admission extends the retained exact registrations");
                 new ToolPackAdmissionJournal(EventStore(store), reloaded).Append(rebaseAdmission, "rebase-step");
                 rebase.Publish(rebaseAdmission);
                 using (var rebased = ConversationModelSession.CreateAsync(adapter, null,
@@ -1852,13 +1886,17 @@ namespace RNAssistant.Harness
                     CancellationToken.None).GetAwaiter().GetResult())
                 {
                     var request = rebased.CreateRequest("rebased-step", new ModelProtocolCallContext(new string[0]));
-                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id) &&
+                    AssertTrue(request.CallableTools.Any(tool => tool.Id == optional.Id) &&
                         request.CallableTools.Any(tool => tool.Id == secondOptional.Id),
-                        "a later accepted core rebase replaces the broken chain without resurrecting drifted schemas");
+                        "explicit readmission replaces the changed pin without losing other tools");
                     AssertTrue(!request.AcceptedMessages.Any(message =>
                         (string)ModelProtocolWire.ReadServiceMessage(message, "tool_pack_state")?["stage"] == "restore"),
                         "a valid accepted rebase clears the prior reconstruction warning");
                 }
+                var oldCatalog = CallableToolPack.Create(ChatModes.Agent, adapter.HostName, "old-catalog-run", catalog,
+                    new ToolPackAdmissionJournal(EventStore(store), reloaded).ReadAccepted());
+                AssertTrue(!oldCatalog.Tools.Any(tool => tool.Id == optional.Id) && oldCatalog.Tools.Any(tool => tool.Id == secondOptional.Id),
+                    "a later revoked pin cannot fall back to an older compatible admission");
             });
         }
 

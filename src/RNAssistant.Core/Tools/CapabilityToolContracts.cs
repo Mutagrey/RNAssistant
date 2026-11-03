@@ -17,17 +17,14 @@ namespace RNAssistant.Core.Tools
         public string ErrorCode { get; private set; }
         public bool Retryable { get; private set; }
         public ToolRecoveryContract Recovery { get; private set; }
-        public System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> Evidence { get; private set; }
-
         public static CapabilityToolOutcome Ok(
-            string message, string dataJson, System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> evidence = null)
+            string message, string dataJson)
         {
             return new CapabilityToolOutcome
             {
                 Status = CapabilityOutcomeStatus.Ok,
                 Message = message ?? string.Empty,
-                DataJson = dataJson,
-                Evidence = evidence
+                DataJson = dataJson
             };
         }
 

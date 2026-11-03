@@ -98,6 +98,16 @@ The macro is parsed for admission only, never executed. Existing `history protoc
 matrix checks fresh-call field guidance in both JSON outputs and typed repair,
 including the distinction between call `id` and `arguments.id`.
 
+Tools/skills persistence (2026-11-03): `skill packages:` checks complete selected
+instructions on every request, the next run and a cold chat reload. `tool pack:`
+checks v2 per-registration restoration, unrelated catalog drift, isolated
+descriptor/policy/binding revocation, latest-pin precedence and explicit v1 reset.
+`tools: discovery is complete and exact` enforces tools-only schema reads;
+`agent: inspects full skill without selection` and
+`skills: references use revisioned resource reads` cover the shared source route.
+The workspace discovery case uses actual v8 `tool_results`/`tool_pack_state` messages.
+These scripted host-neutral checks do not qualify Windows/Office or live-model behavior.
+
 Chat model parity S2a: `workspace: chat model preferences and wire` checks actual
 scripted HTTP bodies, persisted override/default, reopen, exact workspace and busy
 lease refusal. `chat: session model overrides global settings` checks the common

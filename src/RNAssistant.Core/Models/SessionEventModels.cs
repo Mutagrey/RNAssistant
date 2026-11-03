@@ -112,7 +112,9 @@ namespace RNAssistant.Core.Models
 
     public sealed class ToolPackExtensionEventData
     {
-        public const int CurrentContractVersion = 1;
+        // v2 pins each admitted tool's complete descriptor/policy/binding. Snapshot
+        // revisions remain request diagnostics, not a cross-turn replay chain.
+        public const int CurrentContractVersion = 2;
 
         public int ContractVersion { get; set; }
         public string Mode { get; set; }

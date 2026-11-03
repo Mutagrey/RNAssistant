@@ -1126,14 +1126,13 @@ namespace RNAssistant.Runtime
             private readonly CapabilityCatalogService _service;
             private readonly Func<IReadOnlyList<ToolCatalogEntry>> _catalog;
             private readonly Func<IReadOnlyList<SkillDefinition>> _skills;
-            private readonly ChatSession _session;
             internal WorkspaceCapabilityHandler(string id, CapabilityCatalogService service,
-                Func<IReadOnlyList<ToolCatalogEntry>> catalog, Func<IReadOnlyList<SkillDefinition>> skills, ChatSession session)
-            { _id = id; _service = service; _catalog = catalog; _skills = skills; _session = session; }
+                Func<IReadOnlyList<ToolCatalogEntry>> catalog, Func<IReadOnlyList<SkillDefinition>> skills)
+            { _id = id; _service = service; _catalog = catalog; _skills = skills; }
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
             {
                 token.ThrowIfCancellationRequested();
-                var outcome = _service.Execute(_id, context.Arguments, _catalog(), _skills(), _session, false);
+                var outcome = _service.Execute(_id, context.Arguments, _catalog(), _skills(), false);
                 var data = string.IsNullOrWhiteSpace(outcome.DataJson) ? new JObject() : JObject.Parse(outcome.DataJson);
                 if (outcome.Status != CapabilityOutcomeStatus.Ok)
                 { data["code"] = outcome.ErrorCode; data["retryable"] = outcome.Retryable; }
@@ -1277,15 +1276,10 @@ namespace RNAssistant.Runtime
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);
                 if (office?.Tools != null) foreach (var contribution in office.Tools)
                     if (!entries.Any(item => item.Id == contribution.Entry.Id)) Register(registry, entries, contribution.Entry, contribution.Handler);
-                var discovery = new CapabilityCatalogService(_skillCatalog, (arguments, skill, chat) =>
-                    CapabilityToolOutcome.Ok("Use core.read to inspect this skill source; core.skills.load selects it.",
-                        new JObject { ["kind"] = "skill-guidance", ["id"] = skill.Id,
-                            ["readSource"] = new JObject { ["tool"] = "core.read",
-                                ["type"] = "skill", ["target"] = skill.Id },
-                            ["loadSkill"] = skill.Id }.ToString(Formatting.None)));
+                var discovery = new CapabilityCatalogService(_skillCatalog);
                 foreach (var entry in CapabilityToolCatalog.GetTools())
                     Register(registry, entries, entry, new WorkspaceCapabilityHandler(entry.Id, discovery,
-                        () => _catalog, () => _skills.Skills, session));
+                        () => _catalog, () => _skills.Skills));
                 _catalog = entries;
                 _toolPack = new ToolPackSnapshot("workspace", _mode.Mode, "Workspace", entries.Select(item =>
                     ToolPackSnapshot.Capture(new ToolDescriptor(item.Id, item.Description, item.ArgumentSchemaJson,

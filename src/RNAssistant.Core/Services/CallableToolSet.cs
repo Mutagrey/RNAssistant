@@ -25,6 +25,7 @@ namespace RNAssistant.Core.Services
         private readonly HashSet<string> _optionalSet = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<string> _pendingIds = new List<string>();
         private readonly HashSet<string> _pendingSet = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _unavailableIds = new HashSet<string>(StringComparer.Ordinal);
         private string _restorationFailureCode;
 
         private CallableToolSet(
@@ -98,7 +99,8 @@ namespace RNAssistant.Core.Services
                         ["stage"] = "restore",
                         ["restored"] = false,
                         ["code"] = _restorationFailureCode,
-                        ["instruction"] = "The prior optional callable snapshot could not be reproduced exactly, so only the deterministic core is callable. Raw schema history grants no authority. Read and admit any still-needed optional schema again."
+                        ["unavailableSchemas"] = new JArray(_unavailableIds.OrderBy(id => id, StringComparer.Ordinal)),
+                        ["instruction"] = "Some prior optional admissions changed or are incompatible. Only tools offered in this request are callable; unchanged exact admissions remain available. Read and admit any still-needed unavailable tool again. Raw schema history grants no authority."
                     }.ToString(Formatting.None)
                 };
             }
@@ -115,7 +117,7 @@ namespace RNAssistant.Core.Services
         {
             var result = CapabilityCatalogService.BuildPromptCatalog(_catalog, skills, callableTools);
             if (!string.IsNullOrWhiteSpace(_restorationFailureCode))
-                result["reconstructionStatus"] = "invalidated_to_core";
+                result["reconstructionStatus"] = _optionalIds.Count == 0 ? "invalidated_to_core" : "partially_restored";
             return result;
         }
 
@@ -185,7 +187,9 @@ namespace RNAssistant.Core.Services
                 foreach (var id in admission.RequestedIds)
                 {
                     if (_optionalSet.Add(id)) _optionalIds.Add(id);
+                    _unavailableIds.Remove(id);
                 }
+                _restorationFailureCode = _unavailableIds.Count == 0 ? null : "tool_pack_bindings_changed";
             }
             _pendingIds.Clear();
             _pendingSet.Clear();
@@ -221,60 +225,44 @@ namespace RNAssistant.Core.Services
 
         private void Restore(IEnumerable<ToolPackExtensionEventData> admissions)
         {
-            var coreRevision = Revision;
             foreach (var admission in admissions ?? new ToolPackExtensionEventData[0])
             {
                 if (!ValidAdmissionEnvelope(admission))
                 {
+                    ResetRestoration(admission != null && admission.ContractVersion != ToolPackExtensionEventData.CurrentContractVersion
+                        ? "tool_pack_contract_changed" : "tool_pack_admission_invalid");
+                    continue;
+                }
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                if (admission.RequestedSchemas.Count == 0 || admission.RequestedSchemas.Any(reference =>
+                    reference == null || string.IsNullOrWhiteSpace(reference.Id) || !seen.Add(reference.Id) ||
+                    string.IsNullOrWhiteSpace(reference.Revision) || reference.Revision.Length != 64 ||
+                    reference.Revision.Any(character => !Uri.IsHexDigit(character))))
+                {
                     ResetRestoration("tool_pack_admission_invalid");
                     continue;
                 }
-
-                if (!string.Equals(admission.PreviousSnapshotRevision, Revision, StringComparison.Ordinal))
+                // Replay only exact admitted registrations. The current Core/catalog
+                // may have changed independently; neither grants optional membership.
+                // Later admissions replace earlier pins for the same id, never fall
+                // back to an older compatible version after a later pin is revoked.
+                foreach (var reference in admission.RequestedSchemas)
                 {
-                    if (!string.Equals(admission.PreviousSnapshotRevision, coreRevision, StringComparison.Ordinal))
+                    _optionalSet.Remove(reference.Id);
+                    _optionalIds.Remove(reference.Id);
+                    _unavailableIds.Remove(reference.Id);
+                    if (_coreIds.Contains(reference.Id)) continue;
+                    ToolCatalogEntry tool;
+                    if (!_catalogById.TryGetValue(reference.Id, out tool) || tool.Exposure == ToolExposure.Skill ||
+                        !string.Equals(reference.Revision, RegistrationRevision(tool), StringComparison.Ordinal))
                     {
-                        ResetRestoration("tool_pack_chain_broken");
+                        _unavailableIds.Add(reference.Id);
                         continue;
                     }
-                    ResetRestoration(null);
+                    _optionalSet.Add(reference.Id);
+                    _optionalIds.Add(reference.Id);
                 }
-
-                var requested = new List<string>();
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                var valid = true;
-                foreach (var reference in admission.RequestedSchemas ?? new List<ToolPackSchemaRevision>())
-                {
-                    ToolCatalogEntry tool;
-                    if (reference == null || string.IsNullOrWhiteSpace(reference.Id) ||
-                        !seen.Add(reference.Id) || _coreIds.Contains(reference.Id) ||
-                        _optionalSet.Contains(reference.Id) ||
-                        !_catalogById.TryGetValue(reference.Id, out tool) ||
-                        !string.Equals(reference.Revision, CapabilityCatalogService.Revision(tool), StringComparison.Ordinal))
-                    {
-                        valid = false;
-                        break;
-                    }
-                    requested.Add(reference.Id);
-                }
-                if (!valid || requested.Count == 0)
-                {
-                    ResetRestoration("tool_pack_schema_changed");
-                    continue;
-                }
-
-                var restoredRevision = SnapshotRevision(ToolsFor(_optionalIds.Concat(requested)));
-                if (!string.Equals(restoredRevision, admission.SnapshotRevision, StringComparison.Ordinal))
-                {
-                    ResetRestoration("tool_pack_snapshot_changed");
-                    continue;
-                }
-                foreach (var id in requested)
-                {
-                    _optionalSet.Add(id);
-                    _optionalIds.Add(id);
-                }
-                _restorationFailureCode = null;
+                _restorationFailureCode = _unavailableIds.Count == 0 ? null : "tool_pack_bindings_changed";
             }
         }
 
@@ -282,6 +270,7 @@ namespace RNAssistant.Core.Services
         {
             _optionalIds.Clear();
             _optionalSet.Clear();
+            _unavailableIds.Clear();
             _restorationFailureCode = code;
         }
 
@@ -354,7 +343,7 @@ namespace RNAssistant.Core.Services
                 .Select(id => new ToolPackSchemaRevision
                 {
                     Id = id,
-                    Revision = CapabilityCatalogService.Revision(_catalogById[id])
+                    Revision = RegistrationRevision(_catalogById[id])
                 })
                 .ToList();
         }
@@ -362,6 +351,11 @@ namespace RNAssistant.Core.Services
         private string SnapshotRevision(IReadOnlyList<ToolCatalogEntry> tools)
         {
             return _revision(tools);
+        }
+
+        private string RegistrationRevision(ToolCatalogEntry tool)
+        {
+            return SnapshotRevision(new[] { tool });
         }
 
         private bool TryReadEvidence(ChatMessage message, out string id)

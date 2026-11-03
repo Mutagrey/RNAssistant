@@ -246,7 +246,7 @@ namespace RNAssistant.Office.Services
                     schema = CapabilityCatalogService.SearchSchema();
                     break;
                 case CapabilityToolCatalog.ReadToolId:
-                    schema = CapabilityCatalogService.ReadSchema(null, null);
+                    schema = CapabilityCatalogService.ReadSchema(null);
                     break;
                 case UserQuestionToolCatalog.AskToolId:
                     schema = UserQuestionToolCatalog.Schema();

@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
-using RNAssistant.Office.Runtime;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
@@ -18,7 +16,6 @@ namespace RNAssistant.Office.Tools
         private readonly CapabilityCatalogService _service;
         private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
         private readonly IReadOnlyList<SkillDefinition> _skills;
-        private readonly ChatSession _session;
         private readonly bool _manualRun;
 
         internal CapabilityToolHandler(
@@ -26,7 +23,6 @@ namespace RNAssistant.Office.Tools
             CapabilityCatalogService service,
             IReadOnlyList<ToolCatalogEntry> catalog,
             IReadOnlyList<SkillDefinition> skills,
-            ChatSession session,
             bool manualRun)
         {
             if (!CapabilityToolCatalog.Owns(toolId))
@@ -36,7 +32,6 @@ namespace RNAssistant.Office.Tools
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _catalog = catalog ?? new ToolCatalogEntry[0];
             _skills = skills;
-            _session = session;
             _manualRun = manualRun;
         }
 
@@ -45,19 +40,15 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            CapabilityToolOutcome outcome;
-            try { outcome = _service.Execute(_toolId, context.Arguments, _catalog, _skills, _session, _manualRun); }
-            catch (RNAssistant.Core.Models.ResourceRequestException error)
-            { return OfficeToolFailure.Resource(error); }
+            var outcome = _service.Execute(_toolId, context.Arguments, _catalog, _skills, _manualRun);
             if (outcome == null)
                 throw new InvalidOperationException(
                     "Capability service returned no outcome.");
             var result = outcome.Status == CapabilityOutcomeStatus.Ok
-                ? RuntimeResult.Ok(outcome.Message, outcome.DataJson, outcome.Evidence?.Select(item => item.Resource))
+                ? RuntimeResult.Ok(outcome.Message, outcome.DataJson)
                 : RuntimeResult.Error(outcome.Message, ErrorData(outcome));
             return Task.FromResult(new ToolHandlerResult(
                 result, ToolEffectEvidence.None,
-                resourceEvidence: outcome.Evidence,
                 recovery: outcome.Recovery));
         }
 

@@ -115,16 +115,18 @@ namespace RNAssistant.Harness
                         AssertTrue(!offered(0, "fixture.extra"), "optional schema is absent before discovery");
                         AssertTrue(offered(1, "fixture.extra"), "successful exact read admits schema on the next request");
                         AssertTrue(requests[1]["messages"].ToString().Contains("schemaInRequest"), "shared projection removes duplicate admitted schema");
-                        var readReceipts = requests[1]["messages"].Select(message => (string)message["content"])
-                            .Where(content => content != null && content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal))
-                            .Select(content => JObject.Parse(content.Substring("TOOL_RESULT:\n".Length)))
+                        var readReceipts = requests[1]["messages"].SelectMany(message =>
+                            (ModelProtocolWire.ReadServiceMessage(new ChatMessage { Content = (string)message["content"], ProtocolMessage = true },
+                                "tool_results")?["results"] as JArray ?? new JArray()).OfType<JObject>())
                             .Where(result => (string)result["name"] == CapabilityToolCatalog.ReadToolId).ToArray();
                         AssertEqual(2, readReceipts.Length, "both schema reads have model receipts");
                         AssertTrue(readReceipts.All(result => result["data"]["loaded"] == null && result["data"]["revision"] == null),
                             "runtime pins and loaded flags never become model selection authority");
                         AssertTrue(offered(3, "fixture.extra"), "exact admission survives reopening and the next turn");
                         AssertTrue(!offered(4, "fixture.extra"), "binding drift invalidates admission before dispatch");
-                        AssertTrue(requests[4]["messages"].ToString().Contains("TOOL_PACK_RESTORE_STATE"), "drift is explicit");
+                        AssertTrue(requests[4]["messages"].Any(message =>
+                            (string)ModelProtocolWire.ReadServiceMessage(new ChatMessage { Content = (string)message["content"], ProtocolMessage = true },
+                                "tool_pack_state")?["stage"] == "restore"), "drift is explicit");
                         AssertTrue(Enumerable.Range(0, 5).All(index => !offered(index, "fixture.special")), "schema read cannot admit skill-only tools");
                         AssertEqual(1, executions, "restart and drift never replay effects");
                         var session = new ChatStore(paths).Load(sessionId);

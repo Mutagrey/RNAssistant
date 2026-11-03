@@ -296,18 +296,22 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.
 - `agent.response.rejected` keeps malformed Agent output for diagnosis without adding it to model replay or visible chat history.
 - `tool_pack.extension.accepted` / `tool_pack.extension.rejected` are typed
-  `ToolPackExtensionEventData` v1 records at the next model-step boundary. They carry
-  mode/host/profile, catalog and before/after snapshot revisions, and exact requested
-  schema revisions. The append is mandatory and precedes live callable publication;
-  failure sends no next model request and grants no authority. Reconstruction replays
-  the ordered accepted chain for the same logical `TurnId`, validates every exact ref
-  and before/after revision against the current filtered catalog, and rematerializes
-  each extension atomically. A broken chain resets to core until a later accepted event
-  explicitly rebases from the current core revision.
+  `ToolPackExtensionEventData` v2 records at the next model-step boundary. They carry
+  mode/host/profile, catalog and before/after snapshot revisions. Each requested
+  revision pins the complete single-tool registration: descriptor, policy and binding.
+  The append is mandatory and precedes live callable publication; failure sends no
+  next request and grants no authority. Reconstruction reads ordered accepted deltas
+  from the current turn and retained read runs in the same chat, validates each pin
+  against the filtered catalog and restores unchanged tools independently. A later
+  pin replaces an earlier pin for the same ID, even when it is now incompatible.
+  Before/after snapshots remain the in-run publication barrier and diagnostics;
+  unrelated catalog/Core changes do not revoke optional admissions. Invalid envelopes
+  or v1 records explicitly reset optional membership; there is no legacy-pin fallback.
   Historical v7 `RunId` may change across confirmation; v8 retains it. Rejected events and raw tool-result history
-  remain diagnostics, never replay authority. Drift leaves deterministic core plus a
-  visible `TOOL_PACK_RESTORE_STATE`; a later exact read/admission may establish a new
-  accepted snapshot. These events do not mutate the `ChatSession` projection or add a
+  remain diagnostics, never replay authority. Drift leaves deterministic core and
+  unchanged optional tools plus a visible `tool_pack_state` with `stage=restore` and
+  unavailable IDs; a later exact read/admission can replace those pins. These events
+  do not mutate the `ChatSession` projection or add a
   second store.
 - Historical `qualification.*` events from the removed Qualification Center stay
   readable in existing streams. There is no active writer, runner or replay of

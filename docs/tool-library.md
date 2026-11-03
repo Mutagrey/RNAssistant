@@ -105,7 +105,7 @@ Core `CapabilityCatalogService`/`CapabilityToolCatalog` now own descriptor const
 metadata search and exact schema reads for both consumers. `CallableToolSet` owns
 staging, candidate membership and replay checks; `ToolPackAdmissionJournal` persists
 accepted/rejected extensions in the existing chat event stream. Office retains its
-profile factory and ResourceGateway skill source reader. No second registry/journal,
+profile factory; skill source inspection uses the common `core.read` ResourceGateway route. No second registry/journal,
 alias path or migration adapter remains.
 
 Workspace Agent/Plan registers `core.tools.search/read` and uses the shared Core profile.
@@ -119,24 +119,23 @@ candidate (instructions, history, schema, repair/continuation reserves). The jou
 append precedes publication. Successful reads of already callable tools create no
 extension; Skill-only tools still require a selected compatible package. A refused
 candidate does not partially publish or gain authority from retained schema history.
-Reopening validates exact descriptor/policy/binding pins; drift resets optional
-membership explicitly. Already admitted schemas are retained when the current
-request exceeds its budget: preparation must compact or refuse the request, without
-silently evicting schemas. No effect is replayed. Current-run effects remain kernel-owned.
-
-Restoration currently compares the complete snapshot chain, including the Core
-reader's bound capability-ID enum. Adding an unrelated tool or skill changes that
-enum and can reset unchanged direct admissions to Core with
-`tool_pack_chain_broken`. Selected skills are revalidated separately; this reset does
-not clear `SelectedSkills`. This limitation is reproduced in the
-[2026-11-03 audit](stabilization/RISK_REGISTER.md#tools-и-skills-восстановление-по-фото--2026-11-03).
+Reopening validates each admitted tool's exact descriptor/policy/binding pins.
+Unrelated catalog changes preserve unchanged tools; changed or revoked tools are
+excluded individually with explicit restore feedback. The latest accepted pin for
+an ID wins; an older compatible pin is never used as fallback. Already admitted
+schemas are not silently evicted to fit the budget: the complete request must fit
+or fail explicitly. No effect is replayed. Current-run effects remain kernel-owned.
 
 Schema receipts and runtime metadata removal now share Core helpers: exact callable
 schemas are not duplicated in model history, and `loaded`/revision fields do not
-claim selection authority. Workspace capability reads of skill IDs return routing
-metadata to `core.read` (`type=skill`, semantic target) and
-`core.skills.load`; they do not read source, select the skill or execute code.
-Office retains its existing exact skill/reference source reads through ResourceGateway.
+claim selection authority. In Office and workspace, `core.tools.read` accepts tool
+IDs only; its schema has no skill-reference branch. Select a skill directly with
+`core.skills.load`, which admits its full instructions and dependencies together.
+Inspect source through `core.read` (Office semantic `skill:`/`skill reference:`
+targets; workspace `type=skill`). This source read never selects the skill.
+The former Office capability-specific source/continuation reader has been removed.
+Durable tool admissions use v2 per-registration pins; v1 admissions reset explicitly
+and require a new read/admission, without rewriting history or selected skills.
 
 The [paired live pilot](audits/tool-profile-comparison.md) records the earlier broad/compact
 comparison. This cutover deliberately selects the compact Core requested by the user;

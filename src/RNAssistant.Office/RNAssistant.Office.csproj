@@ -345,7 +345,6 @@
     <Compile Include="Tools\SkillAuthoringService.Library.cs" />
     <Compile Include="Tools\SkillAuthoringService.Mutations.cs" />
     <Compile Include="Tools\SkillAuthoringToolHandler.cs" />
-    <Compile Include="Tools\OfficeCapabilitySources.cs" />
     <Compile Include="Tools\CapabilityToolHandler.cs" />
     <Compile Include="Tools\ToolAuthoringCatalog.cs" />
     <Compile Include="Tools\ToolAuthoringCatalog.Schemas.cs" />

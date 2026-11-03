@@ -822,97 +822,46 @@ namespace RNAssistant.Harness
 
         private static void SimpleAgentInspectsFullSkillThroughTool()
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                var skill = new SkillDefinition
-                {
-                    Id = "common.test",
-                    Name = "Test",
-                    Description = "Test workflow",
-                    Version = "2.0.0",
-                    BodyMarkdown = "Follow TEST_SKILL_SENTINEL.\n" + new string('x', 15000) + "\nTEST_SKILL_END.",
-                    Enabled = true
-                };
-                var session = NewSession(adapter);
-                var responses = new Queue<string>(new[]
-                {
-                    ModelProtocolWire.WriteAcceptedCall("Read the selected skill.", "Читаю подходящий skill.",
-                        new ConversationToolCall { Name = CapabilityToolCatalog.ReadToolId,
-                            Arguments = new JObject { ["id"] = "common.test" } }),
-                    ModelProtocolWire.WriteAcceptedCall("Check the skill context again.",
-                        "Повторное чтение для проверки контекста.",
-                        new ConversationToolCall { Name = CapabilityToolCatalog.ReadToolId,
-                            Arguments = new JObject { ["id"] = "common.test" } }),
-                    null
-                });
-                var calls = new List<IReadOnlyList<ChatMessage>>();
-                LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
-                {
-                    calls.Add(messages.ToList());
-                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
-                        "Both skill reads have terminal results.", "Инструкции учтены.",
-                        "The skill instructions were read.", CapabilityToolCatalog.ReadToolId,
-                        CapabilityToolCatalog.ReadToolId);
-                    return Task.FromResult(new LlmCompletionResult { Content = response });
-                };
-                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var published = executor.ExecuteManual(Command("skills.upsert", "id", skill.Id,
-                    "host", "Common", "name", skill.Name, "description", skill.Description, "version", skill.Version,
-                    "bodyMarkdown", skill.BodyMarkdown, "enabled", true), tools, new AppSettings(), false, true, session);
-                AssertEqual("ok", published.Status, "skill fixture crosses the publication barrier");
+                var skill = new SkillDefinition { Id = "skills.test.source", Host = "Common", Name = "Test",
+                    Description = "Test workflow", Version = "2.0.0", Enabled = true,
+                    BodyMarkdown = "Follow TEST_SKILL_SENTINEL.\n" + new string('x', 15000) + "\nTEST_SKILL_END." };
+                var published = executor.ExecuteSkillLibraryMutation(new SkillLibraryCoreMutation {
+                    Kind = "upsert", ExpectedRevision = "", Intended = skill });
+                AssertEqual(SkillAuthoringOutcomeStatus.Ok, published.Outcome.Status, "fixture uses the explicit publication owner: " + published.Outcome.Message);
                 skill = executor.CaptureSkills().Skills.Single(item => item.Id == skill.Id);
-                var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
-                    ChatModes.Agent,
-                    "Do the test workflow.", session, NewContext(adapter), new AppSettings(),
-                    tools, null, null, null, null, CancellationToken.None, true).GetAwaiter().GetResult();
-
-                AssertEqual("Инструкции учтены.", result.AssistantText, "skill-assisted response");
-                var revision = SkillRevision.Compute(skill);
-                AssertTrue(FlattenSimple(calls[0]).IndexOf("TEST_SKILL_SENTINEL", StringComparison.Ordinal) < 0,
-                    "first request contains only catalog");
-                AssertTrue(FlattenSimple(calls[0]).IndexOf(revision, StringComparison.Ordinal) < 0,
-                    "catalog hides skill revision");
-                var replay = FlattenSimple(calls.Last());
-                AssertTrue(!replay.Contains("resource_evidence_stale"),
-                    "repeated skill load does not turn the earlier complete read into a stale error");
-                AssertContains(replay, "TEST_SKILL_SENTINEL", "full instructions returned by tool");
-                AssertContains(replay, "TEST_SKILL_END", "skill body is not cut by the generic tool-result limit");
-                AssertContains(replay, "\"format\":\"markdown\"", "loaded skill format");
-                AssertContains(replay, "\"version\":\"2.0.0\"", "loaded skill version");
-                AssertTrue(replay.IndexOf(revision, StringComparison.Ordinal) < 0,
-                    "model result hides skill revision");
-                var inspected = LastToolResult(calls.Last(), CapabilityToolCatalog.ReadToolId);
-                AssertTrue(inspected.SelectToken("data.loaded") == null,
-                    "reading skill source must not claim selection");
-                AssertEqual(true, (bool)inspected.SelectToken("data.complete"), "source read completeness remains explicit");
-                AssertEqual(skill.BodyMarkdown, (string)inspected.SelectToken("data.bodyMarkdown"), "complete skill source is preserved exactly");
-                AssertContains((string)inspected["message"], "core.skills.load", "source read directs explicit skill selection");
-                AssertContains(replay, "\"complete\":true", "loaded skill body is complete");
-                AssertContains(replay, "core.skills.load",
-                    "source read directs selection through the canonical loader");
-                AssertEqual(0, session.LastRun.SelectedSkills.Count, "source inspection does not select a skill");
-                AssertTrue(replay.IndexOf("\"truncated\":true", StringComparison.Ordinal) < 0,
-                    "loaded skill is not duplicated into a truncated result");
-                var durableMessage = session.Messages.Last(message => string.Equals(
-                    message.ToolName, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal));
-                ToolResultWireReadResult durable;
-                string durableError;
-                AssertTrue(ToolResultHistoryReader.TryRead(durableMessage, out durable, out durableError),
-                    "durable skill result remains readable");
-                AssertContains(durable.Result.DataJson, "\"payload_externalized\":true", "large skill result is reference-first");
-                AssertTrue(durableMessage.ResultPayload != null && !durableMessage.Content.Contains("TEST_SKILL_SENTINEL"),
-                    "history does not duplicate the full skill payload");
-                var hydrated = HistoricalContextProjector.Project(durableMessage);
-                hydrated.Content = executor.Payloads.ReadText(durableMessage.ResultPayload.ToBlobReference());
-                AssertTrue(ToolResultHistoryReader.TryRead(hydrated, out durable, out durableError),
-                    "exact CAS skill result remains readable");
-                AssertContains(durable.Result.DataJson, "\"revision\":\"" + revision + "\"",
-                    "durable skill result retains exact revision");
-                AssertEqual(true, (bool)durable.Data["loaded"], "durable read metadata is unchanged");
-                var exactSkill = SkillPublicationService.SkillResource(skill);
-                AssertTrue(durableMessage.ResourceEvidence.Any(evidence => evidence.Resource.Uri == exactSkill.Uri &&
-                    evidence.Resource.Revision == exactSkill.Revision),
-                    "durable skill evidence pins the committed publication");
+                var session = NewSession(adapter);
+                var requests = new List<IReadOnlyList<ChatMessage>>();
+                var read = ModelProtocolWire.WriteAcceptedCall("Inspect the skill source for editing.", "Читаю исходник навыка.",
+                    new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                        Arguments = new JObject { ["target"] = "skill: " + skill.Id, ["representation"] = "text" } });
+                var result = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                {
+                    requests.Add(messages.ToList());
+                    return Task.FromResult(new LlmCompletionResult { Content = requests.Count <= 2 ? read :
+                        ScriptedVerifiedFinish(session, "The source was inspected.", "Исходник прочитан.",
+                            "The skill source was read.", ResourceToolCatalog.ReadToolId, ResourceToolCatalog.ReadToolId) });
+                }).ExecuteAsync(ChatModes.Agent, "Inspect the skill source without selecting it.", session, NewContext(adapter),
+                    new AppSettings { ContextWindowOverrideTokens = 131072 },
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                AssertEqual("Исходник прочитан.", result.AssistantText, "source inspection completes");
+                AssertTrue(!FlattenSimple(requests[0]).Contains("TEST_SKILL_SENTINEL"), "catalog has metadata only");
+                var replay = FlattenSimple(requests.Last());
+                AssertContains(replay, "TEST_SKILL_SENTINEL", "source body is delivered");
+                AssertContains(replay, "TEST_SKILL_END", "source body is complete");
+                AssertTrue(!replay.Contains("resource_evidence_stale"), "repeated exact source read stays current");
+                AssertTrue(!requests.Last().Any(item => (item.Content ?? "").StartsWith("SELECTED_SKILL " + skill.Id)),
+                    "source inspection does not inject a selected instruction");
+                AssertEqual(0, session.LastRun.SelectedSkills.Count, "source inspection does not select the skill");
+                var inspected = LastToolResult(requests.Last(), ResourceToolCatalog.ReadToolId);
+                AssertEqual(skill.BodyMarkdown, (string)inspected.SelectToken("data.text"), "source uses the common resource contract");
+                AssertEqual(true, (bool)inspected.SelectToken("data.complete"), "source completeness is explicit");
+                AssertTrue(inspected.SelectToken("data.loaded") == null, "source read makes no selection claim");
+                var durable = session.Messages.Last(item => item.ToolName == ResourceToolCatalog.ReadToolId && item.Role != "assistant");
+                var exact = SkillPublicationService.SkillResource(skill);
+                AssertTrue(durable.ResourceEvidence.Any(item => item.Resource.Uri == exact.Uri && item.Resource.Revision == exact.Revision),
+                    "durable read pins the exact published skill");
             });
         }
 
@@ -921,8 +870,8 @@ namespace RNAssistant.Harness
             Func<string, JObject, string> call = (name, arguments) =>
                 ModelProtocolWire.WriteAcceptedCall("Continue inspecting the authored capability.",
                     "Продолжаю проверку пакета.", new ConversationToolCall { Name = name, Arguments = arguments });
-            const string skillId = "excel.in_run_skill";
-            const string toolId = "excel.in_run_tool";
+            const string skillId = "skills.test.inrun";
+            const string toolId = "test.inrun";
             const string body = "# In-run skill\n\nIN_RUN_SKILL_SENTINEL";
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -934,7 +883,7 @@ namespace RNAssistant.Harness
                         ["id"] = skillId, ["host"] = "Excel", ["name"] = "In-run skill",
                         ["description"] = "Test newly published skill visibility.",
                         ["version"] = "1.0.0", ["bodyMarkdown"] = body, ["enabled"] = true }),
-                    call("core.tools.read", new JObject { ["id"] = skillId }),
+                    call("core.read", new JObject { ["target"] = "skill: " + skillId, ["representation"] = "text" }),
                     call("core.skills.load", new JObject { ["id"] = skillId }),
                     null
                 });
@@ -959,7 +908,7 @@ namespace RNAssistant.Harness
                 AssertContains(FlattenSimple(requests[2]), "\"id\":\"" + skillId + "\"",
                     "new skill is discoverable after its publication in the same run");
                 AssertContains(FlattenSimple(requests[3]), "IN_RUN_SKILL_SENTINEL",
-                    "new skill source is readable through the capability reader");
+                    "new skill source is readable through the resource reader");
                 AssertContains(FlattenSimple(requests[4]), "IN_RUN_SKILL_SENTINEL",
                     "newly selected instructions reach the next request");
                 AssertTrue(session.LastRun.SelectedSkills.Any(item => item.Id == skillId),
@@ -2692,6 +2641,12 @@ namespace RNAssistant.Harness
                         AssertContains((string)load["message"], "core.skills.load with action=remove", "budget recovery names the explicit removal operation");
                         AssertEqual(0, session.LastRun.SelectedSkills.Count, "candidate never becomes durable selection");
                     }
+                    if (!tightBudget && requests >= 5)
+                    {
+                        var skill = executor.CaptureSkills().Skills.Single(item => item.Id == "skills.vba.code.editing");
+                        AssertEqual(1, messages.Count(item => item.Content == "SELECTED_SKILL " + skill.Id + "\n" + skill.BodyMarkdown),
+                            "successful selection supplies one complete instruction on every subsequent request");
+                    }
                     var scriptedResponse = responses.Dequeue();
                     if (scriptedResponse == null)
                     {
@@ -2748,6 +2703,31 @@ namespace RNAssistant.Harness
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                     AssertEqual(1, resumedCalls, "restored next user turn can reach the model");
                     AssertEqual(AgentResponseStatuses.Completed, resumed.ResponseStatus, "refused selection does not trap the chat");
+                }
+                else
+                {
+                    var previousRunId = session.LastRun.RunId;
+                    session = new ChatStore(FixturePaths.Value).Load(session.Host, session.DocumentKey, session.Id);
+                    AssertEqual("skills.vba.code.editing", session.LastRun.SelectedSkills.Single().Id,
+                        "cold chat load retains the selected VBA skill");
+                    var resumedCalls = 0;
+                    var resumed = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    {
+                        resumedCalls++;
+                        var skill = executor.CaptureSkills().Skills.Single(item => item.Id == "skills.vba.code.editing");
+                        AssertTrue(session.LastRun.RunId != previousRunId, "follow-up owns a fresh run");
+                        AssertEqual(1, messages.Count(item => item.Content == "SELECTED_SKILL " + skill.Id + "\n" + skill.BodyMarkdown),
+                            "cold reopen and a new run supply the complete selected skill without another load");
+                        AssertTrue(session.LastContextReceipt.Arsenal.Tools.Any(item => item.Id == "resources.move" && item.Skills.Contains(skill.Id)),
+                            "restored selection supplies its dependent tools in the new request");
+                        return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                            ConversationResponse.FinishAction, "Answer using the retained skill.", "Навык остаётся подключён.",
+                            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
+                    }).ExecuteAsync(ChatModes.Agent, "Продолжим проверку VBA.", session, NewContext(adapter), requestSettings,
+                        OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
+                    AssertEqual(1, resumedCalls, "retained skill requires no additional loading exchange");
+                    AssertEqual(AgentResponseStatuses.Completed, resumed.ResponseStatus, "follow-up with retained selection completes");
+                    AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "reopen never replays the earlier mutation");
                 }
             });
         }

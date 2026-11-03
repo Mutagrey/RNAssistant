@@ -41,7 +41,7 @@ namespace RNAssistant.Core.ModelProtocol
                         ? entry.Exposure == ToolExposure.Skill
                             ? "Tool schema is not loaded: " + call.Name + ". Select its published skill with core.skills.load, then wait for the next request before using its tools. If that load was refused, resolve its reported blocker before retrying; the rejected selection grants no tools."
                             : "Tool schema is not loaded: " + call.Name + ". Call core.tools.read with arguments " +
-                            new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for its complete tool_results entry, then call the tool in a later response."
+                            new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for tool_pack_state with admitted=true, then call the tool when offered in a later request. A completed schema read alone does not grant admission."
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }
                 if (calls.Count > 1 && !context.AllowsSequentialBatch(tool))

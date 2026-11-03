@@ -908,7 +908,7 @@ namespace RNAssistant.Harness
                 Test("skill packages: complete request admission preserves usable selection", () => SimpleAgentVbaSchemaInspectionDoesNotLoop(true)),
                 Test("skill packages: restart supporting files and inert arsenal", SkillPackagesRestartAndSupportingFiles),
                 Test("skills: revision and validation are deterministic", SkillRevisionAndValidationAreDeterministic),
-                Test("skills: references are revisioned and runtime-continued", SkillReferencesAreRevisionedAndRuntimeContinued),
+                Test("skills: references use revisioned resource reads", SkillReferencesAreRevisionedAndReadThroughResources),
                 Test("skills: ids do not collide and disabled reads fail", SkillIdsDoNotCollideAndDisabledReadsFail),
                 Test("skills: UI mutations use typed revision guards", SkillUiMutationsUseTypedRevisionGuards),
                 Test("tools: unknown and disabled fail", UnknownAndDisabledToolsFail),

@@ -25,8 +25,8 @@ namespace RNAssistant.Core.Tools
                 "capabilities_search");
             yield return Projection(
                 ReadToolId,
-                "Read-only: Read one exact public capability id from RUNTIME_CONTEXT.capabilities or capabilities_search. For a listed skill reference, use its semantic referencePath and action=next after hasMore=true; offsets, page sizes, catalog revisions, and admission state are runtime-owned.",
-                CapabilityCatalogService.ReadSchema(null, null),
+                "Read-only: Load one exact tool schema from RUNTIME_CONTEXT.capabilities or core.tools.search. Select a skill directly with core.skills.load; it supplies instructions and dependent tools without a preliminary read. Skill source inspection belongs to core.read. Admission state is runtime-owned.",
+                CapabilityCatalogService.ReadSchema(null),
                 "capabilities_read");
         }
 

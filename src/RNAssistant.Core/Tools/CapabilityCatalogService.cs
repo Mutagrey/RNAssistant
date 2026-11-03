@@ -98,13 +98,9 @@ namespace RNAssistant.Core.Tools
         private const int MaximumSummaryCharacters = 160;
 
         private readonly SkillCatalogService _skillCatalog;
-        private readonly Func<IDictionary<string, object>, SkillDefinition, ChatSession, CapabilityToolOutcome> _readSkill;
-
-        public CapabilityCatalogService(SkillCatalogService skillCatalog,
-            Func<IDictionary<string, object>, SkillDefinition, ChatSession, CapabilityToolOutcome> readSkill)
+        public CapabilityCatalogService(SkillCatalogService skillCatalog)
         {
             _skillCatalog = skillCatalog ?? throw new ArgumentNullException(nameof(skillCatalog));
-            _readSkill = readSkill ?? throw new ArgumentNullException(nameof(readSkill));
         }
 
         public SkillCatalogSnapshot CaptureSkills() { return _skillCatalog.Capture(); }
@@ -122,7 +118,6 @@ namespace RNAssistant.Core.Tools
             IDictionary<string, object> arguments,
             IReadOnlyList<ToolCatalogEntry> runnableCatalog,
             IReadOnlyList<SkillDefinition> skills,
-            ChatSession session,
             bool manualRun)
         {
             arguments = arguments ??
@@ -141,7 +136,7 @@ namespace RNAssistant.Core.Tools
             if (string.Equals(toolId, CapabilityToolCatalog.ReadToolId,
                 StringComparison.Ordinal))
             {
-                return Read(arguments, tools, enabledSkills, session);
+                return Read(arguments, tools, enabledSkills);
             }
             return CapabilityToolOutcome.Error(
                 "Unknown capability tool: " + toolId, null,
@@ -211,9 +206,9 @@ namespace RNAssistant.Core.Tools
                 ["total"] = entries.Count,
                 ["complete"] = true,
                 ["truncated"] = false,
-                ["idEnumEnforced"] = HasBoundIdEnum(toolCatalog, entries.Count),
+                ["idEnumEnforced"] = HasBoundIdEnum(toolCatalog, toolCatalog.Count),
                 ["instruction"] =
-                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; core.tools.search is an optional filter. For a tool with loadSkill, select one listed skill through core.skills.load before calling the tool; an empty list means unavailable. core.tools.read inspects sources or admits direct tool schemas. Never synthesize an id."
+                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; core.tools.search is an optional filter. Select a skill directly with core.skills.load; no preliminary source read is required. For a tool with loadSkill, select one listed skill before calling the tool; an empty list means unavailable. core.tools.read reads tool schemas only. Use core.read to inspect a skill source when editing it. Never synthesize an id."
             };
         }
 
@@ -229,15 +224,11 @@ namespace RNAssistant.Core.Tools
                     StringComparison.Ordinal));
             if (reader == null) return;
             var allIds = toolCatalog.Select(tool => tool.Id)
-                .Concat(skillCatalog.Select(skill => skill.Id))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var skillIds = skillCatalog.Select(skill => skill.Id)
-                .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var genericSchema = ReadSchema(null, null);
-            reader.ArgumentSchemaJson = ReadSchema(allIds, skillIds);
+            var genericSchema = ReadSchema(null);
+            reader.ArgumentSchemaJson = ReadSchema(allIds);
             var descriptor = Descriptor(reader);
             if (descriptor == null || descriptor.ToString(Formatting.None).Length > MaximumDescriptorCharacters)
             {
@@ -279,8 +270,7 @@ namespace RNAssistant.Core.Tools
         private CapabilityToolOutcome Read(
             IDictionary<string, object> arguments,
             IReadOnlyList<ToolCatalogEntry> tools,
-            IReadOnlyList<SkillDefinition> skills,
-            ChatSession session)
+            IReadOnlyList<SkillDefinition> skills)
         {
             var id = ArgumentString(
                 arguments, "id", string.Empty).Trim();
@@ -288,12 +278,17 @@ namespace RNAssistant.Core.Tools
                 string.Equals(candidate.Id, id, StringComparison.Ordinal));
             var skill = skills.FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, id, StringComparison.Ordinal));
-            if (tool == null && skill == null)
+            if (skill != null)
+                return CapabilityToolOutcome.Error(
+                    "This id is a skill. Call core.skills.load with this id to select its instructions and tools; no preliminary read is required. Use core.read only to inspect its source.",
+                    new JObject { ["id"] = id, ["loadSkill"] = id }.ToString(Formatting.None),
+                    "skill_requires_load", true);
+            if (tool == null)
             {
-                var records = Records(tools, skills).ToList();
+                var records = Records(tools, new SkillDefinition[0]).ToList();
                 var suggestions = Suggest(id, records, 5);
                 return CapabilityToolOutcome.Error(
-                    "Capability not found: " + id + ". Use an exact id from RUNTIME_CONTEXT.capabilities or core.tools.search; never invent an id.",
+                    "Tool not found: " + id + ". Use an exact tool id from RUNTIME_CONTEXT.capabilities or core.tools.search; select skills with core.skills.load.",
                     new JObject
                     {
                         ["id"] = id,
@@ -303,20 +298,7 @@ namespace RNAssistant.Core.Tools
                     "capability_not_found",
                     true);
             }
-            if (tool != null)
-            {
-                if (HasArgument(arguments, "referencePath") ||
-                    HasArgument(arguments, "action"))
-                {
-                    return CapabilityToolOutcome.Error(
-                        "Skill reference arguments cannot be used with tool capability " + id + ".",
-                        null,
-                        "capability_reference_not_supported",
-                        false);
-                }
-                return ReadTool(tool, skills);
-            }
-            return _readSkill(arguments, skill, session);
+            return ReadTool(tool, skills);
         }
 
         private static CapabilityToolOutcome ReadTool(ToolCatalogEntry tool, IReadOnlyList<SkillDefinition> skills)
@@ -686,70 +668,23 @@ namespace RNAssistant.Core.Tools
                 "\"required\":[\"query\"],\"additionalProperties\":false}";
         }
 
-        public static string ReadSchema(
-            IEnumerable<string> allowedIds,
-            IEnumerable<string> skillIds)
+        public static string ReadSchema(IEnumerable<string> allowedIds)
         {
             var id = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Exact capability id from RUNTIME_CONTEXT.capabilities or core.tools.search. Never invent an id.",
+                ["description"] = "Exact tool id from RUNTIME_CONTEXT.capabilities or core.tools.search. For a skill use core.skills.load instead; it selects instructions and tools in one call.",
                 ["minLength"] = 1,
                 ["maxLength"] = 200
             };
             var all = (allowedIds ?? new string[0]).Where(value => !string.IsNullOrWhiteSpace(value)).ToArray();
             if (all.Length > 0) id["enum"] = new JArray(all);
-            var referenceId = (JObject)id.DeepClone();
-            var skillOnly = (skillIds ?? new string[0]).Where(value => !string.IsNullOrWhiteSpace(value)).ToArray();
-            if (skillOnly.Length > 0) referenceId["enum"] = new JArray(skillOnly);
-
-            var coreProperties = new JObject { ["id"] = id };
-            var referenceProperties = new JObject
-            {
-                ["id"] = referenceId,
-                ["referencePath"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["description"] = "Exact references/*.md path listed by a loaded skill.",
-                    ["maxLength"] = 260
-                },
-                ["action"] = new JObject
-                {
-                    ["type"] = "string",
-                    ["description"] = "Use read to start or restart this reference; use next only after hasMore=true.",
-                    ["enum"] = new JArray("read", "next"),
-                    ["default"] = "read"
-                }
-            };
-            var properties = (JObject)referenceProperties.DeepClone();
-            properties["id"] = id.DeepClone();
-            var variants = new JArray
-            {
-                new JObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = coreProperties,
-                    ["required"] = new JArray("id"),
-                    ["additionalProperties"] = false
-                }
-            };
-            if (skillOnly.Length > 0 || all.Length == 0)
-            {
-                variants.Add(new JObject
-                {
-                    ["type"] = "object",
-                    ["properties"] = referenceProperties,
-                    ["required"] = new JArray("id", "referencePath"),
-                    ["additionalProperties"] = false
-                });
-            }
             return new JObject
             {
                 ["type"] = "object",
-                ["properties"] = properties,
+                ["properties"] = new JObject { ["id"] = id },
                 ["required"] = new JArray("id"),
-                ["additionalProperties"] = false,
-                ["anyOf"] = variants
+                ["additionalProperties"] = false
             }.ToString(Formatting.None);
         }
 
@@ -777,12 +712,6 @@ namespace RNAssistant.Core.Tools
 
             var scalar = token as JValue;
             return Convert.ToString(scalar == null ? token.ToString(Formatting.None) : scalar.Value, System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        private static bool HasArgument(
-            IDictionary<string, object> arguments, string name)
-        {
-            return arguments != null && arguments.ContainsKey(name);
         }
 
         private sealed class CapabilityRecord
