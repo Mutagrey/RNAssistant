@@ -153,24 +153,29 @@ namespace RNAssistant.Office.Services
 
         internal ResourceDescriptor ResolveHtmlTarget(ChatSession session, string target, bool allowUniqueBase = false)
         {
-            if (target == ChatHtmlResourceCatalog.CurrentWorkspaceTarget ||
-                target.Contains(" in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget))
+            if (!target.StartsWith("HTML snapshot: ", StringComparison.Ordinal) && !target.Contains(" in HTML snapshot: "))
             {
                 var current = ProjectHtmlDiscovery(session);
-                var artifact = current.Session.Artifacts.SingleOrDefault(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
-                if (artifact == null)
-                    throw new ResourceRequestException("The current HTML workspace is unavailable; discover or select a current workspace.", "resource_target_not_found", true);
-                if (target == ChatHtmlResourceCatalog.CurrentWorkspaceTarget)
-                    return Describe(current.Session, artifact, true);
-                var members = _htmlResources.DescribeMembers(current.Session, artifact)
-                    .Where(item => ResourceGatewayService.IntentTarget(item) == target || allowUniqueBase &&
-                        ResourceGatewayService.IntentBaseTarget(item) + " in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget == target).Take(2).ToArray();
-                if (members.Length > 1)
-                    throw new ResourceRequestException("The HTML member target is ambiguous; use its exact discovered target.", "resource_target_ambiguous", true);
-                var member = members.SingleOrDefault();
-                if (member == null)
-                    throw new ResourceRequestException("The current HTML member is absent or was recreated; discover its current target.", "resource_target_not_found", true);
-                return member;
+                if (current.UnavailableResources > 0)
+                    throw new ResourceRequestException("HTML discovery is incomplete.", "resource_scope_incomplete", false);
+                var workingMatches = new List<ResourceDescriptor>();
+                foreach (var artifact in current.Session.Artifacts)
+                {
+                    var root = Describe(current.Session, artifact, true);
+                    if (target == root.CurrentTarget || allowUniqueBase && target == "HTML workspace: " +
+                        _documentArtifacts.HtmlWorkspaceOrigin(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id)).Title)
+                        workingMatches.Add(root);
+                    if (!target.StartsWith("HTML file: ") && !target.StartsWith("HTML data: ")) continue;
+                    foreach (var member in _htmlResources.DescribeMembers(current.Session, artifact))
+                        if (target == member.CurrentTarget || allowUniqueBase &&
+                            (target == ResourceGatewayService.IntentBaseTarget(member) ||
+                             target == ResourceGatewayService.IntentBaseTarget(member) + " in " + root.CurrentTarget)) workingMatches.Add(member);
+                }
+                if (workingMatches.Count != 1) throw new ResourceRequestException(workingMatches.Count == 0 ?
+                    "HTML target was not found. Use core.find with scope=html; creating a file requires an explicit workspace." :
+                    "HTML target is ambiguous. Use the complete target from core.find.",
+                    workingMatches.Count == 0 ? "resource_target_not_found" : "resource_target_ambiguous", false);
+                return workingMatches[0];
             }
             const int maximumSnapshots = 1000;
             var snapshots = Artifacts(session).Where(item =>
@@ -198,7 +203,7 @@ namespace RNAssistant.Office.Services
             {
                 var descriptor = Describe(session, artifact, true);
                 descriptor.CurrentTarget = null;
-                var workspaceTarget = ResourceGatewayService.IntentTarget(descriptor);
+                var workspaceTarget = HtmlWorkspaceTargets.Snapshot(artifact);
                 if (string.Equals(target, workspaceTarget, StringComparison.Ordinal))
                     matches.Add(descriptor);
                 else if (target.EndsWith(" in " + workspaceTarget, StringComparison.Ordinal))
@@ -221,7 +226,7 @@ namespace RNAssistant.Office.Services
             var exact = Resolve(session, matches[0].Reference.Uri);
             exact.CurrentTarget = null;
             if (ChatHtmlResourceCatalog.SupportsKind(exact.Kind))
-                exact.ParentTarget = target.Substring(target.LastIndexOf(" in HTML workspace: ", StringComparison.Ordinal) + 4);
+                exact.ParentTarget = target.Substring(target.LastIndexOf(" in HTML snapshot: ", StringComparison.Ordinal) + 4);
             return exact;
         }
 
@@ -229,10 +234,8 @@ namespace RNAssistant.Office.Services
         {
             var snapshot = ChatResourceUri.ArtifactSnapshot(selected);
             string artifactId;
-            if (!ChatResourceUri.TryParseArtifactRevision(snapshot, out _, out artifactId, out _) ||
-                session?.ActiveHtmlArtifactId != artifactId)
-                throw new ResourceRequestException("The selected HTML workspace changed during this read. Read the working target again.",
-                    "resource_revision_changed", true);
+            if (!ChatResourceUri.TryParseArtifactRevision(snapshot, out _, out artifactId, out _))
+                throw new ResourceRequestException("Invalid HTML reference.", "resource_revision_changed", false);
             if (string.IsNullOrWhiteSpace(session.DocumentAuthorityId)) return;
             var logicalId = HtmlWorkspaceIdentity.LogicalId(artifactId);
             var current = logicalId == null ? null : _documentArtifacts?.CurrentSnapshot(session,
@@ -762,9 +765,7 @@ namespace RNAssistant.Office.Services
                 result.Metadata["sectionRead"] = "atx-heading";
             if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
             {
-                result.SnapshotTarget = ResourceGatewayService.IntentTarget(result);
-                if (artifact.Id == session.ActiveHtmlArtifactId)
-                    result.CurrentTarget = ChatHtmlResourceCatalog.CurrentWorkspaceTarget;
+                result.SnapshotTarget = HtmlWorkspaceTargets.Snapshot(artifact);
                 result.Metadata["memberKinds"] = ChatHtmlResourceCatalog.FileKind + "," + ChatHtmlResourceCatalog.DataKind;
                 result.Metadata["memberDiscovery"] = "List this provider with an exact member kind.";
             }
@@ -774,6 +775,8 @@ namespace RNAssistant.Office.Services
         private ResourceDescriptor Describe(ChatSession session, ChatArtifact artifact, bool compact)
         {
             var result = DescribeMetadata(session, artifact);
+            if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace && HtmlWorkspaceTargets.IsCurrent(_documentArtifacts, session, artifact))
+                result.CurrentTarget = HtmlWorkspaceTargets.Workspace(_documentArtifacts, session, artifact);
             if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)
                 result.Metadata["description"] = (string)JObject.Parse(artifact.MetadataJson ?? "{}")["description"];
             if (_payloads != null)
@@ -1139,39 +1142,32 @@ namespace RNAssistant.Office.Services
 
         private ArtifactDiscoveryProjection ProjectHtmlDiscovery(ChatSession session)
         {
-            var artifact = Artifacts(session).SingleOrDefault(item => item.Id == session?.ActiveHtmlArtifactId);
             var result = new ArtifactDiscoveryProjection { Session = CopyDiscoverySession(session, new List<ChatArtifact>()) };
-            if (artifact == null)
+            if (_documentArtifacts == null || string.IsNullOrEmpty(session?.DocumentAuthorityId)) return result;
+            int? offset = 0;
+            long? generation = null;
+            do
             {
-                if (!string.IsNullOrWhiteSpace(session?.ActiveHtmlArtifactId)) result.UnavailableResources = 1;
-                return result;
-            }
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId))
-                {
-                    if (_documentArtifacts == null) throw new System.IO.InvalidDataException("The document artifact owner is unavailable.");
-                    var current = _documentArtifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id)));
-                    if (current?.Uri != ChatResourceUri.CreateArtifactRevisionUri(session, artifact))
-                        throw new System.IO.InvalidDataException("Refresh the selected HTML workspace before discovering members.");
-                    artifact = _documentArtifacts.Read(session, current, false);
-                    if (_documentArtifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id)))?.Revision != current.Revision)
-                        throw new ResourceRequestException("The document changed during member discovery.", "resource_revision_changed", true);
-                    result.SourceRevision = current.Uri + ":" + current.Revision;
-                }
-                result.Session.Artifacts.Add(artifact);
-                FilterDiscoveryAvailability(result);
-            }
-            catch (Exception ex) when (IsDiscoveryUnavailable(ex)) { result.UnavailableResources++; }
+                var page = _documentArtifacts.InspectCurrentMetadata(session, offset.Value, 100);
+                if (generation.HasValue && generation != page.Generation)
+                    throw new ResourceRequestException("HTML discovery changed; repeat discovery.", "resource_revision_changed", true);
+                generation = page.Generation;
+                result.UnavailableResources += page.UnavailableResources;
+                result.Session.Artifacts.AddRange(page.Items.Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace));
+                offset = page.NextOffset;
+                if (offset >= 4000) throw new ResourceRequestException("HTML discovery exceeds its bound.", "resource_scope_incomplete", false);
+            } while (offset.HasValue);
+            result.SourceRevision = TextPatternEngine.Sha256(string.Join("\n", result.Session.Artifacts.Select(item =>
+                item.Id + ":" + item.Revision + ":" + item.ContentSha256)));
+            FilterDiscoveryAvailability(result);
             return result;
         }
 
         private void ValidateHtmlSearchDiscovery(ChatSession session, ArtifactDiscoveryProjection before)
         {
             var after = ProjectHtmlDiscovery(session);
-            if (before.SourceRevision != after.SourceRevision || before.UnavailableResources != after.UnavailableResources ||
-                before.Session.ActiveHtmlArtifactId != after.Session.ActiveHtmlArtifactId)
-                throw new ResourceRequestException("The selected HTML workspace changed during search; refresh and rediscover it.", "resource_revision_changed", true);
+            if (before.SourceRevision != after.SourceRevision || before.UnavailableResources != after.UnavailableResources)
+                throw new ResourceRequestException("HTML changed during search; rediscover it.", "resource_revision_changed", true);
         }
 
         private static ChatSession CopyDiscoverySession(ChatSession session, List<ChatArtifact> artifacts)

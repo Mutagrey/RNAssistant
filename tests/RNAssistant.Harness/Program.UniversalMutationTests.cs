@@ -350,14 +350,18 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var catalog = executor.GetControllerTools().ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
+                AssertTrue(executor.ExecuteManual(Command("html.workspace.create", "title", "Batch"), catalog, settings, false, true, session).Success, "named root created");
+                var owner = new ChatStore(FixturePaths.Value).DocumentArtifacts;
+                var workspace = HtmlWorkspaceTargets.Workspace(owner, session, session.Artifacts.Last());
                 Action<string, string> write = (path, content) => {
-                    var saved = executor.ExecuteManual(Command("core.write", "target", "HTML file: " + path,
+                    var saved = executor.ExecuteManual(Command("core.write", "target", "HTML file: " + path + " in " + workspace,
                         "content", content), catalog, settings, false, true, session);
                     AssertTrue(saved.Success, "HTML fixture publication: " + saved.Message);
                 };
-                Func<string, string> source = path => session.HtmlWorkspace.Files.Single(f => f.Path == path).Content;
+                Func<string, string> source = path => executor.ResourceGateway.ReadWhole(session,
+                    executor.ResourceGateway.ResolveIntentTarget(session, "HTML file: " + path + " in " + workspace, true).Reference, "source").Result.Text;
                 Func<string, string, string, JArray> section = (path, before, after) =>
-                    PatchTargets(PatchSection("HTML file: " + path, LineHunk(before, after)));
+                    PatchTargets(PatchSection("HTML file: " + path + " in " + workspace, LineHunk(before, after)));
                 write("index.html", "<main>one</main>");
                 write("script.js", "let count = 1;");
                 var patch = Command("core.patch", "targets", MergeTargets(section("index.html", "<main>one</main>", "<main>two</main>"), section("script.js", "let count = 1;", "let count = 2;")));

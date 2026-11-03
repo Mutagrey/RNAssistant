@@ -640,42 +640,45 @@ namespace RNAssistant.Office.Services
 
             var verifiedHtmlMembers = verified.Where(item => item?.IsExact == true &&
                 HtmlWorkspaceIdentity.IsMemberIdentity(item.Identity)).ToArray();
-            var publicPatch = command.ToolId == ResourceMutationToolCatalog.Patch && verifiedHtmlMembers.Length > 0;
+            var publicPatch = ResourceMutationToolCatalog.Owns(command.ToolId) && verifiedHtmlMembers.Length > 0;
             if (!publicPatch && (!HtmlWorkspaceToolCatalog.Owns(command.ToolId) ||
                 effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored)) return;
-            var current = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
-                item != null && item.Id == session.ActiveHtmlArtifactId &&
-                item.Kind == ChatArtifactKinds.HtmlWorkspace);
-            var logicalId = HtmlWorkspaceIdentity.LogicalId(current?.Id);
-            if (logicalId == null) return;
-            var artifactRef = ChatResourceUri.CreateArtifactRevision(session, current);
-            var documentScope = authority.ScopeFor(session, artifactRef, false);
-            var frozenDocument = authority.Store.Capture(documentScope);
-            var logicalHeadState = frozenDocument.GetHead(HtmlWorkspaceIdentity.Identity(session, logicalId));
-            var logicalRevision = logicalHeadState?.Knowledge == HeadKnowledge.Known
-                ? authority.Revisions.GetRevision(documentScope, logicalHeadState.Revision) : null;
-            if (logicalRevision?.Dependencies.Count(item => item.Kind == "immutable-snapshot" &&
-                item.Resource.Uri == artifactRef.Uri && item.Resource.Revision == artifactRef.Revision) != 1) return;
-            var retained = authority.Revisions.GetRevision(documentScope, artifactRef);
-            var body = retained?.Payload == null ? null : payloads.ReadText(retained.Payload.ToBlobReference());
-            var workspace = body == null ? null : JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(body);
-            if (workspace == null) return;
-            foreach (var file in (workspace.Files ?? new List<HtmlWorkspaceFile>())
-                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id)))
+            var htmlOwner = new RNAssistant.Core.Storage.DocumentArtifactStore(authority.Store, authority.Revisions, payloads);
+            var htmlIds = verifiedHtmlMembers.Select(item => ResourceUri.Parse(item.Identity.Uri).Segments[2]).Distinct().ToArray();
+            foreach (var logicalId in htmlIds)
             {
-                var source = file.Content ?? string.Empty;
-                var payload = PayloadRef.FromBlob(payloads.StoreText(source, "text/plain; charset=utf-8"));
-                var fileHead = frozenDocument.GetHead(HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
-                    ChatHtmlResourceCatalog.FileMemberKey(file.Id)));
-                if (publicPatch && (fileHead?.Knowledge != HeadKnowledge.Known ||
-                    !verifiedHtmlMembers.Any(item => item.Uri == fileHead.Revision.Uri && item.Revision == fileHead.Revision.Revision))) continue;
-                message.ResourceEvidence.Add(new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
-                    documentScope, ChatHtmlResourceCatalog.FileReference(session, current, file.Id),
-                    ResourceRepresentations.Source, ResourceCoverage.Whole(), true, frozenDocument.Generation,
-                    payload, new[] { new ResourceDependency(fileHead?.Knowledge == HeadKnowledge.Known
-                        ? fileHead.Revision : logicalHeadState.Revision,
-                        kind: fileHead?.Knowledge == HeadKnowledge.Known ? "current-html-file" : "current-html-workspace") }, immutable: true,
-                    contentSha256: TextPatternEngine.Sha256(source)));
+                var published = htmlOwner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logicalId));
+                if (published == null) continue;
+                var current = htmlOwner.Read(session, published, false);
+                var artifactRef = ChatResourceUri.CreateArtifactRevision(session, current);
+                var documentScope = authority.ScopeFor(session, artifactRef, false);
+                var frozenDocument = authority.Store.Capture(documentScope);
+                var logicalHeadState = frozenDocument.GetHead(HtmlWorkspaceIdentity.Identity(session, logicalId));
+                var logicalRevision = logicalHeadState?.Knowledge == HeadKnowledge.Known
+                    ? authority.Revisions.GetRevision(documentScope, logicalHeadState.Revision) : null;
+                if (logicalRevision?.Dependencies.Count(item => item.Kind == "immutable-snapshot" &&
+                    item.Resource.Uri == artifactRef.Uri && item.Resource.Revision == artifactRef.Revision) != 1) continue;
+                var retained = authority.Revisions.GetRevision(documentScope, artifactRef);
+                var body = retained?.Payload == null ? null : payloads.ReadText(retained.Payload.ToBlobReference());
+                var workspace = body == null ? null : JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(body);
+                if (workspace == null) continue;
+                foreach (var file in (workspace.Files ?? new List<HtmlWorkspaceFile>())
+                    .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id)))
+                {
+                    var source = file.Content ?? string.Empty;
+                    var payload = PayloadRef.FromBlob(payloads.StoreText(source, "text/plain; charset=utf-8"));
+                    var fileHead = frozenDocument.GetHead(HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
+                        ChatHtmlResourceCatalog.FileMemberKey(file.Id)));
+                    if (publicPatch && (fileHead?.Knowledge != HeadKnowledge.Known ||
+                        !verifiedHtmlMembers.Any(item => item.Uri == fileHead.Revision.Uri && item.Revision == fileHead.Revision.Revision))) continue;
+                    message.ResourceEvidence.Add(new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
+                        documentScope, ChatHtmlResourceCatalog.FileReference(session, current, file.Id),
+                        ResourceRepresentations.Source, ResourceCoverage.Whole(), true, frozenDocument.Generation,
+                        payload, new[] { new ResourceDependency(fileHead?.Knowledge == HeadKnowledge.Known
+                            ? fileHead.Revision : logicalHeadState.Revision,
+                            kind: fileHead?.Knowledge == HeadKnowledge.Known ? "current-html-file" : "current-html-workspace") }, immutable: true,
+                        contentSha256: TextPatternEngine.Sha256(source)));
+                }
             }
         }
 

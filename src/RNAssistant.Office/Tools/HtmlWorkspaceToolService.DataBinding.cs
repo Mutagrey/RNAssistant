@@ -26,12 +26,12 @@ namespace RNAssistant.Office.Tools
         internal static string BindSchema()
         { return ResourceSelectorContract.NamedInput(true).ToString(Formatting.None); }
 
-        private HtmlWorkspaceToolOutcome BindDataSource(ChatSession session,
+        private HtmlWorkspaceToolOutcome BindDataSource(HtmlWorkspaceMutation session,
             IDictionary<string, object> arguments, Action markDispatchPossible, CancellationToken cancellationToken)
         {
             RequireGateway();
             var name = NormalizeDataName(ToolArgumentReader.String(arguments, "name", string.Empty));
-            var target = _resources.ResolveIntentTarget(session, ToolArgumentReader.String(arguments, "target", string.Empty));
+            var target = _resources.ResolveIntentTarget(session.Actor, ToolArgumentReader.String(arguments, "target", string.Empty));
             if (target.Type == "HTML workspace" || target.Type == "HTML data")
                 throw new ResourceRequestException(
                     "This target describes an HTML workspace or an existing binding, not source values. " +
@@ -56,7 +56,7 @@ namespace RNAssistant.Office.Tools
             binding.Resource = policy == "head" ? new ResourceRef(exact.Identity.Uri) : exact.Copy();
             binding.Policy = policy;
             NormalizeBinding(binding, null);
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+            var workspace = NormalizedWorkspaceCopy(session.Workspace);
             var id = DataSourceId(name);
             var previous = workspace.DataSources.SingleOrDefault(item => item.Id == id)?.Binding;
             if (previous != null && previous.Policy == binding.Policy && previous.View == binding.View &&
@@ -66,45 +66,45 @@ namespace RNAssistant.Office.Tools
                     WorkspaceMutationData(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedNoChange);
             ValidateWorkspaceCapacity(workspace, null, id);
             markDispatchPossible();
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
-            var data = session.HtmlWorkspace.DataSources.SingleOrDefault(item => item.Id == id);
+            session.Workspace = NormalizeWorkspace(session.Workspace);
+            var data = session.Workspace.DataSources.SingleOrDefault(item => item.Id == id);
             if (data == null)
             {
                 data = new HtmlWorkspaceDataSource { Id = id, Name = name };
-                session.HtmlWorkspace.DataSources.Add(data);
+                session.Workspace.DataSources.Add(data);
             }
             data.Binding = binding; data.UpdatedUtc = DateTime.UtcNow;
-            session.HtmlWorkspace.UpdatedUtc = data.UpdatedUtc;
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML resource binding: " + name);
+            session.Workspace.UpdatedUtc = data.UpdatedUtc;
+            session.Capture( "HTML resource binding: " + name);
             return WorkspaceResult(session, "HTML resource bound: " + name + ".",
                 WorkspaceMutationData(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedChange);
         }
 
-        private HtmlWorkspaceToolOutcome FreezeDataSource(ChatSession session,
+        private HtmlWorkspaceToolOutcome FreezeDataSource(HtmlWorkspaceMutation session,
             IDictionary<string, object> arguments, Action markDispatchPossible)
         {
             RequireGateway();
             var name = ToolArgumentReader.String(arguments, "name", string.Empty);
-            var source = FindDataSource(NormalizedWorkspaceCopy(session.HtmlWorkspace), name);
+            var source = FindDataSource(NormalizedWorkspaceCopy(session.Workspace), name);
             if (source.Binding.Policy == "exact")
                 return WorkspaceResult(session, "Resource is already revision-pinned.",
                     WorkspaceMutationData(session, "data", name), HtmlWorkspaceEffect.VerifiedNoChange);
             var exact = ReadBinding(session, source.Binding, CancellationToken.None).Resource.Reference;
             markDispatchPossible();
-            var current = FindDataSource(session.HtmlWorkspace, name);
+            var current = FindDataSource(session.Workspace, name);
             current.Binding.Resource = exact.Copy(); current.Binding.Policy = "exact";
             current.UpdatedUtc = DateTime.UtcNow;
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML resource frozen: " + name);
+            session.Capture( "HTML resource frozen: " + name);
             return WorkspaceResult(session, "Resource pinned to an exact revision: " + name + ".",
                 WorkspaceMutationData(session, "data", name), HtmlWorkspaceEffect.VerifiedChange);
         }
 
-        private ResourceReadResult ReadBinding(ChatSession session, HtmlWorkspaceDataBinding binding, CancellationToken cancellationToken)
+        private ResourceReadResult ReadBinding(HtmlWorkspaceMutation session, HtmlWorkspaceDataBinding binding, CancellationToken cancellationToken)
         {
             NormalizeBinding(binding, null);
             cancellationToken.ThrowIfCancellationRequested();
             var reference = binding.Policy == "head" ? new ResourceRef(binding.Resource.Identity.Uri) : binding.Resource.Copy();
-            return _resources.Read(session, new ResourceReadRequest {
+            return _resources.Read(session.Actor, new ResourceReadRequest {
                 Reference = reference, Representation = binding.View, ViewPath = binding.ViewPath, MaxChars = 1, MaxRows = 1 }).Result;
         }
 

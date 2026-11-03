@@ -15,7 +15,6 @@ namespace RNAssistant.Office.Services
     {
         public const string FileKind = "html-file";
         public const string DataKind = "html-data";
-        internal const string CurrentWorkspaceTarget = "HTML workspace: current";
         private const int MaximumItems = 50;
         private const int MaximumSearchCharacters = int.MaxValue;
         private const int MaximumSearchCharactersPerMember = int.MaxValue;
@@ -180,8 +179,8 @@ namespace RNAssistant.Office.Services
 
         private IEnumerable<HtmlMember> ActiveMembers(ChatSession session)
         {
-            var artifact = FindArtifact(session, session == null ? null : session.ActiveHtmlArtifactId);
-            return Members(session, artifact);
+            return (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace)
+                .SelectMany(artifact => Members(session, artifact));
         }
 
         private IEnumerable<HtmlMember> Members(ChatSession session, ChatArtifact artifact)
@@ -312,12 +311,12 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["name"] = member.Title ?? string.Empty;
             descriptor.Metadata["revisionArtifactId"] = member.Artifact.Id;
             if (member.MemberType == "file") descriptor.Metadata["logicalMemberKey"] = member.MemberKey;
-            descriptor.ParentTarget = WorkspaceTarget(member.Artifact);
+            descriptor.ParentTarget = HtmlWorkspaceTargets.Snapshot(member.Artifact);
             descriptor.SnapshotTarget = ResourceGatewayService.IntentTarget(descriptor);
-            if (member.Artifact.Id == member.Session.ActiveHtmlArtifactId)
+            if (HtmlWorkspaceTargets.IsCurrent(_documentArtifacts, member.Session, member.Artifact))
             {
-                descriptor.ParentTarget = CurrentWorkspaceTarget;
-                descriptor.CurrentTarget = CurrentMemberTarget(member.Kind, member.Title, member.CreatedUtc);
+                descriptor.ParentTarget = HtmlWorkspaceTargets.Workspace(_documentArtifacts, member.Session, member.Artifact);
+                descriptor.CurrentTarget = HtmlWorkspaceTargets.Member(member.Kind, member.Title, member.CreatedUtc, descriptor.ParentTarget);
             }
             descriptor.Metadata["active"] = member.Active ? "true" : "false";
             if (member.Binding != null)
@@ -330,23 +329,7 @@ namespace RNAssistant.Office.Services
             return descriptor;
         }
 
-        private static string WorkspaceTarget(ChatArtifact artifact)
-        {
-            return ResourceGatewayService.IntentTarget(new ResourceDescriptor {
-                Kind = ChatArtifactKinds.HtmlWorkspace, Title = artifact.Title, CreatedUtc = artifact.CreatedUtc });
-        }
 
-        internal static string FileTarget(ChatArtifact artifact, HtmlWorkspaceFile file)
-        {
-            return artifact == null ? null : CurrentMemberTarget(FileKind, file.Path, file.CreatedUtc);
-        }
-
-        internal static string CurrentMemberTarget(string kind, string name, DateTime createdUtc)
-        {
-            return ResourceGatewayService.IntentTarget(new ResourceDescriptor {
-                Kind = kind, Title = name, CreatedUtc = createdUtc,
-                ParentTarget = CurrentWorkspaceTarget });
-        }
 
         internal static string FileMemberKey(string fileId)
         { return MemberKey("file", fileId); }

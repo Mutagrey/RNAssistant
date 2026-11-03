@@ -86,10 +86,7 @@ namespace RNAssistant.Office.Services
                 // JSON quoting preserves embedded whitespace without inventing a target.
                 string messageTarget;
                 var target = messageTargets.TryGetValue(ChatResourceUri.CreateArtifactRevisionUri(session, artifact), out messageTarget)
-                    ? messageTarget : role == "activeHtml" &&
-                    string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)
-                    ? ChatHtmlResourceCatalog.CurrentWorkspaceTarget
-                    : ResourceGatewayService.IntentTarget(descriptor);
+                    ? messageTarget : descriptor.SnapshotTarget ?? ResourceGatewayService.IntentTarget(descriptor);
                 var line = "- target=" + Newtonsoft.Json.JsonConvert.SerializeObject(target) +
                     " | type=" + ResourceGatewayService.IntentType(descriptor) +
                     " | scope=" + (string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ? "conversation" : "document") +

@@ -1069,15 +1069,17 @@ namespace RNAssistant.Harness
             HtmlWorkspaceToolService.UpsertDataSource(htmlSession, "rows", "{\"items\":[1,2]}");
 
             var htmlGateway = new ResourceGatewayService();
+            var htmlMutation = HtmlWorkspaceMutation.ForEditor(htmlSession);
             var mutation = new HtmlWorkspaceToolService().Execute(
                 HtmlWorkspaceToolCatalog.WriteFileToolId,
                 Command(
                     HtmlWorkspaceToolCatalog.WriteFileToolId,
                     "path", "reports/oil-production-chart.html",
                     "content", "<main>Oil chart</main>").Arguments,
-                htmlSession,
+                htmlMutation,
                 delegate { },
                 CancellationToken.None);
+            htmlMutation.ProjectEditor();
             AssertEqual(HtmlWorkspaceOutcomeStatus.Ok, mutation.Status,
                 "HTML mutation succeeds before canonical-ref assertions");
             var mutationData = mutation.Data;

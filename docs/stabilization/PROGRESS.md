@@ -14,16 +14,19 @@ feedback, исходный ответ по кнопке и сохранённы�
 Локальные проверки очереди, модельного протокола и UI пройдены; Windows-причина
 потери сессии и задержки реального API остаются открытыми в [Risk Register](RISK_REGISTER.md).
 
-## HTML при общении агентов — 2026-11-03
+## HTML при общении агентов — 2026-11-03, In Review
 
-Owner: Office HTML source service / mutation routing. По фото воспроизведено чтение
-общего HTML без выбора workspace и ложный успех обхода через `core.write`.
-Существующие HTML targets теперь проверяются против выбранного опубликованного
-snapshot до записи и после confirmation; ошибка явно требует выбора в материалах
-чата, без retry другим tool. Автовыбор общего workspace не добавлен.
-5 адресных host-neutral checks проходят, 5 прежних падений подтверждены на baseline.
-Windows-состояние с фото и реальные циклы модели остаются открытыми;
-[разбор и границы проверки](RISK_REGISTER.md#агенты-html-target-и-выбранный-workspace--2026-11-03).
+Owner: Office HTML domain / mutation routing; Core — prepared member guard.
+Защитный checkpoint `8d947574` закоммичен. Следующий согласованный срез отделяет
+model HTML от chat selection: именованный `html.workspace.create`, стабильная рабочая
+цель, явный `workspace` для данных/assets, общий discovery в документе. Исторические
+цели read-only, запись использует прежние journal/CAS/publication owners. UI обновляет
+только выбранный logical workspace, сохраняя dirty drafts и stale-save guard.
+15 адресных Harness checks проходят: shared HTML (8), member guards (1), editor (4),
+actions (2). Web source/write/actions и Chrome editor views проходят. Проверены
+параллельные файлы, ABA, create/delete, bind/freeze/assets, restart, after-source,
+restore/redo и публикация при ошибке chat save. Windows/Office и реальная модель
+остаются открытыми; [границы](RISK_REGISTER.md#агенты-html-target-и-выбранный-workspace--2026-11-03).
 
 ## HTML views и редакторы в Dockview — 2026-11-03, In Review
 

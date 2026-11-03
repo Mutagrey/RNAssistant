@@ -335,9 +335,11 @@ namespace RNAssistant.Harness
             var write = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId };
             write.Arguments["path"] = "index.html";
             write.Arguments["content"] = "<h1>Report</h1>";
+            var htmlMutation = HtmlWorkspaceMutation.ForEditor(session);
             var writeResult = executor.Execute(
-                write.ToolId, write.Arguments, session, delegate { },
+                write.ToolId, write.Arguments, htmlMutation, delegate { },
                 CancellationToken.None);
+            htmlMutation.ProjectEditor();
             AssertEqual(HtmlWorkspaceOutcomeStatus.Ok, writeResult.Status,
                 "html mutation succeeds");
             var revisionId = session.ActiveHtmlArtifactId;

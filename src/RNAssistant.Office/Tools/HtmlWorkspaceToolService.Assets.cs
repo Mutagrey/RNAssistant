@@ -13,14 +13,14 @@ namespace RNAssistant.Office.Tools
     internal sealed partial class HtmlWorkspaceToolService
     {
         private HtmlWorkspaceToolOutcome PublishAssetPackage(
-            ChatSession session, IDictionary<string, object> arguments,
+            HtmlWorkspaceMutation session, IDictionary<string, object> arguments,
             Action markDispatchPossible)
         {
             if (_assets == null)
                 throw new InvalidOperationException("Local HTML asset library is unavailable.");
             var requested = JArray.Parse(ToolArgumentReader.String(arguments, "files", "[]"))
                 .Values<string>().ToArray();
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+            var workspace = NormalizedWorkspaceCopy(session.Workspace);
             var selected = new List<HtmlAssetFile>();
             foreach (var requestedPath in requested)
             {
@@ -63,14 +63,14 @@ namespace RNAssistant.Office.Tools
         }
 
         private HtmlWorkspaceToolOutcome ImportAssetPackage(
-            ChatSession session, IDictionary<string, object> arguments,
+            HtmlWorkspaceMutation session, IDictionary<string, object> arguments,
             Action markDispatchPossible)
         {
             if (_assets == null)
                 throw new InvalidOperationException("Local HTML asset library is unavailable.");
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
             var version = ToolArgumentReader.String(arguments, "version", string.Empty);
-            var observed = _observedAssets.GetValue(session,
+            var observed = _observedAssets.GetValue(session.Actor,
                 _ => new Dictionary<string, string>(StringComparer.Ordinal));
             string expectedRevision;
             lock (observed)
@@ -85,7 +85,7 @@ namespace RNAssistant.Office.Tools
                     "Asset package changed since catalog discovery. List it again before import.",
                     null, "html_asset_revision_changed", false);
 
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+            var workspace = NormalizedWorkspaceCopy(session.Workspace);
             var now = DateTime.UtcNow;
             foreach (var assetFile in package.Files)
             {
@@ -108,8 +108,8 @@ namespace RNAssistant.Office.Tools
             workspace.UpdatedUtc = now;
             NormalizeWorkspace(workspace);
             markDispatchPossible();
-            session.HtmlWorkspace = workspace;
-            HtmlWorkspaceArtifactService.CaptureCurrent(session,
+            session.Workspace = workspace;
+            session.Capture(
                 "HTML assets: " + package.Id + "@" + package.Version);
             return WorkspaceResult(session,
                 "Imported " + package.Files.Count + " local HTML asset file(s) from " +

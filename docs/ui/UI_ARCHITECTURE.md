@@ -1,5 +1,9 @@
 # Архитектура UI RNAssistant
 
+Модель адресует HTML через явный document workspace; UI selection не участвует в
+разрешении её операций. Controller обновляет выбранный logical workspace до текущей
+публикации при выдаче состояния. HtmlWorkspaceView сохраняет собственные dirty buffers.
+
 ## Live HTML и размещение редакторов — In Review, 2026-11-03
 
 `HtmlWorkspaceView` — адресный owner по chatId (до четырёх вкладок). Он владеет

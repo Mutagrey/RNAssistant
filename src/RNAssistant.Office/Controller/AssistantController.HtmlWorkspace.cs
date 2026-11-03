@@ -302,6 +302,7 @@ namespace RNAssistant.Office
         {
             if (!_chatSessions.IsCurrentDocument(session))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: open the document of this chat before editing HTML.");
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             HtmlWorkspaceActionGuard.Validate(session, request);
         }
 
@@ -321,6 +322,7 @@ namespace RNAssistant.Office
             int messageStartIndex;
             var visibleMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, visibleMessages);
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             var preflight = HtmlWorkspaceToolService.InspectForPreview(
                 session, CancellationToken.None);
             var preflightDto = preflight.Data.ToObject<HtmlWorkspacePreflightDto>();

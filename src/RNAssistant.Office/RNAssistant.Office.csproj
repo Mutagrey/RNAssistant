@@ -322,6 +322,8 @@
     <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
     <Compile Include="Services\HtmlWorkspacePublication.cs" />
+    <Compile Include="Services\HtmlWorkspaceCommand.cs" />
+    <Compile Include="Services\HtmlWorkspaceTargets.cs" />
     <Compile Include="Services\MarkdownDocumentService.cs" />
     <Compile Include="Services\AuthoredFileService.cs" />
     <Compile Include="Services\HtmlWorkspaceActionGuard.cs" />

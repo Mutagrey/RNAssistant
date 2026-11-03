@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Tools
         public const string Write = "core.write", Patch = "core.patch", Replace = "core.replace";
         public const string Move = "resources.move", Copy = "resources.copy", Delete = "resources.delete", Restore = "resources.restore";
         public static bool Owns(string id) { return id == Write || id == Patch || id == Replace || id == Move || id == Copy || id == Delete || id == Restore; }
-        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v5" : ".resource.v1")) : null; }
+        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v6" : ".resource.v2")) : null; }
 
         public static IEnumerable<ToolCatalogEntry> GetTools()
         {

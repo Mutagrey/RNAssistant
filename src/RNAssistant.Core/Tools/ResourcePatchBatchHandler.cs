@@ -109,6 +109,7 @@ namespace RNAssistant.Core.Tools
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchTargetPlan
     {
+        public ResourceHeadState SourceGuard { get; set; }
         public ResourceRef Source { get; set; }
         public string SourceHash { get; set; }
         public ResourceIdentity EffectIdentity { get; set; }
@@ -180,7 +181,7 @@ namespace RNAssistant.Core.Tools
         {
             var sections = Parse(argumentsJson);
             var prepared = JsonConvert.DeserializeObject<ResourcePatchPreparedBatch>(json ?? "null");
-            if (prepared?.Version != 3 || prepared.ArgumentsHash != TextPatternEngine.Sha256(argumentsJson) || prepared.Targets == null ||
+            if (prepared?.Version != 4 || prepared.ArgumentsHash != TextPatternEngine.Sha256(argumentsJson) || prepared.Targets == null ||
                 prepared.Targets.Count != sections.Count || prepared.Targets.Where((t, i) => t?.Target != sections[i].Target || t.Plan?.Source?.IsExact != true).Any())
                 throw new TextPatternException("invalid_edit", "Missing or incompatible prepared package; read sources and prepare a new call. History is retained.");
             return prepared;
@@ -207,7 +208,7 @@ namespace RNAssistant.Core.Tools
     }
     public sealed class ResourcePatchPreparedBatch
     {
-        [JsonProperty(Required = Required.Always)] public int Version { get; set; } = 3;
+        [JsonProperty(Required = Required.Always)] public int Version { get; set; } = 4;
         public string ArgumentsHash { get; set; }
         public List<ResourcePatchPreparedTarget> Targets { get; set; } = new List<ResourcePatchPreparedTarget>();
     }
@@ -297,8 +298,11 @@ namespace RNAssistant.Core.Tools
                 {
                     var current = await TargetHandler.PrepareAsync(TargetContext(context, sections[i], i), token).ConfigureAwait(false);
                     var expected = prepared.Targets[i].Plan;
-                    if (current.Result.Status != ToolResultStatus.Ok || current.PatchTarget?.Source?.Uri != expected.Source.Uri ||
-                        current.PatchTarget.Source.Revision != expected.Source.Revision || current.PatchTarget.SourceHash != expected.SourceHash)
+                    var sameSource = expected.SourceGuard == null
+                        ? current.PatchTarget?.Source?.Uri == expected.Source.Uri && current.PatchTarget?.Source?.Revision == expected.Source.Revision
+                        : current.PatchTarget?.SourceGuard != null && current.PatchTarget.SourceGuard.SameAuthority(expected.SourceGuard) &&
+                            current.PatchTarget.SourceGuard.AuthorityGeneration == expected.SourceGuard.AuthorityGeneration;
+                    if (current.Result.Status != ToolResultStatus.Ok || !sameSource || current.PatchTarget.SourceHash != expected.SourceHash)
                     {
                         var rejected = RejectPreparation(result, i, current.PatchDiagnostic ?? PatchDiagnostic.Create("source_changed", "Prepared target is no longer current; read this target and rebuild the package."), current.Recovery);
                         return new ToolHandlerResult(rejected.Result, ToolEffectEvidence.None, recovery: rejected.Recovery);

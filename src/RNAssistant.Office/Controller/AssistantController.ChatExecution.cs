@@ -682,6 +682,7 @@ namespace RNAssistant.Office
 
         private SendChatResponse CreateSendChatResponse(ChatSession session, AppSettings settings, ChatTurnResult completion)
         {
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             settings = ResolveChatSettings(session, settings);
             var activeId = session.Id;
             var timer = Stopwatch.StartNew();

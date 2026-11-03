@@ -13,7 +13,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed class HtmlWorkspaceToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler
+    internal sealed class HtmlWorkspaceToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler, IPreparableToolHandler
     {
         private readonly string _toolId;
         private readonly ChatSession _session;
@@ -38,7 +38,23 @@ namespace RNAssistant.Office.Tools
             if (!HtmlWorkspaceToolCatalog.Owns(toolId)) return null;
             return new ToolBinding(
                 "html." + toolId.Substring("html.".Length)
-                    .Replace('_', '.') + ".v2");
+                    .Replace('_', '.') + ".v3");
+        }
+
+        public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                var command = _service.PrepareCommand(_session, _toolId, context.Arguments);
+                return Task.FromResult(new ToolPreparationResult(RuntimeResult.Ok("HTML operation prepared."),
+                    command == null ? "{}" : JsonConvert.SerializeObject(command)));
+            }
+            catch (Exception ex) when (ex is ResourceRequestException || ex is System.IO.InvalidDataException || ex is InvalidOperationException)
+            {
+                return Task.FromResult(new ToolPreparationResult(RuntimeResult.Error(ex.Message), recovery:
+                    new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan)));
+            }
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(
@@ -51,20 +67,21 @@ namespace RNAssistant.Office.Tools
                 if (_toolId == HtmlWorkspaceToolCatalog.ListAssetsToolId)
                 {
                     var listed = _service.Execute(_toolId, context.Arguments,
-                        _session, context.MarkDispatchPossible, cancellationToken);
+                        _session, context.MarkDispatchPossible, cancellationToken, null);
                     return Task.FromResult(context.Complete(Project(listed)));
                 }
                 using (DocumentAccessGate.BeginOperation())
                 {
+                    var command = HtmlWorkspaceCommand.Read(context.PreparedStateJson);
                     if (_toolId == HtmlWorkspaceToolCatalog.WriteFileToolId)
                     {
-                        var refusal = GuardExistingFile(context);
+                        var refusal = GuardExistingFile(context, command);
                         if (refusal != null)
                             return Task.FromResult(context.Complete(Project(refusal)));
                     }
                     var outcome = _service.Execute(
                         _toolId, context.Arguments, _session,
-                        context.MarkDispatchPossible, cancellationToken);
+                        context.MarkDispatchPossible, cancellationToken, command);
                     return Task.FromResult(context.Complete(Project(outcome)));
                 }
             }
@@ -74,7 +91,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private HtmlWorkspaceToolOutcome GuardExistingFile(ToolHandlerContext context)
+        private HtmlWorkspaceToolOutcome GuardExistingFile(ToolHandlerContext context, HtmlWorkspaceCommand command)
         {
             var accepted = (_session.Messages ?? new List<ChatMessage>()).SingleOrDefault(message =>
                 message.AcceptedCallOrigin != null &&
@@ -86,14 +103,12 @@ namespace RNAssistant.Office.Tools
 
             var path = HtmlWorkspaceToolService.NormalizeWorkspacePath(
                 ToolArgumentReader.String(context.Arguments, "path", string.Empty));
-            var file = (_session.HtmlWorkspace?.Files ?? new List<HtmlWorkspaceFile>())
+            var mutation = _service.Load(_session, command);
+            var file = mutation.Workspace.Files
                 .SingleOrDefault(item => item != null &&
                     string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
             if (file == null) return null;
-            var artifact = (_session.Artifacts ?? new List<ChatArtifact>())
-                .SingleOrDefault(item => item != null && item.Id == _session.ActiveHtmlArtifactId);
-            if (artifact == null)
-                throw new InvalidOperationException("The current HTML artifact is unavailable.");
+            var artifact = mutation.Snapshot;
             var current = ChatHtmlResourceCatalog.FileReference(_session, artifact, file.Id);
             var hash = TextPatternEngine.Sha256(file.Content ?? string.Empty);
             var acceptedIndex = _session.Messages.IndexOf(accepted);
@@ -116,7 +131,7 @@ namespace RNAssistant.Office.Tools
                 null, "html_source_observation_required", false,
                 new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
                     ToolRetryPolicy.RefreshRequired, current.Identity,
-                    ResourceRepresentations.Source, ChatHtmlResourceCatalog.FileTarget(artifact, file)));
+                    ResourceRepresentations.Source, HtmlWorkspaceTargets.Member(ChatHtmlResourceCatalog.FileKind, file.Path, file.CreatedUtc, _service.WorkspaceTarget(_session, current))));
         }
 
         private static bool MatchesCurrentFile(ResourceEvidence evidence, ResourceRef current, string hash)
@@ -131,6 +146,7 @@ namespace RNAssistant.Office.Tools
                 observedAddress.Provider != currentAddress.Provider ||
                 observedAddress.Segments.Count != 8 || currentAddress.Segments.Count != 8) return false;
             return observedAddress.Segments[0] == currentAddress.Segments[0] &&
+                HtmlWorkspaceIdentity.LogicalId(observedAddress.Segments[2]) == HtmlWorkspaceIdentity.LogicalId(currentAddress.Segments[2]) &&
                 observedAddress.Segments[5] == "member" &&
                 observedAddress.Segments[6] == "file" &&
                 observedAddress.Segments[7] == currentAddress.Segments[7];

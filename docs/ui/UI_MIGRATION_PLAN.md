@@ -1,5 +1,11 @@
 # План модернизации production UI
 
+HTML target cutover (2026-11-03): owner — HTML domain/Controller, явный workspace
+для model mutations и обновление только выбранного logical view. Dockview placement
+не меняется. Ревью: открыть общий HTML в двух чатах, изменить CSS агентом, проверить
+сохранение dirty HTML и отказ stale Save; открыть другой HTML и убедиться, что правка
+первого не переключает редактор. Windows/Office evidence остаётся открытым.
+
 ## Загрузка и удаление чатов по фото — In Review, 2026-11-03
 
 Owner: Web Chat View/navigation; устранение лишних чтений — ChatSessionService.

@@ -637,7 +637,10 @@ The post-cutover catalog is complete host-neutral but is not yet Windows-qualifi
 as the final candidate. R61/11O1
 corrected Resources + Capabilities host-neutral, 11O2 corrected planning, and 11O3
 corrected HTML authoring/data binding. HTML inspection and active selection are now
-internal; file/data writes are separate, patch/delete are semantic, and bind reuses
+internal. HTML creation now uses `html.workspace.create {title}`; data write/bind/freeze
+and asset import/publish require the explicit `workspace` target. File writes use
+`core.write/patch/replace/resources.delete` with a workspace-qualified target;
+selection never grants model authority. File/data writes are separate and bind reuses
 accepted read evidence without model-owned source arguments. Model context/results/
 history omit opaque state while durable records retain it. The later whole-read
 correction removes public resource continuation; the bound VBA project target is

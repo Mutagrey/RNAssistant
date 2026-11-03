@@ -485,7 +485,7 @@ namespace RNAssistant.Office.Services
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority)
                     : HtmlWorkspacePublication.Owns(operation)
                         ? HtmlWorkspacePublication.Prepare(_session, context, arguments,
-                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority, operation)
+                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority, operation, HtmlWorkspaceCommand.Read(preparedStateJson))
                         : ResourceMutationDomains.Impacts(scope, operation, arguments, snapshot);
                 var target = impacts[0].Identity;
                 if (ResourceMutationDomains.IsDocumentArtifactOperation(operation) || TaskListToolCatalog.Owns(operation))
@@ -536,7 +536,12 @@ namespace RNAssistant.Office.Services
                 {
                     if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange && HtmlWorkspacePublication.Owns(attempt.Operation))
                         readBack.AddRange(HtmlWorkspacePublication.ReadBack(_session, attempt, record.Context, documentOperationKey,
-                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads, route?.RoutingArguments, route?.Operation));
+                            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads, route?.RoutingArguments, route?.Operation,
+                            record.Result?.Resources.FirstOrDefault(reference => {
+                                string id; return ChatResourceUri.TryGetArtifactId(_session, reference, out id) &&
+                                    HtmlWorkspaceIdentity.LogicalId(id) == ResourceUri.Parse(attempt.Target.Uri).Segments.Last() &&
+                                    !ResourceUri.Parse(reference.Uri).Segments.Contains("member");
+                            })));
                     else if (record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange && RNAssistant.Office.Tools.MarkdownDocumentToolCatalog.Owns(attempt.Operation))
                         readBack.AddRange(MarkdownDocumentService.ReadBack(_session, attempt, record, preparedStateJson,
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _payloads));

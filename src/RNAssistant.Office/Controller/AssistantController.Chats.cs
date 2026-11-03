@@ -807,6 +807,7 @@ namespace RNAssistant.Office
             var contextMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs;
             var contextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session, settings));
             var usageMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs;
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             var htmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session);
             var htmlMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs;
             response.Inbox = InboxResponse(_inbox.Snapshot(session));

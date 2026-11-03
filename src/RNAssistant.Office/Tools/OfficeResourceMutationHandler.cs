@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Tools
     // The accepted public call never changes. This is private owner preparation, not another callable alias.
     internal sealed class ResourceMutationPrepared
     {
-        public int Version { get; set; } = 2;
+        public int Version { get; set; } = 3;
         public string ToolId { get; set; }
         public string ArgumentsHash { get; set; }
         public string Operation { get; set; }
@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Tools
         internal static ResourceMutationPrepared Read(string json)
         {
             var value = JsonConvert.DeserializeObject<ResourceMutationPrepared>(json ?? "null");
-            if (value?.Version != 2 || !ResourceMutationToolCatalog.Owns(value.ToolId) || value.RoutingArguments == null)
+            if (value?.Version != 3 || !ResourceMutationToolCatalog.Owns(value.ToolId) || value.RoutingArguments == null)
                 throw new InvalidDataException("Missing or incompatible resource mutation preparation.");
             return value;
         }
@@ -80,16 +80,13 @@ namespace RNAssistant.Office.Tools
                     catch (ResourceRequestException ex) when (_id == ResourceMutationToolCatalog.Write &&
                         (ex.ErrorCode == "RESOURCE_NOT_FOUND" || ex.ErrorCode == "resource_not_found" || ex.ErrorCode == "resource_target_not_found"))
                     {
-                        // A missing exact snapshot target is not permission to create
-                        // a same-name file in whichever workspace this chat selected.
                         if (target.StartsWith("HTML file: ", StringComparison.Ordinal) &&
-                            target.Contains(" in HTML workspace: ") &&
-                            !target.EndsWith(" in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget, StringComparison.Ordinal))
-                            throw HtmlWorkspaceToolService.SelectionRequired();
+                            (!target.Contains(" in HTML workspace: ") || target.Contains(" in HTML snapshot: "))) throw;
+
                     }
                     if (selected != null && context.Execution.ExpectedTargetAbsent)
                         throw new InvalidDataException("The requested new resource already exists.");
-                    RequireHtmlSelection(selected);
+                    RequireHtmlTarget(selected);
                     var filePatch = _id == ResourceMutationToolCatalog.Patch && selected?.Descriptor.Kind == ChatArtifactKinds.File;
                     var source = selected == null || filePatch ? null : Read(selected.Reference, token);
                     prepared.Source = filePatch ? selected.Reference : source?.Resource.Reference;
@@ -110,8 +107,8 @@ namespace RNAssistant.Office.Tools
                         RequireAbsent(Value(context.Arguments, "destination"));
                     var owner = Owner(prepared);
                     var args = Arguments(prepared, context, source?.Text, token);
-                    if (_id == ResourceMutationToolCatalog.Patch && selected.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
-                        prepared.HtmlSourceHead = _html.PrepareSourcePatch(_session, selected, source.Text, Value(args, "content"));
+                    if (selected?.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
+                        prepared.HtmlSourceHead = _html.PrepareSourceMutation(_session, selected, source.Text, _id == ResourceMutationToolCatalog.Delete ? source.Text : Value(args, "content"));
                     var preparable = owner as IPreparableToolHandler;
                     PatchTargetPlan filePlan = null;
                     if (preparable != null)
@@ -135,7 +132,7 @@ namespace RNAssistant.Office.Tools
                     }
                     return new ToolPreparationResult(Result.Ok("Resource operation prepared."), JsonConvert.SerializeObject(prepared),
                         patchTarget: filePlan ?? (_id == ResourceMutationToolCatalog.Patch ? new PatchTargetPlan {
-                            Source = prepared.Source, SourceHash = prepared.SourceHash,
+                            Source = prepared.Source, SourceHash = prepared.SourceHash, SourceGuard = prepared.HtmlSourceHead,
                             EffectIdentity = PatchEffectIdentity(selected, prepared.Source),
                             Preview = PatchPreview.From(SourcePatch(source.Text, prepared.Source, context, token).Edits) } : null));
                 }
@@ -161,7 +158,7 @@ namespace RNAssistant.Office.Tools
                     if (prepared.Source != null)
                     {
                         var selected = ResolveTarget(prepared.Target);
-                        RequireHtmlSelection(selected);
+                        RequireHtmlTarget(selected);
                         if (prepared.Operation == AuthoredFileToolCatalog.PatchToolId)
                         {
                             if (selected.Reference.Uri != prepared.Source.Uri || selected.Reference.Revision != prepared.Source.Revision)
@@ -172,12 +169,12 @@ namespace RNAssistant.Office.Tools
                         source = Read(selected.Reference, token);
                         if (TextPatternEngine.Sha256(source.Text) != prepared.SourceHash)
                             throw new ResourceRequestException("Resource changed after preparation; read it again.", "target_conflict", false);
-                        if (_id == ResourceMutationToolCatalog.Patch && selected.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
+                        if (selected?.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
                         {
                             // Sibling edits advance the aggregate snapshot, but not this member's head.
                             // Pin the existing member authority, including ABA/republication generation.
-                            var current = _html.PrepareSourcePatch(_session, selected, source.Text,
-                                Value(Arguments(prepared, context, source.Text, token), "content"));
+                            var current = _html.PrepareSourceMutation(_session, selected, source.Text,
+                                _id == ResourceMutationToolCatalog.Delete ? source.Text : Value(Arguments(prepared, context, source.Text, token), "content"));
                             if (prepared.HtmlSourceHead == null || !current.SameAuthority(prepared.HtmlSourceHead) ||
                                 current.AuthorityGeneration != prepared.HtmlSourceHead.AuthorityGeneration)
                                 throw new ResourceRequestException("HTML file changed after preparation; read this target again.", "target_conflict", false);
@@ -238,17 +235,14 @@ namespace RNAssistant.Office.Tools
 
         private ResourceIntentTarget ResolveTarget(string target)
         {
-            if (target.StartsWith("HTML file: ", StringComparison.Ordinal) && !target.Contains(" in HTML workspace: "))
-                target += " in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget;
             return _gateway.ResolveIntentTarget(_session, target, allowUniqueBase: true);
         }
 
-        private void RequireHtmlSelection(ResourceIntentTarget selected)
+        private void RequireHtmlTarget(ResourceIntentTarget selected)
         {
             // Patch validates the same selection with its member head and candidate.
-            if (selected != null && ChatHtmlResourceCatalog.SupportsKind(selected.Descriptor.Kind) &&
-                (_id != ResourceMutationToolCatalog.Patch || selected.Descriptor.Kind != ChatHtmlResourceCatalog.FileKind))
-                _html.RequireSelectedSource(_session, selected);
+            if (selected != null && selected.Descriptor.Kind == ChatHtmlResourceCatalog.DataKind)
+                _html.RequireCurrentSource(_session, selected);
         }
 
         private void RequireAbsent(string target)
@@ -271,7 +265,7 @@ namespace RNAssistant.Office.Tools
             var accepted = _session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
             if (accepted == null) return; // Manual editor has its explicit owner guard.
             var delivered = accepted.ResourceEvidence ?? new List<ResourceEvidence>();
-            var evidence = delivered.Where(e => e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision).ToArray();
+            var evidence = delivered.Where(e => (e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision) || CurrentHtmlEvidence(e, source.Resource.Reference, source.Text)).ToArray();
             if (complete)
             {
                 if (evidence.Any(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)) return;
@@ -291,6 +285,19 @@ namespace RNAssistant.Office.Tools
             }
             else if (evidence.Length > 0) return;
             throw new ResourceRequestException(complete ? "core.write requires complete current source in model context; read it first." : "Read the current source before changing it.", "source_observation_required", false);
+        }
+
+        private bool CurrentHtmlEvidence(ResourceEvidence evidence, ResourceRef current, string source)
+        {
+            ResourceAddress before, after;
+            if (evidence?.Resource == null || evidence.ContentSha256 != TextPatternEngine.Sha256(source) ||
+                !ResourceUri.TryParse(evidence.Resource.Uri, out before) || !ResourceUri.TryParse(current.Uri, out after) ||
+                before.Provider != "chat" || after.Provider != "chat" || before.Segments.Count != 8 || after.Segments.Count != 8 ||
+                before.Segments[0] != after.Segments[0] || before.Segments[6] != "file" || after.Segments[6] != "file" ||
+                before.Segments[7] != after.Segments[7] || HtmlWorkspaceIdentity.LogicalId(before.Segments[2]) == null ||
+                HtmlWorkspaceIdentity.LogicalId(before.Segments[2]) != HtmlWorkspaceIdentity.LogicalId(after.Segments[2])) return false;
+            return _gateway.Authority != null && new EvidenceStateReducer().Reduce(evidence,
+                _gateway.Authority.CaptureMany(new[] { evidence.ScopeId })).State == EvidenceState.Current;
         }
 
         private List<Tuple<long, long>> CurrentVbaExcerptRanges(ChatMessage accepted, string text, ResourceRef reference, out bool stale)
@@ -369,10 +376,13 @@ namespace RNAssistant.Office.Tools
             {
                 prepared.Operation = HtmlWorkspaceToolCatalog.DeleteToolId;
                 args["target"] = selected.Descriptor.Title;
+                args["workspace"] = _html.WorkspaceTarget(_session, selected.Reference);
             }
             else if (target.StartsWith("HTML file: ", StringComparison.Ordinal))
             {
                 args["path"] = selected?.Descriptor.Title ?? target.Substring(11).Split(new[] { " in HTML workspace: " }, StringSplitOptions.None)[0];
+                args["workspace"] = selected != null ? _html.WorkspaceTarget(_session, selected.Reference) :
+                    target.Substring(target.LastIndexOf(" in HTML workspace: ", StringComparison.Ordinal) + 4);
                 prepared.Operation = _id == ResourceMutationToolCatalog.Write ? HtmlWorkspaceToolCatalog.WriteFileToolId :
                     _id == ResourceMutationToolCatalog.Patch || _id == ResourceMutationToolCatalog.Replace ? HtmlWorkspaceToolCatalog.ApplyPatchToolId :
                     _id == ResourceMutationToolCatalog.Delete ? HtmlWorkspaceToolCatalog.DeleteToolId : null;
@@ -475,7 +485,7 @@ namespace RNAssistant.Office.Tools
             if (accepted != null)
             {
                 var ranges = TextPatch.Coverage((accepted.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e =>
-                    e.Resource.Uri == reference.Uri && e.Resource.Revision == reference.Revision));
+                    (e.Resource.Uri == reference.Uri && e.Resource.Revision == reference.Revision) || CurrentHtmlEvidence(e, reference, source)));
                 bool staleExcerpt;
                 if (ranges != null && vba) ranges = ranges.Concat(CurrentVbaExcerptRanges(accepted, source, reference, out staleExcerpt)).ToArray();
                 patch = patch.WithCoverage(ranges);
@@ -504,8 +514,6 @@ namespace RNAssistant.Office.Tools
         private ToolRecoveryContract Recovery(ToolHandlerContext context, Exception error)
         {
             var code = (error as ResourceRequestException)?.ErrorCode;
-            if (code == HtmlWorkspaceToolService.SelectionRequiredCode)
-                return new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.None);
             if (code == "source_observation_required" || code == "observation_required" || code == "target_conflict" || code == "source_changed" || code == "replacement_search_required")
             {
                 try

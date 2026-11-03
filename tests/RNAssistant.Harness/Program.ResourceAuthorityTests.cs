@@ -2816,8 +2816,7 @@ namespace RNAssistant.Harness
                 AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content,
                     "UPDATED_HTML", "authorized replacement changes the current file");
                 var currentFile = session.HtmlWorkspace.Files.Single(item => item.Path == "index.html");
-                var currentTarget = ChatHtmlResourceCatalog.CurrentMemberTarget(ChatHtmlResourceCatalog.FileKind,
-                    currentFile.Path, currentFile.CreatedUtc);
+                var currentTarget = executor.ResourceGateway.ResolveIntentTarget(session, "HTML file: index.html", true).Descriptor.CurrentTarget;
                 var currentRead = executor.ResourceGateway.ReadWhole(session,
                     executor.ResourceGateway.ResolveIntentTarget(session, currentTarget).Reference,
                     ResourceRepresentations.Source);

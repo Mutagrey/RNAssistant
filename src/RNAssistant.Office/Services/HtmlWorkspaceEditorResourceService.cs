@@ -23,6 +23,35 @@ namespace RNAssistant.Office.Services
         internal HtmlWorkspaceEditorResourceService(OfficeToolExecutor executor, ResourceDataPlaneService data)
         { _executor = executor; _data = data; }
 
+        // Refresh only the selected logical view. Browser drafts stay in Web and
+        // receive the new revision through the existing stale-source mechanism.
+        internal static void RefreshSelected(ChatSession session, DocumentArtifactStore owner)
+        {
+            var logical = HtmlWorkspaceIdentity.LogicalId(session?.ActiveHtmlArtifactId);
+            if (logical == null || owner == null) return;
+            try
+            {
+                var current = owner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logical));
+                if (current == null) return;
+                string id;
+                if (!ChatResourceUri.TryGetArtifactId(session, current, out id) || id == session.ActiveHtmlArtifactId) return;
+                var artifact = owner.Read(session, current);
+                var body = Newtonsoft.Json.JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
+                if (body == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The current HTML body is unavailable.");
+                session.Artifacts.RemoveAll(item => item.Id == artifact.Id);
+                session.Artifacts.Add(artifact);
+                session.HtmlWorkspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(body);
+                session.ActiveHtmlArtifactId = artifact.Id;
+                HtmlWorkspaceArtifactService.RebuildNavigation(session);
+            }
+            catch (Exception ex) when (ex is ResourceRequestException || ex is System.IO.IOException || ex is System.IO.InvalidDataException || ex is Newtonsoft.Json.JsonException)
+            {
+                session.HtmlWorkspaceRecovery = new HtmlWorkspaceRecoveryState {
+                    Status = HtmlWorkspaceRecoveryStatuses.Degraded, Issue = "current_publication_unavailable",
+                    Message = ex.Message, ActiveArtifactId = session.ActiveHtmlArtifactId, CanMutate = false };
+            }
+        }
+
         internal static HtmlWorkspaceDto Metadata(ChatSession session)
         {
             var result = HtmlWorkspaceDto.From(session == null ? null : HtmlWorkspaceToolService.NormalizeWorkspace(session.HtmlWorkspace),
@@ -126,6 +155,7 @@ namespace RNAssistant.Office.Services
         private string ValidateCurrent(ChatSession session, HtmlWorkspaceMutationPayload request, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            RefreshSelected(session, new DocumentArtifactStore(_executor.ResourceAuthority.Store, _executor.ResourceAuthority.Revisions, _executor.Payloads));
             if (request.ExpectedActiveHtmlArtifactId == null || request.ExpectedActiveHtmlArtifactId != (session.ActiveHtmlArtifactId ?? ""))
                 throw Stale();
             var authority = _executor.ResourceAuthority;

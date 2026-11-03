@@ -48,23 +48,19 @@ Owner: Office HTML source service / universal mutation routing.
 Patch отказывал, а `core.write` ошибочно создавал отдельный workspace и сообщал успех.
 При другом выбранном workspace тот же маршрут мог адресовать одноимённый файл.
 
-Общий HTML guard проверяет selection для существующих file/data targets до записи
-и после подтверждения. Отказ `html_workspace_selection_required` не разрешает retry
-и указывает выбор актуального ресурса в материалах чата либо передачу правки агенту
-с этим workspace. Read/discovery не меняют selection, исторические источники не
-становятся текущими автоматически. Отсутствующий точный target также не создаётся
-под видом файла другого workspace.
+Checkpoint `8d947574` закрыл ложный успех guard-ом selection. Следующий
+согласованный срез заменяет его явным workspace command: discovery виден агентам
+документа без подключения; модель не переключает UI. Данные/assets требуют
+workspace, создание файла — существующий явный root, history остаётся read-only.
+Соседние файлы сохраняются при подтверждении; тот же member, ABA, concurrent create
+и чужой документ не могут перезаписаться незаметно. Unknown не replay.
 
-Регрессия красная на исходных owners: ложный успех `core.write`; после изменения
-проверяет пустую/другую selection, write/patch/replace/delete, смену выбора во время
-confirmation и успешный patch после явного подключения. Проходят 5 адресных checks:
-четыре `shared HTML:` и `universal mutations: HTML member guards`. Четыре прежних
-`shared HTML:` падают также с исходными owners (старый `html.source.write` и
-failed-link fixture); `public Office routing` в обоих вариантах падает на размере
-каталога: ожидается 10, фактически 14. Эти тесты не переписаны в текущем срезе.
-Первое сравнение использовало временную копию параллельно изменяемого agent test
-с `Text` вместо несуществующего `AgentMessage.Content`, без изменения рабочего
-файла. Финальный запуск новой регрессии проходит обычным `dotnet run`, без подмен.
+Shared HTML 8/8, member guards 1/1, editor 4/4 и actions 2/2 проходят. Старые shared
+fixtures переведены с удалённого `html.source.write` на native editor/public target
+setup. Web source/write/actions и Chrome editor views проходят, включая dirty,
+stale responses, close/restore, narrow/zoom. `public Office routing` остаётся старым
+baseline gap по размеру каталога (ожидал 10 при прежних 14), не квалификацией нового
+каталога. Полный Harness и Office не запускались.
 Точный active pointer Windows-чата на фото, поведение реальной модели после отказа
 и Windows/Office qualification остаются открытыми; фото не доказывает причину
 всех 334 597 потраченных токенов или цикла переписки агентов.

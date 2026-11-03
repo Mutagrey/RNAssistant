@@ -247,10 +247,10 @@ replacement or old-chat migration. Independent MD authoring remains open.
 
 `HtmlWorkspacePublication` supplies domain preparation and aggregate read-back to
 `ResourceMutationAuthorityObserver`. The existing document mutation lease serializes
-writers; the selected exact snapshot must match the logical workspace head before
-dispatch. Preparation reconstructs the current aggregate from its published bytes.
-A new unselected chat creates a separate logical workspace. Multiple workspaces
-have independent identities and lineages in the same document.
+writers. A typed command names the logical workspace and expected snapshot/member
+head; preparation reconstructs its aggregate from published bytes without selecting
+a chat view. Named empty roots are created by `html.workspace.create`. Multiple
+workspaces have independent identities and lineages in the same document.
 
 The common `DocumentArtifactStore.RetainAuthoredSnapshot` path retains workspace
 records and newly authored JSON files in the existing revision store/CAS. There is
@@ -271,8 +271,8 @@ retains its timestamp and active snapshot. The result is verified no-change, wit
 `changed=false` and `saved=false`, rather than another revision claiming an edit.
 Current-state validation/result projection clones current files and data only;
 it does not serialize and deserialize the full workspace/navigation history.
-Model-facing working HTML targets follow the selected current workspace and file
-identity. Discovery and reads also return `snapshotTarget` for exact retained
+Model-facing working HTML targets follow the explicitly named document workspace
+and file identity, independently of each agent's selected view. Discovery and reads also return `snapshotTarget` for exact retained
 history; the user can inspect an older source without moving the working link.
 File source authority is tracked per member, so changing CSS does not stale an
 unchanged HTML file observation. Normal file writes publish only the affected
@@ -298,7 +298,9 @@ artifact. Export requires a saved document snapshot and does not create a revisi
 
 **«Артефакты» → «В документе» → «Подключить к чату»** loads the displayed current snapshot
 in another chat. Selection validates the complete body before changing membership.
-A stale writer is rejected before dispatch and must explicitly select the new head.
+Responses refresh only that same logical workspace to its published head. A stale
+editor save is rejected before dispatch; the Web view keeps unsaved text for explicit
+source reload. Model writes never switch the editor to another workspace.
 The picker and response guards preserve newer drafts/navigation. Unlink clears
 only this chat's selected workspace, including when its body is unavailable.
 
@@ -488,7 +490,8 @@ those slots: previously omitted entries are recovered by a fresh discovery, and
 Gateway preserves any earlier page's unavailable status through the current scan.
 This supersedes the prior all-collection availability fingerprint, which required
 rehydrating the library before every continuation. HTML-member discovery reads only
-the exact selected current workspace; missing/stale selection stays explicit.
+all current document workspaces; missing bodies remain explicit. Chat selection
+is presentation only and does not narrow model discovery.
 Direct immutable snapshot identity resolution reads its own head and one metadata
 record, removing the final all-history load from the provider identity path.
 

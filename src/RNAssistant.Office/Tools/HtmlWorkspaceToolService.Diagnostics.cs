@@ -6,6 +6,7 @@ using System.Threading;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.Tools
 {
@@ -29,8 +30,11 @@ namespace RNAssistant.Office.Tools
         private static readonly Regex QuerySelectorIdPattern = InspectionRegex("\\bquerySelector(?:All)?\\s*\\(\\s*(?:\"#(?<value>[A-Za-z0-9_-]+)\"|'#(?<value>[A-Za-z0-9_-]+)')", RegexOptions.None);
         private static readonly Regex DataAccessorPattern = InspectionRegex("\\bRN\\s*\\.\\s*resources\\s*\\.\\s*open\\s*\\(\\s*(?:\"(?<value>[^\"]+)\"|'(?<value>[^']+)')", RegexOptions.None);
 
+        internal static HtmlWorkspaceToolOutcome InspectForPreview(ChatSession actor, CancellationToken token)
+        { return InspectForPreview(HtmlWorkspaceMutation.ForEditor(actor), token); }
+
         internal static HtmlWorkspaceToolOutcome InspectForPreview(
-            ChatSession session, CancellationToken cancellationToken)
+            HtmlWorkspaceMutation session, CancellationToken cancellationToken)
         {
             if (session == null)
                 return HtmlWorkspaceToolOutcome.Error(
@@ -45,7 +49,7 @@ namespace RNAssistant.Office.Tools
         }
 
         private static HtmlWorkspaceToolOutcome WithAutomaticPreflight(
-            ChatSession session,
+            HtmlWorkspaceMutation session,
             HtmlWorkspaceToolOutcome outcome,
             CancellationToken cancellationToken)
         {
@@ -78,14 +82,14 @@ namespace RNAssistant.Office.Tools
         }
 
         private static HtmlWorkspaceToolOutcome InspectWorkspace(
-            ChatSession session,
+            HtmlWorkspaceMutation session,
             IDictionary<string, object> arguments,
             CancellationToken cancellationToken)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+                var workspace = NormalizedWorkspaceCopy(session.Workspace);
                 var requestedEntry = ToolArgumentReader.String(
                     arguments, "entryName", string.Empty).Trim();
                 var includeWarnings = ToolArgumentReader.Boolean(
@@ -137,7 +141,7 @@ namespace RNAssistant.Office.Tools
                     ["version"] = 1,
                     ["scope"] = "static_preflight",
                     ["runtimeExecuted"] = false,
-                    ["revisionArtifactId"] = session.ActiveHtmlArtifactId,
+                    ["revisionArtifactId"] = session.Snapshot?.Id,
                     ["passed"] = errors == 0,
                     ["entryName"] = entry == null ? null : entry.Path,
                     ["fileCount"] = workspace.Files.Count(item => item != null),

@@ -19,7 +19,18 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void SharedHtmlMutationsRequireSelectedWorkspace()
+        private static ToolRunResult WriteSharedHtmlFixture(OfficeToolExecutor executor, ChatSession session, string content)
+        {
+            try
+            {
+                executor.MutateLocalResources(session, "html.source.write", new Dictionary<string, object> { ["path"] = "index.html" },
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", content, true));
+                return new ToolRunResult { Success = true };
+            }
+            catch (Exception ex) { return new ToolRunResult { Success = false, Message = ex.Message }; }
+        }
+
+        private static void SharedHtmlExplicitTargetsAcrossAgents()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
             {
@@ -27,61 +38,87 @@ namespace RNAssistant.Harness
                 var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value));
                 var catalog = executor.GetControllerTools().ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
-                Func<ChatSession, string, ToolRunResult> write = (chat, content) => executor.ExecuteManual(
-                    Command("core.write", "target", "HTML file: index.html", "content", content), catalog, settings, false, true, chat);
                 var author = NewSession(adapter);
-                AssertTrue(write(author, "<main>shared</main>").Success, "shared HTML fixture published");
-                var artifact = author.Artifacts.Single(item => item.Id == author.ActiveHtmlArtifactId);
-                var parent = ChatResourceUri.CreateArtifactRevision(author, artifact);
-                var member = ChatHtmlResourceCatalog.FileReference(author, artifact, author.HtmlWorkspace.Files.Single().Id);
-                var target = executor.ResourceGateway.Resolve(author, member.Uri).Resource.SnapshotTarget;
                 var reader = NewSession(adapter); reader.DocumentAuthorityId = author.DocumentAuthorityId;
-                AssertEqual("<main>shared</main>", executor.ResourceGateway.ReadWhole(reader, member, "source").Result.Text,
-                    "another agent can read the shared snapshot without selecting a workspace");
-                var unselected = executor.ExecuteManual(Command("core.write", "target", target, "content", "<main>wrong</main>"),
-                    catalog, settings, false, true, reader);
-                AssertTrue(!unselected.Success, "an unselected reader must not report a new unrelated workspace as the requested edit");
-                AssertTrue(string.IsNullOrEmpty(reader.ActiveHtmlArtifactId), "refusal does not select or create a workspace");
-                var unselectedPatch = PrepareVbaNative(executor, reader, Command("core.patch", "targets",
-                    PatchTargets(PatchSection(target, EditSet(Edit("shared", "wrong")))))).Record;
-                AssertEqual(ToolExecutionOutcome.Error, unselectedPatch.Outcome, "unselected agent cannot patch the readable snapshot");
-                AssertEqual(ToolRetryPolicy.None, unselectedPatch.Recovery?.RetryPolicy, "retrying the same write cannot select a workspace");
-                AssertContains(unselectedPatch.Result.Message, "Materials", "the refusal identifies an available user recovery action");
-                AssertContains(unselectedPatch.Result.DataJson, "html_workspace_selection_required", "patch preserves the precise owner failure");
-
-                AssertTrue(write(reader, "<main>local</main>").Success, "second independent workspace published");
-                var localId = reader.ActiveHtmlArtifactId;
-                foreach (var command in new[] {
-                    Command("core.write", "target", target, "content", "<main>wrong</main>"),
-                    Command("core.write", "target", target.Replace("index.html", "missing.js"), "content", "bad"),
-                    Command("core.patch", "targets", PatchTargets(PatchSection(target, EditSet(Edit("shared", "wrong"))))),
-                    Command("core.replace", "target", target, "query", "shared", "replacement", "wrong", "expectedMatches", 1),
-                    Command("resources.delete", "target", target) })
-                {
-                    var refused = PrepareVbaNative(executor, reader, command).Record;
-                    AssertEqual(ToolExecutionOutcome.Error, refused.Outcome, "unselected target is refused: " + command.ToolId);
-                    AssertEqual(ToolRetryPolicy.None, refused.Recovery?.RetryPolicy, "all HTML mutation routes require explicit selection");
-                    AssertEqual(localId, reader.ActiveHtmlArtifactId, "refusal keeps the selected workspace");
-                    AssertEqual("<main>local</main>", reader.HtmlWorkspace.Files.Single().Content,
-                        "same-name file in the selected workspace is unchanged");
-                }
-                AssertEqual("<main>shared</main>", executor.ResourceGateway.ReadWhole(reader, member, "source").Result.Text,
-                    "the requested shared source is unchanged");
-
-                links.Change(reader, LinkRequest(reader, parent.Uri, false), chats.Save);
-                var pending = PrepareVbaNative(executor, reader, Command("core.write", "target", target, "content", "<main>edited</main>"));
-                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "explicit selection enables editing");
-                var local = reader.Artifacts.Single(item => item.Id == localId);
-                links.Change(reader, LinkRequest(reader, ChatResourceUri.CreateArtifactRevision(reader, local).Uri, false), chats.Save);
-                var switched = ConfirmVbaNative(pending);
-                AssertEqual(ToolExecutionOutcome.Error, switched.Outcome, "selection change during confirmation rejects the edit");
-                AssertTrue(!switched.MayHaveDispatched, "selection drift is rejected before dispatch");
-                AssertEqual("<main>local</main>", reader.HtmlWorkspace.Files.Single().Content, "confirmation never writes the other workspace");
-                links.Change(reader, LinkRequest(reader, parent.Uri, false), chats.Save);
-                var updated = executor.ExecuteManual(Command("core.patch", "targets",
-                    PatchTargets(PatchSection(target, EditSet(Edit("shared", "edited"))))), catalog, settings, false, true, reader);
-                AssertTrue(updated.Success, "selected current shared source can be patched: " + updated.Message);
-                AssertEqual("<main>edited</main>", reader.HtmlWorkspace.Files.Single().Content, "the selected shared workspace is updated");
+                Action<ChatSession, ToolInvocation> run = (chat, command) => {
+                    var result = executor.ExecuteManual(command, catalog, settings, false, true, chat);
+                    AssertTrue(result.Success, command.ToolId + ": " + result.Message);
+                };
+                run(author, Command("html.workspace.create", "title", "Chess"));
+                reader.DocumentAuthorityId = author.DocumentAuthorityId;
+                var original = author.Artifacts.Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                var workspace = HtmlWorkspaceTargets.Workspace(chats.DocumentArtifacts, author, original);
+                Func<string, string> target = path => "HTML file: " + path + " in " + workspace;
+                Func<string, string> read = path => executor.ResourceGateway.ReadWhole(reader,
+                    executor.ResourceGateway.ResolveIntentTarget(reader, target(path), true).Reference, "source").Result.Text;
+                run(author, Command("core.write", "target", target("index.html"), "content", "<main>shared</main>"));
+                run(author, Command("core.write", "target", target("style.css"), "content", "body{color:red;}"));
+                AssertTrue(string.IsNullOrEmpty(author.ActiveHtmlArtifactId), "model creation never selects the author's UI");
+                AssertTrue(executor.ResourceGateway.Find(reader, "index.html", "html").Items.Any(item => item.Target.Contains(workspace)),
+                    "another agent discovers the shared current source without linking: " + JsonConvert.SerializeObject(executor.ResourceGateway.Find(reader, "index.html", "html")));
+                var firstMember = executor.ResourceGateway.ResolveIntentTarget(reader, target("index.html"), true).Descriptor;
+                AssertEqual("<main>shared</main>", read("index.html"), "unselected reader reads the current file");
+                run(reader, Command("html.workspace.create", "title", "Other"));
+                var other = reader.Artifacts.Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                var otherTarget = HtmlWorkspaceTargets.Workspace(chats.DocumentArtifacts, reader, other);
+                run(reader, Command("core.write", "target", "HTML file: index.html in " + otherTarget, "content", "<main>local</main>"));
+                var otherHead = chats.DocumentArtifacts.CurrentSnapshot(reader, HtmlWorkspaceIdentity.Identity(reader, HtmlWorkspaceIdentity.LogicalId(other.Id)));
+                links.Change(reader, LinkRequest(reader, otherHead.Uri, false), chats.Save);
+                var selection = reader.ActiveHtmlArtifactId;
+                RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.ResolveIntentTarget(reader, "HTML file: index.html", true));
+                var pending = PrepareVbaNative(executor, reader, Command("core.patch", "targets",
+                    PatchTargets(PatchSection(target("index.html"), EditSet(Edit("shared", "edited"))))));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "shared source prepares without selecting it");
+                run(author, Command("core.write", "target", target("style.css"), "content", "body{color:green;}"));
+                var confirmed = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Ok, confirmed.Outcome, "sibling changes survive a prepared edit: " + confirmed.Message + " " + confirmed.Result?.DataJson);
+                AssertEqual("body{color:green;}", read("style.css"), "latest aggregate preserves the other agent's CSS");
+                AssertEqual("<main>edited</main>", read("index.html"), "shared source was changed");
+                AssertEqual(selection, reader.ActiveHtmlArtifactId, "writing another workspace never changes selected UI");
+                AssertEqual("<main>local</main>", reader.HtmlWorkspace.Files.Single().Content, "selected editor projection remains intact");
+                var stale = PrepareVbaNative(executor, reader, Command("core.patch", "targets",
+                    PatchTargets(PatchSection(target("index.html"), EditSet(Edit("edited", "stale"))))));
+                run(author, Command("core.write", "target", target("index.html"), "content", "<main>newer</main>"));
+                run(author, Command("core.write", "target", target("index.html"), "content", "<main>edited</main>"));
+                var rejected = ConfirmVbaNative(stale);
+                AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, "same-file ABA conflicts");
+                AssertTrue(!rejected.MayHaveDispatched, "conflict happens before dispatch");
+                AssertEqual("<main>shared</main>", executor.ResourceGateway.ReadWhole(reader,
+                    executor.ResourceGateway.ResolveIntentTarget(reader, firstMember.SnapshotTarget).Reference, "source").Result.Text,
+                    "historical target remains exact");
+                var historical = PrepareVbaNative(executor, reader, Command("core.write", "target", firstMember.SnapshotTarget, "content", "bad")).Record;
+                AssertEqual(ToolExecutionOutcome.Error, historical.Outcome, "history is never a mutation target");
+                var foreign = NewSession(adapter); foreign.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.ResolveIntentTarget(foreign, target("index.html"), true));
+                chats.Save(reader); reader = new ChatStore(FixturePaths.Value).Load(reader.Id);
+                AssertEqual("<main>edited</main>", read("index.html"), "stable target survives restart without changing selection");
+                run(reader, Command("html.data.write", "workspace", workspace, "name", "rows", "json", "{\"value\":1}"));
+                run(reader, Command("html.data.bind", "workspace", workspace, "name", "markup",
+                    "target", executor.ResourceGateway.ResolveIntentTarget(reader, target("index.html"), true).Descriptor.CurrentTarget, "view", "source", "policy", "head"));
+                run(reader, Command("html.data.freeze", "workspace", workspace, "name", "markup"));
+                var boundRoot = executor.ResourceGateway.ResolveIntentTarget(reader, workspace, true).Reference;
+                var boundBody = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(chats.DocumentArtifacts.Read(reader, boundRoot).InlineText);
+                AssertEqual("exact", boundBody.DataSources.Single(item => item.Name == "markup").Binding.Policy, "freeze uses explicit workspace");
+                run(reader, Command("html.assets.publish", "workspace", workspace, "id", "chess-assets", "version", "1.0.0",
+                    "title", "Chess assets", "description", "Shared chess source", "files", new JArray("index.html")));
+                run(author, Command("html.assets.list", "query", "chess-assets"));
+                run(author, Command("html.workspace.create", "title", "Imported"));
+                var imported = author.Artifacts.Last(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                var importTarget = HtmlWorkspaceTargets.Workspace(chats.DocumentArtifacts, author, imported);
+                run(author, Command("html.assets.import", "workspace", importTarget, "id", "chess-assets", "version", "1.0.0"));
+                AssertEqual("<main>edited</main>", executor.ResourceGateway.ReadWhole(author,
+                    executor.ResourceGateway.ResolveIntentTarget(author, "HTML file: index.html in " + importTarget, true).Reference, "source").Result.Text,
+                    "assets import uses its explicit workspace");
+                AssertEqual(selection, reader.ActiveHtmlArtifactId, "data and asset publication preserve UI selection");
+                var creating = PrepareVbaNative(executor, reader, Command("core.write", "target", target("race.js"), "content", "old"));
+                run(author, Command("core.write", "target", target("race.js"), "content", "new"));
+                var createConflict = ConfirmVbaNative(creating);
+                AssertTrue(createConflict.Outcome == ToolExecutionOutcome.Error && !createConflict.MayHaveDispatched, "concurrent creation fails before dispatch");
+                var deleting = PrepareVbaNative(executor, reader, Command("resources.delete", "target", target("race.js")));
+                run(author, Command("core.write", "target", target("style.css"), "content", "body{color:blue;}"));
+                AssertEqual(ToolExecutionOutcome.Ok, ConfirmVbaNative(deleting).Outcome, "delete preserves sibling edits");
+                var missingWorkspace = executor.ExecuteManual(Command("html.data.write", "name", "bad", "json", "{}"), catalog, settings, false, true, reader);
+                AssertTrue(!missingWorkspace.Success, "data mutation cannot infer the selected workspace");
             });
         }
 
@@ -139,10 +176,10 @@ namespace RNAssistant.Harness
                 var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var a = NewSession(adapter);
                 var html = "<!--" + new string('x', 145000) + "--><main>late-html-marker</main>";
-                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html", "content", html),
-                    catalog, new AppSettings(), false, false, a).Success, "long HTML published");
-                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteDataToolId, "name", "sales", "json", "{\"secret\":\"bound-value-only\"}"),
+                AssertTrue(WriteSharedHtmlFixture(executor, a, html).Success, "long HTML published");
+                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteDataToolId, "workspace", HtmlWorkspaceTargets.Workspace(chats.DocumentArtifacts, a, a.Artifacts.Last()), "name", "sales", "json", "{\"secret\":\"bound-value-only\"}"),
                     catalog, new AppSettings(), false, false, a).Success, "bound JSON published");
+                HtmlWorkspaceEditorResourceService.RefreshSelected(a, chats.DocumentArtifacts);
                 var parent = ChatResourceUri.CreateArtifactRevision(a, a.Artifacts.Single(item => item.Id == a.ActiveHtmlArtifactId));
                 var b = NewSession(adapter); b.DocumentAuthorityId = a.DocumentAuthorityId;
                 links.Change(b, LinkRequest(b, parent.Uri, false), chats.Save);
@@ -182,11 +219,10 @@ namespace RNAssistant.Harness
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "parent retains derived member bytes through GC");
                 provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: new ChatStore(paths).DocumentArtifacts);
                 AssertEqual(1, provider.Search(b, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "member index survives owner restart");
-                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html", "content", "<main>replacement</main>"),
-                    catalog, new AppSettings(), false, false, b).Success, "new HTML revision published");
+                AssertTrue(WriteSharedHtmlFixture(executor, b, "<main>replacement</main>").Success, "new HTML revision published");
                 AssertEqual(0, provider.Search(b, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count, "current member search excludes the old index");
                 var stale = provider.Search(a, "late-html-marker", ChatHtmlResourceCatalog.FileKind, 20, 600);
-                AssertTrue(stale.UnavailableResources == 1 && stale.Matches.Count == 0, "stale chat selection requires refresh");
+                AssertTrue(stale.UnavailableResources == 0 && stale.Matches.Count == 0, "discovery follows shared publication regardless of stale selection");
                 AssertEqual(html.Substring(0, 1000), provider.Read(a, new ResourceReadRequest { Reference = match.Reference, MaxChars = 1000 }).Result.Text,
                     "historical member reads stay exact");
                 var current = b.Artifacts.Single(item => item.Id == b.ActiveHtmlArtifactId);
@@ -203,8 +239,7 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html", "content", "<main>needle</main>"),
-                    catalog, new AppSettings(), false, false, session).Success, "HTML race fixture published");
+                AssertTrue(WriteSharedHtmlFixture(executor, session, "<main>needle</main>").Success, "HTML race fixture published");
                 var selected = session.ActiveHtmlArtifactId;
                 var authority = new ResourceAuthorityStore(FixturePaths.Value);
                 var counted = new DiscoveryPageStore(authority);
@@ -231,8 +266,8 @@ namespace RNAssistant.Harness
                 {
                     if (scenario == "selection")
                     {
-                        var error = RuntimeThrows<ResourceRequestException>(() => provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600));
-                        AssertEqual("resource_revision_changed", error.ErrorCode, "selection change invalidates member-only search");
+                        AssertEqual(1, provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count,
+                            "selection change does not invalidate shared discovery");
                     }
                     else AssertEqual(1, provider.Search(session, "needle", ChatHtmlResourceCatalog.FileKind, 20, 600).Matches.Count,
                         "unrelated authority publication does not invalidate HTML search");
@@ -250,13 +285,20 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(FixturePaths.Value);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var css = "body { color: red; }\n/*" + new string('x', 256) + "*/";
+                AssertTrue(executor.ExecuteManual(Command("html.workspace.create", "title", "Sequential"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session).Success, "named workspace created");
+                var root = session.Artifacts.Last(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                var workspace = HtmlWorkspaceTargets.Workspace(store.DocumentArtifacts, session, root);
                 foreach (var file in new[] { new[] { "index.html", "<main>old</main>" }, new[] { "styles.css", css } })
-                    AssertTrue(executor.ExecuteManual(Command("core.write", "target", "HTML file: " + file[0], "content", file[1]),
+                    AssertTrue(executor.ExecuteManual(Command("core.write", "target", "HTML file: " + file[0] + " in " + workspace, "content", file[1]),
                         tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session).Success, "baseline file published");
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: store.DocumentArtifacts);
                 var beforeCss = provider.List(session, ChatHtmlResourceCatalog.FileKind, null, 20).Items.Single(item => item.Title == "styles.css").Reference;
                 var firstPage = provider.Read(session, new ResourceReadRequest { Reference = beforeCss, Representation = "source", MaxChars = 128 }).Result;
                 AssertTrue(firstPage.NextCursor != null, "cursor fixture has a second page");
+                var published = store.DocumentArtifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(root.Id)));
+                new ArtifactWorkingSetService(store.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value))
+                    .Change(session, LinkRequest(session, published.Uri, false), store.Save);
                 var baseline = session.ActiveHtmlArtifactId;
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings { AutoConfirmToolActions = true }, "agent", false, manualRun: true);
                 const string runId = "html-sequential-run";
@@ -269,6 +311,7 @@ namespace RNAssistant.Harness
                         DateTime.UtcNow, false, 4), System.Threading.CancellationToken.None).GetAwaiter().GetResult();
                     AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, "sequential patch published");
                     AssertEqual(ToolEffectEvidence.VerifiedChange, result.Evidence.Effect, "each patch has verified publication evidence");
+                    HtmlWorkspaceEditorResourceService.RefreshSelected(session, store.DocumentArtifacts);
                     authored.Add(session.ActiveHtmlArtifactId);
                 }
                 store.Save(session);
@@ -296,9 +339,16 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var store = new ChatStore(FixturePaths.Value);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                AssertTrue(executor.ExecuteManual(Command("html.workspace.create", "title", "Sequential"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session).Success, "named workspace created");
+                var root = session.Artifacts.Last(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                var workspace = HtmlWorkspaceTargets.Workspace(store.DocumentArtifacts, session, root);
                 foreach (var file in new[] { new[] { "index.html", "<main>old</main>" }, new[] { "styles.css", "body { color: red; }" } })
-                    AssertTrue(executor.ExecuteManual(Command("core.write", "target", "HTML file: " + file[0], "content", file[1]),
+                    AssertTrue(executor.ExecuteManual(Command("core.write", "target", "HTML file: " + file[0] + " in " + workspace, "content", file[1]),
                         tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session).Success, "baseline file published");
+                var published = store.DocumentArtifacts.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(root.Id)));
+                new ArtifactWorkingSetService(store.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value))
+                    .Change(session, LinkRequest(session, published.Uri, false), store.Save);
                 var baseline = session.ActiveHtmlArtifactId;
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: store.DocumentArtifacts);
                 var targets = provider.List(session, ChatHtmlResourceCatalog.FileKind, null, 20).Items
@@ -405,14 +455,14 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), paths: paths,
                     persistResourceFacts: (saved, commit) => { throw new System.IO.IOException("Injected HTML link failure."); });
                 var session = NewSession(adapter);
-                var definition = executor.GetControllerTools().Single(item => item.Id == HtmlWorkspaceToolCatalog.WriteFileToolId);
+                var definition = executor.GetControllerTools().Single(item => item.Id == HtmlWorkspaceToolCatalog.CreateToolId);
                 var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
-                var call = new RNAssistant.Core.Agent.ToolCall("html-link-failure", HtmlWorkspaceToolCatalog.WriteFileToolId,
-                    "{\"path\":\"index.html\",\"content\":\"<main>retained</main>\"}");
+                var call = new RNAssistant.Core.Agent.ToolCall("html-link-failure", HtmlWorkspaceToolCatalog.CreateToolId,
+                    "{\"title\":\"Retained\"}");
                 RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, call, runtime.Describe(call)));
                 var owner = new ChatStore(paths).DocumentArtifacts;
                 var artifact = owner.List(session).Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
-                AssertContains(owner.Read(session, ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText, "retained", "HTML remains discoverable after failed actor-link save");
+                AssertEqual("Retained", artifact.Title, "HTML remains discoverable after failed actor-link save");
                 session.ActiveHtmlArtifactId = null; session.Artifacts.Clear(); session.HtmlWorkspace = new HtmlWorkspace();
                 var retry = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertContains(retry.Result.DataJson, "html_attempt_already_published", "same operation cannot become a second workspace after selection loss");
@@ -430,16 +480,16 @@ namespace RNAssistant.Harness
                 var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths));
                 var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var a = NewSession(adapter);
-                Func<ChatSession, string, ToolRunResult> write = (session, html) => executor.ExecuteManual(
-                    Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html", "content", html), catalog, new AppSettings(), false, false, session);
+                Func<ChatSession, string, ToolRunResult> write = (session, html) => WriteSharedHtmlFixture(executor, session, html);
                 var created = write(a, "<main>first</main>");
                 AssertTrue(created.Success, "native HTML publication: " + created.Message);
                 var first = a.Artifacts.Single(item => item.Id == a.ActiveHtmlArtifactId);
                 var firstRef = ChatResourceUri.CreateArtifactRevision(a, first);
                 AssertEqual(a.DocumentAuthorityId, first.DocumentAuthorityId, "HTML snapshot is document-owned before result projection");
                 var dataWrite = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteDataToolId,
-                    "name", "sales", "json", "{\"total\":42}"), catalog, new AppSettings(), false, false, a);
+                    "workspace", HtmlWorkspaceTargets.Workspace(chats.DocumentArtifacts, a, first), "name", "sales", "json", "{\"total\":42}"), catalog, new AppSettings(), false, false, a);
                 AssertTrue(dataWrite.Success, "native bound JSON publication: " + dataWrite.Message);
+                HtmlWorkspaceEditorResourceService.RefreshSelected(a, chats.DocumentArtifacts);
                 var selected = a.Artifacts.Single(item => item.Id == a.ActiveHtmlArtifactId);
                 var selectedRef = ChatResourceUri.CreateArtifactRevision(a, selected);
                 var logicalId = HtmlWorkspaceIdentity.LogicalId(selected.Id);
@@ -484,7 +534,7 @@ namespace RNAssistant.Harness
                 chats.Delete(a.Host, a.DocumentKey, a.Id);
                 AssertEqual("{\"total\":42}", chats.DocumentArtifacts.Read(b, dataRef).InlineText, "origin chat deletion does not remove shared binding bytes");
                 var prior = head.Id;
-                executor.MutateLocalResources(b, "common.html_workspace_restore", new Dictionary<string, object> { ["snapshotId"] = first.Id }, () => {
+                executor.MutateLocalResources(b, "html.workspace.restore", new Dictionary<string, object> { ["snapshotId"] = first.Id }, () => {
                     HtmlWorkspaceArtifactService.RestoreAsRevision(b, first.Id); return true;
                 });
                 var restored = b.Artifacts.Single(item => item.Id == b.ActiveHtmlArtifactId);
@@ -504,7 +554,7 @@ namespace RNAssistant.Harness
                 b = chats.Load(b.Id);
                 var redoId = b.HtmlWorkspace.RedoBranches.Single().Id;
                 AssertEqual(head.Id, redoId, "redo survives restart and retains the former content revision");
-                executor.MutateLocalResources(b, "common.html_workspace_redo", new Dictionary<string, object> { ["snapshotId"] = redoId },
+                executor.MutateLocalResources(b, "html.workspace.redo", new Dictionary<string, object> { ["snapshotId"] = redoId },
                     () => { HtmlWorkspaceArtifactService.RestoreAsRevision(b, redoId, true); return true; });
                 var redone = b.Artifacts.Single(item => item.Id == b.ActiveHtmlArtifactId);
                 AssertEqual(restored.Id, redone.ParentArtifactId, "redo advances the causal head instead of selecting an old one");
@@ -531,7 +581,7 @@ namespace RNAssistant.Harness
                 var writers = new[] { b, c }.Select((chat, index) => Task.Run(() => write(chat, "<main>writer " + index + "</main>"))).ToArray();
                 Task.WaitAll(writers);
                 AssertEqual(1, writers.Count(task => task.Result.Success), "simultaneous writers publish only one child from the same base");
-                AssertEqual(1, writers.Count(task => task.Result.ErrorCode == "RESOURCE_REVISION_CHANGED"), "loser is rejected before dispatch");
+                AssertEqual(1, writers.Count(task => !task.Result.Success && task.Result.Message.Contains("changed after preparation")), "loser is rejected before dispatch");
                 var gc = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "shared HTML and JSON survive origin deletion and CAS collection");
                 AssertContains(chats.DocumentArtifacts.Read(b, firstRef).InlineText, "first", "historical HTML remains readable after GC");

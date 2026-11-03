@@ -256,12 +256,7 @@ namespace RNAssistant.Office.Services
             string query,
             string scope)
         {
-            if ((scope == "all" || scope == "html") && IsHtmlIntentTarget(query) &&
-                (query.EndsWith("Z]", StringComparison.Ordinal) ||
-                    query == ChatHtmlResourceCatalog.CurrentWorkspaceTarget ||
-                    query.EndsWith(" in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget, StringComparison.Ordinal)) &&
-                (query.StartsWith("HTML workspace: ", StringComparison.Ordinal) ||
-                    query.Contains(" in HTML workspace: ")))
+            if ((scope == "all" || scope == "html") && IsHtmlIntentTarget(query) && query.EndsWith("Z]", StringComparison.Ordinal))
                 return ResolveIntentTarget(session, query).Descriptor;
             if (query.Length == 0 ||
                 scope != "all" && scope != "document") return null;
@@ -1039,7 +1034,7 @@ namespace RNAssistant.Office.Services
 
         private static bool IsHtmlIntentTarget(string target)
         {
-            return target.StartsWith("HTML workspace: ", StringComparison.Ordinal) ||
+            return target.StartsWith("HTML snapshot: ", StringComparison.Ordinal) || target.StartsWith("HTML workspace: ", StringComparison.Ordinal) ||
                 target.StartsWith("HTML file: ", StringComparison.Ordinal) ||
                 target.StartsWith("HTML data: ", StringComparison.Ordinal);
         }

@@ -1135,7 +1135,7 @@ namespace RNAssistant.Harness
                 Test("shared Markdown: agent execution and replay", SharedMarkdownKernelReplay),
                 Test("shared Markdown: prepared guards and batch identity", SharedMarkdownPreparedGuards),
                 Test("shared Markdown: publication survives failed chat link", SharedMarkdownFailedLink),
-                Test("shared HTML: mutations require selected workspace", SharedHtmlMutationsRequireSelectedWorkspace),
+                Test("shared HTML: explicit targets across agents", SharedHtmlExplicitTargetsAcrossAgents),
                 Test("shared HTML: publication survives failed chat link", SharedHtmlFailedLinkDoesNotReplay),
                 Test("shared HTML: metadata pages preserve exact descriptors", SharedHtmlMetadataPagesPreserveDescriptors),
                 Test("shared HTML: publication selection and competing chats", SharedHtmlPublicationAndSelection),

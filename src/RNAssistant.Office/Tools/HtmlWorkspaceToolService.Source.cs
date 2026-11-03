@@ -28,75 +28,45 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None);
         }
 
-        internal const string SelectionRequiredCode = "html_workspace_selection_required";
-
-        internal ChatArtifact RequireSelectedSource(ChatSession session, ResourceIntentTarget selected)
+        internal ChatArtifact RequireCurrentSource(ChatSession actor, ResourceIntentTarget selected)
         {
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
-            var artifact = session.Artifacts.SingleOrDefault(a => a.Id == session.ActiveHtmlArtifactId);
-            var logicalId = HtmlWorkspaceIdentity.LogicalId(artifact?.Id);
-            var authority = _resources?.Authority;
-            if (artifact == null || logicalId == null || authority == null ||
-                artifact.DocumentAuthorityId != session.DocumentAuthorityId)
-                throw SelectionRequired();
-            var expected = ChatResourceUri.CreateArtifactRevision(session, artifact);
-            var requested = ChatResourceUri.ArtifactSnapshot(selected.Reference);
-            if (requested.Uri != expected.Uri || requested.Revision != expected.Revision)
-            {
-                string requestedId;
-                if (ChatResourceUri.TryParseArtifactRevision(requested, out _, out requestedId, out _) &&
-                    HtmlWorkspaceIdentity.LogicalId(requestedId) == logicalId)
-                    throw new ResourceRequestException("HTML target names a historical snapshot. Read the current file before editing.",
-                        "RESOURCE_REVISION_CHANGED", false);
-                throw SelectionRequired();
-            }
-            var owner = new RNAssistant.Core.Storage.DocumentArtifactStore(authority.Store, authority.Revisions, authority.Payloads);
-            var current = owner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logicalId));
-            if (current?.Uri != expected.Uri || current.Revision != expected.Revision)
-                throw SelectionRequired();
-            return artifact;
+            var exact = ChatResourceUri.ArtifactSnapshot(selected.Reference);
+            string id;
+            if (!ChatResourceUri.TryParseArtifactRevision(exact, out _, out id, out _) || !RNAssistant.Core.Storage.DocumentArtifactStore.Owns(actor, exact))
+                throw new ResourceRequestException("HTML belongs to another document.", "RESOURCE_ACCESS_DENIED", false);
+            var logical = HtmlWorkspaceIdentity.LogicalId(id);
+            var current = DocumentOwner.CurrentSnapshot(actor, HtmlWorkspaceIdentity.Identity(actor, logical));
+            if (current?.Uri != exact.Uri || current.Revision != exact.Revision || selected.Target.Contains("HTML snapshot: "))
+                throw new ResourceRequestException("Historical HTML cannot be edited. Read its working target.", "source_changed", false);
+            return DocumentOwner.Read(actor, current);
         }
 
-        internal static ResourceRequestException SelectionRequired()
+        internal ResourceHeadState PrepareSourceMutation(ChatSession actor, ResourceIntentTarget selected, string before, string candidate)
         {
-            return new ResourceRequestException(
-                "Ask the user to select the target's current HTML workspace in this chat's Materials, or ask its agent to edit it. " +
-                "Reading a shared snapshot does not select it. Do not retry with core.write or html.data.bind.",
-                SelectionRequiredCode, false);
-        }
-
-        // Validate the mutable owner and the complete candidate before a batch can
-        // dispatch another target. Publication still repeats its authority guard.
-        internal ResourceHeadState PrepareSourcePatch(ChatSession session, ResourceIntentTarget selected, string before, string candidate)
-        {
-            var artifact = RequireSelectedSource(session, selected);
+            var artifact = RequireCurrentSource(actor, selected);
             var logicalId = HtmlWorkspaceIdentity.LogicalId(artifact.Id);
-            var authority = _resources.Authority;
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+            var body = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
+            var workspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(body);
             var file = FindFile(workspace, selected.Descriptor.Title, false);
-            var member = ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id);
-            if (selected.Reference.Uri != member.Uri || selected.Reference.Revision != member.Revision ||
-                (file.Content ?? string.Empty) != before)
-                throw new ResourceRequestException("HTML source changed or the target names a historical snapshot. Read the current file before editing.", "RESOURCE_REVISION_CHANGED", false);
+            if ((file.Content ?? "") != before) throw new ResourceRequestException("HTML source changed.", "source_changed", false);
             ValidateFile(file.Path, file.Kind, candidate);
             ValidateWorkspaceCapacity(workspace, file.Id, null);
-            var identity = HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
-                ChatHtmlResourceCatalog.FileMemberKey(file.Id));
-            var head = authority.Store.GetHead(authority.Scope(session, true), identity);
+            var identity = HtmlWorkspaceIdentity.MemberIdentity(actor, logicalId, ChatHtmlResourceCatalog.FileMemberKey(file.Id));
+            var head = _resources.Authority.Store.GetHead(_resources.Authority.Scope(actor, true), identity);
             if (head?.Knowledge != HeadKnowledge.Known || head.Revision == null)
-                throw new ResourceRequestException("HTML file authority is unavailable. Reconcile its current publication before editing.", "RESOURCE_REVISION_CHANGED", false);
+                throw new ResourceRequestException("HTML file authority is unavailable.", "source_changed", false);
             return head;
         }
 
-        private static HtmlWorkspaceToolOutcome ApplyWorkspacePatch(
-            ChatSession session, IDictionary<string, object> arguments,
+        private HtmlWorkspaceToolOutcome ApplyWorkspacePatch(
+            HtmlWorkspaceMutation session, IDictionary<string, object> arguments,
             Action markDispatchPossible, CancellationToken cancellationToken)
         {
             object value;
             var edits = arguments.TryGetValue("resolvedTextEdits", out value) ? value as IReadOnlyList<ResolvedTextEdit> : null;
             if (edits == null)
                 return HtmlWorkspaceToolOutcome.Error("A typed prepared source edit is required.", null, "invalid_patch", false);
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+            var workspace = NormalizedWorkspaceCopy(session.Workspace);
             var file = FindFile(workspace, ToolArgumentReader.String(arguments, "path", string.Empty), false);
             var before = file.Content ?? string.Empty;
             var planned = TextEditPlan.ApplyResolved(before, edits, cancellationToken);
@@ -112,13 +82,13 @@ namespace RNAssistant.Office.Tools
             };
             if (!changed)
             {
-                preview.RevisionArtifactId = session.ActiveHtmlArtifactId;
+                preview.RevisionArtifactId = session.Snapshot?.Id;
                 return WorkspaceResult(session, "HTML source already matches: " + file.Path + ".",
                     JObject.FromObject(preview), HtmlWorkspaceEffect.VerifiedNoChange);
             }
             markDispatchPossible();
             var saved = UpsertFile(session, file.Path, file.Kind, planned.Text, false);
-            preview.RevisionArtifactId = session.ActiveHtmlArtifactId;
+            preview.RevisionArtifactId = session.Snapshot?.Id;
             return WorkspaceResult(session, "HTML source updated: " + saved.Path + ".",
                 JObject.FromObject(preview), HtmlWorkspaceEffect.VerifiedChange);
         }

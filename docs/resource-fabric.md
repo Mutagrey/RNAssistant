@@ -1016,16 +1016,21 @@ For HTML, `structure` belongs to the workspace root and lists members; an exact
 `HTML file` target exposes complete `source`. If a model requests `structure` on
 that file target, the model-facing reader explicitly returns complete `source`
 and reports the actual representation. Other unsupported views still fail.
-The selected workspace uses `HTML workspace: current`. Its file/data targets keep
-the member creation timestamp and name under that working parent. A working read
-resolves the selected published head directly; a sibling edit does not force a
-history scan or change that target. `snapshotTarget` in discovery/read results is
-the explicit retained version: it stays on its exact parent after later edits,
-deletion and restart. Historical lookup is bounded to 1,000 snapshot metadata
-records; missing bodies, ambiguous labels and incomplete metadata fail explicitly.
+HTML discovery enumerates current workspaces in the document, independently of chat
+selection. `html.workspace.create {title}` creates a named empty logical workspace.
+Its stable working target uses the first publication's title and timestamp; file/data
+targets retain their name and creation timestamp under that parent. Model mutations
+resolve this explicit workspace into an operation-local typed command, never a UI
+selection. `html.data.write/bind/freeze` and `html.assets.import/publish` require
+`workspace`; `html.assets.list` remains a global catalog read. New file writes need
+an explicit workspace parent. Ambiguous short targets fail without choosing a tab.
+`snapshotTarget` uses an `HTML snapshot:` parent and remains read-only, pinned to
+retained bytes after edits, deletion and restart. Historical lookup is bounded to
+1,000 snapshot metadata records; current HTML discovery to 4,000 metadata records.
+Missing bodies, ambiguous labels and incomplete metadata fail explicitly.
 Current file evidence depends on the file's published logical head. Verified
 changes advance the affected file head; equal unchanged siblings retain theirs.
-Delete/recreate gets a new file identity even with equal bytes, and restore
+Delete/recreate advances member authority even with equal bytes, and restore
 advances affected heads. Older publications without file heads conservatively
 depend on the aggregate until that file receives a verified publication.
 This projection does not rewrite retained structure bytes or move logical heads.

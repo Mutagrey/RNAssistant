@@ -284,7 +284,17 @@ namespace RNAssistant.Office.Tools
             var observer = new ResourceMutationAuthorityObserver(_resourceAuthority, _resourceMutationJournal, session, Payloads,
                 saved => _persistResourceFacts?.Invoke(saved, historyMutation
                     ? ConversationCommit.RewriteHistory(previousIds, saved.Messages) : new ConversationCommit()));
-            var attempt = observer.Prepare(context, arguments);
+            HtmlWorkspaceCommand htmlCommand = null;
+            if (HtmlWorkspacePublication.Owns(operation))
+            {
+                var selected = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveHtmlArtifactId);
+                htmlCommand = new HtmlWorkspaceCommand {
+                    Create = selected == null, Snapshot = selected == null ? null : ChatResourceUri.CreateArtifactRevision(session, selected),
+                    LogicalId = HtmlWorkspaceIdentity.LogicalId(selected?.Id) ?? "html_ws_" + Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),
+                    Title = selected?.Title ?? "HTML workspace" };
+                session.PreparedHtmlWorkspaceId = htmlCommand.LogicalId;
+            }
+            var attempt = observer.Prepare(context, arguments, htmlCommand == null ? null : JsonConvert.SerializeObject(htmlCommand));
             var publicationStarted = false;
             var dispatched = false;
             var before = session.ActiveHtmlArtifactId + "|" + session.ActivePlanDocumentArtifactId + "|" + session.ActiveTaskListArtifactId;
@@ -294,6 +304,23 @@ namespace RNAssistant.Office.Tools
                 {
                     try { validateBeforeDispatch?.Invoke(); }
                     catch { observer.AbandonBeforeDispatch(attempt); throw; }
+                    if (htmlCommand != null && !htmlCommand.Create)
+                    {
+                        var native = htmlCommand.Load(session, new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads), _resourceAuthority);
+                        session.Artifacts.RemoveAll(item => item.Id == native.Snapshot.Id);
+                        session.Artifacts.Add(native.Snapshot);
+                        session.HtmlWorkspace = native.Workspace;
+                    }
+                    if (htmlCommand != null && (operation == "html.workspace.restore" || operation == "html.workspace.redo"))
+                    {
+                        var owner = new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads);
+                        var sourceId = ResourceMutationDomains.Argument(arguments, "snapshotId");
+                        var source = owner.SnapshotHistory(session, htmlCommand.LogicalId).SingleOrDefault(item => item.Id == sourceId);
+                        if (source == null) { observer.AbandonBeforeDispatch(attempt); throw new InvalidOperationException("The restore source is not published in this workspace."); }
+                        source = owner.Read(session, ChatResourceUri.CreateArtifactRevision(session, source));
+                        session.Artifacts.RemoveAll(item => item.Id == source.Id);
+                        session.Artifacts.Add(source);
+                    }
                     observer.MarkDispatchMayHaveOccurred(attempt);
                     dispatched = true;
                     var value = action();
@@ -303,6 +330,8 @@ namespace RNAssistant.Office.Tools
                     var changed = historyMutation || before != after || operation.EndsWith("_restore", StringComparison.Ordinal) || operation.EndsWith("_redo", StringComparison.Ordinal);
                     publicationStarted = true;
                     observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Ok, DateTime.UtcNow,
+                        result: RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Local operation completed.", resources:
+                            htmlCommand == null || session.ActiveHtmlArtifactId == null ? null : new[] { ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId) }),
                         mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,
                             changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange), resourceReadBack: preparedReadBack));
                     return value;
@@ -310,6 +339,7 @@ namespace RNAssistant.Office.Tools
             }
             catch
             {
+                if (!dispatched) observer.AbandonBeforeDispatch(attempt);
                 if (dispatched && !publicationStarted)
                 {
                     publicationStarted = true;
@@ -719,6 +749,7 @@ namespace RNAssistant.Office.Tools
             }
             catch
             {
+                if (!dispatched) observer.AbandonBeforeDispatch(attempt);
                 if (dispatched && !publicationStarted)
                     observer.Complete(attempt, new ToolExecutionRecord(context, ToolExecutionOutcome.Unknown, DateTime.UtcNow,
                         mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.Unknown)));

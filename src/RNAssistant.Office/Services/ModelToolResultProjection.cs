@@ -260,16 +260,16 @@ namespace RNAssistant.Office.Services
                     schema = TaskListToolCatalog.Schema();
                     break;
                 case HtmlWorkspaceToolCatalog.WriteDataToolId:
-                    schema = HtmlWorkspaceToolService.WriteDataSchema();
+                    schema = HtmlWorkspaceToolCatalog.WithWorkspace(HtmlWorkspaceToolService.WriteDataSchema());
                     break;
                 case HtmlWorkspaceToolCatalog.BindDataToolId:
-                    schema = HtmlWorkspaceToolService.BindSchema();
+                    schema = HtmlWorkspaceToolCatalog.WithWorkspace(HtmlWorkspaceToolService.BindSchema());
                     break;
                 case HtmlWorkspaceToolCatalog.RefreshDataToolId:
                     error = "html.data.refresh was retired; reopen RN.resources handles or read sourceTarget. History is preserved.";
                     return false;
                 case HtmlWorkspaceToolCatalog.FreezeDataToolId:
-                    schema = HtmlWorkspaceToolCatalog.FreezeSchema();
+                    schema = HtmlWorkspaceToolCatalog.WithWorkspace(HtmlWorkspaceToolCatalog.FreezeSchema());
                     break;
                 case PromptToolCatalog.SaveToolId:
                     error = "Prompt edits use core.write/patch with a prompt: target. Start a new chat; history is preserved.";

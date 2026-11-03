@@ -29,13 +29,72 @@ namespace RNAssistant.Office.Tools
             LocalHtmlAssetLibraryService assets = null)
         { _resources = resources; _assets = assets; }
 
+        internal RNAssistant.Core.Storage.DocumentArtifactStore DocumentOwner => _resources?.Authority == null ? null : new RNAssistant.Core.Storage.DocumentArtifactStore(
+            _resources.Authority.Store, _resources.Authority.Revisions, _resources.Authority.Payloads);
+
+        internal HtmlWorkspaceMutation Load(ChatSession actor, HtmlWorkspaceCommand command)
+        { return command.Load(actor, DocumentOwner, _resources.Authority); }
+
+        internal string WorkspaceTarget(ChatSession actor, ResourceRef member)
+        { return HtmlWorkspaceTargets.Workspace(DocumentOwner, actor, DocumentOwner.Read(actor, ChatResourceUri.ArtifactSnapshot(member), false)); }
+
+        internal HtmlWorkspaceCommand PrepareCommand(ChatSession actor, string operation, IDictionary<string, object> arguments)
+        {
+            if (operation == HtmlWorkspaceToolCatalog.ListAssetsToolId) return null;
+            if (operation == HtmlWorkspaceToolCatalog.CreateToolId)
+            {
+                var title = ToolArgumentReader.String(arguments, "title", "").Trim();
+                if (title.Length == 0 || title.Length > 100) throw new InvalidOperationException("A workspace title is required (1–100 characters).");
+                return new HtmlWorkspaceCommand { Create = true, Title = title,
+                    LogicalId = "html_ws_" + Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N") };
+            }
+            var target = _resources.ResolveIntentTarget(actor, ToolArgumentReader.String(arguments, "workspace", ""), true);
+            if (target.Type != "HTML workspace" || target.Target.StartsWith("HTML snapshot:"))
+                throw new ResourceRequestException("Use a working HTML workspace target.", "html_workspace_target_required", false);
+            var artifact = RequireCurrentSource(actor, target);
+            var logical = HtmlWorkspaceIdentity.LogicalId(artifact.Id);
+            var command = new HtmlWorkspaceCommand { LogicalId = logical, Snapshot = target.Reference,
+                Title = DocumentOwner.HtmlWorkspaceOrigin(actor, logical).Title };
+            if (operation == HtmlWorkspaceToolCatalog.WriteFileToolId || operation == HtmlWorkspaceToolCatalog.ApplyPatchToolId ||
+                operation == HtmlWorkspaceToolCatalog.DeleteToolId && arguments.ContainsKey("path"))
+            {
+                command.Path = NormalizeWorkspacePath(ToolArgumentReader.String(arguments, "path", ""));
+                var body = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
+                var file = body.Files.SingleOrDefault(item => string.Equals(item.Path, command.Path, StringComparison.OrdinalIgnoreCase));
+                command.FileAbsent = file == null;
+                command.MemberHead = _resources.Authority.Store.GetHead(_resources.Authority.Scope(actor, true),
+                    HtmlWorkspaceIdentity.MemberIdentity(actor, logical, ChatHtmlResourceCatalog.FileMemberKey(file?.Id ?? FileId(command.Path))));
+                if (file == null && operation != HtmlWorkspaceToolCatalog.WriteFileToolId)
+                    throw new ResourceRequestException("HTML file is absent.", "resource_target_not_found", false);
+            }
+            return command;
+        }
+
+        internal HtmlWorkspaceToolOutcome Execute(string toolId, IDictionary<string, object> arguments, ChatSession actor,
+            Action markDispatchPossible, CancellationToken token, HtmlWorkspaceCommand command)
+        {
+            var mutation = command == null && toolId == HtmlWorkspaceToolCatalog.ListAssetsToolId
+                ? new HtmlWorkspaceMutation(actor, null, null, null, new HtmlWorkspace())
+                : command.Load(actor, DocumentOwner, _resources.Authority);
+            if (toolId == HtmlWorkspaceToolCatalog.CreateToolId)
+            {
+                markDispatchPossible(); mutation.Capture(command.Title);
+                actor.Artifacts.AddRange(mutation.Artifacts);
+                return WorkspaceResult(mutation, "HTML workspace created. Use its explicit target for files and bindings.",
+                    WorkspaceMutationData(mutation, "workspace", command.Title), HtmlWorkspaceEffect.VerifiedChange);
+            }
+            var result = Execute(toolId, arguments, mutation, markDispatchPossible, token);
+            actor.Artifacts.AddRange(mutation.Artifacts.Where(item => !actor.Artifacts.Any(existing => existing.Id == item.Id)));
+            return result;
+        }
+
         internal bool HasDataSourceTools { get { return _resources != null; } }
         internal bool HasAssetLibrary { get { return _assets != null; } }
 
         internal HtmlWorkspaceToolOutcome Execute(
             string toolId,
             IDictionary<string, object> arguments,
-            ChatSession session,
+            HtmlWorkspaceMutation session,
             Action markDispatchPossible,
             CancellationToken cancellationToken)
         {
@@ -67,7 +126,7 @@ namespace RNAssistant.Office.Tools
                     var page = _assets.List(
                         ToolArgumentReader.String(arguments, "query", string.Empty),
                         ToolArgumentReader.Int32(arguments, "limit", 10));
-                    var observed = _observedAssets.GetValue(session,
+                    var observed = _observedAssets.GetValue(session.Actor,
                         _ => new Dictionary<string, string>(StringComparer.Ordinal));
                     lock (observed)
                         foreach (var item in page.Items)
@@ -79,7 +138,7 @@ namespace RNAssistant.Office.Tools
                         HtmlWorkspaceEffect.None);
                 }
 
-                HtmlWorkspaceArtifactService.EnsureMutable(session);
+                if (session == null) throw new InvalidOperationException("An explicit HTML mutation is required.");
                 if (string.Equals(toolId,
                     HtmlWorkspaceToolCatalog.ImportAssetToolId,
                     StringComparison.Ordinal))
@@ -127,20 +186,20 @@ namespace RNAssistant.Office.Tools
                     var content = ToolArgumentReader.String(
                         arguments, "content", string.Empty);
                     ValidateFileWrite(session, path, string.Empty, content);
-                    var beforeSnapshot = session.ActiveHtmlArtifactId;
+                    var beforeSnapshot = session.Snapshot?.Id;
                     mark();
                     var file = UpsertFile(session, path, string.Empty,
                         content, true);
-                    var changed = beforeSnapshot != session.ActiveHtmlArtifactId;
-                    var files = session.HtmlWorkspace.Files.Where(item => item != null)
+                    var changed = beforeSnapshot != session.Snapshot?.Id;
+                    var files = session.Workspace.Files.Where(item => item != null)
                         .Select(item => item.Path).OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
                         .Take(12).ToArray();
                     return WithAutomaticPreflight(session,
                         WorkspaceResult(session,
                             (changed ? "HTML workspace file saved: " : "HTML workspace file unchanged: ") + file.Path +
-                            ". Current files (" + session.HtmlWorkspace.Files.Count + "): " +
+                            ". Current files (" + session.Workspace.Files.Count + "): " +
                             string.Join(", ", files) +
-                            (session.HtmlWorkspace.Files.Count > files.Length ? ", ..." : ".") +
+                            (session.Workspace.Files.Count > files.Length ? ", ..." : ".") +
                             " Continue from this saved state. Reuse included complete current source; read before replacement only if the needed source is absent or invalidated.",
                             WorkspaceMutationData(session, "file", file.Path, changed: changed),
                             changed ? HtmlWorkspaceEffect.VerifiedChange : HtmlWorkspaceEffect.VerifiedNoChange),
@@ -174,7 +233,7 @@ namespace RNAssistant.Office.Tools
                     var target = ToolArgumentReader.String(
                         arguments, "target", string.Empty);
                     var workspace = NormalizedWorkspaceCopy(
-                        session.HtmlWorkspace);
+                        session.Workspace);
                     var file = FindOptionalFile(workspace, target);
                     var data = FindOptionalDataSource(workspace, target);
                     if (file != null && data != null)
@@ -346,7 +405,7 @@ namespace RNAssistant.Office.Tools
             return workspace;
         }
 
-        public static HtmlWorkspaceFile UpsertFile(ChatSession session, string path, string kind, string content, bool setActive)
+        public static HtmlWorkspaceFile UpsertFile(HtmlWorkspaceMutation session, string path, string kind, string content, bool setActive)
         {
             if (session == null)
             {
@@ -354,11 +413,11 @@ namespace RNAssistant.Office.Tools
             }
 
             ValidateFileWrite(session, path, kind, content);
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            session.Workspace = NormalizeWorkspace(session.Workspace);
             var normalizedPath = NormalizePath(path);
             var id = FileId(normalizedPath);
             var now = DateTime.UtcNow;
-            var file = session.HtmlWorkspace.Files.FirstOrDefault(f =>
+            var file = session.Workspace.Files.FirstOrDefault(f =>
                 f != null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase));
             var normalizedKind = NormalizeKind(kind, normalizedPath);
             var changed = file == null || file.Path != normalizedPath || file.Kind != normalizedKind ||
@@ -371,7 +430,7 @@ namespace RNAssistant.Office.Tools
                     Path = normalizedPath,
                     CreatedUtc = now
                 };
-                session.HtmlWorkspace.Files.Add(file);
+                session.Workspace.Files.Add(file);
             }
 
             file.Path = normalizedPath;
@@ -379,26 +438,26 @@ namespace RNAssistant.Office.Tools
             file.Content = content ?? string.Empty;
             if (changed) file.UpdatedUtc = now;
             if (string.Equals(file.Kind, "html", StringComparison.OrdinalIgnoreCase) &&
-                (setActive || string.IsNullOrWhiteSpace(session.HtmlWorkspace.ActiveFileId)))
+                (setActive || string.IsNullOrWhiteSpace(session.Workspace.ActiveFileId)))
             {
-                changed |= session.HtmlWorkspace.ActiveFileId != file.Id;
-                session.HtmlWorkspace.ActiveFileId = file.Id;
+                changed |= session.Workspace.ActiveFileId != file.Id;
+                session.Workspace.ActiveFileId = file.Id;
             }
             else if (!string.Equals(file.Kind, "html", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(session.HtmlWorkspace.ActiveFileId, file.Id, StringComparison.OrdinalIgnoreCase))
+                string.Equals(session.Workspace.ActiveFileId, file.Id, StringComparison.OrdinalIgnoreCase))
             {
                 changed = true;
-                session.HtmlWorkspace.ActiveFileId = string.Empty;
-                NormalizeWorkspace(session.HtmlWorkspace);
+                session.Workspace.ActiveFileId = string.Empty;
+                NormalizeWorkspace(session.Workspace);
             }
-            if (changed) session.HtmlWorkspace.UpdatedUtc = now;
+            if (changed) session.Workspace.UpdatedUtc = now;
 
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML: " + normalizedPath);
+            session.Capture( "HTML: " + normalizedPath);
 
             return file;
         }
 
-        public static HtmlWorkspaceDataSource UpsertDataSource(ChatSession session, string name, string json)
+        public static HtmlWorkspaceDataSource UpsertDataSource(HtmlWorkspaceMutation session, string name, string json)
         {
             if (session == null)
             {
@@ -406,11 +465,11 @@ namespace RNAssistant.Office.Tools
             }
 
             ValidateDataWrite(session, name, json);
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
+            session.Workspace = NormalizeWorkspace(session.Workspace);
             var normalizedName = NormalizeDataName(name);
             var id = DataSourceId(normalizedName);
             var now = DateTime.UtcNow;
-            var data = session.HtmlWorkspace.DataSources.FirstOrDefault(d =>
+            var data = session.Workspace.DataSources.FirstOrDefault(d =>
                 d != null && string.Equals(d.Id, id, StringComparison.OrdinalIgnoreCase));
             if (data == null)
             {
@@ -420,69 +479,68 @@ namespace RNAssistant.Office.Tools
                     Name = normalizedName,
                     CreatedUtc = now
                 };
-                session.HtmlWorkspace.DataSources.Add(data);
+                session.Workspace.DataSources.Add(data);
             }
 
             data.Name = normalizedName;
             var artifact = new ChatArtifact
             {
-                Id = "artifact_" + Guid.NewGuid().ToString("N"), DocumentAuthorityId = session.DocumentAuthorityId,
+                Id = "artifact_" + Guid.NewGuid().ToString("N"), DocumentAuthorityId = session.Actor.DocumentAuthorityId,
                 Kind = ChatArtifactKinds.File, Title = normalizedName + ".json",
                 MimeType = "application/json", InlineText = json ?? "{}", Revision = 1
             };
-            if (session.Artifacts == null) session.Artifacts = new List<ChatArtifact>();
             session.Artifacts.Add(artifact);
             data.Binding = new HtmlWorkspaceDataBinding
-            { Resource = ChatResourceUri.CreateArtifactRevision(session, artifact), Policy = "exact", View = "text" };
+            { Resource = ChatResourceUri.CreateArtifactRevision(session.Actor, artifact), Policy = "exact", View = "text" };
             data.UpdatedUtc = now;
-            session.HtmlWorkspace.UpdatedUtc = now;
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML data: " + normalizedName);
+            session.Workspace.UpdatedUtc = now;
+            session.Capture( "HTML data: " + normalizedName);
             return data;
         }
 
-        public static HtmlWorkspaceFile SetActiveFile(ChatSession session, string path)
+        public static HtmlWorkspaceFile SetActiveFile(HtmlWorkspaceMutation session, string path)
         {
             if (session == null)
             {
                 throw new InvalidOperationException("Chat session is required.");
             }
 
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            if (session == null) throw new InvalidOperationException("An explicit HTML mutation is required.");
             ValidatePath(path);
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
-            var file = FindFile(session.HtmlWorkspace, path, true);
-            session.HtmlWorkspace.ActiveFileId = file.Id;
-            session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML active file: " + file.Path);
+            session.Workspace = NormalizeWorkspace(session.Workspace);
+            var file = FindFile(session.Workspace, path, true);
+            session.Workspace.ActiveFileId = file.Id;
+            session.Workspace.UpdatedUtc = DateTime.UtcNow;
+            session.Capture( "HTML active file: " + file.Path);
             return file;
         }
 
-        public static HtmlWorkspaceFile DeleteFile(ChatSession session, string path)
+        public static HtmlWorkspaceFile DeleteFile(HtmlWorkspaceMutation session, string path)
         {
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            if (session == null) throw new InvalidOperationException("An explicit HTML mutation is required.");
             var file = FindFile(session, path);
-            session.HtmlWorkspace.Files.Remove(file);
-            session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
-            NormalizeWorkspace(session.HtmlWorkspace);
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML deleted: " + file.Path);
+            session.Workspace.Files.Remove(file);
+            session.Workspace.UpdatedUtc = DateTime.UtcNow;
+            NormalizeWorkspace(session.Workspace);
+            session.Capture( "HTML deleted: " + file.Path);
             return file;
         }
 
-        public static HtmlWorkspaceDataSource DeleteDataSource(ChatSession session, string name)
+        public static HtmlWorkspaceDataSource DeleteDataSource(HtmlWorkspaceMutation session, string name)
         {
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            if (session == null) throw new InvalidOperationException("An explicit HTML mutation is required.");
             var data = FindDataSource(session, name);
-            session.HtmlWorkspace.DataSources.Remove(data);
-            session.HtmlWorkspace.UpdatedUtc = DateTime.UtcNow;
-            NormalizeWorkspace(session.HtmlWorkspace);
-            HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML data deleted: " + data.Name);
+            session.Workspace.DataSources.Remove(data);
+            session.Workspace.UpdatedUtc = DateTime.UtcNow;
+            NormalizeWorkspace(session.Workspace);
+            session.Capture( "HTML data deleted: " + data.Name);
             return data;
         }
 
-        private static JObject WorkspaceMutationData(ChatSession session, string itemType, string itemId,
+        private static JObject WorkspaceMutationData(HtmlWorkspaceMutation session, string itemType, string itemId,
             ResourceDescriptor boundSource = null, bool? changed = null)
         {
-            var workspace = NormalizedWorkspaceCopy(session == null ? null : session.HtmlWorkspace);
+            var workspace = NormalizedWorkspaceCopy(session == null ? null : session.Workspace);
             var result = new JObject
             {
                 ["type"] = "rnassistant.htmlWorkspaceMutation",
@@ -490,7 +548,7 @@ namespace RNAssistant.Office.Tools
                 ["itemType"] = itemType,
                 ["target"] = itemId,
                 ["itemId"] = itemId,
-                ["revisionArtifactId"] = session == null ? null : session.ActiveHtmlArtifactId,
+                ["revisionArtifactId"] = session == null ? null : session.Snapshot?.Id,
                 ["activeFileId"] = workspace.ActiveFileId,
                 ["fileCount"] = workspace.Files.Count,
                 ["dataSourceCount"] = workspace.DataSources.Count,
@@ -502,7 +560,7 @@ namespace RNAssistant.Office.Tools
             if (source?.Binding != null)
             {
                 string artifactId;
-                if (boundSource == null && ChatResourceUri.TryGetArtifactId(session, source.Binding.Resource, out artifactId))
+                if (boundSource == null && ChatResourceUri.TryGetArtifactId(session.Actor, source.Binding.Resource, out artifactId))
                 {
                     var artifact = session.Artifacts.SingleOrDefault(item => item.Id == artifactId);
                     if (artifact != null) boundSource = new ResourceDescriptor {
@@ -513,23 +571,23 @@ namespace RNAssistant.Office.Tools
             return result;
         }
 
-        private static HtmlWorkspaceToolOutcome WorkspaceResult(
-            ChatSession session, string message, JObject data, HtmlWorkspaceEffect effect)
+        private HtmlWorkspaceToolOutcome WorkspaceResult(
+            HtmlWorkspaceMutation session, string message, JObject data, HtmlWorkspaceEffect effect)
         {
-            var artifact = (session == null ? null : session.Artifacts ?? new List<ChatArtifact>())
-                .Where(item => item != null && string.Equals(
-                    item.Id,
-                    session.ActiveHtmlArtifactId,
-                    StringComparison.OrdinalIgnoreCase))
-                .Take(2)
-                .ToList();
-            var exactArtifact = artifact.Count == 1 ? artifact[0] : null;
+            var exactArtifact = session.Snapshot;
             var artifactRef = exactArtifact == null
                 ? null
-                : ChatResourceUri.CreateArtifactRevision(session, exactArtifact);
+                : ChatResourceUri.CreateArtifactRevision(session.Actor, exactArtifact);
             var members = exactArtifact == null
                 ? Array.Empty<ResourceDescriptor>()
-                : new ChatHtmlResourceCatalog(null).DescribeMembers(session, exactArtifact).ToArray();
+                : new ChatHtmlResourceCatalog(null, _resources?.Authority?.Payloads, DocumentOwner).DescribeMembers(session.Actor, exactArtifact).ToArray();
+            foreach (var member in members)
+            {
+                var root = DocumentOwner == null ? HtmlWorkspaceTargets.Snapshot(exactArtifact) :
+                    HtmlWorkspaceTargets.Workspace(DocumentOwner, session.Actor, exactArtifact);
+                member.CurrentTarget = HtmlWorkspaceTargets.Member(member.Kind, member.Title, member.CreatedUtc, root);
+            }
+            data["workspace"] = exactArtifact == null || DocumentOwner == null ? null : HtmlWorkspaceTargets.Workspace(DocumentOwner, session.Actor, exactArtifact);
             data["artifactRef"] = artifactRef == null ? JValue.CreateNull() : JToken.FromObject(artifactRef);
             data["members"] = new JArray(members.Select(item => new JObject
             {
@@ -546,6 +604,41 @@ namespace RNAssistant.Office.Tools
                 .Select(group => group.First()).ToArray();
             return HtmlWorkspaceToolOutcome.Ok(message, data, effect, resources: resources);
         }
+
+        internal static HtmlWorkspaceFile UpsertFile(ChatSession actor, string path, string kind, string content, bool setActive)
+        {
+            var mutation = HtmlWorkspaceMutation.ForEditor(actor);
+            var result = UpsertFile(mutation, path, kind, content, setActive);
+            mutation.ProjectEditor(); return result;
+        }
+        internal static HtmlWorkspaceDataSource UpsertDataSource(ChatSession actor, string name, string json)
+        {
+            var mutation = HtmlWorkspaceMutation.ForEditor(actor);
+            var result = UpsertDataSource(mutation, name, json);
+            mutation.ProjectEditor(); return result;
+        }
+        internal static HtmlWorkspaceFile SetActiveFile(ChatSession actor, string path)
+        {
+            var mutation = HtmlWorkspaceMutation.ForEditor(actor);
+            var result = SetActiveFile(mutation, path);
+            mutation.ProjectEditor(); return result;
+        }
+        internal static HtmlWorkspaceFile DeleteFile(ChatSession actor, string path)
+        {
+            var mutation = HtmlWorkspaceMutation.ForEditor(actor);
+            var result = DeleteFile(mutation, path);
+            mutation.ProjectEditor(); return result;
+        }
+        internal static HtmlWorkspaceDataSource DeleteDataSource(ChatSession actor, string name)
+        {
+            var mutation = HtmlWorkspaceMutation.ForEditor(actor);
+            var result = DeleteDataSource(mutation, name);
+            mutation.ProjectEditor(); return result;
+        }
+        internal static void ValidateFileWrite(ChatSession actor, string path, string kind, string content)
+        { ValidateFileWrite(HtmlWorkspaceMutation.ForEditor(actor), path, kind, content); }
+        internal static void ValidateDataWrite(ChatSession actor, string name, string json)
+        { ValidateDataWrite(HtmlWorkspaceMutation.ForEditor(actor), name, json); }
 
         private static List<HtmlWorkspaceSnapshot> NormalizeSnapshots(List<HtmlWorkspaceSnapshot> snapshots)
         {
@@ -591,18 +684,18 @@ namespace RNAssistant.Office.Tools
             return HtmlWorkspaceHistoryPolicy.Trim(ordered);
         }
 
-        internal static void ValidateFileWrite(ChatSession session, string path, string kind, string content)
+        internal static void ValidateFileWrite(HtmlWorkspaceMutation session, string path, string kind, string content)
         {
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            if (session == null) throw new InvalidOperationException("An explicit HTML mutation is required.");
             ValidateFile(path, kind, content);
-            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), FileId(NormalizePath(path)), null);
+            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.Workspace), FileId(NormalizePath(path)), null);
         }
 
-        internal static void ValidateDataWrite(ChatSession session, string name, string json)
+        internal static void ValidateDataWrite(HtmlWorkspaceMutation session, string name, string json)
         {
-            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            if (session == null) throw new InvalidOperationException("An explicit HTML mutation is required.");
             ValidateDataSource(name, json);
-            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.HtmlWorkspace), null, DataSourceId(NormalizeDataName(name)));
+            ValidateWorkspaceCapacity(NormalizedWorkspaceCopy(session.Workspace), null, DataSourceId(NormalizeDataName(name)));
         }
 
         private static void ValidateFile(string path, string kind, string content)
@@ -631,7 +724,7 @@ namespace RNAssistant.Office.Tools
 
         }
 
-        private static HtmlWorkspaceFile FindFile(ChatSession session, string path)
+        private static HtmlWorkspaceFile FindFile(HtmlWorkspaceMutation session, string path)
         {
             if (session == null)
             {
@@ -643,8 +736,8 @@ namespace RNAssistant.Office.Tools
             }
 
             ValidatePath(path);
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
-            return FindFile(session.HtmlWorkspace, path, false);
+            session.Workspace = NormalizeWorkspace(session.Workspace);
+            return FindFile(session.Workspace, path, false);
         }
 
         private static HtmlWorkspaceFile FindFile(HtmlWorkspace workspace, string path, bool requireHtml)
@@ -683,15 +776,15 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private static HtmlWorkspaceDataSource FindDataSource(ChatSession session, string name)
+        private static HtmlWorkspaceDataSource FindDataSource(HtmlWorkspaceMutation session, string name)
         {
             if (session == null)
             {
                 throw new InvalidOperationException("Chat session is required.");
             }
 
-            session.HtmlWorkspace = NormalizeWorkspace(session.HtmlWorkspace);
-            return FindDataSource(session.HtmlWorkspace, name);
+            session.Workspace = NormalizeWorkspace(session.Workspace);
+            return FindDataSource(session.Workspace, name);
         }
 
         private static HtmlWorkspaceDataSource FindDataSource(HtmlWorkspace workspace, string name)

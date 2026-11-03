@@ -29,7 +29,7 @@ namespace RNAssistant.Office.Services
         { return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, key)); }
 
         internal static IReadOnlyList<ResourceImpact> Prepare(ChatSession session, ToolExecutionContext context,
-            IDictionary<string, object> arguments, DocumentArtifactStore owner, ResourceAuthorityService authority, string operation = null)
+            IDictionary<string, object> arguments, DocumentArtifactStore owner, ResourceAuthorityService authority, string operation = null, HtmlWorkspaceCommand command = null)
         {
             operation = operation ?? context.Call.Name;
             try
@@ -38,60 +38,32 @@ namespace RNAssistant.Office.Services
                 var operationKey = OperationKey(session, context);
                 if (authority.Store.GetHead(scope, OperationIdentity(session, operationKey)) != null)
                     throw new ToolMutationPreparationException("html_attempt_already_published", "This HTML operation already has a publication. Recover its exact result without replay.");
-                var logicalId = HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId);
-                if (string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId))
-                {
-                    if (session.HtmlWorkspace?.Files.Count > 0 || session.HtmlWorkspace?.DataSources.Count > 0)
-                        throw new ToolMutationPreparationException("html_workspace_unpublished", "Select a published workspace or create an empty workspace explicitly.");
-                    logicalId = operationKey.Replace("html_operation_", "html_ws_");
-                }
-                else
-                {
-                    var selectedItems = session.Artifacts.Where(item => item.Id == session.ActiveHtmlArtifactId).Take(2).ToArray();
-                    if (selectedItems.Length != 1)
-                        throw new ToolMutationPreparationException("html_active_revision_invalid", "The selected HTML snapshot is missing or ambiguous. Reload its exact document revision.");
-                    var selected = selectedItems[0];
-                    if (logicalId == null || selected?.DocumentAuthorityId != session.DocumentAuthorityId)
-                        throw new ToolMutationPreparationException("html_owner_incompatible", "This HTML workspace uses an incompatible chat-owned format. Start a new workspace explicitly; no implicit migration is performed.");
-                    var current = owner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logicalId));
-                    var expected = ChatResourceUri.CreateArtifactRevision(session, selected);
-                    if (current == null || current.Uri != expected.Uri || current.Revision != expected.Revision)
-                        throw new ToolMutationPreparationException("RESOURCE_REVISION_CHANGED", "HTML changed in another chat. Read and select the current document revision before editing.");
-                    var history = owner.SnapshotHistory(session, logicalId).ToList();
-                    var restoreId = ResourceMutationDomains.Argument(arguments, "snapshotId");
-                    if (!history.Any(item => item.Id == selected.Id) ||
-                        !string.IsNullOrEmpty(restoreId) && !history.Any(item => item.Id == restoreId))
-                        throw new InvalidDataException("The selected or restore-source HTML revision is not published in this workspace.");
-                    for (var index = 0; index < history.Count; index++)
-                        if (history[index].Id == selected.Id || history[index].Id == restoreId)
-                            history[index] = owner.Read(session, ChatResourceUri.CreateArtifactRevision(session, history[index]));
-                    session.Artifacts.RemoveAll(item => HtmlWorkspaceIdentity.LogicalId(item.Id) == logicalId);
-                    session.Artifacts.AddRange(history);
-                    if (!HtmlWorkspaceArtifactService.Restore(session, selected.Id))
-                        throw new InvalidDataException("The selected HTML aggregate is invalid or unavailable.");
-                }
-                session.PreparedHtmlWorkspaceId = logicalId;
+                if (command == null) throw new ToolMutationPreparationException("html_preparation_required", "Prepare an explicit HTML workspace command.");
+                var mutation = command.Load(session, owner, authority);
+                var logicalId = command.LogicalId;
                 var includeAllFiles = operation == "html.workspace.restore" ||
                     operation == "html.workspace.redo" ||
                     operation == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ImportAssetToolId;
                 var path = ResourceMutationDomains.Argument(arguments, "path");
                 includeAllFiles |= string.IsNullOrWhiteSpace(path) && SourceFileOperation(operation);
                 return new[] { new ResourceImpact(HtmlWorkspaceIdentity.Identity(session, logicalId), ResourceImpactRelation.Exact) }
-                    .Concat((session.HtmlWorkspace?.Files ?? new List<HtmlWorkspaceFile>()).Where(file => file != null)
+                    .Concat(mutation.Workspace.Files.Where(file => file != null)
                         .Where(file => includeAllFiles || string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase))
                         .Select(file => new ResourceImpact(HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
                             ChatHtmlResourceCatalog.FileMemberKey(file.Id)), ResourceImpactRelation.Exact)))
                     .ToArray();
             }
+            catch (ResourceRequestException ex) { throw new ToolMutationPreparationException(ex.ErrorCode, ex.Message); }
             catch (InvalidDataException ex) { throw new ToolMutationPreparationException("RESOURCE_SNAPSHOT_UNAVAILABLE", ex.Message); }
         }
 
         internal static IReadOnlyList<ResourceMutationReadBack> ReadBack(ChatSession session, MutationAttempt attempt,
             ToolExecutionContext context, string operationKey, DocumentArtifactStore owner, ChatBlobStore payloads,
-            IDictionary<string, object> domainArguments = null, string domainOperation = null)
+            IDictionary<string, object> domainArguments = null, string domainOperation = null, ResourceRef output = null)
         {
             var logicalId = ResourceUri.Parse(attempt.Target.Uri).Segments.Last();
-            var artifact = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveHtmlArtifactId);
+            var artifact = session.Artifacts.SingleOrDefault(item => output != null &&
+                ChatResourceUri.CreateArtifactRevisionUri(session, item) == output.Uri);
             if (artifact?.Kind != ChatArtifactKinds.HtmlWorkspace || HtmlWorkspaceIdentity.LogicalId(artifact.Id) != logicalId)
                 throw new InvalidDataException("HTML read-back does not match the prepared workspace.");
             var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText ?? "null");
@@ -165,7 +137,7 @@ namespace RNAssistant.Office.Services
             foreach (var old in attempt.IntendedImpacts.Where(item => HtmlWorkspaceIdentity.IsMemberIdentity(item.Identity) &&
                 !currentMembers.Contains(item.Identity.Uri)))
                 result.Add(new ResourceMutationReadBack(old.Identity, false));
-            ArtifactWorkingSet.Set(session, artifact, false);
+
             return result.GroupBy(item => item.Identity.Uri).Select(group => group.First()).ToArray();
         }
 
