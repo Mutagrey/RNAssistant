@@ -39,6 +39,36 @@ WebView2 квалификация открыта. Save As воспроизвод
 за запрос не менялся; он также может объяснять долгое отсутствие ответа. Не заявлять,
 что Windows задержка или все причины повторов устранены.
 
+## Агенты: HTML target и выбранный workspace — 2026-11-03
+
+Owner: Office HTML source service / universal mutation routing.
+На фото `core.patch` повторно отклонён с `html_active_revision_invalid`; модель
+предлагает `core.write`/`html.data.bind`. Локально воспроизведён сценарий, где агент
+читает document-owned HTML другого чата по точному target без выбора workspace.
+Patch отказывал, а `core.write` ошибочно создавал отдельный workspace и сообщал успех.
+При другом выбранном workspace тот же маршрут мог адресовать одноимённый файл.
+
+Общий HTML guard проверяет selection для существующих file/data targets до записи
+и после подтверждения. Отказ `html_workspace_selection_required` не разрешает retry
+и указывает выбор актуального ресурса в материалах чата либо передачу правки агенту
+с этим workspace. Read/discovery не меняют selection, исторические источники не
+становятся текущими автоматически. Отсутствующий точный target также не создаётся
+под видом файла другого workspace.
+
+Регрессия красная на исходных owners: ложный успех `core.write`; после изменения
+проверяет пустую/другую selection, write/patch/replace/delete, смену выбора во время
+confirmation и успешный patch после явного подключения. Проходят 5 адресных checks:
+четыре `shared HTML:` и `universal mutations: HTML member guards`. Четыре прежних
+`shared HTML:` падают также с исходными owners (старый `html.source.write` и
+failed-link fixture); `public Office routing` в обоих вариантах падает на размере
+каталога: ожидается 10, фактически 14. Эти тесты не переписаны в текущем срезе.
+Первое сравнение использовало временную копию параллельно изменяемого agent test
+с `Text` вместо несуществующего `AgentMessage.Content`, без изменения рабочего
+файла. Финальный запуск новой регрессии проходит обычным `dotnet run`, без подмен.
+Точный active pointer Windows-чата на фото, поведение реальной модели после отказа
+и Windows/Office qualification остаются открытыми; фото не доказывает причину
+всех 334 597 потраченных токенов или цикла переписки агентов.
+
 ## Общение агентов: поздний ответ и невидимый прогресс — 2026-11-03
 
 Owners: Application Inbox / Office bridge / Core communication skill / Web sender.

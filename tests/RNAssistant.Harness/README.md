@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+## Shared HTML selection — 2026-11-03
+
+`shared HTML: mutations require selected workspace` covers an agent reading another
+chat's exact HTML snapshot without selecting it, refusal of write/patch/replace/delete
+against an unselected workspace, missing exact-target refusal, and selection changes
+during confirmation. It checks actionable no-retry recovery and successful patching
+after explicit selection. Pair with `universal mutations: HTML member guards` and
+`universal mutations: public Office routing` for sibling writes and historical targets.
+These are host-neutral checks, not Windows/Office or live-model qualification.
+
 ## Chat naming — 2026-11-03
 
 `chat rename:` covers exact policy and invalid/foreign target refusal, Office

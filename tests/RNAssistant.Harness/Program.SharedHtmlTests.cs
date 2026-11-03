@@ -19,6 +19,72 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void SharedHtmlMutationsRequireSelectedWorkspace()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var chats = new ChatStore(FixturePaths.Value);
+                var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value));
+                var catalog = executor.GetControllerTools().ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                Func<ChatSession, string, ToolRunResult> write = (chat, content) => executor.ExecuteManual(
+                    Command("core.write", "target", "HTML file: index.html", "content", content), catalog, settings, false, true, chat);
+                var author = NewSession(adapter);
+                AssertTrue(write(author, "<main>shared</main>").Success, "shared HTML fixture published");
+                var artifact = author.Artifacts.Single(item => item.Id == author.ActiveHtmlArtifactId);
+                var parent = ChatResourceUri.CreateArtifactRevision(author, artifact);
+                var member = ChatHtmlResourceCatalog.FileReference(author, artifact, author.HtmlWorkspace.Files.Single().Id);
+                var target = executor.ResourceGateway.Resolve(author, member.Uri).Resource.SnapshotTarget;
+                var reader = NewSession(adapter); reader.DocumentAuthorityId = author.DocumentAuthorityId;
+                AssertEqual("<main>shared</main>", executor.ResourceGateway.ReadWhole(reader, member, "source").Result.Text,
+                    "another agent can read the shared snapshot without selecting a workspace");
+                var unselected = executor.ExecuteManual(Command("core.write", "target", target, "content", "<main>wrong</main>"),
+                    catalog, settings, false, true, reader);
+                AssertTrue(!unselected.Success, "an unselected reader must not report a new unrelated workspace as the requested edit");
+                AssertTrue(string.IsNullOrEmpty(reader.ActiveHtmlArtifactId), "refusal does not select or create a workspace");
+                var unselectedPatch = PrepareVbaNative(executor, reader, Command("core.patch", "targets",
+                    PatchTargets(PatchSection(target, EditSet(Edit("shared", "wrong")))))).Record;
+                AssertEqual(ToolExecutionOutcome.Error, unselectedPatch.Outcome, "unselected agent cannot patch the readable snapshot");
+                AssertEqual(ToolRetryPolicy.None, unselectedPatch.Recovery?.RetryPolicy, "retrying the same write cannot select a workspace");
+                AssertContains(unselectedPatch.Result.Message, "Materials", "the refusal identifies an available user recovery action");
+                AssertContains(unselectedPatch.Result.DataJson, "html_workspace_selection_required", "patch preserves the precise owner failure");
+
+                AssertTrue(write(reader, "<main>local</main>").Success, "second independent workspace published");
+                var localId = reader.ActiveHtmlArtifactId;
+                foreach (var command in new[] {
+                    Command("core.write", "target", target, "content", "<main>wrong</main>"),
+                    Command("core.write", "target", target.Replace("index.html", "missing.js"), "content", "bad"),
+                    Command("core.patch", "targets", PatchTargets(PatchSection(target, EditSet(Edit("shared", "wrong"))))),
+                    Command("core.replace", "target", target, "query", "shared", "replacement", "wrong", "expectedMatches", 1),
+                    Command("resources.delete", "target", target) })
+                {
+                    var refused = PrepareVbaNative(executor, reader, command).Record;
+                    AssertEqual(ToolExecutionOutcome.Error, refused.Outcome, "unselected target is refused: " + command.ToolId);
+                    AssertEqual(ToolRetryPolicy.None, refused.Recovery?.RetryPolicy, "all HTML mutation routes require explicit selection");
+                    AssertEqual(localId, reader.ActiveHtmlArtifactId, "refusal keeps the selected workspace");
+                    AssertEqual("<main>local</main>", reader.HtmlWorkspace.Files.Single().Content,
+                        "same-name file in the selected workspace is unchanged");
+                }
+                AssertEqual("<main>shared</main>", executor.ResourceGateway.ReadWhole(reader, member, "source").Result.Text,
+                    "the requested shared source is unchanged");
+
+                links.Change(reader, LinkRequest(reader, parent.Uri, false), chats.Save);
+                var pending = PrepareVbaNative(executor, reader, Command("core.write", "target", target, "content", "<main>edited</main>"));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "explicit selection enables editing");
+                var local = reader.Artifacts.Single(item => item.Id == localId);
+                links.Change(reader, LinkRequest(reader, ChatResourceUri.CreateArtifactRevision(reader, local).Uri, false), chats.Save);
+                var switched = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Error, switched.Outcome, "selection change during confirmation rejects the edit");
+                AssertTrue(!switched.MayHaveDispatched, "selection drift is rejected before dispatch");
+                AssertEqual("<main>local</main>", reader.HtmlWorkspace.Files.Single().Content, "confirmation never writes the other workspace");
+                links.Change(reader, LinkRequest(reader, parent.Uri, false), chats.Save);
+                var updated = executor.ExecuteManual(Command("core.patch", "targets",
+                    PatchTargets(PatchSection(target, EditSet(Edit("shared", "edited"))))), catalog, settings, false, true, reader);
+                AssertTrue(updated.Success, "selected current shared source can be patched: " + updated.Message);
+                AssertEqual("<main>edited</main>", reader.HtmlWorkspace.Files.Single().Content, "the selected shared workspace is updated");
+            });
+        }
+
         private static void SharedHtmlMetadataPagesPreserveDescriptors()
         {
             WithTempPaths(paths =>

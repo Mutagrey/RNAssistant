@@ -28,24 +28,54 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None);
         }
 
-        // Validate the mutable owner and the complete candidate before a batch can
-        // dispatch another target. Publication still repeats its authority guard.
-        internal ResourceHeadState PrepareSourcePatch(ChatSession session, ResourceIntentTarget selected, string before, string candidate)
+        internal const string SelectionRequiredCode = "html_workspace_selection_required";
+
+        internal ChatArtifact RequireSelectedSource(ChatSession session, ResourceIntentTarget selected)
         {
             HtmlWorkspaceArtifactService.EnsureMutable(session);
             var artifact = session.Artifacts.SingleOrDefault(a => a.Id == session.ActiveHtmlArtifactId);
             var logicalId = HtmlWorkspaceIdentity.LogicalId(artifact?.Id);
             var authority = _resources?.Authority;
-            if (artifact == null || logicalId == null || authority == null)
-                throw new ResourceRequestException("Select a published current HTML workspace before editing.", "html_active_revision_invalid", false);
+            if (artifact == null || logicalId == null || authority == null ||
+                artifact.DocumentAuthorityId != session.DocumentAuthorityId)
+                throw SelectionRequired();
+            var expected = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            var requested = ChatResourceUri.ArtifactSnapshot(selected.Reference);
+            if (requested.Uri != expected.Uri || requested.Revision != expected.Revision)
+            {
+                string requestedId;
+                if (ChatResourceUri.TryParseArtifactRevision(requested, out _, out requestedId, out _) &&
+                    HtmlWorkspaceIdentity.LogicalId(requestedId) == logicalId)
+                    throw new ResourceRequestException("HTML target names a historical snapshot. Read the current file before editing.",
+                        "RESOURCE_REVISION_CHANGED", false);
+                throw SelectionRequired();
+            }
             var owner = new RNAssistant.Core.Storage.DocumentArtifactStore(authority.Store, authority.Revisions, authority.Payloads);
             var current = owner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logicalId));
-            var expected = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            if (current?.Uri != expected.Uri || current.Revision != expected.Revision)
+                throw SelectionRequired();
+            return artifact;
+        }
+
+        internal static ResourceRequestException SelectionRequired()
+        {
+            return new ResourceRequestException(
+                "Ask the user to select the target's current HTML workspace in this chat's Materials, or ask its agent to edit it. " +
+                "Reading a shared snapshot does not select it. Do not retry with core.write or html.data.bind.",
+                SelectionRequiredCode, false);
+        }
+
+        // Validate the mutable owner and the complete candidate before a batch can
+        // dispatch another target. Publication still repeats its authority guard.
+        internal ResourceHeadState PrepareSourcePatch(ChatSession session, ResourceIntentTarget selected, string before, string candidate)
+        {
+            var artifact = RequireSelectedSource(session, selected);
+            var logicalId = HtmlWorkspaceIdentity.LogicalId(artifact.Id);
+            var authority = _resources.Authority;
             var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
             var file = FindFile(workspace, selected.Descriptor.Title, false);
             var member = ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id);
-            if (current?.Uri != expected.Uri || current.Revision != expected.Revision ||
-                selected.Reference.Uri != member.Uri || selected.Reference.Revision != member.Revision ||
+            if (selected.Reference.Uri != member.Uri || selected.Reference.Revision != member.Revision ||
                 (file.Content ?? string.Empty) != before)
                 throw new ResourceRequestException("HTML source changed or the target names a historical snapshot. Read the current file before editing.", "RESOURCE_REVISION_CHANGED", false);
             ValidateFile(file.Path, file.Kind, candidate);

@@ -78,9 +78,18 @@ namespace RNAssistant.Office.Tools
                     ResourceIntentTarget selected = null;
                     try { selected = ResolveTarget(target); }
                     catch (ResourceRequestException ex) when (_id == ResourceMutationToolCatalog.Write &&
-                        (ex.ErrorCode == "RESOURCE_NOT_FOUND" || ex.ErrorCode == "resource_not_found" || ex.ErrorCode == "resource_target_not_found")) { }
+                        (ex.ErrorCode == "RESOURCE_NOT_FOUND" || ex.ErrorCode == "resource_not_found" || ex.ErrorCode == "resource_target_not_found"))
+                    {
+                        // A missing exact snapshot target is not permission to create
+                        // a same-name file in whichever workspace this chat selected.
+                        if (target.StartsWith("HTML file: ", StringComparison.Ordinal) &&
+                            target.Contains(" in HTML workspace: ") &&
+                            !target.EndsWith(" in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget, StringComparison.Ordinal))
+                            throw HtmlWorkspaceToolService.SelectionRequired();
+                    }
                     if (selected != null && context.Execution.ExpectedTargetAbsent)
                         throw new InvalidDataException("The requested new resource already exists.");
+                    RequireHtmlSelection(selected);
                     var filePatch = _id == ResourceMutationToolCatalog.Patch && selected?.Descriptor.Kind == ChatArtifactKinds.File;
                     var source = selected == null || filePatch ? null : Read(selected.Reference, token);
                     prepared.Source = filePatch ? selected.Reference : source?.Resource.Reference;
@@ -152,6 +161,7 @@ namespace RNAssistant.Office.Tools
                     if (prepared.Source != null)
                     {
                         var selected = ResolveTarget(prepared.Target);
+                        RequireHtmlSelection(selected);
                         if (prepared.Operation == AuthoredFileToolCatalog.PatchToolId)
                         {
                             if (selected.Reference.Uri != prepared.Source.Uri || selected.Reference.Revision != prepared.Source.Revision)
@@ -231,6 +241,14 @@ namespace RNAssistant.Office.Tools
             if (target.StartsWith("HTML file: ", StringComparison.Ordinal) && !target.Contains(" in HTML workspace: "))
                 target += " in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget;
             return _gateway.ResolveIntentTarget(_session, target, allowUniqueBase: true);
+        }
+
+        private void RequireHtmlSelection(ResourceIntentTarget selected)
+        {
+            // Patch validates the same selection with its member head and candidate.
+            if (selected != null && ChatHtmlResourceCatalog.SupportsKind(selected.Descriptor.Kind) &&
+                (_id != ResourceMutationToolCatalog.Patch || selected.Descriptor.Kind != ChatHtmlResourceCatalog.FileKind))
+                _html.RequireSelectedSource(_session, selected);
         }
 
         private void RequireAbsent(string target)
@@ -486,6 +504,8 @@ namespace RNAssistant.Office.Tools
         private ToolRecoveryContract Recovery(ToolHandlerContext context, Exception error)
         {
             var code = (error as ResourceRequestException)?.ErrorCode;
+            if (code == HtmlWorkspaceToolService.SelectionRequiredCode)
+                return new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.None);
             if (code == "source_observation_required" || code == "observation_required" || code == "target_conflict" || code == "source_changed" || code == "replacement_search_required")
             {
                 try

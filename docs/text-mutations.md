@@ -133,6 +133,15 @@ Prepared state хранит exact источники, owner guards и bounded be
 прежнего текста также отклоняется. Актуальность выбранного workspace проверяется
 владельцем перед каждой публикацией; другой чат или исторический snapshot не дают
 права продолжать запись. Исходный snapshot для preview/истории не подменяется.
+Для существующих HTML file/data общий owner сверяет target с выбранным в чате
+опубликованным snapshot при подготовке и выполнении `write/patch/replace/delete`.
+Чтение общего ресурса не выбирает workspace. Отсутствующая, чужая или устаревшая
+selection возвращает `html_workspace_selection_required` с `RetryPolicy=None`:
+пользователь выбирает актуальный HTML в материалах этого чата либо поручает правку
+агенту с нужным workspace. Замена tool на `core.write`/`html.data.bind` не решает
+проблему. Не найденный точный snapshot-target не превращается в создание файла
+в другом workspace. Историческая версия уже выбранного workspace требует чтения
+текущего файла; сами исторические bytes остаются доступны без переключения selection.
 Публичный contract и batch prepared state имеют version 3, binding — `.resource.v5`.
 Внутренний Office owner state остаётся version 2; прежний публичный patch pending-state несовместим
 и требует новой подготовки, без удаления истории.
