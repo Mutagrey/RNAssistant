@@ -164,8 +164,8 @@ Shell восстанавливает только target/placement, без се�
 facade для ещё не перенесённых вторичных consumers**, а не singleton Chat View.
 Они возвращают существующий component/source, не создают копию store. Chat commands
 ими не выбирают адрес. Owner и removal gate — [MIGRATION_MAP](../stabilization/MIGRATION_MAP.md#независимые-chat-view--2026-11-03).
-HTML live editor/annotations и plugin source workbench сохраняют прежний scope;
-их полноценные независимые providers относятся к S3b.3c. Inspector остаётся общим
+Plugin source workbench уже принадлежит PluginView по exact pluginId. HTML live
+editor и selected annotation entrypoint ещё требуют scoping в S3b.3c. Inspector остаётся общим
 инструментом выбранного чата. Native document activation остаётся у Office services.
 
 ### S2b.1: состояние отрисовки и lifecycle представления

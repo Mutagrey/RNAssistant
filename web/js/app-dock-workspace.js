@@ -377,7 +377,6 @@
     if (active) active.api.setActive(); changed();
   }
   function mount(nextOwner) {
-    var changedOwner = owner !== nextOwner;
     owner = nextOwner;
     if (!api) return;
     placeHost();

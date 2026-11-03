@@ -10,7 +10,6 @@
     return panel && panel.target.source === "workspace" ? panel : null;
   }
   function currentSnapshot() { var panel = currentPanel(); return panel ? panel.snapshot() : null; }
-  function clearSnapshot() { /* Navigation does not dispose an independently open chat. */ }
   function acceptSnapshot(snapshot, options) {
     var target = { source: "workspace", workspaceId: snapshot.project.workspaceId, sessionId: snapshot.sessionId };
     RNAssistantConversationPanel.open(target);
@@ -19,8 +18,6 @@
   function el(id) {
     return window.RNAssistantWorkspaceChat.node(id) || document.getElementById("projectChat" + id);
   }
-  function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project" ||
-    window.RNAssistantWorkspaceChat.owner() === "plugin"; }
   async function readProjectChat(target, component) {
     var source = window.RNAssistantWorkspaceChat.snapshotSource(target);
     target = source.target;
@@ -210,7 +207,6 @@
     else if (result.selectedWorkspaceId) selectedWorkspaceId = result.selectedWorkspaceId;
     else if (!projects().some(function (item) { return item.workspaceId === selectedWorkspaceId; }))
       selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
-    if (previousProject !== projectId()) { clearSnapshot(); }
     notice("");
     render();
     var chats = project() && project().chats || [];
@@ -218,16 +214,16 @@
     var wanted = target && target.sessionId || remembered || (previousProject === projectId() ? previousChat : null);
     if (wanted && !chats.some(function (item) { return item.Id === wanted; })) {
       window.RNAssistantWorkspaceChat.rememberSession(projectId(), null);
-      if (target && target.sessionId) { clearSnapshot(); render(); notice("Чат отсутствует в этом проекте.", true); return; }
+      if (target && target.sessionId) { render(); notice("Чат отсутствует в этом проекте.", true); return; }
       wanted = null;
     }
     wanted = wanted || chats[0] && chats[0].Id;
     if (wanted && project().available) await open(projectId(), wanted);
-    else if (!wanted) { clearSnapshot(); render(); }
+    else if (!wanted) render();
   }
   function selectProject(workspaceId, openFirst) {
     if (!workspaceId || !projects().some(function (item) { return item.workspaceId === workspaceId; })) return;
-    if (selectedWorkspaceId !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; clearSnapshot(); }
+    if (selectedWorkspaceId !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; }
     render();
     var entry = project();
     if (openFirst !== false && entry.available && entry.chats && entry.chats.length) open(workspaceId, entry.chats[0].Id);
@@ -291,7 +287,7 @@
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
         window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       var removedSelected = projectId() === entry.workspaceId && currentId() === chat.Id;
-      if (removedSelected) { clearSnapshot(); notice(""); }
+      if (removedSelected) notice("");
       render();
       if (!removedSelected) return;
       var selected = project();
@@ -321,7 +317,7 @@
       var pluginSelected = removedSelected && window.RNAssistantWorkspaceChat.owner() === "plugin" &&
         window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId() === entry.workspaceId;
       if (removedSelected) {
-        ++serial; clearSnapshot();
+        ++serial;
         selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
         notice("");
       }
@@ -335,14 +331,11 @@
   }
   function setScope(next, target) {
     scope = next; ++serial;
-    if (next === "projects") window.RNAssistantWorkspaceChat.mount("project", el("Layout"));
+    if (next === "projects") window.RNAssistantWorkspaceChat.mount("project");
     document.getElementById("chatLayout").hidden = next === "projects";
     el("Layout").hidden = next !== "projects";
-    if (next === "projects") {
-      render();
-    } else if (window.RNAssistantWorkspaceChat.mount("office")) {
-      renderMessages();
-    }
+    if (next === "projects") render();
+    else window.RNAssistantWorkspaceChat.mount("office");
     document.querySelectorAll(".chat-scope-switcher").forEach(function (picker) { picker.open = false; });
     var loaded;
     if (next === "projects") {
@@ -408,7 +401,7 @@
           ++catalogRevision;
         }
         if (version === serial && !request.cancelled && !el("Connection").hidden) {
-          selectedWorkspaceId = result.selectedWorkspaceId; clearSnapshot(); notice("");
+          selectedWorkspaceId = result.selectedWorkspaceId; notice("");
         }
         el("Connection").hidden = true;
         if (el("ConnectionPath").value.trim() === path) el("ConnectionPath").value = "";
@@ -425,8 +418,8 @@
     if (options && options.preserveChatOwner && window.RNAssistantWorkspaceChat.owner() === "plugin") {
       render(); window.RNAssistantDockWorkspace.refreshPresentation(); return;
     }
-    if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); }
-    else if (window.RNAssistantWorkspaceChat.mount("office")) renderMessages();
+    window.RNAssistantWorkspaceChat.mount(scope === "projects" ? "project" : "office");
+    if (scope === "projects") { render(); refresh(); }
     window.RNAssistantDockWorkspace.refreshPresentation();
   }, scope: function () { return scope; }, workspaceId: projectId, setScope: setScope,
     refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,

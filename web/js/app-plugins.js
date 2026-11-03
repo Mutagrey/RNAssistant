@@ -41,7 +41,7 @@
     if(route!==chatSelectionSerial||conversationAddress()!==previous)return false;
     await window.RNAssistantProjectChats.open(workspaceId,sessionId);
     if(route!==chatSelectionSerial||window.RNAssistantProjectChats.workspaceId()!==workspaceId)return false;
-    window.RNAssistantWorkspaceChat.mount('plugin',document.getElementById('projectChatLayout'));
+    window.RNAssistantWorkspaceChat.mount('plugin');
     window.RNAssistantProjectChats.render();controls();
     RNAssistantPlugins.onChatSnapshot(RNAssistantProjectChats.snapshot());
     window.RNAssistantDockWorkspace.show('conversation');

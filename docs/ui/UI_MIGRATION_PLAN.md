@@ -573,6 +573,14 @@ S2b.1–S2b.12 ниже — история выполненной подгото
 Полный S2 закрывается после parity и visual/behavior review. Windows/Office evidence
 остаётся отдельным gate; локальные mock/Chromium проверки его не заменяют.
 
+Проверка удаления путей после `c768fa38`: прежний project-file upload отсутствует
+в production, bridge/contracts и project includes. Дочищены пустые snapshot helpers,
+неиспользуемые exports/locals и недостижимые ветки старого mount; действующие
+selected adapters остаются с removal gate в MIGRATION_MAP. Chromium
+`independent-chat-views`, `workspace-shared-draft` и `active-chat-runs` проходят;
+измерение длинного названия в последнем теперь ждёт фактического metadata update.
+Runtime/VSTO проверки для этой Web-дочистки не запускались. Это не закрытие S2.
+
 ### Общие вложения, очередь и меню запросов — In Review, 2026-11-03
 
 Baseline `a96a1500`; owners: Core attachments, Application Conversations/Workspace,

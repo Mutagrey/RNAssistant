@@ -37,10 +37,14 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   assert.equal(await page.locator('.active-chat-runs-menu .rna-action-menu-row > button:first-child svg').count(),0,'chat rows have no redundant icons');
   await page.screenshot({path:'/tmp/rna-active-chat-runs.png'});
   await page.evaluate(async()=>{liveRuns[0].title='Очень длинное название активного запроса для проверки ограничения ширины меню';await RNAssistantActiveRuns.refresh();});
+  // A refresh can coalesce with an already pending metadata read. Measure the
+  // menu only once it has actually rendered the requested title.
+  await page.getByRole('menuitem',{name:'Очень длинное название активного запроса для проверки ограничения ширины меню',exact:true}).waitFor();
   const longWidth=(await page.getByRole('menu',{name:'Активные запросы чатов'}).boundingBox()).width;
-  assert.ok(longWidth>compactWidth&&longWidth<=340,'long labels grow only to the token maximum');
+  assert.ok(longWidth>compactWidth&&longWidth<=340,'long labels grow only to the token maximum: compact='+compactWidth+', long='+longWidth);
   assert.ok(await page.locator('.active-chat-runs-menu .rna-action-menu-label').first().evaluate(el=>el.scrollWidth>el.clientWidth),'long title is truncated');
   await page.evaluate(async()=>{liveRuns[0].title='Отчёт за сентябрь';await RNAssistantActiveRuns.refresh();});
+  await page.getByRole('menuitem',{name:'Отчёт за сентябрь',exact:true}).waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#activeChatRunsButton').evaluate(el=>el===document.activeElement),true,'Escape restores trigger focus');
   await page.evaluate(()=>runTargets.forEach(t=>RNAssistantDockWorkspace.close(RNAssistantConversationPanel.key(t))));

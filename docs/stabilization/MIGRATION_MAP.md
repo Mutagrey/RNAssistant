@@ -24,6 +24,13 @@ state/store или per-tab копии глобального state нет. По�
 не адресует через него команды или async delivery. Это явное уточнение прежнего
 gate S2b.9–12 ниже, а не заявление об удалении всех legacy consumers.
 
+Адресная дочистка после `c768fa38`: удалены пустой `clearSnapshot` и его вызовы,
+неиспользуемые `ownsView`/`composerAction`/`changedOwner`, старые DOM-аргументы mount
+и недостижимый repaint после его постоянного `false`. Навигационный mount остаётся
+действующим adapter Shell, без контракта переноса singleton DOM. Source search не
+находит прежних project-file upload handlers/DTO/bridge/include. Это удаление
+мёртвых остатков, а не закрытие живых consumers ниже.
+
 Plugin source/candidate/watch уже instance-owned (S3b.3c ниже).
 `RNAssistantPluginAnnotations` пока остаётся selected façade для команды показа
 аннотации из общего чата; staged selection проверяет exact source/session.
