@@ -42,11 +42,9 @@
 .rna-product-dock .dv-default-tab-action .dv-svg { width: var(--shell-tab-close); height: var(--shell-tab-close); color: var(--ink-muted); }
 .dock-group-actions { --control: var(--shell-group-action); display: flex; align-items: center; gap: var(--shell-group-action-gap); padding: 0 var(--shell-group-action-inset) 0 0; }
 .dock-group-actions .icon-btn { width: var(--shell-group-action); height: var(--shell-group-action); padding: var(--space-1); border-radius: var(--shell-radius); }
-.dock-group-actions .icon-btn svg, .dock-split-icon { width: var(--shell-group-action-icon); height: var(--shell-group-action-icon); }
+.dock-group-actions .icon-btn svg { width: var(--shell-group-action-icon); height: var(--shell-group-action-icon); }
 .dock-group-menu { --menu-width: var(--shell-group-menu-width); --menu-row-padding: var(--space-2); }
-.dock-split-icon { display: block; background: currentColor; mask: var(--split-icon) center / contain no-repeat; }
-.split-right { --split-icon: url('../icons/codicons-split/split-horizontal.svg'); }
-.split-below { --split-icon: url('../icons/codicons-split/split-vertical.svg'); }
+.dock-group-actions .icon-btn > .dock-split-icon { fill: currentColor; stroke: none; }
 .dock-empty { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 10px; width: 100%; height: 100%; color: var(--ink-muted); }
 .dock-empty > p { flex: 0 0 100%; text-align: center; font-size: 12px; }
 .dock-empty > button { display: flex; gap: 6px; width: auto; padding: 6px 12px; font-size: 12px; }
