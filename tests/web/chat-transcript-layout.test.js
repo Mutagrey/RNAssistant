@@ -23,8 +23,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       <form class="composer" id="chatForm"><span id="inboxAnnouncer" class="inbox-sr-only"></span><span id="inboxStatus"></span>
       <textarea id="chatInput" aria-label="Сообщение"></textarea><button type="button">Отправить</button></form></main>`);
     await page.evaluate(() => {
-      window.state = { activeChatId: "chat", messages: [], activeSends: {}, chatRuns: {}, settings: {},
-        draftAttachments: [], pendingChatSubmits: {}, editingMessageIndex: -1, messageStartIndex: 0, messageTotalCount: 0 };
       window.$ = id => document.getElementById(id);
       window.distanceFromBottom = box => Math.max(0, box.scrollHeight-box.scrollTop-box.clientHeight);
       window.RNAssistantAgentApproval = { create: () => ({ pendingActivity: () => null, renderDock() {} }) };
@@ -40,13 +38,19 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.logOnce = () => {};
       window.log = () => {};
     });
-    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-icons.js", "app-accent.js", "app-utils.js",
-      "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-conversation-view.js", "app-messages.js", "app-chat-inbox.js"])
+    for (const file of ["app-core.js", "vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-icons.js", "app-accent.js", "app-utils.js",
+      "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-conversation-state.js",
+      "app-chat-state.js", "app-conversation-view.js", "app-messages.js", "app-chat-composer.js", "app-chat-inbox.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       window.renderAgentPlanDock = () => {};
+      window.renderSendControls = window.renderChatSessions = () => {};
+      state.activeChatId = "chat"; selectOfficeChatProjection("chat");
+      chatComposer().register("office", { target: () => officeComposerTarget() });
+      state.chatRuns.chat = { runId: "run", activities: [], stream: "" };
+      publishOfficeChatRun("chat", state.chatRuns.chat);
       state.messages = [{ Id: "user", Role: "user", Content: "Проверь отчёт и предложи исправления." }];
-      state.liveStreamContent = "Изучаю документ.\n\n" + "Проверяю данные и связанные формулы.\n".repeat(12);
+      state.chatRuns.chat.stream = "Изучаю документ.\n\n" + "Проверяю данные и связанные формулы.\n".repeat(12);
       applyChatInbox({ chatId: "chat", epoch: "e", revision: 1, running: true, phase: "executing", items: [
         { Id: "queued", OperationId: "op1", Revision: 1, Status: "Pending", Delivery: "Queue",
           Text: "Добавь ещё один раздел.\nНе потеряй этот текст: <img src=x onerror=alert(1)>\n" + "длинноеслово".repeat(20), Attachments: [{ FileName: "Исходные данные.xlsx" }] },
@@ -75,13 +79,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           streamOpacity: getComputedStyle(document.querySelector(".agent-run.live")).opacity,
           divider: getComputedStyle(document.querySelector(".agent-run-actions")).borderBottomWidth
         }));
-        assert.deepEqual(layout.order, ["message:user", "live:agent-run", "live:input:op1", "live:input:op2"]);
+        assert.deepEqual(layout.order, ["message:user", "run:run:segment:model", "live:input:op1", "live:input:op2"]);
         assert.equal(layout.overflow, false, `bubbles fit ${width}px in ${dark ? "dark" : "light"} theme`);
         assert.equal(layout.composerQueue, false);
         assert.equal(layout.injected, false);
         assert.equal(layout.clipped, "none", "all queued text remains readable");
         assert.notEqual(layout.background, "rgba(0, 0, 0, 0)", "queued text retains its user bubble background");
-        assert.equal(layout.streamStatus, "Получаю ответ модели…");
+        assert.equal(layout.streamStatus, "Черновик ответа · Получаю ответ модели…");
         assert.equal(layout.streamColor, layout.paragraphColor, "the draft uses ordinary readable text color");
         assert.equal(layout.streamOpacity, "1", "streamed text is not faded");
         assert.equal(layout.divider, "0px", "a draft has no final-answer divider");
@@ -103,7 +107,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
     // Late media/viewer layout can grow a message without resizing the scroll box.
     await page.evaluate(() => {
-      state.liveStreamContent = "Длинный ответ\n\n" + "Строка текущего ответа.\n".repeat(90);
+      state.chatRuns.chat.stream = "Длинный ответ\n\n" + "Строка текущего ответа.\n".repeat(90);
       renderMessages({ forceScroll: true });
     });
     await settleLayout();
@@ -120,7 +124,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       "late message growth keeps the actual end visible without another render");
     await page.evaluate(() => {
       $("lateMessageContent").style.height = "480px";
-      state.liveStreamContent += "Новое продолжение ответа.\n";
+      state.chatRuns.chat.stream += "Новое продолжение ответа.\n";
       renderStreamingMessages();
     });
     assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2,
@@ -152,7 +156,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const box = $("messages");
       box.dispatchEvent(new WheelEvent("wheel", { deltaY: -12 })); box.scrollTop -= 12;
       const top = box.scrollTop;
-      state.liveStreamContent += "Новая строка ответа.\n".repeat(10);
+      state.chatRuns.chat.stream += "Новая строка ответа.\n".repeat(10);
       renderStreamingMessages();
       return { top, after: box.scrollTop };
     });
@@ -161,14 +165,14 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const scroll = await page.evaluate(() => {
       const box = $("messages"); box.scrollTop = 800; box.dispatchEvent(new Event("scroll"));
       const top = box.scrollTop;
-      for (let i = 0; i < 8; i++) { state.liveStreamContent += "Ещё данные\n".repeat(15); renderStreamingMessages(); }
+      for (let i = 0; i < 8; i++) { state.chatRuns.chat.stream += "Ещё данные\n".repeat(15); renderStreamingMessages(); }
       return { top, after: box.scrollTop, distance: distanceFromBottom(box) };
     });
     assert.ok(Math.abs(scroll.top - scroll.after) < 2, "stream replacements preserve free scroll inside a tall message");
     assert.ok(scroll.distance > 500, "reader remains well above the moving tail");
 
     await page.getByRole("button", { name: "К последним сообщениям", exact: true }).click();
-    await page.evaluate(() => { state.liveStreamContent += "Ещё строка\n".repeat(10); renderStreamingMessages(); });
+    await page.evaluate(() => { state.chatRuns.chat.stream += "Ещё строка\n".repeat(10); renderStreamingMessages(); });
     assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2, "explicit return resumes following");
 
     // A render's deferred scroll must yield to an intervening user gesture.
@@ -183,7 +187,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 
     // Prepending history preserves the visible message even if the tail is windowed away.
     const anchor = await page.evaluate(() => {
-      state.liveStreamContent = ""; state.chatInputEchoes.chat = []; state.chatInboxes.chat.items = [];
+      state.chatRuns.chat.stream = ""; state.chatInputEchoes.chat = []; state.chatInboxes.chat.items = [];
       state.messages = Array.from({ length: 30 }, (_, i) => ({ Id: "m" + i, Role: "user", Content: "История " + i + "\nТекст сообщения" }));
       renderMessages({ forceScroll: true });
       const box = $("messages"); box.scrollTop = 700; box.dispatchEvent(new Event("scroll"));
@@ -198,17 +202,18 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(anchor.attached, true);
     assert.ok(Math.abs(anchor.before - anchor.after) < 2, "paging anchors the viewport independently of removed tail height");
     await page.evaluate(() => {
-      state.activeChatId = "fresh"; state.messages = []; renderMessages();
+      state.activeChatId = "fresh"; selectOfficeChatProjection("fresh"); renderMessages();
       state.messages = [{ Id: "fresh-user", Role: "user", Content: "Новый запрос" }];
-      state.liveStreamContent = "Первый ответ в новом чате.\n\n".repeat(70); renderMessages();
+      state.chatRuns.fresh = { runId: "fresh-run", activities: [], stream: "Первый ответ в новом чате.\n\n".repeat(70) };
+      publishOfficeChatRun("fresh", state.chatRuns.fresh); renderMessages();
     });
     assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2,
       "an empty new chat does not inherit the previous chat's scroll position");
     if (process.env.LAYOUT_SCREENSHOT) {
       await page.evaluate(() => {
-        state.activeChatId = "chat";
+        state.activeChatId = "chat"; selectOfficeChatProjection("chat"); publishOfficeChatRun("chat", state.chatRuns.chat);
         state.messages = [{ Id: "preview-user", Role: "user", Content: "Проверь отчёт и поясни изменения." }];
-        state.liveStreamContent = "Проверяю данные и готовлю ответ.";
+        state.chatRuns.chat.stream = "Проверяю данные и готовлю ответ.";
         applyChatInbox({ chatId: "chat", epoch: "e", revision: 3, running: true, items: [
           { Id: "preview", Revision: 1, Status: "Pending", Delivery: "Queue", Text: "Добавь сравнение с прошлым месяцем.\nИ поясни, откуда взялись отличия.", Attachments: [{ FileName: "Отчёт.xlsx" }] }
         ] }); renderMessages({ forceScroll: true });

@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Пропажа сообщений Office-чата — 2026-11-03
+
+Owners: общий Web ConversationState/Messages и Office Inbox. Воспроизведены и
+исправлены потеря загруженного префикса при новой хвостовой странице, временное
+отсоединение узлов при patch и подавление повторного одинакового ввода после ACK.
+Run/step identity сохраняется между live/saved, непринятый поток подписан как
+черновик. Cap 240, exact receipts, stale guards и leaf-only paints сохранены;
+новый store или переписывание runtime не потребовались.
+Адресные Web/Chromium проверки прошли; [срез In Review](../ui/UI_MIGRATION_PLAN.md#сохранение-сообщений-office-чата--in-review-2026-11-03).
+Windows/Office/WebView2 и прежние baseline gaps остаются открытым evidence.
+
 ## Нормализация ответов, макросы и лента — 2026-11-03
 
 Owners: Core parser/ToolRuntime/AgentProgressTracker, Office macro handler и message

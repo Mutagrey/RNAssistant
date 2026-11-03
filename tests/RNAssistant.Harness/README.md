@@ -24,6 +24,12 @@ DOM/focus/disclosure retention, accepted narration/reasons and quiet effect deta
 `live-run-projection`, `run-view-state` and `stream-render-cost` cover projection and
 incremental rendering. These are host-neutral checks, not Office qualification.
 
+Web follow-up: `conversation-projection` checks overlapping pages across revisions
+without losing applied inputs, bounds and explicit reset; `chat-inbox` distinguishes
+identical deliberate sends after ACK from uncertain retries. `chat-input-delivery`
+checks queue → history → next refresh; Chromium `agent-activity-layout` checks zero
+disconnects for unchanged calls and retained selection/text through live → saved.
+
 Follow-up audit of `601283cf`: the focused history suite also cold-loads a revision-3
 batch without CallCount and rejects its execution; repeated-rejection coverage
 includes intervening truncation and null content. `v8 recovery:` checks that Office

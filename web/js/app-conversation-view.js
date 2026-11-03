@@ -5,7 +5,7 @@
   function emptyCache() {
     return { units: Object.create(null), liveBase: null, liveBaseSignature: null,
       liveSuppressed: false, pastActivities: Object.create(null), pastSteps: Object.create(null),
-      signature: null, liveRunId: null, fullRenderPending: false };
+      signature: null, liveRunId: null, liveUnitKey: null, fullRenderPending: false };
   }
   function get(box, options) {
     if (views.has(box)) return views.get(box);

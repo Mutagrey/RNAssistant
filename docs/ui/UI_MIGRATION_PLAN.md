@@ -45,6 +45,38 @@ transport step IDs даёт два обмена; лишние границы о�
 JSON reader и таблица. Browser измеряет совпадение колонок и baseline текста
 с допуском 1 px на 390/1440 px; общие Tree/Table controls переиспользованы.
 
+## Сохранение сообщений Office-чата — In Review, 2026-11-03
+
+Scope — повторное сообщение пользователя о подмене текста и пропаже ввода из
+очереди именно в Office. Owners: общий ConversationState/Messages, Office Inbox;
+workspace/plugin используют тот же window/key/patch contract. Runtime/storage и
+Dock placement не меняются, отдельный transcript/store не вводится.
+
+Три регрессии воспроизведены до исправлений: хвостовая страница новой revision
+удаляла загруженный префикс с применённым вводом; patch временно отсоединял
+сохранённые узлы, сбрасывая selection/viewers; повторный одинаковый ввод после ACK
+переиспользовал operation ID и не создавал второй элемент очереди. Исправлены merge
+по message IDs, patch контейнеров на месте и выбор ID только для неопределённой
+повторной доставки. Сегмент run/step сохраняет ключ между live и saved; transient
+больше не кодируется общим live-key. Draft обозначен в существующей строке статуса.
+
+Адресные Web/Chromium проверки: окно разных revisions и cap/explicit jump/truncate;
+одинаковые отправки, потерянный ACK, stale receipts и очередь → история → следующий
+refresh; отсутствие disconnect у завершённого call, selection/focus/disclosures,
+live → saved, late deltas, cost/coalescing; shared workspace/plugin progress,
+740/360 px, light/dark, 125%, scroll/follow/anchor. Устаревшие fixtures переключены
+на действующие source/composer; expectation старой жёлтой карточки удалён.
+
+Ревью: `python3 -B prototypes/serve_ui.py`, `/preview/web/?scenario=ready`.
+1. Во время длинного ответа отправить два одинаковых сообщения в очередь:
+   оба остаются видимыми и переходят в историю по своим IDs.
+2. Выделить принятое пояснение и раскрыть завершённый вызов; дождаться следующего
+   шага/refresh: текст и раскрытие сохраняются.
+3. Дождаться finish, прокрутить историю и открыть чат заново: принятые сообщения
+   доступны, непринятый черновик не выдаётся за сохранённый ответ.
+Windows/Office/WebView2 остаётся открытым evidence; локальный Chromium его не
+заменяет. Откат — scoped Web diff, без миграции или удаления пользовательской истории.
+
 ## Лента, reason и штатный возврат макроса — In Review, 2026-11-03
 
 Scope — запрос пользователя о неверных формах ответа, повторных макросах,

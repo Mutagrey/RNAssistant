@@ -43,8 +43,8 @@ function mergeOfficeChatSnapshot(current, response, options) {
       messageStartIndex: response.messageStartIndex !== undefined ? response.messageStartIndex : (response.MessageStartIndex || 0),
       messageTotalCount: response.messageTotalCount !== undefined ? response.messageTotalCount :
         response.MessageTotalCount !== undefined ? response.MessageTotalCount : incomingMessages.length
-    }, !(options && options.latestMessages) && !detailDeferred &&
-      Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision);
+    }, Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision,
+      !!(options && options.latestMessages) || detailDeferred);
     next.messages = windowed.messages;
     next.messageStartIndex = windowed.messageStartIndex;
     next.messageTotalCount = windowed.messageTotalCount;

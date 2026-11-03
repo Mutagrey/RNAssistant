@@ -545,12 +545,27 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await feed.locator(".agent-tool-message").first().waitFor({ state: "visible" });
     assert.match(await feed.innerText(), /Его эффект отдельно не проверен/);
     await page.evaluate(() => {
+      window.feedDisconnects = 0;
+      customElements.define("feed-lifecycle-probe", class extends HTMLElement {
+        disconnectedCallback() { window.feedDisconnects++; }
+      });
+      keptCall.appendChild(document.createElement("feed-lifecycle-probe"));
+      window.keptReason = document.querySelector("#stable-feed .agent-step-reason").firstChild;
+      const selection = window.getSelection(), range = document.createRange();
+      range.setStart(keptReason, 0); range.setEnd(keptReason, 6);
+      selection.removeAllRanges(); selection.addRange(range);
+    });
+    await page.evaluate(() => {
       feedPresentation.data.live.activities.push(feedMarker("s2", "Сравню значения отчёта после выполнения."));
       paintFeed();
     });
     assert.equal(await page.evaluate(() => document.querySelector("#stable-feed .agent-run") === keptFeed &&
       document.querySelector("#stable-feed .agent-transcript-entry") === keptCall), true,
       "a new live step preserves the run and completed call nodes");
+    assert.equal(await page.evaluate(() => feedDisconnects), 0,
+      "unchanged calls stay connected: no viewer restart or transient empty layout");
+    assert.equal(await page.evaluate(() => getSelection().anchorNode === keptReason && getSelection().toString().length === 6), true,
+      "new steps preserve text selection in accepted narration");
     assert.equal(await keptSummary.evaluate(node => document.activeElement === node && node.parentElement.open), true,
       "live patch preserves disclosure and keyboard focus");
     await page.evaluate(() => {
@@ -561,9 +576,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 1, FailedCalls: 0, UnknownEffects: 1,
           ModelOutcome: "partial", ModelResults: [{ Summary: "Проверка результата", Evidence: ["E1"], Assessment: "unverified" }] } };
       window.completedFeed = { items, finalMessage: { message: final, index: items.length } };
-      reconcileMessageUnits(document.getElementById("stable-feed"), [{ key: "run:feed", signature: "final",
-        render: () => renderAgentRunArticle(completedFeed) }], false);
+      const units = [];
+      appendSavedRunUnit(units, completedFeed, { workspace: false, target: { sessionId: "feed-chat" }, invoke: () => false }, "");
+      reconcileMessageUnits(document.getElementById("stable-feed"), units, false);
     });
+    assert.equal(await page.evaluate(() => document.querySelector("#stable-feed .agent-run") === keptFeed &&
+      document.querySelector("#stable-feed .agent-step-reason").firstChild === keptReason), true,
+      "live-to-saved handoff retains the run and accepted text nodes");
     assert.equal(await feed.locator(".agent-step-reason:visible").count(), 2, "accepted reasons remain visible after finish");
     assert.equal(await feed.locator(".agent-run-notice").count(), 0, "unknown and partial results do not add warning cards");
     assert.equal(await feed.locator(".agent-model-results").evaluate(node => node.open), false, "assessment and counters start collapsed");

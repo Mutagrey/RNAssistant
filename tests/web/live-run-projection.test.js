@@ -147,9 +147,9 @@ ctx.state.chatRuns.chat = liveRun;
 ctx.publishOfficeChatRun("chat", liveRun);
 ctx.resetRenderedMessageUnits(box); render();
 assert.equal(box.childNodes.length, 3);
-assert.match(box.childNodes[0].messageUnitKey, /^run:r:segment:m0$/);
+assert.equal(box.childNodes[0].messageUnitKey, "run:r:segment:step:s1");
 assert.equal(box.childNodes[1].messageUnitKey, "message:reply");
-assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
+assert.equal(box.childNodes[2].messageUnitKey, "run:r:segment:step:s2");
 assert.equal(ctx.liveAgentTailActivities(presentation()).map(a => a.StepId).join("|"), "s2|s2",
   "live replay cannot move earlier narration or actions below the applied steer");
 const prefix = box.childNodes[0], reply = box.childNodes[1];
@@ -160,10 +160,10 @@ assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
 ctx.state.liveAgentRun.push(action("s2", "c", "running", "{}"));
 ctx.reconcileMessageUnits(box, ctx.buildLiveMessageUnits(presentation()), true);
 assert.equal(box.childNodes[0], prefix); assert.equal(box.childNodes[1], reply);
-assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
+assert.equal(box.childNodes[2].messageUnitKey, "run:r:segment:step:s2");
 ctx.state.messages.pop(); // New input persisted before the first following action.
 render();
-assert.equal(box.childNodes[0].messageUnitKey, "run:r:segment:m0");
+assert.equal(box.childNodes[0].messageUnitKey, "run:r:segment:step:s1");
 assert.equal(box.childNodes[1].messageUnitKey, "message:reply");
 ctx.publishOfficeChatRun("chat", null);
 console.log("PASS live projection: applying steer preserves history order during full and stream rendering");
@@ -326,7 +326,7 @@ const streamRun = box.firstChild;
 assert.equal(streamRun.classList.contains("pending"), false, "the run and draft are not faded");
 assert.equal(streamRun.querySelector(".agent-run-actions").classList.contains("has-actions"), false,
   "an unfinished draft has no final-answer divider");
-assert.equal(streamRun.querySelector(".agent-stream-status").textContent, "Получаю ответ модели…");
+assert.equal(streamRun.querySelector(".agent-stream-status").textContent, "Черновик ответа · Получаю ответ модели…");
 assert.ok(!streamRun.textContent.includes("Думаю…"), "streaming replaces the ambient thinking label");
 const retainedAction = streamRun.querySelector(".kind-tool");
 const draftBody = streamRun.querySelector(".agent-stream-message");

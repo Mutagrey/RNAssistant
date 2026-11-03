@@ -26,6 +26,9 @@ const context = vm.createContext({
   applyChatStateForChat() {}, loadChatState: () => Promise.resolve({}),
   window: { requestAnimationFrame(fn) { fn(); }, cancelAnimationFrame() {} }
 });
+Object.assign(context, context.window);
+context.window = context;
+vm.runInContext(fs.readFileSync("web/js/app-utils.js", "utf8"), context);
 vm.runInContext(fs.readFileSync("web/js/app-chat-state.js", "utf8"), context);
 // Inbox-specific VM keeps protected storage outside this test; the browser reload
 // check covers the real composer/bridge draft persistence path.
@@ -333,5 +336,20 @@ context.renderChatSessions = () => {};
   detailRequests[1].resolve("new detail"); await newHistory;
   detailRequests[0].resolve("old detail"); await oldHistory;
   assert.deepEqual(deliveredDetails, [["new detail", "history-b"]], "the nested history read also rejects a late reply from a previous binding");
-  console.log("PASS chat inbox: ack/retry, stale receipts, addressed polling, history ordering, queue controls");
+  context.state.activeChatId = "same-text"; context.state.messages = [];
+  const queued = new Map();
+  transport = async (type, payload) => {
+    assert.equal(type, "submitChatInput");
+    if (!queued.has(payload.operationId)) queued.set(payload.operationId, {
+      Id: "queued-" + queued.size, OperationId: payload.operationId, Text: payload.text,
+      Status: "Pending", Delivery: "Queue", Revision: 1, Attachments: []
+    });
+    return { chatId: "same-text", epoch: "same", revision: queued.size, running: true,
+      items: [...queued.values()], acceptedInput: queued.get(payload.operationId) };
+  };
+  assert.equal(await context.submitInboxMessage("Продолжи", [], "same-text", "Queue"), true);
+  assert.equal(await context.submitInboxMessage("Продолжи", [], "same-text", "Queue"), true);
+  assert.equal(queued.size, 2, "a deliberate identical send after ACK is a new input, not a transport retry");
+  assert.equal(context.pendingChatInputs().length, 2, "both identical queued user messages remain visible");
+  console.log("PASS chat inbox: ack/retry, distinct identical inputs, stale receipts, addressed polling, history ordering, queue controls");
 })().catch(error => { console.error(error); process.exitCode = 1; });

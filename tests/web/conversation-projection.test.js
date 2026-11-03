@@ -54,6 +54,31 @@ for (let i = 0; i < 100; i++) {
   owner.accept(data(String(i), 1));
   assert.equal(previous.snapshot(), null, "visited targets do not accumulate retained histories");
 }
+// A normal refresh is another tail page, not permission to erase visible input.
+for (const merge of [
+  (current, incoming, options) => workspace.latestSnapshot(current, incoming, options),
+  (current, incoming, options) => ui.mergeOfficeChatSnapshot(current, incoming, options)
+]) {
+  const page = (revision, start, total) => ({ ...data("timeline", revision), activeChatId: "timeline", sessionRevision: revision,
+    messages: Array.from({ length: total - start }, (_, i) => ({ Id: String(start + i), Content: "message " + (start + i) })),
+    messageStartIndex: start, messageTotalCount: total });
+  const before = page(10, 0, 6);
+  before.messages[0] = { Id: "0", Role: "user", Content: "Applied queued input" };
+  const tail = page(11, 2, 8); tail.messages[0].Content = "Updated terminal result";
+  const merged = merge(before, tail);
+  assert.equal(merged.messageStartIndex, 0, "new revision retains an overlapping history prefix");
+  assert.equal(merged.messages[0].Content, "Applied queued input", "consumed queue input remains visible");
+  assert.equal(merged.messages[2].Content, "Updated terminal result", "newer data wins for overlapping identities");
+  assert.equal(merged.messages.length, 8);
+  assert.equal(merge(merged, page(12, 4, 9), { latestMessages: true }).messageStartIndex, 4,
+    "explicit jump still replaces the window");
+  assert.equal(merge(merged, page(12, 0, 2)).messages.length, 2, "history truncation does not resurrect removed messages");
+  const changed = page(12, 2, 8); changed.messages[0].Id = "replacement";
+  assert.equal(merge(merged, changed).messageStartIndex, 2, "identity discontinuity does not join different histories");
+  const bounded = merge(page(20, 0, 240), page(21, 220, 260));
+  assert.equal(bounded.messages.length, 240, "growing tail remains bounded");
+  assert.equal(bounded.messageStartIndex, 20, "tail following retires only the oldest bounded entries");
+}
 const last = a.projection(); a.dispose();
 assert.equal(last.snapshot(), null); assert.equal(last.isCurrent(), false);
 assert.equal(a.projection(), null);

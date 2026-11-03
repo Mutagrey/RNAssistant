@@ -105,6 +105,7 @@ ctx.state.messages = originalMessages;
 const final = { message: { Id: "answer", Role: "assistant", Content: "Answer" }, index: 1 };
 const run = { items: [{ message: final.message, index: 0 }], finalMessage: final, nextIndex: 1 };
 ctx.canCollectAgentRunAt = () => true; ctx.collectAgentRun = () => run;
+const realRunKey = ctx.agentRunUnitKey;
 ctx.agentRunUnitKey = () => "run:test"; ctx.agentRunUnitSignature = () => "unchanged";
 ctx.renderAgentRunArticle = (_, scope) => { const node = new Element(); ctx.appendAgentRunFooter(node, run.items, final, scope); return node; };
 sending = true; refresh(); const grouped = box.firstChild;
@@ -115,6 +116,7 @@ assert.ok(titles(grouped).includes("Ответвить чат отсюда"));
 console.log("PASS message actions: send/edit/approval/reconnect transitions restore footers without remounting content");
 
 // A persisted mid-run snapshot and the live replay must produce one run unit.
+ctx.agentRunUnitKey = realRunKey;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-run-view-state.js"), "utf8"), ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-model.js"), "utf8"), ctx);
 const activity = (id, status) => ({ RunId: "r", StepId: "s", StepMessage: "One step",
@@ -125,7 +127,8 @@ ctx.canCollectAgentRunAt = () => true; ctx.collectAgentRun = () => snapshot;
 ctx.state.liveRun = { activities: [activity("a", "running"), activity("b", "running")] };
 ctx.renderAgentRunArticle = value => { ctx.projected = value; return new Element(); };
 let units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
-assert.equal(units.length, 1); assert.equal(units[0].key, "live:agent-run");
+assert.equal(units.length, 1); assert.equal(units[0].key, "run:r:segment:step:s");
+assert.equal(units[0].transient, true);
 units[0].render();
 assert.equal(ctx.projected.items.length, 2);
 assert.equal(ctx.projected.items[0].activity.Status, "completed", "persisted result wins over stale live progress");
@@ -135,7 +138,8 @@ ctx.buildLiveMessageUnits(presentation());
 ctx.agentRunUnitSignature = () => "snapshot";
 snapshot = { items: [persisted], finalMessage: { message: { RunId: "r", Id: "final" }, index: 1 }, nextIndex: 1 };
 units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
-assert.equal(units.length, 1); assert.notEqual(units[0].key, "live:agent-run", "terminal snapshot removes live replay");
+assert.equal(units.length, 1); assert.equal(units[0].key, "run:r:segment:step:s", "durable handoff retains the same run identity");
+assert.equal(units[0].transient, false, "terminal snapshot removes live replay");
 ctx.state.liveRun = { activities: [Object.assign(activity("a", "running"), { RunId: "other" })] };
 units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
 assert.equal(units.length, 2, "distinct runtime runs are not merged by matching prose or call names");

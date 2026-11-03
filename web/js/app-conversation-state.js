@@ -73,17 +73,17 @@
     return view && runId && view.runId === runId ? view.lifecycle : saved;
   }
 
-  // A delayed snapshot at the same revision must not replace accepted history
-  // or discard pages already loaded by the reader. Both shells use this rule.
-  function messageWindow(current, incoming, sameRevision) {
-    if (!sameRevision || !current || !incoming ||
+  // Refreshes merge one bounded, contiguous window by durable message identity.
+  // A newer revision updates rows; only a discontinuity or explicit jump resets it.
+  function messageWindow(current, incoming, sameRevision, resetWindow) {
+    if (resetWindow || !current || !incoming ||
         !Array.isArray(current.messages) || !Array.isArray(incoming.messages)) return boundedWindow(incoming, false);
     var oldStart = current.messageStartIndex, nextStart = incoming.messageStartIndex;
     var oldTotal = current.messageTotalCount, nextTotal = incoming.messageTotalCount;
     if (!Number.isSafeInteger(oldStart) || !Number.isSafeInteger(nextStart) ||
         !Number.isSafeInteger(oldTotal) || !Number.isSafeInteger(nextTotal)) return boundedWindow(incoming, false);
     function id(message) { return message && (message.Id || message.id || ""); }
-    if (oldStart === nextStart && oldTotal === nextTotal &&
+    if (sameRevision && oldStart === nextStart && oldTotal === nextTotal &&
         (current.messages.length > incoming.messages.length ||
           current.messages.length === incoming.messages.length && current.messages.some(function (message, index) {
             return id(message) !== id(incoming.messages[index]);
@@ -93,22 +93,22 @@
     }
     // An unchanged snapshot may contain only the latest page, outside the
     // reader's bounded window. Keep the reading position until an explicit jump.
-    if (oldStart < nextStart && oldTotal === nextTotal && current.messages.length) {
+    if (sameRevision && oldStart < nextStart && oldTotal === nextTotal && current.messages.length) {
       incoming.messages = current.messages;
       incoming.messageStartIndex = oldStart;
       return boundedWindow(incoming, true);
     }
-    if (oldStart < nextStart && nextTotal >= oldTotal) {
-      var prependCount = nextStart - oldStart;
-      var overlap = Math.min(current.messages.length - prependCount, incoming.messages.length);
-      if (prependCount <= current.messages.length && overlap > 0 &&
-          current.messages.slice(prependCount, prependCount + overlap).every(function (message, index) {
-            return id(message) && id(message) === id(incoming.messages[index]);
-          })) {
-        incoming.messages = current.messages.slice(0, prependCount).concat(incoming.messages);
-        incoming.messageStartIndex = oldStart;
-        return boundedWindow(incoming, true);
-      }
+    var oldEnd = oldStart + current.messages.length, nextEnd = nextStart + incoming.messages.length;
+    var overlapStart = Math.max(oldStart, nextStart), overlapEnd = Math.min(oldEnd, nextEnd);
+    if (nextTotal >= oldTotal && overlapEnd > overlapStart &&
+        current.messages.slice(overlapStart - oldStart, overlapEnd - oldStart).every(function (message, index) {
+          return id(message) && id(message) === id(incoming.messages[overlapStart - nextStart + index]);
+        })) {
+      var prefix = oldStart < nextStart ? current.messages.slice(0, nextStart - oldStart) : [];
+      var suffix = oldEnd > nextEnd ? current.messages.slice(nextEnd - oldStart) : [];
+      incoming.messages = prefix.concat(incoming.messages, suffix);
+      incoming.messageStartIndex = Math.min(oldStart, nextStart);
+      return boundedWindow(incoming, oldEnd < oldTotal);
     }
     return boundedWindow(incoming, false);
   }

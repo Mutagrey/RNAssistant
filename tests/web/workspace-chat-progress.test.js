@@ -172,9 +172,9 @@ const { chromium } = require('playwright');
       const uncleanFinish = Array.from(reflectionList.querySelectorAll('article.message'))
         .find(article => article.textContent.includes('Часть данных недоступна.'));
       const uncleanClaims = !!uncleanFinish &&
-        uncleanFinish.querySelectorAll('.message-outcome').length === 1 &&
+        uncleanFinish.querySelectorAll('.message-outcome').length === 0 &&
         uncleanFinish.querySelectorAll('.agent-model-results').length === 1 &&
-        uncleanFinish.querySelector('.agent-model-results').open &&
+        !uncleanFinish.querySelector('.agent-model-results').open &&
         uncleanFinish.textContent.includes('call-2');
       list.remove();
       const newer = { project: { workspaceId: 'workspace' }, sessionId: 'progress-test', messages: [],

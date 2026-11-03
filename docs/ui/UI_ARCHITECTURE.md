@@ -51,9 +51,17 @@ storage contracts остаются в domain docs из [README](../README.md).
 `ChatActivity.StepReason` поступает из принятого ответа через Office и
 Workspace/plugin projections; результат инструмента не подменяет его.
 Materialization/clone сохраняют поле. Новый store, renderer или Shell не вводится.
-Новый live-шаг использует существующий patch общего run article; завершённые calls,
-раскрытия и фокус сохраняются. Saved successor вставляется до удаления live-узла,
-чтобы временная потеря высоты не сбрасывала прокрутку. Token paints остаются leaf-only.
+Уточнение после воспроизведения пропажи сообщений: ConversationState объединяет
+пересекающиеся окна разных revisions по точным message IDs, обновляя пересечение
+и сохраняя cap 240. Explicit latest, усечение и разрыв идентичности заменяют окно.
+Уже загруженный префикс не исчезает с приходом следующей хвостовой страницы.
+Messages идентифицирует сегмент по runtime run/первому step, независимо от live/saved;
+transient — отдельный признак cache unit. Patch меняет дочерние узлы известных
+контейнеров на месте: неизменённые принятые пояснения/calls не переносятся через
+отсоединённое дерево. Сохраняются выделение текста, viewers, раскрытия и фокус.
+Новый узел вставляется до удаления заменяемого; token paints остаются leaf-only.
+Office Inbox переиспользует operation ID для неподтверждённой отправки; новый ввод
+с тем же текстом после успешного ACK получает собственный ID. Второй store не введён.
 
 Исправление по фото 2026-11-02: Application workspace projection использует общий
 скрытый DTO для protocol results с ролью `user`; Web project/plugin adapter

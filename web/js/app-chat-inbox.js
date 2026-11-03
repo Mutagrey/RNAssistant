@@ -110,7 +110,11 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
   var echoes = chatInputEchoes(chatId);
   state.inboxSubmissions = state.inboxSubmissions || {};
   var pending = state.inboxSubmissions[chatId];
-  if (!pending || pending.fingerprint !== fingerprint) pending = echoes.find(function (item) { return item.fingerprint === fingerprint; });
+  if (!pending || pending.fingerprint !== fingerprint) pending = echoes.find(function (item) {
+    // Equal text after a successful ACK is a new user action. Only an unresolved
+    // transport failure may reuse an older operation's idempotency key.
+    return item.localStatus === "unconfirmed" && item.fingerprint === fingerprint;
+  });
   if (!pending) {
     pending = { fingerprint: fingerprint, OperationId: inboxOperationId(), Text: text,
       Attachments: attachments.slice(), Delivery: delivery, Answers: answers,
@@ -341,7 +345,7 @@ function renderPendingInput(item, chatId, editing) {
 }
 function buildPendingInputUnits() {
   var chatId = state.activeChatId, box = chatInbox(), items = pendingChatInputs(), units = [];
-  if (box.paused && (box.items || []).length) units.push({ key: "live:inbox-paused", signature: JSON.stringify([box.pauseReason, box.running]), render: function () {
+  if (box.paused && (box.items || []).length) units.push({ key: "live:inbox-paused", transient: true, signature: JSON.stringify([box.pauseReason, box.running]), render: function () {
     var note = document.createElement("div"); note.className = "inbox-pause";
     var reason = document.createElement("span"); reason.textContent = box.pauseReason || "Очередь приостановлена"; note.appendChild(reason);
     note.appendChild(inboxButton("Продолжить очередь", async function () {
@@ -353,7 +357,7 @@ function buildPendingInputUnits() {
   return units.concat(items.map(function (item) {
     var editing = state.inboxEditing === item.Id && state.inboxEditDraft && state.inboxEditDraft.chatId === chatId;
     var statusText = pendingInputStatus(item, box);
-    return { key: "live:input:" + (item.OperationId || item.Id),
+    return { key: "live:input:" + (item.OperationId || item.Id), transient: true,
       // Polling must not replace a focused editor or its selection. Save uses its captured revision.
       signature: JSON.stringify(editing ? [item.Id, "editing"] : [item,
         (box.items || []).some(function (pending) { return pending.Id === item.Id; }), box.paused && !box.running]),

@@ -266,6 +266,7 @@ function appendAgentReflectionStep(parent, decision, commentary) {
   if (!text) return;
   var step = document.createElement("div");
   step.className = "agent-reflection-step";
+  step.agentReconcileSignature = text;
   step.setAttribute("aria-label", "Промежуточное решение агента");
   var icon = document.createElement("span");
   icon.className = "agent-reflection-icon";
@@ -290,6 +291,7 @@ function appendAgentStepMessage(parent, text, marker) {
   if (!text) return;
   var message = document.createElement("div");
   message.className = "agent-step-message markdown";
+  message.agentReconcileSignature = text;
   message.innerHTML = markdown(text);
   parent.appendChild(message);
   enhanceMarkdown(message, { enableVisuals: true, enableJsonViewer: true, sourceText: text });
@@ -300,6 +302,7 @@ function appendAgentStepReason(parent, step) {
   if (!reason || reason === String(step.message || "").trim()) return;
   var line = document.createElement("div");
   line.className = "agent-step-reason";
+  line.agentReconcileSignature = reason;
   line.textContent = reason;
   parent.appendChild(line);
 }

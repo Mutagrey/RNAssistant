@@ -28,7 +28,7 @@ vm.runInContext(read("app-messages.js"), context);
 vm.runInContext(read("app-chat-composer.js"), context);
 context.chatComposer().register("office", { target: () => context.officeComposerTarget() });
 context.messageView().begin(context.officeConversationTarget()); cleaned.length = 0;
-const unit = (key, signature) => ({ key, signature, render: () => new Node(signature) });
+const unit = (key, signature) => ({ key, signature, transient: key.startsWith("live:"), render: () => new Node(signature) });
 const history = Array.from({ length: 1000 }, (_, i) => unit("message:" + i, "message" + i));
 context.reconcileMessageUnits(box, history.concat(unit("live:stream", "first")));
 const original = box.children.slice(0, 1000);

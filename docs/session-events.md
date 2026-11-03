@@ -667,8 +667,17 @@ unchanged attached DOM nodes. Background progress coalesces chat-list rendering
 at 100 ms without dropping deltas. A chat change uses the current full projection.
 This changes presentation cost only, not event/CAS persistence or commit barriers.
 
+The common bounded history window merges overlapping pages across revisions by
+exact message IDs, with incoming rows winning the overlap. It retains loaded
+prefix/suffix rows within the 240-message cap; explicit latest, truncation or an
+identity discontinuity resets the window. A new tail page does not by itself retire
+an applied input already shown in history. Run units use runtime run/first-step
+identity across live/saved delivery, with a separate transient flag. Owned containers
+are patched in place: unchanged nodes never pass through a detached replacement,
+preserving selection and embedded viewer lifecycle as well as disclosures/focus.
+
 Streamed text and reasoning belong to the active run article. The text uses normal
-contrast and a quiet request-stage status, replacing the ambient thinking label
+contrast and a quiet “Черновик ответа · …” request-stage status, replacing the ambient thinking label
 while a draft is visible. Only an accepted final answer receives the divider after
 actions. An attempt reset immediately removes its unaccepted text/reasoning in both
 foreground and background chats, before waiting for the first replacement token.
@@ -996,6 +1005,9 @@ exact message ID arrives in history. A terminal revision survives only while an
 outstanding submission can acknowledge an older state. Polls prioritize unresolved
 echoes and fetch history for explicit Applied receipts or run/epoch transitions,
 not mere queue edits/removals. Absence from the queue is never proof of delivery.
+After a successful submit acknowledgement, a deliberate identical send gets a new
+operation ID. An acknowledged pending echo is never selected by text fingerprint
+as a transport retry; unconfirmed submissions retain their idempotency key.
 
 Receipt `DeliveryRecorded` means the `applied` event was persisted, not that a run
 completed or a tool had an effect. It may advance from false to true. A receipt

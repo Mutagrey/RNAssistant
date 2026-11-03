@@ -18,9 +18,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       .replace(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g, (_, file) => "<style>" + read(file) + "</style>");
     await page.setContent(html);
     await page.evaluate(() => {
-      window.state = { activeChatId: "chat", messages: [], chatRuns: {}, activeSends: {}, settings: {},
-        draftAttachments: [], chatProjectionRevisions: {}, editingMessageIndex: -1,
-        messageStartIndex: 0, messageTotalCount: 0, activeChatMode: "agent" };
       window.$ = id => document.getElementById(id);
       window.RNAssistantAgentApproval = { create: () => ({ pendingActivity: () => null, renderDock() {} }) };
       window.hasActiveMessageEdit = () => false;
@@ -35,11 +32,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       document.body.appendChild(chat); chat.style.height = "100vh";
       document.querySelector(".shell").hidden = true;
     });
-    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js",
+    for (const file of ["app-core.js", "vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js",
       "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js",
       "app-conversation-state.js", "app-conversation-view.js", "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-model-data.js", "app-models.js", "app-attachments.js", "app-conversation-observer.js", "app-conversation-input.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js", "app-workspace-chat.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(async () => {
+      state.activeChatId = "chat"; selectOfficeChatProjection("chat");
       window.renderAgentPlanDock = window.renderChatSessions = window.bindAttachmentActions = () => {};
       window.activeChatUsesCurrentDocument = () => true;
       window.send = (type, payload) => {
@@ -50,14 +48,17 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         window.submitted = payload;
         return new Promise(resolve => { window.acknowledge = resolve; });
       };
-      window.loadChatState = async () => ({ activeChatId: "chat", messages: window.serverMessages,
-        messageStartIndex: 0, messageTotalCount: window.serverMessages.length, inbox: window.serverInbox });
+      window.loadChatState = async () => ({ activeChatId: "chat", sessionRevision: window.serverRevision,
+        messages: window.serverMessages.slice(window.serverStart), messageStartIndex: window.serverStart,
+        messageTotalCount: window.serverMessages.length, inbox: window.serverInbox });
       await hydrateChatDrafts();
       bindChatActions();
     });
 
     for (const delivery of ["Steer", "Queue"]) {
       await page.evaluate(delivery => {
+        clearOfficeChatProjection(); selectOfficeChatProjection("chat");
+        state.chatProjectionRevisions = {}; window.serverRevision = 1; window.serverStart = 0;
         state.settings.RunningMessageDelivery = delivery;
         state.chatInputEchoes = {}; state.chatInboxes = {}; state.inboxSubmissions = {};
         state.chatRuns.chat = { runId: "run", activities: [], stream: "Проверяю данные отчёта.\n\n".repeat(60) };
@@ -108,19 +109,28 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         "late acknowledgement preserves a subsequent manual scroll");
       await page.evaluate(() => {
         state.chatRuns.chat.stream += "Следующие результаты проверки.\n\n".repeat(5);
-        state.liveStreamContent = state.chatRuns.chat.stream; renderStreamingMessages(true);
+        renderStreamingMessages(true);
       });
       assert.ok(Math.abs(await page.locator("#messages").evaluate(el => el.scrollTop) - manualTop) < 2,
         "streaming does not restart following after the user scrolls away");
 
       await page.evaluate(async () => {
-        serverMessages = serverMessages.concat({ Id: "input", Role: "user", RunId: "run", Content: submitted.text });
+        serverRevision++;
+        serverMessages = serverMessages.concat({ Id: "input", Role: "user", RunId: "run", Content: submitted.text },
+          { Id: "overlap", Role: "assistant", Content: "Уточнение принято." });
         await pollChatInbox(); // Inbox revision is unchanged; unresolved echoes still trigger history refresh.
       });
       await page.locator(".inbox-message").waitFor({ state: "detached" });
       assert.equal(await page.locator(".inbox-message").count(), 0);
       assert.equal(await page.locator(".message.user .markdown").filter({ hasText: "Уточнение во время работы: " + delivery }).count(), 1,
         "the exact persisted message replaces its echo once");
+      await page.evaluate(async () => {
+        serverRevision++; serverStart = 2;
+        serverMessages.push({ Id: "next-step", Role: "assistant", Content: "Следующий шаг." });
+        applyChatState(await loadChatState());
+      });
+      assert.equal(await page.locator(".message.user .markdown").filter({ hasText: "Уточнение во время работы: " + delivery }).count(), 1,
+        "subsequent tail snapshots cannot erase the consumed queue message");
     }
     await page.evaluate(() => { window.acknowledge = null; });
     await page.locator("#chatInput").fill("Тот же текст");

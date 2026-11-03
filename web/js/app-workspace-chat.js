@@ -122,7 +122,7 @@
         (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
       incomingState.modelProgress = currentPreview;
     return window.RNAssistantConversationState.messageWindow(current, incoming,
-      !(options && options.latestMessages) && Number.isSafeInteger(previousRevision) && previousRevision === nextRevision);
+      Number.isSafeInteger(previousRevision) && previousRevision === nextRevision, !!(options && options.latestMessages));
   }
   function prependMessages(current, page) {
     var start = field(current, "messageStartIndex"), total = field(current, "messageTotalCount");
@@ -227,6 +227,7 @@
         : { title: "С чего начнём?", text: "Опишите задачу или задайте вопрос." })); });
     }
     var liveAttached = false;
+    view.cache.liveUnitKey = null;
     var liveRunId = field(live, "runId");
     var liveProgress = live ? { content: field(live, "message"), reasoning: field(live, "reasoning"),
       reasoningTruncated: field(live, "reasoningTruncated"), retrying: field(live, "retrying"), showStatus: true } : null;
@@ -241,20 +242,23 @@
             liveAttached = true;
           }
         }
-        appendSavedRunUnit(units, run, presentation, presentation.actionKey + ":" + historyActions, run.live ? "live:workspace-model" : null,
+        appendSavedRunUnit(units, run, presentation, presentation.actionKey + ":" + historyActions,
           run.live ? (function (progress) {
             return function (node) { paintLiveModelOutput(node.querySelector(".agent-stream-step"), progress); };
           }(liveProgress)) : null);
+        if (run.live) view.cache.liveUnitKey = agentRunUnitKey(run);
       }, function (message, index) {
         appendSavedMessageUnit(units, message, index, presentation, presentation.actionKey + ":" + historyActions);
       });
     if (live && !liveAttached) {
-      var liveRun = { items: [], workspace: true, live: true, workspaceProgress: liveProgress };
-      appendMessageUnit(units, "live:workspace-model", String(liveRunId), function () {
+      var liveRun = { items: [], runId: liveRunId, workspace: true, live: true, workspaceProgress: liveProgress };
+      view.cache.liveUnitKey = agentRunUnitKey(liveRun);
+      appendMessageUnit(units, view.cache.liveUnitKey, String(liveRunId), function () {
         return renderAgentRunArticle(liveRun, presentation);
       }, "", null, function (node) {
         paintLiveModelOutput(node.querySelector(".agent-stream-step"), liveProgress);
       });
+      units[units.length - 1].transient = true;
     }
     if (start + messages.length < field(chat, "messageTotalCount")) {
       appendMessageUnit(units, "history:latest", field(chat, "messageTotalCount") + ":" + presentation.actionKey, function () {
@@ -291,7 +295,7 @@
     if (!list) return false;
     var view = messageView(list);
     if (!view.canRender()) return false;
-    var entry = view.cache.units["live:workspace-model"];
+    var entry = view.cache.units[view.cache.liveUnitKey];
     if (!entry || !entry.node || entry.node.parentNode !== list || !view.matches(conversationTarget(chat)) ||
         view.cache.liveRunId !== runId || runStatus(snapshot) !== "running" ||
         field(preview, "runId") !== runId) return false;

@@ -570,7 +570,7 @@ function liveAgentTailActivities(presentation) {
   });
 }
 
-function renderLiveAgentRun(presentation) {
+function liveAgentRun(presentation) {
   var activities = liveAgentTailActivities(presentation);
   if ((!activities.length && !presentation.view.cache.liveBase && !hasLiveAgentOutput(presentation)) || presentation.view.cache.liveSuppressed) return null;
   var items = presentation.view.cache.liveBase ? presentation.view.cache.liveBase.items.slice() : [];
@@ -589,7 +589,13 @@ function renderLiveAgentRun(presentation) {
       items.push({ message: activity.__reasoningMessage || null, index: -1, activity: activity });
     }
   });
-  var node = renderAgentRunArticle({ live: true, items: items, finalMessage: null, hasLiveDraft: hasLiveAgentDraft(presentation) }, presentation);
+  return { live: true, runId: presentation.data.live.runId, items: items, finalMessage: null, hasLiveDraft: hasLiveAgentDraft(presentation) };
+}
+
+function renderLiveAgentRun(presentation, run) {
+  run = run || liveAgentRun(presentation);
+  if (!run) return null;
+  var node = renderAgentRunArticle(run, presentation);
   node.liveOutputVisible = hasLiveAgentOutput(presentation);
   node.liveDraftVisible = hasLiveAgentDraft(presentation);
   node.liveRunId = presentation.data.live.runId;
@@ -665,10 +671,12 @@ function paintLiveModelOutput(section, output) {
   }
   var label = output.retrying ? "Повторная попытка…" : content || output.showStatus
     ? output.statusText || "Получаю ответ модели…" : "";
+  if (content && !output.retrying) label = "Черновик ответа · " + label;
   if (status.hidden !== !label) status.hidden = !label;
   if (status.textContent !== label) status.textContent = label;
   section.liveOutput = { content: content, reasoning: reasoning,
-    reasoningComplete: reasoningComplete, reasoningTruncated: reasoningTruncated };
+    reasoningComplete: reasoningComplete, reasoningTruncated: reasoningTruncated,
+    retrying: output.retrying, statusText: output.statusText, showStatus: output.showStatus };
 }
 
 function messageUnitSignature(message) {
@@ -704,10 +712,13 @@ function messageUnitSignature(message) {
 function agentRunUnitKey(run) {
   var items = run.items || [];
   var finalMessage = run.finalMessage || null;
-  if (run.live) return "live:agent-run";
-  var runId = typeof agentRunId === "function" ? agentRunId(items, finalMessage) : "";
+  var runId = run.runId || (typeof agentRunId === "function" ? agentRunId(items, finalMessage) : "");
   var first = items[0] || finalMessage;
-  if (runId) return "run:" + runId + ":segment:" + (messageId(first && first.message) || (first ? first.index : 0));
+  // A step has the same runtime identity before and after durable delivery.
+  // Stream mode is presentation state, never an identity shared by different runs.
+  var firstStep = items.find(function (item) { return activityStepId(item.activity); });
+  if (runId) return "run:" + runId + ":segment:" + (firstStep ? "step:" + activityStepId(firstStep.activity) :
+    messageId(first && first.message) || "model");
   return "run:index:" + (first ? first.index : 0);
 }
 
@@ -731,8 +742,8 @@ function appendMessageUnit(units, key, signature, render, actionsSignature, refr
     actionsSignature: actionsSignature, refreshActions: refreshActions, update: update });
 }
 
-function appendSavedRunUnit(units, run, presentation, actionsSignature, key, update) {
-  appendMessageUnit(units, key || agentRunUnitKey(run), agentRunUnitSignature(run),
+function appendSavedRunUnit(units, run, presentation, actionsSignature, update) {
+  appendMessageUnit(units, agentRunUnitKey(run), agentRunUnitSignature(run),
     function () { return renderAgentRunArticle(run, presentation); }, actionsSignature, function (node) {
       refreshMessageFooter(node, function (target) {
         if (!run.items.length && run.finalMessage)
@@ -742,6 +753,7 @@ function appendSavedRunUnit(units, run, presentation, actionsSignature, key, upd
       });
     }, update);
   units[units.length - 1].patch = function (node) { patchAgentRunArticle(node, run, presentation); };
+  units[units.length - 1].transient = !!run.live;
 }
 
 function appendSavedMessageUnit(units, message, index, presentation, actionsSignature) {
@@ -845,13 +857,17 @@ function buildMessageUnits(presentation, actionsSignature, pendingUnits) {
 function buildLiveMessageUnits(presentation, pendingUnits) {
   var units = [], cache = presentation.view.cache;
   var activities = liveAgentTailActivities(presentation);
-  if (!cache.liveSuppressed && (activities.length || cache.liveBase || hasLiveAgentOutput(presentation))) {
-    appendMessageUnit(units, "live:agent-run",
+  var run = liveAgentRun(presentation);
+  cache.liveUnitKey = run ? agentRunUnitKey(run) : null;
+  if (run) {
+    appendMessageUnit(units, cache.liveUnitKey,
       JSON.stringify({ stream: "agent", runId: presentation.data.live.runId, value: activities,
         base: cache.liveBaseSignature, hasOutput: hasLiveAgentOutput(presentation), hasDraft: hasLiveAgentDraft(presentation) }),
-      function () { return renderLiveAgentRun(presentation); }, "", null, function (node) { refreshLiveAgentOutput(node, presentation); });
+      function () { return renderLiveAgentRun(presentation, run); }, "", null, function (node) { refreshLiveAgentOutput(node, presentation); });
+    units[units.length - 1].transient = true;
     units[units.length - 1].patch = function (node) {
-      var replacement = renderLiveAgentRun(presentation);
+      var replacement = renderLiveAgentRun(presentation, run);
+      refreshLiveAgentOutput(replacement, presentation);
       patchAgentRunArticle(node, null, presentation, replacement);
       node.liveOutputVisible = replacement.liveOutputVisible;
       node.liveDraftVisible = replacement.liveDraftVisible;
@@ -899,46 +915,51 @@ function patchAgentRunArticle(node, run, presentation, replacement) {
     if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(part);
     if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(part);
   }
-  function reuse(selector) {
-    var prior = Object.create(null);
-    Array.prototype.forEach.call(node.querySelectorAll(selector), function (part) {
-      if (part.agentReconcileKey) prior[part.agentReconcileKey] = part;
+  var containers = ["agent-run-wrap", "agent-run-actions", "agent-model-step", "agent-action-stage", "agent-run-process"];
+  function has(part, name) { return part.classList && part.classList.contains(name); }
+  function key(part) {
+    if (part.agentReconcileKey) return (has(part, "agent-transcript-entry") ? "call:" : "step:") + part.agentReconcileKey;
+    if (has(part, "agent-action-stage")) return "stage:" + part.getAttribute("data-disclosure-key");
+    if (has(part, "agent-run-process")) return "process:" + (part.firstChild && part.firstChild.agentReconcileKey);
+    return ["agent-run-wrap", "agent-run-actions", "agent-stream-step", "agent-step-message", "agent-step-reason",
+      "agent-reflection-step", "reasoning-block"].find(function (name) { return has(part, name); });
+  }
+  // Patch owned containers in place. Moving saved nodes through a detached
+  // replacement preserves identity but resets selection and embedded viewers.
+  function reconcile(parent, fresh) {
+    var prior = Object.create(null), kept = new Set(), oldChildren = Array.prototype.slice.call(parent.childNodes);
+    oldChildren.forEach(function (part) { var id = key(part); if (id) prior[id] = part; });
+    var cursor = parent.firstChild;
+    Array.prototype.slice.call(fresh.childNodes).forEach(function (part) {
+      var saved = prior[key(part)], next = part;
+      if (saved && saved.tagName === part.tagName) {
+        if (part.agentReconcileSignature !== undefined && saved.agentReconcileSignature === part.agentReconcileSignature) {
+          release(part); next = saved;
+        } else if (has(part, "agent-stream-step") && part.liveOutput) {
+          paintLiveModelOutput(saved, part.liveOutput); release(part); next = saved;
+        } else if (containers.some(function (name) { return has(part, name); })) {
+          saved.className = part.className;
+          saved.agentReconcileSignature = part.agentReconcileSignature;
+          reconcile(saved, part); next = saved;
+        }
+      }
+      kept.add(next);
+      if (next === cursor) cursor = cursor.nextSibling;
+      else parent.insertBefore(next, cursor);
     });
-    Array.prototype.forEach.call(replacement.querySelectorAll(selector), function (part) {
-      var saved = prior[part.agentReconcileKey];
-      if (!saved || saved.agentReconcileSignature !== part.agentReconcileSignature) return;
-      if (part === saved) return;
-      release(part);
-      part.replaceWith(saved);
+    oldChildren.forEach(function (part) {
+      if (!kept.has(part) && part.parentNode === parent) { release(part); parent.removeChild(part); }
     });
   }
-  // Reuse completed step and call nodes while the active step changes.
-  reuse(".agent-model-step");
-  reuse(".agent-transcript-entry");
-  var priorGroups = Object.create(null);
-  Array.prototype.forEach.call(node.querySelectorAll(".agent-action-stage[data-disclosure-key]"), function (group) {
-    priorGroups[group.getAttribute("data-disclosure-key")] = group;
-  });
-  Array.prototype.forEach.call(replacement.querySelectorAll(".agent-action-stage[data-disclosure-key]"), function (group) {
-    var saved = priorGroups[group.getAttribute("data-disclosure-key")];
-    if (!saved || saved === group) return;
-    var oldChildren = Array.prototype.slice.call(saved.children);
-    saved.className = group.className;
-    saved.replaceChildren.apply(saved, Array.prototype.slice.call(group.childNodes));
-    oldChildren.forEach(release);
-    group.replaceWith(saved);
-  });
-  var oldChildren = Array.prototype.slice.call(node.children);
   node.className = replacement.className;
-  node.replaceChildren.apply(node, Array.prototype.slice.call(replacement.childNodes));
-  oldChildren.forEach(release);
+  reconcile(node, replacement);
 }
 
 function reconcileMessageUnits(box, units, liveOnly) {
   var view = messageView(box), previousCache = view.cache.units;
   var nextCache = Object.create(null);
   if (liveOnly) Object.keys(previousCache).forEach(function (key) {
-    if (key.indexOf("live:") !== 0) nextCache[key] = previousCache[key];
+    if (!previousCache[key].transient) nextCache[key] = previousCache[key];
   });
   units.forEach(function (unit) {
     var cached = previousCache[unit.key];
@@ -996,7 +1017,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
         });
       }
     }
-    nextCache[unit.key] = { signature: unit.signature, actionsSignature: unit.actionsSignature, node: node };
+    nextCache[unit.key] = { signature: unit.signature, actionsSignature: unit.actionsSignature, node: node, transient: !!unit.transient };
   });
   // Keep unchanged nodes attached: detaching the transcript restarts embedded
   // viewers and invalidates layout/selection even when all signatures match.
@@ -1005,7 +1026,7 @@ function reconcileMessageUnits(box, units, liveOnly) {
     cursor = null;
     Object.keys(nextCache).some(function (key) {
       var node = nextCache[key].node;
-      if (key.indexOf("live:") === 0 && node && node.parentNode === box) {
+      if (nextCache[key].transient && node && node.parentNode === box) {
         cursor = node;
         return true;
       }
@@ -1053,7 +1074,7 @@ function renderStreamingMessages(outputOnly) {
   if (currentConversationView && !currentConversationView.canRender()) return;
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   if (!officeTranscriptActive()) return;
-  var view = messageView(), live = view.cache.units["live:agent-run"];
+  var view = messageView(), live = view.cache.units[view.cache.liveUnitKey];
   if (!messageView().matches(officeConversationTarget()) || !live && !Object.keys(messageView().cache.units).length) {
     renderMessages();
     return;

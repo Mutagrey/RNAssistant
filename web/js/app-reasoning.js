@@ -29,6 +29,7 @@ function reasoningBlock(text, tokens, live, truncated) {
 }
 
 function updateReasoningBlock(details, text, tokens, live, truncated) {
+  details.agentReconcileSignature = JSON.stringify([text, tokens, !!live, !!truncated]);
   var className = "reasoning-block" + (live ? " is-live" : "");
   if (details.className !== className) details.className = className;
   var title = details.querySelector(".reasoning-title");

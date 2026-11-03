@@ -70,7 +70,7 @@ function ui() {
 function assertIdle(ctx, id) {
   assert.equal(ctx.state.chatRuns[id], undefined, "finished chat releases transient progress");
   assert.equal(ctx.rows[id].status, "", "finished chat has no running badge");
-  assert.equal(ctx.rows[id].actions[1].disabled, false, "finished chat can be deleted again");
+  assert.equal(ctx.rows[id].actions.find(action => action.danger).disabled, false, "finished chat can be deleted again");
 }
 function assertStoppedIndicator(ctx, id) {
   assert.equal(ctx.state.chatRuns[id], undefined, "saved terminal state releases transient progress");
@@ -154,7 +154,7 @@ function assertStoppedIndicator(ctx, id) {
   ctx.applyChatState({ activeChatId: "a", sessionRevision: 2,
     chats: [summary("a", "completed", 2)], inbox: inbox("a", true, 2) });
   assertStoppedIndicator(ctx, "a");
-  assert.equal(ctx.rows.a.actions[1].disabled, true, "delete remains blocked while the inbox worker owns the chat");
+  assert.equal(ctx.rows.a.actions.find(action => action.danger).disabled, true, "delete remains blocked while the inbox worker owns the chat");
   ctx.progress("a");
   ctx.renderChatSessions();
   assertStoppedIndicator(ctx, "a");
