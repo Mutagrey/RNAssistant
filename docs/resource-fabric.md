@@ -1024,6 +1024,9 @@ resolve this explicit workspace into an operation-local typed command, never a U
 selection. `html.data.write/bind/freeze` and `html.assets.import/publish` require
 `workspace`; `html.assets.list` remains a global catalog read. New file writes need
 an explicit workspace parent. Ambiguous short targets fail without choosing a tab.
+Origin lookup scans only the first-revision URI range (at most 1,000 heads), excluding
+exact member heads created by reads; they cannot become extra workspace origins.
+Refresh-required failures supply the complete discovered target usable by `core.read`.
 `snapshotTarget` uses an `HTML snapshot:` parent and remains read-only, pinned to
 retained bytes after edits, deletion and restart. Historical lookup is bounded to
 1,000 snapshot metadata records; current HTML discovery to 4,000 metadata records.

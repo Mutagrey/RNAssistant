@@ -17,16 +17,38 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static string CreateHtmlToolWorkspace(OfficeToolExecutor executor, ChatSession session)
+        {
+            var created = executor.ExecuteManual(Command("html.workspace.create", "title", "Tool fixture"),
+                executor.GetControllerTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, true, session);
+            AssertTrue(created.Success, "explicit HTML fixture created: " + created.Message);
+            var store = new ChatStore(FixturePaths.Value);
+            var artifact = session.Artifacts.Last(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+            var target = HtmlWorkspaceTargets.Workspace(store.DocumentArtifacts, session, artifact);
+            new ArtifactWorkingSetService(store.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value))
+                .Change(session, LinkRequest(session, ChatResourceUri.CreateArtifactRevision(session, artifact).Uri, false), store.Save);
+            return target;
+        }
+
+        private static ToolExecutionRecord ExecuteHtmlViewFixture(OfficeToolExecutor executor, ChatSession session,
+            RNAssistant.Office.Runtime.NativeToolRuntimeAdapter runtime, string toolId, JObject arguments)
+        {
+            var result = ExecuteHtmlNative(runtime, toolId, arguments);
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, new ChatStore(FixturePaths.Value).DocumentArtifacts);
+            return result;
+        }
+
         private static void HtmlWorkspaceUsesExactNativeOwnership()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
+                    var workspace = CreateHtmlToolWorkspace(executor, session);
                     var definitions = executor.GetControllerTools()
                         .Where(tool => HtmlWorkspaceToolCatalog.Owns(tool.Id))
                         .ToList();
-                    AssertEqual(10, definitions.Count,
+                    AssertEqual(7, definitions.Count,
                         "semantic HTML workspace family is registered");
                     foreach (var definition in definitions)
                     {
@@ -42,19 +64,16 @@ namespace RNAssistant.Harness
                             string.Join(",", definition.Policy.AllowedModes),
                             definition.Id + " is Agent-only");
                     }
-                    var writeFileSchema = JObject.Parse(definitions.Single(definition =>
-                        definition.Id == HtmlWorkspaceToolCatalog.WriteFileToolId).ArgumentSchemaJson);
-                    AssertContains((string)writeFileSchema["properties"]["content"]["description"],
-                        "one literal source backslash",
-                        "HTML write schema defines the outer JSON escaping boundary");
+                    var writeFileSchema = JObject.Parse(executor.GetControllerTools().Single(definition =>
+                        definition.Id == ResourceMutationToolCatalog.Write).ArgumentSchemaJson);
                     string nestedArgumentsError;
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject
                         {
-                            ["path"] = "index.html",
+                            ["target"] = "HTML file: index.html in " + workspace,
                             ["content"] = "<main>root</main>",
                             ["arguments"] = new JObject
                             {
-                                ["path"] = "index.html",
+                                ["target"] = "HTML file: index.html in " + workspace,
                                 ["content"] = "<main>nested</main>"
                             }
                         }, writeFileSchema, false, out nestedArgumentsError),
@@ -73,23 +92,23 @@ namespace RNAssistant.Harness
                         "HTML binding selects a resource view, not a second transform pipeline");
                     string bindError;
                     AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "sales", ["target"] = "attachment: records.json",
+                        ["workspace"] = workspace, ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "table", ["path"] = "$.records"
                     }, bindSchema, false, out bindError), "HTML binding admits an explicit structural path");
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "sales", ["target"] = "attachment: records.json",
+                        ["workspace"] = workspace, ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "table", ["path"] = "$[*]"
                     }, bindSchema, false, out bindError), "HTML binding rejects wildcard structural paths before execution");
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "sales", ["target"] = "attachment: records.json",
+                        ["workspace"] = workspace, ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "records", ["path"] = "$.records"
                     }, bindSchema, false, out bindError), "new HTML bindings expose only table");
                     AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "sales", ["target"] = "attachment: records.json",
+                        ["workspace"] = workspace, ["name"] = "sales", ["target"] = "attachment: records.json",
                         ["view"] = "text", ["path"] = "$.records"
                     }, bindSchema, false, out bindError), "HTML binding rejects structural selectors on complete views");
                     AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
-                        ["name"] = "page", ["target"] = "File: report.pdf",
+                        ["workspace"] = workspace, ["name"] = "page", ["target"] = "File: report.pdf",
                         ["view"] = "render-page", ["pageIndex"] = 0
                     }, bindSchema, false, out bindError), "HTML binding admits an explicit page index");
                     AssertEqual(@"^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)*$",
@@ -106,7 +125,7 @@ namespace RNAssistant.Harness
                     var allTools = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, allTools, new AppSettings(), "agent", false, manualRun: true);
+                        session, allTools, new AppSettings { AutoConfirmToolActions = true }, "agent", false, manualRun: true);
                     foreach (var definition in definitions)
                     {
                         AssertTrue(runtime.Describe(new ToolCall(
@@ -119,9 +138,9 @@ namespace RNAssistant.Harness
                             definition.Id + " has no case alias");
                     }
 
-                    var searchBinding = ExecuteHtmlNative(runtime,
+                    var searchBinding = ExecuteHtmlViewFixture(executor, session, runtime,
                         HtmlWorkspaceToolCatalog.BindDataToolId,
-                        new JObject { ["name"] = "search", ["target"] = "Excel search scope: sheet 'Data'",
+                        new JObject { ["workspace"] = workspace, ["name"] = "search", ["target"] = "Excel search scope: sheet 'Data'",
                             ["view"] = "table", ["path"] = "$" });
                     AssertEqual(ToolExecutionOutcome.Error, searchBinding.Outcome,
                         "Excel search evidence is not accepted as tabular source data");
@@ -142,9 +161,9 @@ namespace RNAssistant.Harness
                     AssertTrue(advertised.Representations.Contains("table") &&
                         !advertised.Representations.Contains("records"),
                         "model discovery advertises one structural view");
-                    var tableBinding = ExecuteHtmlNative(runtime,
+                    var tableBinding = ExecuteHtmlViewFixture(executor, session, runtime,
                         HtmlWorkspaceToolCatalog.BindDataToolId,
-                        new JObject { ["name"] = "table-sales",
+                        new JObject { ["workspace"] = workspace, ["name"] = "table-sales",
                             ["target"] = "Excel table: Sales",
                             ["view"] = "table" });
                     AssertEqual(ToolExecutionOutcome.Ok, tableBinding.Outcome,
@@ -153,11 +172,11 @@ namespace RNAssistant.Harness
                             .Single(item => item.Name == "table-sales").Binding.ViewPath,
                         "HTML binding persists the runtime-selected canonical path");
 
-                    var upsert = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.WriteFileToolId,
+                    var upsert = ExecuteHtmlViewFixture(executor, session, runtime,
+                        ResourceMutationToolCatalog.Write,
                         new JObject
                         {
-                            ["path"] = "index.html",
+                            ["target"] = "HTML file: index.html in " + workspace,
                             ["content"] = "<main>native</main>"
                         });
                     AssertEqual(ToolExecutionOutcome.Ok, upsert.Outcome,
@@ -188,7 +207,7 @@ namespace RNAssistant.Harness
                     var projectedInvocation = new ToolInvocation
                     {
                         ToolCallId = "html_projection",
-                        ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId
+                        ToolId = ResourceMutationToolCatalog.Write
                     };
                     var projected = ModelToolResultProjection.Project(
                         AgentJsonProtocol.CreateToolResultMessage(
@@ -211,19 +230,19 @@ namespace RNAssistant.Harness
                     string contractError;
                     AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
                             new ToolCall("html_current",
-                                HtmlWorkspaceToolCatalog.WriteFileToolId,
-                                "{\"path\":\"index.html\",\"content\":\"ok\"}"),
+                                ResourceMutationToolCatalog.Write,
+                                "{\"target\":\"HTML file: index.html in HTML workspace: Test\",\"content\":\"ok\"}"),
                             out contractError),
                         "current semantic HTML write is replayable");
                     AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                             new ToolCall("html_old",
-                                "common.html_workspace_upsert_file", "{}"),
+                                "html.workspace.upsert.file", "{}"),
                             out contractError),
                         "retired HTML upsert requires reset");
                     AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                             new ToolCall("html_runtime_arg",
-                                HtmlWorkspaceToolCatalog.WriteFileToolId,
-                                "{\"path\":\"index.html\",\"content\":\"ok\",\"uri\":\"rna://runtime\"}"),
+                                ResourceMutationToolCatalog.Write,
+                                "{\"target\":\"HTML file: index.html in HTML workspace: Test\",\"content\":\"ok\",\"uri\":\"rna://runtime\"}"),
                             out contractError),
                         "HTML history rejects runtime-owned arguments");
                     AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
@@ -237,18 +256,14 @@ namespace RNAssistant.Harness
                         MimeType = "application/json", InlineText = "[{\"sales\":120}]" };
                     session.Artifacts.Add(sourceArtifact);
                     var target = executor.ResourceGateway.Find(session, "native-sales.json", "conversation").Items.Single().Target;
-                    var bind = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId,
-                        new JObject { ["name"] = "sales", ["target"] = target, ["view"] = "text", ["policy"] = "head" });
+                    var bind = ExecuteHtmlViewFixture(executor, session, runtime, HtmlWorkspaceToolCatalog.BindDataToolId,
+                        new JObject { ["workspace"] = workspace, ["name"] = "sales", ["target"] = target, ["view"] = "text", ["policy"] = "head" });
                     AssertEqual(ToolExecutionOutcome.Ok, bind.Outcome, "native canonical binding succeeds: " + bind.Result.Message + " " + bind.Result.DataJson);
                     AssertEqual(ToolEffectEvidence.VerifiedChange, bind.Evidence.Effect, "binding change is verified");
                     var binding = session.HtmlWorkspace.DataSources.Single(item => item.Name == "sales").Binding;
                     AssertContains(binding.Resource.Uri, sourceArtifact.Id, "binding points to resource, not a tool result");
-                    var head = session.ActiveHtmlArtifactId;
-                    var refresh = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.RefreshDataToolId,
-                        new JObject { ["name"] = "sales" });
-                    AssertEqual(ToolExecutionOutcome.Ok, refresh.Outcome, "canonical refresh succeeds");
-                    AssertEqual(ToolEffectEvidence.VerifiedNoChange, refresh.Evidence.Effect, "refresh observes source; it does not mutate workspace");
-                    AssertEqual(head, session.ActiveHtmlArtifactId, "refresh does not duplicate workspace history");
+                    AssertTrue(runtime.Describe(new ToolCall("retired-refresh", HtmlWorkspaceToolCatalog.RefreshDataToolId, "{}")) == null,
+                        "retired refresh has no runtime binding");
                 });
         }
 
@@ -257,17 +272,21 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
+                var workspace = CreateHtmlToolWorkspace(executor, session);
                 var tools = executor.GetControllerTools().ToList();
                 Func<string, string, RNAssistant.Office.Contracts.ToolRunResult> write = (path, content) => executor.ExecuteManual(
-                    Command("core.write", "target", "HTML file: " + path, "content", content), tools,
+                    Command("core.write", "target", "HTML file: " + path + " in " + workspace, "content", content), tools,
                     new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 Func<string, TextPatch, ToolExecutionRecord> patch = (path, body) =>
                 {
-                    var pending = PrepareVbaNative(executor, session, Command("core.patch", "targets", PatchTargets(PatchSection("HTML file: " + path, body))));
-                    return pending.Record.Outcome == ToolExecutionOutcome.AwaitingConfirmation ? ConfirmVbaNative(pending) : pending.Record;
+                    var pending = PrepareVbaNative(executor, session, Command("core.patch", "targets", PatchTargets(PatchSection("HTML file: " + path + " in " + workspace, body))));
+                    var result = pending.Record.Outcome == ToolExecutionOutcome.AwaitingConfirmation ? ConfirmVbaNative(pending) : pending.Record;
+                    HtmlWorkspaceEditorResourceService.RefreshSelected(session, new ChatStore(FixturePaths.Value).DocumentArtifacts);
+                    return result;
                 };
                 var source = "const first = 1;\nconst second = 2;\r\nconst third = 3;";
                 AssertTrue(write("app.js", source).Success, "mixed-newline HTML member is created through core.write");
+                HtmlWorkspaceEditorResourceService.RefreshSelected(session, new ChatStore(FixturePaths.Value).DocumentArtifacts);
                 var revision = session.ActiveHtmlArtifactId;
                 var failed = patch("app.js", MergeEdits(LineHunk("const first = 1;", "const first = 4;"), LineHunk("const missing = 9;", "const missing = 10;")));
                 AssertEqual(ToolExecutionOutcome.Error, failed.Outcome, "missing second hunk refuses the whole file");
@@ -308,14 +327,15 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
+                    var workspace = CreateHtmlToolWorkspace(executor, session);
                     var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, definitions, new AppSettings(), "agent", false, manualRun: true);
+                        session, definitions, new AppSettings { AutoConfirmToolActions = true }, "agent", false, manualRun: true);
                     Func<string, string, string, ToolExecutionRecord> write = delegate(string callId, string path, string content)
                     {
-                        var call = new ToolCall(callId, HtmlWorkspaceToolCatalog.WriteFileToolId,
-                            new JObject { ["path"] = path, ["content"] = content }.ToString(Formatting.None));
+                        var call = new ToolCall(callId, ResourceMutationToolCatalog.Write,
+                            new JObject { ["target"] = "HTML file: " + path + " in " + workspace, ["content"] = content }.ToString(Formatting.None));
                         return runtime.ExecuteAsync(new ToolExecutionContext(
                                 call, runtime.Describe(call), "html_batch_run", "html_batch_turn",
                                 "html_batch_step", DateTime.UtcNow, false, 4), CancellationToken.None)
@@ -324,8 +344,9 @@ namespace RNAssistant.Harness
 
                     var first = write("html_batch_styles", "styles.css", "body { color: #123456; }");
                     var second = write("html_batch_app", "app.js", "window.ready = true;");
-                    AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "first same-step HTML write succeeds");
+                    AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "first same-step HTML write succeeds: " + first.Message);
                     AssertEqual(ToolExecutionOutcome.Ok, second.Outcome, "second same-step HTML write is not treated as a replay");
+                    HtmlWorkspaceEditorResourceService.RefreshSelected(session, new ChatStore(FixturePaths.Value).DocumentArtifacts);
                     AssertEqual(2, session.HtmlWorkspace.Files.Count, "both files are retained in one workspace");
                     AssertTrue(session.HtmlWorkspace.Files.Any(item => item.Path == "styles.css" && item.Content.Contains("#123456")),
                         "CSS content is present");
@@ -334,7 +355,7 @@ namespace RNAssistant.Harness
                     var scope = executor.ResourceAuthority.Scope(session, true);
                     var operationHeads = executor.ResourceAuthority.Store.Capture(scope).Heads.Values
                         .Count(head => head.Identity.Uri.IndexOf("/html_operation_", StringComparison.Ordinal) >= 0);
-                    AssertEqual(2, operationHeads, "each same-step HTML write publishes its own operation receipt");
+                    AssertEqual(3, operationHeads, "each same-step HTML write publishes its own operation receipt");
                 });
         }
 
@@ -344,13 +365,14 @@ namespace RNAssistant.Harness
                 delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
                 {
                     var session = NewSession(adapter);
+                    var workspace = CreateHtmlToolWorkspace(executor, session);
                     var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
                         .Concat(executor.GetControllerTools()).ToList();
                     var runtime = executor.CreateNativeRuntime(
-                        session, definitions, new AppSettings(), "agent", false, manualRun: true);
-                    var created = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        new JObject { ["path"] = "index.html", ["content"] = "<main>first</main>" });
+                        session, definitions, new AppSettings { AutoConfirmToolActions = true }, "agent", false, manualRun: true);
+                    var created = ExecuteHtmlViewFixture(executor, session, runtime,
+                        ResourceMutationToolCatalog.Write,
+                        new JObject { ["target"] = "HTML file: index.html in " + workspace, ["content"] = "<main>first</main>" });
                     AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
                         "initial HTML file is created");
                     AssertContains(created.Result.Message, "Current files (1): index.html",
@@ -360,8 +382,8 @@ namespace RNAssistant.Harness
                         delegate(string step, string content, IList<ResourceEvidence> evidence)
                         {
                             var callId = "html_replace_" + step;
-                            var call = new ToolCall(callId, HtmlWorkspaceToolCatalog.WriteFileToolId,
-                                new JObject { ["path"] = "index.html", ["content"] = content }
+                            var call = new ToolCall(callId, ResourceMutationToolCatalog.Write,
+                                new JObject { ["target"] = "HTML file: index.html in " + workspace, ["content"] = content }
                                     .ToString(Formatting.None));
                             session.Messages.Add(new ChatMessage
                             {
@@ -372,10 +394,12 @@ namespace RNAssistant.Harness
                                 AcceptedCallOrigin = new AcceptedToolCallOrigin(step, "attempt_" + step, 0),
                                 ResourceEvidence = (evidence ?? new List<ResourceEvidence>()).ToList()
                             });
-                            return runtime.ExecuteAsync(new ToolExecutionContext(
+                            var result = runtime.ExecuteAsync(new ToolExecutionContext(
                                     call, runtime.Describe(call), "html_guard_run", "html_guard_turn",
                                     step, DateTime.UtcNow, false, 4), CancellationToken.None)
                                 .GetAwaiter().GetResult();
+                            HtmlWorkspaceEditorResourceService.RefreshSelected(session, new ChatStore(FixturePaths.Value).DocumentArtifacts);
+                            return result;
                         };
 
                     var original = session.ActiveHtmlArtifactId;
@@ -454,7 +478,7 @@ namespace RNAssistant.Harness
                     executor.MutateLocalResources(session, HtmlWorkspaceToolCatalog.WriteFileToolId,
                         null, () => HtmlWorkspaceToolService.UpsertFile(session, "app.js", "script", "run();", false));
                     AssertEqual(ToolExecutionOutcome.Ok,
-                        replace("carried", "<main>fourth</main>", null).Outcome,
+                        replace("carried", "<main>fourth</main>", earlierInput).Outcome,
                         "same-run complete source stays usable after an unrelated file changes the workspace root");
                     AssertEqual("<main>fourth</main>", session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content,
                         "carried observation replaces only its matching file");
@@ -481,7 +505,7 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
-                var settings = new AppSettings { ContextWindowOverrideTokens = 64000 };
+                var settings = new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 64000 };
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths),
                     new SkillStore(paths), new ToolStore(paths), () => settings,
                     value => settings = value, paths);
@@ -534,8 +558,8 @@ namespace RNAssistant.Harness
                         "complete read remains visible in the next model input");
                     const string writeId = "html-visible-write";
                     model.AppendToolCall(new AgentToolCall { Id = writeId,
-                        Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        Arguments = new Dictionary<string, object> { ["path"] = "index.html",
+                        Name = ResourceMutationToolCatalog.Write,
+                        Arguments = new Dictionary<string, object> { ["target"] = target,
                             ["content"] = "<main>after</main>" } }, "Update page.",
                         "Update the observed HTML source.", null,
                         new AcceptedToolCallOrigin("write-step", "write-attempt", 0));
@@ -544,15 +568,15 @@ namespace RNAssistant.Harness
                     AssertTrue(accepted.ResourceEvidence.Any(evidence =>
                         evidence.View == ResourceRepresentations.Source),
                         "accepted write keeps source evidence from its exact model request");
-                    var writeCall = new ToolCall(writeId, HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        new JObject { ["path"] = "index.html", ["content"] = "<main>after</main>" }
+                    var writeCall = new ToolCall(writeId, ResourceMutationToolCatalog.Write,
+                        new JObject { ["target"] = target, ["content"] = "<main>after</main>" }
                             .ToString(Formatting.None));
                     var written = runtime.ExecuteAsync(new ToolExecutionContext(writeCall,
                         runtime.Describe(writeCall), session.LastRun.RunId, session.LastRun.TurnId,
                         "write-step", DateTime.UtcNow, false, 4), CancellationToken.None)
                         .GetAwaiter().GetResult();
                     AssertEqual(ToolExecutionOutcome.Ok, written.Outcome,
-                        "visible complete source authorizes replacement without another read");
+                        "visible complete source authorizes replacement without another read: " + written.Message);
                 }
             });
         }
@@ -600,11 +624,12 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
+                var workspace = CreateHtmlToolWorkspace(executor, session);
                 var definitions = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings(), "agent", false, manualRun: true);
+                var runtime = executor.CreateNativeRuntime(session, definitions, new AppSettings { AutoConfirmToolActions = true }, "agent", false, manualRun: true);
                 const string json = "[{\"year\":2026,\"value\":42}]";
-                var saved = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteDataToolId,
-                    new JObject { ["name"] = "dashboardData", ["json"] = json });
+                var saved = ExecuteHtmlViewFixture(executor, session, runtime, HtmlWorkspaceToolCatalog.WriteDataToolId,
+                    new JObject { ["workspace"] = workspace, ["name"] = "dashboardData", ["json"] = json });
                 AssertEqual(ToolExecutionOutcome.Ok, saved.Outcome, "JSON publication succeeds: " + saved.Result.Message);
                 var data = JObject.Parse(saved.Result.DataJson);
                 var sourceTarget = (string)data["binding"]?["sourceTarget"];
@@ -618,17 +643,19 @@ namespace RNAssistant.Harness
                 AssertEqual("text", (string)data["binding"]["view"], "write describes the actual automatic binding view");
                 AssertContains(saved.Result.Message, "no additional bind", "write prevents redundant self-binding");
                 var memberTarget = (string)((JArray)data["members"]).Single(item => (string)item["memberType"] == "data")["target"];
-                var sourceRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                var sourceRead = ExecuteHtmlViewFixture(executor, session, runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = sourceTarget, ["representation"] = "text" });
                 AssertEqual(ToolExecutionOutcome.Ok, sourceRead.Outcome, "created source resolves immediately");
                 AssertEqual(json, (string)JObject.Parse(sourceRead.Result.DataJson)["text"], "read returns the actual JSON, not binding metadata");
 
-                ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteFileToolId,
-                    new JObject { ["path"] = "index.html", ["content"] = "<main>Dashboard</main>" });
+                ExecuteHtmlViewFixture(executor, session, runtime, ResourceMutationToolCatalog.Write,
+                    new JObject { ["target"] = "HTML file: index.html in " + workspace, ["content"] = "<main>Dashboard</main>" });
                 var promptIndex = ChatResourcePromptIndex.Build(session, 4000);
-                AssertTrue(promptIndex.Contains(oldWorkspaceTarget) && !promptIndex.Contains(oldWorkspaceSnapshot),
-                    "prompt index keeps the working target but not a superseded snapshot");
-                var bindingRead = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                var latestSnapshot = executor.ResourceGateway.Find(session, null, "all").Items
+                    .Single(item => item.Type == "HTML workspace").SnapshotTarget;
+                AssertTrue(promptIndex.Contains(latestSnapshot) && !promptIndex.Contains(oldWorkspaceSnapshot),
+                    "saved artifact index identifies the latest observed snapshot without claiming a live head");
+                var bindingRead = ExecuteHtmlViewFixture(executor, session, runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = memberTarget, ["representation"] = "text" });
                 AssertEqual(ToolExecutionOutcome.Ok, bindingRead.Outcome, "member target survives an unrelated HTML write");
                 var info = JObject.Parse((string)JObject.Parse(bindingRead.Result.DataJson)["text"]);
@@ -643,7 +670,7 @@ namespace RNAssistant.Harness
                     .Single(item => item.Type == "HTML workspace").Target;
                 AssertTrue(executor.ResourceGateway.Find(session, null, "html").Items.Any(item => item.Target == workspaceTarget),
                     "HTML scope includes the document-owned workspace root advertised by guidance");
-                var structure = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                var structure = ExecuteHtmlViewFixture(executor, session, runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = workspaceTarget, ["representation"] = "structure" });
                 AssertEqual(ToolExecutionOutcome.Ok, structure.Outcome, "workspace structure remains readable");
                 var manifest = JObject.Parse((string)JObject.Parse(structure.Result.DataJson)["text"]);
@@ -660,19 +687,19 @@ namespace RNAssistant.Harness
                 foreach (var wrongTarget in new[] { memberTarget, workspaceTarget })
                 {
                     var previousHead = session.ActiveHtmlArtifactId;
-                    var wrong = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId,
-                        new JObject { ["name"] = "dashboardData", ["target"] = wrongTarget, ["view"] = "text" });
+                    var wrong = ExecuteHtmlViewFixture(executor, session, runtime, HtmlWorkspaceToolCatalog.BindDataToolId,
+                        new JObject { ["workspace"] = workspace, ["name"] = "dashboardData", ["target"] = wrongTarget, ["view"] = "text" });
                     AssertEqual(ToolExecutionOutcome.Error, wrong.Outcome, "workspace/binding metadata cannot replace source values");
                     AssertEqual(previousHead, session.ActiveHtmlArtifactId, "invalid binding retains the working data source");
-                    var table = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                    var table = ExecuteHtmlViewFixture(executor, session, runtime, ResourceToolCatalog.ReadToolId,
                         new JObject { ["target"] = wrongTarget, ["representation"] = "table" });
                     AssertContains(table.Result.Message, "sourceTarget", "wrong structural read gives an actionable source route");
                 }
 
-                var bindArgs = new JObject { ["name"] = "dashboardData", ["target"] = sourceTarget, ["view"] = "table" };
-                var rebound = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
+                var bindArgs = new JObject { ["workspace"] = workspace, ["name"] = "dashboardData", ["target"] = sourceTarget, ["view"] = "table" };
+                var rebound = ExecuteHtmlViewFixture(executor, session, runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
                 AssertEqual(ToolExecutionOutcome.Ok, rebound.Outcome, "explicit source can be rebound as table");
-                var historicalBinding = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
+                var historicalBinding = ExecuteHtmlViewFixture(executor, session, runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = oldMemberSnapshot, ["representation"] = "text" });
                 AssertEqual(ToolExecutionOutcome.Ok, historicalBinding.Outcome, "historical binding remains readable after rebind");
                 AssertEqual("text", (string)JObject.Parse((string)JObject.Parse(historicalBinding.Result.DataJson)["text"])["view"],
@@ -686,7 +713,7 @@ namespace RNAssistant.Harness
                     plane.Close(session.Id, "binding-test", opened.LeaseId);
                 }
                 var head = session.ActiveHtmlArtifactId;
-                var repeated = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
+                var repeated = ExecuteHtmlViewFixture(executor, session, runtime, HtmlWorkspaceToolCatalog.BindDataToolId, bindArgs);
                 AssertEqual(ToolEffectEvidence.VerifiedNoChange, repeated.Evidence.Effect, "identical rebind is an explicit no-op");
                 AssertEqual(head, session.ActiveHtmlArtifactId, "identical rebind does not create another workspace revision");
             });

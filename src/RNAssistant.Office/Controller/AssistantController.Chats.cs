@@ -793,6 +793,7 @@ namespace RNAssistant.Office
         private void PopulateChatState(ChatSession session, ChatStateResponse response,
             bool includeCatalog = true, AppSettings settings = null)
         {
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             var timer = Stopwatch.StartNew();
             var activeId = session.Id;
             int messageStartIndex;
@@ -807,7 +808,6 @@ namespace RNAssistant.Office
             var contextMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs;
             var contextUsage = ContextUsageEstimator.FromSession(session, ResolveChatSettings(session, settings));
             var usageMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs;
-            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             var htmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session);
             var htmlMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs;
             response.Inbox = InboxResponse(_inbox.Snapshot(session));

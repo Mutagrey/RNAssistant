@@ -1145,6 +1145,7 @@ namespace RNAssistant.Harness
                 Test("shared HTML: text discovery rejects selection and authority drift", SharedHtmlTextDiscoveryDrift),
                 Test("html actions: stale guard before dispatch", HtmlActionsRejectStaleStateBeforeDispatch),
                 Test("html actions: typed bridge preserves guards", HtmlActionsBridgePreservesGuards),
+                Test("html actions: missing selection cannot create a workspace", HtmlActionsRejectMissingSelection),
                 Test("html editor: upload through existing commit owner", HtmlEditorUploadUsesExistingCommitOwner),
                 Test("html editor: invalid uploads and stale drafts", HtmlEditorRejectsInvalidUploadsAndStaleDrafts),
                 Test("html editor: typed bridge rejects inline bodies", HtmlEditorBridgeRejectsInlineBodies),

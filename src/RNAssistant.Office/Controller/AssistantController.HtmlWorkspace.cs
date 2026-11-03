@@ -317,12 +317,12 @@ namespace RNAssistant.Office
                 validateBeforeDispatch: () => ValidateHtmlWorkspaceAction(session, request));
         }
 
-        private static HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session, bool redoChoiceRequired = false)
+        private HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session, bool redoChoiceRequired = false)
         {
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             int messageStartIndex;
             var visibleMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, visibleMessages);
-            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
             var preflight = HtmlWorkspaceToolService.InspectForPreview(
                 session, CancellationToken.None);
             var preflightDto = preflight.Data.ToObject<HtmlWorkspacePreflightDto>();

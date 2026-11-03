@@ -522,7 +522,7 @@ namespace RNAssistant.Office.Tools
                     var current = ResolveTarget(target).Descriptor;
                     var view = current.Representations.Contains(ResourceRepresentations.Source) ? ResourceRepresentations.Source : ResourceRepresentations.Text;
                     return new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
-                        current.Reference.Identity, view, target,
+                        current.Reference.Identity, view, ResourceGatewayService.IntentTarget(current),
                         readScope: _id == ResourceMutationToolCatalog.Write || view == ResourceRepresentations.Source
                             ? ToolRecoveryReadScope.Whole : ToolRecoveryReadScope.RelevantLines);
                 }

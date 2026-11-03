@@ -22,11 +22,15 @@ model HTML от chat selection: именованный `html.workspace.create`, 
 цель, явный `workspace` для данных/assets, общий discovery в документе. Исторические
 цели read-only, запись использует прежние journal/CAS/publication owners. UI обновляет
 только выбранный logical workspace, сохраняя dirty drafts и stale-save guard.
-15 адресных Harness checks проходят: shared HTML (8), member guards (1), editor (4),
-actions (2). Web source/write/actions и Chrome editor views проходят. Проверены
-параллельные файлы, ABA, create/delete, bind/freeze/assets, restart, after-source,
-restore/redo и публикация при ошибке chat save. Windows/Office и реальная модель
-остаются открытыми; [границы](RISK_REGISTER.md#агенты-html-target-и-выбранный-workspace--2026-11-03).
+Повторный аудит: устранены зависимость refresh от локального списка артефактов,
+ошибка static controller, зависшее recovery той же версии, неявное создание из
+повреждённой selection, смешение origin с member heads и потерянные sourceTarget/
+recovery targets. HTML tool fixtures переведены на действующий публичный контракт.
+23 Harness checks проходят: shared HTML (8), tools (7), member guards (1), editor (4),
+actions (3); Web source/write/actions (25) и Chrome editor views проходят.
+Controller проверен по исходникам: Harness использует stub и не компилирует его.
+Windows/Office build/runtime и реальная модель остаются открытыми;
+[границы](RISK_REGISTER.md#агенты-html-target-и-выбранный-workspace--2026-11-03).
 
 ## HTML views и редакторы в Dockview — 2026-11-03, In Review
 

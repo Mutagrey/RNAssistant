@@ -62,10 +62,25 @@ namespace RNAssistant.Core.Storage
         {
             var scope = Scope(session);
             var prefix = ResourceUri.Create("chat", scope.Id, "artifact") + "/" + logicalId + "_r1_";
-            var page = _authority.ReadHeads(scope, new[] { new ResourceHeadRange(prefix, prefix + "\uffff") }, 0, 2);
-            if (page.Total != 1 || page.Items.Count != 1 || page.Items[0].Knowledge != HeadKnowledge.Known)
+            var roots = new List<ResourceHeadState>();
+            int? offset = 0;
+            long? generation = null;
+            do
+            {
+                var page = _authority.ReadHeads(scope, new[] { new ResourceHeadRange(prefix, prefix + "\uffff") }, offset.Value, 100);
+                if (generation.HasValue && generation != page.Generation)
+                    throw new InvalidDataException("HTML origin discovery changed. Read the workspace again.");
+                generation = page.Generation;
+                // Reads may publish exact member heads under the same URI prefix.
+                // Only an aggregate snapshot can define the workspace's origin.
+                roots.AddRange(page.Items.Where(head => IsSnapshotReference(head.Revision)));
+                offset = page.NextOffset;
+                if (roots.Count > 1 || offset >= 1000)
+                    throw new InvalidDataException("The HTML workspace origin is ambiguous or exceeds its discovery bound.");
+            } while (offset.HasValue);
+            if (roots.Count != 1 || roots[0].Knowledge != HeadKnowledge.Known)
                 throw new InvalidDataException("The HTML workspace origin is missing or ambiguous.");
-            return Read(session, page.Items[0].Revision, false);
+            return Read(session, roots[0].Revision, false);
         }
 
         public IReadOnlyList<ChatArtifact> SnapshotHistory(ChatSession session, string logicalId)

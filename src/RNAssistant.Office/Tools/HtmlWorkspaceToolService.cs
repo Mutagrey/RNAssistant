@@ -559,10 +559,10 @@ namespace RNAssistant.Office.Tools
             var source = itemType == "data" ? workspace.DataSources.SingleOrDefault(item => item.Name == itemId) : null;
             if (source?.Binding != null)
             {
-                string artifactId;
-                if (boundSource == null && ChatResourceUri.TryGetArtifactId(session.Actor, source.Binding.Resource, out artifactId))
+                if (boundSource == null)
                 {
-                    var artifact = session.Artifacts.SingleOrDefault(item => item.Id == artifactId);
+                    var artifact = session.Artifacts.SingleOrDefault(item =>
+                        ChatResourceUri.CreateArtifactRevisionUri(session.Actor, item) == source.Binding.Resource.Uri);
                     if (artifact != null) boundSource = new ResourceDescriptor {
                         Kind = artifact.Kind, Title = artifact.Title, CreatedUtc = artifact.CreatedUtc };
                 }

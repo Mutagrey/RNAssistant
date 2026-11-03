@@ -119,6 +119,15 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, ConfirmVbaNative(deleting).Outcome, "delete preserves sibling edits");
                 var missingWorkspace = executor.ExecuteManual(Command("html.data.write", "name", "bad", "json", "{}"), catalog, settings, false, true, reader);
                 AssertTrue(!missingWorkspace.Success, "data mutation cannot infer the selected workspace");
+                var selectedHead = executor.ResourceGateway.ResolveIntentTarget(reader, workspace, true).Reference;
+                links.Change(reader, LinkRequest(reader, selectedHead.Uri, false), chats.Save);
+                run(author, Command("core.write", "target", target("index.html"), "content", "<main>from another agent</main>"));
+                var latest = executor.ResourceGateway.ResolveIntentTarget(reader, workspace, true).Reference;
+                AssertTrue(!reader.Artifacts.Any(item => ChatResourceUri.CreateArtifactRevision(reader, item).Uri == latest.Uri),
+                    "reader has not linked the other agent's new snapshot");
+                HtmlWorkspaceEditorResourceService.RefreshSelected(reader, chats.DocumentArtifacts);
+                AssertEqual("<main>from another agent</main>", reader.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content,
+                    "selected view refreshes a publication absent from this chat's artifact list");
             });
         }
 

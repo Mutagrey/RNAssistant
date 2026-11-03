@@ -24,18 +24,19 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
+                var workspace = CreateHtmlToolWorkspace(executor, session);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 foreach (var path in new[] { "index.html", "styles.css", "app.js" })
                 {
                     var source = path == "index.html" ? "<main>Exact</main>" : "/* unchanged */\r\n";
-                    var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), "agent", false, manualRun: true);
-                    var arguments = new Newtonsoft.Json.Linq.JObject { ["path"] = path, ["content"] = source };
+                    var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings { AutoConfirmToolActions = true }, "agent", false, manualRun: true);
+                    var arguments = new Newtonsoft.Json.Linq.JObject { ["target"] = "HTML file: " + path + " in " + workspace, ["content"] = source };
                     AssertEqual(RNAssistant.Core.Tools.ToolExecutionOutcome.Ok,
-                        ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteFileToolId, arguments).Outcome, "initial file write");
+                        ExecuteHtmlViewFixture(executor, session, runtime, ResourceMutationToolCatalog.Write, arguments).Outcome, "initial file write");
                     var snapshot = session.ActiveHtmlArtifactId;
                     var stamp = session.HtmlWorkspace.Files.Single(file => file.Path == path).UpdatedUtc;
                     var count = session.Artifacts.Count;
-                    var same = ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteFileToolId, arguments);
+                    var same = ExecuteHtmlViewFixture(executor, session, runtime, ResourceMutationToolCatalog.Write, arguments);
                     AssertEqual(RNAssistant.Core.Tools.ToolEffectEvidence.VerifiedNoChange, same.Evidence.Effect, "identical write is not a content change");
                     AssertEqual(snapshot, session.ActiveHtmlArtifactId, "identical write retains snapshot");
                     AssertEqual(count, session.Artifacts.Count, "identical write does not grow history");

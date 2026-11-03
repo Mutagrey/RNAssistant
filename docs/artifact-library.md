@@ -298,7 +298,11 @@ artifact. Export requires a saved document snapshot and does not create a revisi
 
 **«Артефакты» → «В документе» → «Подключить к чату»** loads the displayed current snapshot
 in another chat. Selection validates the complete body before changing membership.
-Responses refresh only that same logical workspace to its published head. A stale
+Responses refresh only that same logical workspace to its published head, including
+snapshots absent from the recipient chat's artifact list, before projecting the
+artifact catalog and editor metadata. Verified recovery of the same snapshot clears
+the temporary publication error. Missing selected metadata or an unpublished nonempty
+working copy cannot implicitly create another workspace. A stale
 editor save is rejected before dispatch; the Web view keeps unsaved text for explicit
 source reload. Model writes never switch the editor to another workspace.
 The picker and response guards preserve newer drafts/navigation. Unlink clears

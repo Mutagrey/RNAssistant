@@ -288,6 +288,12 @@ namespace RNAssistant.Office.Tools
             if (HtmlWorkspacePublication.Owns(operation))
             {
                 var selected = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveHtmlArtifactId);
+                if (selected == null && (!string.IsNullOrEmpty(session.ActiveHtmlArtifactId) ||
+                    session.HtmlWorkspace?.Files.Count > 0 || session.HtmlWorkspace?.DataSources.Count > 0))
+                    throw new ToolMutationPreparationException("html_active_revision_invalid", "The selected HTML snapshot is unavailable. Reload its exact publication before editing.");
+                if (selected != null && (selected.Kind != ChatArtifactKinds.HtmlWorkspace ||
+                    selected.DocumentAuthorityId != session.DocumentAuthorityId || HtmlWorkspaceIdentity.LogicalId(selected.Id) == null))
+                    throw new ToolMutationPreparationException("html_owner_incompatible", "Select a published document-owned HTML workspace before editing.");
                 htmlCommand = new HtmlWorkspaceCommand {
                     Create = selected == null, Snapshot = selected == null ? null : ChatResourceUri.CreateArtifactRevision(session, selected),
                     LogicalId = HtmlWorkspaceIdentity.LogicalId(selected?.Id) ?? "html_ws_" + Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"),

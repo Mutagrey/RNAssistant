@@ -70,6 +70,35 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void HtmlActionsRejectMissingSelection()
+        {
+            WithTempExecutor((executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                executor.MutateLocalResources(session, "html.source.write", null,
+                    () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "keep", true));
+                var published = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
+                var scope = executor.ResourceAuthority.Scope(session, true);
+                var generation = executor.ResourceAuthority.Store.Capture(scope).Generation;
+                session.Artifacts.Remove(published);
+                foreach (var pointer in new[] { published.Id, "" })
+                {
+                    session.ActiveHtmlArtifactId = pointer;
+                    var dispatched = false;
+                    var error = RuntimeThrows<RNAssistant.Core.Tools.ToolMutationPreparationException>(() =>
+                        executor.MutateLocalResources(session, "html.source.write", null, () => {
+                            dispatched = true;
+                            return HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "wrong", true);
+                        }));
+                    AssertEqual("html_active_revision_invalid", error.Code, "missing selection/unpublished body cannot become a new workspace");
+                    AssertTrue(!dispatched, "invalid view never enters the writer");
+                    AssertEqual("keep", session.HtmlWorkspace.Files.Single().Content, "invalid view retains its readable content");
+                }
+                AssertEqual(generation, executor.ResourceAuthority.Store.Capture(scope).Generation, "refusal publishes no new logical workspace");
+                AssertEqual(0, new ResourceMutationJournal(FixturePaths.Value).Unresolved().Count, "refusal creates no uncertain attempt");
+            });
+        }
+
         private static void HtmlActionsBridgePreservesGuards()
         {
             var controller = new AssistantController();

@@ -6,6 +6,12 @@
 independent editor selection, sibling-file preparation, same-file ABA conflict,
 historical/foreign denial, data binding/freezing, assets, publication recovery,
 restore/redo, sequential model after-source and restart/run attribution.
+`html tools:` uses the public create/write contract for source-observation guards,
+per-call receipts, no-op, binding sourceTarget/table and model-visible read → write.
+The selected-view checks also cover a foreign agent's unlinked new snapshot,
+recovery to the same publication and refusal of missing/nonempty unpublished views.
+Production Controller code is excluded from Harness; its source review is separate
+from the still-open Windows build/runtime evidence.
 `html editor:` and `html actions:` cover native stale guards, unknown publication,
 uploads and typed bridge. Web `html-workspace-source` checks exact lazy hydration;
 `html-editor-views` checks dirty drafts and lifecycle. These host-neutral checks

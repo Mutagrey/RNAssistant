@@ -15,6 +15,7 @@ namespace RNAssistant.Office.Services
     internal sealed class HtmlWorkspaceEditorResourceService
     {
         internal const string Owner = "html-editor";
+        private const string PublicationUnavailable = "current_publication_unavailable";
         internal const int MaximumSourceBytes = int.MaxValue;
         private const string ContentType = "text/plain; charset=utf-8";
         private readonly OfficeToolExecutor _executor;
@@ -32,9 +33,11 @@ namespace RNAssistant.Office.Services
             try
             {
                 var current = owner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logical));
-                if (current == null) return;
+                if (current == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The selected HTML publication is unavailable.");
                 string id;
-                if (!ChatResourceUri.TryGetArtifactId(session, current, out id) || id == session.ActiveHtmlArtifactId) return;
+                if (!ChatResourceUri.TryParseArtifactRevision(current, out _, out id, out _))
+                    throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The selected HTML publication has no exact snapshot.");
+                if (id == session.ActiveHtmlArtifactId && session.HtmlWorkspaceRecovery?.Issue != PublicationUnavailable) return;
                 var artifact = owner.Read(session, current);
                 var body = Newtonsoft.Json.JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
                 if (body == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The current HTML body is unavailable.");
@@ -47,7 +50,7 @@ namespace RNAssistant.Office.Services
             catch (Exception ex) when (ex is ResourceRequestException || ex is System.IO.IOException || ex is System.IO.InvalidDataException || ex is Newtonsoft.Json.JsonException)
             {
                 session.HtmlWorkspaceRecovery = new HtmlWorkspaceRecoveryState {
-                    Status = HtmlWorkspaceRecoveryStatuses.Degraded, Issue = "current_publication_unavailable",
+                    Status = HtmlWorkspaceRecoveryStatuses.Degraded, Issue = PublicationUnavailable,
                     Message = ex.Message, ActiveArtifactId = session.ActiveHtmlArtifactId, CanMutate = false };
             }
         }

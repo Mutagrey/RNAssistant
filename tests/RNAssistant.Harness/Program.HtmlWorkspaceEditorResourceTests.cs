@@ -198,10 +198,19 @@ namespace RNAssistant.Harness
                     var stale = upload("stale");
                     editor.SaveFile(session, upload("newer"), CancellationToken.None);
                     AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() => editor.SaveFile(session, stale, CancellationToken.None)).ErrorCode, "stale whole-workspace guard fails closed");
+                    var known = executor.ResourceAuthority.Store.GetHead(scope, identity);
                     var unknown = upload("unknown"); executor.ResourceAuthority.ReportExternalDrift(scope, identity);
                     AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => editor.SaveFile(session, unknown, CancellationToken.None)).ErrorCode, "an exact artifact id cannot override Unknown authority");
                     AssertEqual("newer", session.HtmlWorkspace.Files.Single().Content, "no stale or unknown write is dispatched");
                     AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "stale/unknown refusals also terminate their preparations");
+                    AssertTrue(!session.HtmlWorkspaceRecovery.CanMutate, "unknown publication is visible as recovery");
+                    var observed = executor.ResourceAuthority.Store.Capture(scope);
+                    executor.ResourceAuthority.Store.Publish(ResourceAuthorityCommit.Create(scope, observed.Generation, null,
+                        new[] { new ResourceHeadChange(identity, observed.GetHead(identity), ResourceHeadState.Known(known.Revision, observed.Generation + 1)) },
+                        AuthorityCommitReason.Restore));
+                    HtmlWorkspaceEditorResourceService.RefreshSelected(session, new ChatStore(paths).DocumentArtifacts);
+                    AssertTrue(session.HtmlWorkspaceRecovery.CanMutate, "verified recovery of the same snapshot clears the temporary error");
+                    AssertEqual("newer", session.HtmlWorkspace.Files.Single().Content, "recovery never replays the rejected write");
                 }
             });
         }

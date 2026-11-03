@@ -55,12 +55,25 @@ workspace, создание файла — существующий явный r
 Соседние файлы сохраняются при подтверждении; тот же member, ABA, concurrent create
 и чужой документ не могут перезаписаться незаметно. Unknown не replay.
 
-Shared HTML 8/8, member guards 1/1, editor 4/4 и actions 2/2 проходят. Старые shared
-fixtures переведены с удалённого `html.source.write` на native editor/public target
-setup. Web source/write/actions и Chrome editor views проходят, включая dirty,
-stale responses, close/restore, narrow/zoom. `public Office routing` остаётся старым
-baseline gap по размеру каталога (ожидал 10 при прежних 14), не квалификацией нового
-каталога. Полный Harness и Office не запускались.
+Повторный аудит после `b49018f2` выявил и закрыл:
+- static `HtmlWorkspaceState` обращался к instance `_chatStore`; этот controller
+  исключён из Harness. Метод стал instance, refresh выполняется до всех DTO;
+- refresh зависел от присутствия чужого нового snapshot в локальном списке чата,
+  а ошибка unknown оставалась после подтверждённого восстановления той же версии;
+- потерянная selection могла неявно создать workspace вместо отказа до dispatch;
+- origin lookup принимал exact member heads после чтения за вторую первую версию;
+- JSON mutation теряла sourceTarget до присоединения operation-local artifacts,
+  а recovery мог предлагать сокращённый target, непригодный для прямого `core.read`.
+
+Shared HTML 8/8, tools 7/7, member guards 1/1, editor 4/4, actions 3/3 проходят.
+Tool fixtures теперь используют публичный core.write и обязательный workspace;
+проверены complete/partial/stale source, no-op, same-step receipts, read → write
+через настоящий model-context compiler, JSON/table binding и readable recovery.
+Web source/write/actions 25/25 и Chrome editor views проходят (dirty, stale,
+close/restore, narrow/zoom). `public Office routing` остаётся прежним baseline gap
+по размеру каталога (ожидал 10 при прежних 14); полный Harness не запускался.
+Source review исправляет ошибку controller, но не заменяет Windows/Office сборку
+и runtime qualification. Повторная проверка не заявляет их прохождение.
 Точный active pointer Windows-чата на фото, поведение реальной модели после отказа
 и Windows/Office qualification остаются открытыми; фото не доказывает причину
 всех 334 597 потраченных токенов или цикла переписки агентов.
