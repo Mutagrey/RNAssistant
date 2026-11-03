@@ -263,6 +263,10 @@ restore. `workspace-chat-progress` now uses scoped nodes and waits for a coalesc
 paint; it verifies 30 token updates preserve the leaf and skip tree/transcript work.
 Older singleton-DOM fixtures require migration before use with Chat View factory.
 
+`chat-navigation-lifetime` covers immediate tree selection during a blocked native
+queue, closed-tab catalog sync, late selection/read/failure delivery, retained
+history, newer Dockview focus and keyboard selection at 600 px / 125% zoom.
+
 `history protocol:` checks JSON-object/schema responses, instruction roles,
 optional message, accepted assistant decisions and user-role indexed result batches,
 shared concise-field guidance, unchanged user data and frozen typed repair.

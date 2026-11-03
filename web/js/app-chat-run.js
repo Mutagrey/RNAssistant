@@ -123,10 +123,11 @@ function applyOfficeChatProgress(progress, progressPending, requestId) {
 
 async function refreshChatAfterSendFailure(chatId) {
   try {
-    var response = state.activeChatId === chatId && typeof loadChatState === "function"
+    var readDetail = state.activeChatId === chatId && typeof loadChatState === "function";
+    var response = readDetail
       ? await loadChatState(chatId)
       : await send("listChats", {});
-    if (state.activeChatId === chatId) applyChatState(response);
+    if (readDetail) applyChatStateForChat(response, chatId);
     else applyChatCatalogState(response);
     return true;
   } catch (syncError) {

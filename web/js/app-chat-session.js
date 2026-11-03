@@ -24,6 +24,7 @@ function sendChatPreference(type, payload) {
 
 function navigateChat(type, payload) {
   var selectionSource = type === "selectChat" ? officeChatSource(payload.chatId) : null;
+  var selectionView = selectionSource && window.RNAssistantConversationPanel ? RNAssistantConversationPanel.selected() : null;
   var clock = function () { return window.performance && window.performance.now ? window.performance.now() : Date.now(); };
   var startedAt = clock(), sentAt = null, queueMs = 0;
   var timing = window.RNAssistantPerformanceDiagnostics;
@@ -35,6 +36,11 @@ function navigateChat(type, payload) {
     selectionVersion = state.chatSelectionRequestVersion;
     state.chatNavigationTargetId = payload.chatId;
   }
+  function selectionIsCurrent() {
+    return !selectionVersion || !window.RNAssistantConversationPanel ||
+      selectionVersion === state.chatSelectionRequestVersion && RNAssistantConversationPanel.selected() === selectionView &&
+        (!selectionView || selectionView.isCurrent());
+  }
   state.chatNavigationPending = (state.chatNavigationPending || 0) + 1;
   if (selectionVersion && typeof renderChatSessions === "function") renderChatSessions();
   if (typeof renderSendControls === "function") renderSendControls();
@@ -42,12 +48,12 @@ function navigateChat(type, payload) {
     if (previous) await previous.catch(function () {});
     if (state.chatSyncPromise) await state.chatSyncPromise;
     if (state.chatPreferencePromise) await state.chatPreferencePromise.catch(function () {});
-    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) {
+    if (selectionVersion && (selectionVersion !== state.chatSelectionRequestVersion || !selectionIsCurrent())) {
       if (timingId) timing.updateNavigation(timingId, { phase: "skipped" });
       return null;
     }
     if (typeof cancelModelCatalogLoad === "function") await cancelModelCatalogLoad();
-    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) {
+    if (selectionVersion && (selectionVersion !== state.chatSelectionRequestVersion || !selectionIsCurrent())) {
       if (timingId) timing.updateNavigation(timingId, { phase: "skipped" });
       return null;
     }
@@ -56,16 +62,18 @@ function navigateChat(type, payload) {
     if (timingId) timing.updateNavigation(timingId, { phase: "waiting", queueMs: Math.round(queueMs) });
     var response = await send(type, payload);
     var bridgeMs = clock() - sentAt;
-    // Apply each completed switch before dispatching the next. If the next request
-    // fails, the visible chat still matches the controller's committed binding.
+    // Native binding completes in order. Presentation belongs to the current view;
+    // an older switch must not reopen a closed tab or replace a newer selection.
     var selectedState = response && (response.init || response.state || response);
     if (selectionSource) selectionSource.accept(selectedState);
+    var selectionCurrent = selectionIsCurrent();
     var appliedNavigation = true;
-    if (type === "init" || response.init) applyInitState(response.init || response);
+    if (type === "init" || response.init) applyInitState(response.init || response, { preserveSelection: !selectionCurrent });
+    else if (!selectionCurrent) { applyChatCatalogState(selectedState); appliedNavigation = false; }
     else if (response.state) appliedNavigation = applyChatNavigationState(selectedState, version, type);
     else if (response.activeChatId !== undefined)
       appliedNavigation = applyChatNavigationState(selectedState, version, type);
-    if (type === "selectChat" && !appliedNavigation && state.chatDetailPending &&
+    if (type === "selectChat" && selectionCurrent && !appliedNavigation && state.chatDetailPending &&
         state.activeChatId === payload.chatId) {
       state.chatDetailPending = false;
       state.chatDetailError = "Состояние чата изменилось. Повторите загрузку.";
@@ -80,7 +88,7 @@ function navigateChat(type, payload) {
       queueMs: Math.round(queueMs), bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs),
       messages: (state.messages || []).length
     }).catch(function () {});
-    return response;
+    return selectionCurrent ? response : null;
   })();
   state.chatNavigationPromise = navigation;
   var finished = function () {
@@ -96,7 +104,7 @@ function navigateChat(type, payload) {
     if (timingId) timing.updateNavigation(timingId, { phase: "failed",
       queueMs: Math.round(sentAt ? queueMs : clock() - startedAt),
       bridgeMs: Math.round(sentAt ? clock() - sentAt : 0) });
-    if (type === "selectChat" && state.chatDetailPending && state.activeChatId === payload.chatId) {
+    if (type === "selectChat" && selectionIsCurrent() && state.chatDetailPending && state.activeChatId === payload.chatId) {
       state.chatDetailPending = false;
       state.chatDetailError = error.detail || error.message || "Не удалось загрузить чат";
       renderChatSessions();
@@ -163,15 +171,21 @@ async function createDocumentChat(documentItem) {
 }
 
 async function selectChat(id) {
-  if (id && window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.show("conversation");
-  if (!id || (id === state.activeChatId && !state.chatNavigationPending && activeChatUsesCurrentDocument())) {
-    return;
-  }
+  if (!id) return;
+  var alreadySelected = id === state.activeChatId && !state.chatNavigationPending && activeChatUsesCurrentDocument();
   if (typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
       !confirmDiscardHtmlWorkspaceChanges("Открыть другой чат")) {
     renderChatSessions();
     return;
   }
+
+  // Placement follows the clicked target immediately. Native selection still
+  // serializes document binding/persistence, but does not block an existing view.
+  var chat = (state.chats || []).find(function (item) { return chatId(item) === id; });
+  if (window.RNAssistantConversationPanel && (alreadySelected || chat && chatIsCurrentDocument(chat))) {
+    if (!RNAssistantConversationPanel.open({ source: "office", sessionId: id })) return;
+  }
+  if (alreadySelected) return;
 
   try {
     if (!await navigateChat("selectChat", { chatId: id })) return;
@@ -326,7 +340,7 @@ function renderVisibleSecondarySurfaces() {
   }
 }
 
-function applyInitState(init) {
+function applyInitState(init, options) {
   init = init || {};
   state.bridgeUnavailable = false;
   state.bridgeFailure = null;
@@ -361,15 +375,15 @@ function applyInitState(init) {
   state.chats = [];
   state.htmlWorkspace = null;
   state.htmlWorkspaceDirty = false;
-  clearOfficeChatProjection();
-  applyChatState(init);
+  if (options && options.preserveSelection) applyChatCatalogState(init);
+  else { clearOfficeChatProjection(); applyChatState(init); }
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
   renderVisibleSecondarySurfaces();
   if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.ready();
   log("Initialized " + init.host);
-  if (init.quickAction && !init.detailDeferred) {
+  if (init.quickAction && !init.detailDeferred && !(options && options.preserveSelection)) {
     runQuickAction(init.quickAction);
   }
 }
@@ -473,8 +487,8 @@ function catalogChatRevision(payload, id) {
   return summary ? window.RNAssistantRunViewState.chatRevision(summary) : null;
 }
 
-function shouldReloadChatDetailFromCatalog(payload) {
-  var responseChatId = payloadActiveChatId(payload);
+function shouldReloadChatDetailFromCatalog(payload, selectedChatId) {
+  var responseChatId = selectedChatId || payloadActiveChatId(payload);
   if (!responseChatId || currentActiveSend()) return false;
   if (responseChatId !== state.activeChatId) return true;
   var revision = catalogChatRevision(payload, responseChatId);
@@ -548,10 +562,15 @@ async function synchronizeChatState(force) {
       if (!state.chatNavigationPending && navigationVersion === state.chatNavigationVersion &&
           stateApplyVersion === state.chatStateApplyVersion &&
           chatNavigationSignature(response) !== chatNavigationSignature(current)) {
-        var responseChatId = payloadActiveChatId(response);
-        var reloadDetail = shouldReloadChatDetailFromCatalog(response);
+        var panels = window.RNAssistantConversationPanel;
+        var component = panels && panels.office(state.activeChatId);
+        var responseChatId = panels ? component && component.target.sessionId : payloadActiveChatId(response);
+        var reloadDetail = (!panels || !!component) && shouldReloadChatDetailFromCatalog(response, responseChatId);
         applyChatCatalogState(response);
         if (reloadDetail) {
+          // Catalog selection is a backend pointer, not permission to open a tab.
+          // The view observer owns late reads, visibility and disposal.
+          if (component) { await component.refresh(); return; }
           var detailNavigationVersion = state.chatNavigationVersion || 0;
           var detail = await loadChatState(responseChatId);
           if (!state.chatNavigationPending && detailNavigationVersion === state.chatNavigationVersion && !currentActiveSend()) {

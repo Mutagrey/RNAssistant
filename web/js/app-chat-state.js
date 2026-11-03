@@ -538,6 +538,12 @@ function officeChatSource(chatId) {
 function applyChatStateForChat(response, expectedChatId) {
   if (!expectedChatId) return false;
   officeChatSource(expectedChatId).accept(response);
+  if (window.RNAssistantConversationPanel) {
+    var component = RNAssistantConversationPanel.office(expectedChatId);
+    if (component) return component.accept(response);
+    applyChatCatalogState(response);
+    return false;
+  }
   if (state.activeChatId === expectedChatId) {
     return applyChatState(response);
   }
@@ -574,15 +580,24 @@ function applyPushedChatState(message) {
   if (scope === "selection") {
     var requestId = message.id || message.Id || "";
     var pending = (state.pending || {})[requestId];
+    var selectedView = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(pending && pending.payload && pending.payload.chatId);
+    if (window.RNAssistantConversationPanel && (!selectedView || RNAssistantConversationPanel.selected() !== selectedView ||
+        state.chatNavigationTargetId !== pending.payload.chatId)) return false;
     if (pending && pending.type === "selectChat" && pending.payload && pending.payload.chatId &&
-        officeChatSource(pending.payload.chatId).matches(response) && (response.detailDeferred || response.DetailDeferred))
+        officeChatSource(pending.payload.chatId).matches(response) && (response.detailDeferred || response.DetailDeferred)) {
+      // A native selection preview must not blank an already loaded view while
+      // waiting for the same selection's full response.
+      if (selectedView && !selectedView.loading && selectedView.snapshot().sessionRevision !== null) {
+        applyChatCatalogState(response); return false;
+      }
       return applyChatState(response);
+    }
     return false;
   }
   var addressed = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(response.activeChatId || response.ActiveChatId);
   if (scope === "full" && addressed) return addressed.accept(response);
   var projection = officeChatProjection();
-  if (scope === "full" && projection && projection.isCurrent() &&
+  if (!window.RNAssistantConversationPanel && scope === "full" && projection && projection.isCurrent() &&
       projection.target.sessionId === state.activeChatId && officeChatSource(projection.target.sessionId).matches(response)) {
     return applyChatState(response);
   }
@@ -776,6 +791,10 @@ function applyChatCatalogState(response) {
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = window.RNAssistantRunViewState.mergeCatalog(
       state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions, true);
+  }
+  if (response.catalogChanges || response.CatalogChanges) {
+    state.chats = window.RNAssistantRunViewState.applyCatalogChanges(
+      state.chats, response.catalogChanges || response.CatalogChanges, state.chatProjectionRevisions);
   }
   if (typeof reconcileTerminalChatRuns === "function") reconcileTerminalChatRuns();
   if (response.documents !== undefined || response.Documents !== undefined) {

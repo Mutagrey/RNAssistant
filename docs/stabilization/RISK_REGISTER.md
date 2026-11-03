@@ -28,6 +28,23 @@ owner и публичных tools два. Он падает до чтения sk
 не смешивается с исправлением восстановления. Актуальные source/reference reads,
 подключение, публикация в текущем run и admission/restart покрыты адресно.
 
+## Chat navigation: соседние UI gaps — 2026-11-03
+
+Owner — Shell NavigationTree / HTML workspace migration. При проверке исправления
+возврата вкладок обнаружены отдельные ограничения:
+
+- В узкой навигации синхронная перерисовка Office-дерева отсоединяет root до
+  `rna-navigation-select`; выбор клавиатурой работает, overlay может остаться открыт.
+  CSS-zoom обрезание ленты уже зарегистрировано ниже; локальных CSS overrides нет.
+- В текущих параллельных незавершённых HTML-изменениях `app-material-view.onVisible`
+  вызывает удалённый `deactivateHtmlWorkspaceInspector`. В boot/restore возникает
+  `ReferenceError`, который DockWorkspace перехватывает как ошибку раскладки и
+  сбрасывает её. Подтверждено с прежней и исправленной Chat View selection;
+  требуется переключить оставшегося consumer в HTML-срезе и повторить restore.
+  Повтор `independent-chat-views` получил этот ReferenceError и пустые inputs
+  вместо трёх восстановленных drafts; удаление durable drafts этим не доказано.
+  Это отдельный открытый gap, не passing evidence восстановления текущего HTML diff.
+
 ## Agent communication: отдельные gaps — 2026-11-03
 
 Owners: Tool Library inventory / Web Shell / Office qualification. Адресная
