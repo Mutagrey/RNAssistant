@@ -130,7 +130,7 @@ namespace RNAssistant.Office.Services
             var userIndex = session.Messages.FindLastIndex(ConversationInputMessage.IsUserInput);
             if (userIndex < 0 || !string.Equals(session.Messages[userIndex].RunId, state.Summary.TurnId, StringComparison.Ordinal))
                 throw HistoryFailure("Confirmation continuation does not match the latest user turn.");
-            var history = new List<AgentMessage> { AgentMessage.User(session.Messages[userIndex].Content) };
+            var history = new List<AgentMessage> { AgentMessage.User(ConversationInputMessage.ModelText(session.Messages[userIndex])) };
             for (var index = userIndex + 1; index < session.Messages.Count; index++)
             {
                 var message = session.Messages[index];

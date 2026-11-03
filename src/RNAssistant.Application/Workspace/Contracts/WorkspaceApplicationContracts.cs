@@ -106,6 +106,7 @@ namespace RNAssistant.Runtime.Contracts
 
     public sealed class WorkspacePendingInput
     {
+        public AgentChatAddress AgentSender { get; set; }
         public string Id { get; set; }
         public string RunId { get; set; }
         public string Text { get; set; }

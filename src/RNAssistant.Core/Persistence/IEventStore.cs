@@ -54,7 +54,8 @@ namespace RNAssistant.Core.Persistence
         TurnEnded = 21,
         StepStarted = 22,
         StepEnded = 23,
-        ConversationInputChanged = 24
+        ConversationInputChanged = 24,
+        AgentCommunicationChanged = 25
     }
 
     public sealed class SessionEventDescriptor
@@ -89,6 +90,8 @@ namespace RNAssistant.Core.Persistence
             Array.AsReadOnly(new[]
             {
                 Agent(SessionEventKind.ConversationInputChanged, SessionEventTypes.ConversationInputChanged,
+                    SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
+                Agent(SessionEventKind.AgentCommunicationChanged, SessionEventTypes.AgentCommunicationChanged,
                     SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
                 Storage(SessionEventKind.SessionCreated, SessionEventTypes.SessionCreated),
                 Storage(SessionEventKind.SessionForked, SessionEventTypes.SessionForked),
@@ -278,7 +281,8 @@ namespace RNAssistant.Core.Persistence
     {
         Validated = 1,
         RequireComplete = 2,
-        RequireCompleteInputJournal = 3
+        RequireCompleteInputJournal = 3,
+        RequireCompleteAgentCommunicationJournal = 4
     }
 
     public interface IEventStore

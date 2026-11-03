@@ -1,5 +1,25 @@
 # Stabilization risk register
 
+## Agent communication: отдельные gaps — 2026-11-03
+
+Owners: Tool Library inventory / Web Shell / Office qualification. Адресная
+реализация межагентного обмена не закрывает эти отдельные проверки:
+
+- `tools: R61 built-in contract inventory` использует старые `common.*`/`excel.add_*`
+  ID. Помимо двух новых `agents.*`, diff затрагивает прежние переименования и схемы
+  неизменённых в этом срезе tools. Массовое обновление исторической таблицы не выполнено.
+- `tests/web/model-settings.test.js` останавливается на старом singleton selector
+  `#composerAddPicker > summary`, который отсутствует после независимых Chat Views.
+  Новый лимит проверен адресно: default 20, изменение и сброс. Старое падение
+  `chat-inbox` (`other-window removal clears its echo`) повторяется; baseline ниже.
+- При 640 px и CSS zoom 125% retained Dockview Chat View обрезает правую часть всей
+  ленты: видно на обычных user/assistant сообщениях и на agent bubble. Это продолжение
+  известного Shell retained-overlay zoom gap; собственная геометрия bubble не расходится
+  с общим компонентом. Нужен отдельный Shell-срез, не локальный override этого сообщения.
+- Сквозной A → B → A проверен на scripted endpoint, а не живой модели. Controller
+  integration и реальные Office document/host switch, закрытие документа и WebView2
+  остаются Windows evidence; никаких Office/VSTO validation на этой машине не запускалось.
+
 ## Проверки parity чата: старые падения — 2026-11-03
 
 Owners: Application Workspace steering / Core source patch / Web Inbox fixtures.

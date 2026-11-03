@@ -23,7 +23,7 @@
     var address = Object.freeze(target.source === "workspace"
       ? { source: "workspace", workspaceId: target.workspaceId, sessionId: target.sessionId }
       : { source: "office", sessionId: target.sessionId });
-    var disposed = false, adapter, listeners = new AbortController(), fullPending = false;
+    var disposed = false, adapter, communication, listeners = new AbortController(), fullPending = false;
     [root].concat(Array.from(root.querySelectorAll("[id]"))).forEach(function (node) {
       var id = node.id; nodes[id] = node; node.dataset.chatNode = id; node.id = prefix + id;
     });
@@ -51,7 +51,7 @@
       inboxState: { inboxEditing: null, inboxEditDraft: null },
       loading: false, loadError: "", error: "", isCurrent: function () { return !disposed; },
       snapshot: function () { return adapter.snapshot(); },
-      refresh: function (options) { return adapter.refresh(options); },
+      refresh: function (options) { return Promise.resolve(adapter.refresh(options)).finally(function () { if (!disposed && communication && adapter.snapshot()) communication.refresh(adapter.running()); }); },
       accept: function (snapshot, options) { return adapter.accept(snapshot, options); },
       pendingUnits: function () { return adapter.pendingUnits ? adapter.pendingUnits() : []; },
       pollInbox: function () { return adapter.pollInbox ? adapter.pollInbox() : component.refresh(); },
@@ -83,6 +83,7 @@
         if (disposed) return;
         if (!options || options.captureDraft !== false) adapter.captureDraft(false);
         disposed = true;
+        if (communication) communication.dispose();
         if (selected === component) selected = null;
         listeners.abort(); if (adapter.dispose) adapter.dispose(); view.dispose();
         if (window.RNAssistantViewerRegistry) RNAssistantViewerRegistry.unmount(node("contextBox"));
@@ -145,7 +146,9 @@
     on(node("clearContextButton"), "click", function () { composer.dispatch("clearContext"); });
     on(window, "resize", component.layout);
     function renderControls() {
-      if (disposed || !view.canRender()) return;
+      if (disposed) return;
+      if (communication) communication.refresh(adapter.running());
+      if (!view.canRender()) return;
       var presentation = adapter.presentation(), editing = edit();
       var disabled = component.loading || !!component.loadError || state.bridgeUnavailable || !address.sessionId;
       var preparing = adapter.pending();
@@ -171,11 +174,12 @@
       else RNAssistantWorkspaceChat.renderMessages(node("messages"), adapter.snapshot(), null, options, composer.capture());
       renderControls();
     }
+    communication = RNAssistantAgentCommunication.mount(component);
+    component.communication = communication;
     component.projection = adapter.projection;
     component.progress = adapter.progress;
     component.inbox = adapter.inbox;
     component.acceptDraft = function (before, after) { composer.acceptDraft(address, before, after); renderControls(); };
-    if (!selected) selected = component;
     if (address.sessionId && ready) component.refresh(); else render();
     return component;
   }
@@ -198,6 +202,7 @@
     ready: function () {
       ready = true;
       RNAssistantDockWorkspace.eachView("conversation", function (component) {
+        if (component.communication) component.communication.rebind();
         if (component.target.sessionId && (!component.projection().snapshot() || !component.snapshot().sessionRevision && component.target.source === "office")) component.refresh();
       });
     },

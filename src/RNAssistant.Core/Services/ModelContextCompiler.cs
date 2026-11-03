@@ -149,7 +149,11 @@ namespace RNAssistant.Core.Services
             }
             var frozenFacts = (facts ?? new ChatMessage[0]).Where(item => item != null && !item.ExcludeFromModelContext)
                 .Select(Clone).ToList();
-            foreach (var fact in frozenFacts) ProjectSharedContext(fact, authority);
+            foreach (var fact in frozenFacts)
+            {
+                if (ConversationInputMessage.IsUserInput(fact)) fact.Content = ConversationInputMessage.ModelText(fact);
+                ProjectSharedContext(fact, authority);
+            }
             var currentUser = frozenFacts.LastOrDefault(item => !item.ProtocolMessage &&
                 string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase));
             // Uploaded text is already a discoverable resource. Its extraction

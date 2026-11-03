@@ -298,7 +298,7 @@ namespace RNAssistant.Runtime
                 throw new InvalidOperationException("Stop or resolve the active run before editing history.");
             var index = session.Messages.FindIndex(message => message != null &&
                 string.Equals(message.Id, request.EditMessageId, StringComparison.OrdinalIgnoreCase));
-            if (index < 0 || session.Messages[index].Role != "user" || session.Messages[index].ProtocolMessage)
+            if (index < 0 || session.Messages[index].Role != "user" || session.Messages[index].ProtocolMessage || session.Messages[index].AgentCommunication?.Sender != null)
                 throw new InvalidOperationException("Only an existing user message can be edited.");
             previousIds = session.Messages.Select(message => message.Id).ToArray();
             var source = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(session.Messages[index]));
@@ -395,7 +395,7 @@ namespace RNAssistant.Runtime
         {
             return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
                 runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost,
-                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile)
+                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox)
                 .ToolIds;
         }
 
@@ -524,7 +524,7 @@ namespace RNAssistant.Runtime
                         session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
                         webHost: _webHost, extraTools: _extraTools?.Invoke(workspace),
                         office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
-                        pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
+                        pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, currentRunOnly: true)),
@@ -576,9 +576,9 @@ namespace RNAssistant.Runtime
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId),
                     pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value),
-                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics);
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
                 var userMessage = new ChatMessage { Id = queuedInput?.Id ?? Guid.NewGuid().ToString("N"), Role = "user",
-                    Content = message ?? string.Empty, RunId = runId,
+                    Content = message ?? string.Empty, RunId = runId, AgentCommunication = queuedInput?.AgentCommunication,
                     Attachments = editedSource == null ? drafts : editedSource.Attachments ?? new List<ChatAttachment>(),
                     ResourceRefs = editedSource == null ? new List<ResourceRef>() :
                         (editedSource.ResourceRefs ?? new List<ResourceRef>()).Where(reference => reference != null)
@@ -646,7 +646,7 @@ namespace RNAssistant.Runtime
                 using (var control = OpenRunControl(session, runReservation, cancellationToken, inputChannel))
                 {
                     var result = await ConversationRunCoordinator.RunAsync(
-                        new AgentRunRequest(runId, runId, message,
+                        new AgentRunRequest(runId, runId, ConversationInputMessage.ModelText(userMessage),
                             new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections), previous),
                         ports, ports.Tools, ports, control.Token, input: inputChannel).ConfigureAwait(false);
                     if (acceptedContract.Requested)
@@ -724,7 +724,7 @@ namespace RNAssistant.Runtime
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value),
-                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics);
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
                 using (var inputChannel = approve ? new WorkspaceInputChannel(this, session, workspace) : null)
                 using (var control = OpenRunControl(session, runReservation, cancellationToken, inputChannel))
                 {
@@ -1051,7 +1051,7 @@ namespace RNAssistant.Runtime
                 }
                 if (item.Role == "user" && !item.ProtocolMessage)
                 {
-                    history.Add(AgentMessage.User(item.Content));
+                    history.Add(AgentMessage.User(ConversationInputMessage.ModelText(item)));
                     priorOrigin = null;
                     priorRunId = null;
                     continue;
@@ -1194,7 +1194,8 @@ namespace RNAssistant.Runtime
                 bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null,
                 IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null,
                 bool pluginSource = false, Action<WorkspaceModelProgress> modelProgress = null,
-                CallableToolProfile toolProfile = null, Action<LlmRequestDiagnosticUpdate> diagnosticProgress = null)
+                CallableToolProfile toolProfile = null, Action<LlmRequestDiagnosticUpdate> diagnosticProgress = null,
+                AgentCommunicationService agentCommunication = null, ConversationInboxService agentInbox = null)
             {
                 _chats = chats; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
@@ -1269,6 +1270,8 @@ namespace RNAssistant.Runtime
                         Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
                     }
                 }
+                if (agentCommunication != null && agentCommunication.IsEnabled(settings.MaxAgentMessages)) foreach (var entry in AgentCommunicationToolCatalog.GetTools())
+                    Register(registry, entries, entry, new AgentCommunicationToolHandler(agentCommunication, agentInbox, session, settings.MaxAgentMessages));
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);

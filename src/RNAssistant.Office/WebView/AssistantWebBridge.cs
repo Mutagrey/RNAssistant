@@ -65,7 +65,9 @@ namespace RNAssistant.Office.WebView
                     throw new InvalidOperationException("Office host switch is not exclusive.");
                 _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
                 _controller.ResourceAuthorityChanged -= ReportResourceChanged;
+                _agentCommunication.Clear();
                 _controller = controller;
+                _controller.ConfigureAgentCommunication(_agentCommunication);
                 _controller.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
                 _controller.ResourceAuthorityChanged += ReportResourceChanged;
             }
@@ -80,6 +82,9 @@ namespace RNAssistant.Office.WebView
             WorkspaceApplicationService workspaces)
         {
             _controller = controller;
+            _agentCommunication = new RNAssistant.Application.Conversations.AgentCommunicationService(
+                () => new RNAssistant.Core.Storage.SettingsService(_controller.StoragePaths).Load().MaxAgentMessages);
+            _controller.ConfigureAgentCommunication(_agentCommunication);
             _workspaces = workspaces ?? throw new ArgumentNullException(nameof(workspaces));
             _postMessageJson = postMessageJson;
             _cancellations = new BridgeRequestCancellationRegistry();
@@ -321,6 +326,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = null;
                         break;
                     case BridgeOperationId.Init:
+                        _agentCommunication.Clear();
                         RuntimeLog.Info("Bridge init started.");
                         responsePayload = await RunBridgeWorkAsync(
                             () => Bootstrap(_controller.Initialize(includeChatState: false)),
@@ -513,6 +519,14 @@ namespace RNAssistant.Office.WebView
                             new ProtectedChatDraftStore(_controller.StoragePaths).DeleteOffice(deletedChatId);
                             return result;
                         }, cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.SetAgentChatPresence:
+                        responsePayload = await RunBridgeWorkAsync(() => SetAgentChatPresence(Payload<AgentChatPresenceRequest>(payload)), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.GetAgentCommunicationState:
+                    case BridgeOperationId.ContinueAgentCommunication:
+                        responsePayload = await RunBridgeWorkAsync(() => AgentCommunicationState(Payload<AgentCommunicationRequest>(payload),
+                            type == BridgeOperationId.ContinueAgentCommunication), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetActiveChatRuns:
                         responsePayload = new ActiveChatRunsResponse { Runs = _controller.ActiveChatRuns()
@@ -1054,6 +1068,7 @@ namespace RNAssistant.Office.WebView
 
         public void Dispose()
         {
+            _agentCommunication.Clear();
             lock (_hostSwitchSync)
             {
                 if (_disposed) return;

@@ -282,6 +282,35 @@
   text-underline-offset: 2px;
 }
 
+.message.user.agent-message .markdown {
+  background: var(--agent-bubble-bg);
+  color: var(--ink);
+  box-shadow: inset 3px 0 var(--agent-bubble-border);
+}
+.agent-message-origin {
+  max-width: 92%;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: right;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.agent-communication-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink);
+  background: var(--agent-bubble-bg);
+  font-size: var(--text-sm);
+}
+.agent-communication-status[hidden] { display: none; }
+
 .message.user .markdown :not(pre) > code {
   border-color: transparent;
   background: var(--user-message-code-bg);

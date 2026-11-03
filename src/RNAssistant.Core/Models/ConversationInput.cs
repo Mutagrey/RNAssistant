@@ -12,6 +12,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ConversationInput
     {
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public AgentCommunicationContext AgentCommunication { get; set; }
         public string Id { get; set; }
         public string OperationId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

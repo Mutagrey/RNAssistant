@@ -53,6 +53,8 @@ namespace RNAssistant.Office.Tools
         private readonly CatalogPublicationService _catalogPublication;
         private readonly ToolStore _toolStore;
         private readonly Func<AppSettings> _loadSettings;
+        internal RNAssistant.Application.Conversations.AgentCommunicationService AgentCommunication { get; set; }
+        internal RNAssistant.Application.Conversations.ConversationInboxService AgentInbox { get; set; }
         internal ResourceAuthorityService ResourceAuthority { get { return _resourceAuthority; } }
         internal ChatBlobStore Payloads { get; private set; }
 
@@ -170,6 +172,7 @@ namespace RNAssistant.Office.Tools
                 HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService));
             RegisterControllerTools(controllerTools,
                 TaskListToolCatalog.GetTools());
+            RegisterControllerTools(controllerTools, AgentCommunicationToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, new[] { SkillLoadToolHandler.Entry() });
             RegisterControllerTools(controllerTools, ResourceMutationToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
@@ -188,9 +191,11 @@ namespace RNAssistant.Office.Tools
         public IEnumerable<ToolCatalogEntry> GetControllerTools()
         {
             var enabled = AgentJavaScriptEnabled;
+            var agentCommunicationEnabled = (_loadSettings?.Invoke()?.MaxAgentMessages ?? AppSettings.DefaultMaxAgentMessages) > 0;
             foreach (var tool in _controllerTools)
             {
                 if (!enabled && string.Equals(tool.Id, JsToolHandler.RunId, StringComparison.Ordinal)) continue;
+                if (!agentCommunicationEnabled && AgentCommunicationToolCatalog.Owns(tool.Id)) continue;
                 yield return ConfigureControllerTool(tool, enabled);
             }
         }
@@ -246,7 +251,7 @@ namespace RNAssistant.Office.Tools
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads,
                         saved => _persistResourceFacts?.Invoke(saved, new ConversationCommit()),
-                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission);
+                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission, AgentCommunication, AgentInbox);
         }
 
         // Explicit UI resource commands share the mutation journal/commit owner.

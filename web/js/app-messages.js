@@ -440,6 +440,7 @@ function renderMessageArticle(message, index, options) {
   var node = document.createElement("article");
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") +
     (message.Failed ? " failed" : "");
+  if (window.RNAssistantAgentCommunication) RNAssistantAgentCommunication.appendSender(node, message);
   if (messageRole(message) === "assistant") node.setAttribute("aria-label",
     message.ReflectionDecision ? "Промежуточное решение агента" : "Ответ агента");
   var activity = messageActivity(message);
@@ -679,6 +680,7 @@ function messageUnitSignature(message) {
   return JSON.stringify({
     id: messageId(message),
     role: messageRole(message),
+    agentSender: message.AgentSender || message.agentSender || null,
     runId: typeof messageRunId === "function" ? messageRunId(message) : "",
     content: messageContent(message),
     pending: !!message.Pending,

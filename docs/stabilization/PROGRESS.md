@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Общение агентов между чатами — 2026-11-03, In Review
+
+Application/Conversations добавляет `agents.list/send` для открытых
+Office/Workspace/plugin-чатов. Входящие используют общий Inbox и provenance в
+истории; остановка/approval сохраняются, ответы отправляются явно. Настройка
+`MaxAgentMessages` — 20 по умолчанию отдельно каждому чату на цепочку; счётчики и
+продолжения durable, неизвестная доставка не replay. Общий Web renderer выделяет
+sender bubble и показывает действие продолжения лимита.
+Уточнение: 0 выключает новый обмен, включая старые handlers; исправлена передача
+лимита через `SettingsControlsDto`. Добавлен общий `skills.agents.communication`.
+Сквозной A → B → A проверен через Workspace runtime с scripted endpoint; адресные
+Inbox/policy/queue и Chromium проверки прошли. UI ещё In Review; Windows/Office,
+live-model поведение, прежний R61 inventory и общий narrow/CSS-zoom overflow остаются
+открытыми. [Scope и ревью](../ui/UI_MIGRATION_PLAN.md#общение-агентов--in-review-2026-11-03).
+
 ## Общие вложения, очередь и меню запросов — 2026-11-03, In Review
 
 Office/Workspace/plugin используют общие attachment cards и scoped upload/CAS;

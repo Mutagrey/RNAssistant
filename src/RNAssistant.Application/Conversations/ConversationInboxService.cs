@@ -80,6 +80,50 @@ namespace RNAssistant.Application.Conversations
         private readonly string _epoch = Guid.NewGuid().ToString("N");
         internal ConversationInboxService(IEventStore events) { _events = events; }
 
+        internal IReadOnlyList<AgentCommunicationEvent> AgentEvents(ChatSession session)
+        {
+            var box = Get(session);
+            lock (box.Sync) return _events.Read(box.Session, SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
+                .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged)
+                .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).ToArray();
+        }
+
+        internal void AppendAgentEvent(ChatSession session, AgentCommunicationEvent change)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                _events.Append(box.Session, new SessionEventWrite(
+                    SessionEventDescriptors.For(SessionEventKind.AgentCommunicationChanged), change, null, null));
+                box.ViewRevision++;
+            }
+        }
+
+        internal AgentPeer AgentPeer(AgentChatAddress address)
+        {
+            Inbox box;
+            lock (_sync) box = _inboxes.Values.FirstOrDefault(item => item.Session.Id == address.ChatId);
+            if (box == null) return new AgentPeer { ChatId = address.ChatId, Title = address.Title,
+                ScopeTitle = address.ScopeTitle, Source = address.Source, Status = "idle" };
+            lock (box.Sync) return new AgentPeer { ChatId = address.ChatId, Title = box.Session.Title,
+                ScopeTitle = box.Session.DocumentTitle, Source = address.Source,
+                Status = box.Running || box.Worker ? "working" :
+                    box.Paused ? "paused" : PendingConfirmationId(box.Session) != null ? "awaiting_approval" : "idle" };
+        }
+
+        internal void ContinueAgentCommunication(ChatSession session, string chainId,
+            AgentCommunicationEvent grant, ConversationInput input)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                if (box.Running || box.Worker || AgentCommunicationService.Context(box.Session, input.AgentCommunication.Limit).ChainId != chainId)
+                    throw new InvalidOperationException("Запуск или цепочка общения уже изменились.");
+                if (grant != null) AppendAgentEvent(box.Session, grant);
+                SubmitLocked(box, input);
+            }
+        }
+
         internal bool HasActiveWork(string chatId)
         {
             List<Inbox> candidates;
@@ -278,7 +322,7 @@ namespace RNAssistant.Application.Conversations
             // Pressing Send in an idle chat starts this new input. An empty queue's
             // old stop/error flag must not require a second confirmation. Retained
             // older inputs stay paused; fresh input does not authorize their replay.
-            var idleInput = !box.Running && PendingConfirmationId(box.Session) == null;
+            var idleInput = input.AgentCommunication?.Sender == null && !box.Running && PendingConfirmationId(box.Session) == null;
             var clearEmptyPause = idleInput && !box.Inputs.Any(IsPending);
             var fact = Write(box, input, clearEmptyPause ? (bool?)false : null);
             if (input.Delivery == InputDelivery.Steer || idleInput) box.ExplicitInputs.Add(input.Id);
@@ -352,6 +396,8 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync)
             {
                 var input = Clone(box.Inputs.FirstOrDefault(i => i.Id == request.InputId));
+                if (input?.AgentCommunication?.Sender != null && action != "remove")
+                    throw new InvalidOperationException("Сообщение агента можно только удалить из очереди.");
                 if (action == "edit" && input?.QuestionSetId != null)
                     throw new InvalidOperationException("Ответы на вопросы нельзя изменять как текст сообщения. Удалите ответ и отправьте новый.");
                 if (input != null && input.Revision == request.ExpectedRevision + 1 &&

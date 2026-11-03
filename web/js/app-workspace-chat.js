@@ -11,7 +11,6 @@
     var component = selected();
     if (component && component.target.source === "workspace" && nextOwner !== "office") component.contextOwner = nextOwner;
     if (window.RNAssistantDockWorkspace) RNAssistantDockWorkspace.mount(nextOwner);
-    return false;
   }
   function rememberSession(workspaceId, sessionId) {
     if (!workspaceId) return;
@@ -361,7 +360,7 @@
         if (pendingId) return run(function () { return send("resolveProjectChat", { workspaceId: target.workspaceId,
           sessionId: target.sessionId, pendingId: pendingId, approve: approve }); }); },
       canMessageAction: function (action) { return !!action.message && !!action.message.Id && !running() && !pending() && !edit() &&
-        !readOnly(snapshot()) && !snapshot().pendingId && (action.name !== "edit" || messageRole(action.message) === "user"); },
+        !readOnly(snapshot()) && !snapshot().pendingId && (action.name !== "edit" || messageRole(action.message) === "user" && !RNAssistantAgentCommunication.sender(action.message)); },
       messageAction: async function (action) {
         if (!commands.canMessageAction(action)) return;
         if (action.name === "edit") {
@@ -432,7 +431,6 @@
   }
   window.RNAssistantWorkspaceChat = { createPanelAdapter: createPanelAdapter, renderMessages: renderMessages,
     mount: mount, owner: owner, node: node,
-    composerAction: function (name) { var component = selected(); if (component && name === "pickFiles") component.node("attachmentFileInput").click(); },
     snapshot: function () { var component = selected(); return component && component.target.source === "workspace" ? component.snapshot() : null; },
     runStatus: runStatus, readOnly: readOnly, runNotice: runNotice,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },

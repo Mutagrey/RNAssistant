@@ -1,5 +1,17 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Сообщение другого агента — In Review, 2026-11-03
+
+Общий bubble сохраняет геометрию и типографику user bubble. Отличие — семантические
+`--agent-bubble-bg`/`--agent-bubble-border`, основанные на общей violet palette и surface,
+и текстовая ссылка «Агент · название чата». Цвет не является единственным признаком.
+История и pending Inbox используют один renderer; заголовок выводится через textContent.
+Панель исчерпанного лимита использует общие spacing/text tokens, переносит кнопку и
+не захватывает фокус. Отдельных значений для Office/Workspace/plugin нет.
+Общее numeric-поле принимает 0; подпись явно поясняет «0 — отключить».
+Сравнение computed padding/radius с обычным bubble на одинаковом viewport прошло;
+общий Shell zoom overflow отмечен отдельно в RISK_REGISTER.
+
 Обновлено: 2026-11-03. Owner: Web presentation; визуальные решения утверждает
 пользователь. Canonical document tokens, компонентов и их повторного использования.
 Стратегия — [Architecture](UI_ARCHITECTURE.md), экраны — [Screen Map](UI_SCREEN_MAP.md).

@@ -108,6 +108,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Models\ConversationInput.cs" />
+    <Compile Include="Models\AgentCommunication.cs" />
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\ResourceModels.cs" />
@@ -167,6 +168,7 @@
     <Compile Include="Tools\PlanResourceToolHandler.cs" />
     <Compile Include="Services\TaskListPublication.cs" />
     <Compile Include="Tools\TaskListToolCatalog.cs" />
+    <Compile Include="Tools\AgentCommunicationToolCatalog.cs" />
     <Compile Include="Tools\TaskListToolHandler.cs" />
     <Compile Include="Tools\UserQuestionToolHandler.cs" />
     <Compile Include="Models\UserQuestions.cs" />
@@ -175,6 +177,7 @@
     <Compile Include="Services\ResourcePublicationReader.cs" />
     <Compile Include="Services\WorkspaceSkillProvider.cs" />
     <Compile Include="Services\ChatVisualizationSkillProvider.cs" />
+    <Compile Include="Services\AgentCommunicationSkillProvider.cs" />
     <Compile Include="Services\VisualAnnotationSourceWorkflow.cs" />
     <Compile Include="Tools\ToolCatalogEntry.cs" />
     <Compile Include="Tools\ToolInvocation.cs" />

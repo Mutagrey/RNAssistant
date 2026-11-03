@@ -1,5 +1,27 @@
 # Tool Library and capability truth
 
+## Agent communication tools — 2026-11-03
+
+`agents.list` and `agents.send` are built-in direct tools of the initial profile
+when the application messaging owner is available and `MaxAgentMessages > 0`.
+Zero removes them from new catalogs and rejects old handlers before dispatch;
+an inherited nonzero chain budget cannot override the switch.
+The shared `skills.agents.communication` package teaches request/reply coordination
+and requires these two tools; zero makes that package unavailable for loading.
+List publishes peer metadata
+without history or effect evidence. Send accepts only `chat_id` and `text` (up to
+131072 characters), returns a queued receipt with recipient/title/text, and cannot
+send to its own chat. A queued receipt proves intake only, never execution of the
+requested task. Closed/unavailable peers, exhausted budget, conflicting operations
+and unresolved delivery have explicit error codes; no automatic retry is allowed.
+
+Bindings: `conversation.agents.list.v1`, `conversation.agents.send.v1`. Sending is a
+managed conversation write available in Agent and Plan; it has no document authority
+observer or per-message approval. Recipient actions retain their own exact policies.
+The `chat_id` property is an explicitly approved public peer address, not a resource
+handle, revision or permission. The existing ToolRuntime/Inbox own dispatch and
+read-back. Details and settings: [conversation protocol](conversation-protocol.md#межагентное-общение--2026-11-03).
+
 Trusted `ToolPolicy.EvidenceEligibility` is `None` or `Eligible`; it participates in
 snapshot hashes, copies and policy drift checks. Capability search/schema reads,
 skill loading and resource find/search/outline publish no E reference. Other reads
@@ -7,10 +29,10 @@ and mutations default to Eligible. Only a terminal runtime commit may issue E;
 a tool/model never supplies it. See [reference revision 4](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4).
 
 Текущий контракт Core, patch и имён: [Text mutations](text-mutations.md).
-Текущий [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
+Исторический [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
 включая условные и manual-only записи. Начальный профиль модели — 10 доступных
-Core tools. Private owner commands и динамические пользовательские tools в эти
+Core tools плюс `agents.list/send` при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
 78 не входят. Общая грамматика patch принадлежит его schema; skills дополняют её
 предметными правилами без копирования всего контракта.
 
@@ -98,8 +120,16 @@ append precedes publication. Successful reads of already callable tools create n
 extension; Skill-only tools still require a selected compatible package. A refused
 candidate does not partially publish or gain authority from retained schema history.
 Reopening validates exact descriptor/policy/binding pins; drift resets optional
-membership explicitly. Prior-turn optional schemas can yield to the current budget
-with an explicit notice; no effect is replayed. Current-run effects remain kernel-owned.
+membership explicitly. Already admitted schemas are retained when the current
+request exceeds its budget: preparation must compact or refuse the request, without
+silently evicting schemas. No effect is replayed. Current-run effects remain kernel-owned.
+
+Restoration currently compares the complete snapshot chain, including the Core
+reader's bound capability-ID enum. Adding an unrelated tool or skill changes that
+enum and can reset unchanged direct admissions to Core with
+`tool_pack_chain_broken`. Selected skills are revalidated separately; this reset does
+not clear `SelectedSkills`. This limitation is reproduced in the
+[2026-11-03 audit](stabilization/RISK_REGISTER.md#tools-и-skills-восстановление-по-фото--2026-11-03).
 
 Schema receipts and runtime metadata removal now share Core helpers: exact callable
 schemas are not duplicated in model history, and `loaded`/revision fields do not

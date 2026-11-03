@@ -360,6 +360,7 @@ namespace RNAssistant.Office
             public string Text { get; set; }
             public IReadOnlyList<ChatAttachment> Attachments { get; set; }
             public string InputId { get; set; }
+            public AgentCommunicationContext AgentCommunication { get; set; }
             public bool AppendUserMessage { get; set; }
             public bool CommitUserAttachments { get; set; }
             public IReadOnlyList<ChatMessage> MessagesToDeleteAfterSave { get; set; }
@@ -424,6 +425,7 @@ namespace RNAssistant.Office
                     var userMessage = new ChatMessage
                     {
                         Id = input.InputId ?? Guid.NewGuid().ToString("N"),
+                        AgentCommunication = input.AgentCommunication,
                         Role = "user",
                         Content = text,
                         RunId = runId,

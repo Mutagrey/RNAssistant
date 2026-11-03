@@ -33,7 +33,14 @@ authority.
 
 ## Current implementation
 
-There are 16 unique built-in skill IDs across Office and Workspace; host catalogs
+`skills.agents.communication` (Common, `AgentCommunicationSkillProvider`) is shared
+by Office, Workspace and plugin chats. It requires `agents.list` and `agents.send`;
+the existing `core.skills.load` path exposes its complete instructions. It covers
+peer discovery, self-contained requests, explicit replies, finish while waiting,
+human authority, budget/disabled/unknown handling and stopping resolved exchanges.
+Peer metadata includes no task description or private history; ask for details.
+
+There are 17 unique built-in skill IDs across Office and Workspace; host catalogs
 overlap and custom packages are counted separately. The current Workspace files ID
 is `skills.workspace.files`. The accidental `skills.skills.workspace.files` name
 is not an alias: stale selections must explicitly load the current package;

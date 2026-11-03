@@ -1,5 +1,22 @@
 # Архитектура UI RNAssistant
 
+## Межагентные сообщения — In Review, 2026-11-03
+
+Scope утверждён пользователем; owner — Application/Conversations для доставки и
+общий Chat View для presentation. `app-agent-communication` подключается к lifecycle
+существующей factory: mount регистрирует endpoint, deactivate/move/split его сохраняют,
+dispose снимает только свой view lease. Поздний ACK закрытого view не удаляет новый.
+Host rebind повторно регистрирует открытые views. Нового UI registry/store нет.
+
+Один sender renderer используется Office/Workspace/plugin для истории и очереди;
+origin приходит в typed DTO из durable факта. UI не назначает отправителя/цепочку.
+Состояние лимита читается при открытии и смене idle revision, без таймера и чтений на
+streaming chunks; stale ответы не меняют закрытый view. Продолжение адресует exact
+chat/chain/operation. Runtime, очередь и исполнение не зависят от наличия DOM.
+Сохранение `MaxAgentMessages=0` инвалидирует запрос состояния и скрывает продолжение;
+runtime повторно проверяет текущую настройку перед новой отправкой. Ноль проходит
+через существующий typed `SettingsControlsDto`, без UI-only выключателя.
+
 Обновлено: 2026-11-03. Owner: Web presentation; host/runtime contracts — их текущие
 domain owners. Стратегия и продолжение общего chat-среза разрешены пользователем;
 детали визуальных решений остаются на ревью.

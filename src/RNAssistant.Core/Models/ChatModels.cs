@@ -105,6 +105,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatMessage
     {
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public AgentCommunicationContext AgentCommunication { get; set; }
         // Request-local provenance for grouped JSON exchanges; never durable state.
         [JsonIgnore]
         public List<string> ProjectedSourceMessageIds { get; set; }

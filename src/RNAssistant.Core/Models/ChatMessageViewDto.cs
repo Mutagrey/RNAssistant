@@ -11,6 +11,8 @@ namespace RNAssistant.Core.Models
     // Protocol bodies and execution evidence stay in the durable/model path.
     public sealed class ChatMessageViewDto
     {
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public AgentChatAddress AgentSender { get; set; }
         public string Id { get; set; }
         public string Role { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string Content { get; set; }
@@ -37,6 +39,7 @@ namespace RNAssistant.Core.Models
             if (message == null) return null;
             var view = new ChatMessageViewDto
             {
+                AgentSender = message.AgentCommunication?.Sender,
                 Id = message.Id,
                 Role = message.Role,
                 ProtocolMessage = message.ProtocolMessage,

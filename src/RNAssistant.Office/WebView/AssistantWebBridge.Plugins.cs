@@ -21,6 +21,7 @@ namespace RNAssistant.Office.WebView
                 if (_plugins?.Conversations != null)
                     _plugins.Conversations.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
                 _plugins = value;
+                if (_plugins?.Conversations != null) _plugins.Conversations.AgentCommunication = _agentCommunication;
                 if (_plugins?.Conversations != null)
                     _plugins.Conversations.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
             }

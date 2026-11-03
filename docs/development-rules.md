@@ -76,6 +76,9 @@ ModelProtocol.
   в typed durable event и execution evidence. Модель получает semantic target и
   предметный результат, а не opaque handle; замена `ResourceRef` на новый
   `candidateId` запрещена.
+- Согласованное исключение для межагентного общения: публичный `chat_id` из
+  `agents.list`/provenance служит только адресом `agents.send`, без resource authority
+  и доступа к истории собеседника. Chain/run IDs остаются runtime-only.
 - Исключения ограничены exact public tool/skill id, когда это реальная выбираемая
   semantic identity, и runtime-generated `tool_call_id` внутреннего Tool Result (не model wire).
   В JSON-профиле модель связывает результаты через batch-local `call_index`;

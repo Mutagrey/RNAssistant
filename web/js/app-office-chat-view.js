@@ -107,7 +107,7 @@
         component.controls();
       },
       canMessageAction: function (value) { return !!value.message && !component.loading && !snapshot().chatReadOnly && !running() && !pending() &&
-        !edit() && !deleting && !approval.pendingActivity() && (value.name !== "edit" || messageRole(value.message) === "user"); },
+        !edit() && !deleting && !approval.pendingActivity() && (value.name !== "edit" || messageRole(value.message) === "user" && !RNAssistantAgentCommunication.sender(value.message)); },
       messageAction: async function (value) {
         if (!commands.canMessageAction(value)) return;
         if (value.name === "edit") {

@@ -72,6 +72,9 @@
     <Compile Include="Contracts\BridgeDtos.ToolResultPresentation.cs" />
     <Compile Include="Contracts\BridgeDtos.ArtifactViewer.cs" />
     <Compile Include="Contracts\BridgeDtos.cs" />
+    <Compile Include="Controller\AssistantController.AgentCommunication.cs" />
+    <Compile Include="WebView\AssistantWebBridge.AgentCommunication.cs" />
+    <Compile Include="Contracts\BridgeDtos.AgentCommunication.cs" />
     <Compile Include="Contracts\BridgeOperationCatalog.cs" />
     <Compile Include="Tools\JsToolHandler.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />

@@ -362,6 +362,7 @@ namespace RNAssistant.Office.Services
             {
                 Id = message.Id,
                 Role = message.Role,
+                AgentCommunication = message.AgentCommunication == null ? null : Newtonsoft.Json.JsonConvert.DeserializeObject<AgentCommunicationContext>(Newtonsoft.Json.JsonConvert.SerializeObject(message.AgentCommunication)),
                 Content = message.Content,
                 ExcludeFromModelContext = message.ExcludeFromModelContext,
                 ProtocolMessage = message.ProtocolMessage,

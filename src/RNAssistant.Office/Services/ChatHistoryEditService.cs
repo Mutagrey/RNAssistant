@@ -35,6 +35,7 @@ namespace RNAssistant.Office.Services
             var trimmed = text.Trim();
             var messages = session.Messages;
             var target = messages[targetIndex];
+            if (target?.AgentCommunication?.Sender != null) throw new InvalidOperationException("Сообщение межагентной цепочки нельзя редактировать.");
 
             // Dialogue rewrites neither select historical shared HTML nor restore a
             // detached workspace. Only incompatible chat-owned projections use checkpoints.

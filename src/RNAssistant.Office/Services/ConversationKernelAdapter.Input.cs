@@ -1,3 +1,4 @@
+using RNAssistant.Core.Services;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -25,7 +26,7 @@ namespace RNAssistant.Office.Services
             if (message == null)
             {
                 message = new ChatMessage { Id = input.Id, Role = "user", Content = input.Text,
-                    RunId = _session.LastRun.TurnId, Attachments = input.Attachments };
+                    AgentCommunication = input.AgentCommunication, RunId = _session.LastRun.TurnId, Attachments = input.Attachments };
                 _session.Messages.Add(message);
                 if (_ingestion != null) _ingestion.CommitAndLink(_session, message, _session.Messages.Count - 1);
                 Save(appended: new[] { message });
@@ -37,7 +38,7 @@ namespace RNAssistant.Office.Services
             _steered = true;
             _input = new ConversationRunInput(routing.Settings, _input.Context, _input.Tools, _input.Skills, routing.PrimaryAttachments);
             if (_modelSession != null) _modelSession.ApplyUserInput(message, _input.Attachments);
-            return AgentMessage.User(message.Content);
+            return AgentMessage.User(ConversationInputMessage.ModelText(message));
         }
     }
 }

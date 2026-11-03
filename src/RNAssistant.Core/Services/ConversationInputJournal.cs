@@ -129,7 +129,8 @@ namespace RNAssistant.Core.Services
                 found = message;
             }
             if (found == null) return false;
-            if (found.Role != "user" || found.ProtocolMessage ||
+            if (JsonConvert.SerializeObject(found.AgentCommunication) != JsonConvert.SerializeObject(input.AgentCommunication) ||
+                found.Role != "user" || found.ProtocolMessage ||
                 input.AcceptedRunId != null && found.RunId != input.AcceptedRunId)
                 throw new InvalidOperationException("Input ID does not identify its persisted user message; inspect the conversation without replaying input.");
             return true;
@@ -154,7 +155,8 @@ namespace RNAssistant.Core.Services
                         prior.PendingId != input.PendingId ||
                         prior.AnswerRunId != input.AnswerRunId ||
                         prior.QuestionSetId != input.QuestionSetId ||
-                        prior.DocumentRuntimeKey != input.DocumentRuntimeKey)
+                        prior.DocumentRuntimeKey != input.DocumentRuntimeKey ||
+                        JsonConvert.SerializeObject(prior.AgentCommunication) != JsonConvert.SerializeObject(input.AgentCommunication))
                         throw new InvalidOperationException("Accepted input identity changed; inspect the conversation without replaying input.");
                 }
                 else byId.Add(input.Id, input);

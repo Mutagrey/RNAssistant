@@ -14,6 +14,7 @@ namespace RNAssistant.Core.Services
         {
             return new[] {
                 ChatVisualizationSkillProvider.Create(),
+                AgentCommunicationSkillProvider.Create(),
                 Skill(FilesId, "Workspace files",
                     "Inspect, create or edit workspace files using current source and verified after-state; honor explicit final-read requirements.",
 @"# Workspace files

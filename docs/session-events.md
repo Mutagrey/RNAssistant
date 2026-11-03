@@ -1,5 +1,30 @@
 # Session event stream
 
+## Agent communication journal — 2026-11-03
+
+`conversation.agents.changed` is a mandatory conversation event: `Prepared`
+reserves a source operation/budget slot before destination intake, `Accepted`
+records a read-back of that exact destination Inbox operation, and `Granted`
+records an explicit user budget extension. Message bodies remain in existing CAS
+and conversation/tool events; there is no independent outbox store.
+
+`ConversationInput.AgentCommunication` and the matching `ChatMessage` retain the
+same chain, sender address/run and pinned limit. Inbox replay validates provenance;
+peer text cannot be edited or steered, but pending input can be removed. Peer
+intake never clears a paused queue, approves a pending action or produces typed
+human answers. Receipt retries are idempotent, including after a view closes.
+A prepared operation without a confirmed receipt is never replayed; its slot stays
+charged conservatively. If only the sender receipt write fails, already accepted
+destination work is still scheduled. User extension is scoped to the current chain
+and serialized with intake; repeating its operation ID cannot grant twice.
+
+Budget recovery reads only these canonical records through the existing disposable
+SQLite event locators (`RequireCompleteAgentCommunicationJournal`). Projection
+schema 9 adds the new event type; an old sidecar is rebuilt, user events are retained.
+Budget queries do not materialize model trace bodies or the full message journal.
+Closing the application retains pending inputs as paused; view close alone does not
+cancel accepted work. Windows/Office delivery evidence remains open.
+
 ## Decision
 
 Workspace association slice (2026-10-04): new CLI chats are ordinary `ChatSession`

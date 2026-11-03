@@ -116,6 +116,8 @@
   --page-inset: 18px;
   --list-width: 250px;
   --user-bubble-bg: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  --agent-bubble-bg: color-mix(in srgb, var(--palette-violet) 12%, var(--surface));
+  --agent-bubble-border: color-mix(in srgb, var(--palette-violet) 42%, var(--surface));
   --user-bubble-text: color-mix(in srgb, var(--accent) 25%, var(--ink));
   --shimmer: #ffffffb3;
   --shimmer-peak: #14291e;

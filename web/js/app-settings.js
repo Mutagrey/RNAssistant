@@ -62,6 +62,7 @@ var agentSettingsDefaults = {
   maxAgentIterations: 256,
   maxAgentFormatRetries: 3,
   maxConsecutiveReflections: 2,
+  maxAgentMessages: 20,
   maxAgentToolSteps: 4096
 };
 
@@ -382,6 +383,7 @@ function renderSettings(options) {
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || agentSettingsDefaults.maxAgentIterations;
   $("maxConsecutiveReflectionsInput").value = compatibilityValue(s, "MaxConsecutiveReflections", "maxConsecutiveReflections", agentSettingsDefaults.maxConsecutiveReflections);
   $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || agentSettingsDefaults.maxAgentFormatRetries;
+  $("maxAgentMessagesInput").value = compatibilityValue(s, "MaxAgentMessages", "maxAgentMessages", agentSettingsDefaults.maxAgentMessages);
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || agentSettingsDefaults.maxAgentToolSteps;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(state.prompts);
@@ -444,6 +446,7 @@ function readSettings() {
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || agentSettingsDefaults.maxAgentIterations),
     MaxConsecutiveReflections: Math.max(0, Math.min(20, Math.trunc(Number($("maxConsecutiveReflectionsInput").value)))),
     MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
+    MaxAgentMessages: Number($("maxAgentMessagesInput").value || agentSettingsDefaults.maxAgentMessages),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || agentSettingsDefaults.maxAgentToolSteps),
     AgentResponseMode: $("agentResponseModeInput").value,
     SystemPromptRole: $("systemPromptRoleInput").value,
@@ -464,12 +467,14 @@ async function persistSettingsFromForm() {
   var submittedRevision = settingsFormRevision;
   var submittedModelDraft = Object.assign({}, settingsModelDraft);
   var javascriptWasEnabled = compatibilityValue(state.settings, "EnableAgentJavaScript", "enableAgentJavaScript", false) === true;
+  var messagingWasEnabled = compatibilityValue(state.settings, "MaxAgentMessages", "maxAgentMessages", agentSettingsDefaults.maxAgentMessages) > 0;
   settingsSaveInProgress = true;
   updateSettingsSaveButton();
   try {
     var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret);
     state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
     state.settings = response.settings;
+    if (window.RNAssistantAgentCommunication) RNAssistantAgentCommunication.settingsChanged();
     Object.keys(submittedModelDraft).forEach(function (field) {
       if (settingsModelDraft[field] === submittedModelDraft[field]) delete settingsModelDraft[field];
     });
@@ -489,7 +494,7 @@ async function persistSettingsFromForm() {
     if (typeof refreshModelDiagnosticsSettings === "function") refreshModelDiagnosticsSettings();
     if (typeof renderChatModePicker === "function") renderChatModePicker();
     renderModelControls();
-    if (javascriptWasEnabled !== nextSettings.EnableAgentJavaScript &&
+    if ((javascriptWasEnabled !== nextSettings.EnableAgentJavaScript || messagingWasEnabled !== (nextSettings.MaxAgentMessages > 0)) &&
         typeof applyLibraryCatalogState === "function") {
       try {
         applyLibraryCatalogState({ tools: await send("getTools", {}) });
@@ -552,6 +557,7 @@ function resetAgentSettingsToDefaults() {
   $("maxAgentIterationsInput").value = agentSettingsDefaults.maxAgentIterations;
   $("maxAgentFormatRetriesInput").value = agentSettingsDefaults.maxAgentFormatRetries;
   $("maxConsecutiveReflectionsInput").value = agentSettingsDefaults.maxConsecutiveReflections;
+  $("maxAgentMessagesInput").value = agentSettingsDefaults.maxAgentMessages;
   $("maxAgentToolStepsInput").value = agentSettingsDefaults.maxAgentToolSteps;
   updateAgentProtocolControls();
   markSettingsDirty();

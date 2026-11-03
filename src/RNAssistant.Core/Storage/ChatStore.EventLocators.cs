@@ -34,7 +34,7 @@ namespace RNAssistant.Core.Storage
         private void IndexProjectionEvent(SqliteConnection connection, SqliteTransaction transaction,
             SessionEvent item, long nextOffset, StorageProtector protector)
         {
-            if (!IsProjectionEvent(item) && !IsInputJournalEvent(item.Type)) return;
+            if (!IsProjectionEvent(item) && !IsInputJournalEvent(item.Type) && item.Type != SessionEventTypes.AgentCommunicationChanged) return;
             var locator = new ProjectionEventLocator { Type = item.Type, Hash = item.Hash,
                 Sequence = item.Sequence, Offset = item.StorageByteOffset, NextOffset = nextOffset };
             ExecuteSql(connection, transaction, "INSERT INTO event_locators(sequence,type,locator) VALUES($p0,$p1,$p2)",
@@ -42,7 +42,7 @@ namespace RNAssistant.Core.Storage
                     JsonConvert.SerializeObject(locator), protector));
         }
 
-        private IReadOnlyList<SessionEvent> ReadIndexedInputJournal(string path, string sessionId)
+        private IReadOnlyList<SessionEvent> ReadIndexedInputJournal(string path, string sessionId, bool agentCommunication = false)
         {
             if (!File.Exists(path)) return new SessionEvent[0];
             return ReadSqliteProjection(path, connection =>
@@ -61,7 +61,7 @@ namespace RNAssistant.Core.Storage
                         throw new ChatConcurrencyException("Chat index changed while the input journal was being read.");
                     foreach (var locator in ReadProjectionEventLocators(connection, transaction, cursor, protector))
                     {
-                        if (!IsInputJournalEvent(locator.Type)) continue;
+                        if (agentCommunication ? locator.Type != SessionEventTypes.AgentCommunicationChanged : !IsInputJournalEvent(locator.Type)) continue;
                         events.Add(ReadLocatedEvent(reader, cursor, locator, protector));
                         Interlocked.Increment(ref _inputJournalEventReads);
                     }
@@ -87,7 +87,7 @@ namespace RNAssistant.Core.Storage
                         "event/" + sequence, (byte[])reader[2], protector)); }
                     catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw new ProjectionDataException(ex); }
                     if (locator == null || locator.Sequence != sequence || locator.Type != reader.GetString(1) ||
-                        (!IsInputJournalEvent(locator.Type) && !IsProjectionEvent(new SessionEvent { Type = locator.Type })) ||
+                        (!IsInputJournalEvent(locator.Type) && locator.Type != SessionEventTypes.AgentCommunicationChanged && !IsProjectionEvent(new SessionEvent { Type = locator.Type })) ||
                         sequence < 1 || sequence > cursor.Sequence || locator.Offset < 0 ||
                         locator.NextOffset <= locator.Offset || locator.NextOffset > cursor.ByteLength)
                         throw new ProjectionDataException(new JsonException("Event locator binding disagrees with its index."));
@@ -122,7 +122,7 @@ namespace RNAssistant.Core.Storage
                 JObject root = null;
                 foreach (var locator in ReadProjectionEventLocators(connection, transaction, cursor, protector))
                 {
-                    if (locator.Type == SessionEventTypes.ConversationInputChanged) continue;
+                    if (locator.Type == SessionEventTypes.ConversationInputChanged || locator.Type == SessionEventTypes.AgentCommunicationChanged) continue;
                     var item = ReadLocatedEvent(reader, cursor, locator, protector);
                     ApplySqliteEvent(connection, transaction, ref root, item, locator.NextOffset, protector);
                     Interlocked.Increment(ref _indexedMaterializationEventReads);

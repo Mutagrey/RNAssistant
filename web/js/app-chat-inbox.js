@@ -238,6 +238,7 @@ function renderPendingInput(item, chatId, editing, component, source) {
   var status = document.createElement("span"); status.className = "inbox-item-status";
   status.textContent = pendingInputStatus(item, box); heading.appendChild(status);
   node.appendChild(heading);
+  if (window.RNAssistantAgentCommunication) RNAssistantAgentCommunication.appendSender(node, item);
   if (editing) {
     var draft = state.inboxEditDraft;
     var editor = document.createElement("textarea"); editor.value = draft.text; editor.rows = 3;
@@ -267,7 +268,7 @@ function renderPendingInput(item, chatId, editing, component, source) {
       submitInboxMessage(item.Text, item.Attachments || [], chatId, item.Delivery, item.Answers,
         item.SteerRunId || item.AcceptedRunId, item.SteerPendingId || item.PendingId);
     }));
-    if (queued && item.Status === "Pending") {
+    if (queued && item.Status === "Pending" && !(window.RNAssistantAgentCommunication && RNAssistantAgentCommunication.sender(item))) {
       if (item.Delivery !== "Steer") actions.appendChild(inboxButton("Отправить сейчас", function () { changeInboxItem("steerChatInput", item); }));
       if (!item.QuestionSetId) actions.appendChild(inboxButton("Редактировать", function () {
         state.inboxEditing = item.Id;

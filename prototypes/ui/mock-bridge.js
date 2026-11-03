@@ -506,6 +506,9 @@
       if (type === "getChatState") requireArtifactReader(payload);
       return chatState(type === "listChats" ? null : payload.chatId);
     }
+    if (type === "setAgentChatPresence") return { registered: !!payload.open };
+    if (type === "getAgentCommunicationState") return { chainId: null, limit: 20, sent: 0, remaining: 20, limitReached: false };
+    if (type === "continueAgentCommunication") return { chainId: payload.chainId, limit: 20, sent: 20, remaining: 20, limitReached: false };
     if (type === "getActiveChatRuns") {
       var activeRequests = Object.keys(previewRuns).map(function (chatId) {
         var chat = chats.find(function (item) { return item.Id === chatId; }), run = previewRuns[chatId];

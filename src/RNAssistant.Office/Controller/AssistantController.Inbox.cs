@@ -229,7 +229,7 @@ namespace RNAssistant.Office
             {
                 var runId = Guid.NewGuid().ToString("N");
                 var input = new ChatTurnInput { Text = item.Text, Attachments = item.Attachments,
-                    AppendUserMessage = true, CommitUserAttachments = true, InputId = item.Id };
+                    AppendUserMessage = true, CommitUserAttachments = true, InputId = item.Id, AgentCommunication = item.AgentCommunication };
                 // Revalidate under the same run lease as the user append.
                 Func<ChatSession, ChatTurnInput> prepare = item.QuestionSetId == null ? null :
                     new Func<ChatSession, ChatTurnInput>(current =>

@@ -74,7 +74,9 @@ namespace RNAssistant.Office.Runtime
             bool trace = true,
             IToolMutationObserver mutationObserver = null, MarkdownDocumentService markdownDocuments = null,
             ConversationRunPolicy runPolicy = null, Func<ToolExecutionContext, string> dispatchGuard = null,
-            AuthoredFileService authoredFiles = null, SkillSelectionAdmission skillAdmission = null)
+            AuthoredFileService authoredFiles = null, SkillSelectionAdmission skillAdmission = null,
+            RNAssistant.Application.Conversations.AgentCommunicationService agentCommunication = null,
+            RNAssistant.Application.Conversations.ConversationInboxService agentInbox = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -247,6 +249,12 @@ namespace RNAssistant.Office.Runtime
                     binding = AuthoredFileToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new AuthoredFileToolHandler(authoredFiles, session);
                 }
+                else if (AgentCommunicationToolCatalog.Owns(registration.Descriptor.Id))
+                {
+                    binding = AgentCommunicationToolCatalog.Binding(registration.Descriptor.Id);
+                    handler = new RNAssistant.Application.Conversations.AgentCommunicationToolHandler(
+                        agentCommunication, agentInbox, session, settings.MaxAgentMessages);
+                }
                 else if (TaskListToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
@@ -348,7 +356,7 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal) ||
                 MarkdownDocumentToolCatalog.Owns(toolId) || AuthoredFileToolCatalog.Owns(toolId) ||
-                TaskListToolCatalog.Owns(toolId) ||
+                TaskListToolCatalog.Owns(toolId) || AgentCommunicationToolCatalog.Owns(toolId) ||
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
                 CapabilityToolCatalog.Owns(toolId) ||
                 ToolAuthoringCatalog.Owns(toolId) ||

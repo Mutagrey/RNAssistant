@@ -529,7 +529,7 @@ namespace RNAssistant.Core.Storage
         }
 
         internal IReadOnlyList<SessionEvent> ReadCompleteInputJournalEvents(
-            string host, string documentKey, string sessionId)
+            string host, string documentKey, string sessionId, bool agentCommunication = false)
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return new List<SessionEvent>();
             var path = GetSessionPath(host, documentKey, sessionId);
@@ -537,8 +537,8 @@ namespace RNAssistant.Core.Storage
             using (AcquireDocumentLockForRead(host, documentKey))
             {
                 var timer = Stopwatch.StartNew();
-                var events = ReadIndexedInputJournal(path, sessionId);
-                LogPerformance("inputJournalReplay", timer.ElapsedMilliseconds,
+                var events = ReadIndexedInputJournal(path, sessionId, agentCommunication);
+                LogPerformance(agentCommunication ? "agentCommunicationReplay" : "inputJournalReplay", timer.ElapsedMilliseconds,
                     "retainedEvents=" + events.Count);
                 return events;
             }

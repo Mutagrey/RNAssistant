@@ -488,7 +488,7 @@ namespace RNAssistant.Core.Services
                 if (message.ToolName == "core.tools.search" || toolResult &&
                     (string)(sourceWire.Data as JObject)?["kind"] == "tool-schema") continue;
                 var operation = message.CompletedOperation != null || toolResult && message.ResourceEffect != null;
-                var sourceRole = toolResult || operation ? "tool" : projected.Role;
+                var sourceRole = toolResult || operation ? "tool" : message.AgentCommunication?.Sender != null ? "assistant" : projected.Role;
                 var userSource = sourceRole == "user" && !toolDependent && !message.ProtocolMessage;
                 var observed = !operation && toolResult && (message.ResourceEvidence?.Count ?? 0) > 0 &&
                     sourceWire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok;
@@ -572,7 +572,9 @@ namespace RNAssistant.Core.Services
 
         private ChatMessage ProjectMessage(ChatSession session, ChatMessage message)
         {
-            return _projection.Project(message);
+            var projected = _projection.Project(message);
+            if (message?.AgentCommunication?.Sender != null) projected.Content = ConversationInputMessage.ModelText(message);
+            return projected;
         }
 
         private static bool SupportsClaimKind(string kind, StructuredContextClaim source)

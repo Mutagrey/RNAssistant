@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
-        private const int SqliteProjectionVersion = 8;
+        private const int SqliteProjectionVersion = 9;
         private static readonly object SqliteProviderSync = new object();
         private static bool _sqliteProviderReady;
         private long _sqliteProjectionFullBuildCount;

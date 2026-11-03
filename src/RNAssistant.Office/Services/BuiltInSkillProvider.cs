@@ -185,6 +185,7 @@ namespace RNAssistant.Office.Services
                     }).ToList() };
             }
             result.Add(RNAssistant.Core.Services.ChatVisualizationSkillProvider.Create());
+            result.Add(AgentCommunicationSkillProvider.Create());
             return result;
         }
 

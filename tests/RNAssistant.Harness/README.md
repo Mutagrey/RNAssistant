@@ -1,5 +1,28 @@
 # RNAssistant Harness
 
+## Agent communication — 2026-11-03
+
+`agent communication:` checks the real Workspace A → B → A path against a scripted
+HTTP provider (including typed bridge presence and model wire), independent pinned
+budgets, idempotent continuation, restart, stopped queues, view replacement/close,
+immutable sender provenance, uncertain delivery and accepted work after sender
+receipt failure. The real model wire also loads the shared communication skill.
+Zero is checked through typed settings and disk persistence, live old-handler denial,
+Office/Workspace catalogs, continuation and re-enable without budget reset.
+Quota reads use existing indexed canonical events without trace
+materialization. Relevant regressions: `inbox:`, `workspace: queue`, `unified policy:`,
+`tool pack: core`, `settings: invalid numeric`, `storage: indexed input journal`.
+Each Harness invocation accepts **one** substring filter.
+
+`node tests/web/agent-communication.test.js` uses Playwright (bundled `NODE_PATH`,
+optional `BROWSER_EXECUTABLE`) to compare agent/human bubble geometry, exercise budget
+settings/continuation, reload races and late presence ACK cleanup, and inspect narrow/zoom.
+Zero rendering and hiding continuation against a stale response are covered as well. Temporary
+screenshots go to `/tmp/rnassistant-agent-communication*.png`. It checks bubble bounds,
+not full Shell zoom qualification; the existing retained-overlay clipping remains
+in RISK_REGISTER. `independent-chat-views` passes; existing `chat-inbox` and
+`model-settings` failures are recorded there separately. Windows/Office and live models are separate.
+
 Chat parity follow-up: `plugins: workspace uses common message attachments` checks
 scoped upload/CAS, foreign draft/lease denial, exact links, idempotency and bounded
 UTF-16 reads without implicit large-text delivery. `workspace: queue uses common

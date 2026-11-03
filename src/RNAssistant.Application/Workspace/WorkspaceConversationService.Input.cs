@@ -62,7 +62,7 @@ namespace RNAssistant.Runtime
             return _conversationInbox.ReadUndelivered(session)
                 .Select(input => new WorkspacePendingInput { Id = input.Id,
                     RunId = input.AcceptedRunId, Text = input.Text, Revision = input.Revision,
-                    Delivery = input.Delivery, Status = input.Status, Attachments = input.Attachments }).ToArray();
+                    Delivery = input.Delivery, Status = input.Status, Attachments = input.Attachments, AgentSender = input.AgentCommunication?.Sender }).ToArray();
         }
 
         private void StartQueuedInputs(WorkspaceDescriptor workspace, string sessionId, AppSettings settings,
@@ -219,12 +219,12 @@ namespace RNAssistant.Runtime
                 if (!ConversationInputJournal.HasPersistedUserMessage(_session, input))
                 {
                     var message = new ChatMessage { Id = input.Id, Role = "user", Content = input.Text, RunId = RunId,
-                        Attachments = input.Attachments };
+                        Attachments = input.Attachments, AgentCommunication = input.AgentCommunication };
                     _session.Messages.Add(message);
                     LinkInputAttachments(_session, message);
                     _owner._chats.Commit(_session, ConversationCommit.UserInput(message));
                 }
-                return Task.FromResult(AgentMessage.User(input.Text));
+                return Task.FromResult(AgentMessage.User(ConversationInputMessage.ModelText(_session.Messages.First(m => m.Id == input.Id))));
             }
 
             public void Dispose()
