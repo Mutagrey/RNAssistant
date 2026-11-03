@@ -27,16 +27,14 @@
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 
-#chatForm[data-owner="office"] .workspace-composer-only,
-#chatForm:not([data-owner="office"]) :is(#inboxAnnouncer, #inboxStatus, #attachmentDrafts,
-  #attachmentStatus, #contextStrip, #contextManager, #attachmentFileInput,
-  #contextMeterWrap, #addSelectionContextButton, #composerOpenMaterialsButton, #compactContextButton) {
+[data-chat-node="chatForm"][data-owner="office"] .workspace-composer-only,
+[data-chat-node="chatForm"]:not([data-owner="office"]) :is([data-chat-node="inboxAnnouncer"], [data-chat-node="attachmentDrafts"],
+  [data-chat-node="attachmentStatus"], [data-chat-node="contextStrip"], [data-chat-node="contextManager"], [data-chat-node="attachmentFileInput"],
+  [data-chat-node="addSelectionContextButton"], [data-chat-node="composerOpenMaterialsButton"], [data-chat-node="compactContextButton"]) {
   display: none !important;
 }
 
-#chatForm[data-owner="plugin"] :is(#projectChatFileStatus, #attachFileButton) {
-  display: none !important;
-}
+
 
 .composer:focus-within {
   background: var(--composer-surface-focus);

@@ -100,7 +100,6 @@ document.addEventListener("DOMContentLoaded", function () {
   bindChatActions();
   if (window.RNAssistantRailPopovers) window.RNAssistantRailPopovers.bind();
   if (window.RNAssistantPlugins) window.RNAssistantPlugins.bind();
-  bindContextActions();
   bindVbaActions();
   bindHtmlWorkspaceActions();
   bindModelActions();
@@ -115,6 +114,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
   window.RNAssistantMaterialView.register(window.RNAssistantDockWorkspace);
   window.RNAssistantHtmlWorkspaceSurface.register(window.RNAssistantDockWorkspace);
+  window.RNAssistantConversationPanel.register(window.RNAssistantDockWorkspace);
   window.RNAssistantDockWorkspace.bind();
   window.RNAssistantShellLayout.refresh();
   window.addEventListener("load", function () {

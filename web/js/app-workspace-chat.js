@@ -1,89 +1,17 @@
 (function () {
   "use strict";
   var selectedSessions = new Map();
-  var sharedComposer = null;
-  var officeComposerAnchor = null;
   var viewNodes = { Messages: "messages", Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton",
-    Notice: "workspaceChatNotice", Control: "workspaceChatControl", Pending: "workspaceChatPending",
+    Notice: "inboxStatus", FileStatus: "projectChatFileStatus", Control: "workspaceChatControl", Pending: "workspaceChatPending",
     Approve: "workspaceChatApprove", Reject: "workspaceChatReject", Questions: "workspaceChatQuestions" };
-  function node(name) { return viewNodes[name] ? document.getElementById(viewNodes[name]) : null; }
-  function dispatch(name, value) { return chatComposer().dispatch(name, value); }
-  function currentTarget() {
-    var snapshot = dispatch("snapshot");
-    return workspaceComposerTarget({ workspaceId: field(field(snapshot, "project"), "workspaceId"), sessionId: field(snapshot, "sessionId") });
-  }
-  function canMessageAction(name, message, index) {
-    return chatComposer().owner() !== "office" && !!dispatch("canMessageAction", { name: name, message: message, index: index });
-  }
-  function messageAction(name, message, index) {
-    if (canMessageAction(name, message, index)) return dispatch("messageAction", { name: name, message: message, index: index });
-  }
-  function cancelWorkspaceMessageEdit(restore) { return chatComposer().cancelEdit(currentTarget(), { restore: restore !== false, focus: restore !== false }); }
-  function startWorkspaceMessageEdit(message) {
-    if (chatComposer().owner() === "office" || !message || !message.Id) return;
-    var snapshot = dispatch("snapshot"), target = currentTarget(), revision = field(field(snapshot, "state"), "revision");
-    if (!target.workspaceId || !target.sessionId || !Number.isSafeInteger(revision)) return;
-    if (sharedComposer) sharedComposer.draftVersion();
-    if (!chatComposer().startEdit(target, { messageId: message.Id, revision: revision, text: messageContent(message) })) return;
-    node("Input").value = messageContent(message);
-    node("Input").dispatchEvent(new Event("input", { bubbles: true })); node("Input").focus();
-  }
-  function currentMessageEdit() { return chatComposer().owner() === "office" ? null : chatComposer().edit(currentTarget()); }
-  function mount(owner, container) {
-    var view = document.getElementById("workspaceChatView");
-    var list = document.getElementById("messages");
-    var form = document.getElementById("chatForm"), input = document.getElementById("chatInput");
-    if (!view || !list || !form || !input || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
-    if (owner !== "office" && !container) return false;
-    var changed = chatComposer().owner() !== owner;
-    if (changed) messageView(list).suspend();
-    if (changed && chatComposer().owner() !== "office") dispatch("suspend");
-    if (chatComposer().owner() === "office" && owner !== "office") {
-      if (!officeComposerAnchor) {
-        officeComposerAnchor = document.createComment("Office composer");
-        form.parentNode.insertBefore(officeComposerAnchor, form);
-      }
-      captureChatDraft(state.activeChatId, false);
-    }
-    if (changed) ["composerAddPicker", "chatModelPicker"].forEach(function (id) {
-      var picker = document.getElementById(id);
-      if (picker) picker.open = false;
-    });
-    if (changed && chatComposer().owner() !== "office" && sharedComposer) sharedComposer.select(null);
-    var transcriptMount = document.getElementById(owner === "office" ? "officeChatTranscriptMount" : "workspaceChatTranscriptMount");
-    if (list.parentNode !== transcriptMount) {
-      transcriptMount.append(list, document.getElementById("chatScrollBottomButton"));
-      changed = true;
-    }
-    chatComposer().activate(owner);
-    form.dataset.owner = owner;
-    document.getElementById("attachmentDrafts").hidden = owner !== "office";
-    var pluginDrafts = document.getElementById("pluginAnnotationDrafts");
-    if (pluginDrafts) pluginDrafts.hidden = owner !== "plugin" || pluginDrafts.childElementCount === 0;
-    if (owner === "office") {
-      form.title = "";
-      if (form.parentNode !== document.getElementById("chatDropZone"))
-        document.getElementById("chatDropZone").insertBefore(form, officeComposerAnchor);
-      if (changed) restoreChatDraft(state.activeChatId);
-      renderSendControls();
-      list.setAttribute("aria-label", "Сообщения чата");
-      if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.mount(owner);
-      window.RNAssistantChatInspector.mount(owner);
-      return changed;
-    }
-    if (!window.RNAssistantDockWorkspace && view.parentNode !== container) container.appendChild(view);
-    if (form.parentNode !== view) view.appendChild(form);
-    form.classList.remove("is-dragging");
-    if (changed && sharedComposer) sharedComposer.select(null);
-    view.dataset.owner = owner;
-    view.classList.add("chat-main");
-    view.classList.remove("plugin-workspace-chat-view");
-    list.setAttribute("aria-label", "Сообщения чата");
-    if (sharedComposer) sharedComposer.refresh();
-    dispatch("input");
-    if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.mount(owner);
-    window.RNAssistantChatInspector.mount(owner);
-    return changed;
+  function selected() { return window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected(); }
+  function node(name) { var component = selected(); return viewNodes[name] ? component ? component.node(viewNodes[name]) : document.getElementById(viewNodes[name]) : null; }
+  function owner() { var component = selected(); return !component || component.target.source === "office" ? "office" : component.contextOwner || "project"; }
+  function mount(nextOwner) {
+    var component = selected();
+    if (component && component.target.source === "workspace" && nextOwner !== "office") component.contextOwner = nextOwner;
+    if (window.RNAssistantDockWorkspace) RNAssistantDockWorkspace.mount(nextOwner);
+    return false;
   }
   function rememberSession(workspaceId, sessionId) {
     if (!workspaceId) return;
@@ -196,23 +124,23 @@
   function snapshotSource(target) {
     return window.RNAssistantConversationState.createSnapshotSource(workspaceComposerTarget(target), conversationTarget);
   }
-  function renderMessages(list, chat, emptyOptions, options) {
+  function renderMessages(list, chat, emptyOptions, options, commands) {
     var view = messageView(list);
     if (!view.canRender()) return;
     chat = chat || { messages: [], state: {} };
     var target = conversationTarget(chat), frame = view.begin(target, options);
-    var presentation = createMessagePresentation(view, chat, chatComposer().capture());
+    var presentation = createMessagePresentation(view, chat, commands || chatComposer().capture());
     var changed = frame.changed, following = frame.follow;
     var snapshot = field(chat, "state"), status = runStatus(snapshot), live = field(snapshot, "modelProgress");
     if (status !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
     var start = field(chat, "messageStartIndex") || 0;
     var messages = chat.messages || [];
     var actionMessage = messages.find(visibleMessage);
-    var historyActions = !!actionMessage && canMessageAction("fork", actionMessage, 0);
+    var historyActions = !!actionMessage && presentation.invoke("canMessageAction", { name: "fork", message: actionMessage, index: 0 });
     var signature = JSON.stringify([presentation.actionKey, chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
     if (!changed && view.cache.signature === signature) return;
     var viewport = !following ? frame.viewport : null;
-    list.dataset.session = JSON.stringify([chatComposer().owner(), target.workspaceId, target.sessionId]);
+    list.dataset.session = JSON.stringify([target.source, target.workspaceId, target.sessionId]);
     list.dataset.startIndex = String(start); view.cache.signature = signature;
     var units = [];
     if (start > 0) {
@@ -277,8 +205,7 @@
         article.append(status, body);
         if (!waiting) {
           var restore = document.createElement("button"); restore.type = "button"; restore.textContent = "Вставить в ввод";
-          restore.onclick = function () { if (presentation.isCurrent() && sharedComposer) sharedComposer.append({
-            workspaceId: field(field(chat, "project"), "workspaceId"), sessionId: field(chat, "sessionId") }, pending.Text); };
+          restore.onclick = function () { presentation.invoke("appendDraft", pending.Text); };
           article.appendChild(restore);
         }
         return article;
@@ -309,164 +236,199 @@
     syncChatScroll(following, false, list);
     return true;
   }
-  function renderWorkspaceControls(chat, submitQuestions) {
-    if (chatComposer().owner() === "office") return;
-    var snapshot = field(chat, "state") || {}, pending = field(chat, "pendingId");
-    node("Control").hidden = !pending;
-    node("Pending").textContent = pending ? (field(chat, "pendingTool") || "Действие") + "\n" +
-      (field(chat, "pendingArguments") || "") : "";
-    var preview = field(chat, "patchPreview");
-    if (pending && preview && window.RNAssistantRunChanges) {
-      node("Pending").textContent = "Предложенные изменения";
-      window.RNAssistantRunChanges.renderPrepared(node("Pending"), preview);
+  function createPanelAdapter(component) {
+    var target = component.target, node = component.node, composer = component.composer;
+    var owner = component.view.bindProjection(snapshotSource(target), latestSnapshot), uploading = false, cancelling = false;
+    function snapshot() { return owner.snapshot() || { sessionId: target.sessionId, project: { workspaceId: target.workspaceId }, messages: [], state: {} }; }
+    function state() { return field(snapshot(), "state") || {}; }
+    function draft() { return readWorkspaceDraft(target); }
+    function writeDraft(text) { return updateWorkspaceDraft(target, { text: text }); }
+    function captureDraft() { return composer.captureDraft(target, writeDraft); }
+    function edit() { return composer.edit(target); }
+    function running() { return runStatus(state()) === "running"; }
+    function pluginBusy() { return window.RNAssistantPlugins && RNAssistantPlugins.isChatBusy(target); }
+    function pending() { return uploading || RNAssistantConversationInput.isPending("workspace", target); }
+    function sendBlocked() { return pluginBusy() || snapshot().project && snapshot().project.available === false ||
+      !!snapshot().pendingId || running() && (!field(state(), "canSteer") || !!(draft() && draft().attachments.length)); }
+    function accept(value, options) {
+      if (!component.isCurrent()) return false;
+      owner.accept(value, options); component.loading = false; component.loadError = "";
+      var title = field(state(), "title"); if (title) RNAssistantDockWorkspace.setTitle(RNAssistantConversationPanel.key(target), title);
+      component.contextOwner = snapshot().project && snapshot().project.pluginId ? "plugin" : "project";
+      observer.select(snapshot(), pending()); component.render();
+      RNAssistantProjectChats.refreshTree();
+      if (selected() === component) { if (window.RNAssistantPlugins) RNAssistantPlugins.onChatSnapshot(snapshot()); RNAssistantChatInspector.render(); }
+      return true;
     }
-    var input = field(snapshot, "userInput"), set = field(input, "questionSet"), container = node("Questions");
-    if (!set) { container.hidden = true; container.replaceChildren(); return; }
-    window.RNAssistantQuestions.render(container, set, {
-      scope: "workspace:" + field(field(chat, "project"), "workspaceId") + ":" + field(chat, "sessionId"),
-      runId: field(input, "runId"), submit: submitQuestions
-    });
-  }
-  function bindComposer(form, options) {
-    if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
-    var input = form.querySelector("textarea");
-    var locked = false;
-    var draftStore = window.RNAssistantChatDrafts;
-    function current() {
-      var target = chatComposer().capture().target;
-      return target && target.source === "workspace" && target.workspaceId && target.sessionId ? target : null;
+    function read() { return RNAssistantProjectChats.read(target, component); }
+    var observer = createRunObserver(component.view, read, accept, component.notice,
+      function () { component.stream(false); });
+    var history = component.view.observe({ current: function () { return target; }, read: read, changed: accept,
+      failed: function (error) { component.loading = false; component.loadError = error.detail || error.message; component.render(); } });
+    function refresh(options) {
+      if (!owner.snapshot()) component.loading = true;
+      if (options && options.latestMessages) return read().then(function (value) { accept(value, options); }).catch(component.notice);
+      return history.refresh();
     }
-    function draftOptions(target) {
-      var saved = draftStore.readWorkspace(target);
-      if (saved) return saved;
-      var snapshot = chatComposer().current(workspaceComposerTarget(target)) ? field(dispatch("snapshot"), "state") : null;
-      return { text: "", mode: field(snapshot, "mode") || "agent",
-        reasoning: !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled") };
+    async function run(action, reportFailure) {
+      var release = RNAssistantConversationInput.begin("workspace", target);
+      if (!release) return false;
+      component.controls(); observer.select(snapshot(), true);
+      try { var response = await snapshotSource(target).read(action); if (component.isCurrent()) { accept(response); component.notice(""); } return true; }
+      catch (error) { component.notice(error); if (reportFailure) throw error; return false; }
+      finally { release(); observer.select(snapshot(), pending()); component.render(); }
     }
-    function writeDraft(target, text, changes) {
-      return draftStore.saveWorkspace(target, Object.assign({}, draftOptions(target), { text: text }, changes));
-    }
-    function captureDraft(changes, onlyChanged) {
-      var target = current();
-      if (!target) return null;
-      return chatComposer().captureDraft(target, function (text) {
-        var saved = draftStore.readWorkspace(target);
-        return onlyChanged && saved && saved.text === text ? saved : writeDraft(target, text, changes);
+    async function submit(answers, requestId) {
+      if (pending() || readOnly(snapshot()) || component.loading || component.loadError || !answers && draft() && draft().pendingVisualAnnotation) return;
+      var editing = answers ? null : edit(), saved = answers ? null : captureDraft(), text = answers ? "" : node("chatInput").value.trim();
+      if (!answers && (sendBlocked() || !text && !(saved && saved.attachments.length))) return;
+      var input = answers ? { sessionId: target.sessionId, requestId: requestId, answers: answers } : prepareWorkspaceInput(target, text, {
+        Mode: running() ? field(state(), "mode") : saved && saved.mode || "agent",
+        ReasoningEnabled: running() ? !!field(field(state(), "modelConfiguration"), "reasoningEnabled") :
+          !!(saved && saved.reasoning) && effectiveModelSupportsReasoning(field(state(), "model") || settingsModel()) !== false,
+        SteerRunId: running() ? field(state(), "runId") : null,
+        EditMessageId: editing && editing.messageId, ExpectedRevision: editing && editing.revision });
+      var gate = RNAssistantConversationInput.create("workspace", target, input.requestId, input.SteerRunId, function () {
+        if (answers) return;
+        if (editing) {
+          acknowledgeWorkspaceInput(target, input);
+          if (component.isCurrent() && edit() === editing) composer.cancelEdit(target);
+        } else {
+          var before = draft(); acceptWorkspaceInput(target, input, text, saved && saved.version); component.acceptDraft(before, draft());
+        }
       });
+      if (editing) editing.busy = true;
+      await run(function () {
+        return gate.submit(function () { return answers ? Promise.resolve() : RNAssistantChatDrafts.flushWorkspace(target); },
+          function (acceptReceipt) { return send("submitProjectChat", { workspaceId: target.workspaceId, sessionId: target.sessionId, input: input },
+            function (progress) {
+              if (progress.workspaceId === target.workspaceId && progress.sessionId === target.sessionId) {
+                acceptReceipt(progress.inputReceipt); observer.acceptProgress(progress);
+              }
+            }); }, function (value) { return value.inputReceipt; });
+      }, !!answers);
+      if (editing) editing.busy = false; component.render();
     }
-    function showOfficeContext(snapshot) {
-      if (chatComposer().owner() !== "project") { form.title = ""; return; }
-      var office = field(snapshot, "office"), status = runStatus(snapshot);
-      var activeRun = status === "running" || status === "awaiting_confirmation", pinned = office && activeRun;
-      form.title = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
-        activeRun ? "Office: документ не привязан" : "Office: при отправке";
-    }
-    var picker = document.getElementById("composerAddPicker");
-    var fileAction = document.getElementById("attachFileButton"), fileInput = document.createElement("input");
-    var fileTarget = null, fileOptions = null;
-    fileInput.id = "workspaceFileInput"; fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
-    picker.appendChild(fileInput);
-    fileInput.onchange = function () {
-      var files = Array.from(fileInput.files || []), target = fileTarget;
-      fileInput.value = "";
-      if (files.length && target && fileOptions) fileOptions.onFiles(files, target);
+    var commands = {
+      snapshot: snapshot,
+      preferences: function () { var saved = draft(); return { selected: field(state(), "model") || "", mode: saved && saved.mode || "agent",
+        reasoning: !!(saved && saved.reasoning), runningModel: running() ? field(field(state(), "modelConfiguration"), "model") : null,
+        disabled: component.loading || !!component.loadError || readOnly(snapshot()) ||
+          running() || pending() || pluginBusy() || !!edit() || !!snapshot().pendingId || window.state.bridgeUnavailable }; },
+      preferenceService: function () { return {
+        write: function (change) {
+          if (change.name === "model") return send("setProjectChatModel", { workspaceId: target.workspaceId, sessionId: target.sessionId, model: change.value });
+          var changes = {}; changes[change.name] = change.value; updateWorkspaceDraft(target, changes);
+          return RNAssistantChatDrafts.flushWorkspace(target);
+        }, read: read, apply: function (response, change) {
+          if (!component.isCurrent()) return false;
+          if (!change) return accept(response);
+          if (change.name !== "model") return true;
+          if (!response || response.workspaceId !== target.workspaceId || response.sessionId !== target.sessionId ||
+              !Number.isSafeInteger(response.revision) || (response.model || "") !== change.value) throw new Error("Выбор модели не подтверждён.");
+          if (response.revision < field(state(), "revision")) return false;
+          state().Model = state().model = response.model; state().Revision = state().revision = response.revision; return true;
+        }
+      }; },
+      submit: function () { return submit(); },
+      stop: async function () {
+        if (!running() || cancelling) return;
+        var runId = field(state(), "runId"); cancelling = true; component.controls();
+        function cancel() { return send("cancelProjectChat", { workspaceId: target.workspaceId, sessionId: target.sessionId,
+          runId: runId, cursor: field(state(), "cursor") }); }
+        try {
+          var result;
+          try { result = await cancel(); }
+          catch (error) {
+            if (error.code !== "project_chat_stale" || !component.isCurrent()) throw error;
+            accept(await read());
+            if (!component.isCurrent() || field(state(), "runId") !== runId || !running()) return;
+            result = await cancel();
+          }
+          accept(result);
+        } catch (error) { component.notice(error); }
+        finally { cancelling = false; component.controls(); }
+      },
+      resolve: function (approve) { var pendingId = snapshot().pendingId;
+        if (pendingId) return run(function () { return send("resolveProjectChat", { workspaceId: target.workspaceId,
+          sessionId: target.sessionId, pendingId: pendingId, approve: approve }); }); },
+      canMessageAction: function (action) { return !!action.message && !!action.message.Id && !running() && !pending() && !edit() &&
+        !readOnly(snapshot()) && !snapshot().pendingId && (action.name !== "edit" || messageRole(action.message) === "user"); },
+      messageAction: async function (action) {
+        if (!commands.canMessageAction(action)) return;
+        if (action.name === "edit") {
+          captureDraft(); composer.startEdit(target, { messageId: action.message.Id, revision: field(state(), "revision"), text: messageContent(action.message) });
+          node("chatInput").value = messageContent(action.message); component.render(); node("chatInput").focus(); return;
+        }
+        try {
+          var result = await send(action.name === "fork" ? "forkProjectChat" : "deleteProjectChatMessage", {
+            workspaceId: target.workspaceId, sessionId: target.sessionId, messageId: action.message.Id });
+          if (!component.isCurrent()) return;
+          if (action.name === "fork") RNAssistantConversationPanel.open({ source: "workspace", workspaceId: target.workspaceId, sessionId: result.sessionId });
+          else accept(result);
+        } catch (error) { component.notice(error); }
+      },
+      loadPrevious: async function () {
+        var before = snapshot().messageStartIndex, revision = field(state(), "revision"); if (!before) return;
+        try {
+          var page = await send("getPreviousProjectChatMessages", { workspaceId: target.workspaceId, sessionId: target.sessionId, beforeIndex: before });
+          if (component.isCurrent() && snapshot().messageStartIndex === before && field(state(), "revision") === revision) {
+            prependMessages(snapshot(), page); component.render({ preserveTop: true });
+          }
+        } catch (error) { component.notice(error); }
+      }, loadLatest: function () { return refresh({ latestMessages: true }); }, progress: observer.acceptProgress
     };
-    function attachFiles(nextOptions) {
-      if (!nextOptions || !nextOptions.onFiles) return;
-      fileOptions = nextOptions;
-      if (sharedComposer) update();
+    function renderUtilities() {
+      node("activeChatTitle").textContent = field(state(), "title") || "Чат проекта";
+      node("activeChatSubtitle").textContent = [snapshot().project && snapshot().project.name,
+        component.loading ? "Загрузка чата…" : component.loadError || formatChatMessageCount((snapshot().messages || []).length)].filter(Boolean).join(" · ");
+      node("documentNotice").classList.add("hidden"); node("agentApprovalDock").classList.add("hidden");
+      var status = RNAssistantProjectChats.fileStatus(target), box = node("projectChatFileStatus");
+      box.textContent = status && status.message || ""; box.hidden = !box.textContent;
+      box.classList.toggle("is-error", !!(status && status.error));
+      node("workspaceChatControl").hidden = !snapshot().pendingId;
+      node("workspaceChatPending").textContent = snapshot().pendingId ? (snapshot().pendingTool || "Действие") + "\n" + (snapshot().pendingArguments || "") : "";
+      if (snapshot().pendingId && snapshot().patchPreview && window.RNAssistantRunChanges)
+        RNAssistantRunChanges.renderPrepared(node("workspaceChatPending"), snapshot().patchPreview);
+      var input = field(state(), "userInput"), questions = field(input, "questionSet");
+      if (questions) RNAssistantQuestions.render(node("workspaceChatQuestions"), questions, {
+        scope: "workspace:" + target.workspaceId + ":" + target.sessionId, runId: field(input, "runId"), submit: submit });
+      else { node("workspaceChatQuestions").hidden = true; node("workspaceChatQuestions").replaceChildren(); }
+      renderChatRunNotice(component); renderContextMeter(component);
+      node("compactContextButton").hidden = true;
+      node("addSelectionContextButton").disabled = true;
     }
-    function pickFiles() {
-      if (chatComposer().owner() !== "project" || locked || !current() || !fileOptions ||
-          fileOptions.canAttachFiles && !fileOptions.canAttachFiles()) return;
-      fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current();
-      picker.open = false; fileInput.click();
-    }
-    function preferences() {
-      var snapshot = field(dispatch("snapshot"), "state"), status = runStatus(snapshot), draft = draftOptions(current());
-      return { selected: field(snapshot, "model") || "", mode: draft.mode, reasoning: draft.reasoning,
-        runningModel: status === "running" || status === "awaiting_confirmation"
-          ? field(field(snapshot, "modelConfiguration"), "model") : null,
-        disabled: locked || !current() || state.bridgeUnavailable };
-    }
-    function effectiveModel() {
-      var selection = preferences();
-      return selection.runningModel || selection.selected || settingsModel();
-    }
-    function update() {
-      if (chatComposer().owner() === "office") return;
-      var draft = draftStore.readWorkspace(current());
-      renderComposerInputState(input.value.trim() || draft && draft.attachments && draft.attachments.length);
-      setComposerPickerDisabled(picker, locked || !current());
-      renderChatModePicker();
-      fileAction.disabled = locked || !current() || !fileOptions ||
-        chatComposer().owner() !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
-      renderReasoningToggle();
-      renderChatModelPicker();
-    }
-    attachFiles(options);
-    sharedComposer = {
-      attachFiles: attachFiles,
-      refresh: update,
-      input: function () { if (!currentMessageEdit()) captureDraft(); update(); },
-      preferences: preferences,
-      savePreference: function (change, target) {
-        if (!chatComposer().current(target)) throw new Error("Чат изменился до сохранения настройки.");
-        var changes = {}; changes[change.name] = change.value;
-        captureDraft(changes);
+    return { commands: commands, projection: function () { return owner; }, snapshot: snapshot, accept: accept, refresh: refresh,
+      draft: draft, writeDraft: writeDraft, captureDraft: captureDraft, pending: pending, running: running,
+      hasAttachments: function () { var saved = draft(); return !!(saved && saved.attachments.length); },
+      renderUtilities: renderUtilities,
+      presentation: function () { return { running: running(), canceling: cancelling, readOnly: readOnly(snapshot()), sendBlocked: sendBlocked(),
+        awaitingReply: runStatus(state()) === "awaiting_user", awaitingApproval: !!snapshot().pendingId, queue: false }; },
+      attachFiles: async function (files) {
+        if (!files.length || pending() || edit() || readOnly(snapshot()) || component.loading || window.state.bridgeUnavailable) return;
+        if (files.length > 10) { component.notice("За один раз можно добавить не более 10 файлов."); return; }
+        uploading = true; component.controls();
+        try { for (var i = 0; i < files.length; i++) if (!await RNAssistantProjectChats.upload(target, files[i], component)) break; }
+        finally { uploading = false; component.controls(); }
       },
-      pickFiles: pickFiles,
-      select: function (target, snapshot) {
-        showOfficeContext(snapshot);
-        if (target) chatComposer().restoreDraft(workspaceComposerTarget(target), draftStore.readWorkspace(target));
-        update();
-      },
-      options: function () {
-        var selected = preferences();
-        return { Mode: selected.mode, ReasoningEnabled: selected.reasoning && effectiveModelSupportsReasoning(effectiveModel()) !== false };
-      },
-      prepareInput: function (target, text, edit, activeRun) {
-        var options = activeRun ? { SteerRunId: field(activeRun, "runId"), Mode: field(activeRun, "mode"),
-          ReasoningEnabled: !!field(field(activeRun, "modelConfiguration"), "reasoningEnabled") } : this.options();
-        return draftStore.prepareWorkspaceInput(target, text, Object.assign({}, options, edit ?
-          { EditMessageId: edit.messageId, ExpectedRevision: edit.revision } : {}));
-      },
-      draftVersion: function () { var saved = captureDraft(null, true); return saved ? saved.version : null; },
-      lock: function (value) { locked = value; update(); },
-      append: function (target, line) {
-        chatComposer().appendDraft(workspaceComposerTarget(target), {
-          read: function () { return draftStore.readWorkspace(target); },
-          write: function (text) { return writeDraft(target, text); }
-        }, line);
-        if (chatComposer().current(workspaceComposerTarget(target))) update();
-      },
-      accepted: function (target, text, version, request) {
-        var previous = draftStore.readWorkspace(target);
-        draftStore.acceptWorkspaceInput(target, request, text, version);
-        if (chatComposer().acceptDraft(workspaceComposerTarget(target), previous, draftStore.readWorkspace(target))) update();
-      },
-      acceptedEdit: function (target, request, edit) {
-        draftStore.acknowledgeWorkspaceInput(target, request);
-        if (chatComposer().edit(workspaceComposerTarget(target)) === edit)
-          chatComposer().cancelEdit(workspaceComposerTarget(target));
+      activate: function () { observer.select(snapshot(), pending()); }, progress: observer.acceptProgress,
+      focus: function () {
+        rememberSession(target.workspaceId, target.sessionId); RNAssistantProjectChats.focus(target);
+        if (window.RNAssistantPlugins) RNAssistantPlugins.onChatSnapshot(snapshot());
       }
     };
-    update();
-    return sharedComposer;
   }
-  window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
-    mount: mount, owner: function () { return chatComposer().owner(); }, node: node, messages: function () { return node("Messages"); },
-    refreshPresentation: function () { dispatch("refresh"); },
-    canMessageAction: canMessageAction, messageAction: messageAction,
-    startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
-    currentMessageEdit: currentMessageEdit,
-    composerAction: function (name) { if (sharedComposer && chatComposer().owner() !== "office" && sharedComposer[name]) sharedComposer[name](); },
-    refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
-    snapshot: function () { return dispatch("snapshot"); }, runStatus: runStatus,
+  window.RNAssistantWorkspaceChat = { createPanelAdapter: createPanelAdapter, renderMessages: renderMessages,
+    mount: mount, owner: owner, node: node,
+    composerAction: function (name) { var component = selected(); if (component && name === "pickFiles") component.node("attachmentFileInput").click(); },
+    snapshot: function () { var component = selected(); return component && component.target.source === "workspace" ? component.snapshot() : null; },
+    runStatus: runStatus, readOnly: readOnly, runNotice: runNotice,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
-    latestSnapshot: latestSnapshot, prependMessages: prependMessages,
-    snapshotSource: snapshotSource,
+    latestSnapshot: latestSnapshot, prependMessages: prependMessages, snapshotSource: snapshotSource,
     createRunObserver: createRunObserver, paintProgress: paintProgress,
-    acceptProgress: function (payload) { dispatch("progress", payload); },
-    readOnly: readOnly, runNotice: runNotice };
+    acceptProgress: function (payload) {
+      var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.find({ source: "workspace", workspaceId: field(payload, "workspaceId"), sessionId: field(payload, "sessionId") });
+      if (component) component.progress(payload);
+    }
+  };
 }());

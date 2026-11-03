@@ -18,6 +18,7 @@ function mergeOfficeChatSnapshot(current, response, options) {
   if (previousRevision !== null && (incomingRevision === null || incomingRevision < previousRevision)) return current;
   var next = Object.assign({}, current || createOfficeChatSnapshot(response.activeChatId || response.ActiveChatId));
   var detailDeferred = !!(response.detailDeferred || response.DetailDeferred);
+  if (response.chatReadOnly !== undefined) next.chatReadOnly = !!response.chatReadOnly;
   next.sessionRevision = incomingRevision;
   if (detailDeferred) {
     next.messages = [];
@@ -74,6 +75,11 @@ function officeChatSnapshot() {
 }
 function officeChatLiveRun() { return officeChatSnapshot().liveRun; }
 function publishOfficeChatRun(chatId, run) {
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
+  if (component) {
+    component.snapshot().liveRun = run || null;
+    component.stream(false);
+  }
   var projection = officeChatProjection();
   if (!projection || !projection.isCurrent() || projection.target.sessionId !== chatId) return false;
   projection.snapshot().liveRun = run || null;
@@ -85,7 +91,8 @@ function setOfficeChatSnapshotField(name, value) {
   selectedOfficeProjection.snapshot()[name] = value;
 }
 function clearOfficeChatProjection() {
-  if (selectedOfficeProjection) selectedOfficeProjection.dispose();
+  var component = selectedOfficeProjection && window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(selectedOfficeProjection.target.sessionId);
+  if (selectedOfficeProjection && !component) selectedOfficeProjection.dispose();
   selectedOfficeProjection = null;
 }
 function selectOfficeChatProjection(chatId) {
@@ -93,6 +100,12 @@ function selectOfficeChatProjection(chatId) {
       selectedOfficeProjection.target.sessionId === chatId) return selectedOfficeProjection;
   clearOfficeChatProjection();
   if (!chatId) return null;
+  if (window.RNAssistantConversationPanel) {
+    RNAssistantConversationPanel.open({ source: "office", sessionId: chatId });
+    var component = RNAssistantConversationPanel.office(chatId);
+    if (component) { selectedOfficeProjection = component.projection(); return selectedOfficeProjection; }
+    return null;
+  }
   selectedOfficeProjection = createOfficeChatProjection(chatId);
   return selectedOfficeProjection;
 }
@@ -134,35 +147,27 @@ function renderChatSessions() {
   select.disabled = !chats.length || state.bridgeUnavailable;
   renderChatSessionList(chats);
 
-  var activeChat = activeChatSummary();
-  var isCurrentDocument = !activeChat || chatIsCurrentDocument(activeChat);
-  $("activeChatTitle").textContent = activeChat ? chatTitle(activeChat) : "Новый чат";
-  var subtitle = [];
-  if (state.activeChatId) {
-    var visibleCount = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); }).length;
-    subtitle.push(state.chatDetailPending ? "Загрузка чата…" : state.chatDetailError ? "Ошибка загрузки чата" : state.messageStartIndex > 0
-      ? "Показано " + visibleCount + " · история доступна выше"
-      : formatChatMessageCount(visibleCount));
-  }
-  if (activeChat) {
-    subtitle = subtitle.concat([chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean));
-  }
-  $("activeChatSubtitle").textContent = subtitle.join(" · ");
-  if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.updateContext();
-  $("documentNotice").classList.toggle("hidden", isCurrentDocument);
-  $("openDocumentButton").hidden = isCurrentDocument || !chatDocumentPath(activeChat);
-
-  var hasActive = !!state.activeChatId;
-  var compactableMessages = (state.messages || []).filter(function (message) {
-    return !messageActivity(message);
-  }).length;
   $("newChatButton").disabled = !!state.bridgeUnavailable;
-  if ($("compactContextButton")) {
-    $("compactContextButton").disabled = !hasActive || compactableMessages < 3 || !!currentActiveSend();
-    $("compactContextButton").hidden = !hasActive || compactableMessages < 3;
-  }
-  renderSendControls();
+  if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.each(function (component) { component.controls(); });
+  if (window.RNAssistantDockWorkspace) RNAssistantDockWorkspace.updateContext();
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.render();
+}
+
+function renderOfficeChatHeader(component) {
+  var node = component.node, snapshot = component.snapshot(), id = component.target.sessionId;
+  var chat = (state.chats || []).find(function (value) { return chatId(value) === id; });
+  var current = !chat || chatIsCurrentDocument(chat);
+  node("activeChatTitle").textContent = chat ? chatTitle(chat) : "Новый чат";
+  var count = (snapshot.messages || []).filter(function (message) { return !messageProtocolMessage(message); }).length;
+  var subtitle = id ? [component.loading ? "Загрузка чата…" : component.loadError ? "Ошибка загрузки чата" : snapshot.messageStartIndex > 0
+    ? "Показано " + count + " · история доступна выше" : formatChatMessageCount(count)] : [];
+  if (chat) subtitle = subtitle.concat([chatDocumentTitle(chat), chatHost(chat)].filter(Boolean));
+  node("activeChatSubtitle").textContent = subtitle.join(" · ");
+  node("documentNotice").classList.toggle("hidden", current);
+  node("openDocumentButton").hidden = current || !chatDocumentPath(chat);
+  var compactable = (snapshot.messages || []).filter(function (message) { return !messageActivity(message); }).length;
+  node("compactContextButton").hidden = !id || compactable < 3;
+  node("compactContextButton").disabled = component.composer.preferences().disabled || compactable < 3;
 }
 
 function activeChatSummary() {
@@ -305,7 +310,12 @@ async function hydrateChatDrafts() {
   });
   draftStoreReady = true;
   draftStoreLoadError = null;
-  if (state.activeChatId) restoreChatDraft(state.activeChatId);
+  if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.each(function (component) {
+    component.restoreDraft();
+    if (component.target.source === "workspace" && pendingWorkspaceInput(component.target)) component.refresh();
+    else if (component.target.source === "office" && state.inboxSubmissions && state.inboxSubmissions[component.target.sessionId]) component.pollInbox();
+  });
+  else if (state.activeChatId) restoreChatDraft(state.activeChatId);
 }
 function resetChatDrafts() {
   ++draftStoreGeneration;
@@ -496,6 +506,8 @@ window.RNAssistantChatDrafts.setPendingOfficeAnnotation = setPendingOfficeAnnota
 window.RNAssistantChatDrafts.forgetOffice = forgetOfficeDraft;
 
 function captureChatDraft(chatIdValue, changed) {
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatIdValue);
+  if (component) return component.captureDraft(changed);
   if (!chatIdValue) return null;
   var target = officeComposerTarget(chatIdValue);
   if (!chatComposer().current(target)) return readOfficeDraft(chatIdValue);
@@ -504,6 +516,8 @@ function captureChatDraft(chatIdValue, changed) {
 }
 
 function restoreChatDraft(chatIdValue) {
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatIdValue);
+  if (component) { state.draftAttachments = (readOfficeDraft(chatIdValue) && readOfficeDraft(chatIdValue).attachments || []).slice(); component.restoreDraft(); return; }
   var draft = readOfficeDraft(chatIdValue);
   state.draftAttachments = draft && draft.attachments ? draft.attachments.slice() : [];
   if (typeof renderAttachmentDrafts === "function") {
@@ -565,6 +579,8 @@ function applyPushedChatState(message) {
       return applyChatState(response);
     return false;
   }
+  var addressed = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(response.activeChatId || response.ActiveChatId);
+  if (scope === "full" && addressed) return addressed.accept(response);
   var projection = officeChatProjection();
   if (scope === "full" && projection && projection.isCurrent() &&
       projection.target.sessionId === state.activeChatId && officeChatSource(projection.target.sessionId).matches(response)) {
@@ -648,6 +664,25 @@ function retainHtmlWorkspaceSources(current, incoming) {
   return current;
 }
 
+function prepareOfficeChatSelection(nextChatId, skipDraftCapture) {
+  if (state.activeChatId === nextChatId) return;
+    if (!skipDraftCapture) captureChatDraft(state.activeChatId);
+    if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
+    if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
+    if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
+    if (typeof cancelSkillSourceWrite === "function") cancelSkillSourceWrite();
+    if (typeof cancelToolLibraryWrite === "function") cancelToolLibraryWrite();
+    if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
+    if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
+    if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
+    if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
+    if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
+    if (typeof window.closeArtifactViewerResources === "function") window.closeArtifactViewerResources();
+    state.artifactViewerPages = {};
+    state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };
+    state.artifactImageGalleryContext = null;
+}
+
 function applyChatState(response, skipDraftCapture, options) {
   response = response || {};
   var detailDeferred = !!(response.detailDeferred || response.DetailDeferred);
@@ -666,26 +701,12 @@ function applyChatState(response, skipDraftCapture, options) {
   if (response.inbox && typeof applyChatInbox === "function") applyChatInbox(response.inbox, true);
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   var chatChanged = previousChatId !== nextChatId;
-  if (chatChanged) {
-    if (!skipDraftCapture) captureChatDraft(previousChatId);
-    if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
-    if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
-    if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
-    if (typeof cancelSkillSourceWrite === "function") cancelSkillSourceWrite();
-    if (typeof cancelToolLibraryWrite === "function") cancelToolLibraryWrite();
-    if (typeof cancelToolSourceRead === "function") cancelToolSourceRead();
-    if (typeof cancelToolDocumentationRead === "function") cancelToolDocumentationRead();
-    if (typeof releasePromptEditorContext === "function") releasePromptEditorContext();
-    if (typeof window.cancelHtmlWorkspaceWrite === "function") window.cancelHtmlWorkspaceWrite();
-    if (typeof window.cancelHtmlWorkspaceRead === "function") window.cancelHtmlWorkspaceRead();
-    if (typeof window.closeArtifactViewerResources === "function") window.closeArtifactViewerResources();
-    state.artifactViewerPages = {};
-    state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };
-    state.artifactImageGalleryContext = null;
-  }
+  prepareOfficeChatSelection(nextChatId, skipDraftCapture);
   var projection = selectOfficeChatProjection(nextChatId);
   if (projection) projection.accept(hasResponseChatId ? response :
     Object.assign({ activeChatId: nextChatId }, response), Object.assign({}, options, { knownRevision: previousRevision }));
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(nextChatId);
+  if (component) { component.loading = detailDeferred; component.loadError = ""; }
   state.activeChatId = nextChatId;
   state.chatDetailPending = detailDeferred;
   state.chatDetailError = "";
@@ -1124,16 +1145,20 @@ function applyModelContextDiagnostics(update) {
   if (typeof renderPromptContextUsage === "function") renderPromptContextUsage(lastModelUsage(), "");
 }
 
-function renderContextMeter() {
-  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+function renderContextMeter(component) {
+  var $ = component ? component.node : window.$;
+  if (!component && typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var summary = $("contextMeterSummary");
   var meter = $("contextMeter");
   if (!summary || !meter) {
     return;
   }
-  var last = lastModelUsage();
-  var usage = state.contextUsage || {};
-  var request = currentModelContextRequest();
+  var data = component ? component.snapshot() : state;
+  if (component && component.target.source === "workspace") data = data.state || data.State || {};
+  var usage = data.contextUsage || data.ContextUsage || {};
+  var request = component ? data.liveRun && data.liveRun.requestContext : currentModelContextRequest();
+  var last = component ? request ? modelUsageFromContext({ lastPromptTokens: request.promptTokens,
+    lastCompletionTokens: request.completionTokens, lastTotalTokens: request.totalTokens }) : modelUsageFromContext(usage) : lastModelUsage();
   var windowTokens = Number(request ? request.contextWindowTokens : usage.contextWindowTokens || usage.ContextWindowTokens || 0);
   var estimated = !!request && request.promptTokens == null && request.estimatedPromptTokens != null;
   var used = estimated ? Number(request.estimatedPromptTokens) : last && last.prompt !== null ? Number(last.prompt) : null;

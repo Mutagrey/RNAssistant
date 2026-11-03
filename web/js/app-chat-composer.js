@@ -110,7 +110,7 @@
     function defer(action) {
       var scope = capture(), frame = window.requestAnimationFrame(function () {
         frames.delete(frame);
-        if (scope.isCurrent() && nodes.form.isConnected !== false &&
+        if (scope.isCurrent() && nodes.form && nodes.form.isConnected !== false &&
             (!nodes.form.closest || !nodes.form.closest("[inert]"))) action();
       });
       frames.add(frame);
@@ -190,16 +190,12 @@
   window.RNAssistantChatComposer = { create: create };
 })();
 
-// Temporary adapter to the single mounted composer; the controller itself accepts explicit nodes/targets.
-var currentChatComposer = null;
+// Selected-surface compatibility only; mounted views always receive their own composer.
+var inactiveChatComposer = null;
 function chatComposer() {
-  if (!currentChatComposer) {
-    currentChatComposer = window.RNAssistantChatComposer.create({ form: $("chatForm"), input: $("chatInput"),
-      send: $("sendButton"), stop: $("stopButton"), clear: $("clearInputButton"), cancelEdit: $("cancelMessageEditButton"),
-      approve: $("workspaceChatApprove"), reject: $("workspaceChatReject") });
-    if (typeof messageView === "function") messageView().composer = currentChatComposer;
-  }
-  return currentChatComposer;
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+  if (component) return component.composer;
+  return inactiveChatComposer || (inactiveChatComposer = RNAssistantChatComposer.create({}));
 }
 function officeComposerTarget(id) { return { source: "office", sessionId: id === undefined ? state.activeChatId : id }; }
 function workspaceComposerTarget(target) {
@@ -216,7 +212,8 @@ function positionComposerTooltip(tooltip, trigger) {
   tooltip.style.setProperty("--composer-tooltip-shift", shift + "px");
 }
 
-function bindComposerTooltip(wrap, trigger, tooltip, canShow) {
+function bindComposerTooltip(wrap, trigger, tooltip, canShow, signal) {
+  var listenerOptions = signal ? { signal: signal } : undefined;
   function hide() { tooltip.hidden = true; }
   function show() {
     if (trigger.disabled || (canShow && !canShow())) return;
@@ -225,17 +222,17 @@ function bindComposerTooltip(wrap, trigger, tooltip, canShow) {
     });
     positionComposerTooltip(tooltip, trigger);
   }
-  wrap.addEventListener("pointerenter", show);
-  wrap.addEventListener("pointerleave", hide);
-  trigger.addEventListener("focus", show);
-  trigger.addEventListener("blur", hide);
-  window.addEventListener("resize", hide);
+  wrap.addEventListener("pointerenter", show, listenerOptions);
+  wrap.addEventListener("pointerleave", hide, listenerOptions);
+  trigger.addEventListener("focus", show, listenerOptions);
+  trigger.addEventListener("blur", hide, listenerOptions);
+  window.addEventListener("resize", hide, listenerOptions);
   document.addEventListener("pointerdown", function (event) {
     if (!wrap.contains(event.target)) hide();
-  });
+  }, listenerOptions);
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") hide();
-  });
+  }, listenerOptions);
 }
 
 function renderChatModePicker() {
@@ -247,50 +244,14 @@ function renderChatModePicker() {
   button.setAttribute("aria-pressed", String(plan));
 }
 
-function bindComposerPickers() {
-  $("composerOpenMaterialsButton").addEventListener("click", function () { switchTab("artifacts"); });
-  $("chatPlanButton").addEventListener("click", function () {
-    if (this.disabled) return;
-    saveChatMode(chatComposer().preferences().mode === "plan" ? "agent" : "plan");
-  });
-  var pickers = [$("composerAddPicker"), $("chatModelPicker")].filter(Boolean);
-  pickers.forEach(function (picker) {
-    var trigger = picker.querySelector("summary");
-    trigger.addEventListener("click", function (event) {
-      if (picker.classList.contains("is-disabled")) event.preventDefault();
-    });
-    picker.addEventListener("toggle", function () {
-      if (!picker.open) return;
-      pickers.forEach(function (other) { if (other !== picker) other.open = false; });
-    });
-  });
-  $("composerAddMenu").addEventListener("click", function (event) {
-    var button = event.target.closest("button");
-    if (!button || button.disabled) return;
-    $("composerAddPicker").open = false;
-    if (button.id !== "composerOpenMaterialsButton") $("composerAddButton").focus();
-  });
-  document.addEventListener("pointerdown", function (event) {
-    pickers.forEach(function (picker) {
-      if (picker.open && !picker.contains(event.target)) picker.open = false;
-    });
-  });
-  document.addEventListener("keydown", function (event) {
-    if (event.key !== "Escape") return;
-    var opened = pickers.filter(function (picker) { return picker.open; })[0];
-    if (opened) {
-      event.preventDefault();
-      opened.open = false;
-      opened.querySelector("summary").focus();
-    }
-  });
-}
-
-function renderChatRunNotice() {
+function renderChatRunNotice(component) {
+  var $ = component ? component.node : window.$;
+  var state = component ? component.snapshot() : window.state;
   var root = $("chatRunNotice");
   if (!root) return;
-  var run = state.activeRunViewState;
-  var runNotice = window.RNAssistantRunViewState.runNotice(run);
+  var workspace = component && component.target.source === "workspace";
+  var run = workspace ? RNAssistantRunViewState.normalize(state.state && (state.state.runViewState || state.state.RunViewState)) : state.activeRunViewState;
+  var runNotice = workspace ? RNAssistantWorkspaceChat.runNotice(state) : RNAssistantRunViewState.runNotice(run);
   var sendError = state.failedSend && state.failedSend.error;
   var title = runNotice ? runNotice.title : "Не удалось выполнить действие";
   var text = runNotice ? runNotice.text : String(sendError || "");
@@ -313,7 +274,7 @@ function renderChatRunNotice() {
     button.className = "agent-details-link"; button.textContent = "Подробности";
     var chatId = state.activeChatId, runId = run.runId;
     button.addEventListener("click", function () {
-      if (state.activeChatId === chatId) window.openRunJournal({ chatId: chatId, runId: runId, filter: "problems" });
+      if (component ? component.isCurrent() : state.activeChatId === chatId) window.openRunJournal(workspace ? { owner: component.contextOwner || "project", workspaceId: component.target.workspaceId, sessionId: component.target.sessionId, runId: runId, filter: "problems" } : { chatId: chatId, runId: runId, filter: "problems" });
     });
     copy.appendChild(button);
   }
@@ -322,7 +283,8 @@ function renderChatRunNotice() {
 
 // Domain owners supply capabilities and activity; one renderer owns the shared
 // composer's labels, editing, reply prompt and stop presentation.
-function renderComposerPresentation(view) {
+function renderComposerPresentation(view, node) {
+  var $ = node || window.$;
   var form = $("chatForm"), input = $("chatInput"), send = $("sendButton"), stop = $("stopButton");
   form.classList.toggle("is-message-editing", !!view.editing);
   form.classList.toggle("is-preparing-attachments", !!view.preparing);
@@ -353,98 +315,20 @@ function renderComposerPresentation(view) {
   $("clearInputButton").disabled = !!view.preparing || !!view.editBusy;
 }
 
-function renderComposerInputState(hasContent) {
+function renderComposerInputState(hasContent, node) {
+  var $ = node || window.$;
   $("chatForm").classList.toggle("has-input", !!hasContent);
   $("clearInputButton").hidden = !$("chatInput").value.trim();
   resizeComposerInput($("chatInput"));
 }
 
 function renderSendControls() {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-  renderChatRunNotice();
-  var navigating = !!(state.chatNavigationPending || state.initializePromise);
-  var detailUnavailable = !!(state.chatDetailPending || state.chatDetailError);
-  var activeSend = currentActiveSend();
-  var isEditing = hasActiveMessageEdit();
-  var isSending = !!activeSend;
-  var isPreparingAttachments = !isSending && !chatComposer().preferenceBusy(officeComposerTarget()) && !!state.activeChatId &&
-    window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId });
-  var isCanceling = isSending && !!activeSend.canceling;
-  var approvalPending = !isEditing && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
-  var awaitingReply = !!state.activeChatId && !navigating && !detailUnavailable &&
-    !isSending && !isPreparingAttachments && !isEditing && !state.bridgeUnavailable &&
-    !!state.activeRunViewState && state.activeRunViewState.lifecycle === "awaiting_user";
-  var currentDocumentAvailable = typeof activeChatUsesCurrentDocument !== "function" || activeChatUsesCurrentDocument();
-
-  if ($("newChatButton")) $("newChatButton").disabled = navigating || !!state.bridgeUnavailable;
-
-  renderComposerPresentation({ editing: isEditing, editBusy: isEditing && officeMessageEdit().busy,
-    preparing: isPreparingAttachments, running: isSending, canceling: isCanceling,
-    awaitingReply: awaitingReply, awaitingApproval: approvalPending,
-    readOnly: state.chatReadOnly, loading: navigating || state.chatDetailPending,
-    loadError: !!state.chatDetailError, unavailable: state.bridgeUnavailable, noChat: !state.activeChatId,
-    inputReadOnly: state.chatReadOnly || navigating || detailUnavailable || isPreparingAttachments ||
-      state.bridgeUnavailable || !state.activeChatId,
-    queue: isSending && (runningMessageDelivery() === "Queue" || typeof exactOfficeSteerTarget !== "function" ||
-      !exactOfficeSteerTarget(state.activeChatId).runId) });
-  setComposerPickerDisabled($("composerAddPicker"), navigating || detailUnavailable ||
-    isPreparingAttachments || isEditing || state.bridgeUnavailable || !state.activeChatId);
-  renderChatModePicker();
-  if (typeof renderChatModelPicker === "function") {
-    renderChatModelPicker();
-  }
-  if (typeof renderReasoningToggle === "function") {
-    renderReasoningToggle();
-  }
-  if (navigating || detailUnavailable || isPreparingAttachments) {
-    if (typeof setComposerPickerDisabled === "function") {
-      setComposerPickerDisabled($("chatModelPicker"), true);
-    }
-    if ($("chatReasoningToggle")) $("chatReasoningToggle").disabled = true;
-  }
-  if ($("addSelectionContextButton")) {
-    $("addSelectionContextButton").disabled = navigating || detailUnavailable || isPreparingAttachments || isEditing || state.bridgeUnavailable || !currentDocumentAvailable;
-  }
-  if ($("attachFileButton")) {
-    $("attachFileButton").disabled = navigating || isPreparingAttachments || isEditing || state.bridgeUnavailable || !state.activeChatId;
-  }
-  if (typeof renderContextMeterAvailability === "function") {
-    renderContextMeterAvailability();
-  }
-  updateComposerInputState();
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+  if (component) component.controls();
+  if ($("newChatButton")) $("newChatButton").disabled = !!(state.chatNavigationPending || state.bridgeUnavailable);
 }
-
-function updateComposerInputState() {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-  var input = $("chatInput");
-  var hasText = !!(input && input.value.trim());
-  var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
-  var hasPendingAttachments = !!(state.chatResourceIngestions && state.activeChatId &&
-    state.chatResourceIngestions[state.activeChatId]);
-
-  renderComposerInputState(hasText || hasAttachments || hasPendingAttachments);
-  updateSendButtonAvailability(hasText || hasAttachments || hasPendingAttachments);
-}
-
-function updateSendButtonAvailability(hasContent) {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-  var sendButton = $("sendButton");
-  if (!sendButton) {
-    return;
-  }
-
-  var editingTarget = hasActiveMessageEdit() ? findEditingMessage() : null;
-  var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
-  var unfinishedAnnotation = readOfficeDraft(state.activeChatId);
-  sendButton.disabled = state.chatReadOnly ||
-    !!state.chatNavigationPending || !!state.initializePromise ||
-    !!state.chatDetailPending || !!state.chatDetailError ||
-    !!state.activeChatId && window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId }) ||
-    state.bridgeUnavailable ||
-    !state.activeChatId ||
-    !!(unfinishedAnnotation && unfinishedAnnotation.pendingVisualAnnotation && !hasActiveMessageEdit()) ||
-    (hasActiveMessageEdit() ? !canSaveEdit : !hasContent);
-}
+function updateComposerInputState() { renderSendControls(); }
+function updateSendButtonAvailability() { renderSendControls(); }
 
 function resizeChatInput() {
   resizeComposerInput($("chatInput"));

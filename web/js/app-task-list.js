@@ -30,7 +30,8 @@
     };
   }
 
-  function persistedActiveTaskList() {
+  function persistedActiveTaskList(snapshot) {
+    var state = snapshot || window.state;
     var activeId = state.activeTaskListArtifactId || "";
     if (!activeId) return null;
     var artifacts = state.artifacts || [];
@@ -70,9 +71,9 @@
     return current;
   }
 
-  function activeTaskList() {
-    var current = persistedActiveTaskList();
-    (state.liveAgentRun || []).forEach(function (activity) {
+  function activeTaskList(snapshot) {
+    var current = persistedActiveTaskList(snapshot);
+    (snapshot ? snapshot.liveRun && snapshot.liveRun.activities || [] : state.liveAgentRun || []).forEach(function (activity) {
       current = applyLiveTaskListActivity(current, activity);
     });
     return current;
@@ -131,10 +132,11 @@
     return list;
   }
 
-  function renderAgentPlanDock() {
+  function renderAgentPlanDock(component) {
+    var $ = component ? component.node : window.$;
     var dock = $("agentPlanDock");
     if (!dock) return;
-    var plan = activeTaskList();
+    var plan = activeTaskList(component && component.snapshot());
     if (!plan || !plan.steps.length) {
       dock.replaceChildren();
       dock.classList.add("hidden");
@@ -143,7 +145,8 @@
 
     var info = planInfo(plan);
     var expansionKey = plan.artifactId || plan.id;
-    var approvalPending = typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
+    var approvalPending = component ? component.snapshot().activeRunViewState && component.snapshot().activeRunViewState.lifecycle === "awaiting_confirmation" :
+      typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
     var details = document.createElement("details");
     details.className = "agent-plan-card status-" + info.status;
     details.open = !approvalPending && !!state.agentPlanExpanded[expansionKey];

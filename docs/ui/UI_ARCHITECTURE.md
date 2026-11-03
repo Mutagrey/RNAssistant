@@ -83,14 +83,9 @@ domain owners; вкладка не создаёт второй durable store и�
 
 **Текущее состояние не достигает этой цели.** S1a/S1b и S2a переиспользуют DOM,
 компоненты и часть правил, но оставляют singleton `conversation`, глобальное
-состояние Office и отдельную Workspace orchestration. Полное объединение и
-несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
-singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
-В S2b.8 Workspace snapshot передан общему view owner. S2b.9–S2b.12 используют тот же
-SnapshotOwner для Office transcript/preferences/context, метаданных материалов и
-run projection через временный selected adapter; полный Office view и навигация
-ещё не принадлежат независимым вкладкам. S2b.12 выделяет создание и нормализацию
-Office source и передаёт его snapshot сборщику ленты явно; выбранный DOM ещё один.
+состояние Office и отдельную Workspace orchestration. Эти ограничения baseline
+сняты контрольной точкой ниже; S2b.1–S2b.12 далее описывают историю её подготовки.
+Полная parity capabilities и остальные вторичные views не объявлены завершёнными.
 
 Создание Office-чата возвращает пустую detail projection и typed `catalogChanges`:
 новая строка и ID заменённого transient. Существующий revision-aware catalog merger
@@ -101,6 +96,35 @@ source adapter. Изменение renderer не должно возвращат
 выбора, в том числе пока другой чат выполняет ответ. Автоматический стартовый
 пустой черновик остаётся временным; выбор другого чата удаляет его строку через
 тот же `catalogChanges`, не оставляя неоткрываемый пункт в дереве.
+
+### Независимые Chat View — In Review, 2026-11-03
+
+`app-conversation-panel.js` — общая factory production DOM, composer, nodes и
+lifecycle. DockWorkspace хранит экземпляры в существующем `objectViews`, descriptor
+`conversation` — per-object по exact `{source, workspaceId?, sessionId}`. Второго
+реестра, renderer ленты, runtime или store нет. `app-office-chat-view.js` и
+Workspace adapter предоставляют source/commands; ProjectChats теперь каталог и
+навигация, не владелец второго composer или переносимого DOM.
+
+У каждого view свои SnapshotOwner, composer/edit, history/scroll, preferences,
+ошибки и observers. Drafts/receipts/runs остаются у прежних domain owners.
+Команды и callbacks захватывают target и lifetime экземпляра. Close очищает
+listeners/RAF/observers/viewers, сохраняет обычный draft, не отменяет run; после
+удаления самого чата presentation закрывается без повторного сохранения draft.
+Повторное открытие exact target активирует единственный существующий экземпляр.
+
+Окно истории — прежние 240 сообщений на source. Streaming сохраняет coalescing,
+leaf paints и attached history; hidden views откладывают paint и polling,
+activate читает пропущенное состояние. Максимум открытых Chat View — 12, In Review.
+Shell восстанавливает только target/placement, без сериализации истории и inputs.
+
+`chatComposer()`, `messageView()`, `$()` и Office state accessors остаются **selected
+facade для ещё не перенесённых вторичных consumers**, а не singleton Chat View.
+Они возвращают существующий component/source, не создают копию store. Chat commands
+ими не выбирают адрес. Owner и removal gate — [MIGRATION_MAP](../stabilization/MIGRATION_MAP.md#независимые-chat-view--2026-11-03).
+HTML live editor/annotations и plugin source workbench сохраняют прежний scope;
+их полноценные независимые providers относятся к S3b.3c. Inspector остаётся общим
+инструментом выбранного чата. Native document activation остаётся у Office services.
 
 ### S2b.1: состояние отрисовки и lifecycle представления
 
@@ -153,10 +177,8 @@ Office также сохраняет record до успешного ответа
 стирают текст правки. Пока edit request выполняется, ввод правки read-only;
 обычный следующий draft во время отправки сообщения остаётся редактируемым.
 
-Временный `chatComposer()` ещё выбирает singleton form, как `messageView()` —
-transcript. Workspace preference/draft adapter, общие builders и доставка snapshots
-ещё требуют explicit instance scope. Несколько независимых UI-вкладок пока не
-включены. Сохранение scratch edit между перезапусками приложения не добавлено.
+На момент S2b.2 `chatComposer()` и `messageView()` выбирали singleton DOM.
+Независимые Chat View заменили его instance scope и addressed commands. Сохранение scratch edit между перезапусками приложения не добавлено.
 
 ### S2b.3: адресная сборка ленты и команды истории
 
@@ -388,7 +410,7 @@ NavigationTree остаётся одним renderer для Office/Workspace/plug
 Владение CSS и границы version-pinned vendor adapter — в
 [Design System](UI_DESIGN_SYSTEM.md#применение-правил-сейчас).
 
-Три bounded singleton views (conversation, inspector, settings) сохраняют свои DOM nodes: renderer `always` выбран только для
+Исторический S1b: три bounded singleton views (conversation, inspector, settings) сохраняли DOM nodes: renderer `always` выбран только для
 них, не как глобальная политика. Закрытие паркует узел, а не уничтожает controller,
 черновик или run. Listener компонента Dockview удаляется на dispose. На скрытом
 conversation transcript paint откладывается; возвращение применяет актуальное

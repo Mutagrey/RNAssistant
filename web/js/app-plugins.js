@@ -126,6 +126,8 @@
     {workspaceId:chat.project.workspaceId,sessionId:chat.sessionId}:null;}
   function pluginDraft(){return window.RNAssistantChatDrafts.readWorkspace(pluginChatTarget())||null;}
   function renderVisualDrafts(){
+    var panel=window.RNAssistantConversationPanel&&RNAssistantConversationPanel.selected();
+    pluginDraftBox=panel&&panel.target.source==='workspace'?panel.node('pluginAnnotationDrafts'):null;
     if(!pluginDraftBox)return;
     pluginDraftBox.replaceChildren();
     var visible=ownsChat()&&pluginAnnotations&&pluginChatTarget();
@@ -144,7 +146,7 @@
       },onLocations:function(items){if(pluginAnnotations)pluginAnnotations.onLocations(items);},
       onReveal:function(result){if(pluginAnnotations)pluginAnnotations.onReveal(result);}});
     var context={mount:el('PreviewFrameHost'),browser:el('PreviewMount'),button:pluginAnnotateButton,
-      statusNode:pluginInspectStatus,draftBox:pluginDraftBox,
+      statusNode:pluginInspectStatus,get draftBox(){return pluginDraftBox;},
       sessionId:function(){var target=pluginChatTarget();return target&&target.sessionId;},
       isOpen:function(){return previewOpen&&!el('PreviewMount').hidden&&
         el('PreviewFrameHost').contains(frame);},
@@ -520,7 +522,7 @@
   window.RNAssistantPlugins={refreshPresentation:refreshPresentation,
     applyAppearance:applyAppearance,restoreVersion:restoreVersion,
     bind:bind,refresh:refresh,show:function(){el('Manager').hidden=false;},select:select,
-    onChatSnapshot:onChatSnapshot,isChatBusy:function(){return ownsChat()&&busy;},
+    onChatSnapshot:onChatSnapshot,isChatBusy:function(target){return busy&&(target?selected&&selected.sourceWorkspaceId===target.workspaceId:ownsChat());},
     sourceWorkspaceId:function(){return ownsChat()&&selected&&selected.sourceWorkspaceId;},
     selectedId:function(){return selected&&selected.pluginId;}};
 })();

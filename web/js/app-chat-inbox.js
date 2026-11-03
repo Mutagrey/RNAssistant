@@ -38,6 +38,7 @@ function reconcileChatInputReceipt(chatId, item, allowInsert) {
 }
 function applyChatInbox(inbox, deferRender) {
   if (!inbox || !inbox.chatId) return;
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(inbox.chatId);
   state.chatInboxes = state.chatInboxes || {};
   var old = state.chatInboxes[inbox.chatId];
   var stale = old && old.epoch === inbox.epoch && old.revision > inbox.revision;
@@ -64,7 +65,7 @@ function applyChatInbox(inbox, deferRender) {
     state.chatRuns && state.chatRuns[inbox.chatId];
   if (endedRun) endChatRunTracking(inbox.chatId);
   if (inbox.chatId === state.activeChatId) {
-    var announcer = $("inboxAnnouncer");
+    var announcer = component ? component.node("inboxAnnouncer") : !window.RNAssistantConversationPanel && $("inboxAnnouncer");
     if (announcer && (!old || old.revision !== inbox.revision)) announcer.textContent =
       "Ожидают отправки: " + (inbox.items || []).length + (inbox.paused ? ". Очередь приостановлена." : ".");
     renderSendControls();
@@ -72,6 +73,7 @@ function applyChatInbox(inbox, deferRender) {
         old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || changed)) renderChatInbox();
   }
   if (!deferRender && (endedRun || !old || old.running !== inbox.running)) renderChatSessions();
+  if (component && !deferRender) component.inbox(old, inbox);
 }
 function reconcileChatInputEchoes(chatId, messages) {
   state.chatInputEchoes = state.chatInputEchoes || {};
@@ -92,7 +94,8 @@ function inboxOperationId() {
   return "input-" + (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() :
     Date.now().toString(36) + "-" + Math.random().toString(36).slice(2));
 }
-async function submitInboxMessage(text, attachments, chatId, delivery, answers, steerRunId, steerPendingId) {
+async function submitInboxMessage(text, attachments, chatId, delivery, answers, steerRunId, steerPendingId, component) {
+  component = component || (window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId));
   if (window.RNAssistantConversationInput.isPending("office", { chatId: chatId })) return false;
   if (delivery === "Steer" && !answers && !steerRunId) delivery = "Queue";
   if (delivery !== "Steer" || answers) { steerRunId = null; steerPendingId = null; }
@@ -123,9 +126,10 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
   }
   state.inboxSubmissions[chatId] = pending;
   pending.localStatus = "submitting";
-  var submittedDraft = !answers && state.activeChatId === chatId ? captureChatDraft(chatId) : readOfficeDraft(chatId);
+  var submittedDraft = !answers && component ? component.captureDraft(false) : !answers && state.activeChatId === chatId ? captureChatDraft(chatId) : readOfficeDraft(chatId);
   var gate = window.RNAssistantConversationInput.create("office", { chatId: chatId },
     pending.OperationId, steerRunId);
+  if (component) component.render({ forceScroll: true });
   if (state.activeChatId === chatId) renderChatInbox({ forceScroll: true });
   try {
     var inbox = await gate.submit(
@@ -138,9 +142,10 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
     applyChatInbox(inbox);
     delete state.inboxSubmissions[chatId];
     if (!answers) {
-      var previousDraft = captureChatDraft(chatId);
+      var previousDraft = component && component.isCurrent() ? component.captureDraft(false) : captureChatDraft(chatId);
       var acceptedDraft = acceptOfficeDraft(chatId, text, submittedDraft && submittedDraft.version, attachments);
-      chatComposer().acceptDraft(officeComposerTarget(chatId), previousDraft, acceptedDraft);
+      if (component) component.acceptDraft(previousDraft, acceptedDraft);
+      else chatComposer().acceptDraft(officeComposerTarget(chatId), previousDraft, acceptedDraft);
       if (state.activeChatId === chatId) {
         state.draftAttachments = acceptedDraft ? acceptedDraft.attachments.slice() : [];
         if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts();
@@ -155,44 +160,35 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
     return true;
   } catch (error) {
     pending.localStatus = "unconfirmed";
+    if (component) component.notice(error);
     log(error.detail || error.message, "error");
     var status = $("inboxStatus");
     if (status && state.activeChatId === chatId) status.textContent = "Не удалось подтвердить отправку. Текст сохранён — повторите отправку.";
     return false;
   } finally {
     releasePending();
+    if (component) component.render();
     renderSendControls();
     if (state.activeChatId === chatId) renderChatInbox();
   }
 }
-function officeObservationTarget() {
-  if (!state.activeChatId || state.bridgeUnavailable || state.chatNavigationPending || state.chatDetailPending || state.chatDetailError ||
-      typeof isPanelActive === "function" && !isPanelActive("chat") ||
-      window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return null;
-  return { source: "office", sessionId: state.activeChatId, generation: state.chatNavigationVersion || 0 };
-}
 function refreshInboxChat(chatId) {
-  if (state.activeChatId !== chatId) return Promise.resolve(null);
-  var view = messageView();
-  if (!view.officeHistoryObserver) view.officeHistoryObserver = view.observe({
-    current: officeObservationTarget,
-    read: function (target) { return loadChatState(target.sessionId); },
-    changed: function (response, target) { applyChatStateForChat(response, target.sessionId); },
-    failed: function (error) { log(error.detail || error.message, "error"); }
-  });
-  return view.officeHistoryObserver.refresh();
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
+  return component ? component.refresh() : Promise.resolve(null);
 }
-async function changeInboxItem(action, item, text) {
-  var chatId = state.activeChatId;
+async function changeInboxItem(action, item, text, component) {
+  var state = component ? component.inboxState : window.state;
+  var chatId = component ? component.target.sessionId : state.activeChatId;
   var editingDraft = state.inboxEditDraft;
   try {
     var response = await send(action, { chatId: chatId, inputId: item.Id, expectedRevision: item.Revision, text: text });
     if (state.inboxEditing === item.Id && state.inboxEditDraft === editingDraft) { state.inboxEditing = null; state.inboxEditDraft = null; }
     applyChatInbox(response);
-    if (state.activeChatId === chatId) $("inboxStatus").textContent = "";
+    if (component) component.notice("");
+    else if (state.activeChatId === chatId) $("inboxStatus").textContent = "";
   } catch (error) {
-    if (state.activeChatId === chatId) $("inboxStatus").textContent = error.detail || error.message;
-    await pollChatInbox();
+    if (component) { component.notice(error); await component.refresh(); }
+    else { if (state.activeChatId === chatId) $("inboxStatus").textContent = error.detail || error.message; await pollChatInbox(); }
   }
 }
 function inboxButton(label, action) {
@@ -203,61 +199,17 @@ function inboxButton(label, action) {
 function renderChatInbox(options) {
   if (typeof renderMessages === "function") renderMessages(options);
 }
-function officeInboxObserver() {
-  var view = messageView();
-  if (view.officeInboxObserver) return view.officeInboxObserver;
-  view.officeInboxObserver = view.observe({
-    current: officeObservationTarget,
-    shouldPoll: function (target) {
-      var box = chatInbox(target.sessionId);
-      return document.visibilityState !== "hidden" && (!state.chatInboxes || !state.chatInboxes[target.sessionId] ||
-        box.running || (box.items || []).length || pendingChatInputs().length || currentActiveSend());
-    },
-    read: function (target) {
-      var chatId = target.sessionId, previous = chatInbox(chatId);
-      // Prioritize missing echoes so a large pending queue cannot starve terminal receipts.
-      var queuedIds = new Set((previous.items || []).map(function (item) { return item.Id; }));
-      var echoes = chatInputEchoes(chatId).filter(function (item) { return item.OperationId; });
-      var operationIds = echoes.filter(function (item) { return !queuedIds.has(item.Id); })
-        .concat(echoes.filter(function (item) { return queuedIds.has(item.Id); }))
-        .map(function (item) { return item.OperationId; }).slice(0, 128);
-      return send("getChatInbox", { chatId: chatId, receiptOperationIds: operationIds });
-    },
-    changed: function (inbox, target) {
-      if (!inbox || inbox.chatId !== target.sessionId) return;
-      // A pushed chat state may already have delivered this transition while the
-      // poll was in flight. Compare with the state actually on screen now.
-      var previous = chatInbox(target.sessionId);
-      applyChatInbox(inbox);
-      var current = chatInbox(target.sessionId);
-      // Phase-only updates are already rendered from the inbox/progress snapshot.
-      // Reload history only at lifecycle boundaries or for a missing accepted input.
-      if (current.epoch !== previous.epoch || current.running !== previous.running ||
-          chatInboxNeedsHistory(target.sessionId)) refreshInboxChat(target.sessionId);
-    },
-    failed: function () { /* The normal bridge banner reports disconnection; keep the saved projection. */ }
-  });
-  return view.officeInboxObserver;
+function pollChatInbox() {
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(state.activeChatId);
+  return component ? component.pollInbox() : Promise.resolve(null);
 }
-function pollChatInbox() { return officeInboxObserver().readNow(); }
 function chatInboxNeedsHistory(chatId) {
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
+  var messages = component ? component.snapshot().messages : chatId === state.activeChatId ? state.messages : [];
   return chatInputEchoes(chatId).some(function (item) {
-    return item.Status === "Applied" && (chatId !== state.activeChatId || !(state.messages || []).some(function (message) {
-      return (message.Id || message.id) === item.Id;
-    }));
+    return item.Status === "Applied" && !(messages || []).some(function (message) { return messageId(message) === item.Id; });
   });
 }
-function initChatInbox() {
-  if (state.inboxInitialized) return;
-  state.inboxInitialized = true;
-  document.addEventListener("click", function (event) {
-    document.querySelectorAll(".inbox-item-menu[open]").forEach(function (itemMenu) {
-      if (!itemMenu.contains(event.target)) itemMenu.open = false;
-    });
-  });
-  officeInboxObserver().start();
-}
-
 function pendingChatInputs() {
   return chatInputEchoes(state.activeChatId).filter(function (item) {
     return !item.Id || !(state.messages || []).some(function (message) { return (message.Id || message.id) === item.Id; });
@@ -274,7 +226,11 @@ function pendingInputStatus(item, box) {
   if (item.Delivery === "Steer" && box.running) return box.phase === "executing" ? "Применится после текущего действия" : "Ожидает применения";
   return box.activeRun ? "В очереди" : "Передаю агенту…";
 }
-function renderPendingInput(item, chatId, editing) {
+function renderPendingInput(item, chatId, editing, component) {
+  var state = component ? component.inboxState : window.state;
+  var $ = component ? component.node : window.$;
+  function renderChatInbox() { if (component) component.render(); else window.renderChatInbox(); }
+  function changeInboxItem(action, value, text) { return window.changeInboxItem(action, value, text, component); }
   var node = document.createElement("article"); node.className = "message user pending inbox-message";
   node.setAttribute("aria-label", "Сообщение в очереди");
   var heading = document.createElement("div"); heading.className = "inbox-heading";
@@ -343,14 +299,17 @@ function renderPendingInput(item, chatId, editing) {
   }
   return node;
 }
-function buildPendingInputUnits() {
-  var chatId = state.activeChatId, box = chatInbox(), items = pendingChatInputs(), units = [];
+function buildPendingInputUnits(component) {
+  var state = component ? component.inboxState : window.state;
+  var chatId = component ? component.target.sessionId : state.activeChatId, box = chatInbox(chatId), units = [];
+  var history = component ? component.snapshot().messages : state.messages;
+  var items = chatInputEchoes(chatId).filter(function (item) { return !item.Id || !(history || []).some(function (message) { return messageId(message) === item.Id; }); });
   if (box.paused && (box.items || []).length) units.push({ key: "live:inbox-paused", transient: true, signature: JSON.stringify([box.pauseReason, box.running]), render: function () {
     var note = document.createElement("div"); note.className = "inbox-pause";
     var reason = document.createElement("span"); reason.textContent = box.pauseReason || "Очередь приостановлена"; note.appendChild(reason);
     note.appendChild(inboxButton("Продолжить очередь", async function () {
       try { applyChatInbox(await send("resumeChatInbox", { chatId: chatId })); }
-      catch (error) { if (state.activeChatId === chatId) $("inboxStatus").textContent = error.message; }
+      catch (error) { if (component) component.notice(error); else if (state.activeChatId === chatId) $("inboxStatus").textContent = error.message; }
     }));
     return note;
   } });
@@ -363,6 +322,6 @@ function buildPendingInputUnits() {
         (box.items || []).some(function (pending) { return pending.Id === item.Id; }), box.paused && !box.running]),
       actionsSignature: statusText,
       refreshActions: function (node) { node.querySelector(".inbox-item-status").textContent = statusText; },
-      render: function () { return renderPendingInput(item, chatId, editing); } };
+      render: function () { return renderPendingInput(item, chatId, editing, component); } };
   }));
 }

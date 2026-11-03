@@ -53,7 +53,7 @@
       },
       pending: function () { var draft = readOfficeDraft(state.activeChatId); return draft && draft.pendingVisualAnnotation || null; },
       setPending: function (value) { window.RNAssistantChatDrafts.setPendingOfficeAnnotation(state.activeChatId, value); },
-      drafts: function () { return state.draftAttachments || []; },
+      drafts: function () { var draft = readOfficeDraft(state.activeChatId); return draft && draft.attachments || []; },
       messages: function () { return state.chatDetailPending || state.chatDetailError ? [] : state.messages || []; },
       updated: function () { if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts(); },
       remove: function (item) { removeDraftAttachment(item); },

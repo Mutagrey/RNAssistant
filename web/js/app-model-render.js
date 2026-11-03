@@ -87,7 +87,8 @@ function renderModelControls() {
     }
     if (typeof renderContextWindowSummary === "function") renderContextWindowSummary();
   }
-  if (chatVisible) {
+  if (chatVisible && window.RNAssistantConversationPanel) RNAssistantConversationPanel.each(function (component) { component.controls(); });
+  else if (chatVisible) {
     renderActiveModelCapability();
     renderReasoningToggle();
     renderChatModelPicker();

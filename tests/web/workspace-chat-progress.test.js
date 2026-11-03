@@ -225,7 +225,7 @@ const { chromium } = require('playwright');
         await page.locator('#pluginWorkbench').getByRole('button', { name: 'Чат исходников', exact: true }).click();
       }
       await page.waitForFunction(expected => RNAssistantWorkspaceChat.owner() === expected &&
-        RNAssistantWorkspaceChat.selectedSession(expected === 'project' ? 'preview-data-workspace' : 'preview-plugin-workspace'), owner);
+        RNAssistantWorkspaceChat.selectedSession(expected === 'project' ? 'preview-data-workspace' : 'preview-plugin-workspace') && !RNAssistantConversationPanel.selected().loading, owner);
       const idleTree = await page.evaluate(() => {
         const row = document.querySelector('#projectChatTree [data-tree-key]');
         const original = RNAssistantNavigationTree.render;
@@ -245,12 +245,12 @@ const { chromium } = require('playwright');
             window.__workspaceProgress.push(event.data.payload);
         });
       });
-      await page.locator('#chatInput').fill('Проверка живого ответа');
-      await page.locator('#chatInput').press('Enter');
-      await page.waitForFunction(() => document.querySelector('#messages .agent-stream-step')?.textContent.includes('Готовлю ответ проекта'));
-      const repaint = await page.evaluate(() => {
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="chatInput"]').fill('Проверка живого ответа');
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="chatInput"]').press('Enter');
+      await page.waitForFunction(() => document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step')?.textContent.includes('Готовлю ответ проекта'));
+      const repaint = await page.evaluate(async () => {
         const tree = RNAssistantNavigationTree.render, transcript = RNAssistantWorkspaceChat.renderMessages;
-        const leaf = document.querySelector('#messages .agent-stream-step');
+        const leaf = document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step');
         const snapshot = RNAssistantProjectChats.snapshot();
         const current = snapshot.state.modelProgress;
         const sequence = current.Sequence || current.sequence || 0;
@@ -262,7 +262,8 @@ const { chromium } = require('playwright');
             RNAssistantWorkspaceChat.acceptProgress({ workspaceId: snapshot.project.workspaceId,
               sessionId: snapshot.sessionId, modelProgress: Object.assign({}, current,
                 { Sequence: sequence + index, Message: 'Живое обновление без перестройки ленты.' }) });
-          return { treeCalls, transcriptCalls, leafRetained: leaf === document.querySelector('#messages .agent-stream-step'),
+          await new Promise(requestAnimationFrame); // Coalesced paints run once per animation frame.
+          return { treeCalls, transcriptCalls, leafRetained: leaf === document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step'),
             textUpdated: leaf.textContent.includes('Живое обновление без перестройки ленты.') };
         } finally {
           RNAssistantNavigationTree.render = tree;
@@ -276,7 +277,7 @@ const { chromium } = require('playwright');
       const delivered = await page.evaluate(() => {
         const events = window.__workspaceProgress;
         const last = events[events.length - 1];
-        const preview = document.querySelector('#messages .agent-stream-step');
+        const preview = document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step');
         const before = preview.textContent;
         RNAssistantWorkspaceChat.acceptProgress({ workspaceId: last.workspaceId, sessionId: last.sessionId,
           modelProgress: Object.assign({}, last.modelProgress, { Sequence: 1, Message: 'Stale event.' }) });
@@ -289,7 +290,7 @@ const { chromium } = require('playwright');
       assert.ok(delivered.count >= 2, owner + ': native-shaped progress events reached the browser');
       assert.equal(delivered.scope, true, owner + ': event has exact workspace scope');
       assert.equal(delivered.unchanged, true, owner + ': stale and foreign events do not replace preview');
-      await page.waitForFunction(() => !document.querySelector('#messages .agent-stream-step'));
+      await page.waitForFunction(() => !document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step'));
       assert.equal(await page.evaluate(() => window.__workspaceProgress.some(event =>
         event.phase === 'session_changed' && event.cursor)), true,
         owner + ': terminal state arrived as an exact session change notification');
@@ -300,7 +301,7 @@ const { chromium } = require('playwright');
       const terminal = await page.evaluate(() => {
         const snapshot = RNAssistantProjectChats.snapshot();
         const row = document.querySelector('[data-tree-key="project-chat:' + snapshot.project.workspaceId + ':' + snapshot.sessionId + '"]');
-        return { stopHidden: document.getElementById('stopButton').hidden,
+        return { stopHidden: RNAssistantConversationPanel.selected().node('stopButton').hidden,
           runningBadge: !!row?.querySelector('.tree-run') };
       });
       assert.deepEqual(terminal, { stopHidden: true, runningBadge: false },

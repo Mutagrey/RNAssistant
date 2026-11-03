@@ -46,7 +46,9 @@ function fixture() {
   context.chatComposer = () => composer;
   composer.register("office", {
     target: context.officeComposerTarget, preferences: context.officeChatPreferences,
-    preferenceService: context.officePreferenceService,
+    preferenceService: scope => context.officePreferenceService({ target: scope.target,
+      isCurrent: scope.isCurrent, snapshot: () => context.state,
+      accept: value => { context.applyChatStateForChat(value, scope.target.sessionId); return true; } }),
     preferenceChanged: context.renderModelControls,
     preferenceFailed: () => {}, preferenceUnavailable: error => context.failBridgeTransport(null, error)
   });

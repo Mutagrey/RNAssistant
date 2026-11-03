@@ -183,78 +183,8 @@ async function selectChat(id) {
   }
 }
 
-async function loadPreviousChatMessages(event) {
-  if (state.messagePageBusy || !state.activeChatId || state.messageStartIndex <= 0) return;
-  var button = event && event.currentTarget;
-  var chatIdValue = state.activeChatId;
-  var beforeIndex = state.messageStartIndex;
-  var revision = state.chatProjectionRevisions[chatIdValue];
-  var navigationVersion = state.chatNavigationVersion;
-  var projection = officeChatProjection();
-  state.messagePageBusy = true;
-  if (button) button.disabled = true;
-  try {
-    var page = await send("getPreviousChatMessages", { chatId: chatIdValue, beforeIndex: beforeIndex });
-    if (projection !== officeChatProjection() || state.activeChatId !== chatIdValue || state.messageStartIndex !== beforeIndex ||
-        state.chatProjectionRevisions[chatIdValue] !== revision ||
-        state.chatNavigationVersion !== navigationVersion) return;
-    if (page.chatId !== chatIdValue || page.sessionRevision !== revision) {
-      var refreshed = await loadChatState(chatIdValue);
-      if (projection === officeChatProjection() && state.activeChatId === chatIdValue && state.messageStartIndex === beforeIndex &&
-          state.chatProjectionRevisions[chatIdValue] === revision &&
-          state.chatNavigationVersion === navigationVersion)
-        applyChatState(refreshed);
-      return;
-    }
-    var windowed = window.RNAssistantConversationState.prependMessageWindow(state, page);
-    var box = $("messages");
-    var previousScrollHeight = box ? box.scrollHeight : 0;
-    state.artifacts = state.artifacts || [];
-    var knownArtifacts = Object.create(null);
-    (state.artifacts || []).forEach(function (artifact) { knownArtifacts[String(artifact.id || artifact.Id || "").toLowerCase()] = true; });
-    (page.artifacts || []).forEach(function (artifact) {
-      var id = String(artifact.id || artifact.Id || "").toLowerCase();
-      if (id && !knownArtifacts[id]) { state.artifacts.push(artifact); knownArtifacts[id] = true; }
-    });
-    var library = state.artifactLibrary || {};
-    var removed = library.removedResourceUris || [];
-    var knownRemoved = Object.create(null);
-    removed.forEach(function (uri) { knownRemoved[String(uri).toLowerCase()] = true; });
-    (page.removedResourceUris || []).forEach(function (uri) {
-      var key = String(uri).toLowerCase();
-      if (key && !knownRemoved[key]) { removed.push(uri); knownRemoved[key] = true; }
-    });
-    library.removedResourceUris = removed;
-    state.messages = windowed.messages;
-    state.messageStartIndex = windowed.messageStartIndex;
-    state.messageTotalCount = windowed.messageTotalCount;
-    renderMessages({ preserveTop: true, previousScrollHeight: previousScrollHeight });
-    renderChatSessions();
-  } catch (error) {
-    if (projection === officeChatProjection()) log(error.detail || error.message, "error");
-  } finally {
-    state.messagePageBusy = false;
-    if (button) button.disabled = false;
-  }
-}
-
-async function jumpToLatestChatMessages() {
-  if (!state.activeChatId) return;
-  var chatIdValue = state.activeChatId;
-  var navigationVersion = state.chatNavigationVersion;
-  var revision = state.chatProjectionRevisions[chatIdValue];
-  var projection = officeChatProjection();
-  try {
-    var response = await loadChatState(chatIdValue);
-    if (projection === officeChatProjection() && state.activeChatId === chatIdValue && state.chatNavigationVersion === navigationVersion &&
-        state.chatProjectionRevisions[chatIdValue] === revision) {
-      applyChatState(response, false, { latestMessages: true });
-      if (typeof renderMessages === "function") renderMessages({ forceScroll: true });
-    }
-  } catch (error) {
-    if (projection === officeChatProjection()) log(error.detail || error.message, "error");
-  }
-}
+function loadPreviousChatMessages() { return chatComposer().dispatch("loadPrevious"); }
+function jumpToLatestChatMessages() { return chatComposer().dispatch("loadLatest"); }
 
 async function openActiveDocument(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
@@ -371,6 +301,7 @@ async function deleteChat(chatIdValue) {
   try {
     await window.RNAssistantChatDrafts.flushOffice(targetChatId);
     await navigateChat("deleteChat", { chatId: targetChatId });
+    RNAssistantConversationPanel.closeDeleted({ source: "office", sessionId: targetChatId });
     window.RNAssistantChatDrafts.forgetOffice(targetChatId);
     clearSendError();
     log("Чат удален.");
@@ -379,44 +310,8 @@ async function deleteChat(chatIdValue) {
   }
 }
 
-async function deleteMessage(message, index, scope) {
-  if (!scope || !scope.isCurrent() || !scope.target || scope.target.source !== "office" || !scope.target.sessionId) return;
-  if (message && message.Local) {
-    state.messages.splice(index, 1);
-    if (message.Failed) {
-      clearSendError();
-    }
-    renderMessages();
-    renderChatSessions();
-    renderContextMeter();
-    return;
-  }
-
-  var targetChatId = scope.target.sessionId;
-  try {
-    var response = await send("deleteMessage", { chatId: targetChatId, id: messageId(message), index: index });
-    if (scope.isCurrent()) applyChatStateForChat(response, targetChatId);
-    else applyChatCatalogState(response);
-    log("Сообщение удалено.");
-  } catch (error) {
-    if (scope.isCurrent()) showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
-    log(error.detail || error.message, "error");
-  }
-}
-
-async function forkChatAtMessage(message, index) {
-  if (!state.activeChatId || state.chatNavigationPending) {
-    return;
-  }
-
-  try {
-    await navigateChat("forkChat", { chatId: state.activeChatId, id: messageId(message), index: index });
-    clearSendError();
-    log("Ветка чата создана.");
-  } catch (error) {
-    log(error.detail || error.message, "error");
-  }
-}
+function deleteMessage(message, index, scope) { return (scope || chatComposer().capture()).invoke("messageAction", { name: "delete", message: message, index: index }); }
+function forkChatAtMessage(message, index) { return chatComposer().dispatch("messageAction", { name: "fork", message: message, index: index }); }
 
 function renderVisibleSecondarySurfaces() {
   if (typeof isPanelActive === "function" && isPanelActive("instructions") && typeof renderInstructions === "function") {
@@ -472,6 +367,7 @@ function applyInitState(init) {
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();
   renderVisibleSecondarySurfaces();
+  if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.ready();
   log("Initialized " + init.host);
   if (init.quickAction && !init.detailDeferred) {
     runQuickAction(init.quickAction);
@@ -718,6 +614,7 @@ async function clearRuntimeData() {
   try {
     await window.RNAssistantChatDrafts.flushAll();
     var init = await send("clearRuntimeData", {});
+    RNAssistantConversationPanel.each(function (component) { RNAssistantConversationPanel.closeDeleted(component.target); });
     window.RNAssistantChatDrafts.reset();
     state.activeChatId = "";
     state.draftAttachments = [];

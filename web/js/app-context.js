@@ -1,37 +1,40 @@
 var contextJsonText = "{}";
 
-function clearContextJsonViewer() {
+function clearContextJsonViewer(component) {
+  var $ = component ? component.node : window.$;
   var target = $("contextBox");
   if (target && window.RNAssistantViewerRegistry) {
     window.RNAssistantViewerRegistry.unmount(target);
   }
 }
 
-function mountContextJsonViewer() {
+function mountContextJsonViewer(component) {
+  var $ = component ? component.node : window.$;
   var target = $("contextBox");
   var details = $("contextJsonDetails");
   var manager = $("contextManager");
   if (!target || !details || !details.open || !manager || manager.classList.contains("hidden")) {
-    clearContextJsonViewer();
+    clearContextJsonViewer(component);
     return;
   }
   if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
     throw new Error("JSON viewer is unavailable.");
   }
   window.RNAssistantViewerRegistry.mount("json", target, {
-    text: contextJsonText,
+    text: component ? target.contextJsonText || "{}" : contextJsonText,
     completeness: "full",
     mode: "tree",
     onCopy: window.copyTextResult
   });
 }
 
-function renderContextJson(value) {
-  contextJsonText = JSON.stringify(value || {}, null, 2);
-  mountContextJsonViewer();
+function renderContextJson(value, component) {
+  var text = JSON.stringify(value || {}, null, 2);
+  if (component) component.node("contextBox").contextJsonText = text; else contextJsonText = text;
+  mountContextJsonViewer(component);
 }
 
-function createRemoveContextButton(note) {
+function createRemoveContextButton(note, component) {
   var button = document.createElement("button");
   button.type = "button";
   button.className = "context-chip-remove";
@@ -41,7 +44,7 @@ function createRemoveContextButton(note) {
   button.addEventListener("click", function (event) {
     event.preventDefault();
     event.stopPropagation();
-    removeContextItem(noteId(note));
+    removeContextItem(noteId(note), component);
   });
   return button;
 }
@@ -111,7 +114,8 @@ function bindContextPopover(chip) {
   chip.addEventListener("focusin", update);
 }
 
-function renderContextChips(notes) {
+function renderContextChips(notes, component) {
+  var $ = component ? component.node : window.$;
   var strip = $("contextStrip");
   var chips = $("contextChips");
   chips.innerHTML = "";
@@ -136,14 +140,15 @@ function renderContextChips(notes) {
     main.appendChild(badge);
     main.appendChild(title);
     chip.appendChild(main);
-    chip.appendChild(createRemoveContextButton(note));
+    chip.appendChild(createRemoveContextButton(note, component));
     appendContextPopover(chip, note);
     bindContextPopover(chip);
     chips.appendChild(chip);
   });
 }
 
-function renderContextList(notes) {
+function renderContextList(notes, component) {
+  var $ = component ? component.node : window.$;
   var list = $("contextList");
   var summary = $("contextSummary");
   if (!list || !summary) {
@@ -174,7 +179,7 @@ function renderContextList(notes) {
     text.appendChild(meta);
     head.appendChild(text);
 
-    var remove = createRemoveContextButton(note);
+    var remove = createRemoveContextButton(note, component);
     remove.classList.add("secondary");
     head.appendChild(remove);
 
@@ -188,14 +193,15 @@ function renderContextList(notes) {
   });
 }
 
-function renderContext() {
-  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
-  var notes = contextNotes();
-  renderContextChips(notes);
-  renderContextList(notes);
-  renderContextJson(state.context || {});
-  renderContextMeter();
-  if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.render();
+function renderContext(component) {
+  if (!component && typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+  var context = component ? component.snapshot().context || {} : state.context || {};
+  var notes = (context.Notes || context.notes || []).filter(Boolean);
+  renderContextChips(notes, component);
+  renderContextList(notes, component);
+  renderContextJson(context, component);
+  renderContextMeter(component);
+  if (!component && window.RNAssistantChatInspector) window.RNAssistantChatInspector.render();
 }
 
 async function syncActiveChatState() {
@@ -203,6 +209,11 @@ async function syncActiveChatState() {
 }
 
 function applyContextResponse(response, projection) {
+  var component = projection && window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(projection.target.sessionId);
+  if (component && component.projection() === projection && projection.isCurrent()) {
+    projection.snapshot().context = response && (response.context || response.Context) || response;
+    renderContext(component); return true;
+  }
   if (!projection || projection !== officeChatProjection() || !projection.isCurrent() ||
       projection.target.sessionId !== state.activeChatId) return false;
   var context = response && (response.context || response.Context) || response;
@@ -220,29 +231,24 @@ async function refreshContext() {
   }
 }
 
-async function addSelectionContext(mode) {
-  var projection = officeChatProjection();
+async function addSelectionContext(mode, component) {
+  var projection = component ? component.projection() : officeChatProjection();
   if (!projection) return;
   var targetChatId = projection.target.sessionId;
-  setControlBusy("addSelectionContextButton", true);
+  var button = component ? component.node("addSelectionContextButton") : $("addSelectionContextButton");
+  button.disabled = true;
   try {
     if (document.activeElement && typeof document.activeElement.blur === "function") {
       document.activeElement.blur();
     }
     reportFocusState();
-    if (currentActiveSend() || (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity())) {
+    if (component ? component.snapshot().activeRunViewState && ["running", "awaiting_confirmation"].includes(component.snapshot().activeRunViewState.lifecycle) :
+        currentActiveSend() || (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity())) {
       var staged = await send("stageSelectionInput", { chatId: targetChatId, mode: mode || "full" });
       var attachment = staged.resource || staged.Resource;
-      if (state.activeChatId === targetChatId) {
-        state.draftAttachments.push(attachment);
-        captureChatDraft(targetChatId, true);
-        renderAttachmentDrafts();
-        updateComposerInputState();
-      } else {
-        var draft = readOfficeDraft(targetChatId);
-        saveOfficeDraft(targetChatId, draft ? draft.text : "",
-          (draft && draft.attachments || []).concat(attachment), true);
-      }
+      var draft = readOfficeDraft(targetChatId);
+      saveOfficeDraft(targetChatId, draft ? draft.text : "", (draft && draft.attachments || []).concat(attachment), true);
+      if (component) component.controls();
       log("Снимок выделения прикреплён к следующему сообщению.");
       return;
     }
@@ -250,13 +256,13 @@ async function addSelectionContext(mode) {
       await send("addSelectionContext", { chatId: targetChatId, mode: mode || "full" }),
       projection);
     if (applied) {
-      await syncActiveChatState();
+      if (component) await component.refresh(); else await syncActiveChatState();
       if (projection === officeChatProjection()) log("Выделение добавлено в контекст.");
     }
   } catch (error) {
-    if (projection === officeChatProjection()) log(error.detail || error.message, "error");
+    if (component) component.notice(error); else if (projection === officeChatProjection()) log(error.detail || error.message, "error");
   } finally {
-    setControlBusy("addSelectionContextButton", false);
+    button.disabled = false;
   }
 }
 
@@ -277,12 +283,12 @@ async function addTextContext(role, kind, title, reference, text, details) {
   return applied;
 }
 
-async function removeContextItem(id) {
+async function removeContextItem(id, component) {
   if (!id) {
     return;
   }
 
-  var projection = officeChatProjection();
+  var projection = component ? component.projection() : officeChatProjection();
   if (!projection) return;
   try {
     var targetChatId = projection.target.sessionId;
@@ -291,7 +297,7 @@ async function removeContextItem(id) {
       projection);
     if (applied && !contextNotes().length) setContextManagerOpen(false);
     if (applied) {
-      await syncActiveChatState();
+      if (component) await component.refresh(); else await syncActiveChatState();
       if (projection === officeChatProjection()) log("Элемент контекста удален.");
     }
   } catch (error) {
@@ -299,7 +305,8 @@ async function removeContextItem(id) {
   }
 }
 
-function setContextManagerOpen(open) {
+function setContextManagerOpen(open, component) {
+  var $ = component ? component.node : window.$;
   var panel = $("contextManager");
   var button = $("openContextTabButton");
   if (!panel) {
@@ -311,47 +318,11 @@ function setContextManagerOpen(open) {
     button.classList.toggle("active", !!open);
     button.setAttribute("aria-expanded", open ? "true" : "false");
   }
-  if (open) mountContextJsonViewer();
-  else clearContextJsonViewer();
+  if (open) mountContextJsonViewer(component);
+  else clearContextJsonViewer(component);
 }
 
 function toggleContextManager() {
   var panel = $("contextManager");
   setContextManagerOpen(panel ? panel.classList.contains("hidden") : true);
-}
-
-function bindContextActions() {
-  $("contextJsonDetails").addEventListener("toggle", function () {
-    if ($("contextJsonDetails").open) mountContextJsonViewer();
-    else clearContextJsonViewer();
-  });
-  $("openContextTabButton").addEventListener("click", toggleContextManager);
-  $("closeContextManagerButton").addEventListener("click", function () { setContextManagerOpen(false); });
-  $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
-  $("clearContextButton").addEventListener("click", async function () {
-    var projection = officeChatProjection();
-    if (!projection) return;
-    var targetChatId = projection.target.sessionId;
-    setControlBusy("clearContextButton", true);
-    try {
-      var applied = applyContextResponse(
-        await send("clearContext", { chatId: targetChatId }),
-        projection);
-      if (applied) setContextManagerOpen(false);
-      if (applied) {
-        await syncActiveChatState();
-        if (projection === officeChatProjection()) log("Контекст очищен.");
-      }
-    } catch (error) {
-      if (projection === officeChatProjection()) log(error.message, "error");
-    } finally {
-      setControlBusy("clearContextButton", false);
-    }
-  });
-  document.addEventListener("keydown", function (event) {
-    var panel = $("contextManager");
-    if (event.key === "Escape" && panel && !panel.classList.contains("hidden")) {
-      setContextManagerOpen(false);
-    }
-  });
 }

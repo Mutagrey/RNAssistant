@@ -528,30 +528,27 @@ preferences and wire`, `chat: session model overrides global settings`,
 
 ### Остаток S2: единая реализация и независимые чаты
 
-S2a (`abfd7c85`) завершает модель/preferences, но **не весь общий чат**. По уточнению
-пользователя Office/project/plugin не должны иметь отдельные реализации chat UI;
-целевая граница — [единый чат](UI_ARCHITECTURE.md#единый-чат-обязательная-целевая-граница).
-Сейчас Dockview имеет один `conversation`: выбор другого чата заменяет его target.
-Открыть одновременно несколько независимых чатов пока нельзя.
+Актуально после контрольной точки 2026-11-03: общая factory и независимые
+Office/Workspace/plugin вкладки **реализованы**. Раздельные draft/edit/model/history,
+параллельная отправка, close без отмены run, late delivery и восстановление всех
+черновиков проверены. Повторять подготовку Chat View или перенос placement не нужно.
+S2b.1–S2b.12 ниже — история выполненной подготовки, не очередь оставшихся задач.
 
-Порядок оставшейся работы, небольшими проверяемыми срезами:
+Ближайший законченный результат — одинаковые возможности уже работающего чата:
 
-1. Выделить общий Chat View со state/lifecycle конкретного target; инвентаризировать
-   и переключать global/owner-specific render/commands на явный scope. Начать с
-   существующего одного view, удалить заменённые пути; runtime/store не дублировать.
-2. Через эту границу объединить вложения, контекст, подтверждения/вопросы и остальные
-   действия. Сверять весь набор возможностей на каждом источнике; недостающие typed
-   contracts закрывать у domain owners, а не постоянным скрытием кнопок по типу чата.
-3. В существующем DockWorkspace разрешить отдельные views разных exact chat targets.
-   Повторное открытие того же target активирует его view. Проверить одновременные
-   draft/edit/model/history/stream, late replies, move/split/close/reopen; закрытие
-   вкладки не отменяет run и не очищает чужое состояние.
-4. Сохранить cap 240 на view, lazy hidden rendering и отмену лишних reads; проверить
-   общие bounds памяти/подписок при нескольких чатах. Catalog paging вводить при
-   необходимом typed contract. Удалить временные adapters после переключения consumers.
+1. Устранить оставшиеся расхождения Queue/Steer, вложений и контекста между
+   источниками. Проверить подтверждения/вопросы и ошибки в нескольких вкладках;
+   их адресная доставка уже подключена, но это ещё не полная parity capabilities.
+   Недостающие contracts закрывать у domain owners, не постоянным скрытием controls.
+2. Переключить оставшиеся secondary consumers с selected facade на explicit
+   target/provider и удалить adapter после последнего consumer. Живые HTML/plugin
+   editor/annotation providers относятся к S3b.3c, не к новой реализации чата.
+3. Сохранить cap 240, lazy paints и границы subscriptions/reads; довести необходимые
+   старые browser fixtures до factory и проверить несколько тяжёлых вкладок.
+   Catalog paging — только при подтверждённой необходимости и typed contract.
 
-S2 завершён только после этих behavioral gates и визуального ревью; Windows/Office
-evidence остаётся отдельным gate. S3b сохраняет свой scope и не подменяет эту работу.
+Полный S2 закрывается после parity и visual/behavior review. Windows/Office evidence
+остаётся отдельным gate; локальные mock/Chromium проверки его не заменяют.
 
 ### S2b.1: общий owner отрисовки — 2026-11-02
 
@@ -968,7 +965,7 @@ Mock не квалифицирует Office/WebView2. Откат — Web diff, �
 с проверками одновременного ввода/настроек/потока, close/move/restore и поздних ответов.
 Selected facade и singleton DOM пока остаются; S2 и несколько chat tabs не завершены.
 
-### Следующая контрольная точка S2: два работающих Chat View — Proposed
+### Следующая контрольная точка S2: два работающих Chat View — In Review
 
 Owner: Web conversation presentation / DockWorkspace. Уточнение способа выполнения
 после замечания пользователя о темпе; исходная архитектура и остальные срезы плана
@@ -976,45 +973,60 @@ Owner: Web conversation presentation / DockWorkspace. Уточнение спо�
 долгая последовательность подготовительных срезов не доставила независимые вкладки.
 Единство реализации компонента не означает единственный экземпляр его DOM/controller.
 
-Фактический остаток на момент S2b.12:
+Реализовано 2026-11-03 в production Web, без изменения runtime/Bridge/storage:
 
-| Граница | Состояние и обязательное переключение |
+| Граница | Фактический результат |
 |---|---|
-| Данные и render input | Адресные sources, bounded snapshots и явная сборка ленты уже есть; использовать их в экземплярах Chat View |
-| DOM и composer | `messageView()` / `chatComposer()` удерживают текущий singleton; Workspace mount переносит одни messages/form. Общая factory должна создавать nodes/controller для каждого view |
-| Команды и подписки | Часть adapters по-прежнему читает active chat и глобальные DOM IDs. Передать exact view/source в действия, ошибки, confirmations/questions, Inspector и callback delivery |
-| Dock placement | Один `conversation` root/id. Переключить существующий DockWorkspace на адресные chat views; повтор exact target активирует существующий view |
+| DOM/composer | Одна factory Chat View, scoped nodes, отдельные controllers Office/Workspace/plugin; прежний перенос form/messages удалён |
+| Данные/команды | Прежние bounded sources, draft/receipt/run owners; exact target для отправки, edit, модели, истории, файлов, approvals и late delivery |
+| Dockview | Per-object descriptor в существующем реестре, несколько видимых чатов, chooser targets, move/close/reopen/restore |
+| Очистка | Удалены singleton composer binding, старые Workspace orchestration/edit handlers и Office inbox/history observer; view освобождает subscriptions/listeners/RAF |
+| Временный остаток | Selected facade для вторичных HTML/material/model-context consumers; не отдельная копия чата. Gate уточнён в MIGRATION_MAP |
 
-Предлагаемый следующий результат — сквозной production-сценарий с одной реализацией
-Chat View и несколькими экземплярами, а не очередное самостоятельное выделение helper.
-Начать интеграцию с двух Office-чатов; до закрытия контрольной точки проверить также
-Office + Workspace и project/plugin source через тот же компонент.
+Проверки: `independent-chat-views` запускает shipped Web с mock bridge и проверяет
+пару Office views, независимые inputs/model/reasoning, параллельную отправку,
+сохранение history DOM, Workspace/plugin submit, edit/cancel, close во время run,
+late read/preference ACK после reopen, изолированные ошибки, narrow/restore и
+восстановление черновиков всех вкладок после перезапуска, закрытие всех чатов.
+`conversation-composer`, `conversation-projection`, `conversation-observer`,
+`conversation-draft`, `office-conversation-projection`, `model-navigation` проверяют
+bounds 240, stale guards, ACK/draft ownership, hidden polling и отсутствие лишней
+перестройки каталога моделей. Snapshot fixture переключён на explicit component
+service; поздние reads проверяются теперь реальным Dockview-сценарием.
+Mock прежде ограничивал Office reads/prefs выбранным чатом; приведён к существующим
+адресным API. Он не доказывает Office qualification.
 
-Критерии результата:
-1. Два чата видны рядом; у каждого свои input/edit/model, history/scroll, progress,
-   ошибки и адресные команды. Изменение одного не меняет другой.
-2. Move/split/close/reopen/restore сохраняют exact target; close не отменяет run;
-   поздний ответ закрытого или прежнего view не обновляет новый.
-3. Сохранены cap 240 на view, coalesced/leaf streaming, lazy hidden rendering,
-   очистка listeners/reads/leases. Runtime, stores и UI реализации не дублируются.
-4. После переключения consumers заменённый singleton path удалён; остаток полной
-   parity S2 перечислен явно. Ни пара Office views, ни эта точка сами по себе не
-   закрывают весь S2 или Windows/Office qualification.
+Старые browser fixtures, вручную монтирующие singleton chat по глобальным IDs,
+требуют перевода на factory перед повторным использованием; новая integration
+проверяет production boot/placement вместо этого устаревшего пути. Они не объявлены
+прошедшими. `workspace-chat-progress` переведён на scoped nodes и ожидание animation frame:
+для project/plugin 30 обновлений сохраняют live leaf, не перерисовывают ленту или
+дерево; terminal snapshot убирает Stop и running badge. Проверка прошла.
 
-Возможны несколько атомарных implementation commits. Подготовительный commit не
-объявляется завершением этого результата; визуальное ревью показывает работающую
-пару чатов. Оценка «ещё один срез — и готово» без такой интеграции больше не используется.
+Ревью: `python3 prototypes/serve_ui.py` → `/preview/web/?scenario=ready`.
+1. Открыть два чата: справа/снизу → выбор чата. Написать разные черновики.
+2. Изменить модель/начать правку в одном; второй должен сохранить свой ввод.
+3. Отправить сообщения в обоих; переключить Office/Workspace/plugin.
+4. Закрыть выполняющийся чат, вернуть через дерево; переместить/восстановить layout.
+
+Откат — этот Web diff и mock fixture, без миграции данных. Старый layout без target
+сбрасывается явно. UI остаётся In Review, не Approved; Windows/Office/WebView2
+qualification открыта. Полный S2 не закрыт: очередь/steer capabilities Workspace,
+живые HTML/plugin providers S3b.3c и остальные secondary consumers ещё требуют
+адресной интеграции. Следующая работа — по найденному поведению и этой конечной
+карте; отдельный подготовительный helper не объявляется переносом Chat View.
 
 ## Последующие срезы — только после ревью предыдущего
 
-| Срез | Содержание | Что удаляется после проверки |
+| Срез | Текущее состояние / остаток | Что удаляется после проверки |
 |---|---|---|
-| S1a / S1b | Общие chat rules и production Chat workspace + Inspector реализованы; визуальное ревью S1b по эталону Demo | Дубли composer presentation и старый Inspector grid/split/open-width удалены. Остальные splitters пока нужны |
-| S2 | View-scoped chat presentation, полная parity model/context/attachment capabilities, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
-| S3 | Browser/material viewers + diagnostics views, lazy detail, deep links | Старые раздельные placement/toggle paths, redundant viewer mounts |
-| S3b — пересмотрен после zoom out | Общая навигация → exact объект → независимый view; общий Browser для HTML/plugin, существующие специализированные viewers | Дубли navigation chrome/commands, inline preview placement, ChatBrowser/plugin splitters после переключения их consumers |
-| S4 | Предметные Library/VBA/project views и редакторы на общей navigation/view основе S3b; Settings вынесен в S1c | Только подтверждённые duplicate controls/styles, global editor-selection paths и legacy routes после consumer switch |
-| S5 | Оставшиеся plugin views, portable export/public API и финальная сверка единства | Migration adapters, obsolete CSS и Demo runtime-копии; reference screenshots можно сохранить |
+| S1 / S1c | Shell, Dockview, Inspector, Settings и rail реализованы; эталон Demo сохраняется | Старый Shell/Inspector placement заменён; повторный перенос не нужен |
+| S2 | Независимые Chat View реализованы; остаток — parity действий и secondary consumers, перечисленные выше | Оставшиеся selected adapters; без второго durable store |
+| S3a | Запрос и Диагностика в Dockview реализованы | Текущие дефекты/review исправляются адресно, не новым переносом |
+| S3b.1–3b.3b | Общая навигация, независимые материалы, сохранённые HTML/plugin версии и Browser реализованы | Заменённые inline previews и старые splitters уже удалены |
+| S3b.3c | Осталось: scoped live HTML/plugin editors и адресные аннотации, dirty/save/close/stale guards | Mutable singleton providers и их selected зависимости |
+| S4 | Осталось: Library/VBA/project views и редакторы через существующие registry/NavigationPane; cold-start mode/search/scroll | Заменённые editor-selection paths и legacy routes |
+| S5 | Финальная сверка и удаление оставшихся adapters; plugin views/export/public API — отдельный явный scope, не условие завершения Chat View | Мёртвые зависимости/overrides после проверки consumers; без новой платформы или SDK |
 
 Каждый срез: problem/scope → baseline → маленький diff → behavior/perf checks →
 визуальное ревью → согласование → удаление заменённого пути. Нет автоматического

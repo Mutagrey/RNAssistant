@@ -1,5 +1,23 @@
 # Current-to-target migration map
 
+## Независимые Chat View — 2026-11-03
+
+Owner: Web ConversationPanel / source adapters; placement — DockWorkspace.
+Singleton conversation root/reparent, shared composer binding, прежние Workspace
+chat orchestration и Office inbox/history observer заменены per-object factory.
+`chatComposer()`/`messageView()`/`$()` и selected Office accessors остаются только
+адаптером вторичных consumers к выбранному **существующему** view/source. Второго
+state/store или per-tab копии глобального state нет. Полное удаление facade перед
+включением вкладок оказалось слишком широкой зависимостью; actual Chat View уже
+не адресует через него команды или async delivery. Это явное уточнение прежнего
+gate S2b.9–12 ниже, а не заявление об удалении всех legacy consumers.
+
+Removal gate: перевести оставшиеся live HTML/plugin source/annotation и
+material/model-context consumers на explicit providers (S3b.3c / соответствующие
+срезы), проверить dirty/stale/close и убрать selected entrypoints после последнего
+consumer. Нельзя расширять facade новыми chat features. Runtime/drafts/receipts
+остаются у прежних owners. Визуальная контрольная точка — In Review.
+
 ## JSON-профиль: старые настройки — 2026-11-02
 
 Owner: Core AppSettings / ModelProtocol. `ToolResultRole` и `FallbackToJsonObject`

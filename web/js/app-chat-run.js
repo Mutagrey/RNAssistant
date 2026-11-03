@@ -107,6 +107,8 @@ function applyOfficeChatProgress(progress, progressPending, requestId) {
     var normalizedActivity = normalizeProgressActivity(progress);
     if (acceptedStepReasoning) normalizedActivity.__reasoningMessage = acceptedStepReasoning;
     recordChatRunActivityState(progressChatId, normalizedActivity);
+    var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(progressChatId);
+    if (component) component.stream(true);
     if (state.chatRuns[progressChatId] && state.chatRuns[progressChatId].cancelRequested &&
         typeof updateChatModelStage === "function") updateChatModelStage(progressChatId);
   }
@@ -133,65 +135,7 @@ async function refreshChatAfterSendFailure(chatId) {
   }
 }
 
-async function submitChatInput(value, scope) {
-  scope = scope || chatComposer().capture();
-  if (!scope.isCurrent() || !scope.target || scope.target.source !== "office" || !scope.target.sessionId) return;
-  if (state.chatNavigationPending || state.initializePromise || state.chatDetailPending || state.chatDetailError) return;
-  if (hasActiveMessageEdit()) {
-    if (!currentActiveSend() && !window.RNAssistantConversationInput.isPending("office", { chatId: scope.target.sessionId })) {
-      officeMessageEdit().text = $("chatInput").value;
-      saveMessageEdit();
-    } else {
-      focusMessageEditComposer();
-    }
-    return;
-  }
-  if (window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId })) {
-    return;
-  }
-
-  var targetChatId = scope.target.sessionId;
-  var text = $("chatInput").value.trim();
-  var ingestion = typeof pendingChatResourceIngestion === "function"
-    ? pendingChatResourceIngestion(targetChatId)
-    : null;
-  var attachments = (state.draftAttachments || []).slice();
-  if (!text && !attachments.length && !ingestion) {
-    return;
-  }
-
-  if (ingestion) {
-    var releaseIngestion = window.RNAssistantConversationInput.begin("office", { chatId: targetChatId });
-    if (!releaseIngestion) return;
-    renderSendControls();
-    var ingestionSucceeded = false;
-    try {
-      ingestionSucceeded = await ingestion !== false;
-    } catch (error) {
-      log(error.detail || error.message, "error");
-    } finally {
-      releaseIngestion();
-      renderSendControls();
-    }
-    if (!ingestionSucceeded || state.activeChatId !== targetChatId ||
-        window.RNAssistantConversationInput.isPending("office", { chatId: targetChatId })) {
-      return;
-    }
-    attachments = (state.draftAttachments || []).slice();
-  }
-
-  if (!text && !attachments.length) {
-    return;
-  }
-
-  var pendingApproval = typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity();
-  var target = exactOfficeSteerTarget(targetChatId);
-  var delivery = currentActiveSend() || pendingApproval ? runningMessageDelivery() : "Queue";
-  if (delivery === "Steer" && !target.runId) delivery = "Queue";
-  await submitInboxMessage(text, attachments, targetChatId, delivery, null,
-    delivery === "Steer" ? target.runId : null,
-    delivery === "Steer" ? target.pendingId : null);
-}
+function submitChatInput(value, scope) { return (scope || chatComposer().capture()).invoke("submit", value); }
 
 function exactOfficeSteerTarget(chatId) {
   var view = chatId === state.activeChatId ? state.activeRunViewState : null;
@@ -203,35 +147,7 @@ function exactOfficeSteerTarget(chatId) {
     ? { runId: live.runId, pendingId: null } : { runId: null, pendingId: null };
 }
 
-function stopActiveSend() {
-  var activeSend = currentActiveSend();
-  var chatId = state.activeChatId;
-  if (!activeSend || activeSend.canceling) {
-    return;
-  }
-
-  activeSend.canceling = true;
-  setChatRunCancelling(chatId, true);
-  renderSendControls();
-  if (activeSend.inbox) {
-    chatInbox(chatId).canceling = true;
-    send("stopChatInbox", { chatId: chatId }).then(applyChatInbox).catch(function (error) {
-      setChatRunCancelling(chatId, false);
-      chatInbox(chatId).canceling = false; log(error.message, "error"); renderSendControls();
-    });
-    return;
-  }
-  var run = state.chatRuns[state.activeChatId] || {};
-  var cancellation = run.runId
-    ? cancelChatRun(state.activeChatId, run.runId)
-    : cancelBridgeRequest(activeSend.requestId);
-  cancellation.catch(function (error) {
-    activeSend.canceling = false;
-    setChatRunCancelling(chatId, false);
-    log(error.detail || error.message, "error");
-    renderSendControls();
-  });
-}
+function stopActiveSend() { return chatComposer().dispatch("stop"); }
 
 function chatModelStageText(run) {
   if (run && run.cancelRequested) return "Останавливаю…";
@@ -248,6 +164,8 @@ function updateChatModelStage(chatId) {
   if (!run) return;
   var activity = { Kind: "notice", RunId: run.runId, Status: "running", Title: chatModelStageText(run) };
   recordChatRunActivityState(chatId, activity);
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
+  if (component) component.stream(true);
   if (!publishOfficeChatRun(chatId, run)) return;
   if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender(true);
 }
@@ -311,7 +229,8 @@ function trackChatProgressRun(chatId, runId) {
 
 function chatRunTerminalView(chatId, runId) {
   if (!chatId || !runId) return null;
-  var active = chatId === state.activeChatId ? state.activeRunViewState : null;
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
+  var active = component ? component.snapshot().activeRunViewState : chatId === state.activeChatId ? state.activeRunViewState : null;
   if (active && active.runId === runId && active.lifecycle !== "running") return active;
   var summary = (state.chats || []).find(function (chat) { return chatId === (chat.Id || chat.id); });
   var view = summary && window.RNAssistantRunViewState.fromChatSummary(summary);
@@ -342,57 +261,5 @@ function restoreActiveChatRun(render) {
   }
 }
 
-async function confirmAgentTool(pendingId) {
-  if (!pendingId || currentActiveSend()) {
-    return;
-  }
-
-  var chatId = state.activeChatId;
-  var request = send("confirmAgentTool", { chatId: chatId, pendingId: pendingId });
-  state.activeSends[chatId] = {
-    requestId: request.requestId,
-    text: "",
-    attachments: [],
-    canceling: false,
-    confirming: true
-  };
-  beginChatRunTracking(chatId);
-  renderChatRunControls();
-  try {
-    var response = await request;
-    if (state.activeChatId === chatId) applyChatState(response);
-    else applyChatCatalogState(response);
-    log("Agent tool confirmed.");
-  } catch (error) {
-    await refreshChatAfterSendFailure(chatId);
-    log(error.detail || error.message, "error");
-  } finally {
-    delete state.activeSends[chatId];
-    endChatRunTracking(chatId);
-    renderChatRunControls();
-  }
-}
-
-async function cancelAgentTool(pendingId) {
-  if (!pendingId) {
-    return;
-  }
-
-  var chatId = state.activeChatId;
-  var approvalDock = $("agentApprovalDock");
-  if (approvalDock) {
-    Array.prototype.slice.call(approvalDock.querySelectorAll("button")).forEach(function (button) {
-      button.disabled = true;
-    });
-  }
-  try {
-    var response = await send("cancelAgentTool", { chatId: chatId, pendingId: pendingId });
-    if (state.activeChatId === chatId) applyChatState(response);
-    else applyChatCatalogState(response);
-    log("Agent tool cancelled.", "warning");
-  } catch (error) {
-    await refreshChatAfterSendFailure(chatId);
-    log(error.detail || error.message, "error");
-    if (typeof renderAgentApprovalDock === "function") renderAgentApprovalDock();
-  }
-}
+function confirmAgentTool(pendingId) { return chatComposer().dispatch("confirm", pendingId); }
+function cancelAgentTool(pendingId) { return chatComposer().dispatch("reject", pendingId); }

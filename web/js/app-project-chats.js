@@ -2,54 +2,26 @@
   "use strict";
   var scope = "office", catalog = null, catalogRevision = 0, catalogBusy = false,
     creatingSessionId = null, serial = 0;
-  var pendingCancels = new Set();
-  var composer = null, uploadingFiles = false, uploadTarget = null;
-  var conversationView = messageView();
-  var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
-    conversationView,
-    readProjectChat,
-    function (snapshot) {
-      var previousTitle = field(runState(), "title", "Title");
-      acceptSnapshot(snapshot);
-      notice(statusText()); render();
-      var nextTitle = field(runState(), "title", "Title");
-      if (previousTitle && nextTitle && previousTitle !== nextTitle &&
-          runStatus() !== "running") {
-        var pid = projectId(), sid = currentId();
-        refreshCatalog(function () { return projectId() === pid && currentId() === sid; })
-          .then(function (refreshed) { if (refreshed && projectId() === pid && currentId() === sid) render(); })
-          .catch(function () { /* The current chat already shows the durable title. */ });
-      }
-    },
-    function (error) { notice(error.detail || error.message, true); },
-    function (snapshot) {
-      acceptSnapshot(snapshot);
-      if (!ownsView() || !window.RNAssistantWorkspaceChat.paintProgress(el("Messages"), currentSnapshot())) render();
-    });
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect", connectionRequest = null;
   var treeRenderKey = null;
   var noticeText = "", noticeError = false, fileNotices = new Map();
-  function currentSnapshot() {
-    var owner = conversationView.projection();
-    return owner && owner.target.source === "workspace" ? owner.snapshot() : null;
+  function currentPanel() {
+    var panel = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+    return panel && panel.target.source === "workspace" ? panel : null;
   }
-  function clearSnapshot() {
-    var owner = conversationView.projection();
-    if (owner && owner.target.source === "workspace") conversationView.clearProjection();
-  }
+  function currentSnapshot() { var panel = currentPanel(); return panel ? panel.snapshot() : null; }
+  function clearSnapshot() { /* Navigation does not dispose an independently open chat. */ }
   function acceptSnapshot(snapshot, options) {
-    var source = window.RNAssistantWorkspaceChat.snapshotSource({
-      workspaceId: field(field(snapshot, "project", "Project"), "workspaceId", "WorkspaceId"),
-      sessionId: field(snapshot, "sessionId", "SessionId") });
-    var owner = conversationView.bindProjection(source, window.RNAssistantWorkspaceChat.latestSnapshot);
-    return owner && owner.accept(snapshot, options);
+    var target = { source: "workspace", workspaceId: snapshot.project.workspaceId, sessionId: snapshot.sessionId };
+    RNAssistantConversationPanel.open(target);
+    return RNAssistantConversationPanel.find(target).accept(snapshot, options);
   }
   function el(id) {
     return window.RNAssistantWorkspaceChat.node(id) || document.getElementById("projectChat" + id);
   }
   function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project" ||
     window.RNAssistantWorkspaceChat.owner() === "plugin"; }
-  async function readProjectChat(target) {
+  async function readProjectChat(target, component) {
     var source = window.RNAssistantWorkspaceChat.snapshotSource(target);
     target = source.target;
     var drafts = window.RNAssistantChatDrafts, pending = drafts.pendingWorkspaceInput(target);
@@ -70,7 +42,11 @@
         window.RNAssistantConversationInput.accepted("workspace", target, pending.input.requestId,
           snapshot.inputReceipt, pending.input.SteerRunId)) {
       if (pending.input.EditMessageId) drafts.acknowledgeWorkspaceInput(target, pending.input);
-      else if (composer) composer.accepted(target, pending.input.message, pending.draftVersion, pending.input);
+      else if (component) {
+        var before = readWorkspaceDraft(target);
+        acceptWorkspaceInput(target, pending.input, pending.input.message, pending.draftVersion);
+        component.acceptDraft(before, readWorkspaceDraft(target));
+      } else acceptWorkspaceInput(target, pending.input, pending.input.message, pending.draftVersion);
       // The original admission reply may never arrive. The durable receipt is
       // enough to settle that exact submit, including its transport idle timer.
       Object.keys(state.pending).forEach(function (id) {
@@ -106,28 +82,18 @@
   function chatRequestKey(workspaceId, sessionId) { return JSON.stringify([workspaceId, sessionId]); }
   function chatBusy() { return !!currentSnapshot() && window.RNAssistantConversationInput.isPending("workspace",
     { workspaceId: projectId(), sessionId: currentId() }); }
-  function cancelBusy() { return !!currentSnapshot() && pendingCancels.has(
-    chatRequestKey(projectId(), currentId()) + ":" + field(runState(), "runId", "RunId")); }
-  function selectedUploadBusy() { return !!currentSnapshot() && uploadingFiles && !!uploadTarget &&
-    uploadTarget.workspaceId === projectId() && uploadTarget.sessionId === currentId(); }
   function field(value, lower, upper) { return value && (value[lower] !== undefined ? value[lower] : value[upper]); }
   function runState() { return field(currentSnapshot(), "state", "State"); }
   function runStatus(state) { return window.RNAssistantWorkspaceChat.runStatus(state || runState()); }
   function notice(text, error) {
     noticeText = text || ""; noticeError = !!error;
-    if (!ownsView() || conversationView.isDisposed()) return;
-    el("Notice").textContent = noticeText;
-    el("Notice").dataset.error = noticeError ? "true" : "false";
+    var panel = currentPanel(); if (panel && error) panel.notice(text);
   }
   function fileStatus(target, message, error) {
     fileNotices.set(chatRequestKey(target.workspaceId, target.sessionId),
       { target: target, message: message || "", error: !!error });
-    if (projectId() !== target.workspaceId || currentId() !== target.sessionId) return;
-    if (!ownsView()) return;
-    var box = el("FileStatus");
-    box.textContent = message || ""; box.hidden = !message;
-    box.classList.toggle("is-error", !!error);
-    box.dataset.session = target.sessionId;
+    var component = RNAssistantConversationPanel.find(Object.assign({ source: "workspace" }, target));
+    if (component) component.controls();
   }
   function fileChunkBase64(bytes) {
     var binary = "";
@@ -135,7 +101,7 @@
       binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + 0x8000));
     return btoa(binary);
   }
-  async function uploadProjectFile(target, file) {
+  async function uploadProjectFile(target, file, component) {
     var lease = null, completing = false;
     if (!file || file.size < 1)
       throw new Error("Выберите непустой файл.");
@@ -155,7 +121,17 @@
       completing = true;
       var result = await send("completeProjectChatFileUpload", { workspaceId: target.workspaceId,
         sessionId: target.sessionId, leaseId: lease.leaseId });
-      if (result.modelReadable) composer.append(target, "Файл проекта: " + result.relativePath);
+      if (result.modelReadable) {
+        if (component) {
+          component.composer.appendDraft(component.target, { read: function () { return readWorkspaceDraft(target); },
+            write: function (text) { return updateWorkspaceDraft(target, { text: text }); } }, "Файл проекта: " + result.relativePath);
+          component.controls();
+        }
+        else {
+          var saved = readWorkspaceDraft(target);
+          updateWorkspaceDraft(target, { text: (saved && saved.text ? saved.text.replace(/\s*$/, "") + "\n" : "") + "Файл проекта: " + result.relativePath });
+        }
+      }
       fileStatus(target, "Файл добавлен в проект: " + result.relativePath +
         (result.modelReadable ? "" : ". Его содержимое пока недоступно для чтения моделью в проектном чате."));
       return true;
@@ -169,21 +145,6 @@
       return false;
     }
   }
-  async function addProjectFiles(files, target) {
-    if (!target || !files.length) return;
-    if (uploadingFiles) { fileStatus(target, "Дождитесь завершения текущей загрузки файла.", true); return; }
-    if (files.length > 10) {
-      fileStatus(target, "За один раз можно добавить не более 10 файлов.", true);
-      return;
-    }
-    uploadingFiles = true; uploadTarget = { workspaceId: target.workspaceId, sessionId: target.sessionId }; render();
-    try {
-      for (var index = 0; index < files.length; index++) {
-        fileStatus(target, "Подготовка файла " + (index + 1) + " из " + files.length + ": " + files[index].name + "…");
-        if (!await uploadProjectFile(target, files[index])) break;
-      }
-    } finally { uploadingFiles = false; uploadTarget = null; render(); }
-  }
   function statusText() {
     var active = currentSnapshot(), state = active && active.state;
     if (!state) return "";
@@ -193,16 +154,19 @@
     if (active.pendingId) return "Нужно подтвердить действие агента.";
     if (state.userInput) return "Нужен ваш ответ.";
     if (field(state, "interruptedEffectPossible", "InterruptedEffectPossible")) return "Возможное изменение требует проверки. Не повторяйте действие автоматически.";
-    if (status === "running" && cancelBusy()) return "Останавливаю запрос…";
     if (status === "running")
       return window.RNAssistantConversationState.status(
         !field(state, "modelProgressUnavailable"), true, false).label + "…";
     if (status === "interrupted") return "Выполнение прервано. Проверьте ход работы перед новым запросом.";
     return "";
   }
+  function chatState(entry, chat) {
+    var panel = window.RNAssistantConversationPanel && RNAssistantConversationPanel.find({ source: "workspace", workspaceId: entry.workspaceId, sessionId: chat.Id });
+    return panel && panel.snapshot().state;
+  }
   function chatRunStatus(entry, chat) {
-    return entry.workspaceId === projectId() && chat.Id === currentId() && runState()
-      ? runStatus() : window.RNAssistantConversationState.lifecycle(chat.RunStatus);
+    var current = chatState(entry, chat);
+    return current ? runStatus(current) : window.RNAssistantConversationState.lifecycle(chat.RunStatus);
   }
   function runBlocksDeletion(status) { return status === "running" || status === "awaiting_confirmation"; }
   function historyBlocked(entry) {
@@ -215,7 +179,9 @@
     var selectedRun = runState();
     var key = JSON.stringify([catalogRevision, selectedWorkspaceId, selected, needle, pluginSource,
       runStatus(selectedRun), field(selectedRun, "title", "Title"),
-      field(selectedRun, "modelProgressUnavailable", "ModelProgressUnavailable")]);
+      field(selectedRun, "modelProgressUnavailable", "ModelProgressUnavailable"),
+      projects().map(function (entry) { return (entry.chats || []).map(function (chat) { var data = chatState(entry, chat);
+        return [chat.Id, chatRunStatus(entry, chat), field(data, "title", "Title")]; }); })]);
     if (key === treeRenderKey && root.firstChild) return;
     treeRenderKey = key;
     var nodes = projects().map(function (entry) {
@@ -224,7 +190,7 @@
         return !needle || ownMatch || chat.Title.toLocaleLowerCase("ru").includes(needle);
       }).map(function (chat) {
         var runStatus = chatRunStatus(entry, chat);
-        var current = entry.workspaceId === projectId() && chat.Id === currentId() ? runState() : null;
+        var current = chatState(entry, chat);
         var presence = window.RNAssistantConversationState.status(
           runStatus === "running" && !!current && !field(current, "modelProgressUnavailable"),
           runStatus === "running",
@@ -279,98 +245,15 @@
     });
   }
   function updateControls() {
-    if (conversationView.isDisposed()) return;
-    var active = currentSnapshot();
-    var pluginBusy = !!(window.RNAssistantPlugins && window.RNAssistantPlugins.isChatBusy());
-    var selectedBusy = chatBusy() || selectedUploadBusy();
-    var status = runStatus();
+    var panel = currentPanel(); if (panel) panel.controls();
+    el("New").disabled = catalogBusy || !project() || !project().available;
     el("ConnectionCancel").textContent = connectionRequest ? "Скрыть" : "Отмена";
     el("ConnectionCancel").title = connectionRequest ? "Операция продолжится; проект появится в дереве." : "";
-    el("New").disabled = catalogBusy || !project() || !project().available || pluginBusy;
-    el("Connect").disabled = catalogBusy;
-    el("Create").disabled = catalogBusy;
-    el("ConnectionSubmit").disabled = catalogBusy;
-    if (!ownsView()) return;
-    var editing = !!window.RNAssistantWorkspaceChat.currentMessageEdit();
-    var readOnly = window.RNAssistantWorkspaceChat.readOnly(active);
-    if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
-      !active || !project() || !project().available || !!active.pendingId || status === "running" || editing);
-    var target = active && active.sessionId ? { workspaceId: projectId(), sessionId: currentId() } : null;
-    var draft = target && window.RNAssistantChatDrafts.readWorkspace(target);
-    var hasAttachments = !!(draft && draft.attachments && draft.attachments.length);
-    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
-      !project() || !project().available || !active || (!el("Input").value.trim() && !hasAttachments) ||
-      !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || status === "running" &&
-        (!field(runState(), "canSteer", "CanSteer") || hasAttachments);
-    if (editing && status === "running") el("Send").disabled = true;
-    renderComposerPresentation({ editing: editing, editBusy: selectedBusy,
-      running: status === "running", canceling: cancelBusy(), readOnly: readOnly,
-      awaitingReply: status === "awaiting_user" && !selectedBusy && !readOnly,
-      awaitingApproval: !!(active && active.pendingId), noChat: !active,
-      unavailable: !!(project() && !project().available) || state.bridgeUnavailable,
-      inputReadOnly: readOnly || !active || !project() || !project().available || state.bridgeUnavailable });
+    ["Connect", "Create", "ConnectionSubmit"].forEach(function (name) { el(name).disabled = catalogBusy; });
   }
   function render(options) {
-    if (conversationView.isDisposed()) return;
-    var active = currentSnapshot();
-    runObserver.select(ownsView() && project() && project().available ? active : null, chatBusy());
-    updateControls();
-    renderTree();
-    if (!ownsView()) return;
-    if (composer) {
-      composer.select({ workspaceId: projectId(), sessionId: currentId() }, active && active.state);
-    }
-
-    el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
-    el("Title").textContent = active && active.state ? field(active.state, "title", "Title") : "Чат проекта";
-    if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.updateContext();
-    updateControls();
-    var fileNotice = active && fileNotices.get(chatRequestKey(projectId(), currentId()));
-    el("FileStatus").textContent = fileNotice ? fileNotice.message : "";
-    el("FileStatus").classList.toggle("is-error", !!(fileNotice && fileNotice.error));
-    el("FileStatus").hidden = !fileNotice || !fileNotice.message;
-    var questionTarget = { workspaceId: projectId(), sessionId: currentId() };
-    window.RNAssistantWorkspaceChat.renderWorkspaceControls(active, function (answers, requestId) {
-      return submitProjectInput(questionTarget, { sessionId: questionTarget.sessionId,
-        requestId: requestId, answers: answers }, null, null, true);
-    });
-    var messages = el("Messages");
-    var emptyOptions = null;
-    if (!active || (!(active.messages || []).length && runStatus() !== "running")) {
-      var suggestions = [];
-      if (project() && active) {
-        [["Сравнить периоды", "Сравни сентябрь с августом и выдели главное."],
-          ["Найти риски и слабые места", "Изучи проект и найди риски и слабые места."],
-          ["Подготовить план работы", "Изучи проект и подготовь план дальнейшей работы."]].forEach(function (entry) {
-          var suggest = node("button", "chat-empty-suggestion");
-          suggest.type = "button"; suggest.textContent = entry[0];
-          suggest.addEventListener("click", function () {
-            el("Input").value = entry[1];
-            el("Input").dispatchEvent(new Event("input", { bubbles: true }));
-            el("Input").focus();
-          });
-          suggestions.push(suggest);
-        });
-      }
-      var pluginChat = window.RNAssistantWorkspaceChat.owner() === "plugin";
-      emptyOptions = {
-        title: !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" :
-          pluginChat ? "Чатов пока нет" : "Выберите чат проекта",
-        text: !project() ? "Подключите папку проекта или выберите проект в дереве." : !project().available ?
-          "Верните папку на прежний путь или подключите её заново." : pluginChat && !active ?
-          "Нажмите «+», чтобы создать чат исходников." : "Обсудите файлы проекта, подготовку данных или составьте план.",
-        buttons: suggestions
-      };
-    }
-    window.RNAssistantWorkspaceChat.renderMessages(messages, active || {
-      project: { workspaceId: projectId() }, sessionId: null, messages: [], state: {}
-    }, emptyOptions, options);
-    window.RNAssistantChatInspector.render();
-    if (!chatBusy() && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
-    else if (!chatBusy() && !noticeError && statusText()) notice(statusText());
-    else notice(noticeText, noticeError);
-    if (window.RNAssistantWorkspaceChat.owner() === "plugin" && window.RNAssistantPlugins)
-      window.RNAssistantPlugins.onChatSnapshot(active);
+    renderTree(); updateControls();
+    var panel = currentPanel(); if (panel) panel.render(options);
   }
   async function refresh(target) {
     var version = ++serial;
@@ -406,44 +289,19 @@
     if (openFirst !== false && entry.available && entry.chats && entry.chats.length) open(workspaceId, entry.chats[0].Id);
   }
   async function open(workspaceId, sessionId) {
-    if (!workspaceId || !sessionId) return;
-    var clock = function () { return window.performance && window.performance.now ? window.performance.now() : Date.now(); };
-    var startedAt = clock();
-    if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; clearSnapshot(); render(); }
+    selectedWorkspaceId = workspaceId;
     if (!project() || !project().available) return;
-    if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.show("conversation");
-    var timing = window.RNAssistantPerformanceDiagnostics;
-    var timingId = timing ? timing.beginNavigation(window.RNAssistantWorkspaceChat.owner() + "Chat") : null;
-    var version = ++serial, pid = projectId();
-    if (currentId() !== sessionId) { clearSnapshot(); render(); }
-    var owner = conversationView.bindProjection(window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: sessionId }),
-      window.RNAssistantWorkspaceChat.latestSnapshot);
-    if (!owner) return;
-    notice("Загружаю чат…");
-    try {
-      var sentAt = clock();
-      if (timingId) timing.updateNavigation(timingId, { phase: "waiting", queueMs: Math.round(sentAt - startedAt) });
-      var result = await readProjectChat({ workspaceId: pid, sessionId: sessionId });
-      var bridgeMs = clock() - sentAt;
-      if (owner.isCurrent() && version === serial && projectId() === pid) {
-        owner.accept(result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId); notice(statusText()); render();
-      }
-      if (timingId) timing.updateNavigation(timingId, { phase: "completed", queueMs: Math.round(sentAt - startedAt),
-        bridgeMs: Math.round(bridgeMs), renderMs: Math.round(clock() - sentAt - bridgeMs),
-        messages: result.messages && result.messages.length || 0 });
-    } catch (error) {
-      if (timingId) timing.updateNavigation(timingId, { phase: "failed", queueMs: 0,
-        bridgeMs: Math.round(clock() - startedAt) });
-      if (owner.isCurrent() && version === serial) notice(error.detail || error.message, true);
-    }
+    window.RNAssistantWorkspaceChat.rememberSession(workspaceId, sessionId);
+    RNAssistantConversationPanel.open({ source: "workspace", workspaceId: workspaceId, sessionId: sessionId });
+    renderTree();
   }
   async function create() {
     if (catalogBusy || !project() || !project().available) return;
-    var version = ++serial, pid = projectId(), binding = conversationView.scope(); catalogBusy = true; creatingSessionId = null; render();
+    var version = ++serial, pid = projectId(); catalogBusy = true; creatingSessionId = null; render();
     try {
       var result = await send("createProjectChat", { workspaceId: pid, title: "Новый чат" });
       window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: result && result.sessionId }).accept(result);
-      var selected = binding.isCurrent() && version === serial && projectId() === pid;
+      var selected = version === serial && projectId() === pid;
       if (selected) {
         creatingSessionId = result.sessionId;
         acceptSnapshot(result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
@@ -458,7 +316,7 @@
   async function rename(entry, chat) {
     var title = window.prompt("Название чата", chat.Title);
     if (title === null || !title.trim() || title.trim() === chat.Title) return;
-    var version = serial, owner = conversationView.projection();
+    var version = serial, panel = currentPanel(), owner = panel && panel.projection();
     try { var result = await send("renameProjectChat", { workspaceId: entry.workspaceId,
         sessionId: chat.Id, title: title.trim() });
       var returnedProject = (result.projects || []).find(function (item) { return item.workspaceId === entry.workspaceId; });
@@ -484,6 +342,7 @@
         currentProject.chats = (currentProject.chats || []).filter(function (item) { return item.Id !== chat.Id; });
         ++catalogRevision;
       }
+      RNAssistantConversationPanel.closeDeleted({ source: "workspace", workspaceId: entry.workspaceId, sessionId: chat.Id });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       fileNotices.delete(chatRequestKey(entry.workspaceId, chat.Id));
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
@@ -511,7 +370,8 @@
         ++catalogRevision;
       }
       (entry.chats || []).forEach(function (chat) {
-        window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
+        RNAssistantConversationPanel.closeDeleted({ source: "workspace", workspaceId: entry.workspaceId, sessionId: chat.Id });
+      window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       });
       fileNotices.forEach(function (fileNotice, key) {
         if (fileNotice.target.workspaceId === entry.workspaceId) fileNotices.delete(key);
@@ -532,48 +392,6 @@
     catch (error) { var selected = projectId() === entry.workspaceId;
       await refresh(selected ? null : { workspaceId: projectId(), sessionId: currentId() });
       if (selected) notice(error.detail || error.message, true); }
-  }
-  async function runChat(action, reportFailure) {
-    if (!currentSnapshot() || !project() || !project().available) return false;
-    var pid = projectId(), sid = currentId();
-    if (!pid || !sid) return false;
-    var releasePending = window.RNAssistantConversationInput.begin("workspace", { workspaceId: pid, sessionId: sid });
-    if (!releasePending) return false;
-    if (catalogBusy && creatingSessionId !== sid) ++serial;
-    var version = serial, owner = conversationView.projection();
-    function selected() { return owner && owner.isCurrent() && version === serial && projectId() === pid && currentId() === sid; }
-    render();
-    try { var result = await window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: sid })
-      .read(function () { return action(pid, sid); }); if (selected()) {
-      owner.accept(result); notice(statusText()); render();
-      // Catalog refresh is presentation work; an accepted input must release
-      // the composer even if this separate read is slow or never returns.
-      refreshCatalog(selected).then(function (refreshed) { if (refreshed && selected()) render(); })
-        .catch(function () { /* The accepted chat result remains available. */ });
-    } return true; }
-    catch (error) {
-      if (selected()) notice(error.detail || error.message, true);
-      if (reportFailure) throw error; return false;
-    }
-    finally { releasePending(); render(); }
-  }
-  function submitProjectInput(target, input, flush, accepted, reportFailure) {
-    if (!target || target.workspaceId !== projectId() || target.sessionId !== currentId()) {
-      var stale = new Error("Выбран другой чат. Откройте исходную беседу перед повтором.");
-      return reportFailure ? Promise.reject(stale) : Promise.resolve(false);
-    }
-    var gate = window.RNAssistantConversationInput.create("workspace", target,
-      input.requestId, input.SteerRunId, accepted);
-    return runChat(function (pid, sid) {
-      return gate.submit(flush || function () { return Promise.resolve(); },
-        function (acceptReceipt) {
-          return send("submitProjectChat", { workspaceId: pid, sessionId: sid, input: input },
-            function (progress) {
-              if (progress.workspaceId === pid && progress.sessionId === sid)
-                acceptReceipt(progress.inputReceipt);
-            }).then(window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: sid }).accept);
-        }, function (result) { return result.inputReceipt; });
-    }, reportFailure);
   }
   function setScope(next, target) {
     scope = next; ++serial;
@@ -608,30 +426,6 @@
   }
   function bind() {
     window.RNAssistantWorkspaceChat.mount("office");
-    composer = window.RNAssistantWorkspaceChat.bindComposer(el("Form"), {
-      fileTarget: function () { return { workspaceId: projectId(), sessionId: currentId() }; },
-      canAttachFiles: function () { return !uploadingFiles; },
-      onFiles: addProjectFiles
-    });
-    var dropZone = el("Layout").querySelector(".project-chat-main");
-    dropZone.addEventListener("dragover", function (event) {
-      if (window.RNAssistantWorkspaceChat.owner() !== "project") return;
-      if (event.dataTransfer && Array.from(event.dataTransfer.types || []).includes("Files")) {
-        event.preventDefault(); event.dataTransfer.dropEffect = currentSnapshot() && !uploadingFiles ? "copy" : "none";
-      }
-    });
-    dropZone.addEventListener("drop", function (event) {
-      if (window.RNAssistantWorkspaceChat.owner() !== "project") return;
-      var files = Array.from(event.dataTransfer && event.dataTransfer.files || []);
-      if (files.length) { event.preventDefault(); addProjectFiles(files,
-        { workspaceId: projectId(), sessionId: currentId() }); }
-    });
-    el("Input").addEventListener("paste", function (event) {
-      if (window.RNAssistantWorkspaceChat.owner() !== "project") return;
-      var files = Array.from(event.clipboardData && event.clipboardData.files || []);
-      if (files.length) { event.preventDefault(); addProjectFiles(files,
-        { workspaceId: projectId(), sessionId: currentId() }); }
-    });
     document.querySelectorAll("[data-workspace-scope]").forEach(function (button) {
       button.addEventListener("click", function () { setScope(button.dataset.workspaceScope); });
     });
@@ -684,176 +478,6 @@
       finally { if (connectionRequest === request) connectionRequest = null;
         catalogBusy = false; render(); }
     });
-    var chatActions = {
-      target: function () { return workspaceComposerTarget({ workspaceId: projectId(), sessionId: currentId() }); },
-      clear: function () { el("Input").value = ""; el("Input").dispatchEvent(new Event("input", { bubbles: true })); el("Input").focus(); },
-      cancelEdit: function () { window.RNAssistantWorkspaceChat.cancelMessageEdit(true); render(); },
-      snapshot: currentSnapshot,
-      preferences: function () { return composer ? composer.preferences() : { disabled: true }; },
-      preferenceService: function (scope) {
-        var target = scope.target, pid = target.workspaceId, sid = target.sessionId, owner = conversationView.projection();
-        return {
-          write: function (change) {
-            if (change.name === "model") return send("setProjectChatModel", { workspaceId: pid, sessionId: sid, model: change.value });
-            composer.savePreference(change, target);
-          },
-          read: function () { return readProjectChat(target); },
-          apply: function (result, change) {
-            if (!owner || !owner.isCurrent() || projectId() !== pid || currentId() !== sid) return false;
-            if (!change) {
-              window.RNAssistantWorkspaceChat.snapshotSource(target).accept(result);
-              owner.accept(result); return true;
-            }
-            if (change.name !== "model") return true;
-            if (!result || result.workspaceId !== pid || result.sessionId !== sid ||
-                !Number.isSafeInteger(result.revision) || result.model !== null && typeof result.model !== "string" ||
-                (result.model || "") !== change.value) throw new Error("Выбор модели не подтверждён.");
-            var data = owner.snapshot().state;
-            if (result.revision < field(data, "revision", "Revision")) return false;
-            data.Model = data.model = result.model;
-            data.Revision = data.revision = result.revision;
-            return true;
-          }
-        };
-      },
-      preferenceChanged: render,
-      preferenceFailed: function (error) { notice(error.detail || error.message, true); },
-      preferenceUnavailable: function (error) { failBridgeTransport(null, error); },
-      refresh: render,
-      suspend: function () { runObserver.select(null, false); },
-      loadPrevious: async function () {
-        var owner = conversationView.projection(), active = owner && owner.snapshot();
-        if (!active || !active.messageStartIndex) return;
-        var pid = projectId(), sid = currentId(), beforeIndex = active.messageStartIndex, version = serial;
-        try {
-          var page = await send("getPreviousProjectChatMessages", {
-            workspaceId: pid, sessionId: sid, beforeIndex: beforeIndex });
-          if (owner.isCurrent() && version === serial && projectId() === pid && currentId() === sid && owner.snapshot().messageStartIndex === beforeIndex) {
-            window.RNAssistantWorkspaceChat.prependMessages(owner.snapshot(), page); render({ preserveTop: true });
-          }
-        } catch (error) { if (owner.isCurrent() && version === serial && projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
-      },
-      loadLatest: async function () {
-        var owner = conversationView.projection();
-        if (!owner || !owner.snapshot()) return;
-        var pid = projectId(), sid = currentId(), version = serial, revision = field(runState(), "revision", "Revision");
-        try {
-          var result = await readProjectChat({ workspaceId: pid, sessionId: sid });
-          if (!owner.isCurrent() || version !== serial || projectId() !== pid || currentId() !== sid ||
-              field(owner.snapshot().state, "revision", "Revision") !== revision ||
-              field(result.state, "revision", "Revision") < revision) return;
-          owner.accept(result, { latestMessages: true });
-          render();
-          if (ownsView()) scrollMessagesToBottom(false);
-        } catch (error) { if (owner.isCurrent() && version === serial && projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
-      },
-      canMessageAction: function (action) {
-        var name = action.name, message = action.message, active = currentSnapshot();
-        return (name === "fork" || name === "delete" || name === "edit") && !!active && !!message && !!message.Id &&
-          (active.messages || []).some(function (item) { return item.Id === message.Id; }) &&
-          !window.RNAssistantWorkspaceChat.readOnly(active) && !chatBusy() &&
-          !active.pendingId && !window.RNAssistantWorkspaceChat.currentMessageEdit() &&
-          !runBlocksDeletion(runStatus()) &&
-          (name !== "edit" || String(field(message, "role", "Role") || "").toLowerCase() === "user");
-      },
-      messageAction: async function (action) {
-        if (!chatActions.canMessageAction(action)) return;
-        if (action.name === "edit") { window.RNAssistantWorkspaceChat.startMessageEdit(action.message); render(); return; }
-        var pid = projectId(), sid = currentId(), version = serial;
-        try {
-          var result = await send(action.name === "fork" ? "forkProjectChat" : "deleteProjectChatMessage", { workspaceId: pid, sessionId: sid,
-            messageId: action.message.Id });
-          window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid,
-            sessionId: action.name === "fork" ? result && result.sessionId : sid }).accept(result);
-          var selected = version === serial && projectId() === pid && currentId() === sid;
-          if (selected) {
-            if (action.name === "fork") ++serial;
-            acceptSnapshot(result);
-            window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
-            notice(action.name === "fork" ? "Ветка чата создана." : "Сообщение удалено."); render();
-          }
-          if (action.name === "fork") {
-            try { await refreshCatalog(); render(); }
-            catch (error) { if (selected) notice("Ветка создана, но список не обновлён: " +
-              (error.detail || error.message), true); }
-          }
-        } catch (error) { if (version === serial && projectId() === pid && currentId() === sid)
-          notice(error.detail || error.message, true); }
-      },
-      input: function () {
-        if (composer) composer.input();
-        updateControls();
-      },
-      submit: function (value, scope) {
-        var text = el("Input").value.trim(); if (el("Send").disabled || !currentSnapshot() || selectedUploadBusy()) return;
-        if (!scope.isCurrent() || !scope.target || scope.target.source !== "workspace") return;
-        var pid = scope.target.workspaceId, sid = scope.target.sessionId;
-        var target = { workspaceId: pid, sessionId: sid }, edit = window.RNAssistantWorkspaceChat.currentMessageEdit();
-        var draftVersion = edit ? null : composer.draftVersion();
-        var request = composer.prepareInput(target, text, edit,
-          runStatus() === "running" ? runState() : null);
-        submitProjectInput(target, request,
-          function () { return window.RNAssistantChatDrafts.flushWorkspace(target); }, function () {
-            if (edit) composer.acceptedEdit(target, request, edit);
-            else composer.accepted(target, text, draftVersion, request);
-          });
-      },
-      escape: function (event) {
-        if (window.RNAssistantWorkspaceChat.currentMessageEdit()) {
-          event.preventDefault(); window.RNAssistantWorkspaceChat.cancelMessageEdit(true); render();
-        }
-      },
-      stop: async function (value, scope) {
-        var state = runState(), pid = projectId(), sid = currentId(), owner = conversationView.projection();
-        if (!state || !pid || !sid || !owner) return;
-        var runId = field(state, "runId", "RunId"), target = { workspaceId: pid, sessionId: sid };
-        function selected() { return scope.isCurrent() && owner.isCurrent() && projectId() === pid && currentId() === sid; }
-        function cancel(snapshot) {
-          return send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
-            runId: runId, cursor: field(snapshot, "cursor", "Cursor") });
-        }
-        var requestKey = chatRequestKey(pid, sid) + ":" + runId;
-        if (pendingCancels.has(requestKey)) return;
-        pendingCancels.add(requestKey); notice(statusText()); render();
-        try {
-          var result;
-          try { result = await cancel(state); }
-          catch (error) {
-            // StaleState proves that no cancellation was dispatched. Refresh
-            // once; never repeat an uncertain delivery or target another run.
-            if (error.code !== "project_chat_stale" || !selected()) throw error;
-            var refreshed = await readProjectChat(target);
-            if (!selected()) return;
-            owner.accept(refreshed); render();
-            var current = field(owner.snapshot(), "state", "State");
-            if (field(current, "runId", "RunId") !== runId) {
-              notice("Запуск сменился. Для нового запуска нажмите «Стоп» ещё раз.", true);
-              return;
-            }
-            if (runStatus(current) !== "running") { notice(statusText()); return; }
-            result = await cancel(current);
-          }
-          window.RNAssistantWorkspaceChat.snapshotSource(target).accept(result);
-          if (selected()) owner.accept(result);
-        } catch (error) { if (selected() && field(runState(), "runId", "RunId") === runId) notice(error.code === "project_chat_stale"
-          ? "Состояние запуска снова изменилось. Нажмите «Стоп» ещё раз."
-          : error.code === "project_chat_cancel_unknown"
-            ? "Не удалось подтвердить отмену. Обновите состояние чата перед повторной попыткой."
-            : error.detail || error.message, true); }
-        finally {
-          pendingCancels.delete(requestKey); render();
-          if (selected() && result && result.cancelStatus === "Requested" && runStatus() === "running" &&
-              field(runState(), "runId", "RunId") === runId) notice("Отмена запрошена…");
-        }
-      },
-      resolve: function (approve) {
-        var pendingId = currentSnapshot() && currentSnapshot().pendingId;
-        if (pendingId) runChat(function (pid, sid) { return send("resolveProjectChat", { workspaceId: pid, sessionId: sid, pendingId: pendingId, approve: approve }); });
-      },
-      progress: runObserver.acceptProgress
-    };
-    chatComposer().register("project", chatActions);
-    chatComposer().register("plugin", chatActions);
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);
@@ -866,7 +490,13 @@
     if (window.RNAssistantPlugins) window.RNAssistantPlugins.refreshPresentation();
   }, scope: function () { return scope; }, workspaceId: projectId, setScope: setScope,
     refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,
-    snapshot: currentSnapshot,
+    snapshot: currentSnapshot, read: readProjectChat, upload: uploadProjectFile,
+    fileStatus: function (target) { return fileNotices.get(chatRequestKey(target.workspaceId, target.sessionId)); },
+    focus: function (target) { selectedWorkspaceId = target.workspaceId; renderTree(); },
+    targets: function () { return projects().filter(function (entry) { return entry.available; }).flatMap(function (entry) {
+      return (entry.chats || []).map(function (chat) { return { title: entry.name + " · " + (chat.Title || "Чат"),
+        target: { view: "conversation", source: "workspace", workspaceId: entry.workspaceId, sessionId: chat.Id } }; });
+    }); },
     isBusy: function () { return catalogBusy || chatBusy(); },
     open: function (workspaceId, sessionId) { switchTab("chat"); return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }); } };
 }());

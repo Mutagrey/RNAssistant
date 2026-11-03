@@ -4,6 +4,7 @@
   function create(options) {
     options = options || {};
     var state = options.state;
+    var $ = options.node || window.$;
 
     function pendingState() {
       if (options.currentActiveSend()) return null;

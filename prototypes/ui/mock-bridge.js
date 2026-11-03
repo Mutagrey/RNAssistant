@@ -197,30 +197,34 @@
       fail("Проект примера изменился.", "preview_project_changed");
   }
   var chatPreferences = Object.create(null);
-  function officePreferences() {
-    return chatPreferences[activeChatId] || (chatPreferences[activeChatId] = { model: "preview-model", mode: "agent", reasoning: false });
+  function officePreferences(chatId) {
+    chatId = chatId || activeChatId;
+    return chatPreferences[chatId] || (chatPreferences[chatId] = { model: "preview-model", mode: "agent", reasoning: false });
   }
-  function chatState() {
-    var lastRunMessage = messages.slice().reverse().find(function (item) { return item.RunViewState || item.runViewState; });
+  function chatState(chatId) {
+    chatId = chatId || activeChatId;
+    var entries = messagesByChat[chatId] || [];
+    var lastRunMessage = entries.slice().reverse().find(function (item) { return item.RunViewState || item.runViewState; });
     var report = artifactExamples.find(function (item) { return item.id === "report" && item.linked; });
-    var preferences = officePreferences();
-    return { sessionRevision: revision, activeChatId: activeChatId, activeChatMode: preferences.mode,
+    var preferences = officePreferences(chatId);
+    return { sessionRevision: revision, activeChatId: chatId, activeChatMode: preferences.mode,
       activeChatModel: preferences.model, activeChatReasoning: preferences.reasoning, chats: clone(chats), documents: clone(documentItems),
-      messages: clone(messages), messageStartIndex: 0, messageTotalCount: messages.length,
+      messages: clone(entries), messageStartIndex: 0, messageTotalCount: entries.length,
       skills: skillLibrary(), tools: toolLibrary(), context: {},
       contextUsage: { lastPromptTokens: 6200, lastCompletionTokens: 240, lastTotalTokens: 6440, contextWindowTokens: 32000 },
-      runViewState: previewRuns[activeChatId] ? null : lastRunMessage && (lastRunMessage.RunViewState || lastRunMessage.runViewState) || null,
-      artifacts: activeChatId === "preview-chat" && report ? [{ id: "report", kind: "markdown",
+      runViewState: previewRuns[chatId] ? null : lastRunMessage && (lastRunMessage.RunViewState || lastRunMessage.runViewState) || null,
+      artifacts: chatId === "preview-chat" && report ? [{ id: "report", kind: "markdown",
         title: fixtures.materials[0].name, mimeType: "text/markdown", sourceMessageId: "preview-answer",
         runId: "preview-run-initial", revision: 1, inlineText: fixtures.report,
         inlineTruncated: false, metadataJson: "{}", relatedArtifactIds: [],
         createdUtc: "2026-10-18T09:00:05Z", resourceUri: report.resourceUri,
         documentScoped: false, documentId: "preview-document" }] : [],
-      artifactLibrary: { sessionRevision: revision, heads: [], removedResourceUris: clone(removedArtifactUris) }, inbox: chatInbox() };
+      artifactLibrary: { sessionRevision: revision, heads: [], removedResourceUris: clone(removedArtifactUris) }, inbox: chatInbox(null, chatId) };
   }
-  function chatInbox(receipt) {
-    var run = previewRuns[activeChatId];
-    return { chatId: activeChatId, epoch: "preview-inbox", revision: inboxRevision,
+  function chatInbox(receipt, chatId) {
+    chatId = chatId || activeChatId;
+    var run = previewRuns[chatId];
+    return { chatId: chatId, epoch: "preview-inbox", revision: inboxRevision,
       running: !!run, phase: run ? run.phase : "", paused: false,
       items: [], receipts: [], acceptedInput: receipt || null };
   }
@@ -273,7 +277,7 @@
   }
   function emit(response) { listeners.forEach(function (listener) { listener({ data: response }); }); }
   function emitChatState(chatId) {
-    emit({ type: "chatState", scope: activeChatId === chatId ? "full" : "catalog", payload: chatState() });
+    emit({ type: "chatState", scope: "full", payload: chatState(chatId) });
   }
   function simulateChatRun(chatId, number) {
     var runId = "preview-run-" + number;
@@ -489,50 +493,50 @@
     }
     if (type === "reportClientTiming" || type === "focusState") return {};
     if (type === "setChatModel" || type === "setChatMode" || type === "setChatReasoning") {
-      requireChat(payload);
-      if (previewRuns[activeChatId]) fail("Дождитесь завершения ответа примера.", "preview_run_busy");
-      var preferences = officePreferences();
+      requireArtifactReader(payload);
+      if (previewRuns[payload.chatId]) fail("Дождитесь завершения ответа примера.", "preview_run_busy");
+      var preferences = officePreferences(payload.chatId);
       if (type === "setChatModel") preferences.model = payload.model || "";
       else if (type === "setChatMode") preferences.mode = payload.mode === "plan" ? "plan" : "agent";
       else preferences.reasoning = !!payload.enabled;
       revision++;
-      return type === "setChatMode" ? chatState() : { chatId: activeChatId, sessionRevision: revision,
+      return type === "setChatMode" ? chatState(type === "listChats" ? null : payload.chatId) : { chatId: payload.chatId, sessionRevision: revision,
         model: preferences.model, mode: preferences.mode, reasoningEnabled: preferences.reasoning };
     }
     if (type === "listChats" || type === "getChatState") {
-      if (type === "getChatState") requireChat(payload);
-      return chatState();
+      if (type === "getChatState") requireArtifactReader(payload);
+      return chatState(type === "listChats" ? null : payload.chatId);
     }
     if (type === "getChatInbox") {
-      requireChat(payload);
-      var inbox = chatInbox();
+      requireArtifactReader(payload);
+      var inbox = chatInbox(null, payload.chatId);
       inbox.receipts = (payload.receiptOperationIds || []).map(function (id) { return inputReceipts[id]; })
-        .filter(function (receipt) { return receipt && receipt.chatId === activeChatId; });
+        .filter(function (receipt) { return receipt && receipt.chatId === payload.chatId; });
       return inbox;
     }
     if (type === "submitChatInput") {
-      requireChat(payload);
+      requireArtifactReader(payload);
       if (Array.isArray(payload.resourceDraftIds) && payload.resourceDraftIds.length || payload.answers)
         fail("В примере доступна отправка только текста.");
       if (typeof payload.text !== "string" || !payload.text.trim() || !payload.operationId)
         fail("Сообщение примера пусто или не имеет ID.", "preview_input_invalid");
       var receipt = inputReceipts[payload.operationId];
-      if (receipt && receipt.chatId !== activeChatId) fail("ID сообщения принадлежит другому чату.", "preview_input_invalid");
+      if (receipt && receipt.chatId !== payload.chatId) fail("ID сообщения принадлежит другому чату.", "preview_input_invalid");
       if (!receipt) {
-        if (previewRuns[activeChatId]) fail("Дождитесь завершения ответа примера.", "preview_run_busy");
+        if (previewRuns[payload.chatId]) fail("Дождитесь завершения ответа примера.", "preview_run_busy");
         var number = ++inputSequence, now = new Date().toISOString();
-        receipt = { chatId: activeChatId, Id: "preview-input-" + number, OperationId: payload.operationId,
+        receipt = { chatId: payload.chatId, Id: "preview-input-" + number, OperationId: payload.operationId,
           Text: payload.text, Status: "Applied", Delivery: payload.delivery || "Steer",
           Revision: 1, Attachments: [] };
         inputReceipts[payload.operationId] = receipt;
-        messages.push({ Id: receipt.Id, Role: "user", Content: payload.text, CreatedUtc: now });
-        previewRuns[activeChatId] = { phase: "thinking" };
+        messagesByChat[payload.chatId].push({ Id: receipt.Id, Role: "user", Content: payload.text, CreatedUtc: now });
+        previewRuns[payload.chatId] = { phase: "thinking" };
         revision++; inboxRevision++;
-        var active = chats.find(function (chat) { return chat.Id === activeChatId; });
-        active.MessageCount = messages.length; active.Revision = revision; active.LastActivityUtc = now;
-        simulateChatRun(activeChatId, number);
+        var active = chats.find(function (chat) { return chat.Id === payload.chatId; });
+        active.MessageCount = messagesByChat[payload.chatId].length; active.Revision = revision; active.LastActivityUtc = now;
+        simulateChatRun(payload.chatId, number);
       }
-      return chatInbox(receipt);
+      return chatInbox(receipt, payload.chatId);
     }
     if (type === "getSkills") return skillLibrary();
     if (type === "getTools") return toolLibrary();

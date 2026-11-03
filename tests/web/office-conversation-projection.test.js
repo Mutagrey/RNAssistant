@@ -93,18 +93,14 @@ assert.equal(workspace.snapshot(), workspaceData);
 assert.equal(ui.officeChatProjection(), first);
 
 (async () => {
-  let rejectRead;
   ui.state.chatNavigationVersion = 7;
   ui.state.messageStartIndex = 80;
-  ui.send = () => new Promise((resolve, reject) => { rejectRead = reject; });
-  const paging = ui.loadPreviousChatMessages();
-  const service = ui.officePreferenceService({ target: { sessionId: "a" } });
+  const service = ui.officePreferenceService({ target: { sessionId: "a" }, isCurrent: first.isCurrent, snapshot: first.snapshot, accept: first.accept });
   ui.clearOfficeChatProjection(); // Reconnect may select the same ID with the same navigation version.
   ui.applyChatState(data("a", 5));
   assert.notEqual(ui.officeChatProjection(), first);
   assert.equal(first.snapshot(), null); assert.equal(first.isCurrent(), false);
   assert.equal(service.apply({ chatId: "a", sessionRevision: 6, model: "late" }, { name: "model", value: "late" }), false);
-  rejectRead(Error("late page from old binding")); await paging;
   assert.equal(ui.state.activeChatModel, "", "a replacement source does not retain old preferences");
   const returned = ui.officeChatProjection();
   ui.applyChatState(data("b", 1));

@@ -1,6 +1,6 @@
 # Дизайн-система и компоненты RNAssistant
 
-Обновлено: 2026-11-02. Owner: Web presentation; визуальные решения утверждает
+Обновлено: 2026-11-03. Owner: Web presentation; визуальные решения утверждает
 пользователь. Canonical document tokens, компонентов и их повторного использования.
 Стратегия — [Architecture](UI_ARCHITECTURE.md), экраны — [Screen Map](UI_SCREEN_MAP.md).
 Направление Approved; продолжение общего chat-среза разрешено. S1b проходит визуальное ревью по эталону завершённого Demo.
@@ -23,6 +23,17 @@
 | Имя документа в topbar, responsive thresholds | In Review |
 | P3 production-чат в Dockview без повторного заголовка | In Review; iframe только Demo evidence |
 | S1a: общие подписи ввода, edit/reply/stop, reasoning и окно истории Office/Workspace/plugin | Реализовано, детали presentation In Review; не полная унификация capabilities |
+
+## Общий Chat View — In Review, 2026-11-03
+
+Production markup служит единственным шаблоном Chat View. Factory создаёт scoped
+nodes с уникальными DOM IDs и `data-chat-node`; стили общих ролей используют
+последний, а не глобальные IDs. Размеры, spacing, кнопки и состояние composer
+остаются в общих tokens/CSS, без отдельных Office/Workspace/plugin overrides.
+Два composer рядом — два экземпляра одного компонента. Базовый стиль P1/P2,
+малые close/split icons и вкладка выбора сохранены; нового варианта оболочки нет.
+В chooser добавлены реальные chat targets. Лимит 12 вкладок и точная presentation
+этой точки остаются In Review до пользовательского согласования.
 
 ## Эталон оболочки: завершённый Dockview Demo
 

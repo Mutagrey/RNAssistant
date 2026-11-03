@@ -103,6 +103,12 @@
 
   function field(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
   function source() {
+    var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+    if (component && component.target.source === "office") {
+      var data = component.snapshot();
+      return { owner: "office", key: JSON.stringify(["office", component.target.sessionId]), chatId: component.target.sessionId,
+        messages: data.messages || [], run: data.activeRunViewState || {}, live: data.liveRun && data.liveRun.activities || [] };
+    }
     if (owner === "office") return { owner: owner, key: JSON.stringify([owner, state.activeChatId]),
       chatId: state.activeChatId, messages: state.messages || [], run: state.activeRunViewState || {}, live: state.liveAgentRun || [] };
     var chat = window.RNAssistantWorkspaceChat.snapshot(), snapshot = field(chat, "state"), project = field(chat, "project");
@@ -184,7 +190,7 @@
     if (!notes.length) paragraph(body, "Пока ничего не добавлено.");
     notes.forEach(function (note) { info(body, noteTitle(note), noteHost(note) + " · " + noteKind(note), "paperclip"); });
     action(body, "Управлять контекстом", "plus", function () {
-      var button = document.getElementById("openContextTabButton");
+      var button = $("openContextTabButton");
       if (button) button.click();
     });
     action(body, "Все материалы", "files", function () { switchTab("artifacts"); });
@@ -599,7 +605,7 @@
     if (!panel) return;
     panel.inert = !visible;
     panel.setAttribute("aria-hidden", String(!visible));
-    document.getElementById("contextMeter").setAttribute("aria-expanded", String(visible && view === "usage" && owner === "office"));
+    var meter = $("contextMeter"); if (meter) meter.setAttribute("aria-expanded", String(visible && view === "usage"));
     if (panelToggle) panelToggle.sync();
     if (visible) render();
     syncSwitcher();

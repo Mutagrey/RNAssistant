@@ -213,6 +213,13 @@ fixture publishes its real transient run instead of writing read-only live field
 its four Web cases, but its static C# ordering assertion also fails on `d61a9aff`;
 see RISK_REGISTER. It is not a passing full file or Office qualification.
 
+Independent Chat Views (2026-11-03): Chromium `tests/web/independent-chat-views.test.js`
+checks shipped boot, parallel Office delivery, Workspace/plugin, source-local drafts
+and preferences, edit, close without run cancellation, stale read/ACK and layout
+restore. `workspace-chat-progress` now uses scoped nodes and waits for a coalesced
+paint; it verifies 30 token updates preserve the leaf and skip tree/transcript work.
+Older singleton-DOM fixtures require migration before use with Chat View factory.
+
 `history protocol:` checks JSON-object/schema responses, instruction roles,
 optional message, accepted assistant decisions and user-role indexed result batches,
 shared concise-field guidance, unchanged user data and frozen typed repair.

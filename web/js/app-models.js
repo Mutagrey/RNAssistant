@@ -73,22 +73,28 @@ function discardModelCatalogPreview() {
   modelCatalogPreview.modelCatalog = null;
 }
 
-// The service captures an exact address; the common composer owns pending/delivery.
-function officePreferenceService(scope) {
-  var chatId = scope.target.sessionId, projection = officeChatProjection();
+// Exact view source; the common composer owns pending and stale delivery guards.
+function officePreferenceService(component) {
+  var id = component.target.sessionId;
+  function snapshot() { return component.snapshot(); }
+  function accept(value) { return component.accept(value); }
   return {
     write: function (change) {
-      if (change.name === "model") return sendChatPreference("setChatModel", { chatId: chatId, model: change.value });
-      if (change.name === "mode") return sendChatPreference("setChatMode", { chatId: chatId, mode: change.value });
-      return sendChatPreference("setChatReasoning", { chatId: chatId, enabled: change.value });
-    },
-    read: function () { return loadChatState(chatId); },
+      if (change.name === "model") return send("setChatModel", { chatId: id, model: change.value });
+      if (change.name === "mode") return send("setChatMode", { chatId: id, mode: change.value });
+      return send("setChatReasoning", { chatId: id, enabled: change.value });
+    }, read: function () { return loadChatState(id); },
     apply: function (response, change) {
-      if (projection !== officeChatProjection()) return false;
-      var full = !change || change.name === "mode";
-      var applied = full ? applyChatStateForChat(response, chatId) :
-        applyChatPreferenceStateForChat(response, chatId);
-      return applied && (!change || officeChatPreferences()[change.name === "model" ? "selected" : change.name] === change.value);
+      if (!component.isCurrent()) return false;
+      if (!change || change.name === "mode") return accept(response);
+      if ((response.chatId || response.ChatId) !== id) throw new Error("Настройка получена для другого чата.");
+      var revision = RNAssistantRunViewState.sessionRevision(response), data = snapshot();
+      if (!Number.isSafeInteger(revision) || revision < data.sessionRevision) return false;
+      data.sessionRevision = revision;
+      data.activeChatModel = response.model || response.Model || "";
+      data.activeChatMode = response.mode || response.Mode || "agent";
+      data.activeChatReasoning = !!(response.reasoningEnabled || response.ReasoningEnabled);
+      return data[change.name === "model" ? "activeChatModel" : "activeChatReasoning"] === change.value;
     }
   };
 }
@@ -109,17 +115,7 @@ function bindModelActions() {
     applyModelDefaultsToForm(findModel($("modelInput").value, modelSettingsFormContext()));
     renderModelControls();
   });
-  $("chatReasoningToggle").addEventListener("click", function () {
-    if (!this.disabled) saveChatReasoningSelection(!chatComposer().preferences().reasoning);
-  });
   $("loadModelsButton").addEventListener("click", function () {
     loadModelCatalog(true);
-  });
-  $("chatModelPicker").addEventListener("toggle", function () {
-    if (!$("chatModelPicker").open) return;
-    renderChatModelPicker(true);
-    if (!state.modelCatalog.loaded && !state.modelCatalog.loading) {
-      loadModelCatalog(false);
-    }
   });
 }

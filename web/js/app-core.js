@@ -128,6 +128,8 @@ var state = {
 };
 
 function $(id) {
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+  if (component && component.node(id)) return component.node(id);
   return document.getElementById(id);
 }
 

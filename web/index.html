@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="css/app.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-chat.css?v=feed-stability-20261103">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1-visuals-20261025-4">
-  <link rel="stylesheet" href="css/app-composer.css?v=chat-models-s2a-20261102">
+  <link rel="stylesheet" href="css/app-composer.css?v=chat-views-20261103">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-models.css?v=settings-dock-20261102">
@@ -61,7 +61,7 @@
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
   <link rel="stylesheet" href="css/app-diagnostics.css?v=diagnostics-source-20261103">
-  <link rel="stylesheet" href="css/app-dock-workspace.css?v=dock-split-icons-20261103">
+  <link rel="stylesheet" href="css/app-dock-workspace.css?v=chat-views-20261103">
 </head>
 <body>
   <div class="shell app-shell">
@@ -1075,7 +1075,7 @@
   <script src="js/vendor/viewer.min.js"></script>
   <script src="js/app-editor-tabs.js?v=diagnostics-20261101"></script>
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
-  <script src="js/app-core.js?v=chat-composer-s2b2-20261102-preferences-s2b5-materials-s3b2-office-projection-s2b9-context-s2b10-live-s2b11"></script>
+  <script src="js/app-core.js?v=chat-views-20261103"></script>
   <script src="js/app-icons.js?v=shared-icons-20261019-1"></script>
   <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
@@ -1091,7 +1091,7 @@
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
   <script src="js/app-layout.js?v=diagnostics-source-20261103"></script>
-  <script src="js/app-chat-inspector.js?v=dock-sidebar-20261102"></script>
+  <script src="js/app-chat-inspector.js?v=chat-views-20261103"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
@@ -1115,12 +1115,12 @@
   <script src="js/app-trajectory.js?v=journal-exchanges-20261103"></script>
   <script src="js/app-prompts.js?v=navigation-s3b1-20261102"></script>
   <script src="js/app-model-data.js?v=chat-models-s2a-20261102-preferences-s2b5"></script>
-  <script src="js/app-model-picker.js?v=chat-models-s2a-20261102"></script>
+  <script src="js/app-model-picker.js?v=chat-views-20261103"></script>
   <script src="js/app-model-capabilities.js?v=chat-models-s2a-20261102"></script>
-  <script src="js/app-model-render.js?v=chat-models-s2a-20261102-preferences-s2b5"></script>
-  <script src="js/app-models.js?v=chat-models-s2a-20261102-preferences-s2b5-source-s2b7-office-projection-s2b9"></script>
+  <script src="js/app-model-render.js?v=chat-views-20261103"></script>
+  <script src="js/app-models.js?v=chat-views-20261103"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=chat-continuity-20261103"></script>
+  <script src="js/app-chat-state.js?v=chat-views-20261103"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1132,7 +1132,7 @@
   <script src="js/app-vba.js?v=shared-editor-tabs-20261019-1"></script>
   <script src="js/app-html-resource-export.js?v=binary-chunks-20260906-1-browser-s3b3b"></script>
   <script src="js/app-visual-inspector.js?v=annotate-hover-20261024-1"></script>
-  <script src="js/app-visual-annotations.js?v=right-sections-sent-20261024-1-annotation-surface-20261026-1-annotation-followup-20261026-1"></script>
+  <script src="js/app-visual-annotations.js?v=chat-views-20261103"></script>
   <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1-vendors-1-visual-inspector-1"></script>
   <script src="js/app-artifact-viewers.js?v=object-views-20261102"></script>
   <script src="js/app-sequence-document-viewer.js?v=object-views-20261102"></script>
@@ -1145,7 +1145,7 @@
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1-materials-s3b2"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1"></script>
   <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1-materials-s3b2-browser-s3b3b"></script>
-  <script src="js/app-context.js?v=office-draft-20261023-1-context-s2b10"></script>
+  <script src="js/app-context.js?v=chat-views-20261103"></script>
   <script src="js/app-model-context-contents.js?v=request-dock-20261102"></script>
   <script src="js/app-model-context.js?v=request-dock-20261102"></script>
   <script src="js/app-context-meter.js?v=diagnostics-20261101"></script>
@@ -1157,31 +1157,33 @@
   <script src="js/app-artifacts.js?v=chat-view-s2-20261102-materials-s3b2-browser-s3b3b"></script>
   <script src="js/app-artifact-versions.js?v=artifact-versions-20261014-1-materials-s3b2"></script>
   <script src="js/app-artifact-catalog.js?v=navigation-s3b1-20261102-materials-s3b2-browser-s3b3b"></script>
-  <script src="js/app-task-list.js?v=run-outcome-20261013-1"></script>
+  <script src="js/app-task-list.js?v=chat-views-20261103"></script>
   <script src="js/app-questions.js?v=questions-pager-20261023-2"></script>
   <script src="js/app-agent-activity.js?v=feed-stability-20261103"></script>
-  <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
+  <script src="js/app-agent-approval.js?v=chat-views-20261103"></script>
   <script src="js/app-run-changes.js?v=compact-tool-card-20261029-2"></script>
   <script src="js/app-agent.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-messages.js?v=chat-continuity-20261103"></script>
+  <script src="js/app-messages.js?v=chat-views-20261103"></script>
   <script src="js/app-reasoning.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-attachments.js?v=addressed-pending-20261027-1"></script>
-  <script src="js/app-chat-session.js?v=dock-s1b-20261102-observe-s2b4-source-s2b7-office-projection-s2b9-context-s2b10-live-s2b11"></script>
-  <script src="js/app-chat-composer.js?v=chat-composer-s2b2-20261102-scope-s2b3-preferences-s2b5-draft-s2b6-projection-s2b8"></script>
-  <script src="js/app-chat-inbox.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-chat-run.js?v=chat-composer-s2b2-20261102-scope-s2b3-preferences-s2b5-live-s2b11"></script>
-  <script src="js/app-chat.js?v=chat-composer-s2b2-20261102-scope-s2b3-observe-s2b4-preferences-s2b5"></script>
-  <script src="js/app-chat-edit.js?v=chat-composer-s2b2-20261102-live-s2b11"></script>
-  <script src="js/app-workspace-chat.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-plugins.js?v=dock-sidebar-20261102-browser-s3b3b"></script>
-  <script src="js/app-project-chats.js?v=diagnostics-source-20261103"></script>
+  <script src="js/app-attachments.js?v=chat-views-20261103"></script>
+  <script src="js/app-chat-session.js?v=chat-views-20261103"></script>
+  <script src="js/app-chat-composer.js?v=chat-views-20261103"></script>
+  <script src="js/app-chat-inbox.js?v=chat-views-20261103"></script>
+  <script src="js/app-chat-run.js?v=chat-views-20261103"></script>
+  <script src="js/app-chat.js?v=chat-views-20261103"></script>
+  <script src="js/app-chat-edit.js?v=chat-views-20261103"></script>
+  <script src="js/app-workspace-chat.js?v=chat-views-20261103"></script>
+  <script src="js/app-office-chat-view.js?v=chat-views-20261103"></script>
+  <script src="js/app-conversation-panel.js?v=chat-views-20261103"></script>
+  <script src="js/app-plugins.js?v=chat-views-20261103"></script>
+  <script src="js/app-project-chats.js?v=chat-views-20261103"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
   <script src="js/app-browser-object-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-html-artifact-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-plugin-release-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-material-view.js?v=object-views-20261102-browser-s3b3b"></script>
-  <script src="js/app-dock-workspace.js?v=dock-split-icons-20261103"></script>
-  <script src="js/app.js?v=diagnostics-source-20261103"></script>
+  <script src="js/app-dock-workspace.js?v=chat-views-20261103"></script>
+  <script src="js/app.js?v=chat-views-20261103"></script>
 </body>
 </html>

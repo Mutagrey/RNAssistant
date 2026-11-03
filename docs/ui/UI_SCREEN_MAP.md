@@ -4,7 +4,8 @@
 Исходная карта — source audit baseline 4ea3d6e4; ниже сохранена карта будущих срезов.
 S1a объединяет bounds/composer presentation; S1b размещает общий conversation и
 настоящий Inspector в одном production Dockview. Settings подключён срезом S1c; остальные целевые views Proposed;
-полная parity capabilities и несколько одновременных чатов ещё не реализованы.
+Независимые Office/Workspace/plugin Chat View реализованы (In Review, 2026-11-03);
+полная parity capabilities остаётся отдельным остатком S2.
 Canonical карта UI; владение/lifecycle — [Architecture](UI_ARCHITECTURE.md),
 компоненты — [Design System](UI_DESIGN_SYSTEM.md).
 
@@ -28,12 +29,21 @@ Owner: Shell chrome — `app-layout.js`, placement/команды workspace —
 | Диагностика | Singleton Dockview с разделами Запуски/Lab/Приложение; сохранённый Запрос — отдельный singleton |
 
 Chooser использует компоновку Demo, показывает «Ничего не найдено» при пустой выдаче.
+В контрольной точке Chat View (In Review) он включает чаты доступного Office/Workspace
+каталога: выбор открывает target в этой группе или переносит уже открытый экземпляр.
+«+» остаётся выбором экрана, не создаёт новую domain-запись чата.
+Открытие чата из дерева сохраняет остальные вкладки. Разные чаты можно видеть рядом;
+input/model/edit/scroll принадлежат каждому. Inspector следует фокусу в чате.
+Close/reopen/restore не изменяют document/session ownership и не останавливают run.
+Старая раскладка единственного `conversation` без target явно сбрасывается с
+уведомлением; история и черновики не мигрируют и не удаляются.
 «Панели» — компактное меню подключённых видов с отметкой уже открытого.
 Общие меню поддерживают Arrow Up/Down, Home/End, Tab, Escape/возврат focus.
 StatusBar показывает mode/connection и раскладку только при видимом workspace;
 агрегация фактических фоновых operations ещё относится к последующим срезам.
 
-Текущие ID: `conversation` (один Office/Workspace/plugin owner), `inspector`
+Текущие ID: `chat:<encoded source/workspace/session>` (один экземпляр на exact chat),
+`conversation` (пустое стартовое состояние), `inspector`
 (четыре настоящих раздела context/abilities/usage/activity), `settings`, `request`, `diagnostics`.
 `choose-N` — временный
 элемент Shell, не продуктовый экран и не второй каталог. Незавершённые chooser tabs

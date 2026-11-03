@@ -1,15 +1,5 @@
-function officeCanMessageAction(action) {
-  if (!action.message || state.chatNavigationPending || !state.activeChatId) return false;
-  if (action.name === "edit") return messageSupportsEdit(action.message, action.index, messageActivity(action.message));
-  return (action.name === "fork" || action.name === "delete") && !currentActiveSend() && !hasActiveMessageEdit() &&
-    !(typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity());
-}
-function officeMessageAction(action, scope) {
-  if (!officeCanMessageAction(action)) return;
-  if (action.name === "fork") return forkChatAtMessage(action.message, action.index);
-  if (action.name === "edit") return startMessageEdit(action.message, action.index);
-  if (action.name === "delete") return deleteMessage(action.message, action.index, scope);
-}
+function officeCanMessageAction(action) { return chatComposer().dispatch("canMessageAction", action); }
+function officeMessageAction(action, scope) { return (scope || chatComposer().capture()).invoke("messageAction", action); }
 
 async function runQuickAction(action) {
   var scope = chatComposer().capture();
@@ -74,48 +64,10 @@ function officeHostChatUnavailableReason() {
 function saveChatMode(mode) { return chatComposer().setPreference("mode", mode || "agent"); }
 
 function bindChatActions() {
-  bindMessageScrollControls();
-  bindAttachmentActions();
   if (typeof bindModelContextActions === "function") bindModelContextActions();
-  if (typeof bindContextMeterActions === "function") bindContextMeterActions();
   $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
-  $("openDocumentButton").addEventListener("click", openActiveDocument);
   $("chatSearchInput").addEventListener("input", function () {
-    state.chatSearch = $("chatSearchInput").value || "";
-    renderChatSessionList(state.chats || []);
+    state.chatSearch = $("chatSearchInput").value || ""; renderChatSessionList(state.chats || []);
   });
-  bindComposerPickers();
-  $("compactContextButton").addEventListener("click", compactChatContext);
-  $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
-  window.addEventListener("resize", resizeChatInput);
-  chatComposer().register("office", {
-    target: function () { return officeComposerTarget(); },
-    preferences: officeChatPreferences,
-    preferenceService: officePreferenceService,
-    preferenceChanged: function () { renderModelControls(); renderSendControls(); },
-    preferenceFailed: function (error) { log(error.detail || error.message, "error"); },
-    preferenceUnavailable: function (error) { failBridgeTransport(null, error); },
-    canMessageAction: officeCanMessageAction,
-    messageAction: officeMessageAction,
-    loadPrevious: loadPreviousChatMessages,
-    loadLatest: jumpToLatestChatMessages,
-    refresh: function () { renderMessages(); renderSendControls(); },
-    submit: submitChatInput,
-    stop: stopActiveSend,
-    clear: function () { setChatInputText("", true); },
-    cancelEdit: cancelMessageEdit,
-    input: function () {
-      updateComposerInputState();
-      if (!hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);
-    },
-    escape: function (event) {
-      if (hasActiveMessageEdit() && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        event.preventDefault(); cancelMessageEdit();
-      }
-    }
-  });
-  chatComposer().bind();
-  if (typeof initChatInbox === "function") initChatInbox();
-  updateComposerInputState();
 }

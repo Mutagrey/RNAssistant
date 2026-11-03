@@ -1,9 +1,9 @@
-// Current singleton adapter. Retain the view while Dockview temporarily detaches its DOM.
-var currentConversationView = null;
+// Compatibility entry for selected consumers; the component owns the view.
 function messageView(box) {
-  if (!box && currentConversationView) return currentConversationView;
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+  if (!box && component) return component.view;
   box = box || $("messages");
-  var current = box === $("messages");
+  if (!box) return null;
   var view = window.RNAssistantConversationView.get(box, {
     button: box === $("messages") ? $("chatScrollBottomButton") : null,
     clear: function () {
@@ -11,7 +11,6 @@ function messageView(box) {
       if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(box);
     }
   });
-  if (current) currentConversationView = view;
   return view;
 }
 function officeConversationTarget() { return { source: "office", sessionId: state.activeChatId || "" }; }
@@ -225,10 +224,6 @@ function renderChatEmptyState(options) {
   empty.appendChild(suggestions);
 
   return empty;
-}
-
-function messageSupportsEdit(message, index, activity) {
-  return !activity && !currentActiveSend() && !hasActiveMessageEdit() && canEditMessage(message) && !isEditingMessage(message, index);
 }
 
 var chatCopyFeedbackTimer = null;
@@ -1058,6 +1053,11 @@ function reconcileMessageUnits(box, units, liveOnly) {
 }
 
 function scheduleLiveStreamRender(fullProjection) {
+  if (window.RNAssistantConversationPanel) {
+    var component = RNAssistantConversationPanel.office(state.activeChatId);
+    if (component) component.stream(fullProjection);
+    return;
+  }
   if (!officeTranscriptActive()) return;
   var view = messageView(), commands = chatComposer().capture();
   var run = state.chatRuns && state.chatRuns[state.activeChatId];
@@ -1070,17 +1070,21 @@ function scheduleLiveStreamRender(fullProjection) {
   });
 }
 
-function renderStreamingMessages(outputOnly) {
-  if (currentConversationView && !currentConversationView.canRender()) return;
-  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
-  if (!officeTranscriptActive()) return;
-  var view = messageView(), live = view.cache.units[view.cache.liveUnitKey];
-  if (!messageView().matches(officeConversationTarget()) || !live && !Object.keys(messageView().cache.units).length) {
-    renderMessages();
+function renderStreamingMessages(outputOnly, component) {
+  if (!component && window.RNAssistantConversationPanel) {
+    component = RNAssistantConversationPanel.office(state.activeChatId); if (!component) return;
+  }
+  var box = component ? component.node("messages") : $("messages");
+  var view = component ? component.view : messageView(), live = view.cache.units[view.cache.liveUnitKey];
+  if (!view.canRender() || !component && !officeTranscriptActive()) return;
+  var target = component ? component.target : officeConversationTarget();
+  if (!view.matches(target) || !live && !Object.keys(view.cache.units).length) {
+    renderMessages(null, component);
     return;
   }
-  if (outputOnly && messageView().cache.liveSuppressed) return;
-  var box = $("messages"), presentation = officeMessagePresentation(view, chatComposer().capture(), officeChatSnapshot());
+  if (outputOnly && view.cache.liveSuppressed) return;
+  var presentation = officeMessagePresentation(view, component ? component.composer.capture() : chatComposer().capture(),
+    component ? component.snapshot() : officeChatSnapshot());
   var shouldScroll = shouldFollowChatScroll(box);
   var viewport = !shouldScroll ? captureMessageViewport(box) : null;
   if (outputOnly && live && live.node.liveOutputVisible && hasLiveAgentOutput(presentation) &&
@@ -1088,63 +1092,66 @@ function renderStreamingMessages(outputOnly) {
     // Token frames do not regroup/serialize activities, rebuild units or detach history.
     refreshLiveAgentOutput(live.node, presentation);
   } else {
-    reconcileMessageUnits(box, buildLiveMessageUnits(presentation, typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []), true);
+    reconcileMessageUnits(box, buildLiveMessageUnits(presentation, component ? component.pendingUnits() : typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []), true);
   }
   if (!shouldScroll) restoreMessageViewport(box, viewport);
-  syncChatScroll(shouldScroll, false);
+  syncChatScroll(shouldScroll, false, box);
 }
 
-function renderMessages(options) {
-  if (currentConversationView && !currentConversationView.canRender()) return;
-  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
-  if (!officeTranscriptActive()) return;
+function renderMessages(options, component) {
+  component = component || window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(state.activeChatId);
+  if (!component && window.RNAssistantConversationPanel) return;
+  if (!component && typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+  if (!component && !officeTranscriptActive()) return;
   options = options || {};
-  if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
-  var box = $("messages");
-  var view = messageView(box), frame = view.begin(officeConversationTarget(), options);
-  var presentation = officeMessagePresentation(view, chatComposer().capture(), officeChatSnapshot());
+  if (!component && window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
+  var box = component ? component.node("messages") : $("messages");
+  var snapshot = component ? component.snapshot() : officeChatSnapshot();
+  var view = messageView(box);
+  if (!view.canRender()) return;
+  var frame = view.begin(component ? component.target : officeConversationTarget(), options);
+  var presentation = officeMessagePresentation(view, component ? component.composer.capture() : chatComposer().capture(), snapshot);
   view.cache.fullRenderPending = false;
   var viewport = frame.viewport, shouldScroll = frame.follow;
   if (options.fullReset && !frame.changed) resetRenderedMessageUnits(box);
-  if (state.chatDetailPending || state.chatDetailError) {
+  var loading = component ? component.loading : state.chatDetailPending, error = component ? component.loadError : state.chatDetailError;
+  if (loading || error) {
     resetRenderedMessageUnits(box);
     var notice = document.createElement("div");
     notice.className = "chat-history-more";
-    notice.textContent = state.chatDetailPending ? "Загрузка чата…" : state.chatDetailError;
+    notice.textContent = loading ? "Загрузка чата…" : error;
     box.appendChild(notice);
-    if (state.chatDetailError && typeof retryChatDetail === "function") {
+    if (error && (component || typeof retryChatDetail === "function")) {
       var retry = document.createElement("button");
       retry.type = "button";
       retry.className = "chat-history-more";
       retry.textContent = "Повторить загрузку";
-      retry.addEventListener("click", retryChatDetail);
+      retry.addEventListener("click", component ? component.refresh : retryChatDetail);
       box.appendChild(retry);
     }
-    if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
+    if (!component && window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return;
   }
-  var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
-  if (!(typeof pendingChatInputs === "function" && pendingChatInputs().length) && !visibleMessages.length && !state.messageStartIndex && !hasLiveAgentOutput(presentation) && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  var pendingUnits = component ? component.pendingUnits() : typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : [];
+  var visibleMessages = (snapshot.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
+  if (!pendingUnits.length && !visibleMessages.length && !snapshot.messageStartIndex && !hasLiveAgentOutput(presentation) && !presentation.data.live.activities.length) {
     resetRenderedMessageUnits(box);
     box.appendChild(renderChatEmptyState());
     view.follow();
-    renderAgentPlanDock();
-    renderAgentApprovalDock();
-    syncChatScroll(false, false);
-    if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
+    if (!component) { renderAgentPlanDock(); renderAgentApprovalDock(); }
+    syncChatScroll(false, false, box);
+    if (!component && window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return;
   }
 
-  if (!Object.keys(messageView().cache.units).length) box.textContent = "";
-  reconcileMessageUnits(box, buildMessageUnits(presentation, messageActionsSignature(),
-    typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []));
+  if (!Object.keys(view.cache.units).length) box.textContent = "";
+  reconcileMessageUnits(box, buildMessageUnits(presentation, component ? component.actionsSignature() : messageActionsSignature(), pendingUnits));
 
-  renderAgentPlanDock();
-  renderAgentApprovalDock();
+  if (!component) { renderAgentPlanDock(); renderAgentApprovalDock(); }
   if (options.preserveTop && (!viewport || !viewport.key)) {
     box.scrollTop += box.scrollHeight - options.previousScrollHeight;
     view.positionChanged();
   } else if (!shouldScroll && viewport) restoreMessageViewport(box, viewport);
-  syncChatScroll(shouldScroll, false);
-  if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
+  syncChatScroll(shouldScroll, false, box);
+  if (!component && window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
 }

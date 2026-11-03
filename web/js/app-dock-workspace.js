@@ -16,7 +16,7 @@
       onClose: function () { RNAssistantDiagnostics.onClose(); } },
     settings: { title: "Настройки", icon: "settings", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
-  function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && !views[id].perObject; }); }
+  function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && (!views[id].perObject || views[id].menu); }); }
   // Temporary section adapters live in this catalog, not a second navigation registry.
   // S3b.2/S4 replace their delivery with independently mounted object views.
   function registerTargetRoute(id, route) {
@@ -33,16 +33,23 @@
     target = Object.freeze(Object.assign({}, target));
     if (descriptor.targetRoute) return descriptor.open(target);
     if (!api || !descriptor.perObject) return false;
+    var chooser = api.activePanel && /^choose-\d+$/.test(api.activePanel.id) ? api.activePanel : null;
     var id = descriptor.key(target), item = panel(id);
+    if (item && options && options.group && item.group !== options.group) item.api.moveTo({ group: options.group, position: "center" });
     if (!item) {
       var count = api.panels.filter(function (p) { return p.params && p.params.target && p.params.target.view === target.view; }).length;
       if (count >= descriptor.maximumInstances) { notice("Открыто " + count + " просмотров. Закройте один перед открытием нового."); return false; }
       var reference = options && panel(options.referencePanel);
       item = api.addPanel({ id: id, component: target.view, title: descriptor.titleFor(target),
         params: { target: target }, renderer: typeof descriptor.renderer === "function" ? descriptor.renderer(target) : descriptor.renderer || "always", minimumWidth: 150, minimumHeight: 120,
-        position: (reference || api.activePanel) ? { referencePanel: reference || api.activePanel, direction: "within" } : undefined });
+        position: options && options.group ? { referenceGroup: options.group, direction: options.direction || "within" } :
+          (reference || api.activePanel) ? { referencePanel: reference || api.activePanel, direction: options && options.direction || "within" } : undefined });
     }
-    item.group.api.setVisible(true); item.api.setActive(); changed(); return true;
+    item.group.api.setVisible(true); item.api.setActive(); changed();
+    var record = objectViews[id]; if (record && record.view.focus) record.view.focus();
+    if (target.view === "conversation" && target.sessionId && panel("conversation")) panel("conversation").api.close();
+    if (chooser && panel(chooser.id)) chooser.api.close();
+    return true;
   }
   function sectionView(name) {
     return Object.keys(views).find(function (id) { return views[id].section === name; }) || null;
@@ -66,6 +73,7 @@
   }
   function createObjectComponent(options, descriptor) {
     var content = element("div", "dock-view"), visibility;
+    if (options.name === "conversation") content.classList.add("dock-conversation");
     var id = options.id;
     return { element: content, init: function (parameters) {
       var target = parameters.params && parameters.params.target;
@@ -102,11 +110,17 @@
     node.addEventListener("click", action); return node;
   }
   function panel(id) { return api && api.getPanel(id); }
-  function visible(id) { var item = panel(id); return workspaceActive() && !!item && item.group.api.isVisible && item.api.isVisible; }
+  function visible(id) {
+    if (!workspaceActive()) return false;
+    var item = panel(id);
+    if (id === "conversation" && !item) return Object.keys(objectViews).some(function (key) {
+      var record = objectViews[key], panelItem = panel(key);
+      return panelItem && panelItem.params && panelItem.params.target && panelItem.params.target.view === "conversation" && panelItem.group.api.isVisible && panelItem.api.isVisible;
+    });
+    return !!item && item.group.api.isVisible && item.api.isVisible;
+  }
   function sync() {
     if (!api || restoring) return;
-    var nextVisible = visible("conversation");
-    roots.conversation.inert = !nextVisible;
     roots.inspector.inert = !visible("inspector");
     var nextSettings = visible("settings"), activateSettings = nextSettings && !settingsVisible;
     var deactivateSettings = !nextSettings && settingsVisible;
@@ -131,7 +145,6 @@
     });
     syncObjectViews();
     updateContext();
-    messageView().setVisible(nextVisible, function () { RNAssistantWorkspaceChat.refreshPresentation(); });
   }
 
   function notice(message) { RNAssistantShellLayout.notice(message); }
@@ -180,6 +193,10 @@
   }
   function show(id, group, direction) {
     if (!api || !views[id] || views[id].targetRoute) return;
+    if (id === "conversation" && views[id].perObject) {
+      var selected = RNAssistantConversationPanel.selected();
+      return openTarget(selected ? selected.route : { view: "conversation", source: "office", sessionId: state.activeChatId || "" }, { group: group, direction: direction });
+    }
     direction = direction || views[id].placement;
     if (views[id].prepare) views[id].prepare();
     var item = panel(id);
@@ -247,15 +264,23 @@
     var empty = element("p", "", "Ничего не найдено"); empty.hidden = true; empty.setAttribute("role", "status");
     input.type = "search"; input.placeholder = "Найти экран…"; input.setAttribute("aria-label", "Найти экран");
     body.append(element("h2", "", "Что открыть?"), input, list, empty);
-    body.appendChild(element("p", "", "Открытый экран будет перенесён сюда. Чат общий для выбранного документа или проекта."));
+    body.appendChild(element("p", "", "Выберите экран или откройте другой чат из дерева навигации."));
     root.appendChild(body); root.dataset.chooserId = id;
     viewIds().forEach(function (viewId) {
       var row = button(views[viewId].title, views[viewId].icon, function () {
         var chooserPanel = panel(id); if (!chooserPanel) return;
-        show(viewId, chooserPanel.group, "within"); chooserPanel.api.close(); changed();
+        show(viewId, chooserPanel.group, "within"); if (panel(id)) chooserPanel.api.close(); changed();
       });
       row.appendChild(element("span", "", views[viewId].title)); list.appendChild(row);
       if (panel(viewId)) row.appendChild(element("small", "", "Открыт"));
+    });
+    var chatTargets = (state.chats || []).map(function (chat) { return { title: chatTitle(chat), target: { view: "conversation", source: "office", sessionId: chatId(chat) } }; });
+    if (window.RNAssistantProjectChats) chatTargets = chatTargets.concat(RNAssistantProjectChats.targets());
+    chatTargets.forEach(function (entry) {
+      var row = button(entry.title, "chat", function () {
+        var chooserPanel = panel(id); if (chooserPanel) openTarget(entry.target, { group: chooserPanel.group });
+      });
+      row.appendChild(element("span", "", entry.title)); list.appendChild(row);
     });
     input.addEventListener("input", function () {
       Array.from(list.children).forEach(function (row) { row.hidden = !row.getAttribute("aria-label").toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()); });
@@ -277,13 +302,20 @@
   }
   function updateContext() {
     if (!api) return;
-    var title = roots.conversation.querySelector(owner === "office" ? "#activeChatTitle" : "#projectChatTitle").textContent;
-    var chat = panel("conversation"); if (chat && chat.title !== title) chat.api.setTitle(title || "Чат");
+    var selected = RNAssistantConversationPanel.selected();
+    if (selected) owner = selected.target.source === "office" ? "office" : "project";
+    Object.keys(objectViews).forEach(function (id) {
+      var view = objectViews[id].view;
+      if (view.target && view.target.source === "office") {
+        var summary = (state.chats || []).find(function (chat) { return chatId(chat) === view.target.sessionId; });
+        var item = panel(id); if (summary && item && item.title !== chatTitle(summary)) item.api.setTitle(chatTitle(summary));
+      }
+    });
     var names = { settings: "Настройки", diagnostics: "Диагностика", artifacts: "Материалы", instructions: "Библиотека", vba: "VBA", plugins: "Плагины" };
     var context = names[section];
     var activeOfficeChat = owner === "office" ? activeChatSummary() : null;
     var officeHost = activeOfficeChat && chatHost(activeOfficeChat) || state.host || "";
-    if (!context) context = owner === "office" ? (activeOfficeChat ? chatDocumentTitle(activeOfficeChat) : "") : roots.conversation.querySelector("#projectChatContext").textContent;
+    if (!context) context = owner === "office" ? (activeOfficeChat ? chatDocumentTitle(activeOfficeChat) : "") : "Проект";
     RNAssistantShellLayout.renderWorkspace({ context: { title: context || "Рабочая область",
       icon: section === "chat" ? owner === "office" ? "host:" + officeHost : "folder" : "layers",
       iconHtml: section === "chat" && owner === "office" ? documentHostIcon(officeHost) : null,
@@ -327,7 +359,9 @@
   function reset() {
     if (!canClose(api.panels)) return;
     restoring = true; wideLayout = null; api.clear();
-    var chat = add("conversation"); add("inspector", { referencePanel: chat, direction: compact || host.clientWidth < 560 ? "within" : "right" }).api.setSize({ width: inspectorWidth });
+    var chat = api.addPanel({ id: "conversation", component: "conversation", title: "Чат", renderer: "always",
+      params: { target: { view: "conversation", source: "office", sessionId: "" } } });
+    add("inspector", { referencePanel: chat, direction: compact || host.clientWidth < 560 ? "within" : "right" }).api.setSize({ width: inspectorWidth });
     chat.api.setActive(); restoring = false; changed();
   }
   function join() {
@@ -341,10 +375,6 @@
     owner = nextOwner;
     if (!api) return;
     placeHost();
-    document.getElementById("chatDropZone").hidden = owner !== "office";
-    document.getElementById("workspaceChatView").hidden = owner === "office";
-    // Background mount/preview refresh must not reopen a hidden conversation.
-    if (changedOwner) show("conversation");
     sync();
   }
   function resize(width) {
@@ -376,8 +406,8 @@
     inspectorWidth = Number.parseFloat(tokens.getPropertyValue("--shell-inspector-width"));
     parking = element("div"); parking.id = "workspaceViewParking"; parking.hidden = true;
     document.querySelector(".shell").appendChild(parking);
-    roots.conversation = element("div", "dock-conversation"); roots.conversation.id = "conversationView";
-    roots.conversation.append(document.getElementById("chatDropZone"), document.getElementById("workspaceChatView"));
+    document.getElementById("chatDropZone").remove();
+    document.getElementById("workspaceChatView").remove();
     roots.inspector = document.getElementById("chatInspector"); roots.inspector.hidden = false;
     roots.settings = document.getElementById("settingsView");
     roots.request = document.getElementById("modelContextDialog"); roots.request.classList.remove("hidden");
@@ -415,8 +445,11 @@
     try { var saved = JSON.parse(localStorage.getItem(storageKey)); if (saved && saved.version === 1 && validateLayout(saved.layout)) api.fromJSON(saved.layout); else { reset(); if (saved) notice("Прежняя компоновка недоступна. Открыт исходный вид."); } }
     catch (error) { reset(); notice("Не удалось прочитать компоновку. Открыт исходный вид."); }
     restoring = false;
-    document.getElementById("workspaceChatView").hidden = true;
-    api.onDidLayoutChange(changed); api.onDidActivePanelChange(function () { sync(); revealActiveTab(); }); api.onDidMaximizedGroupChange(sync);
+    api.onDidLayoutChange(changed); api.onDidActivePanelChange(function () {
+      var record = api.activePanel && objectViews[api.activePanel.id];
+      if (record && record.view.focus) record.view.focus();
+      sync(); revealActiveTab();
+    }); api.onDidMaximizedGroupChange(sync);
     api.onDidRemovePanel(function () { if (!restoring) wideLayout = null; });
     RNAssistantShellLayout.bindWorkspace({
       onLayoutChanged: sync,
@@ -459,10 +492,15 @@
       var rect = entries[0].contentRect;
       if (rect.width && rect.height) { resize(rect.width); api.layout(rect.width, rect.height); sync(); }
     }); observer.observe(dock);
-    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { dragListeners.abort(); endDrag(); messageView().dispose(); observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
+    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { dragListeners.abort(); endDrag(); observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
     sync();
   }
   window.RNAssistantDockWorkspace = {
+    registerConversation: function (descriptor) { views.conversation = descriptor; },
+    getView: function (id) { return objectViews[id] && objectViews[id].view || null; },
+    eachView: function (type, callback) { Object.keys(objectViews).forEach(function (id) {
+      var item = panel(id); if (item && item.params && item.params.target.view === type) callback(objectViews[id].view);
+    }); },
     registerTargetRoute: registerTargetRoute, registerView: registerView, openTarget: openTarget, sectionView: sectionView,
     isSectionVisible: function (name) { var id = sectionView(name); return !!id && visible(id); },
     bind: bind, mount: mount, show: show, close: close, updateContext: updateContext,

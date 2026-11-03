@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Независимые вкладки чатов — 2026-11-03, In Review
+
+Production Web использует одну factory Chat View с отдельными экземплярами для
+Office/Workspace/plugin в существующем Dockview. Параллельный ввод/отправка,
+exact source, закрытие без отмены run и restore проверены в Chromium с mock.
+Singleton DOM/reparent и прежние chat orchestration handlers удалены; selected
+facade остался только у вторичных consumers с явным removal gate в MIGRATION_MAP.
+[Контрольная точка и оставшийся scope](../ui/UI_MIGRATION_PLAN.md#следующая-контрольная-точка-s2-два-работающих-chat-view--in-review).
+Это реализация независимых Chat View, не завершение всего S2 или Office qualification.
+
 ## Фото: блокировка при открытии диагностики — 2026-11-03
 
 Owners: Core ChatStore / Office diagnostic scope and bridge. Повторный

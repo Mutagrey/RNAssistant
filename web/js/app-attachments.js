@@ -75,7 +75,6 @@ function pendingChatResourceIngestion(chatId) {
 }
 
 function draftAttachmentsForChat(chatId) {
-  if (state.activeChatId === chatId) return state.draftAttachments || [];
   var draft = readOfficeDraft(chatId);
   return draft && draft.attachments ? draft.attachments : [];
 }
@@ -85,6 +84,8 @@ function setAttachmentStatus(chatId, message, level) {
   if (message) state.chatAttachmentStatus[chatId] = { message: message, level: level };
   else delete state.chatAttachmentStatus[chatId];
   if (state.activeChatId === chatId) renderAttachmentStatus();
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
+  if (component) component.controls();
   if (message && level) log(message, level);
 }
 
@@ -127,15 +128,11 @@ async function stageChatResourceFiles(targetChatId, files) {
       var response = await uploadChatResourceFile(targetChatId, file);
       var attachment = response.resource || response.Resource;
       if (file.type.indexOf("image/") === 0) attachment.previewUrl = URL.createObjectURL(file);
-      if (state.activeChatId === targetChatId) {
-        state.draftAttachments.push(attachment);
-        captureChatDraft(targetChatId, true);
-        renderAttachmentDrafts();
-      } else {
-        var draft = readOfficeDraft(targetChatId);
-        saveOfficeDraft(targetChatId, draft ? draft.text : "",
-          (draft && draft.attachments || []).concat(attachment), true);
-      }
+      var draft = readOfficeDraft(targetChatId);
+      saveOfficeDraft(targetChatId, draft ? draft.text : "", (draft && draft.attachments || []).concat(attachment), true);
+      var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(targetChatId);
+      if (component) component.controls();
+      else if (state.activeChatId === targetChatId) { state.draftAttachments = draftAttachmentsForChat(targetChatId); renderAttachmentDrafts(); }
     }
     setAttachmentStatus(targetChatId, "");
     return true;
@@ -188,19 +185,16 @@ async function removeDraftAttachment(item) {
     return;
   }
   if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-  if (state.activeChatId === targetChatId) {
-    state.draftAttachments = state.draftAttachments.filter(function (candidate) { return attachmentId(candidate) !== attachmentId(item); });
-    captureChatDraft(targetChatId, true);
-    renderAttachmentDrafts();
-  } else {
-    var draft = readOfficeDraft(targetChatId);
-    if (draft) saveOfficeDraft(targetChatId, draft.text, draft.attachments.filter(function (candidate) {
-      return attachmentId(candidate) !== attachmentId(item);
-    }), true);
-  }
+  var draft = readOfficeDraft(targetChatId);
+  if (draft) saveOfficeDraft(targetChatId, draft.text, draft.attachments.filter(function (candidate) {
+    return attachmentId(candidate) !== attachmentId(item);
+  }), true);
+  if (state.activeChatId === targetChatId) state.draftAttachments = draftAttachmentsForChat(targetChatId);
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(targetChatId);
+  if (component) component.controls(); else renderAttachmentDrafts();
 }
 
-function attachmentCard(item, removable, lifecycle) {
+function attachmentCard(item, removable, lifecycle, removeAction) {
   lifecycle = lifecycle || (removable ? "draft" : "committed");
   var visual = window.RNAssistantVisualAnnotations;
   if (!removable && lifecycle === "committed" && visual && visual.annotation(item))
@@ -240,13 +234,15 @@ function attachmentCard(item, removable, lifecycle) {
     remove.className = "attachment-remove";
     remove.title = "Удалить вложение";
     remove.textContent = "×";
-    remove.addEventListener("click", function () { removeDraftAttachment(item); });
+    remove.addEventListener("click", function () { if (removeAction) removeAction(item); else removeDraftAttachment(item); });
     card.appendChild(remove);
   }
   return card;
 }
 
 function renderAttachmentDrafts() {
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(state.activeChatId);
+  if (component) { component.controls(); return; }
   renderAttachmentStatus();
   var box = $("attachmentDrafts");
   if (!box) return;
@@ -280,58 +276,10 @@ function attachmentTransferHasFiles(transfer) {
 }
 
 function bindAttachmentActions() {
-  var button = $("attachFileButton");
-  var input = $("attachmentFileInput");
-  var composer = $("chatForm");
-  var dropZone = $("chatDropZone");
-  var dragDepth = 0;
-  function clearDrag() { dragDepth = 0; composer.classList.remove("is-dragging"); }
-  button.addEventListener("click", function () {
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
-      window.RNAssistantWorkspaceChat.composerAction("pickFiles");
-    else input.click();
-  });
-  input.addEventListener("change", function () {
-    ingestChatResourceFiles(input.files);
-    input.value = "";
-  });
-  ["dragenter", "dragover"].forEach(function (name) {
-    dropZone.addEventListener(name, function (event) {
-      if (!attachmentTransferHasFiles(event.dataTransfer)) return;
-      event.preventDefault();
-      if (name === "dragenter") dragDepth += 1;
-      var allowed = !attachmentIngestionBlockedReason();
-      event.dataTransfer.dropEffect = allowed ? "copy" : "none";
-      composer.classList.toggle("is-dragging", allowed);
-    });
-  });
-  dropZone.addEventListener("dragleave", function () {
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (!dragDepth) clearDrag();
-  });
-  dropZone.addEventListener("drop", function (event) {
-    clearDrag();
-    if (!attachmentTransferHasFiles(event.dataTransfer)) return;
-    event.preventDefault();
-    var files = attachmentTransferFiles(event.dataTransfer);
-    if (files.length) ingestChatResourceFiles(files);
-    else setAttachmentStatus(state.activeChatId, "Не удалось получить файлы для добавления.", "warning");
-  });
-  // A file dropped outside the chat must not navigate away and lose the draft.
+  // A file dropped outside a composer must never navigate away with its drafts.
   ["dragover", "drop"].forEach(function (name) {
     document.addEventListener(name, function (event) {
       if (attachmentTransferHasFiles(event.dataTransfer)) event.preventDefault();
-      if (name === "drop") clearDrag();
     });
   });
-  window.addEventListener("dragend", clearDrag);
-  $("chatInput").addEventListener("paste", function (event) {
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-    var files = attachmentTransferFiles(event.clipboardData);
-    if (files && files.length) {
-      event.preventDefault();
-      ingestChatResourceFiles(files);
-    }
-  });
-  renderAttachmentDrafts();
 }

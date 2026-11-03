@@ -117,13 +117,14 @@ function createChatModelPickerItem(value, model, isDefault, selected) {
   return button;
 }
 
-function renderChatModelPicker(force) {
-  var selection = chatModelSelection();
+function renderChatModelPicker(force, component) {
+  var $ = component ? component.node : window.$;
+  var selection = component ? component.composer.preferences() : chatModelSelection();
   var picker = $("chatModelPicker");
   var menu = $("chatModelMenu");
   var label = $("chatModelButtonLabel");
   if (!picker || !menu || !label) return;
-  var owner = window.RNAssistantWorkspaceChat ? window.RNAssistantWorkspaceChat.owner() : "office";
+  var owner = component ? component.target.source : window.RNAssistantWorkspaceChat ? window.RNAssistantWorkspaceChat.owner() : "office";
   if (menu.dataset) menu.dataset.owner = owner;
 
   var selected = selection.selected;
@@ -168,7 +169,8 @@ function renderChatModelPicker(force) {
       if (picker.classList.contains("is-disabled")) return;
       var value = item.dataset.value || "";
       picker.open = false;
-      saveChatModelSelection(value);
+      if (component) component.composer.setPreference("model", value);
+      else saveChatModelSelection(value);
     });
   });
 }
