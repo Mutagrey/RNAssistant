@@ -34,8 +34,8 @@ authority.
 ## Current implementation
 
 `skills.agents.communication` (Common, `AgentCommunicationSkillProvider`) is shared
-by Office, Workspace and plugin chats. Version 7.0.0 requires `agents.list` v3,
-`agents.send` v4, `agents.spawn` v2, `agents.wait` v4 and `agents.cancel` v1;
+by Office, Workspace and plugin chats. Version 8.0.0 requires `agents.list` v3,
+`agents.send` v4, `agents.spawn` v2, `agents.wait` v4 and `agents.cancel/pause/resume` v1;
 the existing `core.skills.load` path exposes its complete instructions. It covers
 saved same-scope discovery with `is_self`, stable short addresses, ordinary-thread
 creation without views/history copies, inherited permission ceilings, self-contained requests,
@@ -47,6 +47,10 @@ waiting, and distinguishes a finished turn from a completed user task. Peer meta
 includes no task description or private history; ask for details.
 Cancellation instructions distinguish a live signal from durable terminal cancellation,
 prohibit unknown retries and preserve the chat, queue and other participants.
+Pause guidance separates Requested/Paused/Released, keeps the same Run and budget,
+and prohibits peer release of user Stop, approval or recovery pause. A pending wait
+finishes on its original deadline/event before the safe pause; observation makes no
+background model calls.
 Peer inputs arrive between model requests/tool calls without cancelling in-flight
 work; calling `agents.wait` is not required for delivery. Wait has a per-call timeout
 and no cumulative quota. The remaining generic no-progress issue for repeated

@@ -35,11 +35,20 @@ namespace RNAssistant.Core.Models
         public List<ChatAttachment> Attachments { get; set; } = new List<ChatAttachment>();
     }
 
+    // Runtime-issued identity of an agent pause. Replay never restores peer resume authority.
+    public sealed class ConversationAgentPause
+    {
+        public string RunId { get; set; }
+        public string PauseId { get; set; }
+    }
+
     // One immutable event per accepted transition; replay is the queue authority.
     public sealed class ConversationInputEvent
     {
         public ConversationInput Input { get; set; }
         public bool Paused { get; set; }
         public string PauseReason { get; set; }
+        [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public ConversationAgentPause AgentPause { get; set; }
     }
 }

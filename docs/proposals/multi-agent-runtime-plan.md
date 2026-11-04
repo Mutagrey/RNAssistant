@@ -8,6 +8,46 @@ Office/Workspace — binding к существующим execution owners.
 [Tools](../tool-library.md#agent-communication-tools--2026-11-03),
 [Events](../session-events.md#agent-communication-journal--2026-11-03).
 
+## Этап 3a: агентская пауза/продолжение — In Review, 2026-11-04
+
+`agents.pause(agent_id)` / `agents.resume(agent_id)` v1 подключены к общему Inbox,
+ConversationRunService/AgentKernel и existing Office/Workspace owners. Skill v8.
+Создание Run, отправка сообщения, запрос паузы, достигнутая пауза и release — разные
+действия. Requested подтверждает durable control intake; Paused — безопасную границу;
+Released — снятие агентского запрета, не выполнение/завершение работы.
+
+Выбор: optional `IRunPauseChannel`, `Waiting + PauseId` в прежнем KernelState и typed
+`ConversationInputEvent.AgentPause {RunId,PauseId}`. Второй lifecycle/runtime, отдельный
+pause store и отмена текущего инструмента отклонены. Inbox фиксирует агентскую причину
+отдельно от текста PauseReason. До границы Paused=false: текущий model request и
+инструмент/read-back завершаются; не принятый ответ модели отбрасывается, оставшиеся
+принятые calls закрываются NotDispatched. Существующий agents.wait сначала разрешается
+по входящему событию/своему исходному deadline (до 10 секунд), затем наступает пауза.
+
+Продолжение сохраняет Run/turn, history, iterations/tool budget, reflection/finish
+correction и unknown effects; последний случай по-прежнему требует inspection.
+Закрытый checkpoint не содержит PendingWait или незавершённых calls. Ожидание release
+событийное: без LLM polling, worker/UI blocking и document gate; exact chat lease
+остаётся у живого Run. Входящие сообщения сохраняются в очереди. Source journal
+PausePrepared/Recorded и ResumePrepared/Recorded закрепляет exact live lifetime и
+PauseId до target change. Ранний resume не теряется, запоздалый не снимает новую паузу;
+неизвестный исход не повторяется.
+
+Peer resume доступен только для агентской паузы живого owner в этой области.
+User Stop/approval/runtime shutdown/restart не снимаются; cold replay удаляет live
+peer authority. После restart работает уже существующее явное пользовательское
+продолжение (в том числе batch из любого чата области), с тем же Run и бюджетом.
+`agents.cancel` завершает и live, и dormant pause; cold pause не создаёт фиктивный
+результат инструмента. История/очередь не удаляются, каскадного управления нет.
+
+Инварианты и отказовые проверки: `agent pause:` — до/во время model/tool шага,
+незапущенный read batch, исходный deadline wait, unknown inspection, stale CAS,
+resume-before-wait, новая пауза между admission и dispatch, human priority,
+prepared-only receipt, Office service crash/reload/cold cancel, Workspace live/restart/
+Stop по HTTP без views. Windows/Office controller/WebView2 и live-model evidence
+открыты. UI в этом срезе не меняется; пользовательские controls/подписи и Inspector —
+следующий срез. Межпроцессного peer control пока нет.
+
 ## Этап 3a: адресная отмена — In Review, 2026-11-04
 
 `agents.cancel(agent_id)` v1 реализован в общем Application owner. Адресуется один
@@ -36,8 +76,8 @@ counters. Ошибки сохраняются обычным ToolRuntime, без
 Граница: abandoned Running, pending approval без живого owner и owner другого
 процесса возвращают Unavailable. Existing user Stop/Workspace pipe не заменены;
 отдельной UI-команды cold cancel пока нет, list не стал terminal Run monitor.
-Windows/Office/controller и live-model qualification открыты. Далее: pause/resume
-authority, user cold control, Run wait/dependencies и лимиты. Latency baseline 1/2/4/8
+Windows/Office/controller и live-model qualification открыты. Pause/resume authority реализована следующим срезом выше; далее user cold control,
+Run wait/dependencies и лимиты. Latency baseline 1/2/4/8
 и scheduler fairness остаются перед срезом admission/slots. Дополнительных фоновых
 LLM-вызовов для диагностики здесь нет.
 
@@ -202,7 +242,7 @@ receipt, stale/foreign/busy/binding refusal не блокирует других
 После реализации Collaboration её membership заполняет тот же явный выбор; удаление
 группы и добавление участника не дают автоматического разрешения resume. Inspector
 сможет использовать эту Application-команду без второго control owner. Agent cold
-cancel добавлен в 3a; user cold control, pause/resume и execution slots остаются в этапе 3.
+cancel/pause/resume добавлены в 3a; user cold control и execution slots остаются в этапе 3.
 Проверки: exact selection, partial failures, stale Stop/retry, bounded catalog,
 два реально сохранённых Workspace wait → restart → одна команда → оба прежних Run.
 UI: общий ActionMenu, пагинация, partial/unknown result, клавиатура/zoom/dispose.
@@ -298,7 +338,7 @@ Office может публиковать Shared context через `ContextCompa
 ### Старые чаты и актуальные инструменты
 
 Для совместимого сохранённого чата новые Run получают текущий каталог. `CallableToolProfile.CoreIds`
-уже включает list/send/wait/spawn, если policy разрешает их публикацию. Office composer
+уже включает list/send/wait/spawn/cancel/pause/resume, если policy разрешает их публикацию. Office composer
 и Workspace CompileCurrent собирают RUNTIME_CONTEXT при подготовке запроса; правила
 peer input не застывают в старой истории. Проверять body сообщения и специально
 подкладывать reply schema не нужно. Остальные инструменты доступны через обычные
@@ -326,8 +366,8 @@ rename занятого чата с revision conflict, каталог >50, от�
 | `agents.spawn(title, initial_message?, expect_reply?)` | Создание ordinary thread, отдельно optional intake/request | Реализовано, v2 |
 | `agents.send(agent_id, text, expect_reply?, reply_to?)` | Durable intake, корреляция и явные ответы | Реализовано, v4 |
 | `agents.wait(timeout_seconds?, requests?, mode?)` | Следующее сообщение или any/all ответов на свои запросы | Durable v4, 2b.2 In Review; длительность 1–10 секунд сохранена |
-| `agents.pause` | Остановка продвижения на безопасной границе | Этап 3 |
-| `agents.resume` | Продолжение сохранённого ожидания/agent pause с проверкой полномочий | Этап 3 |
+| `agents.pause(agent_id)` | Запрос паузы живого Run на безопасной границе; Requested ≠ Paused | Реализовано v1, этап 3a In Review |
+| `agents.resume(agent_id)` | Снять агентскую паузу exact live invocation; не снимает user/recovery pause | Реализовано v1, этап 3a In Review |
 | `agents.cancel(agent_id)` | Exact live signal или terminal cancellation сохранённого wait; отдельные receipts | Реализовано v1, этап 3a In Review |
 | `agents.group` | Именованные группы чатов: list/create/rename/add/remove/delete | Этап 4a |
 | `agents.resolve` | Явное разрешение опционального поручения с результатом | Этап 4b |
@@ -343,9 +383,9 @@ request использует ID исходного сообщения, отде�
 не нужна. В Matches поле request_id обозначает ID исходного сообщения, message_id —
 ID ответа. Ответ ссылается на полученное сообщение и проверенного отправителя;
 его цепочка не зависит от более поздних обсуждений. Корреляция переживает restart,
-сохранённый wait продолжается явно в том же Run (2b.2). Control tools будут принимать semantic agent_id; runtime
+сохранённый wait продолжается явно в том же Run (2b.2). Control tools принимают semantic agent_id; runtime
 закрепляет exact Run при admission и отклоняет замену Run перед dispatch.
-User Stop/restart pause не снимается peer-командой без пользовательского разрешения.
+User Stop/restart pause снимается только явным действием пользователя, не peer-командой.
 
 ## Этапы и интеграция
 
@@ -355,7 +395,7 @@ User Stop/restart pause не снимается peer-командой без п�
 | 2a. Корреляция | Existing Prepared/Accepted + input provenance, source recipient verification и Inbox matcher. Реализовано после 1 | Ранние/применённые ответы учитываются, any/all различаются, нет чужих match/потери сигнала, unrelated/human/policy input не выдаётся за ответ. 22 целевые проверки проходят |
 | 2b.1. Повтор ожидания | Реализован typed timeout progress через существующий terminal result; общий kernel не парсит имя tool/body. Зависит от 2a | Четвёртый одинаковый timeout исполняется; JSON/ChatStore replay сохраняет различие, остальные repeat guards и run limits действуют. 23 agent communication + 1 kernel wait + 15 tool runtime checks проходят; Windows отдельно |
 | 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; реализовано, In Review | Waiting + PendingToolWait в прежних events/CAS; явный resume того же call/Run, абсолютный deadline, однократный учёт. Exact chat lease остаётся за живым Run, рабочий поток и document gate свободны. Shutdown сохраняет wait, Stop отменяет живой wait. Непроверенная Windows document binding остаётся открытым gate |
-| 3. Run control/лимиты | User batch resume и agents.cancel v1 (3a) реализованы, In Review. Далее existing run owner/leases/input channel, pause/resume и user cold control; scheduler admission и budgets. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. Справедливость очереди и лимиты параллельных Run ещё предстоит проверить |
+| 3. Run control/лимиты | User batch resume и agents.cancel/pause/resume v1 (3a) реализованы, In Review. Далее пользовательский control через existing run owner/leases/input channel; scheduler admission и budgets. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. Справедливость очереди и лимиты параллельных Run ещё предстоит проверить |
 | 4a. Организация чатов | Optional group events/projection, creator в headers/DTO; `group`, целевой `chat.rename`, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
 | 4b. Поручения | Optional assignment events и bounded projection; `resolve`. Зависит от 2–3, membership не обязателен | Смена ролей без смены identity; finish не закрывает поручение; terminal assignment не доказывает внешний эффект без evidence |
 | 5. Inspector | Typed DTO/cursors поверх существующих SessionEvent/kernel/trajectory readers; production Inspector, без demo/store | Участники + отдельные communication/dependency graphs + timeline, навигация thread/message/Run/step/resource/E; control использует этап 3; subscriptions очищаются при dispose, Run сохраняется |

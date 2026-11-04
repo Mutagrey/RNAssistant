@@ -356,7 +356,7 @@ namespace RNAssistant.Office.Services
             run.RunId = summary.RunId;
             run.TurnId = summary.TurnId;
             run.Status = Status(summary);
-            run.Phase = summary.Lifecycle == RunLifecycle.Waiting ? "waiting_agents" : run.Status;
+            run.Phase = summary.Lifecycle == RunLifecycle.Waiting ? (summary.PauseId == null ? "waiting_agents" : "paused") : run.Status;
             run.CurrentAction = AssistantMessage(summary);
             run.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             run.IterationsUsed = summary.IterationsUsed;

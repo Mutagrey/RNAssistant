@@ -2,6 +2,25 @@
 
 ## Межагентное общение — 2026-11-03
 
+Срез 3a (2026-11-04): `agents.pause(agent_id)` / `agents.resume(agent_id)` v1 —
+управление одним другим live Run своей области. Pause Requested — запрос, Paused —
+достигнутая безопасная граница. Текущие model/tool/read-back не отменяются; ответ
+модели до acceptance может быть отброшен, unstarted accepted calls закрываются
+NotDispatched. Pending agents.wait завершается по событию/исходному deadline, затем
+kernel сохраняет `Waiting + PauseId` с закрытой историей. Это не PendingToolWait.
+
+Resume Released означает только снятие агентского запрета. Exact Run, live invocation
+и PauseId закреплены до dispatch: поздний resume не снимает более новую паузу.
+Продолжается тот же Run с прежним бюджетом, counts и guards. Inbox ждёт сигнал без
+блокировки UI/потока/document gate; chat lease сохраняется. Сообщения остаются в FIFO.
+Нет фоновых LLM вызовов. `IRunPauseChannel` дополняет прежний input channel.
+Typed AgentPause в input journal отделяет peer authority от текста PauseReason;
+User Stop и recovery не снимаются агентом. Replay всегда сбрасывает live peer authority.
+После restart пользователь использует прежнее явное/batch продолжение из любого
+чата области. `agents.cancel` может завершить сохранённую паузу без model/tool call.
+Close вкладки не меняет выполнение. Межпроцессный peer control и новый UI здесь
+не добавлены. Точные схемы — AgentCommunicationToolCatalog, skill v8.0.0.
+
 Owner — Application/Conversations (`AgentCommunicationService`), общий Inbox и
 существующий ConversationRunService/AgentKernel. Срез 2026-11-04 использует сохранённый
 каталог ChatStore в exact document/workspace; runtime связывает область с существующим
@@ -59,7 +78,7 @@ all — каждый. RepliesReady и Matches[{request_id,message_id,agent_id}] 
 Проверка durable Inbox и захват сигнала проходят под одним lock: ответ до wait и
 между проверкой/подпиской не теряется. Корреляция восстанавливается из журнала;
 само ожидание восстанавливается только по явному действию пользователя.
-`agents.wait` contract/binding v4; communication skill v6.0.0. Wait возвращается один,
+`agents.wait` contract/binding v4; communication skill v8.0.0. Wait возвращается один,
 не в batch: его policy не разрешает independent-read batching.
 Ожидание не держит Office gate, service lock или рабочий поток. Exact chat lease и
 владелец очереди остаются за тем же Run; второй Run в этом thread запрещён.

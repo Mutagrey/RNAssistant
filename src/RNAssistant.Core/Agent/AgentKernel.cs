@@ -106,6 +106,8 @@ namespace RNAssistant.Core.Agent
                 throw new InvalidOperationException("Saved wait history differs from this run's accepted call identities.");
             var state = new State(restored.Summary.RunId, continuation);
             var pending = restored.Summary.PendingWait;
+            if (restored.Summary.PauseId != null)
+                return await ResumePauseAsync(state, restored.Summary.PauseId, cancellationToken).ConfigureAwait(false);
             var context = pending.Context;
             state.PendingWait = pending;
             // Claim under CAS while retaining a recoverable wait if the process exits here.
@@ -145,14 +147,58 @@ namespace RNAssistant.Core.Agent
             return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
         }
 
+        private async Task<AgentRunResult> ResumePauseAsync(State state, string pauseId, CancellationToken token)
+        {
+            state.PauseId = pauseId;
+            var control = _input as IRunPauseChannel;
+            if (control == null) throw new InvalidOperationException("Paused run requires its input control owner.");
+            // Claim the checkpoint under CAS, preserving it through runtime shutdown.
+            await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                state.Summary(RunLifecycle.Waiting, "paused"))).ConfigureAwait(false);
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                await control.WaitForResumeAsync(pauseId, token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException)
+            {
+                var suspend = _suspendOnCancellation?.Invoke() == true;
+                return await FinishAsync(state, suspend ? RunLifecycle.Waiting : RunLifecycle.Cancelled,
+                    suspend ? "paused" : "cancelled", "Run paused or stopped.").ConfigureAwait(false);
+            }
+            state.PauseId = null;
+            await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
+            return await LoopAsync(state, token).ConfigureAwait(false);
+        }
+
+        private async Task<AgentRunResult> PauseAsync(State state, string pauseId)
+        {
+            state.PauseId = pauseId;
+            var result = await FinishAsync(state, RunLifecycle.Waiting, "paused", "Execution paused at a safe boundary.").ConfigureAwait(false);
+            // Acknowledge only after the safe checkpoint commits. The coordinator's
+            // next checkpoint publication then includes the acknowledged Inbox state.
+            (_input as IRunPauseChannel)?.AcknowledgePause(pauseId);
+            return result;
+        }
+
         // A pure terminal transition for a dormant, effect-free wait. The application
         // must own the exact conversation lease and commit this fact under storage CAS.
         // No continuation, model request or tool dispatch is needed to cancel it.
         public static AgentRunEvent CancelWait(AgentRunState checkpoint)
         {
             var summary = checkpoint?.Summary;
-            if (summary?.Lifecycle != RunLifecycle.Waiting || summary.PendingWait == null || checkpoint.InFlightTool != null)
+            if (summary?.Lifecycle != RunLifecycle.Waiting || checkpoint.InFlightTool != null)
                 throw new InvalidOperationException("Only a saved, unresolved wait can be cancelled without its live owner.");
+            if (summary.PauseId != null)
+            {
+                var cancelled = new RunSummary(summary.RunId, summary.TurnId, RunLifecycle.Cancelled,
+                    summary.ToolCounts, summary.IterationsUsed, summary.ToolStepsUsed, "Приостановленный запуск отменён.", "cancelled", null);
+                var closed = new AgentRunEvent(AgentRunEventKind.SummaryChanged, cancelled);
+                closed.SetReflectionState(checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued);
+                closed.SetFinishCorrection(checkpoint.FinishCorrection);
+                return closed;
+            }
             var context = summary.PendingWait.Context;
             var now = DateTime.UtcNow;
             const string message = "Ожидание отменено. Выполнение остановлено.";
@@ -184,6 +230,8 @@ namespace RNAssistant.Core.Agent
             {
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
+                var pauseId = (_input as IRunPauseChannel)?.PauseId;
+                if (pauseId != null) return await PauseAsync(state, pauseId).ConfigureAwait(false);
                 if (await TakeInputAsync(state, cancellationToken).ConfigureAwait(false))
                 {
                     completionFeedback = null;
@@ -220,6 +268,8 @@ namespace RNAssistant.Core.Agent
                 }
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
+                pauseId = (_input as IRunPauseChannel)?.PauseId;
+                if (pauseId != null) return await PauseAsync(state, pauseId).ConfigureAwait(false);
                 if (_input != null && _input.HasPendingInput)
                 {
                     requestCause = new ModelRequestCause(ModelRequestCauseKind.InputReceived,
@@ -353,11 +403,11 @@ namespace RNAssistant.Core.Agent
 
                 for (var index = 0; index < response.ToolCalls.Count; index++)
                 {
-                    if (_input != null && _input.HasPendingInput)
+                    if (_input != null && (_input.HasPendingInput || (_input as IRunPauseChannel)?.PauseId != null))
                     {
                         for (var rest = index; rest < response.ToolCalls.Count; rest++)
                             await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
-                                "Superseded by a new incoming message before dispatch.").ConfigureAwait(false);
+                                "Incoming control or message prevented dispatch.").ConfigureAwait(false);
                         break;
                     }
                     var result = await ExecuteOneAsync(state, response.ToolCalls[index], policies[index], stepId,
@@ -592,7 +642,7 @@ namespace RNAssistant.Core.Agent
         private async Task<AgentRunResult> FinishAsync(State state, RunLifecycle lifecycle, string reason, string message)
         {
             if (lifecycle != RunLifecycle.AwaitingConfirmation) state.Pending = null;
-            if (lifecycle != RunLifecycle.Waiting) state.PendingWait = null;
+            if (lifecycle != RunLifecycle.Waiting) { state.PendingWait = null; state.PauseId = null; }
             var summary = state.Summary(lifecycle, reason, message);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, summary)).ConfigureAwait(false);
             return new AgentRunResult(summary, state.Limits, state.Revision, state.Messages, state.AcceptedIds,
@@ -636,6 +686,7 @@ namespace RNAssistant.Core.Agent
             internal long Revision;
             internal PendingConfirmation Pending;
             internal PendingToolWait PendingWait;
+            internal string PauseId;
             internal int ConsecutiveReflections;
             internal bool ReflectionFeedbackIssued;
             internal FinishCorrection FinishCorrection;
@@ -670,7 +721,7 @@ namespace RNAssistant.Core.Agent
 
             internal RunSummary Summary(RunLifecycle lifecycle = RunLifecycle.Running, string reason = null, string message = null)
             {
-                return new RunSummary(RunId, TurnId, lifecycle, Counts, Iterations, ToolSteps, message, reason, Pending, PendingWait);
+                return new RunSummary(RunId, TurnId, lifecycle, Counts, Iterations, ToolSteps, message, reason, Pending, PendingWait, lifecycle == RunLifecycle.Waiting ? PauseId : null);
             }
         }
     }

@@ -15,6 +15,14 @@ namespace RNAssistant.Core.Agent
         bool TryCloseInput();
     }
 
+    // Optional cooperative control. Waiting must release all document/tool gates.
+    public interface IRunPauseChannel
+    {
+        string PauseId { get; }
+        void AcknowledgePause(string pauseId);
+        System.Threading.Tasks.Task WaitForResumeAsync(string pauseId, System.Threading.CancellationToken token);
+    }
+
     public sealed class AgentRunLimits
     {
         public int MaxIterations { get; private set; }
@@ -136,7 +144,9 @@ namespace RNAssistant.Core.Agent
         public static AgentRunContinuation RestoreWait(AgentRunState checkpoint, long revision,
             IEnumerable<AgentMessage> acceptedMessages)
         {
-            return RestorePending(checkpoint, revision, acceptedMessages, true);
+            return checkpoint?.Summary.PauseId != null
+                ? RestoreClosed(checkpoint, revision, acceptedMessages, true)
+                : RestorePending(checkpoint, revision, acceptedMessages, true);
         }
 
         private static AgentRunContinuation RestorePending(AgentRunState checkpoint, long revision,
@@ -173,16 +183,21 @@ namespace RNAssistant.Core.Agent
         // is eligible only after that lease proves its previous owner has exited.
         public static AgentRunContinuation RestoreCheckpoint(AgentRunState checkpoint, long revision,
             IEnumerable<AgentMessage> acceptedMessages)
+        { return RestoreClosed(checkpoint, revision, acceptedMessages, false); }
+
+        private static AgentRunContinuation RestoreClosed(AgentRunState checkpoint, long revision,
+            IEnumerable<AgentMessage> acceptedMessages, bool paused)
         {
             var summary = checkpoint?.Summary;
             var limits = checkpoint?.Limits;
-            var stopped = summary != null && (summary.Lifecycle == RunLifecycle.Running ||
+            var stopped = paused ? summary?.Lifecycle == RunLifecycle.Waiting && summary.PauseId != null
+                : summary != null && (summary.Lifecycle == RunLifecycle.Running ||
                 summary.Lifecycle == RunLifecycle.Cancelled && (summary.Reason == "cancelled" || summary.Reason == "Cancelled" ||
                     summary.Reason == "execution_interrupted") ||
                 summary.Lifecycle == RunLifecycle.Failed && summary.Reason == "runtime_interrupted");
-            if (!stopped || checkpoint.InFlightTool != null || summary.PendingConfirmation != null ||
-                summary.ExecutionHealth == ExecutionHealth.Unknown || revision < 0 ||
-                summary.IterationsUsed >= limits.MaxIterations || summary.ToolStepsUsed > limits.MaxToolSteps)
+            if (!stopped || limits == null || checkpoint.InFlightTool != null || summary.PendingConfirmation != null || summary.PendingWait != null ||
+                (!paused && summary.ExecutionHealth == ExecutionHealth.Unknown) || revision < 0 ||
+                (paused ? summary.IterationsUsed > limits.MaxIterations : summary.IterationsUsed >= limits.MaxIterations) || summary.ToolStepsUsed > limits.MaxToolSteps)
                 throw new InvalidOperationException("Continuation requires a stopped checkpoint, remaining iterations and no pending or uncertain effect.");
             var messages = (acceptedMessages ?? new AgentMessage[0]).ToArray();
             if (messages.Length == 0 || messages.Any(message => message == null))

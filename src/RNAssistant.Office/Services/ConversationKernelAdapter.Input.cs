@@ -10,6 +10,14 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class ConversationKernelAdapter
     {
+        public string PauseId { get { return _runInput?.PauseId; } }
+        public void AcknowledgePause(string pauseId) { _runInput?.AcknowledgePause(pauseId); }
+        public Task WaitForResumeAsync(string pauseId, CancellationToken token)
+        {
+            if (_runInput == null) throw new System.InvalidOperationException("Paused run requires its input owner.");
+            return _runInput.WaitForResumeAsync(pauseId, token);
+        }
+
         public CancellationToken InterruptToken { get { return _runInput?.InterruptToken ?? CancellationToken.None; } }
         public bool HasPendingInput { get { return _runInput != null && _runInput.HasPendingInput; } }
         public bool TryCloseInput() { return _runInput == null || _runInput.TryCloseInput(); }

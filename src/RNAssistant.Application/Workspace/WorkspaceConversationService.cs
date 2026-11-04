@@ -1989,8 +1989,8 @@ namespace RNAssistant.Runtime
                 var firstMessage = _session.Messages.Count;
                 _session.LastRun.KernelState = AgentRunState.Apply(_session.LastRun.KernelState, fact);
                 _session.LastRun.Status = fact.Summary.Lifecycle == RunLifecycle.Waiting ? "running" : fact.Summary.Lifecycle.ToString().ToLowerInvariant();
-                if (fact.Summary.Lifecycle == RunLifecycle.Waiting) _session.LastRun.Phase = "waiting_agents";
-                else if (_session.LastRun.Phase == "waiting_agents") _session.LastRun.Phase = null;
+                if (fact.Summary.Lifecycle == RunLifecycle.Waiting) _session.LastRun.Phase = fact.Summary.PauseId == null ? "waiting_agents" : "paused";
+                else if (_session.LastRun.Phase == "waiting_agents" || _session.LastRun.Phase == "paused") _session.LastRun.Phase = null;
                 _session.LastRun.IterationsUsed = fact.Summary.IterationsUsed;
                 _session.LastRun.ToolStepsUsed = fact.Summary.ToolStepsUsed;
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted)

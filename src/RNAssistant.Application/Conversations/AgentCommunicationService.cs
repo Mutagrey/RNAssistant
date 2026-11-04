@@ -11,7 +11,7 @@ using RNAssistant.Core.Services;
 namespace RNAssistant.Application.Conversations
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    internal enum AgentDeliveryState { Prepared, Accepted, Granted, SpawnPrepared, Spawned, CancelPrepared, CancelRecorded }
+    internal enum AgentDeliveryState { Prepared, Accepted, Granted, SpawnPrepared, Spawned, CancelPrepared, CancelRecorded, PausePrepared, PauseRecorded, ResumePrepared, ResumeRecorded }
 
     internal sealed class AgentCommunicationEvent
     {
@@ -26,6 +26,8 @@ namespace RNAssistant.Application.Conversations
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ExpectReply { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string TargetRunId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public AgentCancellationStatus? Cancellation { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string PauseId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public AgentPauseStatus? PauseControl { get; set; }
     }
 
     internal sealed class AgentConversationEndpoint

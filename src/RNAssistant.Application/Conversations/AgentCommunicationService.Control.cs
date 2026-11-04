@@ -18,8 +18,88 @@ namespace RNAssistant.Application.Conversations
         internal bool Changed;
     }
 
+    [JsonConverter(typeof(StringEnumConverter))]
+    internal enum AgentPauseStatus { Requested, Paused, Released, NoChange, Protected, Changed, Unavailable, Unconfirmed }
+
+    internal sealed class AgentPauseReceipt
+    {
+        [JsonProperty("agent_id")] public string AgentId { get; set; }
+        public AgentPauseStatus Status { get; set; }
+        internal bool Changed;
+    }
+
     internal sealed partial class AgentCommunicationService
     {
+        internal AgentPauseReceipt Pause(ConversationInboxService sourceInbox, ChatSession source, int limit,
+            string operationId, string agentId, bool resume, Action dispatch)
+        {
+            AgentConversationEndpoint target;
+            AgentCommunicationEvent prepared;
+            ConversationActiveSnapshot live;
+            ChatSession selected;
+            var recorded = resume ? AgentDeliveryState.ResumeRecorded : AgentDeliveryState.PauseRecorded;
+            lock (_sync)
+            {
+                RequireEnabled(limit);
+                if (string.IsNullOrWhiteSpace(agentId) || agentId == Address(source).AgentId)
+                    throw new AgentCommunicationException("agent_control_invalid", "Укажите адрес другого участника.");
+                var fingerprint = ConversationInputJournal.Fingerprint(new[] { resume ? "resume" : "pause", agentId });
+                var prior = sourceInbox.AgentEvents(source).Where(item => item.OperationId == operationId).ToArray();
+                if (prior.Length > 0)
+                {
+                    if (prior.Any(item => item.Fingerprint != fingerprint || item.Target?.AgentId != agentId))
+                        throw new AgentCommunicationException("agent_operation_conflict", "Идентификатор уже принадлежит другой операции.");
+                    return new AgentPauseReceipt { AgentId = agentId,
+                        Status = prior.LastOrDefault(item => item.State == recorded)?.PauseControl ?? AgentPauseStatus.Unconfirmed };
+                }
+                target = FindAgent(source, agentId);
+                if (target == null) throw new AgentCommunicationException("agent_chat_not_found", "Участник недоступен в этой области.");
+                selected = target.Load();
+                target.Validate(selected);
+                ConversationRunPolicy.RequireCurrentSession(selected);
+                var box = target.Inbox.Get(selected);
+                lock (box.Sync)
+                {
+                    live = target.Runs?.CaptureCancellation(selected.Id, box.Session.LastRun?.RunId);
+                    prepared = new AgentCommunicationEvent { State = resume ? AgentDeliveryState.ResumePrepared : AgentDeliveryState.PausePrepared,
+                        OperationId = operationId, Fingerprint = fingerprint, Target = target.Address,
+                        TargetRunId = box.Session.LastRun?.RunId, PauseId = resume ? box.AgentPause?.PauseId : operationId };
+                }
+                // Pin invocation AND pause before any target change. An unknown result never retries.
+                dispatch();
+                sourceInbox.AppendAgentEvent(source, prepared);
+            }
+            bool changed = false;
+            ChatSession updated = null;
+            var status = AgentPauseStatus.Unavailable;
+            if (target.IsClosing?.Invoke() != true)
+            {
+                var box = target.Inbox.Get(selected);
+                lock (box.Sync)
+                {
+                    if (live == null || live.Cancellation == null)
+                        status = box.Paused || ConversationInboxService.HasPendingWait(box.Session)
+                            ? AgentPauseStatus.Protected : AgentPauseStatus.Unavailable;
+                    else
+                    {
+                        var current = target.Runs.CaptureCancellation(selected.Id, prepared.TargetRunId);
+                        if (current == null || !ReferenceEquals(current.Cancellation, live.Cancellation)) status = AgentPauseStatus.Changed;
+                        else if (live.Cancellation.IsCancellationRequested) status = AgentPauseStatus.Protected;
+                        else status = target.Inbox.ControlPause(box.Session, prepared.TargetRunId, prepared.PauseId, resume, out changed);
+                    }
+                    if (changed) updated = box.Session;
+                }
+            }
+            try
+            {
+                sourceInbox.AppendAgentEvent(source, new AgentCommunicationEvent { State = recorded,
+                    OperationId = operationId, Fingerprint = prepared.Fingerprint, Target = prepared.Target,
+                    TargetRunId = prepared.TargetRunId, PauseId = prepared.PauseId, PauseControl = status });
+            }
+            finally { if (updated != null) try { target.Changed?.Invoke(updated); } catch { } }
+            return new AgentPauseReceipt { AgentId = agentId, Status = status, Changed = changed };
+        }
+
         internal AgentCancellationReceipt Cancel(ConversationInboxService sourceInbox, ChatSession source, int limit,
             string operationId, string agentId, Action dispatch)
         {

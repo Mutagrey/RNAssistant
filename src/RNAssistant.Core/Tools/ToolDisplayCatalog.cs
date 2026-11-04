@@ -11,6 +11,8 @@ namespace RNAssistant.Core.Tools
         private static readonly IReadOnlyDictionary<string, ToolDisplayMetadata> BuiltIns =
             new Dictionary<string, ToolDisplayMetadata>(StringComparer.Ordinal)
         {
+            { "agents.pause", new ToolDisplayMetadata("Пауза агента", "Запрашиваю паузу", ToolDisplayOperation.Write, new[] { "agent_id" }) },
+            { "agents.resume", new ToolDisplayMetadata("Продолжение агента", "Снимаю агентскую паузу", ToolDisplayOperation.Write, new[] { "agent_id" }) },
             { "agents.wait", new ToolDisplayMetadata("Ожидание агентов", "Жду сообщения агентов", ToolDisplayOperation.Read) },
             { "agents.list", new ToolDisplayMetadata("Собеседники", "Ищу открытые чаты", ToolDisplayOperation.Search) },
             { "agents.send", new ToolDisplayMetadata("Сообщение агенту", "Отправляю сообщение", ToolDisplayOperation.Write, new[] { "agent_id" }) },

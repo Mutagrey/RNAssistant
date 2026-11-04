@@ -39,6 +39,16 @@ race coverage. These are host-neutral checks, not Windows/Office qualification.
 
 ## Agent communication — 2026-11-03
 
+`agent pause:` covers safe model/tool/read-back boundaries, undispatched read batch,
+finish admission race, the existing wait deadline, retained budgets/unknown inspection,
+stale CAS, resume-before-wait, replacement pauses/lifetimes, human authority, exact
+policy binding and prepared-only receipt. Real stores are used for Office service
+crash/reload/cold cancellation; scripted Workspace HTTP runs pause/resume, user Stop
+and restart recovery without opening views. No UI/controller/COM qualification is
+implied. Relevant regressions: `agent cancel:`, `agent communication:`, `agent recovery:`,
+`inbox:`, `kernel: durable wait`, `tool pack: core and atomic` and `unified policy:`.
+The seven pause cases and these 52 regressions pass on the host-neutral Harness.
+
 `agent cancel:` covers live/cold Workspace model wire without views, cold Office
 service projection, exact Run/lifetime guards, competing leases, partial append,
 post-flush/receipt failures and no replay after restart. It checks preserved input, budgets,

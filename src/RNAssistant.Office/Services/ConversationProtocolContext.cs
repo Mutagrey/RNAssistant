@@ -134,7 +134,7 @@ namespace RNAssistant.Office.Services
         {
             EnsureCurrentHistory(session);
             var state = session.LastRun?.KernelState;
-            if (state?.Summary.PendingWait == null || state.Summary.RunId != session.LastRun.RunId ||
+            if (state?.Summary.Lifecycle != RunLifecycle.Waiting || state.Summary.RunId != session.LastRun.RunId ||
                 state.Summary.TurnId != session.LastRun.TurnId)
                 throw HistoryFailure("The saved wait does not belong to the current run.");
             return RestorePendingHistory(session, state, payloads, true);

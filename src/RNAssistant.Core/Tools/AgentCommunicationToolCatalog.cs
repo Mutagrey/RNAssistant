@@ -9,11 +9,17 @@ namespace RNAssistant.Core.Tools
         public const string Wait = "agents.wait";
         public const string Spawn = "agents.spawn";
         public const string Cancel = "agents.cancel";
-        public static bool Owns(string id) { return id == List || id == Send || id == Wait || id == Spawn || id == Cancel; }
+        public const string Pause = "agents.pause";
+        public const string Resume = "agents.resume";
+        public static bool Owns(string id) { return id == List || id == Send || id == Wait || id == Spawn || id == Cancel || id == Pause || id == Resume; }
         public static ToolBinding Binding(string id) { return new ToolBinding("conversation." + id + ".v" + Version(id)); }
-        public static string Version(string id) { return id == Cancel ? "1" : id == Spawn ? "2" : id == Send || id == Wait ? "4" : "3"; }
+        public static string Version(string id) { return id == Cancel || id == Pause || id == Resume ? "1" : id == Spawn ? "2" : id == Send || id == Wait ? "4" : "3"; }
         public static IEnumerable<ToolCatalogEntry> GetTools()
         {
+            yield return Entry(Pause, "Request a cooperative pause of one other live participant in your document/workspace. Requested confirms intake only; the current model/tool and read-back finish first. Remaining unstarted calls close without dispatch. Paused confirms a safe boundary. The same run, history and budget are retained. Does not cancel tools, grant approval, alter queues or affect descendants. No self-pause. User Stop and recovery cannot be overridden. Unconfirmed must not be retried.",
+                "{\"type\":\"object\",\"properties\":{\"agent_id\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64,\"description\":\"Exact short participant address from agents.list or a peer message.\"}},\"required\":[\"agent_id\"],\"additionalProperties\":false}");
+            yield return Entry(Resume, "Release an agent-origin pause of one other live participant in your document/workspace. Runtime pins the exact invocation and pause; a later pause is not released. Released confirms only gate release, not execution or task completion. Never starts a new run. User Stop, approval, runtime shutdown and restart require explicit user action and return Protected or Unavailable. No self-resume. Unconfirmed must not be retried.",
+                "{\"type\":\"object\",\"properties\":{\"agent_id\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64,\"description\":\"Exact short participant address from agents.list or a peer message.\"}},\"required\":[\"agent_id\"],\"additionalProperties\":false}");
             yield return Entry(Cancel, "Cancel the current run of one other participant in your document/workspace. Runtime pins the exact run; a changed target is not cancelled. Requested confirms a signal only: the owning kernel still records terminal state and any uncertain tool effects. Cancelled confirms durable cancellation. AlreadyStopped does not mean your command cancelled it. A saved unresolved wait can be cancelled without model/tool dispatch, including after restart. Does not delete the chat, clear queued messages, resume work or cancel descendants. Unconfirmed must not be retried; inspect the participant. No self-cancellation.",
                 "{\"type\":\"object\",\"properties\":{\"agent_id\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64,\"description\":\"Exact short participant address from agents.list or a peer message.\"}},\"required\":[\"agent_id\"],\"additionalProperties\":false}");
             yield return Entry(List, "List saved chats in your document or workspace, independently of open tabs, including your current chat marked is_self=true. Other entries (is_self=false) are peers you can message. Each has a stable short agent_id, title, document/project and status (idle, working, waiting, paused, awaiting_approval, or not_loaded when live state is not observed). Returns Peers and Truncated, at most 50 entries; narrow query by title or agent_id when truncated. Does not expose history. Copy the exact short peer agent_id into agents.send; never send to yourself.",
@@ -27,7 +33,7 @@ namespace RNAssistant.Core.Tools
         }
         private static ToolCatalogEntry Entry(string id, string description, string schema)
         {
-            var mutation = id == Send || id == Spawn || id == Cancel;
+            var mutation = id == Send || id == Spawn || id == Cancel || id == Pause || id == Resume;
             return new ToolCatalogEntry { Id = id, Host = "Common", Name = id.Replace('.', '_'), Description = description,
                 ArgumentSchemaJson = schema, ContractVersion = Version(id), BuiltIn = true, Enabled = true, Scope = "session", AgentCanRun = true,
                 MutatesLocalState = mutation, Binding = Binding(id),

@@ -1,5 +1,17 @@
 # Stabilization risk register
 
+## Agent pause/resume — host-neutral, 2026-11-04
+
+Owner: Application/Conversations + Core kernel. Пауза cooperative: длительный
+model/tool/read-back не прерывается, ожидание agents.wait сохраняет свой deadline
+(до 10 секунд). Requested не означает Paused; SLA остановки текущего инструмента
+не обещан. Peer resume не доступен после restart/пользовательского Stop и не
+управляет чужим процессом. UI labels/actions для отдельной паузы и cold cancel,
+Windows Office/controller/WebView2 и live-model coordination остаются открыты.
+Run/iteration budget/unknown guards и exact invocation/pause fencing проверяются
+`agent pause:`; наблюдаемость не требует LLM. Срез не вводит scheduler/slots или
+циклическое ожидание Run; эти ограничения остаются в плане этапов 3–4.
+
 ## Durable wait — host-neutral, Windows evidence открыт, 2026-11-04
 
 2b.2 сохраняет Waiting в прежнем run journal и возобновляет exact call/Run после
@@ -16,7 +28,7 @@ Exact document session не перепривязывается автомати�
 user Stop в этом случае пока только сохраняет паузу Inbox. UI cold control остаётся
 открытым. Это особенно важно при утрате Office binding.
 Глобальные execution
-slots, peer control, SCC diagnostics и ожидание Run/поручений — этапы 3–4. Текущий
+slots, SCC diagnostics и ожидание Run/поручений — этапы 3–4. Текущий
 wait ограничен 1–10 секундами. Host-neutral проверки не закрывают эти gates.
 
 При проверке 3a один параллельный Harness-прогон `agent recovery:` завершился

@@ -18,6 +18,19 @@ namespace RNAssistant.Application.Conversations
         internal static void Commit(ChatSession session, IConversationStore store, ChatBlobStore payloads)
         {
             var fact = AgentKernel.CancelWait(session.LastRun?.KernelState);
+            if (fact.Execution == null)
+            {
+                if (session.LastRun.RunId != fact.Summary.RunId || session.LastRun.TurnId != fact.Summary.TurnId)
+                    throw new InvalidOperationException("Saved pause belongs to another run or turn.");
+                session.LastRun.KernelState = AgentRunState.Apply(session.LastRun.KernelState, fact);
+                session.LastRun.Status = "cancelled";
+                session.LastRun.Phase = "cancelled";
+                session.LastRun.CurrentAction = fact.Summary.AssistantMessage;
+                var pausedView = RunViewStateProjector.StampCurrentRun(session, includeProtocolResponses: true);
+                store.CommitRun(session, new ConversationRunCommit(fact, new ChatMessage[0], updated: session.Messages.Where(message =>
+                    pausedView != null && ReferenceEquals(message.RunViewState, pausedView))));
+                return;
+            }
             var context = fact.Execution.Context;
             if (session.LastRun.RunId != context.RunId || session.LastRun.TurnId != context.TurnId)
                 throw new InvalidOperationException("Saved wait belongs to another run or turn.");

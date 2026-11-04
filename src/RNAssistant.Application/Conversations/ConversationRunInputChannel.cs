@@ -9,7 +9,7 @@ namespace RNAssistant.Application.Conversations
 {
     // One kernel input boundary for both environments. Domain callbacks must
     // persist the exact user message before the journal is marked applied.
-    internal sealed class ConversationRunInputChannel : IRunInputChannel, IDisposable
+    internal sealed class ConversationRunInputChannel : IRunInputChannel, IRunPauseChannel, IDisposable
     {
         private readonly ConversationInboxService _inbox;
         private readonly ChatSession _session;
@@ -38,6 +38,10 @@ namespace RNAssistant.Application.Conversations
                     (_session.LastRun?.KernelState?.Summary.Lifecycle == RunLifecycle.Running || _session.LastRun?.KernelState?.Summary.Lifecycle == RunLifecycle.Waiting);
             }
         }
+
+        public string PauseId { get { return _inbox.RunPauseId(_session); } }
+        public void AcknowledgePause(string pauseId) { _inbox.AcknowledgePause(_session, pauseId); }
+        public Task WaitForResumeAsync(string pauseId, CancellationToken token) { return _inbox.WaitForResumeAsync(_session, pauseId, token); }
 
         public CancellationToken InterruptToken { get { return _inbox.InterruptToken(_session); } }
         public bool HasPendingInput { get { return _inbox.HasRunInput(_session); } }

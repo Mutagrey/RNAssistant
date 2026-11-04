@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## Мультиагенты: agents.pause/resume — In Review, 2026-11-04
+
+Продолжен этап 3a [плана](../proposals/multi-agent-runtime-plan.md): два direct tool v1,
+общий Inbox/input channel и kernel; skill v8. Requested ≠ Paused ≠ Released.
+Пауза наступает после текущего model/tool/read-back, сохраняет тот же Run и бюджет;
+Wait завершается по прежнему событию/deadline. Незапущенные calls закрываются,
+unknown эффекты и inspection guards сохраняются. Существующие events/CAS содержат
+Waiting + PauseId и typed peer pause authority, второго store/runtime нет.
+
+Resume закрепляет live invocation и точную паузу; User Stop/restart защищены.
+Сохранённая пауза продолжается существующей явной пользовательской командой, включая
+batch из любого чата области. `agents.cancel` умеет завершать и такую паузу без LLM
+и фиктивного tool result. Закрытие вкладки по-прежнему не влияет на Run.
+Проверки охватывают безопасные границы, гонки, authority, неизвестный receipt,
+Office service crash/reload и Workspace live/restart/Stop без views. 7 pause + 52
+регрессии (cancel/communication/Inbox/recovery/policy/core pack/kernel wait) прошли;
+минимальная сборка и version gate прошли. UI не менялся.
+Windows/Office/controller/WebView2 и live-model qualification открыты. Далее —
+пользовательский cold control/представление паузы, затем admission/slots/budgets.
+
 ## Мультиагенты: agents.cancel — In Review, 2026-11-04
 
 Этап 3a [плана](../proposals/multi-agent-runtime-plan.md): общий Application owner
@@ -16,7 +36,7 @@ restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wa
 проходят; 3 recovery прошли отдельно после cleanup failure в параллельном прогоне
 (Risk Register). Минимальная сборка и version gate прошли. Windows/Office/controller
 и live-model qualification открыты. User cold
-control, peer pause/resume, terminal Run wait/dependencies, лимиты и Inspector ещё
+control, terminal Run wait/dependencies, лимиты и Inspector ещё
 не реализованы; управление owner другого процесса этим tool не добавлено.
 
 ## Мультиагенты: общее продолжение выбранных участников — In Review, 2026-11-04

@@ -44,6 +44,23 @@ namespace RNAssistant.Application.Conversations
                 }
                 var operationId = "agent_" + RNAssistant.Core.Services.ConversationInputJournal.Fingerprint(new[] {
                     _session.Id, context.Execution.RunId, context.Execution.StepId, context.Execution.Call.Id });
+                if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Pause || context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume)
+                {
+                    var control = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
+                    var pauseReceipt = _service.Pause(_inbox, _session, _limit, operationId, control.AgentId,
+                        context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume, context.MarkDispatchPossible);
+                    var data = JsonConvert.SerializeObject(pauseReceipt);
+                    var unknown = pauseReceipt.Status == AgentPauseStatus.Unconfirmed;
+                    var rejected = pauseReceipt.Status == AgentPauseStatus.Changed || pauseReceipt.Status == AgentPauseStatus.Unavailable || pauseReceipt.Status == AgentPauseStatus.Protected;
+                    var result = unknown && context.MayHaveDispatched ? RuntimeResult.Unknown("Управление не подтверждено. Не повторяйте запрос.", data)
+                        : unknown || rejected ? RuntimeResult.Error("Управление не выполнено. Пользовательский Stop и пауза после перезапуска требуют действия пользователя.", data)
+                        : RuntimeResult.Ok(pauseReceipt.Status == AgentPauseStatus.Requested ? "Пауза запрошена; текущий шаг ещё может выполняться."
+                            : pauseReceipt.Status == AgentPauseStatus.Paused ? "Запуск приостановлен на безопасной границе."
+                            : pauseReceipt.Status == AgentPauseStatus.Released ? "Агентская пауза снята; выполнение и завершение работы не подтверждены."
+                            : "Агентской паузы нет; состояние не изменено.", data);
+                    return context.Complete(new ToolHandlerResult(result, unknown && context.MayHaveDispatched ? ToolEffectEvidence.Unknown
+                        : pauseReceipt.Changed && context.MayHaveDispatched ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange));
+                }
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Cancel)
                 {
                     var cancel = JObject.FromObject(context.Arguments).ToObject<ListRequest>();

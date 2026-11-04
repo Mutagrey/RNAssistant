@@ -119,7 +119,7 @@ namespace RNAssistant.Core.Services
                 }).ToList();
         }
         private static bool IsAgentCoordination(string id, ToolBinding binding)
-        { return (id == AgentCommunicationToolCatalog.Send || id == AgentCommunicationToolCatalog.Spawn || id == AgentCommunicationToolCatalog.Cancel) && binding != null &&
+        { return (id == AgentCommunicationToolCatalog.Send || id == AgentCommunicationToolCatalog.Spawn || id == AgentCommunicationToolCatalog.Cancel || id == AgentCommunicationToolCatalog.Pause || id == AgentCommunicationToolCatalog.Resume) && binding != null &&
             binding.HandlerId == AgentCommunicationToolCatalog.Binding(id).HandlerId && string.IsNullOrEmpty(binding.EntryPoint); }
         private static bool IsChatRename(string id, ToolBinding binding)
         { return id == ChatRenameToolHandler.ToolId && binding != null &&

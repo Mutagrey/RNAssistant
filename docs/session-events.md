@@ -2,6 +2,24 @@
 
 ## Agent communication journal — 2026-11-03
 
+Cooperative pause (3a, 2026-11-04) uses the same streams, no second checkpoint store.
+RunSummary optionally carries PauseId: Waiting has either a pure PendingWait or a
+PauseId with closed accepted history. Input changes optionally carry typed
+AgentPause {RunId,PauseId}; it survives ordinary input appends, while user pause/resume
+clears peer authority. Replay always discards this live authority and pauses saved
+Waiting even with no queued input. Old current-format records omit the optional
+fields; no data rewrite, fallback or dual-write. Older runtimes cannot reconstruct
+a pause checkpoint without its new typed contract.
+
+Source PausePrepared/PauseRecorded and ResumePrepared/ResumeRecorded pin target Run
+and PauseId; live control also compares owner cancellation identity. Prepared-only
+is Unconfirmed and never replayed. Requested intake precedes kernel safe-boundary
+Waiting; Released permits progress but proves no work completion. Early release is
+observed under the same Inbox lock; there is no polling. Shutdown retains Waiting;
+explicit user recovery reuses the existing wait continuation and CAS. Cold pause
+cancellation is SummaryChanged/Cancelled with unchanged counts and no invented tool
+result. Waiting with PendingWait retains the existing ToolCompleted cancellation.
+
 Addressed cancellation (3a, 2026-11-04) extends the same communication event with
 CancelPrepared/CancelRecorded, TargetRunId and an optional typed Cancellation receipt.
 The exact target is pinned before signalling; Prepared without a receipt never
@@ -14,7 +32,7 @@ ConversationWaitCancellation projects it through CommitRun under the existing le
 and CAS, preserving the accepted result role. Cancelled requires durable read-back.
 Partial append/failed receipt remains unknown; queued input stays paused and intact.
 No new event type, store, schema migration, model dispatch or tool replay is introduced.
-Current-format chats require no rewrite; cancel v1/communication skill v7 use the
+Current-format chats require no rewrite; cancel/pause/resume v1/communication skill v8 use the
 current catalog. Abandoned ordinary execution and pending approval are not turned
 into a wait cancellation.
 

@@ -74,6 +74,7 @@ namespace RNAssistant.Application.Conversations
             internal TaskCompletionSource<bool> InputChanged = NewInputSignal();
             internal readonly HashSet<string> ReadyAgentInputs = new HashSet<string>(StringComparer.Ordinal);
             internal bool AgentWaiting;
+            internal ConversationAgentPause AgentPause;
             internal bool Running, Accepting, Worker, Paused;
             internal string PauseReason;
             internal long Revision, ViewRevision;
@@ -111,7 +112,8 @@ namespace RNAssistant.Application.Conversations
                 ScopeTitle = address.ScopeTitle, Source = address.Source, Status = "not_loaded" };
             lock (box.Sync) return new AgentPeer { AgentId = address.AgentId, Title = box.Session.Title,
                 ScopeTitle = box.Session.DocumentTitle, Source = address.Source,
-                Status = box.AgentWaiting ? "waiting" : box.Running || box.Worker ? "working" :
+                Status = box.Paused && box.Session.LastRun?.KernelState?.Summary.PauseId != null ? "paused" :
+                    box.AgentWaiting ? "waiting" : box.Running || box.Worker ? "working" :
                     box.Paused ? "paused" : PendingConfirmationId(box.Session) != null ? "awaiting_approval" : "idle" };
         }
 
@@ -169,6 +171,7 @@ namespace RNAssistant.Application.Conversations
                         box.Revision = record.Event.Sequence;
                         box.ViewRevision++;
                     }
+                    box.AgentPause = null;
                     if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
                     _inboxes.Add(key, box);
                 }
@@ -213,6 +216,7 @@ namespace RNAssistant.Application.Conversations
                 SignalInputChanged(box);
                 box.ViewRevision++;
                 if (!completed && !awaiting) PauseLocked(box, "Работа остановлена или завершилась с ошибкой");
+                else if (box.AgentPause != null) Write(box, null, box.Paused, box.PauseReason);
             }
         }
         internal void EndRun(ChatSession session)
@@ -471,11 +475,81 @@ namespace RNAssistant.Application.Conversations
             {
                 // A failed journal append must still stop scheduling in this process.
                 // Recovery also pauses unconditionally, so no durable replay is authorized.
-                box.Paused = true; box.PauseReason = reason;
+                box.Paused = true; box.PauseReason = reason; box.AgentPause = null;
                 box.ExplicitInputs.Clear(); box.ViewRevision++;
                 SignalInputChanged(box);
             }
         }
+        internal string RunPauseId(ChatSession session)
+        {
+            var box = Get(session);
+            lock (box.Sync) return box.Running && box.Accepting && box.AgentPause != null && box.AgentPause.RunId == session.LastRun?.RunId
+                ? box.AgentPause.PauseId : null;
+        }
+
+        // The caller pins the exact live invocation and serializes control with this Inbox.
+        internal AgentPauseStatus ControlPause(ChatSession session, string runId, string pauseId, bool resume, out bool changed)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                changed = false;
+                if (!box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId) return AgentPauseStatus.Changed;
+                if (box.AgentPause == null && box.Paused) return AgentPauseStatus.Protected;
+                if (resume)
+                {
+                    if (box.AgentPause == null) return AgentPauseStatus.NoChange;
+                    if (box.AgentPause.RunId != runId || box.AgentPause.PauseId != pauseId) return AgentPauseStatus.Changed;
+                    Write(box, null, false, null, agentControl: true);
+                    changed = true;
+                    return AgentPauseStatus.Released;
+                }
+                if (box.AgentPause != null) return box.Paused ? AgentPauseStatus.Paused : AgentPauseStatus.Requested;
+                Write(box, null, agentPause: new ConversationAgentPause { RunId = runId, PauseId = pauseId }, agentControl: true);
+                changed = true;
+                return AgentPauseStatus.Requested;
+            }
+        }
+
+        internal void AcknowledgePause(ChatSession session, string pauseId)
+        {
+            var box = Get(session);
+            lock (box.Sync) AcknowledgePauseLocked(box, session, pauseId);
+        }
+
+        private void AcknowledgePauseLocked(Inbox box, ChatSession session, string pauseId)
+        {
+            if (box.Running && box.Accepting && box.AgentPause != null && box.AgentPause.RunId == session.LastRun?.RunId &&
+                box.AgentPause.PauseId == pauseId && !box.Paused)
+                Write(box, null, true, "Приостановлено агентом", box.AgentPause, true);
+        }
+
+        internal async Task WaitForResumeAsync(ChatSession session, string pauseId, CancellationToken token)
+        {
+            var box = Get(session);
+            var cancelled = NewInputSignal();
+            using (token.Register(() => cancelled.TrySetResult(true)))
+                while (true)
+                {
+                    token.ThrowIfCancellationRequested();
+                    Task signal;
+                    lock (box.Sync)
+                    {
+                        if (!box.Running || !box.Accepting || box.Session.LastRun?.RunId != session.LastRun?.RunId)
+                            throw new InvalidOperationException("The pause no longer belongs to this live invocation.");
+                        if (box.AgentPause == null)
+                        {
+                            if (!box.Paused) return;
+                            // User Stop/recovery supersedes peer control, including a failed append.
+                        }
+                        else if (box.AgentPause.PauseId != pauseId) return; // New pause is checked at the next boundary.
+                        else AcknowledgePauseLocked(box, session, pauseId);
+                        signal = box.InputChanged.Task;
+                    }
+                    await Task.WhenAny(signal, cancelled.Task).ConfigureAwait(false);
+                }
+        }
+
         internal void Resume(ChatSession session)
         {
             bool created;
@@ -519,6 +593,7 @@ namespace RNAssistant.Application.Conversations
                 box.Revision = record.Event.Sequence;
                 box.ViewRevision++;
             }
+            box.AgentPause = null;
             // A recovered claim is never a license to dispatch another run.
             if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session))
             {
@@ -589,7 +664,7 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync)
             {
                 ReadyQueuedAgentsLocked(box);
-                if (HasRunInputLocked(box)) return false;
+                if (HasRunInputLocked(box) || box.AgentPause != null) return false;
                 box.Accepting = false;
                 return true;
             }
@@ -828,10 +903,12 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync) { box.Worker = false; box.ViewRevision++; }
         }
-        private SessionEvent Write(Inbox box, ConversationInput input, bool? paused = null, string reason = null)
+        private SessionEvent Write(Inbox box, ConversationInput input, bool? paused = null, string reason = null,
+            ConversationAgentPause agentPause = null, bool agentControl = false)
         {
             var change = new ConversationInputEvent { Input = input, Paused = paused ?? box.Paused,
-                PauseReason = paused.HasValue ? reason : box.PauseReason };
+                PauseReason = paused.HasValue ? reason : box.PauseReason,
+                AgentPause = agentControl ? agentPause : paused.HasValue ? null : box.AgentPause };
             var fact = new ConversationInputJournal(_events).Append(box.Session, change);
             Apply(box, change, fact);
             box.Revision = fact.Sequence;
@@ -849,7 +926,7 @@ namespace RNAssistant.Application.Conversations
                 var index = box.Inputs.FindIndex(i => i.Id == change.Input.Id);
                 if (index < 0) box.Inputs.Add(Clone(change.Input)); else box.Inputs[index] = Clone(change.Input);
             }
-            box.Paused = change.Paused; box.PauseReason = change.PauseReason;
+            box.Paused = change.Paused; box.PauseReason = change.PauseReason; box.AgentPause = change.AgentPause;
         }
         private static bool AppliesToRun(Inbox box, ConversationInput input)
         { return input.AcceptedRunId == null || input.AcceptedRunId == box.Session.LastRun?.RunId; }

@@ -124,15 +124,17 @@ namespace RNAssistant.Core.Agent
         public string Reason { get; private set; }
         public PendingConfirmation PendingConfirmation { get; private set; }
         public PendingToolWait PendingWait { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string PauseId { get; private set; }
 
         [JsonConstructor]
         internal RunSummary(string runId, string turnId, RunLifecycle lifecycle, ToolCounts toolCounts,
-            int iterationsUsed, int toolStepsUsed, string assistantMessage, string reason, PendingConfirmation pendingConfirmation, PendingToolWait pendingWait = null)
+            int iterationsUsed, int toolStepsUsed, string assistantMessage, string reason, PendingConfirmation pendingConfirmation, PendingToolWait pendingWait = null, string pauseId = null)
         {
             if (string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || toolCounts == null ||
                 !Enum.IsDefined(typeof(RunLifecycle), lifecycle) || iterationsUsed < 0 || toolStepsUsed < 0 ||
                 (lifecycle == RunLifecycle.AwaitingConfirmation && pendingConfirmation == null) ||
-                (lifecycle == RunLifecycle.Waiting && pendingWait == null) ||
+                (lifecycle == RunLifecycle.Waiting && pendingWait == null && string.IsNullOrWhiteSpace(pauseId)) ||
+                (pauseId != null && (string.IsNullOrWhiteSpace(pauseId) || lifecycle != RunLifecycle.Waiting || pendingWait != null || pendingConfirmation != null)) ||
                 (pendingWait != null && (pendingConfirmation != null || pendingWait.Context.RunId != runId ||
                     pendingWait.Context.TurnId != turnId || toolStepsUsed < 1)))
                 throw new ArgumentException("Incomplete runtime summary.");
@@ -146,6 +148,7 @@ namespace RNAssistant.Core.Agent
             Reason = reason;
             PendingConfirmation = pendingConfirmation;
             PendingWait = pendingWait;
+            PauseId = pauseId;
         }
     }
 }
