@@ -21,6 +21,9 @@ namespace RNAssistant.Application.Conversations
         public string OperationId { get; set; }
         public string Fingerprint { get; set; }
         public AgentChatAddress Target { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string MessageId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ReplyTo { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ExpectReply { get; set; }
     }
 
     internal sealed class AgentConversationEndpoint
@@ -65,18 +68,27 @@ namespace RNAssistant.Application.Conversations
         public string Status { get; set; }
         [JsonProperty("agent_id")]
         public string AgentId { get; set; }
+        [JsonProperty("message_id")] public string MessageId { get; set; }
         public string Title { get; set; }
         public string Text { get; set; }
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
-    internal enum AgentWaitStatus { MessagesReady, TimedOut, InputPending }
+    internal enum AgentWaitStatus { MessagesReady, RepliesReady, TimedOut, InputPending }
+
+    internal sealed class AgentReplyMatch
+    {
+        [JsonProperty("request_id")] public string RequestId { get; set; }
+        [JsonProperty("message_id")] public string MessageId { get; set; }
+        [JsonProperty("agent_id")] public string AgentId { get; set; }
+    }
 
     internal sealed class AgentWaitResult
     {
         public AgentWaitStatus Status { get; set; }
         public IReadOnlyList<AgentPeer> Peers { get; set; }
         public bool PeersTruncated { get; set; }
+        public IReadOnlyList<AgentReplyMatch> Matches { get; set; } = new AgentReplyMatch[0];
     }
 
     internal sealed class AgentCommunicationException : InvalidOperationException
@@ -164,14 +176,33 @@ namespace RNAssistant.Application.Conversations
         }
 
         internal async Task<AgentWaitResult> WaitAsync(ConversationInboxService inbox, ChatSession session,
-            int limit, string runId, int timeoutSeconds, CancellationToken token)
+            int limit, string runId, int timeoutSeconds, CancellationToken token,
+            string[] requests = null, string mode = "any")
         {
             RequireEnabled(limit);
             if (timeoutSeconds < 1 || timeoutSeconds > 10)
                 throw new AgentCommunicationException("agent_wait_invalid", "Ожидание: от 1 до 10 секунд.");
-            var status = await inbox.WaitForAgentsAsync(session, runId, timeoutSeconds, token).ConfigureAwait(false);
+            if (mode != "any" && mode != "all" || requests == null && mode != "any" ||
+                requests != null && (requests.Length == 0 || requests.Length > 32 ||
+                    requests.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 64) || requests.Distinct(StringComparer.Ordinal).Count() != requests.Length))
+                throw new AgentCommunicationException("agent_wait_invalid", "Укажите 1–32 разных message_id запросов и mode any или all.");
+            Dictionary<string, AgentChatAddress> expected = null;
+            if (requests != null)
+            {
+                var facts = inbox.AgentEvents(session);
+                expected = new Dictionary<string, AgentChatAddress>(StringComparer.Ordinal);
+                foreach (var id in requests)
+                {
+                    var request = facts.SingleOrDefault(item => item.State == AgentDeliveryState.Prepared && item.MessageId == id);
+                    if (request?.Target == null || !request.ExpectReply)
+                        throw new AgentCommunicationException("agent_request_not_found", "Нет собственного запроса с expect_reply=true и указанным message_id.");
+                    expected.Add(id, request.Target);
+                }
+            }
+            var result = await inbox.WaitForAgentsAsync(session, runId, timeoutSeconds, token, expected, mode == "all").ConfigureAwait(false);
             var page = Discover(session, limit);
-            return new AgentWaitResult { Status = status, Peers = page.Peers, PeersTruncated = page.Truncated };
+            result.Peers = page.Peers; result.PeersTruncated = page.Truncated;
+            return result;
         }
 
         internal static AgentCommunicationContext Context(ChatSession session, int limit)
@@ -220,7 +251,8 @@ namespace RNAssistant.Application.Conversations
         }
 
         internal AgentDeliveryReceipt Send(ConversationInboxService sourceInbox, ChatSession source, int limit,
-            string runId, string operationId, string agentId, string text, Action dispatch)
+            string runId, string operationId, string agentId, string text, Action dispatch,
+            bool expectReply = false, string replyTo = null)
         {
             AgentConversationEndpoint target = null;
             ChatSession recipient = null;
@@ -236,15 +268,23 @@ namespace RNAssistant.Application.Conversations
                 if (agentId == AgentChatAddress.IdFor(source.Id))
                     throw new AgentCommunicationException("agent_self_send", "Нельзя отправить сообщение своему чату.");
                 var chain = Context(source, limit);
+                if (replyTo != null)
+                {
+                    var original = sourceInbox.FindAgentMessage(source, replyTo);
+                    if (original?.AgentCommunication?.Sender == null || original.Status != ConversationInputStatus.Applied ||
+                        original.AgentCommunication.Sender.AgentId != agentId)
+                        throw new AgentCommunicationException("agent_reply_invalid", "reply_to должен указывать на полученное сообщение адресата в этом чате.");
+                    chain = original.AgentCommunication;
+                }
                 var senderPolicy = source.LastRun?.ConversationPolicy ?? ConversationRunPolicy.ForSession(source);
                 var facts = sourceInbox.AgentEvents(source);
-                var fingerprint = ConversationInputJournal.Fingerprint(new AgentDeliveryReceipt { AgentId = agentId, Text = text });
+                var fingerprint = ConversationInputJournal.Fingerprint(new[] { agentId, text, expectReply ? "reply" : "message", replyTo });
                 var existing = facts.FirstOrDefault(item => item.OperationId == operationId);
                 if (existing != null && existing.Fingerprint != fingerprint)
                     throw new AgentCommunicationException("agent_operation_conflict", "Операция уже принадлежит другому сообщению.");
                 if (existing != null && facts.Any(item => item.OperationId == operationId && item.State == AgentDeliveryState.Accepted))
                     return new AgentDeliveryReceipt { Status = "queued", AgentId = existing.Target.AgentId,
-                        Title = existing.Target.Title, Text = text };
+                        MessageId = existing.MessageId, Title = existing.Target.Title, Text = text };
                 if ((target = FindAgent(source, existing == null ? agentId : existing.Target.AgentId)) == null)
                     throw new AgentCommunicationException(existing == null ? "agent_chat_not_found" : "agent_delivery_unknown",
                         existing == null ? "Агент не найден в области документа/проекта. Обновите agents.list и скопируйте точный адрес; закрытие вкладки не удаляет участника." : "Получатель недоступен для проверки прежней доставки. Повтор запрещён.");
@@ -268,27 +308,31 @@ namespace RNAssistant.Application.Conversations
                 {
                     if (accepted == null)
                         throw new AgentCommunicationException("agent_delivery_unknown", "Предыдущая доставка не подтверждена. Автоматический повтор запрещён.");
-                    return Receipt(target, text);
+                    if (accepted.AgentCommunication?.MessageId != existing.MessageId)
+                        throw new AgentCommunicationException("agent_delivery_unknown", "Идентификатор прежней доставки не подтверждён. Повтор запрещён.");
+                    return Receipt(target, text, existing.MessageId);
                 }
+                var messageId = "m-" + Guid.NewGuid().ToString("N");
                 var input = new ConversationInput { Id = Guid.NewGuid().ToString("N"), OperationId = operationId,
                     RequestFingerprint = fingerprint, Text = text, CreatedUtc = DateTime.UtcNow,
                     Delivery = InputDelivery.Queue, DocumentRuntimeKey = runtimeKey,
                     AgentCommunication = new AgentCommunicationContext { ChainId = chain.ChainId, Limit = budget.Limit,
-                        Sender = Address(source), SenderRunId = runId, Root = chain.Root, Policy = senderPolicy } };
+                        Sender = Address(source), SenderRunId = runId, Root = chain.Root, Policy = senderPolicy,
+                        MessageId = messageId, ReplyTo = replyTo, ExpectReply = expectReply } };
                 // Reserve before destination append. An unresolved reservation conservatively
                 // consumes one slot, and is never replayed on recovery.
                 dispatch();
                 sourceInbox.AppendAgentEvent(source, new AgentCommunicationEvent { State = AgentDeliveryState.Prepared,
                     ChainId = chain.ChainId, Limit = budget.Limit, OperationId = operationId,
-                    Fingerprint = fingerprint, Target = target.Address });
+                    Fingerprint = fingerprint, Target = target.Address, MessageId = messageId, ReplyTo = replyTo, ExpectReply = expectReply });
                 target.Inbox.Submit(recipient, input);
-                if (target.Inbox.FindOperation(recipient, operationId, fingerprint) == null)
+                if (target.Inbox.FindOperation(recipient, operationId, fingerprint)?.AgentCommunication?.MessageId != messageId)
                     throw new InvalidOperationException("Нет подтверждения записи сообщения в очередь.");
                 schedule = true;
                 sourceInbox.AppendAgentEvent(source, new AgentCommunicationEvent { State = AgentDeliveryState.Accepted,
                     ChainId = chain.ChainId, Limit = budget.Limit, OperationId = operationId,
-                    Fingerprint = fingerprint, Target = target.Address });
-                receipt = Receipt(target, text);
+                    Fingerprint = fingerprint, Target = target.Address, MessageId = messageId, ReplyTo = replyTo, ExpectReply = expectReply });
+                receipt = Receipt(target, text, messageId);
             }
             return receipt;
             }
@@ -302,8 +346,8 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
-        private static AgentDeliveryReceipt Receipt(AgentConversationEndpoint target, string text)
-        { return new AgentDeliveryReceipt { Status = "queued", AgentId = target.Address.AgentId, Title = target.Address.Title, Text = text }; }
+        private static AgentDeliveryReceipt Receipt(AgentConversationEndpoint target, string text, string messageId)
+        { return new AgentDeliveryReceipt { Status = "queued", AgentId = target.Address.AgentId, MessageId = messageId, Title = target.Address.Title, Text = text }; }
 
         private static void RequireAddress(AgentConversationEndpoint target, string source, string workspaceId)
         {

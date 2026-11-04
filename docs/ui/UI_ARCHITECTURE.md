@@ -1,5 +1,35 @@
 # Архитектура UI RNAssistant
 
+## Участники, сообщения и совместная работа — Proposed, 2026-11-04
+
+Уточнение пользователя: прежний насыщенный макет отклонён. Лента использует текущий
+sender renderer, имя и аккуратный ID; нажатие открывает отправителя, без копирования.
+Текущий `app-agent-communication.appendSender` уже вызывает
+`RNAssistantConversationPanel.open(source/workspaceId/sessionId)` из истории и Inbox.
+Для цвета/типографики достаточно существующего `AgentSender`; новый envelope DTO,
+получатель, delivery stages и badges не нужны для этого среза.
+
+Один renderer и общие tokens обслуживают Office/Workspace/plugin. Цвет стабилен по
+agent_id и общему accent catalog, не зависит от вкладки/порядка/роли. Runtime endpoints,
+исполнение и хранение не меняются. Optional reply navigation — отдельное небольшое
+расширение typed metadata при реальной необходимости; body не парсится для routing.
+
+Inspector остаётся отдельной последующей задачей: компактный список участников и
+детали по выбору. Графы/временная шкала — диагностические виды по запросу, не элементы
+каждой chat row. Предыдущая компоновка не утверждена. Application владеет bounded
+typed projections, Web — presentation/lifecycle, существующие routes — переходами.
+
+Отдельного `AgentEventLog` в текущем `src` нет: communication facts читаются через
+`ConversationInboxService.AgentEvents/AppendAgentEvent` из SessionEvent, Run/tools —
+через kernel/trajectory. Сейчас communication append не передаёт run/step: будущие
+точные ссылки развивают typed факт, не восстанавливаются по времени/operation ID.
+Нового журнала/store нет. Inspector читает metadata лениво, без фоновых LLM calls;
+hide/dispose освобождают чтения, не отменяют Run. Состояние неизвестно, если фактов нет.
+
+Экран — [Screen Map](UI_SCREEN_MAP.md#совместная-работа--proposed-2026-11-04),
+компоненты — [Design System](UI_DESIGN_SYSTEM.md#участники-и-адресные-сообщения--proposed-2026-11-04),
+форматы — [план runtime](../proposals/multi-agent-runtime-plan.md#сообщения-в-контексте-и-ui--proposed-2026-11-04).
+
 Модель адресует HTML через явный document workspace; UI selection не участвует в
 разрешении её операций. Controller обновляет выбранный logical workspace до текущей
 публикации при выдаче состояния. HtmlWorkspaceView сохраняет собственные dirty buffers.

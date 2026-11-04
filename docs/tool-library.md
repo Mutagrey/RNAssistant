@@ -29,15 +29,16 @@ when the application messaging owner is available and `MaxAgentMessages > 0`.
 Zero removes them from new catalogs and rejects old handlers before dispatch;
 an inherited nonzero chain budget cannot override the switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires list/send v3, spawn v1 and wait v2 (skill v4.0.0); zero makes that package
+and requires list v3, send v4, spawn v2 and wait v3 (skill v5.0.0); zero makes that package
 unavailable for loading.
 List reads saved chats in the caller's document/workspace, independently of tabs,
 with optional `query` (title substring) and `agent_id` (exact address). Its bounded
 `Peers` page contains at most 50 entries; `Truncated` requests a narrower query.
 An unobserved live Inbox reports `not_loaded`, not an invented idle state.
 List includes `is_self` identifying the caller and stable short
-`agent_id` addresses, without history or effect evidence. Send accepts only `agent_id` and `text` (up to
-131072 characters), returns a queued receipt with recipient/title/text, and cannot
+`agent_id` addresses, without history or effect evidence. Send requires `agent_id`
+and `text` (up to 131072 characters), with optional `expect_reply` and `reply_to`.
+It returns a queued receipt with runtime `message_id`/recipient/title/text and cannot
 send to its own chat. A queued receipt proves intake only, never execution of the
 requested task. Unavailable/out-of-scope peers, exhausted budget, conflicting operations
 and unresolved delivery have explicit error codes; no automatic retry is allowed.
@@ -48,19 +49,31 @@ current model request/tool call, even without `agents.wait`. In-flight work and
 read-back finish first; unstarted accepted calls receive NotDispatched. Human FIFO,
 Stop and pending confirmation remain in force.
 
-`agents.spawn(title, initial_message?)` creates an ordinary saved chat without
+Set expect_reply=true for a request whose answer is needed. To reply, copy the
+incoming message_id to reply_to and address its sender. Runtime rejects foreign,
+unknown or not-yet-applied messages and wrong recipients before dispatch; reply
+provenance retains the original chain. Correlation is part of operation identity.
+
+`agents.spawn(title, initial_message?, expect_reply?)` creates an ordinary saved chat without
 opening a view, selecting it or copying parent history. `title` is a single line,
 1–200 characters; optional input uses the same 131072-character bound as send.
-The child inherits the source scope, effective model and planning/mutation
+expect_reply=true requires initial_message; accepted initial intake returns its
+message_id, usable as a request ID in wait. The child inherits the source scope, effective model and planning/mutation
 restrictions. Creation and initial intake are independent: the receipt retains
 the created `agent_id` even when initial intake is rejected or unknown. Eight
 creations per root chain include recursive creation and unresolved reservations.
 Exact operation identity/fingerprint prevents duplicate creation; unknown effects
 are never automatically retried. Roles and task lists are not required.
 
-`agents.wait(timeout_seconds?)` is an event-driven read with no effect evidence.
+`agents.wait(timeout_seconds?, requests?, mode?)` is an event-driven read with no effect evidence.
 It defaults to 5 seconds and accepts 1–10 per call, with no cumulative wait quota.
-It returns `MessagesReady`, `TimedOut` or `InputPending`, up to 50 peers and
+Without requests it returns MessagesReady, TimedOut or InputPending. With 1–32 unique
+IDs of the caller's expect_reply requests, mode any (default) or all requires replies
+from their exact recipients. RepliesReady confirms that condition, not task completion.
+Matches contains request_id/message_id/agent_id pairs; timeout may include partial
+matches. Early/applied replies count without duplicate context delivery. Unrelated
+input yields InputPending so peers can answer each other; it is not a false match.
+Wait returns up to 50 peers and
 `PeersTruncated`; there is
 no remaining-wait field. Ready messages
 enter the current run through the common input channel; human FIFO/Stop take priority.
@@ -70,16 +83,17 @@ the run. Repeated identical wait results still encounter the generic tool
 no-progress guard; this is an [open issue](conversation-protocol.md#межагентное-общение--2026-11-03),
 not a separate wait budget or a guarantee of unlimited waiting.
 
-Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v3`,
-`conversation.agents.spawn.v1`, `conversation.agents.wait.v2`. Stale admissions must
+Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v4`,
+`conversation.agents.spawn.v2`, `conversation.agents.wait.v3`. Stale admissions must
 explicitly reload the current contract. Send/spawn are managed conversation writes
 available in Agent and Plan, without a document authority observer or per-message
 approval. Recipients retain their own exact policies and the sender's recorded
 ceiling: Plan/Deny cannot be laundered, and automatic approval can only decrease.
 Incompatible busy-run inputs remain queued for a compatible next run; wait reports
 InputPending rather than including them under broader permissions.
-The `agent_id` property is an explicitly approved public peer address, not a resource
-handle, revision or permission. The existing ToolRuntime/Inbox own dispatch and
+Public agent_id and message_id/reply_to are peer addressing and message correlation,
+not resource handles, revisions or permissions. Runtime mints the IDs; the model
+can reference only previously issued values. The existing ToolRuntime/Inbox own dispatch and
 read-back. Details and settings: [conversation protocol](conversation-protocol.md#межагентное-общение--2026-11-03).
 
 Trusted `ToolPolicy.EvidenceEligibility` is `None` or `Eligible`; it participates in

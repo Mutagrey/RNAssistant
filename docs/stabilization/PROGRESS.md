@@ -1,9 +1,31 @@
 # Stabilization progress
 
+## Мультиагенты: корреляция запросов и ответов — In Review, 2026-11-04
+
+Owner: Application/Conversations; Core — immutable provenance/catalog/skill.
+После `8b6ba5f2` реализован этап 2a: runtime message_id, expect_reply/reply_to,
+проверка адресата ответа и сохранение цепочки исходного запроса. Wait v3 выбирает
+any/all собственных запросов, учитывает ранние/applied ответы и partial timeout,
+не обходит human FIFO/permission ceiling и не считает посторонний input ответом.
+Source Prepared + existing Inbox journal исключают потерю раннего ответа; второго
+store нет. Spawn v2/send v4/skill v5; старые admissions требуют текущих контрактов.
+22 agent communication + 12 inbox + 6 unified policy + 1 core pack checks проходят,
+включая настоящий Workspace spawn→reply→filtered wait без views. В старом round-trip
+тесте убрана зависимость от того, успеет ли ответ прийти в текущий или следующий Run.
+По согласованию сокращён model-facing заголовок: scope/display title документа и
+повторные правила убраны из каждого сообщения; корреляция сохранена. Общий runtime
+context хранит правила один раз и сохраняет peer authority guard после отключения
+общения. 22 целевых checks повторно проходят; проверены оба JSON-режима, реальный
+Workspace wire после disable, escaping и неизменность durable Content.
+Роли переиспользуются через skills; отдельный постоянный Agent пока не вводится —
+[решение и следующий срез](../proposals/multi-agent-runtime-plan.md).
+Durable Run suspension/restart, generic repeated-wait guard, cancel/pause/resume,
+Collaboration/resolve и Inspector остаются впереди. Windows/Office evidence открыто.
+
 ## Мультиагенты: saved catalog и spawn — In Review, 2026-11-04
 
 Owner: Application/Conversations; Core — provenance/policy, Web — общий Chat View.
-Первый срез [плана](../proposals/multi-agent-runtime-plan.md): участники берутся из
+Первый срез `8b6ba5f2` [плана](../proposals/multi-agent-runtime-plan.md): участники берутся из
 ChatStore в пределах документа/workspace; `agents.spawn` создаёт обычный чат без
 вкладки/копирования истории. Presence bridge/leases удалены. Закрытие вкладки не
 останавливает Run/wait и не запрещает новые сообщения. Root journal ограничивает

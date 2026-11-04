@@ -1781,7 +1781,7 @@ namespace RNAssistant.Runtime
                 runtime["tools"] = RuntimeContextPrompt.Tools(surface.Tools);
                 runtime["capabilities"] = CapabilityCatalogService.BuildPromptCatalog(_catalog, _skills.Skills, surface.Tools);
                 var runtimeContext = new ChatMessage { Role = _settings.SystemPromptRole,
-                    Content = RuntimeContextPrompt.Render(runtime) };
+                    Content = RuntimeContextPrompt.Render(runtime, ConversationInputMessage.HasAgentMessages(_session)) };
                 required.Add(runtimeContext);
                 var state = packState ?? _packState ?? _callable?.RestorationStateMessage;
                 if (state != null) required.Add(state);

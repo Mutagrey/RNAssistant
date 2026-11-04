@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Services
             var runtime = BuildRuntimeContextData(mode, adapter, tools, skills, context, session, settings, capabilityCatalog);
             if (completionFeedback != null) runtime["completionFeedback"] = completionFeedback.DeepClone();
             if (skillSurface != null) runtime["loaded_skills"] = new JArray(skillSurface.Instructions.Select(skill => skill.Id));
-            var runtimeContext = RuntimeContextPrompt.Render(runtime);
+            var runtimeContext = RuntimeContextPrompt.Render(runtime, ConversationInputMessage.HasAgentMessages(session));
             var role = NormalizeInstructionRole(settings.SystemPromptRole);
             var messages = new List<ChatMessage>
             {
@@ -119,7 +119,8 @@ namespace RNAssistant.Office.Services
             AppSettings settings = null,
             JObject capabilityCatalog = null)
         {
-            return RuntimeContextPrompt.Render(BuildRuntimeContextData(mode, adapter, tools, skills, context, session, settings, capabilityCatalog));
+            return RuntimeContextPrompt.Render(BuildRuntimeContextData(mode, adapter, tools, skills, context, session, settings, capabilityCatalog),
+                ConversationInputMessage.HasAgentMessages(session));
         }
 
         internal static JObject BuildRuntimeContextData(string mode, IOfficeApplicationAdapter adapter,

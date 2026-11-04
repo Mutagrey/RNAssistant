@@ -36,6 +36,12 @@ namespace RNAssistant.Core.Models
 
     public sealed class AgentCommunicationContext
     {
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string MessageId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ReplyTo { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool ExpectReply { get; set; }
         public string ChainId { get; set; }
         public int Limit { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

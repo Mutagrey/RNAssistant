@@ -20,8 +20,21 @@ Creation and optional initial delivery have separate receipts; an unknown delive
 cannot erase the known created child. Re-observing historical uncertainty does not
 invent a new invocation dispatch.
 
+Correlation slice 2a adds runtime `MessageId`, `ExpectReply`, `ReplyTo` to the same
+Prepared/Accepted events and immutable input provenance. Source Prepared records
+the request ID before destination intake; read-back verifies the same ID. Operation
+fingerprints include reply expectation and the referenced message. A reply must
+reference an applied incoming message addressed back to its recorded sender;
+it inherits that message's causal chain, not whichever unrelated input arrived last.
+Matching uses canonical Inbox metadata (including applied inputs) and the source's
+recorded request recipient. The state check and wake-signal capture share intake's
+lock, so early replies are retained and cannot fall between check/subscription.
+This is durable correlation, not a durable waiting Run: no new wait journal,
+automatic restart continuation or tool replay is introduced in 2a.
+
 `ConversationInput.AgentCommunication` and the matching `ChatMessage` retain the
-same chain, sender address/run, root, accepted permission ceiling and pinned limit. Inbox replay validates provenance;
+same message/reply IDs, chain, sender address/run, root, accepted permission ceiling
+and pinned limit. Inbox replay validates provenance;
 peer text cannot be edited or steered, but pending input can be removed. Peer
 intake never clears a paused queue, approves a pending action or produces typed
 human answers. Receipt retries are idempotent, including after a view closes.

@@ -58,6 +58,18 @@ intake, recursive/recovered/concurrent root budget, cross-scope refusal and poli
 ceiling checks. A real Workspace model-wire run creates and runs a child without UI;
 global automatic approval cannot widen the sender's accepted policy. 17 targeted
 checks pass. The production Office Controller remains outside Harness compilation.
+Correlation slice 2a extends this to 22 checks: exact reply sender/recipient and
+operation identity, original causal chain after unrelated input, any/all, early
+and applied replies, partial timeout and event wake, restart without duplicate
+delivery, human/policy/unrelated-input priority, and a real Workspace
+spawn(expect_reply) → send(reply_to) → wait(requests) exchange. The generic round-trip
+fixture accepts both valid arrival boundaries (current or next Run), not fixed timing.
+The compact-header check compiles restored peer inputs through the real Office composer,
+Core compiler and LLM wire builder in both JSON modes: exact sender/correlation, escaped
+titles, unchanged durable body, no display scope, and one runtime authority instruction.
+The Workspace round trip also checks a real request after messaging is disabled;
+retained peer history cannot lose its authority boundary or prescribe unavailable tools.
+This does not yet test durable suspension/restoration of a waiting Run.
 Quota reads use existing indexed canonical events without trace
 materialization. Relevant regressions: `inbox:`, `workspace: queue`, `unified policy:`,
 `tool pack: core`, `settings: invalid numeric`, `storage: indexed input journal`.

@@ -1,5 +1,32 @@
 # План модернизации production UI
 
+## Представление совместной работы — Proposed, 2026-11-04
+
+Пользователь отклонил насыщенный макет и уточнил scope: имя, небольшой цветовой
+маркер и аккуратный agent_id; сохранить текущий переход к отправителю по нажатию.
+Копирование, recipient/type/receipt строки и обязательный reply preview не добавлять.
+Production UI пока не изменён; отдельный Demo не развивается.
+
+1. Ближайший срез: существующий `appendSender` + общие tokens/bubble, без нового DTO
+   для цвета. Проверить одну presentation истории/Inbox Office/Workspace/plugin,
+   сохранение перехода source/workspace/session, стабильность цвета при rename/reorder/
+   close, длинные/одинаковые имена, light/dark/narrow/zoom и отсутствие лишних controls.
+2. Model-facing заголовок сокращён по согласованию, In Review: `role=user`, sender и
+   корреляция сохранены, scope/display-подпись удалена; общие правила один раз в runtime
+   context, в том числе guard при отключённом общении. 22 целевые проверки проходят,
+   включая Office composer/Core compiler в обоих JSON-режимах и реальный Workspace
+   wire после disable. UI и формат истории не менялись; полная compaction открытых
+   ожиданий остаётся следующим runtime этапом.
+3. Inspector: сначала текущие участники/состояния и детали по выбору. Графы/время,
+   durable wait/control и groups остаются следующими зависимыми этапами runtime-плана.
+   Предыдущая компоновка отклонена; не реализовывать её автоматически.
+
+Структура — [Architecture](UI_ARCHITECTURE.md#участники-сообщения-и-совместная-работа--proposed-2026-11-04),
+экран — [Screen Map](UI_SCREEN_MAP.md#совместная-работа--proposed-2026-11-04),
+оформление — [Design System](UI_DESIGN_SYSTEM.md#участники-и-адресные-сообщения--proposed-2026-11-04).
+Для docs-only — diff/links; runtime/UI проверки выбираются при фактической реализации.
+Windows/Office/WebView2 и визуальная приёмка остаются отдельными открытыми gates.
+
 ## Участники без открытых вкладок — In Review, 2026-11-04
 
 Owner: Application/Conversations; Web — существующая общая presentation.

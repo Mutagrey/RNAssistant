@@ -278,6 +278,12 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync) return Clone(box.Inputs.FirstOrDefault(i => i.Id == id));
         }
+        internal ConversationInput FindAgentMessage(ChatSession session, string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(messageId) || messageId.Length > 64) return null;
+            var box = Get(session);
+            lock (box.Sync) return Clone(box.Inputs.SingleOrDefault(input => input.AgentCommunication?.MessageId == messageId));
+        }
         internal ConversationInput FindOperation(ChatSession session, string operationId, string fingerprint = null)
         {
             return FindAccepted(session, operationId, fingerprint)?.Current;
@@ -619,8 +625,9 @@ namespace RNAssistant.Application.Conversations
         { return box.Inputs.Where(i => i.Status == ConversationInputStatus.Pending &&
             i.AcceptedRunId == null && i.Delivery == InputDelivery.Queue); }
 
-        internal async Task<AgentWaitStatus> WaitForAgentsAsync(ChatSession session, string runId,
-            int timeoutSeconds, CancellationToken token)
+        internal async Task<AgentWaitResult> WaitForAgentsAsync(ChatSession session, string runId,
+            int timeoutSeconds, CancellationToken token, IReadOnlyDictionary<string, AgentChatAddress> requests = null,
+            bool all = false)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -642,17 +649,39 @@ namespace RNAssistant.Application.Conversations
                         {
                             RequireAgentWaitRun(box, runId);
                             if (box.Inputs.Any(i => IsRunInput(box, i) && i.AgentCommunication?.Sender == null))
-                                return AgentWaitStatus.InputPending;
+                                return new AgentWaitResult { Status = AgentWaitStatus.InputPending };
                             var pending = PendingQueuedInputs(box).ToArray();
                             // Keep FIFO: a queued human request is not skipped to reach later peers.
                             var ready = pending.TakeWhile(i => CanIncludePeerInput(box, i)).ToArray();
-                            if (ready.Length > 0)
+                            if (requests == null)
                             {
-                                foreach (var input in ready) box.ReadyAgentInputs.Add(input.Id);
-                                return AgentWaitStatus.MessagesReady;
+                                if (ready.Length > 0) return CompleteAgentWait(box, AgentWaitStatus.MessagesReady, ready);
+                                if (pending.Length > 0) return new AgentWaitResult { Status = AgentWaitStatus.InputPending };
+                                if (timeout.IsCompleted) return new AgentWaitResult { Status = AgentWaitStatus.TimedOut };
                             }
-                            if (pending.Length > 0) return AgentWaitStatus.InputPending;
-                            if (timeout.IsCompleted) return AgentWaitStatus.TimedOut;
+                            else
+                            {
+                                // Applied input is retained in the canonical Inbox journal. A
+                                // reply that arrived before this wait cannot be missed. The
+                                // state check and signal capture below share the intake lock.
+                                var readyIds = new HashSet<string>(ready.Select(input => input.Id), StringComparer.Ordinal);
+                                var matches = box.Inputs.Where(input => input.Status == ConversationInputStatus.Applied || readyIds.Contains(input.Id))
+                                    .Where(input => MatchesReply(input, requests))
+                                    .GroupBy(input => input.AgentCommunication.ReplyTo, StringComparer.Ordinal)
+                                    .Select(group => group.First()).Select(input => new AgentReplyMatch {
+                                        RequestId = input.AgentCommunication.ReplyTo, MessageId = input.AgentCommunication.MessageId,
+                                        AgentId = input.AgentCommunication.Sender.AgentId }).ToArray();
+                                if (pending.Length > 0 && ready.Length == 0)
+                                    return CompleteAgentWait(box, AgentWaitStatus.InputPending, ready, matches);
+                                if (matches.Length > 0 && (!all || matches.Length == requests.Count))
+                                    return CompleteAgentWait(box, AgentWaitStatus.RepliesReady, ready, matches);
+                                // Questions from peers must remain actionable while waiting;
+                                // unrelated input is not evidence that the requested reply arrived.
+                                if (ready.Any(input => !MatchesReply(input, requests)) || pending.Length > ready.Length)
+                                    return CompleteAgentWait(box, AgentWaitStatus.InputPending, ready, matches);
+                                if (timeout.IsCompleted)
+                                    return CompleteAgentWait(box, AgentWaitStatus.TimedOut, ready, matches);
+                            }
                             changed = box.InputChanged.Task;
                         }
                         await Task.WhenAny(changed, timeout).ConfigureAwait(false);
@@ -668,6 +697,22 @@ namespace RNAssistant.Application.Conversations
                     }
                 }
             }
+        }
+
+        private static bool MatchesReply(ConversationInput input, IReadOnlyDictionary<string, AgentChatAddress> requests)
+        {
+            var message = input.AgentCommunication;
+            AgentChatAddress target;
+            return message?.ReplyTo != null && message.MessageId != null && message.Sender != null &&
+                requests.TryGetValue(message.ReplyTo, out target) && target.ChatId == message.Sender.ChatId &&
+                target.Source == message.Sender.Source && target.WorkspaceId == message.Sender.WorkspaceId;
+        }
+
+        private static AgentWaitResult CompleteAgentWait(Inbox box, AgentWaitStatus status, IEnumerable<ConversationInput> ready,
+            AgentReplyMatch[] matches = null)
+        {
+            foreach (var input in ready) box.ReadyAgentInputs.Add(input.Id);
+            return new AgentWaitResult { Status = status, Matches = matches ?? new AgentReplyMatch[0] };
         }
 
         private static void RequireAgentWaitRun(Inbox box, string runId)

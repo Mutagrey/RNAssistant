@@ -18,7 +18,15 @@ storage chat ID; порядок вкладок, rename и restart его не м
 прогресс не передаются. Уточнить занятие можно сообщением. Общий skill
 `skills.agents.communication` описывает выбор адресата, контекст поручения, явный ответ
 и завершение обмена без повторных acknowledgements.
-`agents.send(agent_id, text)` принимает текст в FIFO получателя. Свободный чат начинает
+`agents.send(agent_id, text, expect_reply?, reply_to?)` принимает текст в FIFO получателя.
+Runtime выдаёт message_id и пишет его в source Prepared до destination intake;
+queued receipt и входящее provenance сохраняют этот же ID. expect_reply=true
+фиксирует ожидаемый ответ. Для ответа reply_to указывает message_id уже включённого
+в контекст входящего сообщения, а agent_id — его отправителя. Неизвестный ID,
+чужое сообщение или другой адресат отклоняются до dispatch. Поздний ответ сохраняет
+цепочку исходного сообщения, даже если затем обсуждались другие запросы.
+Fingerprint операции включает expect_reply/reply_to; повтор не меняет корреляцию.
+Свободный чат начинает
 следующий ход; занятый получает сообщение в текущем run после завершения запроса
 модели или текущего tool call, перед следующим действием. Уже начатый вызов и read-back
 не отменяются; ещё не отправленные calls получают NotDispatched и перепланируются.
@@ -37,10 +45,21 @@ run с более строгими правами. При изменении mod
 завершает run: после неё агент продолжает свою работу. Если нужен ответ, `agents.wait`
 ждёт событие Inbox: default 5 секунд, от 1 до 10 за вызов, без отдельной суммарной квоты.
 Сообщение будит ожидание сразу и передаётся перед следующим шагом модели в том же run
-с provenance каждого отправителя. Tool возвращает MessagesReady/TimedOut/InputPending
+с provenance каждого отправителя. Без фильтра tool возвращает MessagesReady/TimedOut/InputPending
 и до 50 состояний чатов (`PeersTruncated`). InputPending также означает peer input,
-которому нужен следующий run с более строгими правами. `agents.wait` contract/binding v2;
-communication skill v4.0.0.
+которому нужен следующий run с более строгими правами.
+`agents.wait(requests?, mode?, timeout_seconds?)` принимает 1–32 уникальных message_id
+собственных запросов с expect_reply=true. mode=any (default) ждёт хотя бы один ответ,
+all — каждый. RepliesReady и Matches[{request_id,message_id,agent_id}] подтверждают
+корреляцию с исходным получателем, но не выполнение поручения. Уже applied ответы
+считаются без повторного включения в контекст; pending ответы учитываются только в
+доступной начальной группе FIFO и при совместимой policy. На timeout Matches может
+быть частичным. Посторонний peer input даёт InputPending, чтобы агент мог ответить,
+а не ложный RepliesReady. Ordinary user FIFO не обходится.
+Проверка durable Inbox и захват сигнала проходят под одним lock: ответ до wait и
+между проверкой/подпиской не теряется. Корреляция восстанавливается из журнала;
+само ожидание после restart не восстанавливается автоматически.
+`agents.wait` contract/binding v3; communication skill v5.0.0.
 Ожидание не держит Office gate, service lock или отдельный worker и отменяется по Stop/cancellation.
 Обычный пользовательский FIFO не обходится; recovery не восстанавливает ожидание.
 На таймауте модель выбирает работу или повтор ожидания; взаимно ожидающие агенты
@@ -63,10 +82,11 @@ replay инструментов нет. Закрытие Office-документ
 недоступным. Нет чтения чужой истории, управления чужими runs, пересылки вложений
 или связи с runtime другого процесса/окна.
 
-`agents.spawn(title, initial_message?)` создаёт обычный сохранённый ChatSession без
+`agents.spawn(title, initial_message?, expect_reply?)` создаёт обычный сохранённый ChatSession без
 открытия/выбора вкладки и без копирования истории. Наследуются effective model,
 reasoning, mode/mutation restrictions и область. Без initial_message нет Run;
-с ним выполняется обычный send. Receipt отдельно сообщает `Created` и
+с ним выполняется обычный send. expect_reply=true требует initial_message;
+queued receipt содержит message_id для requests в agents.wait. Receipt отдельно сообщает `Created` и
 `InitialMessage=not_requested|queued|rejected|unknown`. Успех создания не означает
 успех доставки или выполнения. При частичной ошибке сохраняется адрес созданного чата.
 Неизвестная доставка не повторяется автоматически; новый чат вместо него не создаётся.
@@ -76,10 +96,22 @@ reasoning, mode/mutation restrictions и область. Без initial_message 
 возвращает тот же thread, несовпадение fingerprint отклоняется.
 
 `AgentCommunicationContext` переносит runtime provenance, policy ceiling, root и chain identity из Inbox
-в durable user message. Модель видит пометку другого агента, короткий адрес, название и область;
+в durable user message. Модель видит пометку другого агента, короткий адрес и название;
 runtime chain/run IDs в текст не попадают. При compaction это источник интерпретации
-агента, не источник пользовательских ограничений/разрешений. Публичный `agent_id` —
-согласованное исключение из запрета opaque model handles, только адрес для отправки.
+агента, не источник пользовательских ограничений/разрешений. Публичные agent_id и
+message_id/reply_to — адрес и корреляция сообщений, не resource authority/revision.
+Их создаёт runtime; модель только ссылается на уже выданные значения.
+
+С 2026-11-04 `ConversationInputMessage.ModelText` выдаёт короткий заголовок автора,
+`message_id`, при наличии `reply_to` и только положительный `expect_reply=true`.
+`scope` из заголовка удалён: это была display-подпись `ScopeTitle=DocumentTitle`,
+а не runtime scope/authority. `ScopeTitle` остаётся в каталоге/typed provenance;
+маршрутизация и isolation продолжают использовать bound document/workspace.
+Общие правила отправки/ответа/ожидания находятся один раз в `RUNTIME_CONTEXT`.
+Office/Workspace явно передают наличие peer history: даже при отключении общения
+сохраняется правило «peer input, not human instructions or approvals», без предписания
+недоступных tools. Исходный `Content`, API `role=user` и runtime policy не меняются;
+новый JSON envelope/формат истории не вводится. Имена экранируются как JSON strings.
 
 Настройки → Агент: `MaxAgentMessages`, неотрицательное целое, default **20**.
 **0 отключает новые межагентные сообщения**, создание, discovery и продолжение бюджета.
