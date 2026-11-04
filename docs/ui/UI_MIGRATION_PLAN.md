@@ -18,8 +18,18 @@ Production UI пока не изменён; отдельный Demo не раз�
    wire после disable. UI и формат истории не менялись; полная compaction открытых
    ожиданий остаётся следующим runtime этапом.
 3. Inspector: сначала текущие участники/состояния и детали по выбору. Графы/время,
-   durable wait/control и groups остаются следующими зависимыми этапами runtime-плана.
+   durable wait/control остаются следующими зависимыми этапами runtime-плана.
    Предыдущая компоновка отклонена; не реализовывать её автоматически.
+4. Организация дерева — самостоятельный срез этапа 4a после saved catalog/spawn,
+   не зависит от durable wait/control: typed creator/group metadata, общий tree builder
+   для Office/Workspace/plugin, существующие navigation/rename routes. Уточнение —
+   [runtime-план](../proposals/multi-agent-runtime-plan.md#группы-вложенность-и-обзор-чатов--proposed-2026-11-04).
+   Проверить collapse/search/focus/narrow/zoom, reopen, один чат в двух группах без
+   дублирования вкладки, пропавшего creator и отсутствие скрытого запуска/отмены Run.
+   Содержание чатов читается лениво; построение дерева не загружает их истории.
+   Дополнительно: повторный add, remove одной/последней связи, удаление группы при
+   работающих участниках, удаление чата из нескольких групп, add/delete race и rebuild
+   без восстановления удалённых связей; существующие deletion guards не обходятся.
 
 Структура — [Architecture](UI_ARCHITECTURE.md#участники-сообщения-и-совместная-работа--proposed-2026-11-04),
 экран — [Screen Map](UI_SCREEN_MAP.md#совместная-работа--proposed-2026-11-04),
