@@ -1107,6 +1107,35 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ResourceCatalogInitializationWaitsForPublisher()
+        {
+            foreach (var skillsOnly in new[] { true, false })
+                WithTempExecutor((executor, adapter) =>
+                {
+                    var journal = new ResourceMutationJournal(FixturePaths.Value);
+                    var entered = new System.Threading.ManualResetEventSlim();
+                    System.Threading.Tasks.Task capture = null;
+                    using (journal.AcquireScope(CatalogPublicationService.ScopeId))
+                    {
+                        capture = System.Threading.Tasks.Task.Run(() =>
+                        {
+                            entered.Set();
+                            if (skillsOnly) executor.CaptureSkills();
+                            else executor.CaptureCatalogs();
+                        });
+                        AssertTrue(entered.Wait(5000), "capture started beside a publication owner");
+                        AssertTrue(!capture.Wait(100), "initial capture waits for the existing publisher");
+                    }
+                    AssertTrue(capture.Wait(5000), "initial capture completes when the publisher releases");
+                    entered.Dispose();
+                    var generation = executor.ResourceAuthority.Store.Capture(CatalogPublicationService.ScopeId).Generation;
+                    if (skillsOnly) executor.CaptureSkills();
+                    else executor.CaptureCatalogs();
+                    AssertEqual(generation, executor.ResourceAuthority.Store.Capture(CatalogPublicationService.ScopeId).Generation,
+                        "later captures reuse the published heads without duplicate publication");
+                });
+        }
+
         private static void ResourceSkillCatalogPublication()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>

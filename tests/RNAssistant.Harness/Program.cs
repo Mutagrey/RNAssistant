@@ -1147,6 +1147,7 @@ namespace RNAssistant.Harness
                 Test("resource cutover: fork preparation fails closed", ResourceForkPreparationFailsClosed),
                 Test("resource cutover: schema mapping derived publication", ResourceSchemaMappingDerivedPublication),
                 Test("resource cutover: large call retains latest pair and folds archive", ResourceCompletedCallsPreserveLatestPayload),
+                Test("resource cutover: concurrent catalog initialization", ResourceCatalogInitializationWaitsForPublisher),
                 Test("resource cutover: immutable skill catalog publication", ResourceSkillCatalogPublication),
                 Test("resource cutover: tool source replaces definition read", ResourceToolSourceReplacesDefinitionRead),
                 Test("skill editor: published reference and guarded save", SkillReferenceEditorReadsPublishedSource),

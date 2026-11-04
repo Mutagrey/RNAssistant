@@ -84,7 +84,8 @@ namespace RNAssistant.Office.Services
             var head = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId).GetHead(identity);
             if (head == null)
             {
-                using (_journal.AcquireScope(ScopeId))
+                // Concurrent first requests share the existing publication lease.
+                using (_journal.AcquireScope(ScopeId, waitForOwner: true))
                 {
                     var snapshot = _authority.CaptureMany(new[] { ScopeId }).Get(ScopeId);
                     head = snapshot.GetHead(identity);

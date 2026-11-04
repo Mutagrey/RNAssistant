@@ -63,7 +63,9 @@ namespace RNAssistant.Core.Services
             var identity = new ResourceIdentity(ResourceUri.Create("catalog", kind));
             var head = CaptureReady().Get(ScopeId).GetHead(identity);
             if (head == null)
-                using (_journal.AcquireScope(ScopeId))
+                // Another request may be publishing the first snapshot. Wait for
+                // that short storage lease, then read its head before publishing.
+                using (_journal.AcquireScope(ScopeId, waitForOwner: true))
                 {
                     var snapshot = CaptureReady().Get(ScopeId);
                     head = snapshot.GetHead(identity);

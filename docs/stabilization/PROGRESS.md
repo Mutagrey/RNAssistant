@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Параллельная подготовка каталогов — 2026-11-05
+
+Baseline восьми получателей воспроизвёл IOException на первом `skills` capture:
+`Current` использовал неблокирующий publication lease. Core SkillPublicationService
+и Office CatalogPublicationService теперь ждут прежний короткий lease и повторно
+читают head; tool effects не повторяются. Адресная contention-проверка и baseline
+1/2/4/8 проходят локально; это не Windows/Office qualification.
+
 ## Settings: границы вкладки — In Review, 2026-11-05
 
 Во время multi-agent slice обнаружен прежний overflow Settings при 125%.

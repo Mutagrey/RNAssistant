@@ -1803,6 +1803,15 @@ terminal publication and the tool-result event. Uncaptured affected views become
 Unknown. Interrupted attempts are never automatically replayed/restored.
 HostRuntime/document serialization covers guard through read-back, not model/user waits.
 
+As of 2026-11-05, first catalog/skill captures wait for the existing short catalog
+publication lease, then re-read the head under that lease. Concurrent fresh Runs
+reuse one committed initial snapshot instead of failing on the nonblocking lock.
+The existing storage wait is bounded to 10 seconds; it does not retry tool effects,
+republish Unknown heads, or hold a document gate during model/agent waits.
+`resource cutover: concurrent catalog initialization` covers contention and reuse;
+the 1/2/4/8-agent fixture exercises fresh preparation without views. Windows/Office
+qualification remains separate.
+
 When the context compiler folds identical current reads, it keeps their original
 call/result pairs and compares scope, exact identity/revision/view/coverage and
 actual source bytes. A matching active body suppresses an independent current view;
