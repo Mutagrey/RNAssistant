@@ -1,5 +1,12 @@
 # Stabilization progress
 
+## Settings: границы вкладки — In Review, 2026-11-05
+
+Во время multi-agent slice обнаружен прежний overflow Settings при 125%.
+Отдельно исправлена renderer policy, как ранее у Chat View; форма/dirty state
+сохраняются. Локальная проверка actual Dock bounds и навигации проходит.
+Windows/WebView2 qualification остаётся открытой.
+
 ## Мультиагенты: пользовательские controls Run — In Review, 2026-11-04
 
 Завершён следующий срез 3a: shared Office/Workspace/plugin показывает live pause,

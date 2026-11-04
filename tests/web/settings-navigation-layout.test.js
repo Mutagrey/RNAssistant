@@ -125,6 +125,18 @@ const { chromium } = require("playwright");
       node.getBoundingClientRect().top >= 0), true, "narrow settings heading is not clipped");
     assert.equal(await page.locator('.settings-pages').evaluate(node => node.scrollWidth <= node.clientWidth + 1), true,
       "narrow settings fit without horizontal overflow");
+    await page.evaluate(() => document.documentElement.style.zoom = '1.25');
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const bounds = await page.locator('#settingsView').evaluate(node => {
+      const content = node.closest('.dv-content-container');
+      if (!content || node.closest('.dv-render-overlay')) return { overlay: true };
+      const root = node.getBoundingClientRect(), area = content.getBoundingClientRect();
+      return { left: root.left, right: root.right, top: root.top, bottom: root.bottom,
+        areaLeft: area.left, areaRight: area.right, areaTop: area.top, areaBottom: area.bottom };
+    });
+    assert.ok(!bounds.overlay && bounds.left >= bounds.areaLeft - 1 && bounds.right <= bounds.areaRight + 1 &&
+      bounds.top >= bounds.areaTop - 1 && bounds.bottom <= bounds.areaBottom + 1,
+      'Settings stay inside the actual Dock content at narrow/125%: ' + JSON.stringify(bounds));
     assert.deepEqual(errors, [], "settings screen has no page errors");
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT });
     console.log("PASS settings: shared navigation icons/search, model controls, active page and hover version");

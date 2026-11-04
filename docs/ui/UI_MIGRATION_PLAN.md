@@ -1,5 +1,14 @@
 # План модернизации production UI
 
+## Settings bounds — исправление, In Review, 2026-11-05
+
+При проверке нового параметра участников обнаружен прежний retained overlay Settings:
+при narrow/125% форма выходила из вкладки. Изолированный fix меняет только renderer
+policy существующего singleton; UI state/controls/runtime сохраняются. Baseline root
+находится вне `.dv-content-container`; после fix проверка actual bounds проходит.
+`settings-navigation-layout.test.js` сохраняет проверки навигации/формы/hide-return.
+Rollback — вернуть одну policy; Windows/WebView2 и визуальное принятие открыты.
+
 ## Пауза и отмена сохранённого Run — In Review, 2026-11-04
 
 Scope/owner: общий Chat View (`app-chat-inbox` + Workspace presentation), typed user

@@ -1,5 +1,12 @@
 # Архитектура UI RNAssistant
 
+## Границы Settings — исправление, In Review, 2026-11-05
+
+Settings использует существующую policy `onlyWhenVisible`, как общий Chat View.
+DOM остаётся внутри Dock content; скрытие сохраняет его в прежнем parking вместе
+с формой/dirty state. Удалено повторное масштабирование retained overlay при 125%.
+Runtime, bridge и storage не меняются; Windows/WebView2 evidence отдельно.
+
 ## Пользовательские controls Run — In Review, 2026-11-04
 
 `app-chat-inbox.buildPendingInputUnits` остаётся единым renderer Office/Workspace/plugin.

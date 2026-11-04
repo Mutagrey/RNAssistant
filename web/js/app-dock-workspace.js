@@ -14,7 +14,7 @@
     request: { title: "Запрос модели", icon: "code" },
     diagnostics: { title: "Диагностика", icon: "chart", onVisible: function (shown) { RNAssistantDiagnostics.onVisible(shown); },
       onClose: function () { RNAssistantDiagnostics.onClose(); } },
-    settings: { title: "Настройки", icon: "settings", canClose: function () { return RNAssistantSettingsView.canClose(); } }
+    settings: { title: "Настройки", icon: "settings", renderer: "onlyWhenVisible", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
   function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && (!views[id].perObject || views[id].menu); }); }
   // Temporary section adapters live in this catalog, not a second navigation registry.

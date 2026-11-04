@@ -1,5 +1,11 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Размер Settings — исправление, In Review, 2026-11-05
+
+Settings получает геометрию от Dock content без дополнительного CSS zoom overlay.
+Tokens, spacing, размеры полей и кнопок не меняются. Проверяется rect всей формы
+относительно реальной Dock-группы, а не только overflow внутри увеличенной формы.
+
 ## Controls сохранённого Run — In Review, 2026-11-04
 
 Одна строка `inbox-pause` и существующий `inboxButton`, без новых CSS/карточек/tokens.
