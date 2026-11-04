@@ -2,6 +2,22 @@
 
 ## Agent communication journal — 2026-11-03
 
+Addressed cancellation (3a, 2026-11-04) extends the same communication event with
+CancelPrepared/CancelRecorded, TargetRunId and an optional typed Cancellation receipt.
+The exact target is pinned before signalling; Prepared without a receipt never
+replays. Live control also compares the exact cancellation source: a later invocation
+of the same Run cannot receive an old signal. Its kernel owns terminal outcomes.
+
+For a dormant effect-free wait, AgentKernel.CancelWait produces a ToolCompleted fact
+with the original context, NotDispatched/cancelled and unchanged counts. Application
+ConversationWaitCancellation projects it through CommitRun under the existing lease
+and CAS, preserving the accepted result role. Cancelled requires durable read-back.
+Partial append/failed receipt remains unknown; queued input stays paused and intact.
+No new event type, store, schema migration, model dispatch or tool replay is introduced.
+Current-format chats require no rewrite; cancel v1/communication skill v7 use the
+current catalog. Abandoned ordinary execution and pending approval are not turned
+into a wait cancellation.
+
 User batch wait resume (2026-11-04) introduces no event/store/schema migration.
 Each selected exact session/run/revision is leased and uses the existing Inbox
 resume event. Admission happens for all eligible selections before queue starts;

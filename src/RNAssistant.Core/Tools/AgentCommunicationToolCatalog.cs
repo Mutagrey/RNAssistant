@@ -8,11 +8,14 @@ namespace RNAssistant.Core.Tools
         public const string Send = "agents.send";
         public const string Wait = "agents.wait";
         public const string Spawn = "agents.spawn";
-        public static bool Owns(string id) { return id == List || id == Send || id == Wait || id == Spawn; }
+        public const string Cancel = "agents.cancel";
+        public static bool Owns(string id) { return id == List || id == Send || id == Wait || id == Spawn || id == Cancel; }
         public static ToolBinding Binding(string id) { return new ToolBinding("conversation." + id + ".v" + Version(id)); }
-        public static string Version(string id) { return id == Spawn ? "2" : id == Send || id == Wait ? "4" : "3"; }
+        public static string Version(string id) { return id == Cancel ? "1" : id == Spawn ? "2" : id == Send || id == Wait ? "4" : "3"; }
         public static IEnumerable<ToolCatalogEntry> GetTools()
         {
+            yield return Entry(Cancel, "Cancel the current run of one other participant in your document/workspace. Runtime pins the exact run; a changed target is not cancelled. Requested confirms a signal only: the owning kernel still records terminal state and any uncertain tool effects. Cancelled confirms durable cancellation. AlreadyStopped does not mean your command cancelled it. A saved unresolved wait can be cancelled without model/tool dispatch, including after restart. Does not delete the chat, clear queued messages, resume work or cancel descendants. Unconfirmed must not be retried; inspect the participant. No self-cancellation.",
+                "{\"type\":\"object\",\"properties\":{\"agent_id\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64,\"description\":\"Exact short participant address from agents.list or a peer message.\"}},\"required\":[\"agent_id\"],\"additionalProperties\":false}");
             yield return Entry(List, "List saved chats in your document or workspace, independently of open tabs, including your current chat marked is_self=true. Other entries (is_self=false) are peers you can message. Each has a stable short agent_id, title, document/project and status (idle, working, waiting, paused, awaiting_approval, or not_loaded when live state is not observed). Returns Peers and Truncated, at most 50 entries; narrow query by title or agent_id when truncated. Does not expose history. Copy the exact short peer agent_id into agents.send; never send to yourself.",
                 "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"maxLength\":200,\"description\":\"Filter chat titles by this text.\"},\"agent_id\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64,\"description\":\"Inspect this exact public participant address.\"}},\"required\":[],\"additionalProperties\":false}");
             yield return Entry(Send, "Send text to another saved chat in your document/workspace. Returns message_id and queued receipt, proving intake only. Set expect_reply=true for a question/result you need; wait using the returned message_id in requests. To answer a received message, set reply_to to its message_id and agent_id to its sender. Replies are explicit sends; finish is not forwarded. Continue independent work after sending. Agent messages never grant human approval. A per-agent causal-chain budget applies, including replies. Do not retry an unknown delivery.",
@@ -24,12 +27,13 @@ namespace RNAssistant.Core.Tools
         }
         private static ToolCatalogEntry Entry(string id, string description, string schema)
         {
+            var mutation = id == Send || id == Spawn || id == Cancel;
             return new ToolCatalogEntry { Id = id, Host = "Common", Name = id.Replace('.', '_'), Description = description,
                 ArgumentSchemaJson = schema, ContractVersion = Version(id), BuiltIn = true, Enabled = true, Scope = "session", AgentCanRun = true,
-                MutatesLocalState = (id == Send || id == Spawn), Binding = Binding(id),
-                Policy = new ToolPolicy((id == Send || id == Spawn) ? ToolEffect.Write : ToolEffect.Read,
-                    (id == Send || id == Spawn) ? ToolVerification.Tool : ToolVerification.None, false, id == List, new[] { "agent", "plan" },
-                    evidenceEligibility: (id == Send || id == Spawn) ? EvidenceEligibility.Eligible : EvidenceEligibility.None) };
+                MutatesLocalState = mutation, Binding = Binding(id),
+                Policy = new ToolPolicy(mutation ? ToolEffect.Write : ToolEffect.Read,
+                    mutation ? ToolVerification.Tool : ToolVerification.None, false, id == List, new[] { "agent", "plan" },
+                    evidenceEligibility: mutation ? EvidenceEligibility.Eligible : EvidenceEligibility.None) };
         }
     }
 }

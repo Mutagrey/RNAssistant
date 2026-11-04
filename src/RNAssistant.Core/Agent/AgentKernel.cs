@@ -145,6 +145,29 @@ namespace RNAssistant.Core.Agent
             return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
         }
 
+        // A pure terminal transition for a dormant, effect-free wait. The application
+        // must own the exact conversation lease and commit this fact under storage CAS.
+        // No continuation, model request or tool dispatch is needed to cancel it.
+        public static AgentRunEvent CancelWait(AgentRunState checkpoint)
+        {
+            var summary = checkpoint?.Summary;
+            if (summary?.Lifecycle != RunLifecycle.Waiting || summary.PendingWait == null || checkpoint.InFlightTool != null)
+                throw new InvalidOperationException("Only a saved, unresolved wait can be cancelled without its live owner.");
+            var context = summary.PendingWait.Context;
+            var now = DateTime.UtcNow;
+            const string message = "Ожидание отменено. Выполнение остановлено.";
+            var record = new ToolExecutionRecord(context, ToolExecutionOutcome.NotDispatched,
+                now < context.StartedUtc ? context.StartedUtc : now, message, mayHaveDispatched: false,
+                result: RNAssistant.Core.Tools.Contracts.ToolResult.Error(message,
+                    "{\"code\":\"wait_cancelled\",\"dispatched\":false}"), wasCancelled: true);
+            var terminal = new RunSummary(summary.RunId, summary.TurnId, RunLifecycle.Cancelled,
+                summary.ToolCounts, summary.IterationsUsed, summary.ToolStepsUsed, message, "cancelled", null);
+            var fact = new AgentRunEvent(AgentRunEventKind.ToolCompleted, terminal, context.StepId, execution: record);
+            fact.SetReflectionState(checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued);
+            fact.SetFinishCorrection(checkpoint.FinishCorrection);
+            return fact;
+        }
+
         private async Task<AgentRunResult> LoopAsync(State state, CancellationToken cancellationToken)
         {
             if (state.Progress.RecoveryIgnored)

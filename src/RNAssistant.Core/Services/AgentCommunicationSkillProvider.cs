@@ -13,12 +13,13 @@ namespace RNAssistant.Core.Services
             return new SkillDefinition {
                 Id = Id, Host = "Common", Name = "Agent communication",
                 Description = "Coordinate questions, delegated tasks and explicit replies with agents in other saved chats in the same document/workspace. Load for inter-agent collaboration.",
-                BuiltIn = true, Enabled = true, Version = "6.0.0",
+                BuiltIn = true, Enabled = true, Version = "7.0.0",
                 Package = new SkillPackageManifest { PackageId = Id, RequiredTools = new List<SkillToolDependency> {
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.List, ContractVersion = "3" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Send, ContractVersion = "4" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Wait, ContractVersion = "4" },
-                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Spawn, ContractVersion = "2" }
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Spawn, ContractVersion = "2" },
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Cancel, ContractVersion = "1" }
                 } },
                 BodyMarkdown = @"# Agent communication
 Use agents.list to see saved chats in your own document/workspace regardless of open tabs, including yourself (is_self=true). Every is_self=false entry is another agent; do not subtract yourself again or guess identity from repeated titles. Copy the exact short agent_id of a peer from that result or an incoming sender address. A not-found address can be a transcription error; refresh the list instead of claiming the chat was closed. The list contains title, document/project title, source and status only. A working status does not reveal the task, current tool, progress, history or capabilities. Ask the peer if you need that information. Never invent an address or assume another chat shares your context or permissions.
@@ -26,6 +27,9 @@ Use agents.list to see saved chats in your own document/workspace regardless of 
 ## Create participants when useful
 - agents.spawn creates an ordinary chat with title and optional initial_message. It inherits your model and restrictions, without copying history or opening a tab. Give the necessary context explicitly. Set expect_reply=true when you need a response to that initial input; preserve the returned message_id. Agents may choose and change roles freely.
 - Creation without initial_message is idle. queued means intake only, not that a run has started or completed. If initial delivery fails, reuse the created agent_id; never spawn a duplicate. There are at most 8 new participants in a causal chain, including children of children. Do not bypass a limit by asking a peer to spawn.
+
+## Stop a participant when needed
+- agents.cancel takes one peer agent_id in this document/workspace. Requested is only an accepted cancellation signal; do not claim the work stopped or effects were undone. Cancelled confirms a terminal journal state; AlreadyStopped may mean the run completed before your request. A saved wait can be cancelled after restart without continuing it. Changed/Unavailable do not cancel a replacement run; Unconfirmed must not be retried. Chats, queued input and other participants are preserved. User Stop is never resumed by this command.
 
 ## Exchange a clear request and reply
 - Use agents.send with agent_id and text. Give a short subject, the specific question or delegated task, relevant context and the result you need. Include the necessary facts explicitly; another agent cannot read your chat history or attachments. Set expect_reply=true for a response you need and keep the returned message_id; use it in agents.wait requests, even if the reply may already have arrived. Different requests to the same peer have different IDs.

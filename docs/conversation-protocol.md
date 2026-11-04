@@ -102,7 +102,25 @@ Run. Ошибка одного участника не блокирует ост
 Повтор старой команды не снимает новую паузу. Stop между разрешением и queue binding
 сохраняется; очередь не выполняет повторный Resume. Команда не продлевает deadline,
 не меняет бюджеты и не подтверждает ожидающие write tools. Модель эту user-команду
-не получает как `agents.resume`; model control tools остаются следующим этапом.
+не получает как `agents.resume`; pause/resume control tools остаются следующим этапом.
+
+`agents.cancel(agent_id)` v1 отменяет один другой чат этой области, независимо от
+creator и вкладки. Runtime сохраняет exact target Run в CancelPrepared до dispatch;
+живой сигнал закреплён за конкретной cancellation lifetime. Requested означает
+принятый сигнал, Cancelled — подтверждённую журналом отмену, AlreadyStopped — ранее
+завершённый Run, Changed — сменившийся запуск, Unavailable — недоступный owner/тип
+checkpoint, Unconfirmed — неподтверждённый результат. Повтор операции возвращает
+прежний receipt; Prepared без receipt не исполняется повторно. Ошибки сохраняются
+через обычный ToolRuntime. Живой Run завершает его kernel, сохраняя unknown effects.
+
+Effect-free Waiting отменяется после restart без resume/модели/tools: kernel формирует
+terminal fact, общий Application owner закрывает прежний call/Run через CommitRun,
+exact lease и CAS. Read-back обязателен для Cancelled. Чат, история, queued input,
+budgets и потомки сохраняются; очередь остаётся paused. Self/cross-scope/disabled
+запрещены. Команда не предоставляет approval и не снимает Stop/restart pause.
+Abandoned Running и pending approval без живого owner возвращают Unavailable;
+owner другого процесса не перехватывается. User UI cold cancel остаётся следующим
+срезом; прежний Workspace user control не менялся.
 Срок не продлевается: ответ с runtime CreatedUtc после deadline не удовлетворяет
 прежнее условие; само сообщение остаётся доступным для следующего шага. Ранние
 ответы до deadline учитываются даже после restart. Stop до получения результата закрывает wait единственным NotDispatched result и
@@ -157,8 +175,8 @@ Office/Workspace явно передают наличие peer history: даже
 новый JSON envelope/формат истории не вводится. Имена экранируются как JSON strings.
 
 Настройки → Агент: `MaxAgentMessages`, неотрицательное целое, default **20**.
-**0 отключает новые межагентные сообщения**, создание, discovery и продолжение бюджета.
-Все четыре tools отсутствуют в новых request catalogs; ранее созданный handler проверяет
+**0 отключает новые межагентные сообщения**, создание, discovery, agents.cancel и продолжение бюджета.
+Все пять tools отсутствуют в новых request catalogs; ранее созданный handler проверяет
 сохранённую настройку перед отправкой/ожиданием. Уже принятые сообщения/история сохраняются
 и обрабатываются по обычным правилам Inbox; выключатель не отменяет начатую работу.
 После включения старые цепочки сохраняют счётчики и зафиксированный лимит.

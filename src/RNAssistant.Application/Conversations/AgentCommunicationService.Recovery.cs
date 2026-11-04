@@ -88,10 +88,10 @@ namespace RNAssistant.Application.Conversations
                 var appendAttempted = false;
                 try
                 {
-                    if (endpoint.ReserveForResume == null || endpoint.IsClosing?.Invoke() == true)
+                    if (endpoint.Reserve == null || endpoint.IsClosing?.Invoke() == true)
                         throw new InvalidOperationException("Runtime не принимает продолжение.");
                     ChatSession session;
-                    using (endpoint.ReserveForResume())
+                    using (endpoint.Reserve())
                     {
                         session = endpoint.Load();
                         if (session == null) throw new InvalidOperationException("Чат больше недоступен.");

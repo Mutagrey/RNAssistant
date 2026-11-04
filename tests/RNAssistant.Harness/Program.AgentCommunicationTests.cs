@@ -494,7 +494,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), config, (executor, adapter) => {
                 AssertTrue(!executor.GetControllerTools().Any(t => AgentCommunicationToolCatalog.Owns(t.Id)), "disabled tools are absent from Office request catalog");
                 config.MaxAgentMessages = 20;
-                AssertEqual(4, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
+                AssertEqual(5, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
                 var office = RNAssistant.Office.Services.BuiltInSkillProvider.GetSkills(adapter).Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 var workspace = WorkspaceSkillProvider.GetSkills().Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 AssertEqual(office.BodyMarkdown, workspace.BodyMarkdown, "Office and Workspace use the same communication skill");
@@ -613,10 +613,11 @@ namespace RNAssistant.Harness
         private sealed class AgentReceiptFailureEvents : IEventStore
         {
             private readonly IEventStore _inner;
-            internal AgentReceiptFailureEvents(IEventStore inner) { _inner = inner; }
+            private readonly AgentDeliveryState _state;
+            internal AgentReceiptFailureEvents(IEventStore inner, AgentDeliveryState state = AgentDeliveryState.Accepted) { _inner = inner; _state = state; }
             public SessionEvent Append(ChatSession session, SessionEventWrite write)
             {
-                if ((write.Data as AgentCommunicationEvent)?.State == AgentDeliveryState.Accepted)
+                if ((write.Data as AgentCommunicationEvent)?.State == _state)
                     throw new IOException("sender receipt unavailable");
                 return _inner.Append(session, write);
             }

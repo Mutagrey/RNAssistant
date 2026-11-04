@@ -39,6 +39,13 @@ race coverage. These are host-neutral checks, not Windows/Office qualification.
 
 ## Agent communication — 2026-11-03
 
+`agent cancel:` covers live/cold Workspace model wire without views, cold Office
+service projection, exact Run/lifetime guards, competing leases, partial append,
+post-flush/receipt failures and no replay after restart. It checks preserved input, budgets,
+result roles and unknown effects. Relevant regressions: `agent communication:`,
+`agent recovery:`, `inbox:`, `unified policy:`, `tool pack: core`, `kernel: durable wait`.
+Production Office Controller and Windows qualification remain separate.
+
 `agent recovery:` covers one explicit selection across saved waits: current scope,
 exact run/revision, lease/binding refusal, partial receipts, stale command replay,
 unselected chats, Stop before queue binding and bounded 20-chat pages without model

@@ -39,9 +39,12 @@ namespace RNAssistant.Office
         private AgentConversationEndpoint AgentEndpoint(AgentChatAddress address,
             Action<string, string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {
+            Action<ChatSession> notify = current => changed?.Invoke(GetChatDetail(current.Id));
             return new AgentConversationEndpoint { Address = address,
+                Runs = _activeRuns, Store = _conversationStore, Payloads = _toolExecutor.Payloads,
+                Changed = notify,
                 Inbox = _inbox, Load = () => LoadInboxSession(address.ChatId),
-                ReserveForResume = () => _conversationLeases.Reserve(address.ChatId),
+                Reserve = () => _conversationLeases.Reserve(address.ChatId),
                 IsClosing = () => _conversationApplication.IsClosing || _lifetimeCancellation.IsCancellationRequested,
                 ValidateResume = current => OfficeDocumentExecutionGuardState.ThrowIfMismatch(_adapter,
                     new OfficeDocumentExecutionExpectation { Host = current.Host, DocumentKey = current.DocumentKey,
@@ -49,7 +52,7 @@ namespace RNAssistant.Office
                 Validate = current => { EnsureCurrentDocument(current); return CaptureExpectedRuntimeDocumentKey(current); },
                 Start = current => {
                     StartConversationQueue(current, (run, phase, text, activity) => progress?.Invoke(current.Id, run, phase, text, activity), changed);
-                    changed?.Invoke(GetChatDetail(current.Id));
+                    notify(current);
                 } };
         }
     }

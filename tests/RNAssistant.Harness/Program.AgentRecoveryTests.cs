@@ -59,7 +59,7 @@ namespace RNAssistant.Harness
                 var starts = new List<string>();
                 var catalog = sessions.Select(session => new AgentConversationEndpoint {
                     Address = AgentCommunicationService.Address(session), Inbox = inbox, Load = () => store.Load(session.Id),
-                    Validate = current => current.DocumentKey, ReserveForResume = () => leases.Reserve(session.Id),
+                    Validate = current => current.DocumentKey, Reserve = () => leases.Reserve(session.Id),
                     ValidateResume = current => { if (current.Id == sessions[3].Id) throw new InvalidOperationException("Document binding changed"); },
                     Start = current => {
                         AssertTrue(sessions.Take(2).All(item => inbox.HasRunnable(store.Load(item.Id))), "all selected waits admitted before the first start");

@@ -1,5 +1,7 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationWaitCancellation.cs" Link="Application\Conversations\ConversationWaitCancellation.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Control.cs" Link="Application\Conversations\AgentCommunicationService.Control.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\AgentRecoveryContracts.cs" Link="Application\Contracts\AgentRecoveryContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Recovery.cs" Link="Application\Conversations\AgentCommunicationService.Recovery.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentConversationScope.cs" Link="Application\Conversations\AgentConversationScope.cs" />

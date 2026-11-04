@@ -11,7 +11,7 @@ using RNAssistant.Core.Services;
 namespace RNAssistant.Application.Conversations
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    internal enum AgentDeliveryState { Prepared, Accepted, Granted, SpawnPrepared, Spawned }
+    internal enum AgentDeliveryState { Prepared, Accepted, Granted, SpawnPrepared, Spawned, CancelPrepared, CancelRecorded }
 
     internal sealed class AgentCommunicationEvent
     {
@@ -24,6 +24,8 @@ namespace RNAssistant.Application.Conversations
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string MessageId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ReplyTo { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ExpectReply { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string TargetRunId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public AgentCancellationStatus? Cancellation { get; set; }
     }
 
     internal sealed class AgentConversationEndpoint
@@ -33,9 +35,13 @@ namespace RNAssistant.Application.Conversations
         internal Func<ChatSession> Load;
         internal Func<ChatSession, string> Validate;
         internal Action<ChatSession> Start;
-        internal Func<IDisposable> ReserveForResume;
+        internal Action<ChatSession> Changed;
+        internal Func<IDisposable> Reserve;
         internal Action<ChatSession> ValidateResume;
         internal Func<bool> IsClosing;
+        internal ConversationRunOwner Runs;
+        internal RNAssistant.Core.Persistence.IConversationStore Store;
+        internal RNAssistant.Core.Storage.ChatBlobStore Payloads;
     }
 
     internal sealed class AgentPeer

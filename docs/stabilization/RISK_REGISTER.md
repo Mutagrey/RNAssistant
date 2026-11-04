@@ -12,11 +12,21 @@ store/HTTP paths. Найденная stale-session запись при queue res
 Открыто: production Office controller/COM/WebView2, исходная document binding после
 перезапуска Office, визуальная приёмка existing pause banner и live-model cooperation.
 Exact document session не перепривязывается автоматически. Подтверждённая отмена
-сохранённого Waiting без живого owner относится к этапу 3; нынешний Stop в этом
-случае только сохраняет паузу Inbox. Это особенно важно при утрате Office binding.
+сохранённого Waiting без живого owner добавлена в 3a через agents.cancel; нынешний
+user Stop в этом случае пока только сохраняет паузу Inbox. UI cold control остаётся
+открытым. Это особенно важно при утрате Office binding.
 Глобальные execution
 slots, peer control, SCC diagnostics и ожидание Run/поручений — этапы 3–4. Текущий
 wait ограничен 1–10 секундами. Host-neutral проверки не закрывают эти gates.
+
+При проверке 3a один параллельный Harness-прогон `agent recovery:` завершился
+`Directory not empty` в cleanup теста concurrent Workspace waits after restart.
+Отдельный повтор всех трёх recovery checks прошёл. Причина не установлена: нельзя
+объявлять это исправленным runtime-дефектом или доказанной причиной в конкуренции
+Harness-процессов. Owner: Harness recovery fixture; следующий шаг — сохранить
+исходную ошибку до cleanup и квалифицировать teardown. Это не блокирует независимую
+адресную отмену; новые четыре cancel checks и остальные 45 регрессий прошли.
+
 Соседний `tests/web/workspace-chat-v8.test.js` не доходит до renderer: fixture не
 подключает RNAssistantConversationView (`app-messages.js:7`). Та же ошибка повторена
 с `HEAD:web/js/app-workspace-chat.js` без изменения рабочего дерева. Это отдельный

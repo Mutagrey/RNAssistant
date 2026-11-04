@@ -44,6 +44,23 @@ namespace RNAssistant.Application.Conversations
                 }
                 var operationId = "agent_" + RNAssistant.Core.Services.ConversationInputJournal.Fingerprint(new[] {
                     _session.Id, context.Execution.RunId, context.Execution.StepId, context.Execution.Call.Id });
+                if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Cancel)
+                {
+                    var cancel = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
+                    var cancelReceipt = _service.Cancel(_inbox, _session, _limit, operationId, cancel.AgentId, context.MarkDispatchPossible);
+                    var data = JsonConvert.SerializeObject(cancelReceipt);
+                    var unknown = cancelReceipt.Status == AgentCancellationStatus.Unconfirmed;
+                    var rejected = cancelReceipt.Status == AgentCancellationStatus.Changed || cancelReceipt.Status == AgentCancellationStatus.Unavailable;
+                    var result = unknown && context.MayHaveDispatched ? RuntimeResult.Unknown("Отмена не подтверждена. Не повторяйте запрос.", data)
+                        : unknown || rejected ? RuntimeResult.Error("Отмена не выполнена или прежний результат не подтверждён. Проверьте участника.", data)
+                        : RuntimeResult.Ok(cancelReceipt.Status == AgentCancellationStatus.Requested
+                            ? "Отмена запрошена. Завершение запуска и эффекты инструментов ещё не подтверждены."
+                            : cancelReceipt.Status == AgentCancellationStatus.Cancelled ? "Отмена запуска подтверждена журналом."
+                            : "Участник уже не выполняет этот запуск.", data);
+                    return context.Complete(new ToolHandlerResult(result, unknown && context.MayHaveDispatched
+                        ? ToolEffectEvidence.Unknown : context.MayHaveDispatched && cancelReceipt.Changed
+                            ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange));
+                }
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Spawn)
                 {
                     var spawn = JObject.FromObject(context.Arguments).ToObject<SpawnRequest>();

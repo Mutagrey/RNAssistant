@@ -454,13 +454,13 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync) PauseLocked(box, reason);
         }
-        internal bool PauseForRun(ChatSession session, string runId)
+        internal bool PauseForRun(ChatSession session, string runId, string reason = "Остановлено пользователем")
         {
             var box = Get(session);
             lock (box.Sync)
             {
                 if (box.Session.LastRun?.RunId != runId) return false;
-                PauseLocked(box, "Остановлено пользователем");
+                PauseLocked(box, reason);
                 return true;
             }
         }

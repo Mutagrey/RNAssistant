@@ -40,9 +40,14 @@ namespace RNAssistant.Runtime
             AppSettings settings, Func<string> key)
         {
             var workspaceId = workspace.WorkspaceId;
+            Action<WorkspaceRunEvent> progress = value => AgentProgress?.Invoke(workspaceId, address.ChatId, value);
+            Action<ChatSession> changed = current => progress(new WorkspaceRunEvent("QueueChanged", current.LastRun?.KernelState?.Summary,
+                null, ConversationEventFeed.Cursor(current)));
             return new AgentConversationEndpoint { Address = address,
+                Runs = _activeRuns, Store = new ChatConversationStoreAdapter(_chats), Payloads = _payloads,
+                Changed = changed,
                 Inbox = _conversationInbox, Load = () => GetSession(_workspaces.OpenConnected(workspaceId), address.ChatId),
-                ReserveForResume = () => ReserveRun(address.ChatId, false),
+                Reserve = () => ReserveRun(address.ChatId, false),
                 IsClosing = () => _conversationApplication.IsClosing || _titleLifetime.IsCancellationRequested,
                 Validate = current => {
                     if (current == null || current.WorkspaceId != workspaceId) throw new InvalidOperationException("Исходный проект недоступен.");
@@ -50,10 +55,8 @@ namespace RNAssistant.Runtime
                     return workspaceId;
                 },
                 Start = current => {
-                    Action<WorkspaceRunEvent> progress = value => AgentProgress?.Invoke(workspaceId, current.Id, value);
                     StartQueuedInputs(workspace, current.Id, settings, key, progress, null);
-                    progress(new WorkspaceRunEvent("QueueChanged", current.LastRun?.KernelState?.Summary,
-                        null, ConversationEventFeed.Cursor(current)));
+                    changed(current);
                 } };
         }
     }

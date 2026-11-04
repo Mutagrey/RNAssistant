@@ -24,12 +24,12 @@ generation from overwriting it, even if the chosen text matches a draft/placehol
 
 ## Agent communication tools — 2026-11-03
 
-`agents.list`, `agents.spawn`, `agents.send` and `agents.wait` are built-in direct tools of the initial profile
+`agents.list`, `agents.spawn`, `agents.send`, `agents.wait` and `agents.cancel` are built-in direct tools of the initial profile
 when the application messaging owner is available and `MaxAgentMessages > 0`.
 Zero removes them from new catalogs and rejects old handlers before dispatch;
 an inherited nonzero chain budget cannot override the switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires list v3, send v4, spawn v2 and wait v3 (skill v5.0.0); zero makes that package
+and requires list v3, send v4, spawn v2, wait v4 and cancel v1 (skill v7.0.0); zero makes that package
 unavailable for loading.
 List reads saved chats in the caller's document/workspace, independently of tabs,
 with optional `query` (title substring) and `agent_id` (exact address). Its bounded
@@ -89,13 +89,21 @@ live wait; runtime shutdown preserves it. An expired deadline is not renewed, an
 late replies remain input without retroactively satisfying that deadline. Details: [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
 
 Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v4`,
-`conversation.agents.spawn.v2`, `conversation.agents.wait.v4`. Stale admissions must
-explicitly reload the current contract. Send/spawn are managed conversation writes
+`conversation.agents.spawn.v2`, `conversation.agents.wait.v4`, `conversation.agents.cancel.v1`. Stale admissions must
+explicitly reload the current contract. Send/spawn/cancel are managed conversation writes
 available in Agent and Plan, without a document authority observer or per-message
 approval. Recipients retain their own exact policies and the sender's recorded
 ceiling: Plan/Deny cannot be laundered, and automatic approval can only decrease.
 Incompatible busy-run inputs remain queued for a compatible next run; wait reports
 InputPending rather than including them under broader permissions.
+
+Cancel requires only `agent_id` of one other same-scope participant. Runtime pins the
+Run and cancellation lifetime: Requested proves an accepted signal, Cancelled durable
+terminal cancellation, AlreadyStopped a previously stopped run. Changed/Unavailable
+do not cancel a replacement; Unconfirmed is never retried. A saved wait can be cancelled
+without model/tool dispatch. Chat, queue and descendants remain intact; input stays
+paused. Abandoned execution, pending approval without a live owner and another
+process's owner are unavailable in this slice. This tool never resumes user Stop.
 Public agent_id and message_id/reply_to are peer addressing and message correlation,
 not resource handles, revisions or permissions. Runtime mints the IDs; the model
 can reference only previously issued values. The existing ToolRuntime/Inbox own dispatch and
@@ -111,7 +119,7 @@ a tool/model never supplies it. See [reference revision 4](protocols/CONVERSATIO
 Исторический [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
 включая условные и manual-only записи. Начальный профиль модели — 10 доступных
-Core tools плюс `chat.rename`; `agents.list/spawn/send/wait` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
+Core tools плюс `chat.rename`; `agents.list/spawn/send/wait/cancel` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
 78 не входят. Общая грамматика patch принадлежит его schema; skills дополняют её
 предметными правилами без копирования всего контракта.
 

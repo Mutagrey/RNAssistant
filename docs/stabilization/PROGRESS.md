@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Мультиагенты: agents.cancel — In Review, 2026-11-04
+
+Этап 3a [плана](../proposals/multi-agent-runtime-plan.md): общий Application owner
+принимает `agents.cancel(agent_id)` v1. Exact Run и live cancellation lifetime
+закреплены до сигнала; Requested не выдаётся за завершение. Сохранённый effect-free
+wait завершается через AgentKernel + existing CommitRun под lease/CAS, без модели,
+tools или resume. Cancelled требует read-back. Source CancelPrepared/CancelRecorded
+исключают replay неизвестного запроса; unknown effects, counts, очередь и история
+сохраняются. Нет cascade, нового store, UI или зависимостей от вкладок. Skill v7.
+
+Host-neutral проверки покрывают live/cold Workspace model wire, Office service/fake
+adapter, смену Run и lifetime, lease, append/flush/receipt faults и повтор после
+restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wait
+проходят; 3 recovery прошли отдельно после cleanup failure в параллельном прогоне
+(Risk Register). Минимальная сборка и version gate прошли. Windows/Office/controller
+и live-model qualification открыты. User cold
+control, peer pause/resume, terminal Run wait/dependencies, лимиты и Inspector ещё
+не реализованы; управление owner другого процесса этим tool не добавлено.
+
 ## Мультиагенты: общее продолжение выбранных участников — In Review, 2026-11-04
 
 По замечанию пользователя устранено наложение recovery portal на обычный «+» при

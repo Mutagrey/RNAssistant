@@ -225,14 +225,27 @@ namespace RNAssistant.Application.Conversations
         internal IReadOnlyList<ConversationActiveSnapshot> Active()
         { lock (_sync) return _runs.Values.Select(ShallowClone).ToArray(); }
 
-        public bool Cancel(string chatId, string runId)
+        internal ConversationActiveSnapshot CaptureCancellation(string chatId, string runId)
+        {
+            lock (_sync)
+            {
+                ConversationActiveSnapshot run;
+                if (!_runs.TryGetValue(chatId, out run) || run.RunId != runId) return null;
+                var snapshot = ShallowClone(run);
+                snapshot.Cancellation = run.Cancellation;
+                return snapshot;
+            }
+        }
+
+        public bool Cancel(string chatId, string runId, CancellationTokenSource expectedCancellation = null)
         {
             CancellationTokenSource cancellation;
             lock (_sync)
             {
                 ConversationActiveSnapshot run;
                 if (!_runs.TryGetValue(chatId ?? string.Empty, out run) ||
-                    !string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase) ||
+                    expectedCancellation != null && !ReferenceEquals(run.Cancellation, expectedCancellation))
                 {
                     return false;
                 }

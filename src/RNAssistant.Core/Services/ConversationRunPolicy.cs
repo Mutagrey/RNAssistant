@@ -98,12 +98,12 @@ namespace RNAssistant.Core.Services
             if (policy == null || policy.Effect == ToolEffect.Unclassified) return false;
             if (!policy.AllowedModes.Contains(Mode, StringComparer.Ordinal)) return false;
             return (!policy.MayHaveSideEffects && !policy.ExecutesCode && !policy.RequiresConfirmation) ||
-                IsPlanningArtifact(id, binding) || IsAgentMessage(id, binding) || IsChatRename(id, binding) || (Mode == ChatModes.Plan && IsPlanSourceTool(id, binding)) || AllowsConfirmation;
+                IsPlanningArtifact(id, binding) || IsAgentCoordination(id, binding) || IsChatRename(id, binding) || (Mode == ChatModes.Plan && IsPlanSourceTool(id, binding)) || AllowsConfirmation;
         }
         public ToolPolicy EffectiveToolPolicy(string id, ToolPolicy policy, ToolBinding binding)
         {
             if (policy == null) throw new ArgumentNullException(nameof(policy));
-            var confirmation = !IsPlanningArtifact(id, binding) && !IsAgentMessage(id, binding) && !IsChatRename(id, binding) && (policy.RequiresConfirmation || policy.MayHaveSideEffects || policy.ExecutesCode);
+            var confirmation = !IsPlanningArtifact(id, binding) && !IsAgentCoordination(id, binding) && !IsChatRename(id, binding) && (policy.RequiresConfirmation || policy.MayHaveSideEffects || policy.ExecutesCode);
             return new ToolPolicy(policy.Effect, policy.Verification, confirmation,
                 policy.IndependentLocalRead && !confirmation, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode, policy.EvidenceEligibility);
         }
@@ -118,8 +118,8 @@ namespace RNAssistant.Core.Services
                     return copy;
                 }).ToList();
         }
-        private static bool IsAgentMessage(string id, ToolBinding binding)
-        { return (id == AgentCommunicationToolCatalog.Send || id == AgentCommunicationToolCatalog.Spawn) && binding != null &&
+        private static bool IsAgentCoordination(string id, ToolBinding binding)
+        { return (id == AgentCommunicationToolCatalog.Send || id == AgentCommunicationToolCatalog.Spawn || id == AgentCommunicationToolCatalog.Cancel) && binding != null &&
             binding.HandlerId == AgentCommunicationToolCatalog.Binding(id).HandlerId && string.IsNullOrEmpty(binding.EntryPoint); }
         private static bool IsChatRename(string id, ToolBinding binding)
         { return id == ChatRenameToolHandler.ToolId && binding != null &&
