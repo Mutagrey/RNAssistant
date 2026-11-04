@@ -42,6 +42,8 @@ namespace RNAssistant.Runtime
             var workspaceId = workspace.WorkspaceId;
             return new AgentConversationEndpoint { Address = address,
                 Inbox = _conversationInbox, Load = () => GetSession(_workspaces.OpenConnected(workspaceId), address.ChatId),
+                ReserveForResume = () => ReserveRun(address.ChatId, false),
+                IsClosing = () => _conversationApplication.IsClosing || _titleLifetime.IsCancellationRequested,
                 Validate = current => {
                     if (current == null || current.WorkspaceId != workspaceId) throw new InvalidOperationException("Исходный проект недоступен.");
                     ConversationRunPolicy.RequireCurrentSession(current);

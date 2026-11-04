@@ -2,6 +2,13 @@
 
 ## Agent communication journal — 2026-11-03
 
+User batch wait resume (2026-11-04) introduces no event/store/schema migration.
+Each selected exact session/run/revision is leased and uses the existing Inbox
+resume event. Admission happens for all eligible selections before queue starts;
+there is no cross-chat transaction. A partial/unknown response never authorizes
+replaying tools or resuming a newer wait. Restart still requires explicit user
+action even if the previous process saved Resume before it stopped.
+
 `conversation.agents.changed` is a mandatory conversation event: `Prepared`
 reserves a source operation/budget slot before destination intake, `Accepted`
 records a read-back of that exact destination Inbox operation, and `Granted`

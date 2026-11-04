@@ -33,6 +33,9 @@ namespace RNAssistant.Application.Conversations
         internal Func<ChatSession> Load;
         internal Func<ChatSession, string> Validate;
         internal Action<ChatSession> Start;
+        internal Func<IDisposable> ReserveForResume;
+        internal Action<ChatSession> ValidateResume;
+        internal Func<bool> IsClosing;
     }
 
     internal sealed class AgentPeer

@@ -31,10 +31,20 @@
     function button(item, key) {
       var control = document.createElement("button"); control.type = "button";
       control.dataset.menuKey = item.key || key;
-      control.setAttribute("role", "menuitem"); control.setAttribute("aria-label", item.label); control.disabled = !!item.disabled;
-      control.innerHTML = (item.icon === false ? "" : icon(item.icon || "right")) + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
-      if (item.status) { var status = document.createElement("small"); status.textContent = item.status; control.appendChild(status); }
-      control.addEventListener("click", function () { closePopup(true); item.onSelect(); });
+      var check = typeof item.checked === "boolean";
+      control.setAttribute("role", check ? "menuitemcheckbox" : "menuitem"); control.setAttribute("aria-label", item.label); control.disabled = !!item.disabled;
+      if (check) control.setAttribute("aria-checked", String(item.checked));
+      control.innerHTML = (check ? icon("check") : item.icon === false ? "" : icon(item.icon || "right")) + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
+      if (item.status) {
+        control.classList.add("has-detail"); if (check || item.icon !== false) control.classList.add("has-icon");
+        var status = document.createElement("small"); status.textContent = item.status; control.appendChild(status);
+        control.title = item.label + " · " + item.status;
+      }
+      control.addEventListener("click", function (event) {
+        // A retained action may replace its own DOM before document.click runs.
+        event.stopPropagation();
+        if (!check && !item.keepOpen) closePopup(true); item.onSelect();
+      });
       return control;
     }
     function render(values) {
@@ -67,13 +77,15 @@
       menu.style.maxWidth = "min(var(--menu-max-width, 100vw), " + Math.max(0, (innerWidth - 2 * inset) / scale) + "px)";
       menu.style.maxHeight = Math.max(0, (innerHeight - 2 * inset) / scale) + "px";
       var bounds = menu.getBoundingClientRect();
-      menu.style.left = Math.max(inset, Math.min(rect.right - bounds.width, innerWidth - bounds.width - inset)) / scale + "px";
+      var left = options.align === "start" ? rect.left : rect.right - bounds.width;
+      menu.style.left = Math.max(inset, Math.min(left, innerWidth - bounds.width - inset)) / scale + "px";
       var top = options.placement === "top" ? rect.top - bounds.height - offset : rect.bottom + offset;
       menu.style.top = Math.max(inset, Math.min(top, innerHeight - bounds.height - inset)) / scale + "px";
     }
     position();
     var first = popup.querySelector("button:not(:disabled)"); if (first) first.focus();
     return { update: function (values) { if (popup === menu) { render(values); position(); } },
+      close: function () { if (popup === menu) closePopup(false); },
       isOpen: function () { return popup === menu; } };
   }
 

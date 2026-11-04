@@ -53,8 +53,8 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=chat-welcome-20261103">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=plugin-materials-20261103-html-editors-20261103-1">
-  <link rel="stylesheet" href="css/app-product-components.css?v=plugin-materials-20261103">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=agent-recovery-20261104">
+  <link rel="stylesheet" href="css/app-product-components.css?v=agent-recovery-20261104">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-materials.css?v=plugin-materials-20261103-html-editors-20261103-1">
   <link rel="stylesheet" href="css/app-product-screens.css?v=plugin-materials-20261103-html-editors-20261103-1">
@@ -203,6 +203,10 @@
                   <button type="button" class="composer-picker-item composer-menu-action" id="composerOpenMaterialsButton">
                     <span class="composer-menu-icon"><svg data-rna-icon="file" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
                     <span class="composer-menu-label">Материал чата</span>
+                  </button>
+                  <button type="button" class="composer-picker-item composer-menu-action" id="resumeAgentWaitsButton">
+                    <span class="composer-menu-icon"><svg data-rna-icon="play" viewBox="0 0 24 24" aria-hidden="true"></svg></span>
+                    <span class="composer-menu-label">Продолжить совместную работу…</span>
                   </button>
                   <hr>
                   <div id="chatModeMenu" role="group" aria-label="Планирование">
@@ -1086,7 +1090,7 @@
   <script src="js/app-conversation-observer.js?v=addressed-poll-20261027-1-observe-s2b4"></script>
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=20261029-first-group-1"></script>
-  <script src="js/app-action-menu.js?v=navigation-s3b1-20261102-browser-s3b3b"></script>
+  <script src="js/app-action-menu.js?v=agent-recovery-20261104"></script>
   <script src="js/app-navigation-pane.js?v=navigation-20261102-html-editors-20261103-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
@@ -1175,8 +1179,9 @@
   <script src="js/app-chat-edit.js?v=chat-views-20261103"></script>
   <script src="js/app-workspace-chat.js?v=chat-views-20261103-chat-audit-20261103"></script>
   <script src="js/app-office-chat-view.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
-  <script src="js/app-agent-communication.js?v=20261103"></script>
-  <script src="js/app-conversation-panel.js?v=chat-views-20261103"></script>
+  <script src="js/app-agent-recovery.js?v=agent-recovery-20261104"></script>
+  <script src="js/app-agent-communication.js?v=agent-recovery-20261104"></script>
+  <script src="js/app-conversation-panel.js?v=agent-recovery-20261104"></script>
   <script src="js/app-plugin-view.js?v=html-editors-20261103-1"></script>
   <script src="js/app-plugins.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-project-chats.js?v=plugin-materials-20261103"></script>

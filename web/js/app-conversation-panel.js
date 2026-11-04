@@ -137,6 +137,10 @@
       on(node(id), "click", function () { if (adapter.commands[id]) adapter.commands[id](); });
     });
     on(node("composerOpenMaterialsButton"), "click", function () { component.focus(); switchTab("artifacts"); });
+    on(node("resumeAgentWaitsButton"), "click", function (event) {
+      event.stopPropagation(); node("composerAddPicker").open = false;
+      communication.openRecovery(node("composerAddButton"));
+    });
     on(node("composerAddMenu"), "click", function (event) { if (event.target.closest("button")) node("composerAddPicker").open = false; });
     bindComposerTooltip(node("contextMeterWrap"), node("contextMeter"), node("contextMeterTooltip"), function () { return true; }, listeners.signal);
     on(node("contextMeter"), "click", function () { component.focus(); RNAssistantChatInspector.openUsage(); });

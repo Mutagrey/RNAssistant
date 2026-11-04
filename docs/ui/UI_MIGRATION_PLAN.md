@@ -1,5 +1,17 @@
 # План модернизации production UI
 
+## User batch resume — In Review, 2026-11-04
+
+Разрешённый пользователем срез: общее продолжение выбранных сохранённых ожиданий
+из меню «+» любого чата области. Owner runtime — Application Conversations,
+presentation — общий `app-agent-recovery`/ActionMenu. Именованные группы и Inspector
+не начинаются автоматически; нет нового store, LLM summary или фонового опроса.
+Проверить: открыть меню → выбрать двух участников → продолжить → увидеть отдельные
+receipts → открыть нужный чат. Отдельно: partial/unknown response, Stop/revision race,
+пагинация с выбором, Escape/focus, narrow/125%, stale load при закрытии/rebind.
+Rollback — обратный diff без удаления событий: сохранённые факты остаются обычными
+Inbox Resume. Windows/Office binding и визуальная приёмка пользователем открыты.
+
 ## Durable wait: existing Inbox control — In Review, 2026-11-04
 
 Срез runtime 2b.2 подключает существующую кнопку Resume к сохранённому Waiting Run

@@ -39,6 +39,17 @@ race coverage. These are host-neutral checks, not Windows/Office qualification.
 
 ## Agent communication — 2026-11-03
 
+`agent recovery:` covers one explicit selection across saved waits: current scope,
+exact run/revision, lease/binding refusal, partial receipts, stale command replay,
+unselected chats, Stop before queue binding and bounded 20-chat pages without model
+calls. Its scripted Workspace case runs two concurrent waits, closes the runtime,
+reopens it and resumes both original Run/call IDs with one command and one charge
+per wait. Relevant regressions: `agent communication: durable`, `inbox:`.
+`tests/web/agent-recovery.test.js` exercises the production common menu, selection
+across pages, exact Office/Workspace commands, partial/uncertain receipts, narrow/125%,
+keyboard and stale close cleanup. `active-chat-runs.test.js` covers the shared
+ActionMenu detail layout. Real Office/COM/controller qualification remains open.
+
 `agent communication:` checks the real Workspace A → B → A path against a scripted
 HTTP provider (including typed bridge state and model wire), independent pinned
 budgets, idempotent continuation, restart, stopped queues, tab-independent discovery,

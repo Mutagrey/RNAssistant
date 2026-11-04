@@ -214,7 +214,7 @@ namespace RNAssistant.Office
                 var context = LoadContext(session);
                 var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
-                _inbox.Bind(session);
+                _inbox.Bind(session, queuedWait: true);
                 session.LastRun.RuntimeId = _runtimeId;
                 _activeRuns.UpdateSessionSnapshot(session.Id, runId, session);
                 trace = RunCausalTrace.Begin(_eventStore, session);

@@ -41,7 +41,7 @@ namespace RNAssistant.Runtime
 
         private async Task<WorkspaceRunResult> ContinueOwnedAsync(WorkspaceDescriptor workspace,
             WorkspaceRunControlRequest request, AppSettings settings, Func<string> apiKeyProvider,
-            Action<WorkspaceRunEvent> progress, CancellationToken cancellationToken, string modelDigest)
+            Action<WorkspaceRunEvent> progress, CancellationToken cancellationToken, string modelDigest, bool queuedWait = false)
         {
             using (var runReservation = ReserveRun(request.SessionId, cancellationToken: cancellationToken))
             {
@@ -73,12 +73,12 @@ namespace RNAssistant.Runtime
                 acceptance.Error = null;
                 session.LastRun.Phase = null;
                 session.LastRun.CurrentAction = null;
-                using (var input = new WorkspaceInputChannel(this, session, workspace))
+                using (var input = new WorkspaceInputChannel(this, session, workspace, queuedWait))
                 using (var control = OpenRunControl(session, runReservation, cancellationToken, input))
                 {
                     // Bind this leased session before the resume append. A queue
                     // worker may still hold an older projection of the same chat.
-                    _conversationInbox.Resume(session);
+                    if (!queuedWait) _conversationInbox.Resume(session);
                     var result = await ConversationRunCoordinator.ContinueAsync(continuation,
                         ports, ports.Tools, ports, control.Token, input, () => _titleLifetime.IsCancellationRequested).ConfigureAwait(false);
                     if (acceptance.Requested)

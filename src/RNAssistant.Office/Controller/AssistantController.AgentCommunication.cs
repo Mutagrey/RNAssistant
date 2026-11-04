@@ -4,6 +4,7 @@ using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
@@ -40,6 +41,11 @@ namespace RNAssistant.Office
         {
             return new AgentConversationEndpoint { Address = address,
                 Inbox = _inbox, Load = () => LoadInboxSession(address.ChatId),
+                ReserveForResume = () => _conversationLeases.Reserve(address.ChatId),
+                IsClosing = () => _conversationApplication.IsClosing || _lifetimeCancellation.IsCancellationRequested,
+                ValidateResume = current => OfficeDocumentExecutionGuardState.ThrowIfMismatch(_adapter,
+                    new OfficeDocumentExecutionExpectation { Host = current.Host, DocumentKey = current.DocumentKey,
+                        RuntimeDocumentKey = current.LastRun.DocumentRuntimeKey }),
                 Validate = current => { EnsureCurrentDocument(current); return CaptureExpectedRuntimeDocumentKey(current); },
                 Start = current => {
                     StartConversationQueue(current, (run, phase, text, activity) => progress?.Invoke(current.Id, run, phase, text, activity), changed);

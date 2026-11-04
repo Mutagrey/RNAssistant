@@ -1,5 +1,16 @@
 # Архитектура UI RNAssistant
 
+## Общее продолжение ожиданий — In Review, 2026-11-04
+
+`app-agent-recovery` — presentation общей ConversationPanel Office/Workspace/plugin.
+Меню читает существующий saved catalog только по запросу пользователя; закрытие,
+rebind и dispose инвалидируют поздние ответы, не отменяют принятое выполнение.
+Application `AgentCommunicationService.Recovery` владеет bounded discovery, exact
+selection/revision/lease checks и receipts; очереди продолжают прежние Run.
+`getRecoverableAgentWaits` / `resumeAgentWaits` — typed user bridge contracts.
+UI не выводит membership из переписки и не хранит второй каталог. Именованные
+группы и Inspector подключат ту же команду на своих этапах.
+
 ## Сохранённое ожидание — In Review, 2026-11-04
 
 Application/Core сохраняют Waiting в прежних events/CAS. Web получает typed

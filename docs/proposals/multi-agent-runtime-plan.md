@@ -150,6 +150,30 @@ summary дополняют существующий compiler, без второ�
 Пользователь подтвердил правила группировки и удаления. Поведение согласовано;
 production пока не изменён, визуальное оформление остаётся на ревью при реализации.
 
+### Общее продолжение до появления именованных групп — In Review
+
+По запросу пользователя реализован узкий срез этапа 3: из любого чата текущего
+документа/workspace можно выбрать сохранённые ожидания и одним user-действием
+продолжить выбранных участников. Команда доступна в общем меню «+», не требует
+открытия каждого чата. Участники выбираются явно; creator tree и causal chain не
+подменяют membership. Нового group store и model tool в этом срезе нет.
+
+Owner — `AgentCommunicationService.Recovery`, существующие Inbox/leases/queue ports.
+`getRecoverableAgentWaits` читает до 20 чатов за страницу без LLM; `resumeAgentWaits`
+принимает до 32 exact session/run/revision целей. Каждый участник получает отдельный
+receipt, stale/foreign/busy/binding refusal не блокирует других. Все разрешения
+сохраняются до первого старта, но атомарность между чатами не обещается. Requested
+не означает completed; ambiguous failure не replay. Stop до binding сильнее
+отложенного старта. Run/call/deadline/бюджеты остаются прежними.
+
+После реализации Collaboration её membership заполняет тот же явный выбор; удаление
+группы и добавление участника не дают автоматического разрешения resume. Inspector
+сможет использовать эту Application-команду без второго control owner. Холодный
+cancel, agent pause/resume tools и execution slots остаются в этапе 3.
+Проверки: exact selection, partial failures, stale Stop/retry, bounded catalog,
+два реально сохранённых Workspace wait → restart → одна команда → оба прежних Run.
+UI: общий ActionMenu, пагинация, partial/unknown result, клавиатура/zoom/dispose.
+
 ### Текущее состояние и выбор
 
 `app-chat-state.chatDocumentTreeNode` показывает Document → chats,
@@ -298,7 +322,7 @@ User Stop/restart pause не снимается peer-командой без п�
 | 2a. Корреляция | Existing Prepared/Accepted + input provenance, source recipient verification и Inbox matcher. Реализовано после 1 | Ранние/применённые ответы учитываются, any/all различаются, нет чужих match/потери сигнала, unrelated/human/policy input не выдаётся за ответ. 22 целевые проверки проходят |
 | 2b.1. Повтор ожидания | Реализован typed timeout progress через существующий terminal result; общий kernel не парсит имя tool/body. Зависит от 2a | Четвёртый одинаковый timeout исполняется; JSON/ChatStore replay сохраняет различие, остальные repeat guards и run limits действуют. 23 agent communication + 1 kernel wait + 15 tool runtime checks проходят; Windows отдельно |
 | 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; реализовано, In Review | Waiting + PendingToolWait в прежних events/CAS; явный resume того же call/Run, абсолютный deadline, однократный учёт. Exact chat lease остаётся за живым Run, рабочий поток и document gate свободны. Shutdown сохраняет wait, Stop отменяет живой wait. Непроверенная Windows document binding остаётся открытым gate |
-| 3. Run control/лимиты | Existing run owner/leases/input channel, typed pause/resume/cancel; глобальный scheduler admission и budgets. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. Справедливость очереди и лимиты параллельных Run проверены |
+| 3. Run control/лимиты | User batch resume сохранённых ожиданий реализован, In Review (см. выше). Далее existing run owner/leases/input channel, agent pause/resume/cancel; глобальный scheduler admission и budgets. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. Справедливость очереди и лимиты параллельных Run ещё предстоит проверить |
 | 4a. Организация чатов | Optional group events/projection, creator в headers/DTO; `group`, целевой `chat.rename`, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
 | 4b. Поручения | Optional assignment events и bounded projection; `resolve`. Зависит от 2–3, membership не обязателен | Смена ролей без смены identity; finish не закрывает поручение; terminal assignment не доказывает внешний эффект без evidence |
 | 5. Inspector | Typed DTO/cursors поверх существующих SessionEvent/kernel/trajectory readers; production Inspector, без demo/store | Участники + отдельные communication/dependency graphs + timeline, навигация thread/message/Run/step/resource/E; control использует этап 3; subscriptions очищаются при dispose, Run сохраняется |

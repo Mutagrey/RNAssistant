@@ -19,14 +19,14 @@ namespace RNAssistant.Application.Conversations
 
         internal ConversationRunInputChannel(ConversationInboxService inbox, ChatSession session,
             Func<ConversationInput, CancellationToken, Task<AgentMessage>> apply,
-            Action onConsumed = null, bool ownsBinding = false)
+            Action onConsumed = null, bool ownsBinding = false, bool queuedWait = false)
         {
             _inbox = inbox ?? throw new ArgumentNullException(nameof(inbox));
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _apply = apply ?? throw new ArgumentNullException(nameof(apply));
             _onConsumed = onConsumed;
             _ownsBinding = ownsBinding;
-            if (_ownsBinding) _inbox.Bind(_session);
+            if (_ownsBinding) _inbox.Bind(_session, queuedWait);
         }
 
         internal bool Accepting

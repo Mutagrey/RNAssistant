@@ -1,5 +1,28 @@
 # Stabilization progress
 
+## Мультиагенты: общее продолжение выбранных участников — In Review, 2026-11-04
+
+По запросу пользователя из любого чата области доступно «+ → Продолжить совместную
+работу…». Общий Chat View показывает bounded список сохранённых ожиданий; выбор
+явный, открывать вкладки участников не требуется. Owner — Application Conversations,
+прежние Inbox/leases/queue ports. Нет нового store, model tool, группировки по
+creator/chain или неявного resume всех чатов. Именованные группы и Inspector позже
+используют ту же команду.
+
+Каждая выбранная session/run/revision перепроверяется; отдельные receipts отличают
+принятое продолжение от stale/unavailable/unconfirmed. Разрешения сохраняются до
+первого старта, межчатовая атомарность не обещается. Stop до queue binding не теряется;
+повтор старого выбора не снимает новую паузу. Прежние Run/call/deadline и бюджет
+сохраняются. Пагинация — по 20 чатов, до 32 выбранных, без фоновых LLM/списковых запросов.
+
+Host-neutral проверки: 3 agent recovery, 2 durable recovery и 12 Inbox — проходят;
+реальный scripted Workspace восстанавливает двух параллельных участников после
+закрытия runtime одной командой. Chrome: recovery menu, existing agent communication
+и active runs; selection/pages, partial/unknown, exact scope, Escape/focus, narrow/125%
+и stale close проверены. Общий ActionMenu переиспользует title/detail без отдельной
+геометрии. Windows/Office/controller/WebView2 и пользовательское визуальное принятие
+остаются открытыми. Далее: agent control/cold cancel и лимиты этапа 3; группы — 4a.
+
 ## Мультиагенты: сохраняемое ожидание того же Run — In Review, 2026-11-04
 
 Этап 2b.2 реализован host-neutral. Owner: Core kernel/events/ToolRuntime и Application

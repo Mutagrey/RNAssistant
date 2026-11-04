@@ -161,7 +161,7 @@ namespace RNAssistant.Runtime
                 using (_owner._runtimeUseLease?.Invoke())
                     await _owner.ContinueOwnedAsync(_workspace, new WorkspaceRunControlRequest {
                         SessionId = session.Id, RunId = session.LastRun.RunId, Cursor = ConversationEventFeed.Cursor(session) },
-                        _settings, _key, _progress, token, _digest).ConfigureAwait(false);
+                        _settings, _key, _progress, token, _digest, queuedWait: true).ConfigureAwait(false);
             }
             public Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token)
             { throw new InvalidOperationException("Сначала подтвердите или отклоните ожидающее действие."); }
@@ -182,12 +182,12 @@ namespace RNAssistant.Runtime
             internal string RunId { get { return _session.LastRun.RunId; } }
             internal ChatSession Session { get { return _session; } }
             internal bool Accepting { get { return _channel.Accepting; } }
-            internal WorkspaceInputChannel(WorkspaceConversationService owner, ChatSession session, WorkspaceDescriptor workspace)
+            internal WorkspaceInputChannel(WorkspaceConversationService owner, ChatSession session, WorkspaceDescriptor workspace, bool queuedWait = false)
             {
                 _owner = owner; _session = session; _workspace = workspace;
                 _inbox = owner._conversationInbox;
                 _channel = new ConversationRunInputChannel(_inbox, session, ApplyInputAsync,
-                    () => _owner.SetModelProgress(_session.Id, null), ownsBinding: true);
+                    () => _owner.SetModelProgress(_session.Id, null), ownsBinding: true, queuedWait: queuedWait);
                 if (!owner._inputChannels.TryAdd(session.Id, this))
                 {
                     _channel.Dispose();

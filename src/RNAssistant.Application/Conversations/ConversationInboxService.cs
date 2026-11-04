@@ -186,11 +186,14 @@ namespace RNAssistant.Application.Conversations
                 "\0" + (session.DocumentKey ?? string.Empty) + "\0" + session.Id;
         }
 
-        internal void Bind(ChatSession session)
+        internal void Bind(ChatSession session, bool queuedWait = false)
         {
             var box = Get(session);
             lock (box.Sync)
             {
+                if (queuedWait && (!box.Worker || box.Paused || box.Running ||
+                    box.Session.LastRun?.RunId != session.LastRun?.RunId || !HasPendingWait(session)))
+                    throw new OperationCanceledException("Продолжение ожидания уже остановлено или изменилось.");
                 box.Session = session;
                 box.Running = true;
                 box.Accepting = true;

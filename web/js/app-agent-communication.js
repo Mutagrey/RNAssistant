@@ -19,6 +19,7 @@
   }
   function mount(component) {
     var target = component.target, closed = false;
+    var recovery = RNAssistantAgentRecovery.create(component);
     var checking = null, signature = null, generation = 0, budget = null, retryOperation = null, lastRunning = false;
     var box = document.createElement("div"); box.className = "agent-communication-status"; box.hidden = true;
     var label = document.createElement("span"), button = document.createElement("button");
@@ -58,9 +59,9 @@
       finally { button.disabled = false; }
     });
     refresh(false);
-    return { refresh: refresh, settingsChanged: function () { signature = null; ++generation; refresh(lastRunning); },
-      rebind: function () { signature = null; ++generation; refresh(lastRunning); }, dispose: function () {
-      if (closed) return; closed = true; ++generation; box.remove();
+    return { refresh: refresh, openRecovery: recovery.open, settingsChanged: function () { signature = null; ++generation; refresh(lastRunning); },
+      rebind: function () { recovery.reset(); signature = null; ++generation; refresh(lastRunning); }, dispose: function () {
+      if (closed) return; closed = true; ++generation; recovery.dispose(); box.remove();
     } };
   }
   window.RNAssistantAgentCommunication = Object.freeze({ sender: sender, appendSender: appendSender, mount: mount,
