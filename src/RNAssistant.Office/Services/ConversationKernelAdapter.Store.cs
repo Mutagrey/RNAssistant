@@ -104,6 +104,14 @@ namespace RNAssistant.Office.Services
                     activity.RunId = run.RunId;
                     activity.Activity.RunId = run.RunId;
                     break;
+                case AgentRunEventKind.ToolWaiting:
+                    activity = FindActivity(fact.Execution.Context.Call.Id);
+                    if (activity == null) throw new InvalidOperationException("Waiting tool has no started activity.");
+                    activity.Activity.Status = "waiting";
+                    activity.Activity.ExecutionStatus = "waiting";
+                    activity.Activity.ResultMessage = "Ожидаю сообщения агентов";
+                    run.Phase = "waiting_agents";
+                    break;
                 case AgentRunEventKind.ToolCompleted:
                     activity = ProjectToolCompletion(fact);
                     break;
@@ -235,7 +243,7 @@ namespace RNAssistant.Office.Services
         {
             // Confirmation is still a pending call. A question set is already
             // recorded: close its call/result frame before waiting for an answer.
-            if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation) return null;
+            if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation || record.Outcome == ToolExecutionOutcome.Waiting) return null;
             ToolResultMaterialization result;
             if (_results.TryGetValue(record.Context.Call.Id, out result))
             {
@@ -267,7 +275,7 @@ namespace RNAssistant.Office.Services
 
         private void AppendTerminalMessage(RunSummary summary)
         {
-            if (summary.Lifecycle == RunLifecycle.Running || summary.Lifecycle == RunLifecycle.AwaitingConfirmation ||
+            if (summary.Lifecycle == RunLifecycle.Running || summary.Lifecycle == RunLifecycle.Waiting || summary.Lifecycle == RunLifecycle.AwaitingConfirmation ||
                 summary.Reason == "awaiting_user") return;
             var diagnostic = RunViewStateProjector.TerminalDiagnostic(summary);
             string responseStatus = null;
@@ -306,7 +314,7 @@ namespace RNAssistant.Office.Services
                     StepReason = fact.Response.Reason,
                     Kind = "step", Title = string.IsNullOrWhiteSpace(_stepMessage) ? "Выполняю действие" : _stepMessage, Status = "running" });
             else if (activity != null)
-                _progress(fact.Kind == AgentRunEventKind.ToolStarted ? "tool_running" : "tool_result",
+                _progress(fact.Kind == AgentRunEventKind.ToolWaiting ? "waiting_agents" : fact.Kind == AgentRunEventKind.ToolStarted ? "tool_running" : "tool_result",
                     activity.Activity.ResultMessage ?? _stepMessage ?? "Выполняю действие", activity.Activity);
         }
     }
@@ -335,6 +343,7 @@ namespace RNAssistant.Office.Services
 
         internal static string Status(RunSummary summary)
         {
+            if (summary.Lifecycle == RunLifecycle.Waiting) return "running";
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation) return "waiting_confirmation";
             if (summary.Lifecycle == RunLifecycle.Completed &&
                 summary.Reason == "awaiting_user") return "awaiting_user";
@@ -347,7 +356,7 @@ namespace RNAssistant.Office.Services
             run.RunId = summary.RunId;
             run.TurnId = summary.TurnId;
             run.Status = Status(summary);
-            run.Phase = run.Status;
+            run.Phase = summary.Lifecycle == RunLifecycle.Waiting ? "waiting_agents" : run.Status;
             run.CurrentAction = AssistantMessage(summary);
             run.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             run.IterationsUsed = summary.IterationsUsed;

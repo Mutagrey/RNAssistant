@@ -108,16 +108,21 @@ namespace RNAssistant.Harness
                 var input = ApplyPeerInput(store, inbox, b); ApplyPeerInput(store, inbox, c);
                 AssertContains(ConversationInputMessage.ModelText(b.Messages.Last()), ab.MessageId, "model receives exact request ID");
                 var reply = service.Send(inbox, b, 20, "b-run", "ba", AgentChatAddress.IdFor(a.Id), "Answer B", () => { }, replyTo: ab.MessageId);
-                var any = service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None,
+                var expired = service.CompleteWaitAsync(inbox, a, 20, "wait-run",
+                    new AgentWaitCondition(DateTime.UtcNow.AddMinutes(-2), DateTime.UtcNow.AddMinutes(-1), new[] { ab.MessageId }),
+                    CancellationToken.None).GetAwaiter().GetResult();
+                AssertTrue(expired.Status == AgentWaitStatus.TimedOut && expired.Matches.Count == 0,
+                    "a reply received after the saved deadline cannot retroactively satisfy the wait");
+                var any = WaitForAgentTest(service, inbox, a, 20, "wait-run", 1, CancellationToken.None,
                     new[] { ab.MessageId, ac.MessageId }).GetAwaiter().GetResult();
                 AssertTrue(any.Status == AgentWaitStatus.RepliesReady && any.Matches.Single().MessageId == reply.MessageId,
                     "an early reply satisfies any without losing the race to wait registration");
                 foreach (var pending in inbox.TakeRunInput(a)) ApplyPeerInput(store, inbox, a, pending);
-                var partial = service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None,
+                var partial = WaitForAgentTest(service, inbox, a, 20, "wait-run", 1, CancellationToken.None,
                     new[] { ab.MessageId, ac.MessageId }, "all").GetAwaiter().GetResult();
                 AssertTrue(partial.Status == AgentWaitStatus.TimedOut && partial.Matches.Single().RequestId == ab.MessageId,
                     "all timeout reports the applied partial reply without claiming completion");
-                var all = service.WaitAsync(inbox, a, 20, "wait-run", 10, CancellationToken.None,
+                var all = WaitForAgentTest(service, inbox, a, 20, "wait-run", 10, CancellationToken.None,
                     new[] { ab.MessageId, ac.MessageId }, "all");
                 AssertTrue(!all.IsCompleted, "all still requires C");
                 service.Send(inbox, c, 20, "c-run", "ca", AgentChatAddress.IdFor(a.Id), "Answer C", () => { }, replyTo: ac.MessageId);
@@ -128,7 +133,7 @@ namespace RNAssistant.Harness
                 a = store.Load(a.Id); inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
                 service = new AgentCommunicationService(); service.Register(StoredAgentScope(store, inbox, a));
                 BindPeerWait(inbox, a, "explicit-new-run");
-                var recovered = service.WaitAsync(inbox, a, 20, "explicit-new-run", 1, CancellationToken.None,
+                var recovered = WaitForAgentTest(service, inbox, a, 20, "explicit-new-run", 1, CancellationToken.None,
                     new[] { ab.MessageId, ac.MessageId }, "all").GetAwaiter().GetResult();
                 AssertTrue(recovered.Status == AgentWaitStatus.RepliesReady && recovered.Matches.Count == 2,
                     "correlation survives restart without restoring the old wait/run automatically");
@@ -169,7 +174,7 @@ namespace RNAssistant.Harness
                 AssertTrue(conflict && dispatches == 1, "an operation cannot be retargeted to a different request");
                 BindPeerWait(inbox, c);
                 var foreignWait = false;
-                try { service.WaitAsync(inbox, c, 20, "wait-run", 1, CancellationToken.None, new[] { first.MessageId }).GetAwaiter().GetResult(); }
+                try { WaitForAgentTest(service, inbox, c, 20, "wait-run", 1, CancellationToken.None, new[] { first.MessageId }).GetAwaiter().GetResult(); }
                 catch (AgentCommunicationException error) { foreignWait = error.Code == "agent_request_not_found"; }
                 AssertTrue(foreignWait, "knowing an ID does not expose another chat's request state");
             });
@@ -188,7 +193,7 @@ namespace RNAssistant.Harness
                 if (kind == "human") inbox.Submit(a, InboxInput("human", "User request first", InputDelivery.Queue));
                 service.Send(inbox, b, 20, "b-run", "response", AgentChatAddress.IdFor(a.Id), "Reply", () => { },
                     replyTo: kind == "peer" ? null : question.MessageId);
-                var result = service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None, new[] { question.MessageId }).GetAwaiter().GetResult();
+                var result = WaitForAgentTest(service, inbox, a, 20, "wait-run", 1, CancellationToken.None, new[] { question.MessageId }).GetAwaiter().GetResult();
                 AssertTrue(result.Status == AgentWaitStatus.InputPending && result.Matches.Count == 0,
                     kind + " input is not reported as fulfillment of the selected wait");
                 AssertEqual(kind == "peer" ? 1 : 0, inbox.TakeRunInput(a).Count, "FIFO and permission boundaries remain in force");

@@ -18,8 +18,9 @@ Office/Workspace — binding к существующим execution owners.
    Параллельные независимые Run одного thread отклонены: нарушают порядок контекста
    и принятую policy. Разные threads исполняются параллельно через прежних owners.
 3. Durable wait должен продолжать тот же Run. Это изменение kernel continuation,
-   а не обёртка polling или второй чат. Сначала требуется сохраняемый suspension
-   contract; нынешний wait 1–10 секунд не выдаётся за его реализацию.
+   а не обёртка polling или второй чат. В 2b.2 реализован сохраняемый suspension
+   contract для input/replies. Живой Run сохраняет exact chat lease; рабочий поток и
+   document gate свободны. Глобальные execution slots относятся к этапу 3.
 4. Chat events/CAS остаются источником истины. Нет второго mailbox/task store.
    Новые projections — удаляемые индексы. Exactly-once неизвестных side effects
    не обещается. Prepared без доказанного результата не переисполняется.
@@ -267,7 +268,7 @@ rename занятого чата с revision conflict, каталог >50, от�
 | `agents.list(query?, agent_id?)` | Saved participants и runtime status своей области | Реализовано, v3 |
 | `agents.spawn(title, initial_message?, expect_reply?)` | Создание ordinary thread, отдельно optional intake/request | Реализовано, v2 |
 | `agents.send(agent_id, text, expect_reply?, reply_to?)` | Durable intake, корреляция и явные ответы | Реализовано, v4 |
-| `agents.wait(timeout_seconds?, requests?, mode?)` | Следующее сообщение или any/all ответов на свои запросы | Transient v3, этап 2a; durable suspension впереди |
+| `agents.wait(timeout_seconds?, requests?, mode?)` | Следующее сообщение или any/all ответов на свои запросы | Durable v4, 2b.2 In Review; длительность 1–10 секунд сохранена |
 | `agents.pause` | Остановка продвижения на безопасной границе | Этап 3 |
 | `agents.resume` | Продолжение сохранённого ожидания/agent pause с проверкой полномочий | Этап 3 |
 | `agents.cancel` | Отмена выполнения с отдельным подтверждением terminal state | Этап 3 |
@@ -285,7 +286,7 @@ request использует ID исходного сообщения, отде�
 не нужна. В Matches поле request_id обозначает ID исходного сообщения, message_id —
 ID ответа. Ответ ссылается на полученное сообщение и проверенного отправителя;
 его цепочка не зависит от более поздних обсуждений. Корреляция переживает restart,
-само ожидание — пока нет. Control tools будут принимать semantic agent_id; runtime
+сохранённый wait продолжается явно в том же Run (2b.2). Control tools будут принимать semantic agent_id; runtime
 закрепляет exact Run при admission и отклоняет замену Run перед dispatch.
 User Stop/restart pause не снимается peer-командой без пользовательского разрешения.
 
@@ -296,7 +297,7 @@ User Stop/restart pause не снимается peer-командой без п�
 | 1. Каталог/spawn | `AgentConversationScope`, `AgentCommunicationService.Spawn`; `ChatSessionService.PrepareAgentChat`; Workspace scope binding; catalog/skill; удаление presence bridge/leases | Работа без views, сохранение provenance, общий recursive budget, truthful partial receipt. Риск: binding/права при закрытом target. Локальные проверки пройдены; Office/controller evidence отдельно |
 | 2a. Корреляция | Existing Prepared/Accepted + input provenance, source recipient verification и Inbox matcher. Реализовано после 1 | Ранние/применённые ответы учитываются, any/all различаются, нет чужих match/потери сигнала, unrelated/human/policy input не выдаётся за ответ. 22 целевые проверки проходят |
 | 2b.1. Повтор ожидания | Реализован typed timeout progress через существующий terminal result; общий kernel не парсит имя tool/body. Зависит от 2a | Четвёртый одинаковый timeout исполняется; JSON/ChatStore replay сохраняет различие, остальные repeat guards и run limits действуют. 23 agent communication + 1 kernel wait + 15 tool runtime checks проходят; Windows отдельно |
-| 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; ещё не реализовано | Сохраняемый suspension освобождает worker/document gate; resume даёт terminal wait result тому же accepted call. Не обходить текущий запрет восстановления незавершённых exchanges; crash/deadline/cancel проверяются отдельно |
+| 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; реализовано, In Review | Waiting + PendingToolWait в прежних events/CAS; явный resume того же call/Run, абсолютный deadline, однократный учёт. Exact chat lease остаётся за живым Run, рабочий поток и document gate свободны. Shutdown сохраняет wait, Stop отменяет живой wait. Непроверенная Windows document binding остаётся открытым gate |
 | 3. Run control/лимиты | Existing run owner/leases/input channel, typed pause/resume/cancel; глобальный scheduler admission и budgets. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. Справедливость очереди и лимиты параллельных Run проверены |
 | 4a. Организация чатов | Optional group events/projection, creator в headers/DTO; `group`, целевой `chat.rename`, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
 | 4b. Поручения | Optional assignment events и bounded projection; `resolve`. Зависит от 2–3, membership не обязателен | Смена ролей без смены identity; finish не закрывает поручение; terminal assignment не доказывает внешний эффект без evidence |
@@ -307,10 +308,14 @@ User Stop/restart pause не снимается peer-командой без п�
 Inspector. Лимит 8 созданий на causal chain — ограничитель разрастания, не глобальный
 лимит одновременно работающих Run. Новых LLM-запросов для discovery/наблюдения нет.
 Большие каталоги читаются через headers, без историй; model output ограничен 50 peers.
-В этапе 2a добавлена durable correlation. Сам wait всё ещё ограничен 1–10 секундами
-в текущем Run; await не держит рабочий поток/Office gate, но Run/queue ownership ещё
-не освобождается как отдельный durable suspension. В 2b.1 исправлен generic guard
-для повторяющихся elapsed timeout receipts; незавершённый wait по-прежнему не сохраняется.
+В этапе 2a добавлена durable correlation, в 2b.1 — typed timeout progress, в 2b.2 —
+сохраняемый незавершённый wait. Диапазон 1–10 секунд сохранён; расширение длительности
+не требуется для проверки восстановления. Освобождать exact chat ownership во время
+wait отклонено: это допускает второй Run и конфликт контекста. Владение чатом не
+равно занятому потоку/Office gate или будущему execution slot. Тот же coordinator
+продолжает kernel после события/таймера. При restart resume остаётся явным; peer input
+не снимает recovery pause. Wait v4/skill v6 используют прежнюю форму JSON; старые
+admissions требуют актуального контракта, скрытой миграции suspended calls нет.
 
 ## Семантика и проверяемые границы
 
@@ -325,8 +330,9 @@ Inspector. Лимит 8 созданий на causal chain — ограничи�
 | Завершить Run | Kernel terminal lifecycle/outcome | Все поручения или работа группы выполнены |
 | Завершить поручение | Этап 4: terminal assignment event и ссылки на результат | Внешние эффекты подтверждены без read-back |
 
-Ожидания этапа 2b: durable reply, следующее сообщение после cursor, terminal Run,
-terminal assignment, any/all набора. Один matcher и journal registration; timeout
+В 2b.2 реализованы durable reply any/all и следующий доступный peer input через
+прежний Inbox matcher; отдельного event cursor для произвольных событий нет.
+Terminal Run/assignment и dependency graph — последующие этапы 3–4. Timeout
 по сохранённому UTC deadline, отдельные cancelled/expired/failed outcomes. Polling
 оставляется только bounded reconnect сверке, не основному механизму.
 Wait dependency graph отделён от communication graph. Цикл без внешнего источника
@@ -344,7 +350,7 @@ Wait dependency graph отделён от communication graph. Цикл без �
 | Plan/Deny или выключенный auto approval | Policy ceiling; pre-intake отказ, safe-boundary deferral, real Workspace child run без broader global approval |
 | Busy recipient, user FIFO, текущая запись | Existing boundary/input channel; no cancellation/replay in-flight tool; queue tests |
 | Stop/restart | Durable paused queue; shared-controller recovery и explicit resume checks |
-| Ответ пришёл раньше wait; несколько отправителей | 2a: ранний/applied ответ, any/all, частичный timeout, late signal, restart и настоящий Workspace spawn→reply→filtered wait; durable suspension — 2b |
+| Ответ пришёл раньше wait; несколько отправителей | 2a: ранний/applied ответ, any/all, частичный timeout, late signal, restart и настоящий Workspace spawn→reply→filtered wait; durable suspension — 2b.2, cold recovery в Office service/Workspace |
 | Циклическое ожидание/timeout/cancel | Этапы 2–3: dependency graph и восстановление exact suspension |
 | Chess: согласовать роли, создать/сыграть игру | После 2–6: несколько ordinary threads, проверяемый игровой артефакт/правила ходов, смена ролей, close/restore, запись в Inspector; пока не qualified |
 | Общий Office/file ресурс и unknown mutation | Этап 6: contention, stale revision, подготовка до dispatch, read-back и запрет автоматического replay |

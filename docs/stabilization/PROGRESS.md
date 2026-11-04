@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Мультиагенты: сохраняемое ожидание того же Run — In Review, 2026-11-04
+
+Этап 2b.2 реализован host-neutral. Owner: Core kernel/events/ToolRuntime и Application
+Conversations; Office/Workspace используют прежних owners и queue ports. Waiting +
+PendingToolWait сохраняют original run/turn/step/call, accepted policy и абсолютный
+UTC deadline в events/CAS. Suspension не даёт terminal tool result; бюджет списывается
+один раз. Возобновление проверяет историю, binding и CAS; остальные незавершённые
+инструменты не replay. История прежних Run остаётся контекстом и не попадает в IDs
+и finish evidence текущего Run. Exact chat lease сохраняется у живого Run, UI/потоки/Office
+gate не удерживаются. Вкладки на выполнение не влияют.
+
+Stop отменяет живое ожидание, штатный shutdown и process loss сохраняют незавершённый
+wait. После восстановления нужен явный Resume, в том числе при пустом Inbox. Office
+проверяет исходную document session; Workspace сохраняет accepted model/settings.
+Ожидание ответа после старого deadline не становится успешным задним числом; сообщение
+при этом не теряется. Wait v4/skill v6, прежняя форма JSON и диапазон 1–10 секунд.
+
+Проверки: 25 agent communication, 12 inbox, 15 tool runtime, 13 kernel continuation/
+cancellation/wait и 1 core pack — проходят (66). Реальные ChatStore reload и scripted
+Workspace HTTP проверяют crash/close → explicit resume без повторного call/start/charge;
+VM Inbox проверяет existing кнопку; старый workspace-chat-v8 VM падает и на HEAD
+из-за отсутствующего ConversationView в fixture (Risk Register). Windows/Office/controller/WebView2, binding после
+переоткрытия документа и live-model cooperation остаются открытыми.
+Далее этап 3: control tools, pause/resume authority и лимиты параллельных Run;
+Run/assignment wait targets, dependency graph, группы и Inspector ещё не реализованы.
+
 ## Мультиагенты: повтор ожидания без ложного no-progress — In Review, 2026-11-04
 
 Документация группировки/удаления согласована и сохранена в `1a3e0c50`.
@@ -11,8 +37,7 @@ ToolRuntime проверяет read/no-effect contract, ProgressTracker учит
 Проверены четыре последовательных реальных ожидания через Office service/fake adapter,
 ChatStore reload, JSON replay и лимиты. 23 agent communication, 1 kernel wait,
 15 tool runtime checks проходят. Это host-neutral evidence, Windows/Office открыто.
-Далее 2b.2: сохраняемый suspension незавершённого wait и продолжение того же Run;
-пока они не реализованы. Группировка/UI также остаются в плане.
+На момент 2b.1 сохраняемый suspension ещё не был реализован; результат 2b.2 — выше. Группировка/UI также остаются в плане.
 
 ## Мультиагенты: корреляция запросов и ответов — In Review, 2026-11-04
 

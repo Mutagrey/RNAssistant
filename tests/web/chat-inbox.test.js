@@ -95,6 +95,11 @@ context.renderChatSessions = () => {};
   for (const label of ["Продолжить очередь", "Отправить сейчас", "Редактировать", "Удалить"])
     assert.ok(nodes.some(n => n.textContent === label), label);
   assert.ok(nodes.some(n => n.textContent === "<script>unsafe</script>"), "message rendered as plain text");
+  const waitUnits = context.buildPendingInputUnits(null, { box: { items: [], paused: true, hasPendingWait: true } });
+  assert.equal(waitUnits.length, 1, "saved wait can resume with an empty inbox");
+  assert.ok(walk(waitUnits[0].render()).some(node => node.textContent === "Продолжить ожидание"));
+  assert.equal(context.buildPendingInputUnits(null, { box: { items: [], paused: false, hasPendingWait: true } }).length, 0,
+    "live wait does not add a pause banner");
   context.state.messages = [];
   context.reconcileChatInputEchoes("b", []);
   context.applyChatInbox({ chatId: "b", revision: 5, running: true, phase: "executing", items: [

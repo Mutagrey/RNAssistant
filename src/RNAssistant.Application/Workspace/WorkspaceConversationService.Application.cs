@@ -1,3 +1,4 @@
+using RNAssistant.Application.Conversations;
 using System;
 using System.IO;
 using System.Linq;
@@ -102,7 +103,7 @@ namespace RNAssistant.Runtime
                 Office = IsPluginSource(workspace) || session.LastRun?.OfficeTarget == null ? null : new WorkspaceOfficeContext {
                     Host = session.LastRun.OfficeTarget.Host,
                     DocumentTitle = session.LastRun.OfficeTarget.DocumentTitle },
-                CanSteer = preview.CanSteer, PendingInputs = ReadPendingInputs(session),
+                CanSteer = preview.CanSteer, HasPendingWait = ConversationInboxService.HasPendingWait(session), PendingInputs = ReadPendingInputs(session),
                 RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,
                 ContextCheckpointId = ContextCompactionRuntime.ActiveCheckpoint(session)?.Id,
                 ToolStepsUsed = session.LastRun?.KernelState?.Summary.ToolStepsUsed, Limits = session.LastRun?.KernelState?.Limits,

@@ -38,7 +38,7 @@ namespace RNAssistant.Core.Persistence
         {
             var limits = fact.Limits ?? (previous == null ? null : previous.Limits);
             var active = fact.Kind == AgentRunEventKind.ToolStarted ? fact.ToolContext
-                : fact.Kind == AgentRunEventKind.ToolCompleted || fact.Kind == AgentRunEventKind.SummaryChanged
+                : fact.Kind == AgentRunEventKind.ToolCompleted || fact.Kind == AgentRunEventKind.ToolWaiting || fact.Kind == AgentRunEventKind.SummaryChanged
                     ? null : previous == null ? null : previous.InFlightTool;
             return new AgentRunState(fact.Summary, limits, active,
                 fact.ConsecutiveReflections, fact.ReflectionFeedbackIssued, fact.FinishCorrection);

@@ -16,7 +16,7 @@ using RNAssistant.Office.Tools;
 namespace RNAssistant.Office.Runtime
 {
     // Production composition for direct typed handlers.
-    internal sealed class NativeToolRuntimeAdapter : IToolRuntime
+    internal sealed class NativeToolRuntimeAdapter : IToolRuntime, IToolWaitRuntime
     {
         private readonly ToolRuntime _runtime;
         private readonly bool _trace;
@@ -394,7 +394,8 @@ namespace RNAssistant.Office.Runtime
             try
             {
                 var record = await _runtime.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
-                Trace(context, SessionEventKind.ToolExecutionCompletedObservation, record.Outcome.ToString());
+                if (record.Outcome != ToolExecutionOutcome.Waiting)
+                    Trace(context, SessionEventKind.ToolExecutionCompletedObservation, record.Outcome.ToString());
                 return record;
             }
             catch (Exception ex)
@@ -403,6 +404,13 @@ namespace RNAssistant.Office.Runtime
                     ex is OperationCanceledException ? "cancelled" : "threw");
                 throw;
             }
+        }
+
+        public async Task<ToolExecutionRecord> CompleteWaitAsync(PendingToolWait pending, CancellationToken token)
+        {
+            var record = await _runtime.CompleteWaitAsync(pending, token).ConfigureAwait(false);
+            Trace(pending.Context, SessionEventKind.ToolExecutionCompletedObservation, record.Outcome.ToString());
+            return record;
         }
 
         internal ToolRunResult ExecuteManual(ToolInvocation command,

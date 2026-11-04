@@ -36,6 +36,14 @@ namespace RNAssistant.Office.Services
             return record;
         }
 
+        public async Task<ToolExecutionRecord> CompleteWaitAsync(PendingToolWait pending, CancellationToken token)
+        {
+            var record = await _nativeTools.CompleteWaitAsync(pending, token).ConfigureAwait(false);
+            var materialization = _nativeTools.TakeMaterialization(record);
+            if (materialization != null) _results[pending.Context.Call.Id] = materialization;
+            return record;
+        }
+
         private static ToolExecutionRecord MissingRegistration(
             ToolExecutionContext context)
         {

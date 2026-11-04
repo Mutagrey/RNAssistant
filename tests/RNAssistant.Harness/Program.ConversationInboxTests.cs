@@ -558,6 +558,8 @@ namespace RNAssistant.Harness
             public bool IsClosing { get { return false; } }
             public ChatSession Reload(string chatId) { ReloadCount++; return Store.Load(chatId); }
             public void ValidateBinding(ChatSession session, ConversationInput input) { }
+            public Task ContinueWaitAsync(ChatSession session, CancellationToken token)
+            { throw new InvalidOperationException("No saved wait in the queue fixture."); }
             public Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token)
             { throw new InvalidOperationException("No pending confirmation in the queue fixture."); }
             public async Task StartTurnAsync(ChatSession session, ConversationInput input, CancellationToken token)

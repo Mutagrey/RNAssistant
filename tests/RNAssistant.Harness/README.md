@@ -69,13 +69,25 @@ Core compiler and LLM wire builder in both JSON modes: exact sender/correlation,
 titles, unchanged durable body, no display scope, and one runtime authority instruction.
 The Workspace round trip also checks a real request after messaging is disabled;
 retained peer history cannot lose its authority boundary or prescribe unavailable tools.
-This does not yet test durable suspension/restoration of a waiting Run.
+The earlier 2a slice tests durable correlation; unfinished waits are covered below.
 Slice 2b.1 adds `agent communication: repeated wait timeout progress is persisted`:
 four real one-second waits through Office service/ToolRuntime/kernel, then ChatStore
 reload. The total is now 23 communication checks. `kernel: timed wait` covers replay,
 ordinary run budgets and preservation of unchanged-read/error/unknown guards even
 when the result JSON is identical. `tool runtime:` adds 15 relevant regressions.
-These tests restore completed facts, not an unfinished waiting Run.
+Slice 2b.2 adds `agent communication: durable Office wait recovery` (interruption after
+real CAS commit, fresh Inbox/service, explicit same-call continuation) and
+`agent communication: durable Workspace wait recovery` (scripted HTTP, graceful
+runtime close, fresh service, empty-queue Resume). The latter checks bind-before-resume
+against the current leased projection. There are now 25 communication checks; the
+correlation test also rejects a reply newer than a restored deadline.
+`kernel: durable wait` checks JSON restore, one start/terminal/charge, unchanged IDs,
+stale cursor rejection, changed binding and cancellation. Previous-turn calls remain
+model context but never enter the current Run's accepted IDs/counts/finish evidence. Ordinary stopped/confirmation
+continuations, cancellation and ToolRuntime gates remain separate regression filters.
+`tests/web/chat-inbox.test.js` checks the reused resume control with an empty waiting
+Inbox and its absence during live waiting. Windows Office controller and document
+session rebinding are still separate, unqualified evidence.
 Quota reads use existing indexed canonical events without trace
 materialization. Relevant regressions: `inbox:`, `workspace: queue`, `unified policy:`,
 `tool pack: core`, `settings: invalid numeric`, `storage: indexed input journal`.

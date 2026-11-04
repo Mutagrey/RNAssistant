@@ -974,7 +974,7 @@ namespace RNAssistant.Application
                 var chats = Conversations.ListSessions(workspace);
                 if (chats.Any(item => {
                     var lifecycle = Conversations.GetSession(workspace, item.Id)?.LastRun?.KernelState?.Summary?.Lifecycle;
-                    return lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.AwaitingConfirmation;
+                    return lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.Waiting || lifecycle == RunLifecycle.AwaitingConfirmation;
                 })) throw new PluginException("project_chat_busy", "Stop or resolve active project chats before deleting their history.");
                 foreach (var chat in chats)
                     if (!Conversations.DeleteSession(workspace, chat.Id))

@@ -169,7 +169,7 @@ namespace RNAssistant.Application.Conversations
                         box.Revision = record.Event.Sequence;
                         box.ViewRevision++;
                     }
-                    if (box.Inputs.Any(IsPending)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
+                    if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
                     _inboxes.Add(key, box);
                 }
             }
@@ -232,7 +232,7 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync) return new ConversationInboxSnapshot
             {
                 ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision, Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase, Running = box.Running || box.Worker,
-                ActiveRun = box.Running, Paused = box.Paused, PauseReason = box.PauseReason,
+                ActiveRun = box.Running, HasPendingWait = HasPendingWait(box.Session), Paused = box.Paused, PauseReason = box.PauseReason,
                 Items = Undelivered(box.Session, box.Inputs, null).Select(Clone).ToList(),
                 Receipts = requested.Count == 0 ? new List<ConversationInboxReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
                     .Select(input => new ConversationInboxReceipt { Id = input.Id, OperationId = input.OperationId,
@@ -363,7 +363,7 @@ namespace RNAssistant.Application.Conversations
                     throw new ArgumentException("Steer requires its exact run target.", nameof(input));
                 if (AlreadyAcceptedForTarget(box, input, runId, null)) return;
                 if (!box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId ||
-                    box.Session.LastRun.KernelState?.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Running)
+                    (box.Session.LastRun.KernelState?.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Running && box.Session.LastRun.KernelState?.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Waiting))
                     throw new InvalidOperationException("Запуск уже завершает работу. Обновите чат и отправьте сообщение снова.");
                 SubmitLocked(box, input);
             }
@@ -517,7 +517,7 @@ namespace RNAssistant.Application.Conversations
                 box.ViewRevision++;
             }
             // A recovered claim is never a license to dispatch another run.
-            if (box.Inputs.Any(IsPending))
+            if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session))
             {
                 box.Paused = true;
                 box.PauseReason = "После перезапуска";
@@ -626,7 +626,7 @@ namespace RNAssistant.Application.Conversations
             i.AcceptedRunId == null && i.Delivery == InputDelivery.Queue); }
 
         internal async Task<AgentWaitResult> WaitForAgentsAsync(ChatSession session, string runId,
-            int timeoutSeconds, CancellationToken token, IReadOnlyDictionary<string, AgentChatAddress> requests = null,
+            DateTime deadlineUtc, CancellationToken token, IReadOnlyDictionary<string, AgentChatAddress> requests = null,
             bool all = false)
         {
             var box = Get(session);
@@ -638,7 +638,8 @@ namespace RNAssistant.Application.Conversations
             }
             using (var delayCancellation = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
-                var timeout = Task.Delay(timeoutSeconds * 1000, delayCancellation.Token);
+                var remaining = deadlineUtc - DateTime.UtcNow;
+                var timeout = Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, delayCancellation.Token);
                 try
                 {
                     while (true)
@@ -655,9 +656,9 @@ namespace RNAssistant.Application.Conversations
                             var ready = pending.TakeWhile(i => CanIncludePeerInput(box, i)).ToArray();
                             if (requests == null)
                             {
-                                if (ready.Length > 0) return CompleteAgentWait(box, AgentWaitStatus.MessagesReady, ready);
-                                if (pending.Length > 0) return new AgentWaitResult { Status = AgentWaitStatus.InputPending };
-                                if (timeout.IsCompleted) return new AgentWaitResult { Status = AgentWaitStatus.TimedOut };
+                                if (ready.Any(input => input.CreatedUtc <= deadlineUtc)) return CompleteAgentWait(box, AgentWaitStatus.MessagesReady, ready);
+                                if (pending.Length > ready.Length) return new AgentWaitResult { Status = AgentWaitStatus.InputPending };
+                                if (timeout.IsCompleted || DateTime.UtcNow >= deadlineUtc) return CompleteAgentWait(box, AgentWaitStatus.TimedOut, ready);
                             }
                             else
                             {
@@ -666,7 +667,7 @@ namespace RNAssistant.Application.Conversations
                                 // state check and signal capture below share the intake lock.
                                 var readyIds = new HashSet<string>(ready.Select(input => input.Id), StringComparer.Ordinal);
                                 var matches = box.Inputs.Where(input => input.Status == ConversationInputStatus.Applied || readyIds.Contains(input.Id))
-                                    .Where(input => MatchesReply(input, requests))
+                                    .Where(input => input.CreatedUtc <= deadlineUtc && MatchesReply(input, requests))
                                     .GroupBy(input => input.AgentCommunication.ReplyTo, StringComparer.Ordinal)
                                     .Select(group => group.First()).Select(input => new AgentReplyMatch {
                                         RequestId = input.AgentCommunication.ReplyTo, MessageId = input.AgentCommunication.MessageId,
@@ -679,7 +680,7 @@ namespace RNAssistant.Application.Conversations
                                 // unrelated input is not evidence that the requested reply arrived.
                                 if (ready.Any(input => !MatchesReply(input, requests)) || pending.Length > ready.Length)
                                     return CompleteAgentWait(box, AgentWaitStatus.InputPending, ready, matches);
-                                if (timeout.IsCompleted)
+                                if (timeout.IsCompleted || DateTime.UtcNow >= deadlineUtc)
                                     return CompleteAgentWait(box, AgentWaitStatus.TimedOut, ready, matches);
                             }
                             changed = box.InputChanged.Task;
@@ -798,6 +799,7 @@ namespace RNAssistant.Application.Conversations
         }
         private static bool HasRunnableLocked(Inbox box, ChatSession session)
         {
+            if (HasPendingWait(session)) return !box.Paused;
             var awaiting = PendingConfirmationId(session) != null;
             return box.Inputs.Any(i => i.Status == ConversationInputStatus.Pending &&
                 CanSchedule(session, i, awaiting) && (!awaiting || i.Delivery == InputDelivery.Steer) &&
@@ -809,6 +811,9 @@ namespace RNAssistant.Application.Conversations
                 input.AcceptedRunId == session.LastRun?.RunId &&
                 (input.PendingId == null || input.PendingId == PendingConfirmationId(session));
         }
+        internal static bool HasPendingWait(ChatSession session)
+        { return session?.LastRun?.KernelState?.Summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Waiting; }
+
         internal static string PendingConfirmationId(ChatSession session)
         {
             var summary = session?.LastRun?.KernelState?.Summary;

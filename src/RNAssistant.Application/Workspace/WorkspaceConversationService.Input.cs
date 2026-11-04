@@ -48,7 +48,7 @@ namespace RNAssistant.Runtime
             if (duplicate != null) return duplicate;
             var session = GetSession(workspace, request.SessionId);
             if (session?.LastRun == null || !request.Enqueue && session.LastRun.RunId != request.SteerRunId ||
-                session.LastRun.KernelState?.Summary.Lifecycle != RunLifecycle.Running)
+                (session.LastRun.KernelState?.Summary.Lifecycle != RunLifecycle.Running && session.LastRun.KernelState?.Summary.Lifecycle != RunLifecycle.Waiting))
                 throw new InvalidOperationException("Запуск уже завершён или изменился. Обновите чат перед отправкой уточнения.");
             cancellationToken.ThrowIfCancellationRequested();
             // Only the lease owner appends intake against its live session cursor.
@@ -85,7 +85,14 @@ namespace RNAssistant.Runtime
                 await WorkspaceRunControl.SendInboxAsync(_paths.WorkspaceDirectory, session.LastRun.RunId, command, token).ConfigureAwait(false);
                 return;
             }
-            using (ReserveRun(session.Id, false, token))
+            ConversationRunReservation reservation;
+            try { reservation = ReserveRun(session.Id, false, token); }
+            catch (WorkspaceSessionLeaseUnavailableException) when (ConversationInboxService.HasPendingWait(session))
+            {
+                await WorkspaceRunControl.SendInboxAsync(_paths.WorkspaceDirectory, session.LastRun.RunId, command, token).ConfigureAwait(false);
+                return;
+            }
+            using (reservation)
             {
                 session = GetSession(workspace, command.SessionId);
                 ChangeInbox(session, command);
@@ -147,6 +154,14 @@ namespace RNAssistant.Runtime
                     await _owner.ExecuteInputAsync(_workspace, new WorkspaceSubmitInputRequest {
                         SessionId = session.Id, RequestId = input.OperationId, Message = input.Text },
                         _settings.Clone(), _key, _progress, token, _digest, queuedInput: input).ConfigureAwait(false);
+            }
+            public async Task ContinueWaitAsync(ChatSession session, CancellationToken token)
+            {
+                ValidateBinding(session, new ConversationInput { DocumentRuntimeKey = _workspace.WorkspaceId });
+                using (_owner._runtimeUseLease?.Invoke())
+                    await _owner.ContinueOwnedAsync(_workspace, new WorkspaceRunControlRequest {
+                        SessionId = session.Id, RunId = session.LastRun.RunId, Cursor = ConversationEventFeed.Cursor(session) },
+                        _settings, _key, _progress, token, _digest).ConfigureAwait(false);
             }
             public Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token)
             { throw new InvalidOperationException("Сначала подтвердите или отклоните ожидающее действие."); }

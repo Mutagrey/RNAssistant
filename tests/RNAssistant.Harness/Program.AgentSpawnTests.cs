@@ -206,7 +206,7 @@ namespace RNAssistant.Harness
                 inbox.Bind(receiver);
                 service.Send(inbox, sender, 20, "sender-run", "lower-approval", AgentChatAddress.IdFor(receiver.Id), "Work", () => { });
                 AssertEqual(0, inbox.TakeRunInput(receiver).Count, "restricted input is not included in a run with automatic approval");
-                AssertEqual(AgentWaitStatus.InputPending, service.WaitAsync(inbox, receiver, 20, "receiver-run", 1, CancellationToken.None)
+                AssertEqual(AgentWaitStatus.InputPending, WaitForAgentTest(service, inbox, receiver, 20, "receiver-run", 1, CancellationToken.None)
                     .GetAwaiter().GetResult().Status, "wait yields to queued input needing another permission policy");
                 var input = inbox.Get(receiver).Inputs.Single();
                 var policy = ConversationRunPolicy.ForSession(receiver, true).ForPeerInput(input.AgentCommunication);

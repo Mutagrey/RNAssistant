@@ -70,7 +70,7 @@ function applyChatInbox(inbox, deferRender) {
       "Ожидают отправки: " + (inbox.items || []).length + (inbox.paused ? ". Очередь приостановлена." : ".");
     renderSendControls();
     if (!deferRender && (!old || old.epoch !== inbox.epoch || old.revision !== inbox.revision ||
-        old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || changed)) renderChatInbox();
+        old.hasPendingWait !== inbox.hasPendingWait || old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || changed)) renderChatInbox();
   }
   if (!deferRender && (endedRun || !old || old.running !== inbox.running)) renderChatSessions();
   if (component && !deferRender) component.inbox(old, inbox);
@@ -309,10 +309,10 @@ function buildPendingInputUnits(component, source) {
   var chatId = component ? component.target.sessionId : state.activeChatId, box = source ? source.box : chatInbox(chatId), units = [];
   var history = component ? component.snapshot().messages : state.messages;
   var items = (source ? box.items : chatInputEchoes(chatId)).filter(function (item) { return !item.Id || !(history || []).some(function (message) { return messageId(message) === item.Id; }); });
-  if (box.paused && (box.items || []).length) units.push({ key: "live:inbox-paused", transient: true, signature: JSON.stringify([box.pauseReason, box.running]), render: function () {
+  if (box.paused && ((box.items || []).length || box.hasPendingWait)) units.push({ key: "live:inbox-paused", transient: true, signature: JSON.stringify([box.pauseReason, box.running, box.hasPendingWait]), render: function () {
     var note = document.createElement("div"); note.className = "inbox-pause";
     var reason = document.createElement("span"); reason.textContent = box.pauseReason || "Очередь приостановлена"; note.appendChild(reason);
-    note.appendChild(inboxButton("Продолжить очередь", async function () {
+    note.appendChild(inboxButton(box.hasPendingWait ? "Продолжить ожидание" : "Продолжить очередь", async function () {
       try { if (source) await source.resume(); else applyChatInbox(await send("resumeChatInbox", { chatId: chatId })); }
       catch (error) { if (component) component.notice(error); else if (state.activeChatId === chatId) $("inboxStatus").textContent = error.message; }
     }));

@@ -175,9 +175,8 @@ namespace RNAssistant.Application.Conversations
             return new AgentPeerPage { Peers = peers.Take(50).ToArray(), Truncated = peers.Length > 50 };
         }
 
-        internal async Task<AgentWaitResult> WaitAsync(ConversationInboxService inbox, ChatSession session,
-            int limit, string runId, int timeoutSeconds, CancellationToken token,
-            string[] requests = null, string mode = "any")
+        internal AgentWaitCondition PrepareWait(ConversationInboxService inbox, ChatSession session, int limit,
+            int timeoutSeconds, string[] requests, string mode)
         {
             RequireEnabled(limit);
             if (timeoutSeconds < 1 || timeoutSeconds > 10)
@@ -186,6 +185,14 @@ namespace RNAssistant.Application.Conversations
                 requests != null && (requests.Length == 0 || requests.Length > 32 ||
                     requests.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 64) || requests.Distinct(StringComparer.Ordinal).Count() != requests.Length))
                 throw new AgentCommunicationException("agent_wait_invalid", "Укажите 1–32 разных message_id запросов и mode any или all.");
+            ResolveWaitRequests(inbox, session, requests);
+            var now = DateTime.UtcNow;
+            return new AgentWaitCondition(now, now.AddSeconds(timeoutSeconds), requests, mode == "all");
+        }
+
+        private static Dictionary<string, AgentChatAddress> ResolveWaitRequests(ConversationInboxService inbox,
+            ChatSession session, string[] requests)
+        {
             Dictionary<string, AgentChatAddress> expected = null;
             if (requests != null)
             {
@@ -199,7 +206,15 @@ namespace RNAssistant.Application.Conversations
                     expected.Add(id, request.Target);
                 }
             }
-            var result = await inbox.WaitForAgentsAsync(session, runId, timeoutSeconds, token, expected, mode == "all").ConfigureAwait(false);
+            return expected;
+        }
+
+        internal async Task<AgentWaitResult> CompleteWaitAsync(ConversationInboxService inbox, ChatSession session,
+            int limit, string runId, AgentWaitCondition condition, CancellationToken token)
+        {
+            RequireEnabled(limit);
+            var expected = ResolveWaitRequests(inbox, session, condition.RequestIds.Count == 0 ? null : condition.RequestIds.ToArray());
+            var result = await inbox.WaitForAgentsAsync(session, runId, condition.DeadlineUtc, token, expected, condition.All).ConfigureAwait(false);
             var page = Discover(session, limit);
             result.Peers = page.Peers; result.PeersTruncated = page.Truncated;
             return result;

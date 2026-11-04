@@ -24,7 +24,7 @@ namespace RNAssistant.Office
                 Prepared = !current, SkillCount = selected.Count,
                 ToolCount = current ? snapshot.Tools.Count : 0,
                 Historical = current && session.LastRun?.KernelState?.Summary != null &&
-                    session.LastRun.KernelState.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Running &&
+                    (session.LastRun.KernelState.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Running && session.LastRun.KernelState.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Waiting) &&
                     session.LastRun.KernelState.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.AwaitingConfirmation,
                 Pending = current && (selected.Count != snapshot.Selected.Count || selected.Any(item =>
                     !snapshot.Selected.Any(previous => previous.Id == item.Id && previous.Revision == item.Revision))) };

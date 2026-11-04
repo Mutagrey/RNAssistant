@@ -160,6 +160,11 @@ namespace RNAssistant.Core.Tools
         }
     }
 
+    public interface IWaitingToolHandler
+    {
+        Task<ToolHandlerResult> CompleteWaitAsync(ToolHandlerContext context, AgentWaitCondition condition, CancellationToken cancellationToken);
+    }
+
     public interface IToolHandler
     {
         Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken);
@@ -303,12 +308,13 @@ namespace RNAssistant.Core.Tools
         // A real bounded event wait reached its deadline. This is runtime
         // progress metadata, not a model claim or evidence of task completion.
         public bool WaitTimedOut { get; private set; }
+        public AgentWaitCondition WaitCondition { get; private set; }
 
         public ToolHandlerResult(ToolResult result, ToolEffectEvidence effect = ToolEffectEvidence.Unreported,
             bool awaitingUser = false, IEnumerable<ResourceEvidence> resourceEvidence = null,
             IEnumerable<ResourceMutationReadBack> resourceReadBack = null,
             ToolRecoveryContract recovery = null, ResourceAuthorityCommit authorityCommit = null, ResourceEffect resourceEffect = null,
-            bool invocationCompleted = false, bool waitTimedOut = false)
+            bool invocationCompleted = false, bool waitTimedOut = false, AgentWaitCondition waitCondition = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (!Enum.IsDefined(typeof(ToolEffectEvidence), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
@@ -335,6 +341,11 @@ namespace RNAssistant.Core.Tools
                 awaitingUser || invocationCompleted || recovery != null || authorityCommit != null || resourceEffect != null ||
                 ResourceEvidence.Count != 0 || ResourceReadBack.Count != 0))
                 throw new ArgumentException("A timed-out wait must be a successful observation without effects or recovery.", nameof(waitTimedOut));
+            if (waitCondition != null && (waitTimedOut || result.Status != ToolResultStatus.Ok || effect != ToolEffectEvidence.None ||
+                awaitingUser || invocationCompleted || recovery != null || authorityCommit != null || resourceEffect != null ||
+                ResourceEvidence.Count != 0 || ResourceReadBack.Count != 0 || result.Resources.Count != 0))
+                throw new ArgumentException("Suspension cannot carry effects or a terminal result.");
+            WaitCondition = waitCondition;
             WaitTimedOut = waitTimedOut;
         }
     }

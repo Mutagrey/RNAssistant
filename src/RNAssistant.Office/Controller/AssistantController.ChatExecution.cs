@@ -59,7 +59,8 @@ namespace RNAssistant.Office
         private void PersistRunCheckpoint(ChatSession session, string runId, string phase, int firstMessageIndex)
         {
             if (!string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
+                !string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(phase, "waiting_agents", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -395,6 +396,8 @@ namespace RNAssistant.Office
             try
             {
                 session = ReloadReservedSession(session);
+                if (ConversationInboxService.HasPendingWait(session))
+                    throw new InvalidOperationException("Сначала продолжите сохранённое ожидание.");
                 ConversationRunPolicy.RequireCurrentSession(session);
                 _inbox.Bind(session);
                 if (input != null && input.InputId != null) _inbox.EnsureCanDispatch(session, input.InputId);

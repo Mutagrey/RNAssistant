@@ -58,10 +58,12 @@ all — каждый. RepliesReady и Matches[{request_id,message_id,agent_id}] 
 а не ложный RepliesReady. Ordinary user FIFO не обходится.
 Проверка durable Inbox и захват сигнала проходят под одним lock: ответ до wait и
 между проверкой/подпиской не теряется. Корреляция восстанавливается из журнала;
-само ожидание после restart не восстанавливается автоматически.
-`agents.wait` contract/binding v3; communication skill v5.0.0.
-Ожидание не держит Office gate, service lock или отдельный worker и отменяется по Stop/cancellation.
-Обычный пользовательский FIFO не обходится; recovery не восстанавливает ожидание.
+само ожидание восстанавливается только по явному действию пользователя.
+`agents.wait` contract/binding v4; communication skill v6.0.0. Wait возвращается один,
+не в batch: его policy не разрешает independent-read batching.
+Ожидание не держит Office gate, service lock или рабочий поток. Exact chat lease и
+владелец очереди остаются за тем же Run; второй Run в этом thread запрещён.
+Stop отменяет живое ожидание. Закрытие вкладки не влияет на него.
 На таймауте модель выбирает работу или повтор ожидания; взаимно ожидающие агенты
 сначала отвечают на вопросы друг друга. Общие настройки run limits не меняются.
 С 2026-11-04 завершившийся по таймеру wait передаёт typed `WaitTimedOut` через handler,
@@ -72,7 +74,26 @@ Kernel не распознаёт имя инструмента или текст
 он сохраняется в обычных terminal events. Wait не сбрасывает защиты других вызовов
 от одинаковых результатов, ошибок и unknown effects. RepliesReady/MessagesReady/
 InputPending не получают исключения; iteration/tool-step limits и Stop сохраняются.
-Это исправление повторов, не сохраняемый suspension незавершённого вызова.
+В 2b.2 незавершённое ожидание тоже сохраняется: `RunLifecycle.Waiting` и `PendingToolWait`
+с исходным ToolExecutionContext и AgentWaitCondition (UTC registration/deadline,
+request IDs и any/all). Источник — прежние chat events/CAS, отдельного store нет.
+Kernel пишет `ToolWaiting`, не ToolCompleted и не model-facing tool result. Шаг
+расходуется один раз; ReadOk/ReadError появляется только при terminal result.
+ConversationRunCoordinator асинхронно продолжает тот же Run/call/step после события
+или срока, с повторной exact policy/binding проверкой и CAS claim. История с иными
+незавершёнными инструментами не допускается к replay.
+
+После аварии либо штатного закрытия runtime сохранённый wait остаётся на паузе,
+без фонового model call. «Продолжить ожидание» работает и с пустой очередью; Office
+проверяет исходную document session, Workspace — workspace, accepted settings и
+model configuration. Потерянная Office document binding не заменяется автоматически.
+Срок не продлевается: ответ с runtime CreatedUtc после deadline не удовлетворяет
+прежнее условие; само сообщение остаётся доступным для следующего шага. Ранние
+ответы до deadline учитываются даже после restart. Stop до получения результата закрывает wait единственным NotDispatched result и
+Cancelled; уже установленный terminal result сохраняется при гонке с отменой. Shutdown
+без установленного terminal result сохраняет Waiting. Повторное продолжение со старым cursor отклоняется.
+Ожидание Run/поручения, peer cancel/pause/resume, dependency graph и общий scheduler
+относятся к следующим этапам.
 Первоначальное воспроизведение и оставшиеся риски — в
 [аудите повторов](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03).
 Поздний ответ автоматически начинает следующий ход. Completed с историческими

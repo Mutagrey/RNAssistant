@@ -323,6 +323,76 @@ namespace RNAssistant.Harness
             AssertEqual(4, result.Summary.IterationsUsed, "the same kernel owns all continuation accounting");
         }
 
+        private static async Task KernelDurableWaitContinuation()
+        {
+            foreach (var mode in new[] { "resume", "cancel", "binding_changed" })
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("wait")), KernelResponse());
+                f.Tools.Policies["wait"] = new ToolPolicySnapshot("wait", "v1", new ToolPolicy(ToolEffect.Read,
+                    ToolVerification.None, false, false, new[] { "agent" }, evidenceEligibility: EvidenceEligibility.None));
+                f.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
+                    ToolExecutionOutcome.Waiting, context.StartedUtc.AddSeconds(1), mayHaveDispatched: false,
+                    evidence: new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.None),
+                    waitCondition: new AgentWaitCondition(context.StartedUtc.AddSeconds(1), context.StartedUtc.AddSeconds(6))));
+                var earlier = new ToolExecutionContext(new ToolCall("earlier-call", "write", "{}"), f.Tools.Policies["write"],
+                    "old-run", "old-turn", "old-step", DateTime.UtcNow, false, 1);
+                var previous = new[] { AgentMessage.User("Earlier task"), AgentMessage.Assistant(new AgentResponse(
+                    ConversationResponse.ExecuteAction, "Earlier action", null, new[] { earlier.Call })),
+                    AgentMessage.ToolResult(KernelRecord(earlier)) };
+                var stopped = await f.Kernel.RunAsync(new AgentRunRequest("run", "turn", "Current task",
+                    new AgentRunLimits(10, 10), previous), CancellationToken.None);
+                AssertEqual(RunLifecycle.Waiting, stopped.Summary.Lifecycle, "suspension is not a completed run");
+                AssertEqual(1, f.Model.Requests.Count, "no model polling while suspended");
+                AssertEqual(0, stopped.Summary.ToolCounts.ReadOk, "suspension is not successful tool evidence");
+                AssertEqual(0, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ToolCompleted), "no false terminal event");
+                var checkpoint = Newtonsoft.Json.JsonConvert.DeserializeObject<AgentRunState>(Newtonsoft.Json.JsonConvert.SerializeObject(
+                    new AgentRunState(stopped.Summary, stopped.Continuation.Limits)));
+                var restored = AgentRunContinuation.RestoreWait(checkpoint, stopped.Continuation.Revision, stopped.AcceptedMessages.Skip(previous.Length));
+                var live = stopped.Continuation;
+                var pending = restored.Summary.PendingWait;
+                if (mode == "resume")
+                {
+                    var write = new ToolExecutionContext(new ToolCall("unsafe", "write", "{}"), f.Tools.Policies["write"],
+                        "run", "turn", "step", pending.Context.StartedUtc, false, 1);
+                    RuntimeThrows<ArgumentException>(() => new PendingToolWait(write, pending.Condition));
+                    RuntimeThrows<ArgumentException>(() => new ToolExecutionRecord(pending.Context, ToolExecutionOutcome.Waiting,
+                        pending.Condition.RegisteredUtc, mayHaveDispatched: true, waitCondition: pending.Condition));
+                }
+                AssertEqual(stopped.Summary.PendingWait.Condition.DeadlineUtc, pending.Condition.DeadlineUtc, "absolute deadline survives reload");
+                KernelCheckpointRejected(() => AgentRunContinuation.RestoreCheckpoint(checkpoint, restored.Revision, restored.AcceptedMessages),
+                    "ordinary checkpoint restore cannot replay an unresolved wait");
+                KernelCheckpointRejected(() => AgentRunContinuation.RestoreWait(checkpoint, restored.Revision,
+                    restored.AcceptedMessages.Concat(new[] { AgentMessage.ToolResult(KernelRecord(pending.Context)) })),
+                    "an already resolved call cannot resume");
+                var completions = 0;
+                f.Tools.OnWait = (wait, token) => {
+                    completions++;
+                    AssertEqual(pending.Context.Call.Id, wait.Context.Call.Id, "same call resumed");
+                    AssertEqual(pending.Condition.DeadlineUtc, wait.Condition.DeadlineUtc, "no deadline reset");
+                    return Task.FromResult(new ToolExecutionRecord(wait.Context, ToolExecutionOutcome.Ok,
+                        wait.Condition.DeadlineUtc, mayHaveDispatched: false,
+                        evidence: new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.None),
+                        result: RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Wait elapsed"), waitTimedOut: true));
+                };
+                if (mode == "binding_changed") f.Tools.Policies["wait"] = f.Tools.Policies["read"];
+                var result = await f.Kernel.ResumeWaitAsync(mode == "resume" ? live : restored, mode == "cancel" ? new CancellationToken(true) : CancellationToken.None);
+                AssertEqual("run", result.Summary.RunId, "same run resumed");
+                AssertEqual("turn", result.Summary.TurnId, "same turn resumed");
+                AssertEqual(0, result.Summary.ToolCounts.WriteOk, "earlier run effects do not become current counts");
+                if (mode == "resume") AssertTrue(f.Model.Requests.Last().AcceptedMessages.Any(message => message.ToolCallId == earlier.Call.Id),
+                    "earlier context is retained without importing its calls into current finish evidence");
+                AssertEqual(1, f.Tools.Calls.Count, "initial handler never re-executed");
+                AssertEqual(mode == "resume" ? 1 : 0, completions, "cancel and changed binding stop before handler");
+                AssertEqual(1, result.Summary.ToolStepsUsed, "wait charged exactly once");
+                AssertEqual(1, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ToolStarted), "no duplicate start");
+                AssertEqual(1, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ToolCompleted), "one terminal fact");
+                AssertTrue(result.Summary.PendingWait == null, "terminal result clears pending wait");
+                AssertEqual(mode == "cancel" ? RunLifecycle.Cancelled : RunLifecycle.Completed, result.Summary.Lifecycle, "terminal lifecycle");
+                await KernelThrowsAsync<RunStoreException>(() => f.Kernel.ResumeWaitAsync(restored, CancellationToken.None));
+                AssertEqual(mode == "resume" ? 1 : 0, completions, "stale resume cannot observe again");
+            }
+        }
+
         private static async Task KernelTimedWaitProgressRetainsLimitsAndGuards()
         {
             var policy = new ToolPolicySnapshot("wait", "wait-v1", new ToolPolicy(ToolEffect.Read,
@@ -1460,7 +1530,7 @@ namespace RNAssistant.Harness
             }
         }
 
-        private sealed class KernelToolFake : IToolRuntime
+        private sealed class KernelToolFake : IToolRuntime, IToolWaitRuntime
         {
             internal readonly List<ToolExecutionContext> Calls = new List<ToolExecutionContext>();
             internal readonly Dictionary<string, ToolPolicySnapshot> Policies = new Dictionary<string, ToolPolicySnapshot>
@@ -1477,6 +1547,9 @@ namespace RNAssistant.Harness
                     ToolEffect.Unclassified, ToolVerification.None, false, false, new[] { "agent" }))
             };
             internal Func<ToolExecutionContext, CancellationToken, Task<ToolExecutionRecord>> OnExecute;
+            internal Func<PendingToolWait, CancellationToken, Task<ToolExecutionRecord>> OnWait;
+            public Task<ToolExecutionRecord> CompleteWaitAsync(PendingToolWait pending, CancellationToken token)
+            { return OnWait(pending, token); }
             internal Action BeforeDescribe;
             private readonly KernelStoreFake _store;
             internal KernelToolFake(KernelStoreFake store) { _store = store; }

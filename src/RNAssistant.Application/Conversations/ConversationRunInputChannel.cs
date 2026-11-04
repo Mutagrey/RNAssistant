@@ -35,7 +35,7 @@ namespace RNAssistant.Application.Conversations
             {
                 var box = _inbox.Get(_session);
                 lock (box.Sync) return box.Accepting &&
-                    _session.LastRun?.KernelState?.Summary.Lifecycle == RunLifecycle.Running;
+                    (_session.LastRun?.KernelState?.Summary.Lifecycle == RunLifecycle.Running || _session.LastRun?.KernelState?.Summary.Lifecycle == RunLifecycle.Waiting);
             }
         }
 

@@ -57,7 +57,7 @@ namespace RNAssistant.Core.Agent
         }
     }
 
-    public enum AgentRunEventKind { Started, ModelStepStarted, ResponseAccepted, ToolStarted, ToolCompleted, SummaryChanged }
+    public enum AgentRunEventKind { Started, ModelStepStarted, ResponseAccepted, ToolStarted, ToolCompleted, SummaryChanged, ToolWaiting }
 
     public sealed class AgentRunEvent
     {
@@ -130,9 +130,23 @@ namespace RNAssistant.Core.Agent
         public static AgentRunContinuation Restore(AgentRunState checkpoint, long revision,
             IEnumerable<AgentMessage> acceptedMessages)
         {
+            return RestorePending(checkpoint, revision, acceptedMessages, false);
+        }
+
+        public static AgentRunContinuation RestoreWait(AgentRunState checkpoint, long revision,
+            IEnumerable<AgentMessage> acceptedMessages)
+        {
+            return RestorePending(checkpoint, revision, acceptedMessages, true);
+        }
+
+        private static AgentRunContinuation RestorePending(AgentRunState checkpoint, long revision,
+            IEnumerable<AgentMessage> acceptedMessages, bool waiting)
+        {
             var summary = checkpoint?.Summary;
             var limits = checkpoint?.Limits;
-            if (summary == null || summary.Lifecycle != RunLifecycle.AwaitingConfirmation || summary.PendingConfirmation == null ||
+            if (summary == null || checkpoint.InFlightTool != null ||
+                (waiting ? summary.Lifecycle != RunLifecycle.Waiting || summary.PendingWait == null
+                    : summary.Lifecycle != RunLifecycle.AwaitingConfirmation || summary.PendingConfirmation == null) ||
                 limits == null || revision < 0 || summary.IterationsUsed > limits.MaxIterations || summary.ToolStepsUsed > limits.MaxToolSteps)
                 throw new InvalidOperationException("A validated pending run summary is required; open a new chat or cancel the pending action.");
             var messages = (acceptedMessages ?? new AgentMessage[0]).ToArray();
@@ -146,7 +160,7 @@ namespace RNAssistant.Core.Agent
             foreach (var message in messages.Where(message => message.Kind == AgentMessageKind.ToolResult))
                 if (!ids.Contains(message.ToolCallId) || !completed.Add(message.ToolCallId))
                     throw new InvalidOperationException("Orphan or duplicate accepted tool result in continuation history.");
-            var pending = summary.PendingConfirmation.Call;
+            var pending = waiting ? summary.PendingWait.Context.Call : summary.PendingConfirmation.Call;
             var original = calls.SingleOrDefault(call => string.Equals(call.Id, pending.Id, StringComparison.OrdinalIgnoreCase));
             if (original == null || original.Name != pending.Name || original.ArgumentsJson != pending.ArgumentsJson ||
                 completed.Contains(pending.Id) || calls.Any(call => call.Id != pending.Id && !completed.Contains(call.Id)))
@@ -216,7 +230,7 @@ namespace RNAssistant.Core.Agent
         {
             Summary = summary;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
-            if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
+            if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation || summary.Lifecycle == RunLifecycle.Waiting)
                 Continuation = new AgentRunContinuation(summary, limits, revision, AcceptedMessages, ids,
                     consecutiveReflections, reflectionFeedbackIssued, finishCorrection);
         }

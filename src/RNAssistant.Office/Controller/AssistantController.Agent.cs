@@ -1,3 +1,4 @@
+using RNAssistant.Application.Conversations;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -191,6 +192,49 @@ namespace RNAssistant.Office
                 StartConversationQueue(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
             }
             return response;
+        }
+
+        private async Task ResumeWaitingRunAsync(ChatSession session, CancellationToken token,
+            Action<string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
+        {
+            var runId = session.LastRun.RunId;
+            CancellationTokenSource cancellation;
+            var lease = StartControllerRun(session, runId, token, out cancellation);
+            RunCausalTrace trace = null;
+            try
+            {
+                session = ReloadReservedSession(session);
+                if (session.LastRun?.RunId != runId || !ConversationInboxService.HasPendingWait(session))
+                    throw new InvalidOperationException("The saved wait changed before continuation.");
+                OfficeDocumentExecutionGuardState.ThrowIfMismatch(_adapter,
+                    new OfficeDocumentExecutionExpectation { Host = session.Host, DocumentKey = session.DocumentKey,
+                        RuntimeDocumentKey = session.LastRun.DocumentRuntimeKey });
+                ConversationRunPolicy.ForAcceptedRun(session);
+                var settings = ResolveChatSettings(session);
+                var context = LoadContext(session);
+                var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
+                var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
+                _inbox.Bind(session);
+                session.LastRun.RuntimeId = _runtimeId;
+                _activeRuns.UpdateSessionSnapshot(session.Id, runId, session);
+                trace = RunCausalTrace.Begin(_eventStore, session);
+                var firstMessage = session.Messages.Count;
+                var runProgress = CreateControllerRunProgress(session, runId, firstMessage, progress, changed);
+                var completion = await _conversationRunService.ResumeWaitAsync(session,
+                    new ConversationRunInput(settings, context, tools, skills, ConversationInputMessage.Latest(session)?.Attachments),
+                    runProgress, RegisterPendingAgentTool, cancellation.Token).ConfigureAwait(false);
+                FinalizeControllerRun(session, firstMessage, 0, runId, completion, null, new List<ChatMessage>());
+            }
+            catch (RunStoreException)
+            {
+                RecoverAfterRunStoreFailure(lease, session, session.Id, ref trace);
+                throw;
+            }
+            finally
+            {
+                _toolCatalog.InvalidateDocumentVbaTools();
+                EndInboxRun(session, lease, ref trace);
+            }
         }
 
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null)

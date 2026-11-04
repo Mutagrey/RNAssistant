@@ -386,7 +386,7 @@ namespace RNAssistant.Runtime
             var session = GetSession(workspace, sessionId);
             if (session == null) throw new InvalidOperationException("Workspace session was not found.");
             var lifecycle = session.LastRun?.KernelState?.Summary?.Lifecycle;
-            if (lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.AwaitingConfirmation ||
+            if ((lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.Waiting) || lifecycle == RunLifecycle.AwaitingConfirmation ||
                 string.Equals(session.LastRun?.Status, "running", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Stop or resolve the active run before changing this chat.");
         }
@@ -531,6 +531,8 @@ namespace RNAssistant.Runtime
                         AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, currentRunOnly: true)),
                         pendingPorts, pendingPorts.Tools, pendingPorts, cancellationToken, rejectPending: true).ConfigureAwait(false);
                 }
+                if (ConversationInboxService.HasPendingWait(session))
+                    throw new InvalidOperationException("Resume the saved wait before starting another run.");
                 if (session.LastRun?.KernelState?.Summary?.Lifecycle == RunLifecycle.AwaitingConfirmation)
                     throw new InvalidOperationException("The pending approval must be resolved before another turn.");
                 if (answers != null)
@@ -649,7 +651,7 @@ namespace RNAssistant.Runtime
                     var result = await ConversationRunCoordinator.RunAsync(
                         new AgentRunRequest(runId, runId, ConversationInputMessage.ModelText(userMessage),
                             new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections), previous),
-                        ports, ports.Tools, ports, control.Token, input: inputChannel).ConfigureAwait(false);
+                        ports, ports.Tools, ports, control.Token, input: inputChannel, suspendOnCancellation: () => _titleLifetime.IsCancellationRequested).ConfigureAwait(false);
                     if (acceptedContract.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptedContract);
@@ -713,7 +715,7 @@ namespace RNAssistant.Runtime
                     // Resume's first persisted kernel checkpoint consumes this
                     // pending confirmation before tool dispatch (or rejection).
                     if (admitted != null && value.Summary?.RunId == run.Summary.RunId &&
-                        value.Summary.Lifecycle == RunLifecycle.Running &&
+                        (value.Summary.Lifecycle == RunLifecycle.Running || value.Summary.Lifecycle == RunLifecycle.Waiting) &&
                         value.Summary.PendingConfirmation == null && value.Cursor != pendingCursor)
                     {
                         admitted();
@@ -733,7 +735,7 @@ namespace RNAssistant.Runtime
                     cancellationToken.ThrowIfCancellationRequested();
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingId, continuation, ports, ports.Tools, ports, control.Token,
-                        rejectPending: !approve, input: inputChannel).ConfigureAwait(false);
+                        rejectPending: !approve, input: inputChannel, suspendOnCancellation: () => _titleLifetime.IsCancellationRequested).ConfigureAwait(false);
                     if (acceptance.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);
@@ -770,7 +772,7 @@ namespace RNAssistant.Runtime
         private void AssessAcceptance(WorkspaceDescriptor workspace, ChatSession session, RunSummary summary,
             WorkspaceRunAcceptance acceptance)
         {
-            var waiting = summary.Lifecycle == RunLifecycle.AwaitingConfirmation ||
+            var waiting = summary.Lifecycle == RunLifecycle.AwaitingConfirmation || summary.Lifecycle == RunLifecycle.Waiting ||
                 summary.Reason == "awaiting_user";
             RefreshAcceptance(_files, _webSnapshots, workspace, session, summary.RunId, acceptance, waiting);
             acceptance.State = acceptance.Error != null ? WorkspaceAcceptanceState.Unknown :
@@ -1986,7 +1988,9 @@ namespace RNAssistant.Runtime
                     throw new InvalidOperationException("Accepted workspace decision has no exact model-attempt origin.");
                 var firstMessage = _session.Messages.Count;
                 _session.LastRun.KernelState = AgentRunState.Apply(_session.LastRun.KernelState, fact);
-                _session.LastRun.Status = fact.Summary.Lifecycle.ToString().ToLowerInvariant();
+                _session.LastRun.Status = fact.Summary.Lifecycle == RunLifecycle.Waiting ? "running" : fact.Summary.Lifecycle.ToString().ToLowerInvariant();
+                if (fact.Summary.Lifecycle == RunLifecycle.Waiting) _session.LastRun.Phase = "waiting_agents";
+                else if (_session.LastRun.Phase == "waiting_agents") _session.LastRun.Phase = null;
                 _session.LastRun.IterationsUsed = fact.Summary.IterationsUsed;
                 _session.LastRun.ToolStepsUsed = fact.Summary.ToolStepsUsed;
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted)
@@ -2037,7 +2041,7 @@ namespace RNAssistant.Runtime
                     message.UsageJson = _lastCompletion.UsageJson;
                 }
                 ChatMessage activity = null;
-                if (fact.Kind == AgentRunEventKind.ToolStarted || fact.Kind == AgentRunEventKind.ToolCompleted)
+                if (fact.Kind == AgentRunEventKind.ToolStarted || fact.Kind == AgentRunEventKind.ToolCompleted || fact.Kind == AgentRunEventKind.ToolWaiting)
                     activity = ProjectToolActivity(fact);
                 if (fact.Kind == AgentRunEventKind.ToolCompleted &&
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
@@ -2158,7 +2162,7 @@ namespace RNAssistant.Runtime
                 else
                 {
                     var record = fact.Execution;
-                    view.Status = record.Outcome == ToolExecutionOutcome.AwaitingConfirmation || record.AwaitingUser
+                    view.Status = record.Outcome == ToolExecutionOutcome.AwaitingConfirmation || record.Outcome == ToolExecutionOutcome.Waiting || record.AwaitingUser
                         ? "waiting" : record.Outcome == ToolExecutionOutcome.Ok ? "completed" : "failed";
                     view.ExecutionStatus = record.Outcome == ToolExecutionOutcome.AwaitingConfirmation
                         ? "awaiting_confirmation" : record.AwaitingUser ? "awaiting_user" : record.Outcome.ToString().ToLowerInvariant();

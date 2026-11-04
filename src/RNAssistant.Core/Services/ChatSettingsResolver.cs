@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Services
         {
             ConversationRunPolicy.RequireCurrentSession(session);
             var lifecycle = session.LastRun?.KernelState?.Summary?.Lifecycle;
-            if (lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.AwaitingConfirmation ||
+            if ((lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.Waiting) || lifecycle == RunLifecycle.AwaitingConfirmation ||
                 string.Equals(session.LastRun?.Status, "running", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Stop or resolve the active run before changing chat preferences.");
         }

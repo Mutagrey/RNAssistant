@@ -31,7 +31,7 @@ namespace RNAssistant.Office
         {
             return new ChatInboxResponse { ChatId = snapshot.ChatId, Epoch = snapshot.Epoch,
                 Revision = snapshot.Revision, Items = snapshot.Items, Paused = snapshot.Paused,
-                PauseReason = snapshot.PauseReason, Phase = snapshot.Phase, Running = snapshot.Running, ActiveRun = snapshot.ActiveRun,
+                PauseReason = snapshot.PauseReason, Phase = snapshot.Phase, Running = snapshot.Running, ActiveRun = snapshot.ActiveRun, HasPendingWait = snapshot.HasPendingWait,
                 Receipts = snapshot.Receipts.Select(item => new ChatInputReceipt { Id = item.Id,
                     OperationId = item.OperationId, Revision = item.Revision, Status = item.Status }).ToList() };
         }
@@ -214,6 +214,13 @@ namespace RNAssistant.Office
                     OfficeDocumentExecutionGuardState.ThrowIfMismatch(_owner._adapter,
                         new OfficeDocumentExecutionExpectation { Host = session.Host,
                             DocumentKey = session.DocumentKey, RuntimeDocumentKey = input.DocumentRuntimeKey });
+            }
+
+            public Task ContinueWaitAsync(ChatSession session, System.Threading.CancellationToken token)
+            {
+                var runId = session.LastRun.RunId;
+                return _owner.ResumeWaitingRunAsync(session, token,
+                    (phase, text, activity) => _progress?.Invoke(runId, phase, text, activity), _changed);
             }
 
             public Task ContinuePendingAsync(ChatSession session, string pendingId, System.Threading.CancellationToken token)

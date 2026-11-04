@@ -199,8 +199,9 @@
         return Object.assign({}, item, { AcceptedRunId: item.RunId,
           Delivery: item.Delivery || "Steer", Status: item.Status || "Pending" });
       });
-      var inboxSource = { box: { items: queue, running: status === "running", runId: field(snapshot, "runId"), activeRun: status === "running" || !!chat.pendingId,
-        paused: status !== "running" && !chat.pendingId },
+      var pendingWait = !!field(snapshot, "hasPendingWait"), waitActive = !!field(snapshot, "canSteer");
+      var inboxSource = { box: { items: queue, hasPendingWait: pendingWait, running: pendingWait ? waitActive : status === "running", runId: field(snapshot, "runId"), activeRun: status === "running" || !!chat.pendingId,
+        paused: pendingWait ? !waitActive : status !== "running" && !chat.pendingId },
         change: function (action, item, text) { return presentation.invoke("updateInbox", { action: action, item: item, text: text }); },
         appendDraft: function (text) { return presentation.invoke("appendDraft", text); },
         resume: function () { return presentation.invoke("updateInbox", { action: "resumeChatInbox" }); } };

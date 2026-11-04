@@ -24,7 +24,7 @@ namespace RNAssistant.Runtime
                 receipt.Status = WorkspaceCancellationStatus.StaleState;
             else if (session.LastRun.KernelState == null)
                 receipt.Status = WorkspaceCancellationStatus.Unconfirmed;
-            else if (session.LastRun.KernelState.Summary.Lifecycle != RunLifecycle.Running)
+            else if ((session.LastRun.KernelState.Summary.Lifecycle != RunLifecycle.Running && session.LastRun.KernelState.Summary.Lifecycle != RunLifecycle.Waiting))
                 receipt.Status = WorkspaceCancellationStatus.AlreadyStopped;
             else receipt.Status = await WorkspaceRunControl.SendAsync(_paths.WorkspaceDirectory, request, cancellationToken).ConfigureAwait(false);
             return receipt;
@@ -51,29 +51,36 @@ namespace RNAssistant.Runtime
                 ConversationRunPolicy.ForAcceptedRun(session);
                 settings = ChatSettingsResolver.ResolveAcceptedRun(settings, session);
                 ValidateContinuationSettings(session, settings, modelDigest);
+                RegisterAgentScope(workspace, settings, apiKeyProvider);
                 if (session.LastRun.InterruptedToolId != null || session.LastRun.InterruptedEffectPossible ||
                     session.Messages.Any(item => item.RunId == request.RunId && item.ProtocolMessage && item.ExcludeFromModelContext))
                     throw new InvalidOperationException("An interrupted tool exchange requires explicit inspection/new input, not same-run continuation.");
-                var continuation = AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0,
-                    RestoreAcceptedHistory(session, currentRunOnly: true));
+                var waiting = ConversationInboxService.HasPendingWait(session);
+                var history = RestoreAcceptedHistory(session, currentRunOnly: true);
+                var continuation = waiting ? AgentRunContinuation.RestoreWait(session.LastRun.KernelState, 0, history)
+                    : AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace,
                     session, settings, apiKeyProvider, progress, acceptance, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value),
-                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics);
-                _chats.CloseOpenSteps(session, request.RunId, "interrupted", "Explicit continuation after the previous invocation stopped.");
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
+                if (!waiting) _chats.CloseOpenSteps(session, request.RunId, "interrupted", "Explicit continuation after the previous invocation stopped.");
                 // The kernel's first mandatory append claims this cursor. No new
                 // input, run ID, budget or accepted tool call is manufactured.
                 acceptance.State = acceptance.Requested ? WorkspaceAcceptanceState.Pending : WorkspaceAcceptanceState.NotRequested;
                 acceptance.Error = null;
                 session.LastRun.Phase = null;
                 session.LastRun.CurrentAction = null;
-                using (var control = OpenRunControl(session, runReservation, cancellationToken))
+                using (var input = new WorkspaceInputChannel(this, session, workspace))
+                using (var control = OpenRunControl(session, runReservation, cancellationToken, input))
                 {
+                    // Bind this leased session before the resume append. A queue
+                    // worker may still hold an older projection of the same chat.
+                    _conversationInbox.Resume(session);
                     var result = await ConversationRunCoordinator.ContinueAsync(continuation,
-                        ports, ports.Tools, ports, control.Token).ConfigureAwait(false);
+                        ports, ports.Tools, ports, control.Token, input, () => _titleLifetime.IsCancellationRequested).ConfigureAwait(false);
                     if (acceptance.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);
@@ -96,7 +103,7 @@ namespace RNAssistant.Runtime
             try
             {
                 return new WorkspaceRunControl(_paths.WorkspaceDirectory, session.Id, session.LastRun.RunId,
-                    cursor => session.LastRun.KernelState?.Summary.Lifecycle == RunLifecycle.Running &&
+                    cursor => (session.LastRun.KernelState?.Summary.Lifecycle == RunLifecycle.Running || session.LastRun.KernelState?.Summary.Lifecycle == RunLifecycle.Waiting) &&
                         session.Revision > initialRevision && ConversationEventFeed.Cursor(session) == cursor,
                     () => LocalModelProgress(session), run,
                     input == null ? null : new Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt>(input.Submit),

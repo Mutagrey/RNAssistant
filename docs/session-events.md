@@ -29,8 +29,16 @@ it inherits that message's causal chain, not whichever unrelated input arrived l
 Matching uses canonical Inbox metadata (including applied inputs) and the source's
 recorded request recipient. The state check and wake-signal capture share intake's
 lock, so early replies are retained and cannot fall between check/subscription.
-This is durable correlation, not a durable waiting Run: no new wait journal,
-automatic restart continuation or tool replay is introduced in 2a.
+Stage 2a adds durable correlation. Stage 2b.2 persists the unfinished wait in the
+same run summary: Waiting + PendingToolWait (original execution context and a bounded
+AgentWaitCondition). ToolWaiting updates the existing activity using MessageUpdated;
+it is not ToolExecutionFinished and supplies no model-facing terminal result.
+The existing CAS append claims a continuation while retaining Waiting until its
+single terminal result commits. Run/turn/step/call identities, deadline and budgets
+survive reload. No separate wait journal/store or automatic tool replay is introduced.
+An idle recovered Inbox with a pending wait is paused even when it has no inputs.
+Only explicit resume restores the read-only observation; changed bindings fail closed.
+Shutdown leaves an unresolved wait durable; user cancellation resolves it as cancelled.
 
 Completed timeouts now carry optional `ToolExecutionProgress.WaitTimedOut` through
 the existing terminal result/activity facts. Replay preserves the distinction from

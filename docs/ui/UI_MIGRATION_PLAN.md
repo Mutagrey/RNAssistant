@@ -1,5 +1,14 @@
 # План модернизации production UI
 
+## Durable wait: existing Inbox control — In Review, 2026-11-04
+
+Срез runtime 2b.2 подключает существующую кнопку Resume к сохранённому Waiting Run
+в Office/Workspace/plugin. Typed hasPendingWait разрешает кнопку при пустом Inbox;
+живой wait не получает дополнительный banner. Новый Inspector/группы/цвета этим не
+начинаются. Application владеет продолжением, Web — общей presentation; геометрия
+не меняется. Empty-Inbox/live-state покрыты `chat-inbox.test.js`. Windows controller,
+exact document session и визуальное WebView2 ревью остаются открытыми.
+
 ## Представление совместной работы — Proposed, 2026-11-04
 
 Пользователь отклонил насыщенный макет и уточнил scope: имя, небольшой цветовой

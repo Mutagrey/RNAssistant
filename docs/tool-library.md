@@ -81,11 +81,15 @@ No model polling or document gate is held during the wait. On timeout, the model
 uses peer statuses to choose useful work or another wait; timeout does not finish
 the run. Repeated elapsed timeouts are distinguished by typed runtime progress and
 do not hit the unchanged-result guard. Immediate replies/input retain normal guards;
-iteration/tool-step limits still apply. This does not restore an unfinished wait
-after restart. Details: [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
+iteration/tool-step limits still apply. Wait is issued alone, never in a batch.
+Its unresolved call and absolute UTC deadline persist with the same Run. Explicit
+user continuation after restart revalidates the exact binding and resumes only that
+observation; it does not resend messages or replay other tools. User Stop cancels a
+live wait; runtime shutdown preserves it. An expired deadline is not renewed, and
+late replies remain input without retroactively satisfying that deadline. Details: [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
 
 Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v4`,
-`conversation.agents.spawn.v2`, `conversation.agents.wait.v3`. Stale admissions must
+`conversation.agents.spawn.v2`, `conversation.agents.wait.v4`. Stale admissions must
 explicitly reload the current contract. Send/spawn are managed conversation writes
 available in Agent and Plan, without a document authority observer or per-message
 approval. Recipients retain their own exact policies and the sender's recorded

@@ -60,6 +60,7 @@ namespace RNAssistant.Office.Services
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
         private readonly Action<ChatSession> _saved;
         private readonly ConversationInboxService _inbox;
+        private readonly Func<bool> _suspendOnCancellation;
         private readonly ChatResourceIngestionService _ingestion;
 
         public ConversationRunService(IOfficeApplicationAdapter adapter, OfficeToolExecutor toolExecutor,
@@ -70,7 +71,7 @@ namespace RNAssistant.Office.Services
             IConversationStore conversationStore, IEventStore eventStore, LlmCompletionDelegate completeAsync,
             ContextCompactionService contextCompactionService,
             Func<IMaterializedModelProtocol> modelProtocolFactory = null, Action<ChatSession> saved = null, ConversationInboxService inbox = null,
-            ChatResourceIngestionService ingestion = null)
+            ChatResourceIngestionService ingestion = null, Func<bool> suspendOnCancellation = null)
         {
             _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
             _toolExecutor = toolExecutor ?? throw new ArgumentNullException(nameof(toolExecutor));
@@ -81,6 +82,7 @@ namespace RNAssistant.Office.Services
             _attachmentAnalysisService = new AttachmentAnalysisService(completeAsync);
             _saved = saved;
             _inbox = inbox;
+            _suspendOnCancellation = suspendOnCancellation;
             _ingestion = ingestion;
         }
 
@@ -100,6 +102,8 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken, bool appendUserMessage = true)
         {
             ConversationRunPolicy.RequireCurrentSession(session);
+            if (ConversationInboxService.HasPendingWait(session))
+                throw new InvalidOperationException("Resume the saved wait before starting another run.");
             settings = settings ?? new AppSettings();
             ConversationProtocolContext.EnsureCurrentHistory(session);
             mode = ValidateMode(mode, session);
@@ -131,7 +135,7 @@ namespace RNAssistant.Office.Services
             {
                 var result = await ConversationRunCoordinator.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
                     user == null ? text : ConversationInputMessage.ModelText(user), new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections)),
-                    ports, ports, ports, cancellationToken, ports).ConfigureAwait(false);
+                    ports, ports, ports, cancellationToken, ports, _suspendOnCancellation).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }
@@ -153,7 +157,21 @@ namespace RNAssistant.Office.Services
                 progress, pendingToolRegistrar, cancellationToken, command, refreshModelInput, continuation.Revision))
             {
                 var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
-                    pendingId, continuation, ports, ports, ports, cancellationToken, supersedePending, ports).ConfigureAwait(false);
+                    pendingId, continuation, ports, ports, ports, cancellationToken, supersedePending, ports, suspendOnCancellation: _suspendOnCancellation).ConfigureAwait(false);
+                return ports.Result(result.Summary);
+            }
+        }
+
+        internal async Task<ChatTurnResult> ResumeWaitAsync(ChatSession session, ConversationRunInput input,
+            Action<string, string, ChatActivity> progress, PendingToolRegistrar registrar, CancellationToken token)
+        {
+            ConversationRunPolicy.RequireCurrentSession(session);
+            ConversationRunPolicy.ForAcceptedRun(session);
+            var continuation = ConversationProtocolContext.RestoreWaitContinuation(session, _toolExecutor.Payloads);
+            using (var ports = CreatePorts(ValidateMode(session.Mode, session), LatestUserRequest(session), session, input,
+                progress, registrar, token, revision: continuation.Revision))
+            {
+                var result = await ConversationRunCoordinator.ContinueAsync(continuation, ports, ports, ports, token, ports, _suspendOnCancellation).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }

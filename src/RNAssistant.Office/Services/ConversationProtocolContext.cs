@@ -127,14 +127,30 @@ namespace RNAssistant.Office.Services
                 message.Activity.ToolCallId == pending.Call.Id);
             if (activity == null || !string.Equals(activity.Activity.ConfirmationCatalogSha256, pending.Policy.Revision, StringComparison.Ordinal))
                 throw HistoryFailure("Ожидающее действие не связано с сохранённым fingerprint каталога.");
-            var userIndex = session.Messages.FindLastIndex(ConversationInputMessage.IsUserInput);
-            if (userIndex < 0 || !string.Equals(session.Messages[userIndex].RunId, state.Summary.TurnId, StringComparison.Ordinal))
-                throw HistoryFailure("Confirmation continuation does not match the latest user turn.");
+            return RestorePendingHistory(session, state, payloads, false);
+        }
+
+        internal static AgentRunContinuation RestoreWaitContinuation(ChatSession session, RNAssistant.Core.Storage.ChatBlobStore payloads = null)
+        {
+            EnsureCurrentHistory(session);
+            var state = session.LastRun?.KernelState;
+            if (state?.Summary.PendingWait == null || state.Summary.RunId != session.LastRun.RunId ||
+                state.Summary.TurnId != session.LastRun.TurnId)
+                throw HistoryFailure("The saved wait does not belong to the current run.");
+            return RestorePendingHistory(session, state, payloads, true);
+        }
+
+        private static AgentRunContinuation RestorePendingHistory(ChatSession session, RNAssistant.Core.Persistence.AgentRunState state,
+            RNAssistant.Core.Storage.ChatBlobStore payloads, bool waiting)
+        {
+            var userIndex = session.Messages.FindIndex(message =>
+                (ConversationInputMessage.IsUserInput(message) || message.AgentCommunication?.Sender != null) && message.RunId == state.Summary.TurnId);
+            if (userIndex < 0) throw HistoryFailure("Continuation has no original input turn.");
             var history = new List<AgentMessage> { AgentMessage.User(ConversationInputMessage.ModelText(session.Messages[userIndex])) };
             for (var index = userIndex + 1; index < session.Messages.Count; index++)
             {
                 var message = session.Messages[index];
-                if (message.Activity != null) continue;
+                if (message.Activity != null || message.RuntimeProjection) continue;
                 if (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
                 {
                     message = RNAssistant.Core.Storage.AcceptedCallPayloadService.Hydrate(message, payloads);
@@ -142,6 +158,8 @@ namespace RNAssistant.Office.Services
                     if (!parsed.Success) throw HistoryFailure("Cannot reconstruct accepted calls: " + parsed.Error);
                     history.Add(AgentMessage.Assistant(parsed.Response));
                 }
+                else if (ConversationInputMessage.IsUserInput(message) || message.AgentCommunication?.Sender != null)
+                    history.Add(AgentMessage.User(ConversationInputMessage.ModelText(message)));
                 else if (message.ProtocolMessage && !string.IsNullOrWhiteSpace(message.ToolCallId))
                 {
                     ToolResultWireReadResult wire; string error;
@@ -152,7 +170,8 @@ namespace RNAssistant.Office.Services
                         message.ExecutionProgress, message.ResourceEvidence, message.ResourceEffect));
                 }
             }
-            try { return AgentRunContinuation.Restore(state, session.Revision, history); }
+            try { return waiting ? AgentRunContinuation.RestoreWait(state, session.Revision, history)
+                : AgentRunContinuation.Restore(state, session.Revision, history); }
             catch (InvalidOperationException ex) { throw HistoryFailure(ex.Message); }
         }
 

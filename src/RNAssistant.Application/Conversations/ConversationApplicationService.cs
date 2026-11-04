@@ -10,6 +10,7 @@ namespace RNAssistant.Application.Conversations
         bool IsClosing { get; }
         ChatSession Reload(string chatId);
         void ValidateBinding(ChatSession session, ConversationInput input);
+        Task ContinueWaitAsync(ChatSession session, CancellationToken token);
         Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token);
         Task StartTurnAsync(ChatSession session, ConversationInput input, CancellationToken token);
         void Changed(ChatSession session);
@@ -30,6 +31,7 @@ namespace RNAssistant.Application.Conversations
             _runs = runs ?? throw new ArgumentNullException(nameof(runs));
         }
 
+        internal bool IsClosing { get { return _work.IsClosing; } }
         internal bool HasWorkers { get { return _work.HasWorkers; } }
         internal Task Drained { get { return _work.Drained; } }
         internal Task CloseAsync() { return _work.CloseAsync(); }
@@ -56,6 +58,11 @@ namespace RNAssistant.Application.Conversations
                             // input completes, or after Stop has paused retained work.
                             if (!_inbox.HasRunnable(session)) break;
                             session = port.Reload(session.Id);
+                            if (ConversationInboxService.HasPendingWait(session))
+                            {
+                                await port.ContinueWaitAsync(session, token).ConfigureAwait(false);
+                                continue;
+                            }
                             var input = _inbox.TakeNext(session);
                             if (input == null) break;
                             port.ValidateBinding(session, input);

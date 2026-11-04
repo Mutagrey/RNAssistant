@@ -6,7 +6,7 @@ using RNAssistant.Core.Tools;
 namespace RNAssistant.Core.Agent
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum RunLifecycle { Running, Completed, AwaitingConfirmation, Cancelled, Failed }
+    public enum RunLifecycle { Running, Completed, AwaitingConfirmation, Cancelled, Failed, Waiting }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum ExecutionHealth { Clean, Errors, Unknown }
 
@@ -32,7 +32,7 @@ namespace RNAssistant.Core.Agent
         internal ToolCounts Add(ToolExecutionRecord record)
         {
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation ||
-                record.Outcome == ToolExecutionOutcome.NotDispatched) return this;
+                record.Outcome == ToolExecutionOutcome.NotDispatched || record.Outcome == ToolExecutionOutcome.Waiting) return this;
             var write = record.Context.Policy.MayHaveSideEffects;
             var ok = record.Outcome == ToolExecutionOutcome.Ok;
             var unknown = write && record.Outcome == ToolExecutionOutcome.Unknown;
@@ -44,6 +44,23 @@ namespace RNAssistant.Core.Agent
                     WriteError + (write && !ok && !unknown ? 1 : 0),
                     WriteUnknown + (unknown ? 1 : 0));
             }
+        }
+    }
+
+    public sealed class PendingToolWait
+    {
+        public ToolExecutionContext Context { get; private set; }
+        public RNAssistant.Core.Models.AgentWaitCondition Condition { get; private set; }
+
+        [JsonConstructor]
+        public PendingToolWait(ToolExecutionContext context, RNAssistant.Core.Models.AgentWaitCondition condition)
+        {
+            if (context == null || condition == null || context.Policy.Policy == null ||
+                context.Policy.MayHaveSideEffects || context.Policy.RequiresConfirmation || context.Policy.IndependentLocalRead ||
+                context.Policy.Policy.EvidenceEligibility != EvidenceEligibility.None || context.IsConfirmed ||
+                context.PreparedStateJson != null || condition.RegisteredUtc < context.StartedUtc)
+                throw new ArgumentException("Only an effect-free event observation may suspend a run.");
+            Context = context; Condition = condition;
         }
     }
 
@@ -106,14 +123,18 @@ namespace RNAssistant.Core.Agent
         public string AssistantMessage { get; private set; }
         public string Reason { get; private set; }
         public PendingConfirmation PendingConfirmation { get; private set; }
+        public PendingToolWait PendingWait { get; private set; }
 
         [JsonConstructor]
         internal RunSummary(string runId, string turnId, RunLifecycle lifecycle, ToolCounts toolCounts,
-            int iterationsUsed, int toolStepsUsed, string assistantMessage, string reason, PendingConfirmation pendingConfirmation)
+            int iterationsUsed, int toolStepsUsed, string assistantMessage, string reason, PendingConfirmation pendingConfirmation, PendingToolWait pendingWait = null)
         {
             if (string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || toolCounts == null ||
                 !Enum.IsDefined(typeof(RunLifecycle), lifecycle) || iterationsUsed < 0 || toolStepsUsed < 0 ||
-                (lifecycle == RunLifecycle.AwaitingConfirmation && pendingConfirmation == null))
+                (lifecycle == RunLifecycle.AwaitingConfirmation && pendingConfirmation == null) ||
+                (lifecycle == RunLifecycle.Waiting && pendingWait == null) ||
+                (pendingWait != null && (pendingConfirmation != null || pendingWait.Context.RunId != runId ||
+                    pendingWait.Context.TurnId != turnId || toolStepsUsed < 1)))
                 throw new ArgumentException("Incomplete runtime summary.");
             RunId = runId;
             TurnId = turnId;
@@ -124,6 +145,7 @@ namespace RNAssistant.Core.Agent
             AssistantMessage = assistantMessage ?? string.Empty;
             Reason = reason;
             PendingConfirmation = pendingConfirmation;
+            PendingWait = pendingWait;
         }
     }
 }

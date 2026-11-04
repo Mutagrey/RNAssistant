@@ -55,7 +55,7 @@ namespace RNAssistant.Core.Tools
         }
     }
 
-    public enum ToolExecutionOutcome { Ok, Error, Unknown, AwaitingConfirmation, NotDispatched }
+    public enum ToolExecutionOutcome { Ok, Error, Unknown, AwaitingConfirmation, NotDispatched, Waiting }
 
     // Small terminal metadata carried by the existing accepted result event.
     // Bodies, resource evidence and effects retain their existing owners.
@@ -181,6 +181,7 @@ namespace RNAssistant.Core.Tools
         public string ConfirmationDataJson { get; private set; }
         public bool AwaitingUser { get; private set; }
         public bool WaitTimedOut { get; private set; }
+        public RNAssistant.Core.Models.AgentWaitCondition WaitCondition { get; private set; }
         public int ToolStepsConsumed { get; private set; }
         public ToolExecutionEvidence Evidence { get; private set; }
         public System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> ResourceEvidence { get; private set; }
@@ -199,8 +200,16 @@ namespace RNAssistant.Core.Tools
             System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             RNAssistant.Core.Models.ResourceEffect resourceEffect = null, string authorityCommitId = null,
             System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null, bool wasCancelled = false, bool waitTimedOut = false)
+            ToolRecoveryContract recovery = null, bool wasCancelled = false, bool waitTimedOut = false, RNAssistant.Core.Models.AgentWaitCondition waitCondition = null)
         {
+            if ((outcome == ToolExecutionOutcome.Waiting) != (waitCondition != null) ||
+                waitCondition != null && (mayHaveDispatched || waitTimedOut || awaitingUser || result != null || modelResultJson != null ||
+                    resourceEffect != null || authorityCommitId != null || recovery != null ||
+                    (resourceEvidence != null && resourceEvidence.Count != 0) || (resourceReadBack != null && resourceReadBack.Count != 0) ||
+                    evidence == null || evidence.Effect != ToolEffectEvidence.None))
+                throw new ArgumentException("Waiting requires a pure unresolved observation.");
+            if (waitCondition != null) new PendingToolWait(context, waitCondition);
+            WaitCondition = waitCondition;
             Context = context ?? throw new ArgumentNullException(nameof(context));
             if (!Enum.IsDefined(typeof(ToolExecutionOutcome), outcome)) throw new ArgumentOutOfRangeException(nameof(outcome));
             if (completedUtc < context.StartedUtc) throw new ArgumentException("Completion precedes execution start.", nameof(completedUtc));

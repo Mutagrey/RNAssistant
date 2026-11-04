@@ -217,7 +217,8 @@ namespace RNAssistant.Office
                 _eventStore,
                 completion,
                 _contextCompactionService,
-                saved: _chatSessions.NotifySaved, inbox: _inbox, ingestion: _chatResourceIngestion);
+                saved: _chatSessions.NotifySaved, inbox: _inbox, ingestion: _chatResourceIngestion,
+                suspendOnCancellation: () => _lifetimeCancellation.IsCancellationRequested || _conversationApplication.IsClosing);
             _contextService = new ContextService(_adapter);
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);

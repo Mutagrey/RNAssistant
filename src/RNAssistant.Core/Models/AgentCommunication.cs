@@ -1,9 +1,34 @@
 using Newtonsoft.Json;
+using System;
+using System.Linq;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace RNAssistant.Core.Models
 {
+    // Persisted with the accepted call, never inferred from a tool's display text.
+    public sealed class AgentWaitCondition
+    {
+        public DateTime RegisteredUtc { get; private set; }
+        public DateTime DeadlineUtc { get; private set; }
+        public IReadOnlyList<string> RequestIds { get; private set; }
+        public bool All { get; private set; }
+
+        [JsonConstructor]
+        public AgentWaitCondition(DateTime registeredUtc, DateTime deadlineUtc, IEnumerable<string> requestIds = null, bool all = false)
+        {
+            var ids = (requestIds ?? new string[0]).Take(33).ToArray();
+            if (registeredUtc.Kind != DateTimeKind.Utc || deadlineUtc.Kind != DateTimeKind.Utc ||
+                deadlineUtc <= registeredUtc || deadlineUtc - registeredUtc > TimeSpan.FromHours(1) ||
+                ids.Length > 32 || ids.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 64) ||
+                ids.Distinct(StringComparer.Ordinal).Count() != ids.Length || all && ids.Length == 0)
+                throw new ArgumentException("Invalid bounded agent wait condition.");
+            RegisteredUtc = registeredUtc; DeadlineUtc = deadlineUtc;
+            RequestIds = Array.AsReadOnly(ids); All = all;
+        }
+    }
+
     // Runtime-authored provenance. A chat address is public; document authority is not.
     public sealed class AgentChatAddress
     {

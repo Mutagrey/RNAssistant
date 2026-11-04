@@ -87,7 +87,7 @@ namespace RNAssistant.Core.Services
 
         public static ChatActivity TerminalDiagnostic(RunSummary summary)
         {
-            if (summary == null || summary.Lifecycle == RunLifecycle.Running ||
+            if (summary == null || summary.Lifecycle == RunLifecycle.Running || summary.Lifecycle == RunLifecycle.Waiting ||
                 summary.Lifecycle == RunLifecycle.AwaitingConfirmation ||
                 summary.Lifecycle == RunLifecycle.Completed ||
                 summary.Reason == "provider_refused") return null;

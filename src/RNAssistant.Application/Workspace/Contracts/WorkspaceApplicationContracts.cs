@@ -81,6 +81,7 @@ namespace RNAssistant.Runtime.Contracts
         public RunViewState RunViewState { get; set; }
         public string RunId { get; set; }
         [JsonProperty("canSteer")] public bool CanSteer { get; set; }
+        [JsonProperty("hasPendingWait")] public bool HasPendingWait { get; set; }
         [JsonProperty("pendingInputs")] public IReadOnlyList<WorkspacePendingInput> PendingInputs { get; set; }
         public int? IterationsUsed { get; set; }
         public int? ToolStepsUsed { get; set; }

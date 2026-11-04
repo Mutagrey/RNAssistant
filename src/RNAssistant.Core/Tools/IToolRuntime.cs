@@ -4,6 +4,11 @@ using RNAssistant.Core.Agent;
 
 namespace RNAssistant.Core.Tools
 {
+    public interface IToolWaitRuntime
+    {
+        Task<ToolExecutionRecord> CompleteWaitAsync(PendingToolWait pending, CancellationToken cancellationToken);
+    }
+
     public interface IToolRuntime
     {
         // Lookup only; must not dispatch. The adapter owns exact policy/argument

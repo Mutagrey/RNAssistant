@@ -74,5 +74,6 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("phase")] public string Phase { get; set; }
         [JsonProperty("running")] public bool Running { get; set; }
         [JsonProperty("activeRun")] public bool ActiveRun { get; set; }
+        [JsonProperty("hasPendingWait")] public bool HasPendingWait { get; set; }
     }
 }

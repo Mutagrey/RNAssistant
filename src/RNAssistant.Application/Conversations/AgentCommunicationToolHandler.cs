@@ -9,7 +9,7 @@ using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Application.Conversations
 {
-    internal sealed class AgentCommunicationToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler
+    internal sealed class AgentCommunicationToolHandler : IReadOnlyToolHandler, IManagedMutationToolHandler, IWaitingToolHandler
     {
         private readonly AgentCommunicationService _service;
         private readonly ConversationInboxService _inbox;
@@ -20,7 +20,10 @@ namespace RNAssistant.Application.Conversations
         { _service = service; _inbox = inbox; _session = session; _limit = limit; }
 
         private sealed class ErrorData { [JsonProperty("code")] public string Code { get; set; } }
-        public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
+        public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
+        { return Task.FromResult(Execute(context, token)); }
+
+        private ToolHandlerResult Execute(ToolHandlerContext context, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             try
@@ -36,15 +39,8 @@ namespace RNAssistant.Application.Conversations
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Wait)
                 {
                     var wait = JObject.FromObject(context.Arguments).ToObject<WaitRequest>();
-                    var result = await _service.WaitAsync(_inbox, _session, _limit, context.Execution.RunId,
-                        wait.TimeoutSeconds, token, wait.Requests, wait.Mode).ConfigureAwait(false);
-                    return new ToolHandlerResult(RuntimeResult.Ok(
-                        result.Status == AgentWaitStatus.MessagesReady ? "Сообщения поступили; они будут переданы в этом запуске перед следующим шагом модели."
-                        : result.Status == AgentWaitStatus.RepliesReady ? "Указанные ответы получены. Matches подтверждает корреляцию, а не выполнение поручения. Уже обработанные ответы повторно в контекст не добавляются."
-                        : result.Status == AgentWaitStatus.InputPending ? "Есть другой ввод или запрос с более строгими правами. Условие ожидания не подтверждено: обработайте ввод либо завершите ход для очередного запроса."
-                        : "Время ожидания истекло. Проверьте состояния собеседников и выберите дальнейшее действие.",
-                        JsonConvert.SerializeObject(result)), ToolEffectEvidence.None,
-                        waitTimedOut: result.Status == AgentWaitStatus.TimedOut);
+                    var condition = _service.PrepareWait(_inbox, _session, _limit, wait.TimeoutSeconds, wait.Requests, wait.Mode);
+                    return new ToolHandlerResult(RuntimeResult.Ok("Waiting for agent input."), ToolEffectEvidence.None, waitCondition: condition);
                 }
                 var operationId = "agent_" + RNAssistant.Core.Services.ConversationInputJournal.Fingerprint(new[] {
                     _session.Id, context.Execution.RunId, context.Execution.StepId, context.Execution.Call.Id });
@@ -76,6 +72,19 @@ namespace RNAssistant.Application.Conversations
                     JsonConvert.SerializeObject(new ErrorData { Code = error.Code })), ToolEffectEvidence.None,
                     recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.None));
             }
+        }
+        public async Task<ToolHandlerResult> CompleteWaitAsync(ToolHandlerContext context, AgentWaitCondition condition, CancellationToken token)
+        {
+            if (context.Execution.Call.Name != AgentCommunicationToolCatalog.Wait)
+                throw new InvalidOperationException("Only agents.wait may resume an observation.");
+            var result = await _service.CompleteWaitAsync(_inbox, _session, _limit, context.Execution.RunId, condition, token).ConfigureAwait(false);
+            return new ToolHandlerResult(RuntimeResult.Ok(
+                result.Status == AgentWaitStatus.MessagesReady ? "Сообщения поступили; они будут переданы в этом запуске перед следующим шагом модели."
+                : result.Status == AgentWaitStatus.RepliesReady ? "Указанные ответы получены. Matches подтверждает корреляцию, а не выполнение поручения. Уже обработанные ответы повторно в контекст не добавляются."
+                : result.Status == AgentWaitStatus.InputPending ? "Есть другой ввод или запрос с более строгими правами. Условие ожидания не подтверждено: обработайте ввод либо завершите ход для очередного запроса."
+                : "Время ожидания истекло. Проверьте состояния собеседников и выберите дальнейшее действие.",
+                JsonConvert.SerializeObject(result)), ToolEffectEvidence.None,
+                waitTimedOut: result.Status == AgentWaitStatus.TimedOut);
         }
         private sealed class SendRequest
         {

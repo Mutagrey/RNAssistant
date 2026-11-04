@@ -1,5 +1,28 @@
 # Stabilization risk register
 
+## Durable wait — host-neutral, Windows evidence открыт, 2026-11-04
+
+2b.2 сохраняет Waiting в прежнем run journal и возобновляет exact call/Run после
+явного Resume. Проверены отмена, stale cursor, binding mismatch, исходный deadline,
+Office service crash/reload и Workspace graceful shutdown/reload через настоящие
+store/HTTP paths. Найденная stale-session запись при queue resume устранена:
+сначала Bind свежего session под lease, затем resume append. Повторных tool effects,
+нового mailbox и автоматического запуска после restart нет.
+
+Открыто: production Office controller/COM/WebView2, исходная document binding после
+перезапуска Office, визуальная приёмка existing pause banner и live-model cooperation.
+Exact document session не перепривязывается автоматически. Подтверждённая отмена
+сохранённого Waiting без живого owner относится к этапу 3; нынешний Stop в этом
+случае только сохраняет паузу Inbox. Это особенно важно при утрате Office binding.
+Глобальные execution
+slots, peer control, SCC diagnostics и ожидание Run/поручений — этапы 3–4. Текущий
+wait ограничен 1–10 секундами. Host-neutral проверки не закрывают эти gates.
+Соседний `tests/web/workspace-chat-v8.test.js` не доходит до renderer: fixture не
+подключает RNAssistantConversationView (`app-messages.js:7`). Та же ошибка повторена
+с `HEAD:web/js/app-workspace-chat.js` без изменения рабочего дерева. Это отдельный
+дефект VM fixture; в этот runtime-срез его исправление не включено. Общий Inbox VM
+и syntax checks затронутых JS проходят.
+
 ## Повтор тайм-аута agents.wait — исправлен host-neutral, 2026-11-04
 
 Ошибка из аудита ниже закрыта срезом 2b.1: typed WaitTimedOut в terminal progress
@@ -7,8 +30,8 @@
 Office service/fake adapter завершаются без ложного repeat rejection; ChatStore/JSON
 сохраняют факт. Остальные guards и iteration/tool-step limits проверены отдельно.
 23 agent communication + 1 kernel wait + 15 tool runtime checks проходят.
-Сохраняемый suspension/restart, Windows/Office и live-model cooperation ещё открыты;
-эта проверка не квалифицирует их. Контракт — [общение](../conversation-protocol.md#межагентное-общение--2026-11-03).
+Сохраняемый suspension проверен отдельно в 2b.2 выше; Windows/Office и live-model
+cooperation ещё открыты. Сами проверки 2b.1 их не квалифицируют. Контракт — [общение](../conversation-protocol.md#межагентное-общение--2026-11-03).
 
 ## Finish: коррекция и ограничение цикла — 2026-11-04
 

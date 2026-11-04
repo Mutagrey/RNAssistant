@@ -1,5 +1,13 @@
 # Архитектура UI RNAssistant
 
+## Сохранённое ожидание — In Review, 2026-11-04
+
+Application/Core сохраняют Waiting в прежних events/CAS. Web получает typed
+`hasPendingWait` через existing Office Inbox / Workspace snapshot и использует общий
+`buildPendingInputUnits`. UI не создаёт scheduler или checkpoint store. Команда
+existing Resume продолжает прежний Run через queue port; close/dispose view его не
+отменяет. Границы — [conversation](../conversation-protocol.md#межагентное-общение--2026-11-03).
+
 ## Участники, сообщения и совместная работа — Proposed, 2026-11-04
 
 Уточнение пользователя: прежний насыщенный макет отклонён. Лента использует текущий

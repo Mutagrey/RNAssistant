@@ -21,12 +21,22 @@ using RNAssistant.Office;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.WebView;
 using RNAssistant.Core.Llm;
+using RNAssistant.Runtime;
 using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        // Exercise the same preparation/completion boundary without a model loop.
+        private static Task<AgentWaitResult> WaitForAgentTest(AgentCommunicationService service, ConversationInboxService inbox,
+            ChatSession session, int limit, string runId, int timeoutSeconds, CancellationToken token,
+            string[] requests = null, string mode = "any")
+        {
+            var condition = service.PrepareWait(inbox, session, limit, timeoutSeconds, requests, mode);
+            return service.CompleteWaitAsync(inbox, session, limit, runId, condition, token);
+        }
+
         private static ChatSession AgentChat(ChatStore store, string title)
         {
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
@@ -215,6 +225,140 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void AgentDurableWaitWorkspaceRecovery()
+        {
+            WithPluginPaths(paths => {
+                var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
+                var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+                using (var listener = new HttpListener())
+                using (var projects = new RNAssistant.Application.PluginApplicationService(paths))
+                {
+                    var id = projects.CreateProjectWorkspace(new ProjectConnectionRequest {
+                        RootPath = Path.Combine(paths.Root, "durable-wait") }).SelectedWorkspaceId;
+                    var workspace = new WorkspaceStore(paths).OpenConnected(id);
+                    var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "wait-model",
+                        AgentResponseMode = "json_object", StreamResponses = false, SmartChatTitles = false,
+                        AutoCompressContext = false, MaxAgentIterations = 4 };
+                    listener.Prefixes.Add(settings.BaseUrl + "/"); listener.Start();
+                    var modelCalls = 0;
+                    var server = Task.Run(async () => {
+                        for (var i = 0; i < 2; i++)
+                        {
+                            var request = await listener.GetContextAsync().ConfigureAwait(false);
+                            Interlocked.Increment(ref modelCalls);
+                            await SteeringReply(request, i == 0 ? ModelProtocolWire.WriteAcceptedCall("Observe input", null,
+                                new ConversationToolCall { Name = "agents.wait", Arguments = new JObject { ["timeout_seconds"] = 1 } }) :
+                                ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "No reply yet", "Wait finished.",
+                                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.UnableToComplete)).ConfigureAwait(false);
+                        }
+                    });
+                    string chatId;
+                    try
+                    {
+                        using (var runtime = new WorkspaceConversationService(paths))
+                        {
+                            chatId = runtime.CreateSession(workspace, "Saved wait").Id;
+                            {
+                                var initial = runtime.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest { SessionId = chatId,
+                                    RequestId = "wait-original", Message = "Wait for peer" }, settings, () => "test", frame => {
+                                        if (frame.Kind != "ToolWaiting") return;
+                                        Task.Run(async () => { await Task.Delay(50).ConfigureAwait(false); await runtime.CloseAsync().ConfigureAwait(false); });
+                                    }).GetAwaiter().GetResult();
+                                AssertTrue(initial.Summary.Lifecycle == RunLifecycle.Waiting,
+                                    "graceful shutdown retains the unresolved wait: summary=" + JsonConvert.SerializeObject(initial.Summary) + " results=" + string.Join(";", new ChatStore(paths).Load(chatId).Messages.Where(m => m.ExecutionProgress != null).Select(m => m.Content)));
+                            }
+                        }
+                        var store = new ChatStore(paths); var saved = store.Load(chatId); var runId = saved.LastRun.RunId;
+                        AssertTrue(ConversationInboxService.HasPendingWait(saved), "workspace saves unresolved observation");
+                        var callId = saved.LastRun.KernelState.Summary.PendingWait.Context.Call.Id;
+                        using (var resumed = new WorkspaceConversationService(paths))
+                        {
+                            var snapshot = resumed.ReadState(workspace, chatId);
+                            AssertTrue(snapshot.HasPendingWait && !snapshot.CanSteer, "cold snapshot exposes recoverable wait without live ownership");
+                            AssertEqual(1, modelCalls, "inspection does not start another model turn");
+                            resumed.UpdateInboxAsync(workspace, new WorkspaceInboxCommand { SessionId = chatId,
+                                Action = WorkspaceInboxAction.Resume }, settings, () => "test", null, CancellationToken.None).GetAwaiter().GetResult();
+                            AssertTrue(resumed.RunsDrained.Wait(8000), "explicit queue resume completes without queued input");
+                            var finished = store.Load(chatId);
+                            AssertEqual(runId, finished.LastRun.RunId, "workspace keeps original run id");
+                            AssertEqual(RunLifecycle.Completed, finished.LastRun.KernelState.Summary.Lifecycle, "workspace continuation completed: " + new ConversationInputJournal(EventStore(store)).Read(finished, false).LastOrDefault()?.Change.PauseReason);
+                            AssertEqual(1, finished.LastRun.KernelState.Summary.ToolStepsUsed, "restored wait charged once");
+                            var result = finished.Messages.Single(m => m.Activity == null && m.ExecutionProgress != null);
+                            AssertTrue(result.ExecutionProgress.WaitTimedOut, "old deadline resolves as timeout");
+                            AssertEqual(callId, result.ToolCallId, "original workspace call resolved");
+                        }
+                        AssertTrue(server.Wait(3000), "exactly two model requests");
+                    }
+                    finally { listener.Stop(); try { server.Wait(1000); } catch (AggregateException) { } }
+                }
+            });
+        }
+
+        private static void AgentDurableWaitOfficeRecovery()
+        {
+            WithTempExecutor((executor, adapter) => {
+                var store = new ChatStore(FixturePaths.Value);
+                var inbox = new ConversationInboxService(EventStore(store));
+                var service = new AgentCommunicationService();
+                var session = AgentChat(store, "Durable waiting");
+                RegisterAgent(service, AgentEndpoint(session, inbox));
+                executor.AgentCommunication = service; executor.AgentInbox = inbox;
+                var settings = new AppSettings { AgentResponseMode = "json_object", StreamResponses = false,
+                    SmartChatTitles = false, AutoCompressContext = false, MaxAgentIterations = 5 };
+                var calls = 0;
+                LlmCompletionDelegate completion = (config, messages, options, stream, token) => {
+                    var response = ++calls == 1
+                        ? ModelProtocolWire.WriteAcceptedCall("Observe peer replies", null,
+                            new ConversationToolCall { Name = "agents.wait", Arguments = new JObject { ["timeout_seconds"] = 1 } })
+                        : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "No reply yet", "Wait finished.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.UnableToComplete);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
+                };
+                var runtime = new ConversationRunService(adapter, executor, ConversationStore(store), EventStore(store),
+                    completion, null, saved: current => {
+                        if (ConversationInboxService.HasPendingWait(current)) throw new IOException("Simulated process exit after durable suspension");
+                    }, inbox: inbox);
+                inbox.Bind(session);
+                try
+                {
+                    runtime.ExecuteAsync(ChatModes.Agent, "Wait for a peer", session, NewContext(adapter), settings,
+                        executor.GetControllerTools().ToList(), null, null, null, BuiltInSkillProvider.GetSkills(adapter),
+                        CancellationToken.None).GetAwaiter().GetResult();
+                    throw new InvalidOperationException("Expected simulated process interruption");
+                }
+                catch (RunStoreException) { }
+                session = store.Load(session.Id);
+                var pending = session.LastRun.KernelState.Summary.PendingWait;
+                AssertTrue(pending != null, "waiting checkpoint survives the real ChatStore/CAS append");
+                AssertEqual(1, calls, "suspension performs no background model calls");
+                AssertTrue(!ConversationRecoveryService.NeedsInterruption(session.LastRun), "recovery does not classify saved wait as unknown work");
+                var runId = session.LastRun.RunId;
+                inbox = new ConversationInboxService(EventStore(store));
+                AssertTrue(inbox.Snapshot(session).Paused && inbox.Snapshot(session).HasPendingWait, "cold wait exposed as paused even with an empty inbox");
+                AssertTrue(!inbox.HasRunnable(session), "restart cannot resume on its own");
+                RegisterAgent(service, AgentEndpoint(session, inbox)); executor.AgentInbox = inbox;
+                var restored = ConversationProtocolContext.RestoreWaitContinuation(session, executor.Payloads);
+                AssertEqual(pending.Condition.DeadlineUtc, restored.Summary.PendingWait.Condition.DeadlineUtc, "exact deadline restored");
+                inbox.Resume(session);
+                AssertTrue(inbox.HasRunnable(session), "explicit resume schedules wait without queued messages");
+                inbox.Bind(session);
+                runtime = new ConversationRunService(adapter, executor, ConversationStore(store), EventStore(store), completion, null, inbox: inbox);
+                runtime.ResumeWaitAsync(session, new ConversationRunInput(settings, NewContext(adapter),
+                    executor.GetControllerTools().ToList(), BuiltInSkillProvider.GetSkills(adapter)), null, null,
+                    CancellationToken.None).GetAwaiter().GetResult();
+                inbox.EndRun(session);
+                var recovered = store.Load(session.Id);
+                AssertEqual(runId, recovered.LastRun.RunId, "same persisted run continued");
+                AssertEqual(RunLifecycle.Completed, recovered.LastRun.KernelState.Summary.Lifecycle, "continued run completes");
+                AssertEqual(1, recovered.LastRun.KernelState.Summary.ToolStepsUsed, "no second charge");
+                var results = recovered.Messages.Where(m => m.Activity == null && m.ExecutionProgress != null).ToArray();
+                AssertEqual(1, results.Length, "exactly one terminal protocol result");
+                AssertTrue(results[0].ExecutionProgress.WaitTimedOut, "deadline concludes the saved observation");
+                AssertEqual(pending.Context.Call.Id, results[0].ToolCallId, "original call resolved");
+                AssertEqual(2, calls, "one post-wait model step");
+            });
+        }
+
         private static void AgentRepeatedWaitTimeoutProgress()
         {
             WithTempExecutor((executor, adapter) => {
@@ -266,25 +410,25 @@ namespace RNAssistant.Harness
                 var a = AgentChat(store, "Same name"); var b = AgentChat(store, "Same name");
                 a.LastRun = new ChatRunRecord { RunId = "wait-run", TurnId = "wait-turn", ConversationPolicy = ConversationRunPolicy.ForSession(a) };
                 inbox.Bind(a); RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox));
-                var timeout = service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None).GetAwaiter().GetResult();
+                var timeout = WaitForAgentTest(service, inbox, a, 20, "wait-run", 1, CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(AgentWaitStatus.TimedOut, timeout.Status, "timeout returns control rather than ending the run");
                 AssertTrue(inbox.Snapshot(a).ActiveRun, "timeout keeps the run active");
                 b.LastRun = new ChatRunRecord { RunId = "b-wait-run", TurnId = "b-wait-turn", ConversationPolicy = ConversationRunPolicy.ForSession(b) }; inbox.Bind(b);
-                var bothWaiting = new[] { service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None),
-                    service.WaitAsync(inbox, b, 20, "b-wait-run", 1, CancellationToken.None) };
+                var bothWaiting = new[] { WaitForAgentTest(service, inbox, a, 20, "wait-run", 1, CancellationToken.None),
+                    WaitForAgentTest(service, inbox, b, 20, "b-wait-run", 1, CancellationToken.None) };
                 AssertTrue(service.List(a).All(p => p.Status == "waiting"), "both agents can wait without holding each other's locks");
                 AssertTrue(Task.WaitAll(bothWaiting, 3000) && bothWaiting.All(w => w.Result.Status == AgentWaitStatus.TimedOut),
                     "mutual waiting returns control to both models within the bounded interval");
                 inbox.End(b, true, false);
                 using (var cancel = new CancellationTokenSource())
                 {
-                    var waiting = service.WaitAsync(inbox, a, 20, "wait-run", 10, cancel.Token);
+                    var waiting = WaitForAgentTest(service, inbox, a, 20, "wait-run", 10, cancel.Token);
                     AssertEqual("waiting", service.List(a).Single(p => p.IsSelf).Status, "wait has a distinct visible peer status");
                     cancel.Cancel(); var cancelled = false;
                     try { waiting.GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
                     AssertTrue(cancelled && service.List(a).Single(p => p.IsSelf).Status == "working", "cancellation wakes and cleans up the waiter");
                 }
-                var waitingForStop = service.WaitAsync(inbox, a, 20, "wait-run", 10, CancellationToken.None);
+                var waitingForStop = WaitForAgentTest(service, inbox, a, 20, "wait-run", 10, CancellationToken.None);
                 inbox.Pause(a, "stop"); var stopped = false;
                 try { waitingForStop.GetAwaiter().GetResult(); }
                 catch (AgentCommunicationException error) { stopped = error.Code == "agent_wait_unavailable"; }
@@ -297,7 +441,7 @@ namespace RNAssistant.Harness
                 inbox.Resume(a); inbox.Bind(a);
                 inbox.Submit(a, InboxInput("human-first", "next user task", InputDelivery.Queue));
                 service.Send(inbox, b, 20, "b-run", "peer-after-human", AgentChatAddress.IdFor(a.Id), "peer result", () => { });
-                AssertEqual(AgentWaitStatus.InputPending, service.WaitAsync(inbox, a, 20, "wait-run", 1,
+                AssertEqual(AgentWaitStatus.InputPending, WaitForAgentTest(service, inbox, a, 20, "wait-run", 1,
                     CancellationToken.None).GetAwaiter().GetResult().Status, "queued human input takes priority");
                 AssertTrue(!inbox.HasRunInput(a), "wait does not steal the peer input past the human FIFO entry");
                 a.LastRun.KernelState = new AgentRunState(new RunSummary("wait-run", "wait-turn", RunLifecycle.Completed,

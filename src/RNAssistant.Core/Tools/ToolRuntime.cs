@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Tools
 {
     // One call, one captured registration, one handler invocation. The kernel
     // owns response batching, accounting, pending lifecycle and the run store.
-    public sealed class ToolRuntime : IToolRuntime
+    public sealed class ToolRuntime : IToolRuntime, IToolWaitRuntime
     {
         private readonly ToolHandlerRegistry _registry;
         private readonly string _mode;
@@ -60,7 +60,19 @@ namespace RNAssistant.Core.Tools
             catch (Exception ex) { return "The published binding could not be verified: " + ex.Message; }
         }
 
-        public async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
+        public Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken)
+        {
+            return ExecuteAsync(context, cancellationToken, null);
+        }
+
+        public Task<ToolExecutionRecord> CompleteWaitAsync(PendingToolWait pending, CancellationToken cancellationToken)
+        {
+            if (pending == null) throw new ArgumentNullException(nameof(pending));
+            return ExecuteAsync(pending.Context, cancellationToken, pending.Condition);
+        }
+
+        private async Task<ToolExecutionRecord> ExecuteAsync(ToolExecutionContext context, CancellationToken cancellationToken,
+            RNAssistant.Core.Models.AgentWaitCondition wait)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (cancellationToken.IsCancellationRequested) return NotDispatched(context, "Cancelled before handler dispatch.");
@@ -93,6 +105,13 @@ namespace RNAssistant.Core.Tools
             catch (Exception ex) when (ex is JsonException || ex is FormatException || ex is OverflowException || ex is InvalidCastException)
             {
                 return Reject(context, "invalid_arguments", context.Call.Name == ResourceMutationToolCatalog.Patch ? "Invalid patch JSON or argument value." : ex.Message);
+            }
+
+            if (wait != null)
+            {
+                if (!(tool.Handler is IWaitingToolHandler) || policy.MayHaveSideEffects || policy.RequiresConfirmation)
+                    return Reject(context, "wait_binding_changed", "The saved observation cannot be resumed by this handler.");
+                return await ExecuteHandlerAsync(context, policy, tool.Handler, arguments, null, cancellationToken, wait: wait).ConfigureAwait(false);
             }
 
             var planSourceTool = ConversationRunPolicy.IsPlanSourceTool(context.Call.Name, tool.Registration.Binding) &&
@@ -194,7 +213,7 @@ namespace RNAssistant.Core.Tools
 
         private async Task<ToolExecutionRecord> ExecuteHandlerAsync(ToolExecutionContext context, ToolPolicy policy,
             IToolHandler handler, IDictionary<string, object> arguments, string preparedState,
-            CancellationToken cancellationToken, Action parentDispatch = null)
+            CancellationToken cancellationToken, Action parentDispatch = null, RNAssistant.Core.Models.AgentWaitCondition wait = null)
         {
             string mutationAttemptId = null;
             var registered = _registry.Lookup(context.Call.Name);
@@ -239,7 +258,13 @@ namespace RNAssistant.Core.Tools
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var result = await handler.ExecuteAsync(handlerContext, cancellationToken).ConfigureAwait(false);
+                var result = wait == null
+                    ? await handler.ExecuteAsync(handlerContext, cancellationToken).ConfigureAwait(false)
+                    : await ((IWaitingToolHandler)handler).CompleteWaitAsync(handlerContext, wait, cancellationToken).ConfigureAwait(false);
+                if (wait != null && result?.WaitCondition != null)
+                    throw new InvalidOperationException("A resumed observation must produce a terminal result.");
+                if (result?.WaitCondition != null && !(handler is IWaitingToolHandler))
+                    throw new InvalidOperationException("The handler cannot resume its wait.");
                 if (result == null) throw new InvalidOperationException("Handler returned no terminal result.");
                 // Cancellation cannot discard a terminal result/effect that the
                 // handler already established. The kernel observes lifecycle next.
@@ -294,6 +319,9 @@ namespace RNAssistant.Core.Tools
         private static ToolExecutionRecord FromHandler(ToolExecutionContext context, ToolPolicy policy,
             ToolHandlerContext handlerContext, ToolHandlerResult completed)
         {
+            if (completed.WaitCondition != null)
+                return Record(context, ToolExecutionOutcome.Waiting, null, handlerContext.MayHaveDispatched,
+                    completed.Effect, message: "Waiting for agent input.", waitCondition: completed.WaitCondition);
             if (completed.AuthorityCommit != null &&
                 !string.Equals(completed.AuthorityCommit.Effect.Operation, context.Call.Name, StringComparison.Ordinal))
                 throw new InvalidOperationException("Direct authority commit operation differs from the accepted tool call.");
@@ -407,7 +435,7 @@ namespace RNAssistant.Core.Tools
             IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
             ToolRecoveryContract recovery = null, bool wasCancelled = false, RNAssistant.Core.Models.ResourceEffect resourceEffect = null,
-            bool invocationCompleted = false, bool waitTimedOut = false)
+            bool invocationCompleted = false, bool waitTimedOut = false, RNAssistant.Core.Models.AgentWaitCondition waitCondition = null)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
@@ -416,7 +444,7 @@ namespace RNAssistant.Core.Tools
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect, invocationCompleted),
                 result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
                 resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack,
-                recovery: recovery, wasCancelled: wasCancelled, resourceEffect: resourceEffect, waitTimedOut: waitTimedOut);
+                recovery: recovery, wasCancelled: wasCancelled, resourceEffect: resourceEffect, waitTimedOut: waitTimedOut, waitCondition: waitCondition);
         }
 
     }

@@ -17,11 +17,13 @@ namespace RNAssistant.Core.Agent
         private readonly Func<DateTime> _utcNow;
         private readonly Func<string> _newCallId;
         private readonly IRunInputChannel _input;
+        private readonly Func<bool> _suspendOnCancellation;
 
         public AgentKernel(IModelProtocol model, IToolRuntime tools, IRunStore store, Func<DateTime> utcNow = null,
-            Func<string> newCallId = null, IRunInputChannel input = null)
+            Func<string> newCallId = null, IRunInputChannel input = null, Func<bool> suspendOnCancellation = null)
         {
             _input = input;
+            _suspendOnCancellation = suspendOnCancellation;
             _model = model ?? throw new ArgumentNullException(nameof(model));
             _tools = tools ?? throw new ArgumentNullException(nameof(tools));
             _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -85,6 +87,61 @@ namespace RNAssistant.Core.Agent
                 continuation.Revision, continuation.AcceptedMessages);
             var state = new State(checkedContinuation.Summary.RunId, checkedContinuation);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
+            return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<AgentRunResult> ResumeWaitAsync(AgentRunContinuation continuation, CancellationToken cancellationToken)
+        {
+            if (continuation == null) throw new ArgumentNullException(nameof(continuation));
+            // Workspace may carry earlier turns in model context. They are not
+            // accepted calls of this Run and cannot become its finish evidence.
+            var currentIds = new HashSet<string>(continuation.AcceptedCallIds, StringComparer.OrdinalIgnoreCase);
+            var currentHistory = continuation.AcceptedMessages.Where(message => message.Kind == AgentMessageKind.ToolResult
+                ? currentIds.Contains(message.ToolCallId)
+                : message.ToolCalls.Count == 0 || message.ToolCalls.Any(call => currentIds.Contains(call.Id)));
+            var restored = AgentRunContinuation.RestoreWait(new AgentRunState(continuation.Summary, continuation.Limits, null,
+                continuation.ConsecutiveReflections, continuation.ReflectionFeedbackIssued, continuation.FinishCorrection),
+                continuation.Revision, currentHistory);
+            if (!currentIds.SetEquals(restored.AcceptedCallIds))
+                throw new InvalidOperationException("Saved wait history differs from this run's accepted call identities.");
+            var state = new State(restored.Summary.RunId, continuation);
+            var pending = restored.Summary.PendingWait;
+            var context = pending.Context;
+            state.PendingWait = pending;
+            // Claim under CAS while retaining a recoverable wait if the process exits here.
+            await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                state.Summary(RunLifecycle.Waiting, "waiting_agents"))).ConfigureAwait(false);
+            ToolExecutionRecord record;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!context.Policy.Matches(_tools.Describe(context.Call)) || !(_tools is IToolWaitRuntime))
+                    throw new InvalidOperationException("The saved wait binding changed; request a new observation.");
+                record = await ((IToolWaitRuntime)_tools).CompleteWaitAsync(pending, cancellationToken).ConfigureAwait(false);
+                if (record == null || !ReferenceEquals(record.Context, context) ||
+                    record.Outcome == ToolExecutionOutcome.Waiting || record.Outcome == ToolExecutionOutcome.AwaitingConfirmation ||
+                    record.MayHaveDispatched || record.AwaitingUser)
+                    throw new InvalidOperationException("Invalid terminal evidence for a saved wait.");
+            }
+            catch (Exception ex)
+            {
+                var cancelled = ex is OperationCanceledException;
+                record = new ToolExecutionRecord(context, cancelled ? ToolExecutionOutcome.NotDispatched : ToolExecutionOutcome.Error,
+                    CompletionTime(context), ex.Message, mayHaveDispatched: false, wasCancelled: cancelled);
+            }
+            if (record.WasCancelled && _suspendOnCancellation?.Invoke() == true)
+                return await FinishAsync(state, RunLifecycle.Waiting, "waiting_agents",
+                    "Runtime closed; explicitly continue the saved wait.").ConfigureAwait(false);
+            state.PendingWait = null;
+            state.Counts = state.Counts.Add(record);
+            state.Messages.Add(AgentMessage.ToolResult(record));
+            state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false;
+            if (record.Outcome != ToolExecutionOutcome.NotDispatched) state.FinishCorrection = null;
+            await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
+                context.StepId, execution: record)).ConfigureAwait(false);
+            state.Progress.Observe(context.Call, ToolExecutionProgress.Capture(record), record.Message, record.ResourceEvidence, record.ResourceEffect);
+            if (record.WasCancelled || cancellationToken.IsCancellationRequested)
+                return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled while waiting.").ConfigureAwait(false);
             return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
         }
 
@@ -452,6 +509,13 @@ namespace RNAssistant.Core.Agent
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
             state.ToolSteps = (int)Math.Min(int.MaxValue, (long)state.ToolSteps + Math.Max(0, (long)record.ToolStepsConsumed - chargedSteps));
             state.Counts = state.Counts.Add(record);
+            if (record.Outcome == ToolExecutionOutcome.Waiting)
+            {
+                state.PendingWait = new PendingToolWait(context, record.WaitCondition);
+                await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolWaiting,
+                    state.Summary(RunLifecycle.Waiting, "waiting_agents"), stepId, execution: record)).ConfigureAwait(false);
+                return state.Summary(RunLifecycle.Waiting, "waiting_agents", record.Message);
+            }
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
                 state.Pending = new PendingConfirmation(record);
             else
@@ -505,6 +569,7 @@ namespace RNAssistant.Core.Agent
         private async Task<AgentRunResult> FinishAsync(State state, RunLifecycle lifecycle, string reason, string message)
         {
             if (lifecycle != RunLifecycle.AwaitingConfirmation) state.Pending = null;
+            if (lifecycle != RunLifecycle.Waiting) state.PendingWait = null;
             var summary = state.Summary(lifecycle, reason, message);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, summary)).ConfigureAwait(false);
             return new AgentRunResult(summary, state.Limits, state.Revision, state.Messages, state.AcceptedIds,
@@ -547,6 +612,7 @@ namespace RNAssistant.Core.Agent
             internal int ToolSteps;
             internal long Revision;
             internal PendingConfirmation Pending;
+            internal PendingToolWait PendingWait;
             internal int ConsecutiveReflections;
             internal bool ReflectionFeedbackIssued;
             internal FinishCorrection FinishCorrection;
@@ -581,7 +647,7 @@ namespace RNAssistant.Core.Agent
 
             internal RunSummary Summary(RunLifecycle lifecycle = RunLifecycle.Running, string reason = null, string message = null)
             {
-                return new RunSummary(RunId, TurnId, lifecycle, Counts, Iterations, ToolSteps, message, reason, Pending);
+                return new RunSummary(RunId, TurnId, lifecycle, Counts, Iterations, ToolSteps, message, reason, Pending, PendingWait);
             }
         }
     }

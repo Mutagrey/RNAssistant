@@ -85,11 +85,11 @@ namespace RNAssistant.Core.Persistence
             }
             if (activity != null)
             {
-                if (fact.Kind != AgentRunEventKind.ToolStarted && fact.Kind != AgentRunEventKind.ToolCompleted)
+                if (fact.Kind != AgentRunEventKind.ToolStarted && fact.Kind != AgentRunEventKind.ToolCompleted && fact.Kind != AgentRunEventKind.ToolWaiting)
                     throw new InvalidOperationException("Only a tool fact can publish activity.");
                 if (fact.Kind == AgentRunEventKind.ToolCompleted)
                     activity.ExecutionProgress = RNAssistant.Core.Tools.ToolExecutionProgress.Capture(fact.Execution);
-                writes.Add(new ConversationMessageWrite(resultProjection ? SessionOperationTypes.MessageUpdated :
+                writes.Add(new ConversationMessageWrite(resultProjection || fact.Kind == AgentRunEventKind.ToolWaiting ? SessionOperationTypes.MessageUpdated :
                     fact.Kind == AgentRunEventKind.ToolStarted ? SessionOperationTypes.ToolExecutionStarted :
                     SessionOperationTypes.ToolExecutionFinished, activity));
             }
