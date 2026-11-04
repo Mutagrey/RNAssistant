@@ -67,11 +67,72 @@ namespace RNAssistant.Application.Conversations
                 NextAfterSessionId = page.Length > RecoveryPageSize ? page[RecoveryPageSize - 1].Address.ChatId : null };
         }
 
+        private static bool ValidWaitTarget(AgentWaitResumeTarget target)
+        {
+            return target != null && !string.IsNullOrWhiteSpace(target.SessionId) && target.SessionId.Length <= 128 &&
+                !string.IsNullOrWhiteSpace(target.RunId) && target.RunId.Length <= 128 && target.Revision >= 1;
+        }
+
+        // Explicit human control; it reuses the same lease/CAS cancellation as the tool.
+        // Never signals a live/replacement invocation through an old saved-wait button.
+        internal AgentWaitCancelReceipt CancelSavedWait(AgentWaitCancelCommand request)
+        {
+            if (!ValidWaitTarget(request?.Target)) throw new ArgumentException("Требуется точная версия сохранённого запуска.");
+            var target = request.Target;
+            var endpoint = RecoveryCatalog(request).SingleOrDefault(item => item.Address.ChatId == target.SessionId);
+            var receipt = new AgentWaitCancelReceipt { SessionId = target.SessionId, RunId = target.RunId, Status = AgentWaitCancelStatus.Unavailable };
+            if (endpoint == null) { receipt.Detail = "Чат недоступен в выбранной области."; return receipt; }
+            ChatSession terminal = null;
+            try
+            {
+                bool changed;
+                var status = CancelTarget(endpoint, target.RunId, target.Revision, null, null, out changed, out terminal,
+                    "Остановлено пользователем");
+                switch (status)
+                {
+                    case AgentCancellationStatus.Cancelled: receipt.Status = AgentWaitCancelStatus.Cancelled; break;
+                    case AgentCancellationStatus.AlreadyStopped: receipt.Status = AgentWaitCancelStatus.AlreadyStopped; break;
+                    case AgentCancellationStatus.Changed: receipt.Status = AgentWaitCancelStatus.Changed; break;
+                    case AgentCancellationStatus.Unconfirmed: receipt.Status = AgentWaitCancelStatus.Unconfirmed; break;
+                    default: receipt.Status = AgentWaitCancelStatus.Unavailable; break;
+                }
+            }
+            catch (Exception error) { receipt.Status = AgentWaitCancelStatus.Unconfirmed; receipt.Detail = error.Message; }
+            finally { if (terminal != null) try { endpoint.Changed?.Invoke(terminal); } catch { } }
+            return receipt;
+        }
+
+        private static bool ResumeLivePause(AgentConversationEndpoint endpoint, AgentWaitResumeTarget target,
+            AgentWaitResumeReceipt receipt)
+        {
+            if (!endpoint.Inbox.HasActiveWork(target.SessionId)) return false;
+            var session = endpoint.Load();
+            endpoint.Validate(session);
+            var box = endpoint.Inbox.Get(session);
+            lock (box.Sync)
+            {
+                if (!box.Running) return false;
+                receipt.Status = AgentWaitResumeStatus.Changed;
+                receipt.Detail = "Запуск или пауза изменились. Обновите чат.";
+                var live = endpoint.Runs?.CaptureCancellation(target.SessionId, target.RunId);
+                if (box.Session.LastRun?.RunId != target.RunId || box.Session.Revision != target.Revision ||
+                    box.Session.LastRun.KernelState?.Summary.PauseId == null || !box.Accepting || !box.Paused ||
+                    live?.Cancellation == null || live.Cancellation.IsCancellationRequested) return true;
+                // Human authority may release this exact live pause, never a Stop token.
+                receipt.Status = AgentWaitResumeStatus.Unconfirmed;
+                endpoint.Inbox.Resume(box.Session);
+                receipt.Status = AgentWaitResumeStatus.Requested;
+                receipt.Detail = null;
+                session = box.Session;
+            }
+            try { endpoint.Changed?.Invoke(session); } catch { }
+            return true;
+        }
+
         internal AgentRecoveryResponse ResumeSelectedWaits(AgentRecoveryCommand request)
         {
             if (request?.Targets == null || request.Targets.Count == 0 || request.Targets.Count > MaximumResumeParticipants ||
-                request.Targets.Any(item => item == null || string.IsNullOrWhiteSpace(item.SessionId) || item.SessionId.Length > 128 ||
-                    string.IsNullOrWhiteSpace(item.RunId) || item.RunId.Length > 128 || item.Revision < 1) ||
+                request.Targets.Any(item => !ValidWaitTarget(item)) ||
                 request.Targets.Select(item => item.SessionId).Distinct(StringComparer.Ordinal).Count() != request.Targets.Count)
                 throw new ArgumentException("Выберите от 1 до 32 разных чатов с точной версией сохранённого запуска.");
             var catalog = RecoveryCatalog(request).ToDictionary(item => item.Address.ChatId, StringComparer.Ordinal);
@@ -90,6 +151,9 @@ namespace RNAssistant.Application.Conversations
                 {
                     if (endpoint.Reserve == null || endpoint.IsClosing?.Invoke() == true)
                         throw new InvalidOperationException("Runtime не принимает продолжение.");
+                    // Live release is the single-chat control. Batch recovery admits
+                    // dormant selections before starting any owner.
+                    if (request.Targets.Count == 1 && ResumeLivePause(endpoint, target, receipt)) continue;
                     ChatSession session;
                     using (endpoint.Reserve())
                     {
@@ -120,7 +184,7 @@ namespace RNAssistant.Application.Conversations
                     });
                 }
                 catch (Exception error)
-                { receipt.Status = appendAttempted ? AgentWaitResumeStatus.Unconfirmed : AgentWaitResumeStatus.Unavailable; receipt.Detail = error.Message; }
+                { receipt.Status = appendAttempted || receipt.Status == AgentWaitResumeStatus.Unconfirmed ? AgentWaitResumeStatus.Unconfirmed : AgentWaitResumeStatus.Unavailable; receipt.Detail = error.Message; }
             }
             foreach (var start in starts) start();
             return new AgentRecoveryResponse { Receipts = receipts };

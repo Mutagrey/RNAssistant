@@ -1,5 +1,17 @@
 # Архитектура UI RNAssistant
 
+## Пользовательские controls Run — In Review, 2026-11-04
+
+`app-chat-inbox.buildPendingInputUnits` остаётся единым renderer Office/Workspace/plugin.
+Typed `runPaused` отделяет execution pause от queue pause; `waitTarget` содержит exact
+session/run/revision. Workspace cache учитывает эти поля, поэтому живая пауза видна
+даже при `canSteer=true`. Общий handler продолжения использует `resumeAgentWaits`,
+отмены сохранённого Waiting — `cancelAgentWait`; Application Recovery/Control владеют
+lease/CAS/lifetime/read-back. Неприкреплённый Resume для сохранённого Run заменён,
+queue-only Resume оставлен прежнему owner. Нет второго UI/store, новых model tools
+или фонового LLM. Busy/notice принадлежат view; после ответа — одно чтение состояния,
+без retry. Dispose отбрасывает позднюю presentation, принятая команда сохраняется.
+
 ## Границы Chat View — исправление, In Review, 2026-11-04
 
 ConversationPanel использует `onlyWhenVisible`: DOM активного чата находится внутри
@@ -28,8 +40,8 @@ UI не выводит membership из переписки и не хранит �
 Application/Core сохраняют Waiting в прежних events/CAS. Web получает typed
 `hasPendingWait` через existing Office Inbox / Workspace snapshot и использует общий
 `buildPendingInputUnits`. UI не создаёт scheduler или checkpoint store. Команда
-existing Resume продолжает прежний Run через queue port; close/dispose view его не
-отменяет. Границы — [conversation](../conversation-protocol.md#межагентное-общение--2026-11-03).
+exact Resume продолжает прежний Run через общий Application owner; close/dispose
+view его не отменяет. Границы — [conversation](../conversation-protocol.md#межагентное-общение--2026-11-03).
 
 ## Участники, сообщения и совместная работа — Proposed, 2026-11-04
 

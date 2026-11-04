@@ -67,7 +67,7 @@ namespace RNAssistant.Office.Contracts
         GetChatInbox,
         GetActiveChatRuns, StopActiveChatRun,
         GetAgentCommunicationState, ContinueAgentCommunication,
-        GetRecoverableAgentWaits, ResumeAgentWaits,
+        GetRecoverableAgentWaits, ResumeAgentWaits, CancelAgentWait,
         SubmitChatInput,
         EditChatInput,
         RemoveChatInput,

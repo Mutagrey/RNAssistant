@@ -25,6 +25,19 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("targets")] public List<AgentWaitResumeTarget> Targets { get; set; }
     }
+    public sealed class AgentWaitCancelCommand : AgentRecoveryScope
+    {
+        [JsonProperty("target")] public AgentWaitResumeTarget Target { get; set; }
+    }
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum AgentWaitCancelStatus { Cancelled, AlreadyStopped, Changed, Unavailable, Unconfirmed }
+    public sealed class AgentWaitCancelReceipt
+    {
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("status")] public AgentWaitCancelStatus Status { get; set; }
+        [JsonProperty("detail")] public string Detail { get; set; }
+    }
     public sealed class AgentRecoveryParticipant
     {
         [JsonProperty("sessionId")] public string SessionId { get; set; }

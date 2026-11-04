@@ -82,6 +82,9 @@ namespace RNAssistant.Runtime.Contracts
         public string RunId { get; set; }
         [JsonProperty("canSteer")] public bool CanSteer { get; set; }
         [JsonProperty("hasPendingWait")] public bool HasPendingWait { get; set; }
+        [JsonProperty("runPaused")] public bool RunPaused { get; set; }
+        [JsonProperty("waitTarget", NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Application.Contracts.AgentWaitResumeTarget WaitTarget { get; set; }
         [JsonProperty("pendingInputs")] public IReadOnlyList<WorkspacePendingInput> PendingInputs { get; set; }
         public int? IterationsUsed { get; set; }
         public int? ToolStepsUsed { get; set; }

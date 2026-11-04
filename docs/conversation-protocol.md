@@ -2,6 +2,22 @@
 
 ## Межагентное общение — 2026-11-03
 
+Пользовательские controls (3a, 2026-11-04): Office Inbox/Workspace snapshot возвращают
+`runPaused` (kernel PauseId) и `waitTarget {sessionId,runId,revision}` для Waiting.
+Это данные для адресного действия, не разрешение на захват live lease. Общая лента
+использует typed `resumeAgentWaits` для одного показанного Run; live pause снимается
+только при совпадении Run/ревизии, действующем owner и отсутствии cancellation/Stop.
+Продолжается прежний owner; batch из меню по-прежнему принимает только dormant waits.
+
+`cancelAgentWait {source,workspaceId?,sessionId,target}` — явная user bridge команда,
+не model tool. Scope проверяется каталогом; отменяется только сохранённый Waiting
+под exact lease/CAS. Она использует прежний `CancelTarget`/CommitRun/read-back без
+LLM/tools/COM. Receipt: Cancelled / AlreadyStopped / Changed / Unavailable / Unconfirmed
+и exact session/run. Последние три не означают отмену; UI обновляет состояние без
+повторения команды. История, очередь, бюджет и unknown effects сохраняются; очередь
+остаётся приостановленной пользователем. Обычный live Stop и queue-only Resume
+сохраняют существующих owners. Новых событий или миграции хранения нет.
+
 Срез 3a (2026-11-04): `agents.pause(agent_id)` / `agents.resume(agent_id)` v1 —
 управление одним другим live Run своей области. Pause Requested — запрос, Paused —
 достигнутая безопасная граница. Текущие model/tool/read-back не отменяются; ответ
@@ -18,8 +34,8 @@ Typed AgentPause в input journal отделяет peer authority от текс�
 User Stop и recovery не снимаются агентом. Replay всегда сбрасывает live peer authority.
 После restart пользователь использует прежнее явное/batch продолжение из любого
 чата области. `agents.cancel` может завершить сохранённую паузу без model/tool call.
-Close вкладки не меняет выполнение. Межпроцессный peer control и новый UI здесь
-не добавлены. Точные схемы — AgentCommunicationToolCatalog, skill v8.0.0.
+Close вкладки не меняет выполнение. Межпроцессный peer control
+не добавлен; пользовательский UI описан выше. Точные схемы — AgentCommunicationToolCatalog, skill v8.0.0.
 
 Owner — Application/Conversations (`AgentCommunicationService`), общий Inbox и
 существующий ConversationRunService/AgentKernel. Срез 2026-11-04 использует сохранённый

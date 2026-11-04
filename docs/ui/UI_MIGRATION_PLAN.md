@@ -1,5 +1,26 @@
 # План модернизации production UI
 
+## Пауза и отмена сохранённого Run — In Review, 2026-11-04
+
+Scope/owner: общий Chat View (`app-chat-inbox` + Workspace presentation), typed user
+bridge и Application Recovery/Control. Прежний banner расширен подписью live pause,
+exact Resume и cold Stop; неподкреплённый target Resume сохранённого Run заменён.
+Новых stores/events/adapters/CSS нет, rollback — обратный diff без удаления истории.
+Runtime cancellation использует existing lease/CAS/read-back, не вызывает LLM/tools.
+
+Baseline: `chat-inbox` и `agent-recovery` до изменений. После: новый browser fixture
+`agent-run-controls` (три источника, exact target, stale/unknown без retry, черновик,
+busy/close, narrow/125%), прежние Inbox и recovery tests. Минимальный host-neutral
+Harness покрывает user control и регрессии pause/cancel/recovery; Office Controller
+не входит в Harness. [Замеры](review/agent-run-controls.json).
+
+Для ревью: 1) открыть приостановленный чат и нажать «Продолжить»; 2) после сохранения
+Waiting/перезапуска нажать «Остановить» — Run terminal без нового ответа модели;
+3) проверить узкую вкладку и обычный «+» с вложениями/сжатием.
+[Широкий](review/agent-run-controls-wide.png) и [узкий](review/agent-run-controls-narrow.png)
+виды проверены локально. Пользовательское принятие и Windows/Office/WebView2 остаются
+открытыми; этот срез не запускает Inspector/группы или новый Shell.
+
 ## Chat View bounds — исправление, In Review, 2026-11-04
 
 Пользователь сообщил выход чата за вкладку. Baseline при 640 px / 125%: body области

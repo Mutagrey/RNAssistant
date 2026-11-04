@@ -31,5 +31,7 @@ namespace RNAssistant.Application.Conversations
         internal bool Running { get; set; }
         internal bool ActiveRun { get; set; }
         internal bool HasPendingWait { get; set; }
+        internal bool RunPaused { get; set; }
+        internal RNAssistant.Application.Contracts.AgentWaitResumeTarget WaitTarget { get; set; }
     }
 }

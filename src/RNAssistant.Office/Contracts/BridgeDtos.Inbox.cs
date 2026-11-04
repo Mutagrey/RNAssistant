@@ -75,5 +75,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("running")] public bool Running { get; set; }
         [JsonProperty("activeRun")] public bool ActiveRun { get; set; }
         [JsonProperty("hasPendingWait")] public bool HasPendingWait { get; set; }
+        [JsonProperty("runPaused")] public bool RunPaused { get; set; }
+        [JsonProperty("waitTarget", NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Application.Contracts.AgentWaitResumeTarget WaitTarget { get; set; }
     }
 }

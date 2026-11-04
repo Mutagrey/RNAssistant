@@ -70,7 +70,7 @@ function applyChatInbox(inbox, deferRender) {
       "Ожидают отправки: " + (inbox.items || []).length + (inbox.paused ? ". Очередь приостановлена." : ".");
     renderSendControls();
     if (!deferRender && (!old || old.epoch !== inbox.epoch || old.revision !== inbox.revision ||
-        old.hasPendingWait !== inbox.hasPendingWait || old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || changed)) renderChatInbox();
+        old.hasPendingWait !== inbox.hasPendingWait || old.runPaused !== inbox.runPaused || old.phase !== inbox.phase || old.running !== inbox.running || old.paused !== inbox.paused || changed)) renderChatInbox();
   }
   if (!deferRender && (endedRun || !old || old.running !== inbox.running)) renderChatSessions();
   if (component && !deferRender) component.inbox(old, inbox);
@@ -304,18 +304,68 @@ function renderPendingInput(item, chatId, editing, component, source) {
   }
   return node;
 }
+async function controlSavedInboxRun(component, chatId, target, cancel) {
+  var scope = component ? component.target : { source: "office", sessionId: chatId };
+  if (!target || target.sessionId !== chatId || !target.runId || !Number.isSafeInteger(target.revision))
+    throw new Error("Состояние запуска устарело. Обновите чат.");
+  var command = Object.assign({}, scope), expected = Object.assign({}, target), receipt;
+  if (cancel) {
+    command.target = expected;
+    receipt = await send("cancelAgentWait", command);
+  } else {
+    command.targets = [expected];
+    var response = await send("resumeAgentWaits", command);
+    receipt = response && Array.isArray(response.receipts) && response.receipts.length === 1 ? response.receipts[0] : null;
+  }
+  if (!receipt || receipt.sessionId !== expected.sessionId || receipt.runId !== expected.runId)
+    throw new Error("Результат управления не подтверждён. Обновите чат.");
+  if (cancel && ["Cancelled", "AlreadyStopped"].includes(receipt.status) || !cancel && receipt.status === "Requested") return;
+  var message = receipt.status === "Changed" ? "Запуск изменился. Обновите чат." :
+    receipt.status === "Unavailable" ? "Запуск сейчас недоступен для этой команды. Обновите чат." :
+    "Результат управления не подтверждён. Обновите чат без повторения команды.";
+  throw new Error(message + (receipt.detail ? " " + receipt.detail : ""));
+}
+
 function buildPendingInputUnits(component, source) {
   var state = component ? component.inboxState : window.state;
   var chatId = component ? component.target.sessionId : state.activeChatId, box = source ? source.box : chatInbox(chatId), units = [];
   var history = component ? component.snapshot().messages : state.messages;
   var items = (source ? box.items : chatInputEchoes(chatId)).filter(function (item) { return !item.Id || !(history || []).some(function (message) { return messageId(message) === item.Id; }); });
-  if (box.paused && ((box.items || []).length || box.hasPendingWait)) units.push({ key: "live:inbox-paused", transient: true, signature: JSON.stringify([box.pauseReason, box.running, box.hasPendingWait]), render: function () {
+  if ((box.paused || box.runPaused) && ((box.items || []).length || box.hasPendingWait)) units.push({ key: "live:inbox-paused", transient: true,
+    signature: JSON.stringify([box.pauseReason, box.running, box.hasPendingWait, box.runPaused, box.waitTarget, !!state.inboxRunControlBusy]), render: function () {
     var note = document.createElement("div"); note.className = "inbox-pause";
-    var reason = document.createElement("span"); reason.textContent = box.pauseReason || "Очередь приостановлена"; note.appendChild(reason);
-    note.appendChild(inboxButton(box.hasPendingWait ? "Продолжить ожидание" : "Продолжить очередь", async function () {
-      try { if (source) await source.resume(); else applyChatInbox(await send("resumeChatInbox", { chatId: chatId })); }
-      catch (error) { if (component) component.notice(error); else if (state.activeChatId === chatId) $("inboxStatus").textContent = error.message; }
-    }));
+    var reason = document.createElement("span");
+    reason.textContent = box.runPaused ? "Выполнение приостановлено" : box.pauseReason || (box.hasPendingWait ? "Ожидание сохранено" : "Очередь приостановлена");
+    note.appendChild(reason);
+    async function control(cancel) {
+      if (state.inboxRunControlBusy) return;
+      state.inboxRunControlBusy = true;
+      if (component) { component.notice(""); component.render(); } else renderChatInbox();
+      try {
+        if (box.hasPendingWait) await controlSavedInboxRun(component, chatId, box.waitTarget, cancel);
+        else if (source) await source.resume();
+        else applyChatInbox(await send("resumeChatInbox", { chatId: chatId }));
+      } catch (error) {
+        if (component) component.notice(error); else if (window.state.activeChatId === chatId) $("inboxStatus").textContent = error.message;
+      } finally {
+        try {
+          if (component && component.isCurrent()) {
+            if (component.target.source === "office") await component.pollInbox();
+            await component.refresh();
+          } else if (!component && window.state.activeChatId === chatId) await pollChatInbox();
+        } catch (error) { if (component) component.notice(error); }
+        state.inboxRunControlBusy = false;
+        if (component && component.isCurrent()) component.render(); else if (!component) renderChatInbox();
+      }
+    }
+    var resume = inboxButton(box.runPaused ? "Продолжить" : box.hasPendingWait ? "Продолжить ожидание" : "Продолжить очередь", function () { return control(false); });
+    resume.disabled = !!state.inboxRunControlBusy || box.hasPendingWait && !box.waitTarget;
+    note.appendChild(resume);
+    if (box.hasPendingWait && !box.running) {
+      var stop = inboxButton("Остановить", function () { return control(true); });
+      stop.disabled = !!state.inboxRunControlBusy || !box.waitTarget;
+      note.appendChild(stop);
+    }
     return note;
   } });
   return units.concat(items.map(function (item) {

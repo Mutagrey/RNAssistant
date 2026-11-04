@@ -39,6 +39,18 @@ race coverage. These are host-neutral checks, not Windows/Office qualification.
 
 ## Agent communication — 2026-11-03
 
+`agent user control:` covers typed pause/target snapshots, stale/revision/lease/scope
+refusal, write failure, user cancellation after restart without LLM/tools, exact live
+resume and no live release in a recovery batch. Three cases use real Office service
+stores/fake adapter and Workspace scripted HTTP. Regressions: `agent pause:`,
+`agent cancel:`, `agent recovery:` (14 cases). Production Office Controller is excluded.
+`tests/web/agent-run-controls.test.js` covers the common Office/Workspace/plugin row,
+exact scope/Run/revision, stale/unknown without retry, draft, busy/late close cleanup,
+narrow/125% and shared button geometry. Use existing Playwright via NODE_PATH and
+optional BROWSER_EXECUTABLE; run browser fixtures sequentially. `chat-inbox.test.js`
+and `agent-recovery.test.js` retain queue controls and ordinary +/file/compression paths.
+Windows/Office/WebView2 and visual acceptance remain separate.
+
 `agent pause:` covers safe model/tool/read-back boundaries, undispatched read batch,
 finish admission race, the existing wait deadline, retained budgets/unknown inspection,
 stale CAS, resume-before-wait, replacement pauses/lifetimes, human authority, exact

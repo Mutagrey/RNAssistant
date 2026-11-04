@@ -104,6 +104,7 @@ namespace RNAssistant.Runtime
                     Host = session.LastRun.OfficeTarget.Host,
                     DocumentTitle = session.LastRun.OfficeTarget.DocumentTitle },
                 CanSteer = preview.CanSteer, HasPendingWait = ConversationInboxService.HasPendingWait(session), PendingInputs = ReadPendingInputs(session),
+                RunPaused = session.LastRun?.KernelState?.Summary.PauseId != null, WaitTarget = ConversationInboxService.SavedWaitTarget(session),
                 RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,
                 ContextCheckpointId = ContextCompactionRuntime.ActiveCheckpoint(session)?.Id,
                 ToolStepsUsed = session.LastRun?.KernelState?.Summary.ToolStepsUsed, Limits = session.LastRun?.KernelState?.Limits,

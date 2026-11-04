@@ -198,13 +198,15 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void AgentPauseOfficeRecovery()
+        private static void AgentPauseOfficeRecovery() { AgentPauseOfficeRecovery(false); }
+        private static void AgentPauseOfficeRecovery(bool userControl)
         {
             foreach (var cancel in new[] { false, true })
             WithTempExecutor((executor, adapter) => {
                 var store = new ChatStore(FixturePaths.Value); var inbox = new ConversationInboxService(EventStore(store));
                 var target = AgentChat(store, "Office pause"); var source = AgentChat(store, "Peer");
-                var service = new AgentCommunicationService(); RegisterCancellationScope(service, store, inbox, source);
+                var service = new AgentCommunicationService();
+                RegisterCancellationScope(service, store, inbox, source, scopeKey: userControl ? "office" : null);
                 var calls = 0;
                 var settings = new AppSettings { StreamResponses = false, SmartChatTitles = false, AutoCompressContext = false };
                 LlmCompletionDelegate model = (config, messages, options, stream, token) => {
@@ -223,21 +225,54 @@ namespace RNAssistant.Harness
                     executor.GetControllerTools().ToList(), null, null, null, BuiltInSkillProvider.GetSkills(adapter), CancellationToken.None).GetAwaiter().GetResult());
                 var saved = store.Load(target.Id); var runId = saved.LastRun.RunId;
                 var recoveredInbox = new ConversationInboxService(EventStore(store));
-                RegisterCancellationScope(service, store, recoveredInbox, source);
+                RegisterCancellationScope(service, store, recoveredInbox, source, scopeKey: userControl ? "office" : null);
                 AssertEqual("durable-pause", saved.LastRun.KernelState.Summary.PauseId, "pause survives event replay");
                 AssertEqual(AgentPauseStatus.Protected, service.Pause(recoveredInbox, source, 20, "restart-resume", AgentChatAddress.IdFor(target.Id), true, () => { }).Status, "peer cannot resume after restart");
                 AssertEqual(1, calls, "inspection/control cannot dispatch the model");
                 if (cancel)
                 {
                     var messages = saved.Messages.Count;
-                    AssertEqual(AgentCancellationStatus.Cancelled, service.Cancel(recoveredInbox, source, 20, "cancel-pause", AgentChatAddress.IdFor(target.Id), () => { }).Status, "cold pause cancellation is terminal");
+                    if (userControl)
+                    {
+                        var shown = recoveredInbox.Snapshot(saved);
+                        AssertTrue(shown.RunPaused && shown.WaitTarget.RunId == runId && shown.WaitTarget.Revision == saved.Revision,
+                            "Office Inbox exposes typed pause and exact user control target");
+                        var command = new AgentWaitCancelCommand { Source = "office", SessionId = target.Id, Target = shown.WaitTarget };
+                        var revision = shown.WaitTarget.Revision;
+                        command.Target.Revision--;
+                        AssertEqual(AgentWaitCancelStatus.Changed, service.CancelSavedWait(command).Status, "stale button cannot cancel");
+                        command.Target.Revision = revision;
+                        using (ConversationLeaseService.ForOffice(FixturePaths.Value).Reserve(target.Id))
+                            AssertEqual(AgentWaitCancelStatus.Unavailable, service.CancelSavedWait(command).Status, "cold control cannot take over a live lease");
+                        command.Target.SessionId = "foreign";
+                        AssertEqual(AgentWaitCancelStatus.Unavailable, service.CancelSavedWait(command).Status, "foreign target cannot be controlled");
+                        command.Target.SessionId = target.Id;
+                        store.AppendFaultPoint = point => { if (point == "before-write") throw new IOException("Lost write"); };
+                        AssertEqual(AgentWaitCancelStatus.Unconfirmed, service.CancelSavedWait(command).Status, "write failure never claims cancellation");
+                        store.AppendFaultPoint = null;
+                        command.Target = recoveredInbox.Snapshot(store.Load(target.Id)).WaitTarget;
+                        AssertEqual(AgentWaitCancelStatus.Cancelled, service.CancelSavedWait(command).Status, "explicit user cancellation confirms durable state");
+                        AssertEqual("Остановлено пользователем", recoveredInbox.Snapshot(store.Load(target.Id)).PauseReason,
+                            "human cancellation retains its own pause reason");
+                        AssertEqual(AgentWaitCancelStatus.Cancelled, service.CancelSavedWait(command).Status, "historical cancellation receipt cannot redispatch work");
+                    }
+                    else
+                        AssertEqual(AgentCancellationStatus.Cancelled, service.Cancel(recoveredInbox, source, 20, "cancel-pause", AgentChatAddress.IdFor(target.Id), () => { }).Status, "cold pause cancellation is terminal");
                     var terminal = store.Load(target.Id);
                     AssertEqual(messages, terminal.Messages.Count, "pause cancellation fabricates no tool exchange");
                     AssertTrue(terminal.LastRun.KernelState.Summary.PauseId == null, "terminal clears pause");
                     AssertEqual(1, calls, "cold cancel runs no model");
                     return;
                 }
-                recoveredInbox.Resume(saved); recoveredInbox.Bind(saved);
+                if (userControl)
+                {
+                    var receipt = service.ResumeSelectedWaits(new AgentRecoveryCommand { Source = "office", SessionId = target.Id,
+                        Targets = new List<AgentWaitResumeTarget> { recoveredInbox.Snapshot(saved).WaitTarget } }).Receipts.Single();
+                    AssertEqual(AgentWaitResumeStatus.Requested, receipt.Status, "user resume uses exact saved target");
+                    saved = store.Load(target.Id);
+                }
+                else recoveredInbox.Resume(saved);
+                recoveredInbox.Bind(saved);
                 var resumed = new ConversationRunService(adapter, executor, ConversationStore(store), EventStore(store), model, null, inbox: recoveredInbox);
                 resumed.ResumeWaitAsync(saved, new ConversationRunInput(settings, NewContext(adapter), executor.GetControllerTools().ToList(),
                     BuiltInSkillProvider.GetSkills(adapter)), null, null, CancellationToken.None).GetAwaiter().GetResult();
@@ -265,7 +300,7 @@ namespace RNAssistant.Harness
                         StreamResponses = false, SmartChatTitles = false, AutoCompressContext = false, MaxAgentIterations = 5 };
                     listener.Prefixes.Add(settings.BaseUrl + "/"); listener.Start();
                     var releaseFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    var expected = action == "resume" ? 6 : action == "restart" ? 4 : 3;
+                    var expected = action == "resume" ? 6 : action == "restart" || action == "user-resume" ? 4 : 3;
                     var targetCalls = 0; var sourceCalls = 0;
                     var active = runtime;
                     var server = Task.Run(async () => {
@@ -316,6 +351,9 @@ namespace RNAssistant.Harness
                                 new ConversationInputJournal(EventStore(store)).Read(saved, false).LastOrDefault()?.Change.Paused == true;
                         }, 5000), "kernel reaches and persists a safe pause");
                         var checkpoint = store.Load(target.Id); var runId = checkpoint.LastRun.RunId;
+                        var shown = runtime.ReadState(workspace, target.Id);
+                        AssertTrue(shown.RunPaused && shown.HasPendingWait && shown.WaitTarget.RunId == runId &&
+                            shown.WaitTarget.Revision == checkpoint.Revision, "typed live pause and exact target reach Workspace projection");
                         AssertEqual(1, targetCalls, "paused owner makes no background model calls");
                         if (action == "resume")
                         {
@@ -324,6 +362,36 @@ namespace RNAssistant.Harness
                             AssertTrue(Task.WaitAll(new Task[] { peer, controller }, 5000), "independent owners settle after peer release");
                             AssertEqual(RunLifecycle.Completed, peer.Result.Summary.Lifecycle, "peer resumed");
                             AssertEqual(RunLifecycle.Completed, controller.Result.Summary.Lifecycle, "resume receipt admits source finish");
+                        }
+                        else if (action == "user-resume")
+                        {
+                            var request = new AgentRecoveryCommand { Source = "workspace", WorkspaceId = id, SessionId = target.Id,
+                                Targets = new List<AgentWaitResumeTarget> { shown.WaitTarget } };
+                            shown.WaitTarget.Revision--;
+                            AssertEqual(AgentWaitResumeStatus.Changed, runtime.AgentCommunication.ResumeSelectedWaits(request).Receipts.Single().Status,
+                                "late user resume does not release a changed pause");
+                            shown.WaitTarget.Revision++;
+                            request.Targets.Add(new AgentWaitResumeTarget { SessionId = source.Id, RunId = "stale-run", Revision = 1 });
+                            var batch = runtime.AgentCommunication.ResumeSelectedWaits(request);
+                            AssertEqual(AgentWaitResumeStatus.Unavailable, batch.Receipts[0].Status,
+                                "batch recovery cannot release a live owner before other admissions");
+                            AssertTrue(!peer.IsCompleted, "live pause remains held after the rejected batch");
+                            request.Targets.RemoveAt(1);
+                            AssertEqual(AgentWaitResumeStatus.Requested, runtime.AgentCommunication.ResumeSelectedWaits(request).Receipts.Single().Status,
+                                "explicit user releases the live pause");
+                            AssertTrue(peer.Wait(5000), "same live owner completes after user resume");
+                        }
+                        else if (action == "user-cancel")
+                        {
+                            runtime.CloseAsync().GetAwaiter().GetResult();
+                            AssertEqual(RunLifecycle.Waiting, peer.GetAwaiter().GetResult().Summary.Lifecycle, "shutdown preserves the saved Run");
+                            active = new WorkspaceConversationService(paths);
+                            active.RegisterAgentScope(workspace, settings, () => "test");
+                            shown = active.ReadState(workspace, target.Id);
+                            AssertTrue(shown.RunPaused && !shown.CanSteer, "cold pause is visible without live ownership");
+                            var receipt = active.AgentCommunication.CancelSavedWait(new AgentWaitCancelCommand {
+                                Source = "workspace", WorkspaceId = id, SessionId = target.Id, Target = shown.WaitTarget });
+                            AssertEqual(AgentWaitCancelStatus.Cancelled, receipt.Status, "explicit user cancels the saved pause without continuing it");
                         }
                         else if (action == "restart")
                         {
@@ -344,9 +412,9 @@ namespace RNAssistant.Harness
                         }
                         var finished = store.Load(target.Id);
                         AssertEqual(runId, finished.LastRun.RunId, "control and recovery preserve original Run");
-                        AssertEqual(action == "stop" ? RunLifecycle.Cancelled : RunLifecycle.Completed, finished.LastRun.KernelState.Summary.Lifecycle, "durable terminal state");
-                        AssertEqual(action == "stop" ? 1 : 2, targetCalls, "no replay or polling model calls");
-                        AssertEqual(action == "stop" ? 1 : 2, finished.LastRun.KernelState.Summary.IterationsUsed, "no budget reset");
+                        AssertEqual(action == "stop" || action == "user-cancel" ? RunLifecycle.Cancelled : RunLifecycle.Completed, finished.LastRun.KernelState.Summary.Lifecycle, "durable terminal state");
+                        AssertEqual(action == "stop" || action == "user-cancel" ? 1 : 2, targetCalls, "no replay or polling model calls");
+                        AssertEqual(action == "stop" || action == "user-cancel" ? 1 : 2, finished.LastRun.KernelState.Summary.IterationsUsed, "no budget reset");
                         AssertTrue(server.Wait(1000), "all expected wire requests completed");
                     }
                     finally

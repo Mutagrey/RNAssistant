@@ -2,6 +2,16 @@
 
 ## Agent communication journal — 2026-11-03
 
+Exact user control (3a, 2026-11-04) adds typed bridge/projection fields only: `runPaused`
+and `waitTarget {sessionId,runId,revision}`. No stream/schema migration or second store.
+Single live pause resume checks the existing owner and cancellation token under Inbox
+lock, then writes the existing Resume event. Batch recovery continues to admit only
+cold selections before starting owners. Cold user cancel uses the same lease/CAS,
+CancelWait/CommitRun and durable read-back as `agents.cancel`; its Inbox pause reason
+identifies the user. No fabricated peer communication event or tool call is appended.
+Stale or uncertain UI commands never automatically replay; a changed owner cannot be
+cancelled by the old saved-run target. Closing a view only disposes its presentation.
+
 Cooperative pause (3a, 2026-11-04) uses the same streams, no second checkpoint store.
 RunSummary optionally carries PauseId: Waiting has either a pure PendingWait or a
 PauseId with closed accepted history. Input changes optionally carry typed

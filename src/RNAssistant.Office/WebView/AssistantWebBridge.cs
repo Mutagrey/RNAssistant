@@ -530,6 +530,9 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ResumeAgentWaits:
                         responsePayload = await RunBridgeWorkAsync(() => ResumeAgentWaits(Payload<AgentRecoveryCommand>(payload)), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.CancelAgentWait:
+                        responsePayload = await RunBridgeWorkAsync(() => CancelAgentWait(Payload<AgentWaitCancelCommand>(payload)), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetActiveChatRuns:
                         responsePayload = new ActiveChatRunsResponse { Runs = _controller.ActiveChatRuns()
                             .Concat(Plugins == null ? new RNAssistant.Application.Conversations.ConversationActiveSnapshot[0] : Plugins.Conversations.ActiveChatRuns())

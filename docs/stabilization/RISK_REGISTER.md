@@ -1,13 +1,24 @@
 # Stabilization risk register
 
+## User Run controls — host-neutral, 2026-11-04
+
+Общая лента различает execution pause и queue pause; user cold cancel и exact resume
+реализованы. Устаревшая ревизия, чужая область, занятый lease и failed append проверены;
+UI не повторяет unknown receipt. Resume live pause доступен одной локальной цели;
+межпроцессный release этим не добавлен. Отмена сохранённого Run не требует прежнего
+live Office binding, потому что не выполняет model/tools/COM; продолжение по-прежнему
+проверяет binding. 3 новых Harness checks + browser tests не заменяют проверку
+production Controller/WebView2 на Windows; визуальное принятие остаётся открытым.
+
 ## Agent pause/resume — host-neutral, 2026-11-04
 
 Owner: Application/Conversations + Core kernel. Пауза cooperative: длительный
 model/tool/read-back не прерывается, ожидание agents.wait сохраняет свой deadline
 (до 10 секунд). Requested не означает Paused; SLA остановки текущего инструмента
 не обещан. Peer resume не доступен после restart/пользовательского Stop и не
-управляет чужим процессом. UI labels/actions для отдельной паузы и cold cancel,
-Windows Office/controller/WebView2 и live-model coordination остаются открыты.
+управляет чужим процессом. UI labels/actions для отдельной паузы и cold cancel
+реализованы следующим срезом; Windows Office/controller/WebView2, визуальное принятие
+и live-model coordination остаются открыты.
 Run/iteration budget/unknown guards и exact invocation/pause fencing проверяются
 `agent pause:`; наблюдаемость не требует LLM. Срез не вводит scheduler/slots или
 циклическое ожидание Run; эти ограничения остаются в плане этапов 3–4.

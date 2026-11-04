@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Мультиагенты: пользовательские controls Run — In Review, 2026-11-04
+
+Завершён следующий срез 3a: shared Office/Workspace/plugin показывает live pause,
+продолжает exact показанный Run и отменяет сохранённый Waiting через прежние
+lease/CAS/read-back. Отмена не запускает модель/tools; stale/unknown не повторяется.
+Сохранены черновики, прежний «+» и tab-independent runtime. Нет нового store/CSS.
+3 новых user-control + 14 pause/cancel/recovery checks и 3 web fixtures проходят;
+Windows/Office/controller/WebView2 и пользовательское визуальное принятие открыты.
+[Ревью](../ui/UI_MIGRATION_PLAN.md#пауза-и-отмена-сохранённого-run--in-review-2026-11-04).
+Далее по плану: baseline 1/2/4/8 участников и admission/slots/budgets; группы и Inspector
+остаются отдельными этапами.
+
 ## Мультиагенты: agents.pause/resume — In Review, 2026-11-04
 
 Продолжен этап 3a [плана](../proposals/multi-agent-runtime-plan.md): два direct tool v1,
@@ -18,7 +30,7 @@ Office service crash/reload и Workspace live/restart/Stop без views. 7 pause
 регрессии (cancel/communication/Inbox/recovery/policy/core pack/kernel wait) прошли;
 минимальная сборка и version gate прошли. UI не менялся.
 Windows/Office/controller/WebView2 и live-model qualification открыты. Далее —
-пользовательский cold control/представление паузы, затем admission/slots/budgets.
+пользовательский cold control/представление паузы (следующий срез выше), затем admission/slots/budgets.
 
 ## Мультиагенты: agents.cancel — In Review, 2026-11-04
 

@@ -30,6 +30,13 @@ namespace RNAssistant.Office.WebView
             return _agentCommunication.ResumeSelectedWaits(request);
         }
 
+        private AgentWaitCancelReceipt CancelAgentWait(AgentWaitCancelCommand request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            PrepareAgentScope(request.Source, request.WorkspaceId);
+            return _agentCommunication.CancelSavedWait(request);
+        }
+
         private void PrepareAgentScope(string source, string workspaceId)
         {
             if (source == "workspace")

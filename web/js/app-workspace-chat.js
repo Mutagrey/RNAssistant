@@ -137,6 +137,8 @@
     var actionMessage = messages.find(visibleMessage);
     var historyActions = !!actionMessage && presentation.invoke("canMessageAction", { name: "fork", message: actionMessage, index: 0 });
     var signature = JSON.stringify([presentation.actionKey, chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions,
+      field(snapshot, "hasPendingWait"), field(snapshot, "runPaused"), field(snapshot, "waitTarget"), field(snapshot, "canSteer"),
+      RNAssistantConversationPanel.find(conversationTarget(chat))?.inboxState?.inboxRunControlBusy,
       RNAssistantConversationPanel.find(conversationTarget(chat))?.inboxState?.inboxEditing]);
     if (!changed && view.cache.signature === signature) return;
     var viewport = !following ? frame.viewport : null;
@@ -199,9 +201,10 @@
         return Object.assign({}, item, { AcceptedRunId: item.RunId,
           Delivery: item.Delivery || "Steer", Status: item.Status || "Pending" });
       });
-      var pendingWait = !!field(snapshot, "hasPendingWait"), waitActive = !!field(snapshot, "canSteer");
+      var pendingWait = !!field(snapshot, "hasPendingWait"), waitActive = !!field(snapshot, "canSteer"), runPaused = !!field(snapshot, "runPaused");
       var inboxSource = { box: { items: queue, hasPendingWait: pendingWait, running: pendingWait ? waitActive : status === "running", runId: field(snapshot, "runId"), activeRun: status === "running" || !!chat.pendingId,
-        paused: pendingWait ? !waitActive : status !== "running" && !chat.pendingId },
+        paused: pendingWait ? !waitActive : status !== "running" && !chat.pendingId,
+        runPaused: runPaused, waitTarget: field(snapshot, "waitTarget") },
         change: function (action, item, text) { return presentation.invoke("updateInbox", { action: action, item: item, text: text }); },
         appendDraft: function (text) { return presentation.invoke("appendDraft", text); },
         resume: function () { return presentation.invoke("updateInbox", { action: "resumeChatInbox" }); } };

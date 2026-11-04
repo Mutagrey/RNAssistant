@@ -25,9 +25,10 @@ namespace RNAssistant.Harness
     {
         private static void RegisterCancellationScope(AgentCommunicationService service, ChatStore store,
             ConversationInboxService inbox, ChatSession source, ConversationRunOwner runs = null, ChatStore cancellationStore = null,
-            Action<ChatSession> changed = null)
+            Action<ChatSession> changed = null, string scopeKey = null)
         {
             var scope = StoredAgentScope(store, inbox, source);
+            if (scopeKey != null) scope.Key = scopeKey;
             var read = scope.ReadCatalog;
             var leases = ConversationLeaseService.ForOffice(FixturePaths.Value);
             scope.ReadCatalog = () => read().Select(endpoint => {

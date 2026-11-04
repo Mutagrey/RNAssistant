@@ -1,0 +1,44 @@
+{
+  "wide": {
+    "left": 291,
+    "right": 955,
+    "areaLeft": 273,
+    "areaRight": 973,
+    "width": 664,
+    "scroll": 664,
+    "buttons": [
+      {
+        "height": "30px",
+        "padding": "5px 8px",
+        "font": "12px"
+      },
+      {
+        "height": "30px",
+        "padding": "5px 8px",
+        "font": "12px"
+      }
+    ]
+  },
+  "narrow": {
+    "left": 76,
+    "right": 398.5,
+    "areaLeft": 61,
+    "areaRight": 413.5,
+    "width": 258,
+    "scroll": 258,
+    "buttons": [
+      {
+        "height": "30px",
+        "padding": "5px 8px",
+        "font": "12px"
+      },
+      {
+        "height": "30px",
+        "padding": "5px 8px",
+        "font": "12px"
+      }
+    ]
+  },
+  "scope": "Existing common Inbox controls, Office/Workspace/plugin; mock bridge, real production Chat View",
+  "baseline": "chat-inbox.test.js and agent-recovery.test.js passed before changes; shared inboxButton geometry retained; frozen Demo has no execution-pause row"
+}

@@ -158,7 +158,8 @@ namespace RNAssistant.Application.Conversations
         }
 
         private static AgentCancellationStatus CancelTarget(AgentConversationEndpoint target, string runId,
-            long revision, ChatSession selected, ConversationActiveSnapshot live, out bool changed, out ChatSession terminal)
+            long revision, ChatSession selected, ConversationActiveSnapshot live, out bool changed, out ChatSession terminal,
+            string pauseReason = "Остановлено другим агентом")
         {
             changed = false;
             terminal = null;
@@ -171,7 +172,7 @@ namespace RNAssistant.Application.Conversations
                 {
                     if (box.Session.LastRun?.RunId != runId) return AgentCancellationStatus.Changed;
                     if (!target.Runs.Cancel(target.Address.ChatId, runId, live.Cancellation)) return AgentCancellationStatus.Changed;
-                    target.Inbox.PauseForRun(box.Session, runId, "Остановлено другим агентом");
+                    target.Inbox.PauseForRun(box.Session, runId, pauseReason);
                 }
                 changed = true;
                 return AgentCancellationStatus.Requested;
@@ -195,7 +196,7 @@ namespace RNAssistant.Application.Conversations
                         return AgentCancellationStatus.AlreadyStopped;
                     if (current.Revision != revision || box.Session.Revision != revision) return AgentCancellationStatus.Changed;
                     if (!ConversationInboxService.HasPendingWait(current)) return AgentCancellationStatus.Unavailable;
-                    target.Inbox.PauseForRun(current, runId, "Остановлено другим агентом");
+                    target.Inbox.PauseForRun(current, runId, pauseReason);
                     try { ConversationWaitCancellation.Commit(current, target.Store, target.Payloads); }
                     catch
                     {

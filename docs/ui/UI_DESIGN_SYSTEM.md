@@ -1,5 +1,15 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Controls сохранённого Run — In Review, 2026-11-04
+
+Одна строка `inbox-pause` и существующий `inboxButton`, без новых CSS/карточек/tokens.
+Resume и cold Stop имеют одинаковые computed min-height 30 px, padding 5 × 8 px,
+текст 12 px; при 420 px / 125% подпись переносится, кнопки остаются внутри Dock content.
+Геометрия прежнего компонента сохранена; у frozen Demo нет соответствующей pause row.
+[Замеры](review/agent-run-controls.json). Состояния передаются текстом и native disabled,
+без дополнительных badges; runtime IDs остаются в exact command, не в видимой строке.
+Оформление одинаково для Office/Workspace/plugin; Windows/WebView2 ревью отдельно.
+
 ## Размер Chat View — исправление, In Review, 2026-11-04
 
 Геометрия ленты/composer берётся из content-container Dockview. Повторного применения

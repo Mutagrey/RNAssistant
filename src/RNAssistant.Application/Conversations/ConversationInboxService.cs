@@ -240,6 +240,7 @@ namespace RNAssistant.Application.Conversations
             {
                 ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision, Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase, Running = box.Running || box.Worker,
                 ActiveRun = box.Running, HasPendingWait = HasPendingWait(box.Session), Paused = box.Paused, PauseReason = box.PauseReason,
+                RunPaused = box.Session.LastRun?.KernelState?.Summary.PauseId != null, WaitTarget = SavedWaitTarget(box.Session),
                 Items = Undelivered(box.Session, box.Inputs, null).Select(Clone).ToList(),
                 Receipts = requested.Count == 0 ? new List<ConversationInboxReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
                     .Select(input => new ConversationInboxReceipt { Id = input.Id, OperationId = input.OperationId,
@@ -889,6 +890,12 @@ namespace RNAssistant.Application.Conversations
                 input.AcceptedRunId == session.LastRun?.RunId &&
                 (input.PendingId == null || input.PendingId == PendingConfirmationId(session));
         }
+        internal static RNAssistant.Application.Contracts.AgentWaitResumeTarget SavedWaitTarget(ChatSession session)
+        {
+            return HasPendingWait(session) ? new RNAssistant.Application.Contracts.AgentWaitResumeTarget {
+                SessionId = session.Id, RunId = session.LastRun.RunId, Revision = session.Revision } : null;
+        }
+
         internal static bool HasPendingWait(ChatSession session)
         { return session?.LastRun?.KernelState?.Summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Waiting; }
 
