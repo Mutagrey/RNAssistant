@@ -65,6 +65,11 @@ Owner — Core/Application; после принятия diff это истори
 
 ## Канонические документы
 
+[Карта повторов и блокировок](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03)
+содержит матрицы причин, исходные пределы и локальные воспроизведения semantic/inspection
+циклов. [Первый срез](stabilization/RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04)
+исправляет finish feedback и ограничивает одинаковые отказы; контракт — в v8.
+
 По запросу пользователя сохранены [целевой V8 context/reference contract](proposals/RNAssistant_V8_Context_Protocol_Target.md)
 и [план Diagnostics / Qualification Lab](proposals/RNAssistant_V8_Diagnostics_Qualification_Plan.md)
 от 2026-10-30. Owner — Core ModelProtocol/LLM/context; существующие Office/Workspace

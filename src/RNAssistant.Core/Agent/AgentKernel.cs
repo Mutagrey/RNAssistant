@@ -81,7 +81,7 @@ namespace RNAssistant.Core.Agent
             // first append claims the supplied invocation cursor before any model call.
             var checkedContinuation = AgentRunContinuation.RestoreCheckpoint(
                 new AgentRunState(continuation.Summary, continuation.Limits, null,
-                    continuation.ConsecutiveReflections, continuation.ReflectionFeedbackIssued),
+                    continuation.ConsecutiveReflections, continuation.ReflectionFeedbackIssued, continuation.FinishCorrection),
                 continuation.Revision, continuation.AcceptedMessages);
             var state = new State(checkedContinuation.Summary.RunId, checkedContinuation);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, state.Summary())).ConfigureAwait(false);
@@ -93,6 +93,9 @@ namespace RNAssistant.Core.Agent
             if (state.Progress.RecoveryIgnored)
                 return await FinishAsync(state, RunLifecycle.Failed, "restored_no_progress",
                     "The checkpoint already exhausted its no-progress allowance.").ConfigureAwait(false);
+            if (state.FinishCorrection?.Kind == ModelRequestCauseKind.CompletionRejected &&
+                state.FinishCorrection.Rejections >= FinishCorrection.MaximumRejections)
+                return await FinishRejectionLimitAsync(state).ConfigureAwait(false);
             string completionFeedback = state.ReflectionFeedbackIssued ? ReflectionLimitFeedback(state) : null;
             ModelRequestCause requestCause = completionFeedback == null ? null :
                 new ModelRequestCause(ModelRequestCauseKind.ReflectionLimit, null, completionFeedback);
@@ -120,9 +123,10 @@ namespace RNAssistant.Core.Agent
                     using (var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
                         _input == null ? CancellationToken.None : _input.InterruptToken))
                         model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
-                            state.Messages, completionFeedback ?? (state.Progress.InspectionRequired
+                            state.Messages, completionFeedback ?? state.FinishCorrection?.Message ?? (state.Progress.InspectionRequired
                                 ? ModelProtocolWire.UnknownEffectGuidance : null), state.Limits.MaxConsecutiveReflections,
-                            state.ConsecutiveReflections, requestCause), requestCancellation.Token).ConfigureAwait(false);
+                            state.ConsecutiveReflections, requestCause ?? state.FinishCorrection?.RequestCause(),
+                            state.FinishCorrection), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -153,11 +157,10 @@ namespace RNAssistant.Core.Agent
 
                 if (model.CompletionRejected)
                 {
-                    completionFeedback = model.Message;
-                    requestCause = new ModelRequestCause(ModelRequestCauseKind.CompletionRejected,
-                        model.SourceModelAttemptId, completionFeedback);
-                    await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
-                        state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
+                    completionFeedback = null; requestCause = null;
+                    var stopped = await RejectFinishAsync(state, model.Response, model.CompletionRejection,
+                        model.SourceModelAttemptId, stepId).ConfigureAwait(false);
+                    if (stopped != null) return stopped;
                     continue;
                 }
                 completionFeedback = null;
@@ -205,11 +208,10 @@ namespace RNAssistant.Core.Agent
                 }
                 if (response.Final && state.Progress.InspectionRequired)
                 {
-                    completionFeedback = ModelProtocolWire.UnknownEffectGuidance;
-                    requestCause = new ModelRequestCause(ModelRequestCauseKind.CompletionRejected,
-                        model.SourceModelAttemptId, completionFeedback);
-                    await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
-                        state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
+                    var stopped = await RejectFinishAsync(state, model.Response,
+                        FinishAdmission.Reject("inspection_required", ModelProtocolWire.UnknownEffectGuidance),
+                        model.SourceModelAttemptId, stepId).ConfigureAwait(false);
+                    if (stopped != null) return stopped;
                     continue;
                 }
                 if (response.Final)
@@ -229,11 +231,9 @@ namespace RNAssistant.Core.Agent
                             "Finish evidence resolver returned no decision.").ConfigureAwait(false);
                     if (!admission.Accepted)
                     {
-                        completionFeedback = admission.Code + ": " + admission.Message;
-                        requestCause = new ModelRequestCause(ModelRequestCauseKind.CompletionRejected,
-                            model.SourceModelAttemptId, completionFeedback);
-                        await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
-                            state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
+                        var stopped = await RejectFinishAsync(state, model.Response, admission,
+                            model.SourceModelAttemptId, stepId).ConfigureAwait(false);
+                        if (stopped != null) return stopped;
                         continue;
                     }
                     // Reconsider a partial claim once without interpreting free-form reason text.
@@ -243,11 +243,11 @@ namespace RNAssistant.Core.Agent
                         state.ToolSteps < state.Limits.MaxToolSteps)
                     {
                         partialFinishRechecked = true;
-                        completionFeedback = ModelProtocolWire.PartialFinishRecheckGuidance;
-                        requestCause = new ModelRequestCause(ModelRequestCauseKind.PartialFinishRecheck,
-                            model.SourceModelAttemptId, completionFeedback);
+                        state.FinishCorrection = FinishCorrection.Create(model.Response, "partial_finish_recheck",
+                            ModelProtocolWire.PartialFinishRecheckGuidance, null, model.SourceModelAttemptId,
+                            ModelRequestCauseKind.PartialFinishRecheck, null);
                         await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
-                            state.Summary(reason: "partial_finish_recheck", message: completionFeedback), stepId)).ConfigureAwait(false);
+                            state.Summary(reason: "partial_finish_recheck", message: state.FinishCorrection.Message), stepId)).ConfigureAwait(false);
                         continue;
                     }
                     if (_input != null && !_input.TryCloseInput())
@@ -257,6 +257,7 @@ namespace RNAssistant.Core.Agent
                         continue;
                     }
                 }
+                if (response.Final) state.FinishCorrection = null;
                 if (response.Action == ConversationResponse.ReflectionAction) state.ConsecutiveReflections++;
                 foreach (var call in response.ToolCalls) state.AcceptedIds.Add(call.Id);
                 state.Messages.Add(AgentMessage.Assistant(response));
@@ -305,6 +306,24 @@ namespace RNAssistant.Core.Agent
                 "Format repairs and provider retries do not consume reflection depth. Do not invent a tool call or report unverified work as complete.";
         }
 
+        private async Task<AgentRunResult> RejectFinishAsync(State state, AgentResponseDraft proposal,
+            FinishAdmission rejection, string sourceModelAttemptId, string stepId)
+        {
+            state.FinishCorrection = FinishCorrection.Create(proposal, rejection.Code, rejection.Message,
+                rejection.ClaimIndex, sourceModelAttemptId, ModelRequestCauseKind.CompletionRejected, state.FinishCorrection);
+            await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                state.Summary(reason: "completion_requirements_unmet", message: state.FinishCorrection.RequestCause().Feedback), stepId)).ConfigureAwait(false);
+            return state.FinishCorrection.Rejections >= FinishCorrection.MaximumRejections
+                ? await FinishRejectionLimitAsync(state).ConfigureAwait(false) : null;
+        }
+
+        private Task<AgentRunResult> FinishRejectionLimitAsync(State state)
+        {
+            return FinishAsync(state, RunLifecycle.Failed, "repeated_finish_no_progress",
+                "Завершение трижды отклонено по одной причине без новых результатов инструментов или ввода. " +
+                "Запуск остановлен. Последний ответ не принят. Причина: " + state.FinishCorrection.RequestCause().Feedback);
+        }
+
         private async Task<bool> TakeInputAsync(State state, CancellationToken token)
         {
             if (_input == null) return false;
@@ -312,6 +331,7 @@ namespace RNAssistant.Core.Agent
             if (messages.Count > 0)
             {
                 state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false;
+                state.FinishCorrection = null;
                 state.Progress.ObserveUserInput();
             }
             foreach (var message in messages)
@@ -438,6 +458,10 @@ namespace RNAssistant.Core.Agent
                 state.Messages.Add(AgentMessage.ToolResult(record));
             if (record.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
             { state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false; }
+            // A fresh terminal fact gives the model new information. Rejected
+            // dispatches and reflection do not erase an outstanding correction.
+            if (record.Outcome != ToolExecutionOutcome.AwaitingConfirmation && record.Outcome != ToolExecutionOutcome.NotDispatched)
+                state.FinishCorrection = null;
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
                 stepId, execution: record)).ConfigureAwait(false);
             state.Progress.Observe(call, ToolExecutionProgress.Capture(record), record.Message,
@@ -484,7 +508,7 @@ namespace RNAssistant.Core.Agent
             var summary = state.Summary(lifecycle, reason, message);
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged, summary)).ConfigureAwait(false);
             return new AgentRunResult(summary, state.Limits, state.Revision, state.Messages, state.AcceptedIds,
-                state.ConsecutiveReflections, state.ReflectionFeedbackIssued);
+                state.ConsecutiveReflections, state.ReflectionFeedbackIssued, state.FinishCorrection);
         }
 
         private DateTime CompletionTime(ToolExecutionContext context)
@@ -500,6 +524,7 @@ namespace RNAssistant.Core.Agent
                 // Finish the mandatory append, then observe cancellation at the
                 // next dispatch boundary. Cancellation cannot discard evidence.
                 fact.SetReflectionState(state.ConsecutiveReflections, state.ReflectionFeedbackIssued);
+                fact.SetFinishCorrection(state.FinishCorrection);
                 var revision = await _store.AppendAsync(fact, state.Revision, CancellationToken.None).ConfigureAwait(false);
                 if (revision <= state.Revision) throw new InvalidOperationException("Run store did not advance its cursor.");
                 state.Revision = revision;
@@ -524,6 +549,7 @@ namespace RNAssistant.Core.Agent
             internal PendingConfirmation Pending;
             internal int ConsecutiveReflections;
             internal bool ReflectionFeedbackIssued;
+            internal FinishCorrection FinishCorrection;
             internal readonly AgentProgressTracker Progress = new AgentProgressTracker();
 
             internal State(AgentRunRequest request)
@@ -550,6 +576,7 @@ namespace RNAssistant.Core.Agent
                 Revision = continuation.Revision;
                 ConsecutiveReflections = continuation.ConsecutiveReflections;
                 ReflectionFeedbackIssued = continuation.ReflectionFeedbackIssued;
+                FinishCorrection = continuation.FinishCorrection;
             }
 
             internal RunSummary Summary(RunLifecycle lifecycle = RunLifecycle.Running, string reason = null, string message = null)

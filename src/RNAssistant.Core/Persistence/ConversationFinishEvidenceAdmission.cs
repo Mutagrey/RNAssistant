@@ -63,14 +63,19 @@ namespace RNAssistant.Core.Persistence
                 " Available: " + available + ". Correct the citation without repeating tools.";
             foreach (var reference in references)
             {
+                var claimIndex = Enumerable.Range(0, results.Count).First(index =>
+                    results[index].Evidence.Contains(reference, StringComparer.OrdinalIgnoreCase));
                 Fact terminal;
                 if (!byAlias.TryGetValue(reference, out terminal))
-                    return FinishAdmission.Reject("unknown_evidence", reference + " is not an eligible terminal result of this chat. T/R are not evidence." + hint);
+                    return FinishAdmission.Reject("unknown_evidence", "results[" + claimIndex + "].evidence: " + reference +
+                        " is not an eligible terminal result of this chat. T/R are not evidence." + hint, claimIndex);
                 if (!delivered.Contains(reference))
-                    return FinishAdmission.Reject("undelivered_evidence", reference + " was not delivered in this request." + hint);
+                    return FinishAdmission.Reject("undelivered_evidence", "results[" + claimIndex + "].evidence: " + reference +
+                        " was not delivered in this request." + hint, claimIndex);
                 Fact call;
                 if (!calls.TryGetValue(terminal.CallId, out call) || !retained.Contains(call.Message.Id) || !retained.Contains(terminal.Message.Id))
-                    return FinishAdmission.Reject("unknown_evidence", reference + " no longer belongs to the retained chat history." + hint);
+                    return FinishAdmission.Reject("unknown_evidence", "results[" + claimIndex + "].evidence: " + reference +
+                        " no longer belongs to the retained chat history." + hint, claimIndex);
                 ValidateSelected(call, terminal, facts, payloads);
             }
             // Missing current terminals cannot turn a damaged/incomplete index
@@ -82,10 +87,17 @@ namespace RNAssistant.Core.Persistence
                 return FinishAdmission.Reject("missing_finish_results", "Report the outcomes of the accepted calls." + hint);
             if (currentEligible && references.Length == 0)
                 return FinishAdmission.Reject("missing_finish_evidence", "Cite at least one delivered eligible result (E1, E2)." + hint);
-            foreach (var claim in results)
-                if (claim.Assessment == ConversationAssessment.Satisfied &&
-                    claim.Evidence.Any(id => byAlias[id].Message.ExecutionProgress.Outcome != ToolExecutionOutcome.Ok))
-                    return FinishAdmission.Reject("contradictory_assessment", "A satisfied claim cites a failed, unknown or undispatched result.");
+            for (var index = 0; index < results.Count; index++)
+            {
+                var claim = results[index];
+                if (claim.Assessment != ConversationAssessment.Satisfied) continue;
+                var invalid = claim.Evidence.FirstOrDefault(id => byAlias[id].Message.ExecutionProgress.Outcome != ToolExecutionOutcome.Ok);
+                if (invalid != null)
+                    return FinishAdmission.Reject("contradictory_assessment", "results[" + index + "].assessment=satisfied cites " +
+                        invalid + " (" + byAlias[invalid].Message.ExecutionProgress.Outcome + "). " +
+                        "Cite successful evidence for this criterion, or correct its assessment and use a consistent outcome. " +
+                        "Do not repeat an accepted operation merely to change its citation.", index);
+            }
             return FinishAdmission.Allow();
         }
 

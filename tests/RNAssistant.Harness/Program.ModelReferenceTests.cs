@@ -86,8 +86,11 @@ namespace RNAssistant.Harness
                 AssertTrue(finish(new[] { failed }, new[] { "E1" }).Accepted, "failed eligible result can support an honest limitation");
                 AssertTrue(finish(new[] { satisfied }, new[] { "E2" }).Accepted, "an uncited earlier error does not block success");
                 var contradiction = new ConversationResultClaim("Read succeeded.", new[] { "E1", "E2" }, ConversationAssessment.Satisfied);
-                AssertEqual("contradictory_assessment", finish(new[] { contradiction }, new[] { "E1", "E2" }).Code,
+                var rejectedClaim = finish(new[] { contradiction }, new[] { "E1", "E2" });
+                AssertEqual("contradictory_assessment", rejectedClaim.Code,
                     "a successful result cannot hide a cited failed result");
+                AssertEqual(0, rejectedClaim.ClaimIndex.Value, "rejection locates the specific claim");
+                AssertContains(rejectedClaim.Message, "E1 (Error)", "rejection names the actual incompatible evidence");
                 var reopened = new ChatStore(paths).Load(session.Id);
                 AssertEqual(3L, reopened.ToolCallReferenceSequence, "call high water survives SQLite/replay");
                 AssertEqual(2L, reopened.EvidenceReferenceSequence, "evidence high water is independent");

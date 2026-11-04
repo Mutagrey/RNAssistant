@@ -209,6 +209,7 @@
     <Compile Include="Persistence\ConversationRunCommit.cs" />
     <Compile Include="Persistence\AgentRunState.cs" />
     <Compile Include="ModelProtocol\AgentModelProtocol.cs" />
+    <Compile Include="ModelProtocol\FinishCorrection.cs" />
     <Compile Include="ModelProtocol\ModelProtocolContracts.cs" />
     <Compile Include="ModelProtocol\ModelProtocolWire.cs" />
     <Compile Include="ModelProtocol\ModelProtocolWire.Requests.cs" />

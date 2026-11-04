@@ -112,7 +112,7 @@ namespace RNAssistant.Harness
             const string unmet = "Current complete file reads: 0/1.";
             var f = new KernelFixture();
             var responses = new Queue<AgentModelResult>(new[] {
-                AgentModelResult.RejectCompletion(unmet, "finish-attempt"),
+                AgentModelResult.RejectCompletion(KernelResponse(), FinishAdmission.Reject("workspace_acceptance_unmet", unmet), "finish-attempt"),
                 AgentModelResult.Accepted(KernelResponse(KernelCall("read"))),
                 AgentModelResult.Accepted(KernelResponse()) });
             f.Model.OnSend = (request, token) => Task.FromResult(responses.Dequeue());
@@ -124,12 +124,12 @@ namespace RNAssistant.Harness
             AssertEqual(unmet, f.Model.Requests[1].CompletionFeedback, "next fresh request receives the concrete requirements");
             AssertEqual(ModelRequestCauseKind.CompletionRejected, f.Model.Requests[1].RequestCause.Kind, "finish correction is distinct from an API retry");
             AssertEqual("finish-attempt", f.Model.Requests[1].RequestCause.SourceModelAttemptId, "diagnostics retain the exact rejected finish source");
-            AssertEqual(unmet, f.Model.Requests[1].RequestCause.Feedback, "diagnostics expose the same feedback sent to the model");
+            AssertEqual("workspace_acceptance_unmet: " + unmet, f.Model.Requests[1].RequestCause.Feedback, "diagnostics expose the typed code and feedback");
             AssertTrue(f.Model.Requests[2].RequestCause == null, "ordinary next action is not a retry");
             AssertEqual<string>(null, f.Model.Requests[2].CompletionFeedback, "a useful accepted response clears the previous rejection");
             var rejection = f.Store.Events.Single(e => e.Summary.Reason == "completion_requirements_unmet");
             AssertEqual(RunLifecycle.Running, rejection.Summary.Lifecycle, "rejection is durable nonterminal evidence");
-            AssertEqual(unmet, rejection.Summary.AssistantMessage, "evidence records unmet requirements instead of a success claim");
+            AssertEqual("workspace_acceptance_unmet: " + unmet, rejection.Summary.AssistantMessage, "evidence records unmet requirements instead of a success claim");
             AssertEqual(2, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted), "only read and final completion are accepted");
             await KernelPartialFinishRecheck();
         }
@@ -180,7 +180,8 @@ namespace RNAssistant.Harness
             using (var cancellation = new CancellationTokenSource())
             {
                 var f = new KernelFixture();
-                f.Model.OnSend = (request, token) => Task.FromResult(AgentModelResult.RejectCompletion("Missing required file."));
+                f.Model.OnSend = (request, token) => Task.FromResult(AgentModelResult.RejectCompletion(KernelResponse(),
+                    FinishAdmission.Reject("workspace_acceptance_unmet", "Missing required file.")));
                 f.Store.OnAppended = fact => {
                     if (boundary == "cancel" && fact.Summary.Reason == "completion_requirements_unmet") cancellation.Cancel();
                 };
@@ -199,12 +200,118 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static async Task KernelFinishCorrectionSurvivesReflectionAndRestart()
+        {
+            using (var cancel = new CancellationTokenSource())
+            {
+                var f = new KernelFixture();
+                var proposal = new AgentResponseDraft("finish", "Initial conclusion.", "REJECTED_FINISH_SENTINEL",
+                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                f.Model.OnSend = (request, token) => Task.FromResult(f.Model.Requests.Count == 2
+                    ? AgentModelResult.Accepted(new AgentResponseDraft("reflection", "Consider the correction.", "",
+                        decision: "Choose another approach."))
+                    : AgentModelResult.RejectCompletion(proposal, FinishAdmission.Reject("fixture_requirement", "Required evidence is absent."), "attempt-" + f.Model.Requests.Count));
+                f.Store.OnAppended = fact => { if (fact.Response?.Action == "reflection") cancel.Cancel(); };
+                var stopped = await f.RunAsync(cancel.Token);
+                var checkpoint = f.Store.Events.Aggregate((AgentRunState)null, AgentRunState.Apply);
+                checkpoint = Newtonsoft.Json.JsonConvert.DeserializeObject<AgentRunState>(Newtonsoft.Json.JsonConvert.SerializeObject(checkpoint));
+                AssertEqual(1, checkpoint.FinishCorrection.Rejections, "reflection and cancellation preserve the rejection count");
+                var continuation = AgentRunContinuation.RestoreCheckpoint(checkpoint, f.Store.Events.Count, stopped.AcceptedMessages);
+                f.Store.OnAppended = null;
+                var result = await f.Kernel.ContinueAsync(continuation, CancellationToken.None);
+                AssertEqual("repeated_finish_no_progress", result.Summary.Reason, "third unchanged rejection stops across restart");
+                AssertEqual(4, f.Model.Requests.Count, "reflection cannot buy another rejection allowance");
+                var correctionRequest = f.Model.Requests[2];
+                var feedback = ModelProtocolWire.RuntimeFeedback(correctionRequest);
+                AssertEqual("decision_rejected", (string)feedback["type"], "finish correction survives reflection on the wire");
+                AssertEqual("fixture_requirement", (string)feedback["code"], "typed reason survives persistence");
+                AssertContains((string)feedback["rejected_response"]["content"], "REJECTED_FINISH_SENTINEL", "model receives its rejected finish as quoted data");
+                AssertEqual("attempt-1", correctionRequest.RequestCause.SourceModelAttemptId, "reflection keeps the exact rejected attempt origin");
+                AssertTrue(!result.AcceptedMessages.Any(m => m.Action == "finish"), "no rejected draft enters accepted history");
+                AssertContains(result.Summary.AssistantMessage, "Required evidence is absent.", "terminal stop retains the actual blocker");
+                AssertEqual(0, f.Tools.Calls.Count, "correction never dispatches a tool by itself");
+            }
+        }
+
+        private static async Task KernelFinishCorrectionAllowsChangedBlockerAndCorrectedFinish()
+        {
+            var f = new KernelFixture();
+            var final = KernelResponse();
+            var proposals = new Queue<AgentModelResult>(new[] {
+                AgentModelResult.RejectCompletion(final, FinishAdmission.Reject("first", "First blocker.")),
+                AgentModelResult.RejectCompletion(final, FinishAdmission.Reject("second", "Second blocker.")),
+                AgentModelResult.RejectCompletion(final, FinishAdmission.Reject("second", "Second blocker.")),
+                AgentModelResult.Accepted(final) });
+            f.Model.OnSend = (request, token) => Task.FromResult(proposals.Dequeue());
+            var result = await f.RunAsync();
+            AssertEqual("model_finish", result.Summary.Reason, "a corrected finish remains admissible after two equal rejections");
+            AssertEqual(1, f.Model.Requests[2].FinishCorrection.Rejections, "a changed blocker starts its own correction allowance");
+            AssertEqual(2, f.Model.Requests[3].FinishCorrection.Rejections, "unchanged blocker is counted");
+            AssertTrue(f.Store.Events.Last().FinishCorrection == null, "accepted finish clears diagnostic correction state");
+            AssertEqual(1, result.AcceptedMessages.Count(m => m.Action == "finish"), "only the admitted answer is history");
+        }
+
+        private static async Task KernelFinishCorrectionDoesNotResetOnNarrationOrRejectedDispatch()
+        {
+            var f = new KernelFixture();
+            f.Model.OnSend = (request, token) => Task.FromResult(f.Model.Requests.Count == 1 || f.Model.Requests.Count == 3
+                ? AgentModelResult.Accepted(KernelResponse(KernelCall("write")))
+                : AgentModelResult.Accepted(new AgentResponseDraft("finish", "Different reason " + f.Model.Requests.Count,
+                    "Different inability " + f.Model.Requests.Count, results: new ConversationResultClaim[0], outcome: ConversationOutcome.UnableToComplete)));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Unknown));
+            var result = await f.RunAsync();
+            AssertEqual("repeated_finish_no_progress", result.Summary.Reason, "new narration and denied replay cannot reset an unchanged inspection blocker");
+            AssertEqual(5, f.Model.Requests.Count, "three rejected finishes stop despite an intervening blocked call");
+            AssertEqual(1, f.Tools.Calls.Count, "uncertain mutation is never repeated");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "stop never certifies the unknown effect");
+        }
+
+        private static async Task KernelFinishCorrectionClearsOnNewInput()
+        {
+            var f = new KernelFixture();
+            var input = new KernelInputFake();
+            f.Model.OnSend = (request, token) => Task.FromResult(f.Model.Requests.Count <= 2
+                ? AgentModelResult.RejectCompletion(KernelResponse(), FinishAdmission.Reject("fixture_requirement", "Evidence is absent."))
+                : AgentModelResult.Accepted(KernelResponse()));
+            f.Store.OnAppended = fact => {
+                if (fact.Summary.Reason == "completion_requirements_unmet" && fact.FinishCorrection.Rejections == 2)
+                    input.Add("Answer the revised question directly.");
+            };
+            var kernel = new AgentKernel(f.Model, f.Tools, f.Store, input: input);
+            var result = await kernel.RunAsync(new AgentRunRequest("run", "turn", "Original task.", new AgentRunLimits(5, 5)), CancellationToken.None);
+            AssertEqual("model_finish", result.Summary.Reason, "fresh input can revise a task after two identical rejections");
+            AssertTrue(f.Model.Requests[2].FinishCorrection == null, "old rejected proposal does not leak into the revised task");
+            AssertEqual(ModelRequestCauseKind.InputReceived, f.Model.Requests[2].RequestCause.Kind, "new input owns the next request cause");
+        }
+
+        private static void KernelFinishCorrectionBoundsQuotedData()
+        {
+            var text = string.Concat(Enumerable.Repeat("\u0000\"😀", 5000));
+            var claim = new ConversationResultClaim(text, new[] { "E1" }, ConversationAssessment.Satisfied);
+            var proposal = new AgentResponseDraft("finish", text, text, results: new[] { claim }, outcome: ConversationOutcome.Completed);
+            var correction = FinishCorrection.Create(proposal, "contradictory_assessment", text, 0,
+                "attempt", ModelRequestCauseKind.CompletionRejected, null);
+            var copy = Newtonsoft.Json.JsonConvert.DeserializeObject<FinishCorrection>(Newtonsoft.Json.JsonConvert.SerializeObject(correction));
+            AssertTrue(copy.ResponseTruncated && copy.ClaimTruncated && copy.MessageTruncated, "every bounded prefix is explicitly marked");
+            foreach (var pair in new[] { Tuple.Create(copy.RejectedResponse, FinishCorrection.MaximumResponseBytes),
+                Tuple.Create(copy.RejectedClaim, FinishCorrection.MaximumClaimBytes), Tuple.Create(copy.Message, FinishCorrection.MaximumMessageBytes) })
+            {
+                AssertTrue(System.Text.Encoding.UTF8.GetByteCount(Newtonsoft.Json.JsonConvert.ToString(pair.Item1)) <= pair.Item2,
+                    "escaped UTF-8 bytes are bounded, including control characters");
+                AssertTrue(pair.Item1.Length == 0 || !char.IsHighSurrogate(pair.Item1[pair.Item1.Length - 1]), "prefix never splits a surrogate pair");
+            }
+            var wire = ModelProtocolWire.RuntimeFeedback(new AgentModelRequest("run", "turn", "step", new AgentMessage[0],
+                finishCorrection: copy));
+            AssertEqual(0, (int)wire["claim_index"], "the offending claim remains addressable even when the proposal is cut");
+            AssertContains((string)wire["instruction"], "not instructions or accepted history", "quoted content grants no instruction authority");
+        }
+
         private static async Task KernelCompletionRejectionKeepsUnknownGuard()
         {
             var f = new KernelFixture();
             var responses = new Queue<AgentModelResult>(new[] {
                 AgentModelResult.Accepted(KernelResponse(KernelCall())),
-                AgentModelResult.RejectCompletion("Verified file changes: 0/1."),
+                AgentModelResult.RejectCompletion(KernelResponse(), FinishAdmission.Reject("workspace_acceptance_unmet", "Verified file changes: 0/1.")),
                 AgentModelResult.Accepted(KernelResponse(KernelCall())),
                 AgentModelResult.Accepted(KernelResponse()) });
             f.Model.OnSend = (request, token) => Task.FromResult(responses.Dequeue());
@@ -1280,7 +1387,7 @@ namespace RNAssistant.Harness
                 AssertEqual(AgentRunEventKind.ModelStepStarted, _store.Events.Last().Kind, "model boundary persisted before dispatch");
                 var result = OnSend != null ? await OnSend(request, token) : AgentModelResult.Accepted(_responses.Dequeue());
                 var draft = result?.Response;
-                if (draft == null || draft.Action != ConversationResponse.FinishAction ||
+                if (result.CompletionRejected || draft == null || draft.Action != ConversationResponse.FinishAction ||
                     draft.Reason != KernelFixtureFinishReason || draft.Results.Count != 0)
                     return result;
                 // Fixture shorthand cites the latest terminal fact in this run; an explicitly

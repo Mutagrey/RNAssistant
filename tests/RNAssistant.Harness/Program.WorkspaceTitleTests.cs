@@ -21,7 +21,8 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void WorkspaceAcceptedCallHistory(bool strict = false, bool rejectFinish = false, bool failedRead = false)
+        private static void WorkspaceAcceptedCallHistory(bool strict = false, bool rejectFinish = false, bool failedRead = false,
+            bool reflectBeforeCorrection = false)
         {
             WithTempPaths(paths =>
             {
@@ -34,7 +35,7 @@ namespace RNAssistant.Harness
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
                     listener.Start();
                     var served = 0;
-                    var expectedRequests = rejectFinish ? 4 : 3;
+                    var expectedRequests = reflectBeforeCorrection ? 5 : rejectFinish ? 4 : 3;
                     var requests = new string[expectedRequests];
                     string sessionId = null;
                     var server = Task.Run(async () =>
@@ -67,6 +68,9 @@ namespace RNAssistant.Harness
                                     invalid["results"][0]["evidence"] = new JArray("r1");
                                     content = invalid.ToString(Newtonsoft.Json.Formatting.None);
                                 }
+                                if (reflectBeforeCorrection && number == 3)
+                                    content = ModelProtocolWire.WriteAcceptedDecision("reflection", "Consider the evidence correction.", "",
+                                        decision: "Use the provided terminal references without repeating tools.");
                                 if (strict)
                                 {
                                     AssertEqual("json_schema", (string)JObject.Parse(requests[number - 1])["response_format"]?["type"],
@@ -108,9 +112,20 @@ namespace RNAssistant.Harness
                                 (message.ToolName == "core.find" || failedRead && message.ToolName == "core.read")).ToArray();
                             if (rejectFinish)
                             {
-                                AssertEqual(3, first.Summary.IterationsUsed, "rejected finish consumes a step of the same run");
+                                AssertEqual(reflectBeforeCorrection ? 4 : 3, first.Summary.IterationsUsed, "rejected finish consumes a step of the same run");
                                 AssertTrue(requests[2].Contains("unknown_evidence") && requests[2].Contains(failedRead ? "Available terminal references" : "No terminal references"),
                                     "correction feedback supplies exact available references");
+                                foreach (var index in reflectBeforeCorrection ? new[] { 2, 3 } : new[] { 2 })
+                                {
+                                    var runtime = JObject.Parse(requests[index])["messages"].Select(item => (string)item["content"])
+                                        .Single(item => item.StartsWith(RuntimeContextPrompt.Header, StringComparison.Ordinal));
+                                    var feedback = RuntimeMetadataValue(runtime, "completionFeedback");
+                                    AssertEqual("decision_rejected", (string)feedback["type"], "semantic correction stays in the actual next request");
+                                    AssertEqual("unknown_evidence", (string)feedback["code"], "typed reason survives reflection and compiler projection");
+                                    var rejected = JObject.Parse((string)feedback["rejected_response"]["content"]);
+                                    AssertEqual("R1", (string)rejected["results"][0]["evidence"][0], "the model sees the rejected parsed citation with canonical casing");
+                                    AssertEqual(0, (int)feedback["claim_index"], "feedback identifies the offending claim");
+                                }
                             }
                             AssertEqual(2, calls.Length, "accepted read batch has two durable per-call records");
                             var activities = service.GetSession(workspace, sessionId).Messages.Where(message =>

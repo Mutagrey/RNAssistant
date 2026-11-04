@@ -72,6 +72,7 @@ namespace RNAssistant.Core.Agent
         public ToolExecutionRecord Execution { get; private set; }
         public int ConsecutiveReflections { get; private set; }
         public bool ReflectionFeedbackIssued { get; private set; }
+        public FinishCorrection FinishCorrection { get; private set; }
 
         internal AgentRunEvent(AgentRunEventKind kind, RunSummary summary, string stepId = null,
             AgentRunLimits limits = null, AgentMessage userMessage = null, AgentResponse response = null,
@@ -95,6 +96,8 @@ namespace RNAssistant.Core.Agent
             ConsecutiveReflections = consecutive;
             ReflectionFeedbackIssued = feedbackIssued;
         }
+
+        internal void SetFinishCorrection(FinishCorrection correction) { FinishCorrection = correction; }
     }
 
     // An immutable in-memory continuation, not a second durable authority.
@@ -108,10 +111,11 @@ namespace RNAssistant.Core.Agent
         public IReadOnlyList<string> AcceptedCallIds { get; private set; }
         public int ConsecutiveReflections { get; private set; }
         public bool ReflectionFeedbackIssued { get; private set; }
+        public FinishCorrection FinishCorrection { get; private set; }
 
         internal AgentRunContinuation(RunSummary summary, AgentRunLimits limits, long revision,
             IEnumerable<AgentMessage> messages, IEnumerable<string> ids,
-            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false)
+            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false, FinishCorrection finishCorrection = null)
         {
             Summary = summary;
             Limits = limits;
@@ -120,6 +124,7 @@ namespace RNAssistant.Core.Agent
             AcceptedCallIds = Array.AsReadOnly(ids.OrderBy(id => id, StringComparer.Ordinal).ToArray());
             ConsecutiveReflections = consecutiveReflections;
             ReflectionFeedbackIssued = reflectionFeedbackIssued;
+            FinishCorrection = finishCorrection;
         }
 
         public static AgentRunContinuation Restore(AgentRunState checkpoint, long revision,
@@ -147,7 +152,7 @@ namespace RNAssistant.Core.Agent
                 completed.Contains(pending.Id) || calls.Any(call => call.Id != pending.Id && !completed.Contains(call.Id)))
                 throw new InvalidOperationException("Pending call differs from accepted history or is already resolved.");
             return new AgentRunContinuation(summary, limits, revision, messages, ids,
-                checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued);
+                checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued, checkpoint.FinishCorrection);
         }
 
         // The application must own the exact session lease. A Running checkpoint
@@ -195,7 +200,7 @@ namespace RNAssistant.Core.Agent
             if (last.Kind == AgentMessageKind.Assistant && last.Action != ConversationResponse.ReflectionAction)
                 throw new InvalidOperationException("The accepted model decision cannot be continued.");
             return new AgentRunContinuation(summary, limits, revision, messages, ids,
-                checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued);
+                checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued, checkpoint.FinishCorrection);
         }
     }
 
@@ -207,13 +212,13 @@ namespace RNAssistant.Core.Agent
 
         internal AgentRunResult(RunSummary summary, AgentRunLimits limits, long revision,
             IEnumerable<AgentMessage> messages, IEnumerable<string> ids,
-            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false)
+            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false, FinishCorrection finishCorrection = null)
         {
             Summary = summary;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation)
                 Continuation = new AgentRunContinuation(summary, limits, revision, AcceptedMessages, ids,
-                    consecutiveReflections, reflectionFeedbackIssued);
+                    consecutiveReflections, reflectionFeedbackIssued, finishCorrection);
         }
     }
 }

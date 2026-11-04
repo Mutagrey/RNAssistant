@@ -1,5 +1,38 @@
 # Stabilization progress
 
+## Finish: коррекция и ограничение цикла — 2026-11-04
+
+Owners: Core AgentKernel / ModelProtocol / Persistence; Application — typed acceptance.
+Реализован первый срез: модель получает код/причину, конкретный claim/E и ограниченную
+цитату непринятого finish. Причина сохраняется через reflection и восстановление.
+Три одинаковых отказа без нового terminal tool result/ввода останавливают run с
+`repeated_finish_no_progress` и исходной причиной, без принятия ответа или replay tools.
+Минимальная сборка Harness прошла; 20 целевых checks проходят, включая реальные
+scripted HTTP requests в обоих JSON-режимах. Шесть соседних baseline failures
+подтверждены на прежней сборке и зафиксированы в
+[Risk Register](RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04).
+Открыто: достижимость inspection/partial reads/null target, repeated agents.wait,
+отдельный semantic verdict исходного запроса, поведение живой модели и Windows/Office.
+Причина зависания на исходной фотографии по-прежнему не установлена.
+
+## Аудит циклов повторов — 2026-11-03, до исправления
+
+Owners: Core ModelProtocol/Kernel/ToolRuntime, Application Inbox; Web — причины.
+[Карта и матрицы](RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03)
+разделяют HTTP retry, format repair, rejected finish и tool recovery. Локально
+воспроизведены 256 одинаковых semantic отказов, невозможность честно завершить
+неосмотренный unknown, отсутствие объединения partial reads и блок повторного
+`agents.wait` при одинаковых timeout receipts. 7 existing checks прошли без сборки
+Harness; 6 scripted probes изолируют kernel/progress без HTTP/Office. Предложено
+начать с bounded semantic no-progress и достижимого inspection; runtime не изменён.
+Причина конкретного Windows зависания по фото вкладки Приложение остаётся открытой.
+Уточнение finish: 4 сквозных локальных HTTP-сценария проходят через настоящий
+Workspace compiler/store/admission. Исправленная E принимается без replay tools;
+подтверждены отсутствие rejected proposal в следующем запросе, потеря причины после
+reflection и общий feedback без claim/E при contradictory assessment. Первый
+предлагаемый срез дополнен конкретным сохраняемым finish feedback; на дату аудита код
+не изменялся. Реализация первого среза описана выше; остальные риски остаются открытыми.
+
 ## Межагентная очередь и причины повторов — 2026-11-03, In Review
 
 Owners: Application Inbox, Core ModelProtocol/Kernel, Web RunJournal.

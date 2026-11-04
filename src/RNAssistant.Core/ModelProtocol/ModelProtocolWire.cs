@@ -27,7 +27,8 @@ namespace RNAssistant.Core.ModelProtocol
             "criterion is a short statement of one original user requirement, without copied source, logs or repeated explanation. ";
 
         public const string UnknownEffectGuidance =
-            "An unknown effect requires investigation. Before finish, successfully read the affected current state after the unconfirmed operation. " +
+            "An unknown effect requires investigation. Before finish, successfully read each affected exact current resource after the unconfirmed operation. " +
+            "Inspection requires a fresh, complete whole-resource live read; partial ranges and immutable historical snapshots do not satisfy it. " +
             "Compare it with the requested outcome, then continue feasible authorized work. Do not repeat the uncertain call unchanged or disguise a retry by changing arguments. " +
             "A read alone does not prove the intended change, and an unrelated success does not resolve it. " +
             "Report concrete obstacles and unfinished outcomes honestly; unverified does not waive required inspection. " +
@@ -194,9 +195,9 @@ namespace RNAssistant.Core.ModelProtocol
         {
             if (kind == ConversationResponseError.None) throw new ArgumentException("A format error is required.", nameof(kind));
             bool errorTruncated, truncated;
-            var boundedError = BoundRepairText(string.IsNullOrWhiteSpace(error) ? "Invalid conversation response." : error.Trim(),
+            var boundedError = BoundDiagnosticText(string.IsNullOrWhiteSpace(error) ? "Invalid conversation response." : error.Trim(),
                 MaximumFormatRepairErrorBytes, out errorTruncated);
-            var content = BoundRepairText(rejectedContent ?? string.Empty, MaximumFormatRepairResponseBytes, out truncated);
+            var content = BoundDiagnosticText(rejectedContent ?? string.Empty, MaximumFormatRepairResponseBytes, out truncated);
             return new JObject
             {
                 ["type"] = "format_repair", ["dispatched"] = false,
@@ -223,7 +224,7 @@ namespace RNAssistant.Core.ModelProtocol
             }.ToString(Formatting.None);
         }
 
-        private static string BoundRepairText(string content, int maximumBytes, out bool truncated)
+        internal static string BoundDiagnosticText(string content, int maximumBytes, out bool truncated)
         {
             // Bound quoted JSON bytes: control characters can otherwise expand sixfold.
             var lower = 0;

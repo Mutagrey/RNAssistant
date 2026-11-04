@@ -2,6 +2,7 @@ using System;
 using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Core.Persistence
 {
@@ -14,10 +15,11 @@ namespace RNAssistant.Core.Persistence
         public ToolExecutionContext InFlightTool { get; private set; }
         public int ConsecutiveReflections { get; private set; }
         public bool ReflectionFeedbackIssued { get; private set; }
+        public FinishCorrection FinishCorrection { get; private set; }
 
         [JsonConstructor]
         public AgentRunState(RunSummary summary, AgentRunLimits limits, ToolExecutionContext inFlightTool = null,
-            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false)
+            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false, FinishCorrection finishCorrection = null)
         {
             Summary = summary ?? throw new ArgumentNullException(nameof(summary));
             Limits = limits ?? throw new ArgumentNullException(nameof(limits));
@@ -29,6 +31,7 @@ namespace RNAssistant.Core.Persistence
                 throw new ArgumentOutOfRangeException(nameof(consecutiveReflections));
             ConsecutiveReflections = consecutiveReflections;
             ReflectionFeedbackIssued = reflectionFeedbackIssued;
+            FinishCorrection = finishCorrection;
         }
 
         public static AgentRunState Apply(AgentRunState previous, AgentRunEvent fact)
@@ -38,7 +41,7 @@ namespace RNAssistant.Core.Persistence
                 : fact.Kind == AgentRunEventKind.ToolCompleted || fact.Kind == AgentRunEventKind.SummaryChanged
                     ? null : previous == null ? null : previous.InFlightTool;
             return new AgentRunState(fact.Summary, limits, active,
-                fact.ConsecutiveReflections, fact.ReflectionFeedbackIssued);
+                fact.ConsecutiveReflections, fact.ReflectionFeedbackIssued, fact.FinishCorrection);
         }
 
         public AgentRunState Interrupt(bool cancelled, string message, string interruptedRunId = null)
@@ -55,7 +58,7 @@ namespace RNAssistant.Core.Persistence
             return new AgentRunState(new RunSummary(interruptedRunId ?? Summary.RunId, Summary.TurnId,
                 cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed, counts, Summary.IterationsUsed,
                 Summary.ToolStepsUsed, message, "runtime_interrupted", null), Limits, null,
-                ConsecutiveReflections, ReflectionFeedbackIssued);
+                ConsecutiveReflections, ReflectionFeedbackIssued, FinishCorrection);
         }
     }
 }

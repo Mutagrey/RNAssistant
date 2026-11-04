@@ -1,5 +1,17 @@
 # RNAssistant Harness
 
+## Finish correction — 2026-11-04
+
+Run one substring filter per invocation: `kernel: finish correction`,
+`kernel: completion rejection`, `model refs:`. These cover bounded quoted diagnostic
+data, unchanged-rejection stop through reflection/restart, narration and blocked
+replay, reset on input/tool facts, corrected citations without tool replay, and actual
+Workspace HTTP requests in both JSON modes. Existing partial recheck remains bounded.
+The focused 20 cases pass; unrelated `kernel: external unknown` and five
+`kernel replay:` failures reproduce on the pre-change Harness and remain documented
+in [RISK_REGISTER](../../docs/stabilization/RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04).
+No real-model, Windows/Office or full Harness qualification is implied.
+
 ## Shared HTML targets — 2026-11-03
 
 `shared HTML:` covers explicit creation, same-document discovery across agents,

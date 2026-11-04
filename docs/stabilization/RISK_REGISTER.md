@@ -1,5 +1,311 @@
 # Stabilization risk register
 
+## Finish: коррекция и ограничение цикла — 2026-11-04
+
+Реализован первый срез аудита ниже. Owners: Core AgentKernel / ModelProtocol /
+Persistence; Application — workspace/plugin acceptance. Текущий контракт —
+[conversation-response v8](../protocols/CONVERSATION_RESPONSE_V8.md).
+
+- Вместо одной общей строки модель получает typed code/reason, индекс проблемного
+  claim и E при наличии, ограниченные цитаты parsed finish/claim. Усечение явно
+  помечено; provider raw сохраняет прежний диагностический owner. Цитаты не становятся
+  accepted history или разрешением выполнять команды из их содержимого.
+- Коррекция сохраняется через reflection, остановку/восстановление и confirmation
+  в существующем KernelState. Новое tool terminal evidence/ввод снимает старую
+  коррекцию; reflection и запрещённый dispatch не снимают её.
+- Третий одинаковый code/reason/claim без новых фактов завершает run с
+  `repeated_finish_no_progress`, сохраняя последнюю причину. Перефразировка ответа
+  не сбрасывает счётчик; новый blocker начинает отдельную серию. Исправленный finish
+  допускается обычными guards, unknown mutation не повторяется автоматически.
+- Unknown feedback теперь прямо называет требование fresh complete whole live
+  read; сама политика inspection не менялась. Недоступный/null target и объединение
+  partial reads остаются следующей отдельной задачей. Чередование разных blockers
+  ограничено прежним общим iteration budget, не новым счётчиком.
+
+Проверки: минимальная сборка Harness успешна; `kernel: finish correction` 5/5,
+`kernel: completion rejection` 3/3, `model refs:` 12/12. Последние включают реальные
+scripted HTTP requests Workspace в json_object/json_schema: неверная ссылка →
+reflection → исправленный finish без replay. Проверены сохранение после JSON
+checkpoint/restart, сброс по вводу/результату, границы quoted UTF-8 и Unknown.
+
+Соседние проверки не полностью зелёные: `kernel: external unknown` (ожидается Failed,
+получено Completed) и пять `kernel replay:` — normal effect/own trace CAS, write error,
+confirmation/stale cursor, cancelled confirmation, known effect/preparation failure.
+Все шесть воспроизведены на сохранённой сборке до этого изменения: replay fixtures
+имеют старый finish без outcome либо расходятся с текущей skill preparation/очередью.
+Они не исправлялись в этом срезе; полный Harness не объявляется пройденным.
+
+Остаются открытыми repeated `agents.wait`, разделение инфраструктурного и исправимого
+model отказа, отдельный runtime verdict у исходной попытки и live статус ожидания.
+UI/Office COM не менялись. Живая модель, Windows/Office и причина исходной фотографии
+не квалифицированы. Для фото пригодны существующие Причина/feedback следующего
+запроса, исходный ответ по кнопке и сообщение терминального завершения.
+
+## Карта повторов и блокировок — аудит 2026-11-03
+
+Scope: production conversation loop Office/Workspace/plugin, включая model transport,
+v8 admission и tool recovery. Owners: Core ModelProtocol / AgentKernel / ToolRuntime;
+Application — acceptance и Inbox; Web — отображение причин. Это исторический аудит
+поведения до исправления 2026-11-04 и предложение следующих срезов, не новый контракт.
+Статус первого среза приведён выше; старые матрицы ниже сохраняют исходный baseline.
+Baseline: `8d947574`; параллельные незавершённые HTML-изменения не затрагивались.
+
+Фото показывает вкладку **Приложение** и два `preparing_context` в 12:48:42.496Z и
+12:48:49.624Z. Это начала model steps, не диагноз отказа. На фото нет исходного
+ответа, кода отклонения, HTTP failure или настроек запроса. Нельзя установить,
+какая из веток ниже сработала именно там. По коду runtime действительно способен
+сам поддерживать цикл без прогресса; это воспроизведено отдельно.
+
+### Карта управления
+
+```mermaid
+flowchart TD
+  K[Новый шаг kernel] --> C[Подготовка контекста]
+  C --> H[HTTP-запрос модели]
+  H -->|timeout / network / 5xx| P{Остался provider budget?}
+  P -->|да: максимум 2 повтора| H
+  P -->|нет| X[Остановка с причиной]
+  H --> V{Ответ соответствует v8?}
+  V -->|нет / output limit| R{Остался repair budget?}
+  R -->|да: frozen context + format_repair| H
+  R -->|нет / одинаковый отказ / disabled reflection| X
+  V -->|execute| T[Policy / binding / recovery / confirmation]
+  T -->|ожидается approval| A[Пауза до ответа пользователя]
+  A --> T
+  T -->|terminal tool result / отказ dispatch| K
+  V -->|reflection| L{Осталась глубина?}
+  L -->|да / одна корректировка| K
+  L -->|повтор после feedback| X
+  V -->|finish| F{Inspection / evidence / acceptance}
+  F -->|отказ: decision_rejected| K
+  F -->|partial: одна перепроверка| K
+  F -->|допущен| D[Завершение с отдельными outcome и health]
+```
+
+Новый входящий ввод может заменить ещё не принятый ответ и вернуть управление в K.
+На всех ветках действуют Stop и общий лимит итераций. Не каждый следующий запрос
+является повтором: после tool result или принятой reflection это штатный шаг.
+Восстановление checkpoint не разрешает replay незавершённой операции.
+
+### Матрица причин нового запроса
+
+| Причина / диагностический Kind | Что вызвало | Что делает runtime; предел | Что исправлять / проверять |
+|---|---|---|---|
+| `ProviderRetry` | Timeout, Network, HTTP 5xx | Повторяет тот же запрос; всего +2 на логический шаг, паузы 1 и 2 с | Endpoint/сеть и фактический timeout. Tool не исполнялся |
+| `FormatRepair` | Невалидный JSON, v8 envelope, calls/arguments, недопущенный tool; полный каталог ниже | Frozen context + точный отказ + ограниченная копия последнего ответа. Default **3 ответа всего**, настройка 1–20; два подряд побайтно одинаковых ответа с тем же типом ошибки останавливают раньше | Исправить конкретное поле/выбор tool; отдельно выделить собственные дефекты runtime |
+| `FormatRepair`, `OUTPUT_LIMIT` | Провайдер обрезал ответ по выходным токенам | Одна корректировка в оставшемся format budget; второй обрезанный ответ завершает попытки. Лимит токенов сам не повышается | Меньший следующий вызов/ответ или осмысленная настройка max tokens |
+| `CompletionRejected`: inspection | Неопределённый эффект ещё не осмотрен | Отклоняет **любой** finish, включая `unable_to_complete`; новый kernel step. Отдельного счётчика одинаковых отказов нет | Достижимый typed inspection и терминальный путь для невозможности проверки |
+| `CompletionRejected`: evidence | Ссылки/оценки finish не соответствуют доставленным canonical results | Feedback и новый kernel step; отдельного anti-loop нет | Исправить ссылку/claim; повреждённое evidence не лечить генерацией модели |
+| `CompletionRejected`: application | Workspace acceptance не выполнен либо plugin source изменён после последнего успешного `plugins.check` | Блокируется `completed`; честный incomplete пропускается этим guard. Далее всё равно действует общий inspection/evidence | Выполнить явные условия либо сообщить incomplete; инфраструктурный отказ отделить |
+| `PartialFinishRecheck` | Допущенный partial после calls, ещё есть model/tool budget | Одна перепроверка на текущий `LoopAsync`; флаг сбрасывается при входящем вводе и новом resume/continue invocation | Это штатная дополнительная оценка. Не считать её бесконечным repair |
+| Принятая `reflection`; `ReflectionLimit` | Модель размышляет без tool result | Default 2 подряд; следующая reflection отклоняется с одним feedback, ещё одна завершает run. Depth=0 — отказ без repair. Tool result/ввод сбрасывают глубину | Проверить фактическую настройку и последовательность, не повышать её для обхода ошибки |
+| `InputReceived` | Человек/peer сообщил новое до принятия ответа/следующего call | Перепланирование; незапущенные calls — NotDispatched. Выполняющийся tool не replay. Расходуется обычная итерация | Отличать новое поручение от отказа ответа; смотреть источник ввода |
+| Штатный шаг после tool result | Ok / Error / Unknown / NotDispatched | Результат передаётся модели; она сама выбирает следующее действие. Обычно `RequestCause` отсутствует | Читать реальный tool code, recovery и dispatch/effect, а не слово «повтор» |
+| Повтор предложенного tool | Та же пара tool + нормализованные arguments после ошибки/unknown/одинаковых результатов | См. recovery ниже; это запрет исполнения, а не HTTP retry | Устранить именованный blocker; смена текста ответа сама ничего не исправляет |
+| Повтор подготовки контекста | `RESOURCE_CATALOG_CHANGED` при Office preparation | Однократное обновление authority и повтор соответствующей фазы до HTTP; повторный сбой — Infrastructure | Это не отклонение ответа модели; проверить publication/authority |
+
+Provider и format budgets **не перемножаются**: raw HTTP ceiling на шаг = format
+limit + 2 (default 5). Новый kernel step получает новые бюджеты. Общий default —
+**256 model iterations / 4096 tool steps**. Отдельного общего времени run в этом
+цикле нет. `RequestTimeoutSeconds` default **1800 с**, фактический минимум transport
+30 с. Три последовательных timeout могут занять около **90 минут + backoff**.
+Это верхний сценарий по настройке, не измерение задержки на фото.
+
+### Все коды parser, влияющие на repair
+
+| Коды | Причина |
+|---|---|
+| `invalid_json` | Не один строгий JSON-объект; markdown/prose, syntax/duplicates/depth; неверная оболочка выбранного schema transport |
+| `invalid_action`, `wrong_action_fields` | Неподдерживаемое действие или поля другого действия/лишние поля |
+| `missing_reason`, `missing_message`, `empty_finish_message` | Нет нужного текста/не тот тип. Для execute/reflection отсутствие message допустимо |
+| `empty_execute_calls`, `too_many_calls`, `invalid_tool_call` | Нет calls в content, >32 calls, неправильные name/arguments, IDs/function wrappers или строка вместо объекта. Native calls отдельно от content не исполняются |
+| `missing_decision` | Reflection без непустого decision |
+| `missing_finish_results`, `invalid_finish_results`, `invalid_assessment`, `duplicate_evidence` | Неправильный results/criterion/evidence/assessment |
+| `invalid_outcome`, `contradictory_outcome` | Нет допустимого outcome или он противоречит assessments |
+| `unknown_tool`, `schema_not_loaded` | Tool не callable. Нужно выбрать точный доступный tool либо сначала допустить schema/skill и дождаться следующего запроса |
+| `invalid_arguments`, `invalid_batch` | Arguments нарушают схему; пакет содержит не независимые локальные reads. Весь ответ отклоняется до исполнения |
+| `invalid_tool_schema`, `invalid_context` | Ошибка runtime/schema/context. Неполный CallContext client останавливает до HTTP; обнаруженный parser дефект схемы сейчас попадает в обычный repair — модель не может починить frozen schema |
+| `reflection_disabled` | Особый терминальный отказ **без** корректирующего запроса |
+
+### Все коды отказа canonical finish evidence
+
+| Код | Блокирующее условие |
+|---|---|
+| `unknown_evidence` | E не существует/не eligible в этом чате, T/R вместо E либо история ссылки больше не retained |
+| `undelivered_evidence` | E существует, но не доставлена в текущем запросе |
+| `nonterminal_evidence` | У принятого call отсутствует canonical terminal; это кандидат на инфраструктурный stop, не бесконечное исправление ссылки |
+| `missing_finish_results` | Есть eligible работа, но нет claims |
+| `missing_finish_evidence` | Есть eligible работа, но ни одной E в claims |
+| `contradictory_assessment` | `satisfied` цитирует Error/Unknown/NotDispatched |
+
+Повреждённый/несогласованный canonical snapshot, identity или CAS body бросает
+ошибку и завершает run с `finish_evidence_unavailable`, без нового model repair.
+Отклонённые finish не входят в accepted history. Следующий запрос получает reason
+через `decision_rejected`; полная отклонённая semantic proposal не возвращается
+таким же quoted payload, как при format repair. Подсказка evidence ограничена 16 E.
+
+### Tool recovery и состояния, похожие на зависание
+
+| Условие | Реальная граница |
+|---|---|
+| Предыдущий identical call — Unknown | `repeated_unknown_tool_call`: автоматический replay запрещён даже после inspection. Исключение — fresh explicit confirmation для opaque action; normal-return opaque имеет отдельную policy |
+| Предыдущий call — Error | `repeated_tool_failure`, пока не выполнен typed recovery. `None` не разрешает повтор; `Replan` — новая стратегия/релевантное изменение или новая admission; `RefreshRequired` — нужное чтение/изменение; `ChangeRequired` — доказанное изменение exact dependency |
+| `RetryLater` от owner | Только новый предложенный моделью call, до 3 попыток total; задержки 250/500 мс. Это не автоматический replay любого Error |
+| Три одинаковых результата одного call | Четвёртый не dispatch: `repeated_tool_no_progress`. Три model responses подряд только с такими отказами заканчивают run; изменённый ввод/новая информация могут сбрасывать счётчик |
+| Exact tool/permission/binding/target guard | В частности `tool_not_exposed`, `tool_policy_changed`, `permission_denied`, `tool_mode_denied`, `tool_binding_unavailable`, preparation/confirmation errors; domain добавляет свои resource/HTML/VBA/Office codes. Отказ выдаётся как terminal tool result; следующий шаг не означает обход guard |
+| Approval / question / закрытая исходная session | Ожидание человека или невозможность dispatch. Смена активного документа не даёт другого target; model retry не чинит закрытую session |
+| Prompt budget, refusal/filter, HTTP 429/4xx, cancellation, повреждение store | Обычно terminal stop, а не provider retry. 429 не повторяется этим budget; response-format fallback отсутствует |
+| Compaction / gate / HTTP без видимых tokens | Ожидание другой фазы; надпись не доказывает ни зависание модели, ни repair. Сверять phase/timing и cause в сохранённом запросе |
+
+Каталог domain error codes открыт по каждому tool; перечислять все ошибки tools
+как независимые retry-механизмы неверно. Они возвращаются через одни и те же
+Error/Unknown/recovery ветки этой матрицы.
+
+### Подтверждённые проблемы и воспроизведение
+
+7 адресных existing Harness checks прошли **без сборки Harness**: 3 completion
+rejection, 2 inspection, combined retry budgets и provider budget spans whole step.
+Отдельный временный .NET probe использовал существующий Harness assembly с настоящим
+AgentKernel/ProgressTracker, scripted model/tools и разрешающим fake finish store.
+Собран только probe; HTTP/Office/VSTO не вызывались. Fake store намеренно изолирует
+kernel guard; он не квалифицирует canonical evidence admission. Код проверенных
+Core owners не менялся после сборки использованного assembly.
+
+| Scripted сценарий | Фактический итог |
+|---|---|
+| Один и тот же `RejectCompletion` | 256 model requests, 0 tools → `iteration_limit` |
+| Unknown с exact target → повтор честного `unable_to_complete` | 256 requests, 1 write, 0 вызовов finish admission → `iteration_limit`, health Unknown |
+| Unknown без target → свежий whole read → честный отказ | 256 requests, 2 tools, 0 admission → `iteration_limit`. Null target не удовлетворяется никаким read |
+| Unknown → два свежих смежных диапазона одной revision → отказ | На лимите 8: 8 requests, 3 tools, 0 admission → `iteration_limit`. Coverage не объединяется |
+| Контроль: Unknown → свежий exact Whole read → честный отказ | 3 requests, 2 tools → `model_finish`; health остаётся Unknown |
+| `agents.wait`, неизменный `TimedOut` и список peers | 3 calls исполняются, следующие 3 отклоняются → `repeated_tool_no_progress` после 6 model requests |
+
+Выводы по владельцам:
+
+1. **Kernel:** completion rejection имеет только общий iteration limit. Повтор
+   идентичного semantic отказа не попадает под защиту identical format response
+   или repeated tool call. Это подтверждённый источник длинного цикла.
+2. **Kernel inspection:** блокируется даже честное завершение без успеха. Требуется
+   отдельное полное свежее mutable observation каждого exact target. Диапазоны не
+   объединяются, null target неразрешим. Bounded reads крупных ресурсов могут не
+   иметь способа выдать нужный Whole за один вызов (например snapshot read max 32000).
+   Unknown replay guard при этом нужен и не должен сниматься ради завершения.
+3. **Agent communication / progress:** действующее описание `agents.wait` разрешает
+   ждать снова после timeout, но generic result fingerprint блокирует это при трёх
+   одинаковых receipts. Наличие временного ожидания не выражено в progress contract.
+   Проверен synthetic receipt с production policy, не реальное межоконное ожидание.
+4. **ModelProtocol / admission:** `invalid_tool_schema` отправляется модели на repair,
+   `nonterminal_evidence` — на новый semantic шаг. Собственную неисправность runtime
+   следует отделить от исправимого model proposal; причинность на фото не установлена.
+5. **Observability:** «Повторная попытка» — флаг замены live draft, без типа причины.
+   `preparing_context` публикуется на каждом model step. Ноль ошибок во вкладке
+   Приложение не означает отсутствие parser/admission/tool отказов.
+
+### Finish: фактический feedback и потеря причины — уточнение 2026-11-03
+
+Повторный срез по запросу пользователя, baseline `bf85ec27`. Проверены реальные
+WorkspaceConversationService → compiler → ModelProtocolClient → HTTP → kernel →
+canonical ChatStore/finish admission. Endpoint — локальный scripted HTTP server,
+workspace — временные файлы. Использован существующий Harness assembly от 19:32;
+пересобран только внешний probe. Это проверка проводки и состояния, не поведения
+реальной модели и не Windows/Office qualification.
+
+Порядок проверок finish: v8 shape/outcome → application acceptance (Workspace/plugin)
+→ unknown inspection → canonical E admission → один partial recheck → проверка
+нового Inbox input → durable acceptance. В Office дополнительных Workspace/plugin
+postconditions нет. Наличие старой ошибки само по себе не запрещает finish: важно,
+на какую E ссылается satisfied claim, и есть ли pending inspection.
+
+После semantic отказа модель получает **новый запрос** с неизменённой accepted
+history и `completionFeedback` внутри `# RUNTIME_CONTEXT / Environment`.
+Поле сериализовано JSON-объектом на строке YAML metadata. Фактическое содержимое
+на примере запроса после неправильной E999:
+
+```json
+{
+  "type": "decision_rejected",
+  "reason": "unknown_evidence: E999 is not an eligible terminal result of this chat. T/R are not evidence. Available: E1 (core.read: Ok). Correct the citation without repeating tools.",
+  "reflections_remaining": 2,
+  "instruction": "Use reflection only when useful and within the remaining allowance; otherwise execute or finish."
+}
+```
+
+Это **не** format repair: ошибочный finish не входит ни в accepted history, ни в
+отдельную quoted rejected proposal в следующем запросе. `RequestCause` хранит
+диагностическую связь с исходной попыткой, но эта связь не доставляет её body модели.
+Одинаковый generic instruction про reflection добавляется и при отказе завершения.
+
+| Сквозной сценарий | Наблюдение в фактическом HTTP request |
+|---|---|
+| `core.read` → finish с E999 → исправленный finish с E1 | 3 запроса, 1 tool call, Completed. Следующий запрос содержит точный `unknown_evidence` и доступную E1; отклонённого текста finish в нём нет |
+| То же, но между отказом и исправлением принята reflection | 4 запроса, 1 call, Completed. После reflection `completionFeedback.type` становится `runtime_context`, `reason` отсутствует. Отказ исчез **до** исправления ссылки и без нового tool evidence |
+| Неудачный read E1 → успешный read E2 → satisfied claim цитирует E1 и E2 → finish только с E2 | 4 запроса, 2 calls, Completed. Feedback: `contradictory_assessment: A satisfied claim cites a failed, unknown or undispatched result.` В нём нет индекса claim, criterion и проблемной E1; самого rejected claim тоже нет |
+| Успешный read → валидный partial → тот же честный partial | 3 запроса, 1 call, Completed. Первый partial намеренно не принимается; модель получает просьбу продолжить выполнимую работу либо повторить partial с объяснением препятствия |
+
+Вывод: исправление E работает без повторного исполнения tools. Все четыре
+исправленных/повторных допустимых finish приняты. Найдена проблема **контекста
+коррекции**, а не доказательство произвольного отклонения любого валидного finish:
+
+- В `AgentKernel` completion feedback очищается сразу после получения обычного
+  parsed response, до исполнения действия и без доказательства устранения причины.
+  Принятая reflection потому стирает даже ещё не исправленную citation error.
+- `contradictory_assessment` не локализует claim/ссылку; отвергнутая proposal не
+  передаётся. Модель должна заново восстановить, какое своё утверждение исправлять.
+- Unknown feedback требует «read affected current state», но не сообщает список
+  оставшихся проверок и точные условия `mutable + fresh + Complete + Whole + exact
+  identity`. Частичные reads могут выглядеть для модели выполнением инструкции,
+  хотя kernel снова выдаст тот же отказ. Даже `unable_to_complete` не освобождает
+  от этого требования; прежний воспроизведённый тупик остаётся.
+- В обзоре **исходного запроса** semantic отказ не имеет самостоятельного verdict:
+  `ModelContextRequestProjection.Summary` может показать Parser=Accepted,
+  Runtime=NotRecorded без reason. Причина находится у **следующего запроса** в
+  RequestCause и в run summary. Если следующий запрос не отправлен, отдельной
+  строки retry с причиной не будет. Это наблюдаемость, не принятие finish runtime.
+
+Уточнённый первый срез: общий typed finish feedback с ограниченной quoted proposal,
+конкретным claim/E/условием и явным действием для исправления; сохранять незакрытую
+причину через reflection. Quoted proposal остаётся непринятым диагностическим
+материалом. Вместе с этим ограничить повтор одного отказа без нового факта, сохранив
+исходную причину в терминальном ответе. Затем решить достижимый inspection и честное
+завершение при невозможности проверки, сохранив Unknown и запрет mutation replay.
+Новый runtime-код в этом аудите не внесён; влияние этих пробелов на конкретную
+живую модель остаётся открытым.
+
+Точки: [сброс feedback](../../src/RNAssistant.Core/Agent/AgentKernel.cs),
+[формирование feedback](../../src/RNAssistant.Core/ModelProtocol/ModelProtocolWire.Requests.cs),
+[состав контекста](../../src/RNAssistant.Office/Services/ConversationPromptComposer.cs),
+[YAML metadata](../../src/RNAssistant.Core/Services/RuntimeContextPrompt.cs),
+[обзор запроса](../../src/RNAssistant.Office/Services/ModelContextRequestProjection.cs).
+
+### Предлагаемый порядок исправлений
+
+| Порядок / owner | Конкретный срез | Приёмка |
+|---|---|---|
+| 1 — Core AgentKernel / ModelProtocol | Конкретный typed finish feedback с bounded rejected proposal, сохранением причины через reflection; bounded semantic no-progress по неизменным отказу/предложению/фактам | Модель получает проблемный claim/E и способ исправления; reflection не теряет feedback; одинаковый finish без прогресса останавливается рано с исходной причиной; unknown mutation не replay |
+| 2 — Core inspection + resource owners | Сделать inspection достижимым: typed target/coverage/currentness; объединять совместимые свежие диапазоны одной revision, если owner допускает такую проверку. Отдельный честный terminal path, когда проверка недоступна | Large/partial/null target, failed read, revision change и restore. Unverified остаётся Unknown и не превращается в success/permission |
+| 3 — Application wait + Core progress | Typed progress semantics для ожидания; не имитировать новые данные timestamp/случайным полем receipt | Более трёх ожиданий с теми же peers допустимы по wait policy; Stop/input/run limits работают; реальный бесцельный read loop всё ещё ограничен |
+| 4 — Core ModelProtocol/store | Runtime/configuration failure прекращает запрос; только исправимые model proposals получают repair | Invalid frozen schema/missing canonical terminal не создают лишних HTTP; неверный arguments/E получает точный feedback |
+| 5 — общий Chat UI / Llm transport | Показать существующие cause, попытку/предел и время ожидания рядом с live статусом; отдельно определить timeout/idle policy | По фотографии различимы API retry, format repair, rejected finish, tool blocker и ожидание. UI-срез проходит обычное визуальное ревью |
+
+Повышение retry/iteration limits не устраняет эти причины. Изменения runtime в этом
+аудите не внесены; предложение не разрешает удалять safety guards. Следующий
+Windows evidence: **Диагностика → Запуски → повторный запрос → причина/feedback →
+«Ответ модели, вызвавший повтор»**, плюс видимый снимок timeout. Допустимы только
+фотографии экрана; сбор/передача логов или файлов не требуется.
+
+Основные точки кода:
+[kernel](../../src/RNAssistant.Core/Agent/AgentKernel.cs),
+[progress](../../src/RNAssistant.Core/Agent/AgentProgressTracker.cs),
+[protocol client](../../src/RNAssistant.Core/ModelProtocol/ModelProtocolClient.cs),
+[budgets](../../src/RNAssistant.Core/ModelProtocol/ModelProtocolRetryBudget.cs),
+[parser](../../src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs),
+[JSON envelope](../../src/RNAssistant.Core/ModelProtocol/ConversationResponseJson.cs),
+[finish evidence](../../src/RNAssistant.Core/Persistence/ConversationFinishEvidenceAdmission.cs),
+[runtime](../../src/RNAssistant.Core/Tools/ToolRuntime.cs),
+[wait catalog](../../src/RNAssistant.Core/Tools/AgentCommunicationToolCatalog.cs),
+[wait handler](../../src/RNAssistant.Application/Conversations/AgentCommunicationToolHandler.cs),
+[request UI](../../web/js/app-run-journal.js).
+
 ## Повторы, накопление peer input и потеря сессии — 2026-11-03
 
 Фото сделаны после обновления; последнее содержит короткие ID и причину паузы

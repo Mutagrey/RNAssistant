@@ -25,16 +25,17 @@ namespace RNAssistant.Core.Persistence
         public bool Accepted { get; private set; }
         public string Code { get; private set; }
         public string Message { get; private set; }
+        public int? ClaimIndex { get; private set; }
 
-        private FinishAdmission(bool accepted, string code, string message)
-        { Accepted = accepted; Code = code; Message = message; }
+        private FinishAdmission(bool accepted, string code, string message, int? claimIndex = null)
+        { Accepted = accepted; Code = code; Message = message; ClaimIndex = claimIndex; }
 
         public static FinishAdmission Allow() { return new FinishAdmission(true, null, null); }
-        public static FinishAdmission Reject(string code, string message)
+        public static FinishAdmission Reject(string code, string message, int? claimIndex = null)
         {
-            if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(message))
+            if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(message) || claimIndex < 0)
                 throw new ArgumentException("A typed rejection requires a code and feedback.");
-            return new FinishAdmission(false, code, message);
+            return new FinishAdmission(false, code, message, claimIndex);
         }
     }
 

@@ -86,6 +86,10 @@ run, but does not establish whole-task success. Questions go through
 are owned by the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md).
 An admitted `finish/partial` after tool calls gets one bounded reconsideration while
 run budgets remain; `finish` is never itself a request to continue.
+Semantic rejection supplies a bounded quoted proposal and specific correction,
+retained across reflection and checkpoint restoration. Three unchanged finish
+rejections without new tool results or input stop with `repeated_finish_no_progress`
+and the actual cause. Evidence and unknown-effect admission rules remain in force.
 
 - Agent is the default behavior, without a mode selector in the UI.
 - The single **Plan** toggle in the composer `+` menu stays active until disabled.

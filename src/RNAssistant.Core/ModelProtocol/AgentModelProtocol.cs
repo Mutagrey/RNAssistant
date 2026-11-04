@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Persistence;
 
 namespace RNAssistant.Core.ModelProtocol
 {
@@ -22,12 +23,14 @@ namespace RNAssistant.Core.ModelProtocol
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
         public string CompletionFeedback { get; private set; }
         public ModelRequestCause RequestCause { get; private set; }
+        public FinishCorrection FinishCorrection { get; private set; }
         public int? ReflectionLimit { get; private set; }
         public int ReflectionsUsed { get; private set; }
 
         internal AgentModelRequest(string runId, string turnId, string stepId,
             IEnumerable<AgentMessage> messages, string completionFeedback = null,
-            int? reflectionLimit = null, int reflectionsUsed = 0, ModelRequestCause requestCause = null)
+            int? reflectionLimit = null, int reflectionsUsed = 0, ModelRequestCause requestCause = null,
+            FinishCorrection finishCorrection = null)
         {
             RunId = runId;
             TurnId = turnId;
@@ -35,6 +38,7 @@ namespace RNAssistant.Core.ModelProtocol
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             CompletionFeedback = completionFeedback;
             RequestCause = requestCause;
+            FinishCorrection = finishCorrection;
             ReflectionLimit = reflectionLimit;
             ReflectionsUsed = reflectionsUsed;
         }
@@ -47,6 +51,7 @@ namespace RNAssistant.Core.ModelProtocol
         public string Message { get; private set; }
         public bool ProviderRefusal { get; private set; }
         public bool CompletionRejected { get; private set; }
+        public FinishAdmission CompletionRejection { get; private set; }
         public string SourceModelAttemptId { get; private set; }
 
         private AgentModelResult() { }
@@ -59,10 +64,12 @@ namespace RNAssistant.Core.ModelProtocol
 
         // A valid finish failed explicit application-owned postconditions. This is
         // a fresh kernel step, never a format repair or accepted assistant answer.
-        public static AgentModelResult RejectCompletion(string message, string sourceModelAttemptId = null)
+        public static AgentModelResult RejectCompletion(AgentResponseDraft proposal, FinishAdmission rejection,
+            string sourceModelAttemptId = null)
         {
-            if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("Unmet requirements are required.", nameof(message));
-            return new AgentModelResult { CompletionRejected = true, Message = message,
+            if (proposal == null || proposal.Action != ConversationResponse.FinishAction || rejection == null || rejection.Accepted)
+                throw new ArgumentException("A validated finish and its explicit rejection are required.");
+            return new AgentModelResult { CompletionRejected = true, Response = proposal, CompletionRejection = rejection, Message = rejection.Message,
                 SourceModelAttemptId = sourceModelAttemptId };
         }
 

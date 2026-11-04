@@ -412,6 +412,14 @@ message/run/bridge fields are removed; retained unknown JSON fields are ignored 
 cannot seed UI authority or confirmation execution. A run without current
 `KernelState` requires the explicit new-chat/reset path.
 
+Finish correction (2026-11-04) adds optional immutable `FinishCorrection` to the same
+`KernelState` / `run.updated` projection. It retains the bounded parsed proposal,
+selected claim, typed cause, source attempt and unchanged-rejection count through
+reflection, interruption and continuation. It is diagnostic state, not accepted
+history or a replayable response. New input/terminal tool facts and accepted finish
+clear it; no second body store or event envelope is introduced. Bounds and stop/reset
+rules belong to the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md).
+
 Normal macro return (2026-11-03) adds source-owned `InvocationCompleted` to the
 existing execution evidence and `OpaqueActionCompleted` to `ToolExecutionProgress`.
 Missing values remain false. These facts survive terminal materialization and

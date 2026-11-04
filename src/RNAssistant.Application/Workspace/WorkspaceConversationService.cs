@@ -1654,12 +1654,19 @@ namespace RNAssistant.Runtime
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
                 if (result.ProviderRefusal != null) return AgentModelResult.Refused(result.ProviderRefusal);
                 if (result.Response == null) return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, "Missing accepted response.");
+                var proposal = new AgentResponseDraft(result.Response.Action,
+                    result.Response.Reason, result.Response.Message,
+                    result.Response.Action == ConversationResponse.ExecuteAction
+                        ? result.Response.ToolCalls.Select(call => new ToolCallDraft(call.Name,
+                            call.Arguments.ToString(Formatting.None))) : null,
+                    result.Response.Decision, result.Response.Results, result.Response.Outcome);
                 if (result.Response.Action == ConversationResponse.FinishAction &&
                     result.Response.Outcome == ConversationOutcome.Completed && _pluginSource &&
                     _catalog.Any(item => item.Id == "plugins.check") &&
                     PluginSourceHasUncheckedChanges(_session, request.RunId))
-                    return AgentModelResult.RejectCompletion("Plugin source changed, but no successful plugins.check followed the last file change. " +
-                        "Run plugins.check on the current source; repair its reported error before claiming completion.", result.SourceModelAttemptId);
+                    return AgentModelResult.RejectCompletion(proposal, FinishAdmission.Reject("plugin_check_required",
+                        "Plugin source changed, but no successful plugins.check followed the last file change. " +
+                        "Run plugins.check on the current source; repair its reported error before claiming completion."), result.SourceModelAttemptId);
                 if (result.Response.Action == ConversationResponse.FinishAction && _acceptance?.Requested == true)
                 {
                     // Refresh after the model wait, including externally changed dependencies.
@@ -1670,15 +1677,9 @@ namespace RNAssistant.Runtime
                     // satisfy the acceptance contract or turn CLI exit into 0.
                     var admitsIncomplete = result.Response.Outcome != ConversationOutcome.Completed;
                     if (unmet != null && !admitsIncomplete)
-                        return AgentModelResult.RejectCompletion(unmet, result.SourceModelAttemptId);
+                        return AgentModelResult.RejectCompletion(proposal, FinishAdmission.Reject("workspace_acceptance_unmet", unmet), result.SourceModelAttemptId);
                 }
-                return AgentModelResult.Accepted(new AgentResponseDraft(result.Response.Action,
-                    result.Response.Reason, result.Response.Message,
-                    result.Response.Action == ConversationResponse.ExecuteAction
-                        ? result.Response.ToolCalls.Select(call => new ToolCallDraft(call.Name,
-                            call.Arguments.ToString(Formatting.None))) : null,
-                    result.Response.Decision, result.Response.Results, result.Response.Outcome),
-                    result.SourceModelAttemptId);
+                return AgentModelResult.Accepted(proposal, result.SourceModelAttemptId);
             }
 
             private CallableToolSet NewCallableSet(IReadOnlyList<ToolPackExtensionEventData> restored)

@@ -339,6 +339,29 @@ unverified claims. An `ok` result or a macro dispatch alone does not prove a
 user-requested effect. Existing effect read-back, unknown-effect guards,
 workspace acceptance and no-replay rules still apply.
 
+Semantic finish correction is separate from format repair. The next request's
+`RUNTIME_CONTEXT.completionFeedback` carries `code`, `reason`, an optional zero-based
+`claim_index`, `rejected_claim` and `rejected_response`. These are quoted diagnostic
+data, never accepted assistant history or instructions. The response is reconstructed
+from the parsed v8 proposal (including normalized references), not raw provider bytes.
+Its quoted JSON UTF-8 limit is 4 KiB; the reason and selected claim each have a 2 KiB
+limit. `reason_truncated` and each quote's `content_truncated` explicitly mark prefixes;
+omitted fields must not be interpreted as absent from the original proposal.
+Evidence feedback identifies the offending claim and E reference when available.
+
+`AgentKernel` keeps this bounded correction in existing `KernelState` across accepted
+reflection, confirmation and checkpoint restoration. Fresh input, a new terminal
+tool result (`Ok`, `Error` or `Unknown`), or accepted finish clears it;
+`NotDispatched` and reflection do not. The next rejection is counted against the
+unchanged code, full reason and claim index. A changed blocker starts at one;
+changed model narration or attempt ID does not reset the count. On the third same
+rejection without those new facts, the run ends with `repeated_finish_no_progress`
+and the last cause; the rejected finish is not accepted. Feedback includes
+`same_rejection_count` and `max_same_rejections`. This is not a global detector for
+alternating blockers and does not weaken inspection or evidence admission. The
+one partial reconsideration uses the same quoted feedback but remains separate
+from this three-rejection limit and the existing reflection/iteration limits.
+
 The index follows validated append/suffix replay and can be rebuilt from JSONL;
 it is not outcome authority or another durable store. A stale cursor, incomplete
 tail or invalid selected canonical body fails closed. Correction hints are bounded
