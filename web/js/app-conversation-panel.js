@@ -118,7 +118,10 @@
     });
     var pickers = [node("composerAddPicker"), node("chatModelPicker")];
     pickers.forEach(function (picker) {
-      on(picker.querySelector("summary"), "click", function (event) { if (picker.classList.contains("is-disabled")) event.preventDefault(); });
+      on(picker.querySelector("summary"), "click", function (event) {
+        if (picker.classList.contains("is-disabled")) event.preventDefault();
+        else if (communication) communication.closeRecovery();
+      });
       on(picker, "toggle", function () { if (picker.open) pickers.forEach(function (other) { if (other !== picker) other.open = false; }); });
     });
     on(document, "pointerdown", function (event) { pickers.forEach(function (picker) { if (!picker.contains(event.target)) picker.open = false; }); });
@@ -190,7 +193,7 @@
   function register(workspace) {
     prepare(); bindAttachmentActions();
     workspace.registerConversation({ title: "Чат", icon: "chat", section: "chat", menu: true, perObject: true,
-      maximumInstances: 12, key: key, create: create,
+      maximumInstances: 12, renderer: "onlyWhenVisible", key: key, create: create,
       titleFor: function (target) {
         if (target.source === "office") {
           var summary = (state.chats || []).find(function (chat) { return chatId(chat) === target.sessionId; });

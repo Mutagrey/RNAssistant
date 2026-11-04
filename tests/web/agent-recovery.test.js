@@ -30,16 +30,35 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
    };
   });
   const menu=page.locator('.rna-action-menu-popup[aria-label="Продолжить совместную работу"]');
+  const office=page.locator('.conversation-panel').filter({has:page.locator('[data-chat-node="activeChatTitle"]', {hasText:'Что изменилось за сентябрь'})});
+  const plus=office.locator('[data-chat-node="composerAddButton"]');
+  const ordinary=office.locator('[data-chat-node="composerAddMenu"]');
   async function openOffice(){
-   await page.evaluate(()=>{const c=RNAssistantConversationPanel.office('preview-chat');c.node('composerAddPicker').open=true;c.node('resumeAgentWaitsButton').click();});
+   await plus.click();
+   assert.equal(await menu.count(),0,'plus always returns to ordinary chat actions');
+   assert.equal(await ordinary.getByRole('button',{name:'Файл с компьютера',exact:true}).isVisible(),true);
+   await ordinary.getByRole('button',{name:'Продолжить совместную работу…',exact:true}).click();
    await menu.getByRole('menuitemcheckbox',{name:'Проверка правил',exact:true}).waitFor();
   }
   assert.equal(await page.evaluate(()=>recoveryCalls.length),0,'no background recovery enumeration');
   await openOffice();
+  await plus.click();
+  assert.equal(await menu.count(),0,'recovery cannot cover the ordinary plus menu');
+  assert.equal(await ordinary.getByRole('button',{name:'Материал чата',exact:true}).isVisible(),true);
+  await page.evaluate(()=>{
+   const c=RNAssistantConversationPanel.office('preview-chat');
+   c.snapshot().messages.push({Id:'compaction-menu-fixture',Role:'user',Content:'Third message makes compaction available'});
+   c.render();
+  });
+  assert.equal(await ordinary.getByRole('button',{name:'Сжать контекст',exact:true}).isVisible(),true,'eligible compaction remains in ordinary menu');
+  await page.screenshot({path:'/tmp/rnassistant-chat-plus-restored.png'});
+  const chooser=page.waitForEvent('filechooser');
+  await ordinary.getByRole('button',{name:'Файл с компьютера',exact:true}).click();await chooser;
+  await openOffice();
   assert.equal(await menu.locator('[aria-checked="true"]').count(),0,'no implicit selection of unrelated chats');
   await menu.getByRole('menuitemcheckbox',{name:'Разработка шахматной игры',exact:true}).click();
   await menu.getByRole('menuitem',{name:'Следующие чаты',exact:true}).click();
-  await page.waitForFunction(()=>recoveryCalls.filter(c=>c.type==='getRecoverableAgentWaits').length===2);
+  await page.waitForFunction(()=>recoveryCalls.filter(c=>c.type==='getRecoverableAgentWaits').at(-1).payload.afterSessionId==='B');
   await menu.getByRole('menuitemcheckbox',{name:'Разработка шахматной игры',exact:true}).last().click();
   assert.equal(await menu.locator('[aria-checked="true"]').count(),2,'selected rows stay reviewable across bounded pages');
   await menu.getByRole('menuitem',{name:'Продолжить выбранных (2)',exact:true}).click();

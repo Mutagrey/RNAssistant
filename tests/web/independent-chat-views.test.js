@@ -14,6 +14,33 @@ const root = path.resolve(__dirname, '../..');
     const page = await browser.newPage({viewport: {width: 1440, height: 900}}), errors = [];
     page.setDefaultTimeout(7000);
     page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
+    async function verifyBounds() {
+      try { await page.waitForFunction(() => {
+        let shown = 0, valid = true;
+        RNAssistantConversationPanel.each(view => {
+          if (!view.element.isConnected || view.element.inert) return;
+          shown++;
+          const body = view.element.closest('.dv-content-container');
+          if (!body || view.element.closest('.dv-render-overlay')) { valid = false; return; }
+          const limit = body.getBoundingClientRect(), group = body.closest('.dv-groupview').getBoundingClientRect();
+          if (limit.right > group.right + 1 || limit.bottom > group.bottom + 1 || group.right > innerWidth + 1) valid = false;
+          [view.element, view.node('messages'), view.node('chatForm')].forEach(node => {
+            const rect = node.getBoundingClientRect();
+            if (rect.left < limit.left - 1 || rect.right > limit.right + 1 || rect.top < limit.top - 1 || rect.bottom > limit.bottom + 1) valid = false;
+          });
+        });
+        return shown > 0 && valid;
+      }); } catch (error) {
+        console.error('Chat bounds', await page.evaluate(() => {
+          const values=[]; RNAssistantConversationPanel.each(view=>{
+            if (!view.element.isConnected || view.element.inert) return;
+            const nodes=[view.element.closest('.dv-content-container'),view.element,view.node('messages'),view.node('chatForm')];
+            values.push({target:view.target,nodes:nodes.map(node=>node?{name:node.className,...node.getBoundingClientRect().toJSON()}:null)});
+          }); return values;
+        }));
+        await page.screenshot({path:'/tmp/rnassistant-chat-bounds-failure.png'}); throw error;
+      }
+    }
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     const first = page.locator('.conversation-panel').filter({has: page.locator('[data-chat-node="messages"] .message')}).first();
@@ -22,6 +49,11 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForFunction(() => { const p = RNAssistantConversationPanel.office('preview-summary'); return p && !p.loading; });
     const second = page.locator('.conversation-panel').filter({has: page.locator('[data-chat-node="messages"] .chat-empty')}).last();
     await second.locator('[data-chat-node="chatInput"]').fill('Второй отдельный черновик');
+    await verifyBounds();
+    await page.evaluate(() => document.documentElement.style.zoom = '1.25');
+    await verifyBounds();
+    await page.evaluate(() => document.documentElement.style.zoom = '1');
+    await verifyBounds();
     const views = await page.evaluate(() => {
       const a = RNAssistantConversationPanel.office('preview-chat'), b = RNAssistantConversationPanel.office('preview-summary');
       return {drafts: [a.node('chatInput').value,b.node('chatInput').value], sources:[a.snapshot().activeChatId,b.snapshot().activeChatId],
@@ -52,12 +84,21 @@ const root = path.resolve(__dirname, '../..');
     })), [['','Первый отдельный черновик'],['','Второй отдельный черновик']]);
     assert.equal(await page.evaluate(() => RNAssistantConversationPanel.office('preview-chat').node('messages').firstChild === firstHistoryNode),true,
       'background stream and terminal delivery retain attached history');
+    await page.evaluate(() => {
+      const view=RNAssistantConversationPanel.office('preview-chat'); RNAssistantConversationPanel.open(view.target);
+      const box=view.node('messages'); box.scrollTop=Math.min(120,box.scrollHeight-box.clientHeight);
+      box.dispatchEvent(new Event('scroll')); window.retainedChatScroll=box.scrollTop;
+    });
+    assert.ok(await page.evaluate(()=>retainedChatScroll>0),'fixture has a scrolled transcript');
     await page.evaluate(async () => {
       const catalog = await send('getProjectChats',{}), entry = catalog.projects.find(p => p.available && p.chats.length);
       window.chatPairTarget = {source:'workspace',workspaceId:entry.workspaceId,sessionId:entry.chats[0].Id};
       RNAssistantConversationPanel.open(chatPairTarget);
     });
     await page.waitForFunction(() => { const p = RNAssistantConversationPanel.find(chatPairTarget); return p && !p.loading && p.snapshot().messages; });
+    await page.evaluate(()=>RNAssistantConversationPanel.open({source:'office',sessionId:'preview-chat'}));
+    await page.waitForFunction(()=>Math.abs(RNAssistantConversationPanel.office('preview-chat').node('messages').scrollTop-retainedChatScroll)<2);
+    await page.evaluate(()=>RNAssistantConversationPanel.open(chatPairTarget));
     await page.evaluate(() => {
       const p = RNAssistantConversationPanel.find(chatPairTarget); p.node('chatInput').value = 'Рабочий проект'; p.node('chatInput').dispatchEvent(new Event('input'));
     });
@@ -151,25 +192,44 @@ const root = path.resolve(__dirname, '../..');
       w.node('chatInput').value = 'Восстановить проект'; w.node('chatInput').dispatchEvent(new Event('input'));
       await RNAssistantChatDrafts.flushAll();
     });
-    await page.setViewportSize({width:600,height:800});
+    await page.evaluate(() => document.documentElement.style.zoom = '1.25');
+    await page.setViewportSize({width:640,height:800});
+    await page.evaluate(()=>RNAssistantConversationPanel.open(chatPairTarget));
+    await verifyBounds();
+    await page.screenshot({path:'/tmp/rnassistant-chat-tab-bounds-narrow.png'});
     await page.setViewportSize({width:1440,height:900});
+    await verifyBounds();
+    await page.evaluate(() => document.documentElement.style.zoom = '1');
+    await verifyBounds();
     await page.waitForFunction(() => {
       const layout=JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'));
       return layout && Object.values(layout.layout.panels).filter(p=>p.contentComponent==='conversation').length===4;
     });
     const workspaceTarget = await page.evaluate(() => chatPairTarget);
+    await page.evaluate(() => {
+      const key = 'rnassistant.ui.dock.s1.v1', saved = JSON.parse(localStorage.getItem(key));
+      Object.values(saved.layout.panels).filter(panel => panel.contentComponent === 'conversation').forEach(panel => panel.renderer = 'always');
+      localStorage.setItem(key, JSON.stringify(saved));
+    });
     await page.reload();
     await page.waitForFunction(() => state.activeChatId && !state.initializePromise && RNAssistantConversationPanel.office('preview-summary'));
-    assert.equal(await page.locator('.conversation-panel').count(),4,'exact target panels survive reload without duplicate roots');
+    await verifyBounds();
+    assert.equal(await page.evaluate(() => {
+      const roots=[];RNAssistantConversationPanel.each(view=>roots.push(view.element));
+      return new Set(roots).size;
+    }),4,'all exact target views survive reload; inactive DOM remains owned without overlay mounting');
     assert.deepEqual(await page.evaluate(workspaceTarget => [RNAssistantConversationPanel.office('preview-chat').node('chatInput').value,
       RNAssistantConversationPanel.office('preview-summary').node('chatInput').value,
       RNAssistantConversationPanel.find(workspaceTarget).node('chatInput').value], workspaceTarget),
       ['Черновик вне редактора','Восстановить второй Office','Восстановить проект'], 'hydration restores every mounted draft, including inactive targets');
+    await page.evaluate(target => RNAssistantConversationPanel.open(target), workspaceTarget);
+    await verifyBounds();
+    await page.screenshot({path:'/tmp/rnassistant-chat-tab-bounds.png'});
     await page.evaluate(() => RNAssistantConversationPanel.each(p => RNAssistantDockWorkspace.close(RNAssistantConversationPanel.key(p.target))));
     await page.waitForFunction(() => !document.querySelector('.conversation-panel'));
     await page.reload();
     await page.waitForFunction(() => !state.initializePromise && RNAssistantConversationPanel.office(state.activeChatId));
     assert.deepEqual(errors,[]);
-    console.log('PASS independent Chat Views: Office pair, parallel delivery, history identity, Workspace/plugin, edit, close-run/late reply, narrow/restore/all-closed');
+    console.log('PASS independent Chat Views: Office pair, parallel delivery, history identity, Workspace/plugin, edit, close-run/late reply, tab bounds at 125%, old layout restore/all-closed');
   } finally { await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

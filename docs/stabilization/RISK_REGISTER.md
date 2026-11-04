@@ -543,10 +543,12 @@ Owners: Tool Library inventory / Web Shell / Office qualification. Адресн�
   `#composerAddPicker > summary`, который отсутствует после независимых Chat Views.
   Новый лимит проверен адресно: default 20, изменение и сброс. Старый `chat-inbox`
   fixture исправлен в аудите чатов: polling проверяется через реальный per-view adapter.
-- При 640 px и CSS zoom 125% retained Dockview Chat View обрезает правую часть всей
-  ленты: видно на обычных user/assistant сообщениях и на agent bubble. Это продолжение
-  известного Shell retained-overlay zoom gap; собственная геометрия bubble не расходится
-  с общим компонентом. Нужен отдельный Shell-срез, не локальный override этого сообщения.
+- Chat View gap исправлен 2026-11-04 по замечанию пользователя. Baseline 640 px / 125%:
+  область 573 px, `always` overlay 715.625 px; переход на `onlyWhenVisible` устраняет
+  повторное масштабирование. Старые layouts применяют текущий renderer descriptor.
+  `independent-chat-views` проверяет root/messages/composer bounds своей группы,
+  scroll/drafts/parallel delivery и reopen/restore. Другие retained views и реальный
+  Windows/WebView2 остаются отдельным evidence; локальных bubble overrides нет.
 - Сквозной A → B → A проверен на scripted endpoint, а не живой модели. Controller
   integration и реальные Office document/host switch, закрытие документа и WebView2
   остаются Windows evidence; никаких Office/VSTO validation на этой машине не запускалось.

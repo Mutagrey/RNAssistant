@@ -1,5 +1,15 @@
 # Архитектура UI RNAssistant
 
+## Границы Chat View — исправление, In Review, 2026-11-04
+
+ConversationPanel использует `onlyWhenVisible`: DOM активного чата находится внутри
+content-container своей Dockview-группы. `always` overlay повторно масштабировал
+измеренный rect при CSS zoom. View object, DOM/черновик/scroll и runtime ownership
+сохраняются при скрытии; dispose по-прежнему происходит только при закрытии.
+Восстановление обычной/сохранённой/широкой раскладки берёт явную renderer policy из
+текущего view descriptor, сохраняя placement и targets. Старый сохранённый `always`
+не возвращает ошибку. Vendor код, chat storage, bridge и исполнение не менялись.
+
 ## Общее продолжение ожиданий — In Review, 2026-11-04
 
 `app-agent-recovery` — presentation общей ConversationPanel Office/Workspace/plugin.
@@ -10,6 +20,8 @@ selection/revision/lease checks и receipts; очереди продолжают
 `getRecoverableAgentWaits` / `resumeAgentWaits` — typed user bridge contracts.
 UI не выводит membership из переписки и не хранит второй каталог. Именованные
 группы и Inspector подключат ту же команду на своих этапах.
+Открытие native picker «+»/модели закрывает recovery portal и инвалидирует его поздние
+чтения. Один trigger не держит одновременно два меню; принятое выполнение продолжается.
 
 ## Сохранённое ожидание — In Review, 2026-11-04
 

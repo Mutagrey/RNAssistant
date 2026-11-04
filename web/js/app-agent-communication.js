@@ -59,7 +59,7 @@
       finally { button.disabled = false; }
     });
     refresh(false);
-    return { refresh: refresh, openRecovery: recovery.open, settingsChanged: function () { signature = null; ++generation; refresh(lastRunning); },
+    return { refresh: refresh, openRecovery: recovery.open, closeRecovery: recovery.reset, settingsChanged: function () { signature = null; ++generation; refresh(lastRunning); },
       rebind: function () { recovery.reset(); signature = null; ++generation; refresh(lastRunning); }, dispose: function () {
       if (closed) return; closed = true; ++generation; recovery.dispose(); box.remove();
     } };

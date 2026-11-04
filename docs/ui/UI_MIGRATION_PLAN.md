@@ -1,5 +1,17 @@
 # План модернизации production UI
 
+## Chat View bounds — исправление, In Review, 2026-11-04
+
+Пользователь сообщил выход чата за вкладку. Baseline при 640 px / 125%: body области
+573 px, retained chat overlay 715.625 px; vendor повторно применял zoom к rect.
+Общий Chat View переведён на `onlyWhenVisible`, без CSS-компенсаций или изменения
+vendor. Existing view owner сохраняет DOM/черновики, scroll, streaming и runtime.
+Все три restore paths применяют renderer policy текущего descriptor к старым layouts.
+`independent-chat-views` проверяет bounds внутри собственной группы, wide/narrow/125%,
+scroll hide/show, старый `always` layout, четыре точных view, drafts, parallel delivery
+и close без cancel. `agent-recovery` проверяет обычный «+» реальными кликами;
+`active-chat-runs` — общие меню/Stop. Windows/Office/WebView2 evidence открыто.
+
 ## User batch resume — In Review, 2026-11-04
 
 Разрешённый пользователем срез: общее продолжение выбранных сохранённых ожиданий
@@ -11,6 +23,9 @@ receipts → открыть нужный чат. Отдельно: partial/unkno
 пагинация с выбором, Escape/focus, narrow/125%, stale load при закрытии/rebind.
 Rollback — обратный diff без удаления событий: сохранённые факты остаются обычными
 Inbox Resume. Windows/Office binding и визуальная приёмка пользователем открыты.
+Исправлена найденная пользователем коллизия повторного «+»: портал закрывается при
+открытии native picker. Regression проходит через реальные клики и filechooser,
+проверяет материал и доступное сжатие, без программного обхода обычного меню.
 
 ## Durable wait: existing Inbox control — In Review, 2026-11-04
 

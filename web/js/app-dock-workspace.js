@@ -375,7 +375,7 @@
   function reset() {
     if (!canClose(api.panels)) return;
     restoring = true; wideLayout = null; api.clear();
-    var chat = api.addPanel({ id: "conversation", component: "conversation", title: "Чат", renderer: "always",
+    var chat = api.addPanel({ id: "conversation", component: "conversation", title: "Чат", renderer: views.conversation.renderer,
       params: { target: { view: "conversation", source: "office", sessionId: "" } } });
     add("inspector", { referencePanel: chat, direction: compact || host.clientWidth < 560 ? "within" : "right" }).api.setSize({ width: inspectorWidth });
     chat.api.setActive(); restoring = false; changed();
@@ -385,6 +385,16 @@
     var group = api.activeGroup || api.groups[0], active = api.activePanel;
     api.panels.slice().forEach(function (item) { if (item.group !== group) item.api.moveTo({ group: group, position: "center" }); });
     if (active) active.api.setActive(); changed();
+  }
+  function restoreLayout(layout) {
+    // Placement is saved; rendering policy belongs to the current view descriptor.
+    // Old `always` chat overlays use scaled rectangles as CSS sizes under zoom.
+    Object.keys(layout.panels).forEach(function (id) {
+      var spec = layout.panels[id], view = views[spec.contentComponent];
+      if (view && view.renderer) spec.renderer = typeof view.renderer === "function"
+        ? view.renderer(spec.params && spec.params.target) : view.renderer;
+    });
+    api.fromJSON(layout);
   }
   function mount(nextOwner) {
     owner = nextOwner;
@@ -405,7 +415,7 @@
       api.panels.slice().forEach(function (item) { if (item.group !== group) item.api.moveTo({ group: group, position: "center" }); });
       if (active) active.api.setActive();
     } else if (!compact && wideLayout) {
-      var saved = wideLayout; wideLayout = null; api.fromJSON(saved);
+      var saved = wideLayout; wideLayout = null; restoreLayout(saved);
     }
     restoring = false; sync(); revealActiveTab();
     // Dockview can settle visibility after the group move. Restore at the next paint,
@@ -457,7 +467,7 @@
     document.addEventListener("pointercancel", endDrag, { capture: true, signal: dragListeners.signal });
     window.addEventListener("blur", endDrag, { signal: dragListeners.signal });
     restoring = true;
-    try { var saved = JSON.parse(localStorage.getItem(storageKey)); if (saved && saved.version === 1 && validateLayout(saved.layout)) api.fromJSON(saved.layout); else { reset(); if (saved) notice("Прежняя компоновка недоступна. Открыт исходный вид."); } }
+    try { var saved = JSON.parse(localStorage.getItem(storageKey)); if (saved && saved.version === 1 && validateLayout(saved.layout)) restoreLayout(saved.layout); else { reset(); if (saved) notice("Прежняя компоновка недоступна. Открыт исходный вид."); } }
     catch (error) { reset(); notice("Не удалось прочитать компоновку. Открыт исходный вид."); }
     restoring = false;
     api.onDidLayoutChange(changed); api.onDidActivePanelChange(function () {
@@ -479,7 +489,7 @@
           ["Сохранить раскладку", "check", function () { try { localStorage.setItem(savedKey, JSON.stringify(api.toJSON())); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
           ["Вернуть сохранённую", "refresh", function () { try { var layout = JSON.parse(localStorage.getItem(savedKey)); if (validateLayout(layout)) {
             if (!canClose(api.panels.filter(function (item) { return !layout.panels[item.id]; }))) return;
-            restoring = true; wideLayout = null; api.fromJSON(layout); restoring = false; changed(); notice("Раскладка восстановлена");
+            restoring = true; wideLayout = null; restoreLayout(layout); restoring = false; changed(); notice("Раскладка восстановлена");
           } else notice("Сохранённой раскладки нет или её формат недоступен"); } catch (error) { restoring = false; notice("Не удалось восстановить раскладку"); } }]]);
       }
     });

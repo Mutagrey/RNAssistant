@@ -1,5 +1,12 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Размер Chat View — исправление, In Review, 2026-11-04
+
+Геометрия ленты/composer берётся из content-container Dockview. Повторного применения
+CSS zoom к retained overlay нет; размеры bubbles, шрифты и tokens не менялись.
+Проверяются реальные bounds root/messages/composer относительно своей группы, а не
+только отсутствие overflow внутри уже неверно увеличенного root.
+
 ## Выбор участников для продолжения — In Review, 2026-11-04
 
 Срез использует существующий composer menu и portalled ActionMenu, без нового dialog,
@@ -10,6 +17,8 @@
 окне; полный текст доступен в title. Цвет не является единственным состоянием.
 Escape возвращает фокус к «+», close view убирает portal. Windows/WebView2 и принятие
 визуального вида пользователем остаются отдельными gates.
+Native composer picker и recovery portal взаимоисключаются: «+» всегда возвращает
+прежнее меню действий, без перекрывающего списка участников.
 
 ## Ожидание и recovery — In Review, 2026-11-04
 
@@ -87,7 +96,7 @@ Library/VBA header имеет minimum из `--page-header-height`, а факти
 созданные участники используют обычный Chat View, те же bubbles/activity/receipts.
 Закрытие вкладки не получает скрытого действия Stop. Геометрия компонентов не меняется.
 Сравнение computed padding/radius с обычным bubble на одинаковом viewport прошло;
-общий Shell zoom overflow отмечен отдельно в RISK_REGISTER.
+Chat View zoom overflow исправлен 2026-11-04; другие retained views остаются в RISK_REGISTER.
 
 Обновлено: 2026-11-04. Owner: Web presentation; визуальные решения утверждает
 пользователь. Canonical document tokens, компонентов и их повторного использования.

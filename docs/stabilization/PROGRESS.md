@@ -2,6 +2,15 @@
 
 ## Мультиагенты: общее продолжение выбранных участников — In Review, 2026-11-04
 
+По замечанию пользователя устранено наложение recovery portal на обычный «+» при
+повторном нажатии. Реальные клики проверяют возврат прежних пунктов, filechooser и
+сжатие при достаточной истории; общие runtime/команды не менялись.
+Также исправлен выход Chat View за вкладку при 125%: использован content-container
+Dockview вместо повторно масштабируемого `always` overlay, включая старые layouts.
+Chrome проверяет bounds Office/Workspace/plugin, split/narrow/restore, сохранение
+view/draft/scroll и фоновых ответов. `agent-recovery`, `independent-chat-views` и
+`active-chat-runs` проходят; Windows/WebView2 не квалифицированы.
+
 По запросу пользователя из любого чата области доступно «+ → Продолжить совместную
 работу…». Общий Chat View показывает bounded список сохранённых ожиданий; выбор
 явный, открывать вкладки участников не требуется. Owner — Application Conversations,

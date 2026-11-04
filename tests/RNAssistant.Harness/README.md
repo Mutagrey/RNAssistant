@@ -360,6 +360,12 @@ and preferences, edit, close without run cancellation, stale read/ACK and layout
 restore. `workspace-chat-progress` now uses scoped nodes and waits for a coalesced
 paint; it verifies 30 token updates preserve the leaf and skip tree/transcript work.
 Older singleton-DOM fixtures require migration before use with Chat View factory.
+The 2026-11-04 correction also checks actual root/messages/composer bounds inside
+their Dock group at 125% CSS zoom, narrow/wide restoration, scroll across hidden
+views and reopening layouts that still recorded renderer `always`. Four view
+instances remain owned; inactive DOM no longer needs an overlay in the document.
+`agent-recovery` uses real plus/menu clicks and checks returning to file/material/
+compaction actions, including the native filechooser after dismissing recovery.
 
 `chat-navigation-lifetime` covers immediate tree selection during a blocked native
 queue, closed-tab catalog sync, late selection/read/failure delivery, retained
