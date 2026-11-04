@@ -42,7 +42,7 @@ Application-владельца и срез с переключением обо�
 [Парное сравнение broad/compact профилей](audits/tool-profile-comparison.md)
 фиксирует реальные траектории, размеры запросов и ограничения пилота.
 
-[Текущий подсчёт tools и skills](audits/capability-inventory-2026-10-29.md):
+[Исторический срез tools и skills от 2026-10-29](audits/capability-inventory-2026-10-29.md):
 91 → 71 встроенный tool ID, 16 skills, 10 начальных Core tools; сравнение по hosts,
 исправленная чистка инструкций и следующие кандидаты на сокращение.
 [Предыдущий аудит описаний](audits/skills-tools-description-review.md) и
@@ -68,7 +68,13 @@ Owner — Core/Application; после принятия diff это истори
 [Карта повторов и блокировок](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03)
 содержит матрицы причин, исходные пределы и локальные воспроизведения semantic/inspection
 циклов. [Первый срез](stabilization/RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04)
-исправляет finish feedback и ограничивает одинаковые отказы; контракт — в v8.
+исправляет finish feedback и ограничивает одинаковые отказы; текущий контракт —
+[v8 admission/correction](protocols/CONVERSATION_RESPONSE_V8.md#admission-persistence-and-presentation).
+Текущая доставка между действиями, wait v2/skill v3 и оставшиеся ограничения — в
+[межагентном общении](conversation-protocol.md#межагентное-общение--2026-11-03).
+HTML model operations используют явный document workspace независимо от выбора
+редактора; текущая публикация и recovery — в
+[Artifact Library](artifact-library.md#implemented-shared-html-publication--2026-09-08).
 
 По запросу пользователя сохранены [целевой V8 context/reference contract](proposals/RNAssistant_V8_Context_Protocol_Target.md)
 и [план Diagnostics / Qualification Lab](proposals/RNAssistant_V8_Diagnostics_Qualification_Plan.md)
@@ -98,6 +104,7 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Область | Владелец текущего контракта |
 |---|---|
 | Model loop, modes, tool result/effect | [Conversation protocol](conversation-protocol.md) |
+| Межагентные адреса, доставка, ожидание и лимит сообщений | [Conversation protocol](conversation-protocol.md#межагентное-общение--2026-11-03); tools — [Tool Library](tool-library.md#agent-communication-tools--2026-11-03), skill — [Skill Library](skills.md#current-implementation) |
 | Wire JSON v8 | [Conversation response v8](protocols/CONVERSATION_RESPONSE_V8.md); [v7](protocols/CONVERSATION_RESPONSE_V7.md) — исторический формат |
 | Совместимость model endpoint и проверка ролей/формата | [Model endpoint compatibility](model-endpoint-compatibility.md) |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |

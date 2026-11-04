@@ -493,8 +493,8 @@ invalidates the cursor. Metadata recovery at the same generation does not shift
 those slots: previously omitted entries are recovered by a fresh discovery, and
 Gateway preserves any earlier page's unavailable status through the current scan.
 This supersedes the prior all-collection availability fingerprint, which required
-rehydrating the library before every continuation. HTML-member discovery reads only
-all current document workspaces; missing bodies remain explicit. Chat selection
+rehydrating the library before every continuation. HTML-member discovery reads
+current document workspaces; missing bodies remain explicit. Chat selection
 is presentation only and does not narrow model discovery.
 Direct immutable snapshot identity resolution reads its own head and one metadata
 record, removing the final all-history load from the provider identity path.
@@ -578,8 +578,10 @@ semantic section reads remain subsequent work.
 
 ### Implemented HTML member discovery views — 2026-09-08
 
-`ChatHtmlResourceCatalog` resolves/serializes members from the exact selected HTML
-aggregate. `DocumentArtifactStore.SearchMemberText` reuses the existing text-view
+`ChatArtifactResourceProvider` supplies current HTML workspaces from the document
+catalog, independently of the chat's selected view. `ChatHtmlResourceCatalog`
+resolves/serializes members from those exact published aggregates.
+`DocumentArtifactStore.SearchMemberText` reuses the existing text-view
 engine and CAS retention, under the exact published parent revision with view key
 `artifact-member-text-index-v1:member/{type}/{key}`. Member character coverage is
 scoped by that path; it never claims whole-parent coverage or publishes new heads.
@@ -594,10 +596,11 @@ CAS protection metadata is preserved for retained member payloads. Missing/corru
 derived views are regenerated from the same aggregate; a missing parent stays
 unavailable. Retained parts survive ordinary GC and owner restart.
 
-Search validates selected artifact and authority generation after member scanning,
-including member-only requests. Combined search also checks its initial document
-generation and preserves member failures in `unavailableResources`. A changed
-selection/current head requires refresh; exact historical reads still work.
+Search rechecks the current HTML collection identity and unavailable count after
+member scanning, including member-only requests. Combined search also checks its
+initial document projection and preserves member failures in `unavailableResources`.
+Changed publications require fresh discovery; switching the selected chat view
+does not change the search scope. Exact historical reads remain available.
 
 The catalog still loads/parses the complete bounded aggregate for member discovery,
 including warm-index searches. This slice does not establish metadata-only HTML

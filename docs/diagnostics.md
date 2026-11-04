@@ -62,6 +62,9 @@ run + source model attempt. Нет привязки к ближайшему со
 явно отмечается. Это метаданные существующего request trace, без нового журнала/store.
 Parser acceptance подписан как принятие формата, не как runtime-доказательство finish.
 Снимок настроек запроса показывает фактический HTTP timeout.
+Надпись «Повторная попытка» в live-чате сама по себе не определяет причину нового
+запроса. Если API не вернул ответ, UI показывает этот факт вместо подстановки
+соседнего ответа. Политики provider retry, format repair и semantic отказа различны.
 
 Срез finish 2026-11-04: `RequestCause.Feedback` содержит код и конкретную причину
 semantic отказа; исходная связь сохраняется через reflection. Фактический следующий
@@ -71,6 +74,8 @@ request содержит ограниченную цитату разобран�
 новых tool results/ввода run завершается с reason `repeated_finish_no_progress`,
 а terminal message сохраняет последнюю причину. Точный контракт —
 [v8](protocols/CONVERSATION_RESPONSE_V8.md).
+Этот исход имеет lifecycle Failed: pending сообщения остаются на паузе по
+[общей политике Inbox](session-events.md), независимо от наличия нового peer ответа.
 UI в этом срезе не меняется. Открытый gap: обзор исходного запроса может показывать
 Parser=Accepted / Runtime=NotRecorded; semantic причина находится у следующего
 запроса и в итоге запуска, а не в отдельном verdict исходной попытки.

@@ -52,10 +52,12 @@ Windows/Office/WebView2 evidence. S4 целиком и формальный вы
 старого run; сохранённый бюджет не обходится. Добавлен общий встроенный skill.
 
 После Windows-фото исправлены Office progress route и ложная пауза очереди после
-Completed с известной ошибкой попытки. Список включает текущий чат с `is_self`;
+Completed со старыми failed/unknown попытками. Список включает текущий чат с `is_self`;
 короткий стабильный `agent_id` используется в tool wire и подписи bubble. Добавлен
-`agents.wait`: 1–10 секунд за вызов, 30 на run, немедленное пробуждение через общий
-input channel. Skill v2 требует продолжать работу после send и учитывать ID/тему.
+`agents.wait` v2: 1–10 секунд за вызов (default 5), без суммарной квоты, немедленное
+пробуждение через общий input channel. Skill v3.0.0 требует продолжать работу после
+send и учитывать ID/тему. Peer input доставляется между model/tool действиями и без
+wait; начатый вызов/read-back завершается, незапущенные calls перепланируются.
 Host-neutral native queue + kernel + bridge воспроизводит ошибку адреса, ответ,
 ожидание в том же run и поздний следующий ход; Chromium проверяет адресный streaming
 и sender label. Windows latency и визуальное принятие пользователем ещё открыты.
@@ -68,7 +70,9 @@ Host-neutral native queue + kernel + bridge воспроизводит ошиб�
 Визуальное принятие пользователем ещё открыто. Проверки и сценарии — в
 [Harness guide](../../tests/RNAssistant.Harness/README.md#agent-communication--2026-11-03).
 Известные gaps: реальный Windows/Office/WebView2, live-model cooperation, общий
-retained-overlay zoom при узкой Shell. Прежний R61 inventory требует отдельного
+retained-overlay zoom при узкой Shell и generic no-progress при одинаковых timeout
+receipts `agents.wait` (см. [текущий контракт](../conversation-protocol.md#межагентное-общение--2026-11-03)).
+Прежний R61 inventory требует отдельного
 обновления после переименований. Не смешивать эти gaps с passing адресными проверками.
 Rollback — обратный diff среза, без удаления пользовательских событий/CAS.
 Прежнего межагентного пути и временного dual path не было.
@@ -81,6 +85,9 @@ trace/trajectory contract. Журнал показывает причину и f
 Минимальные проверки дополнения: run-journal, stream-render-cost и
 diagnostics-navigation (wide/narrow, lazy payload, точные связи, cleanup).
 Windows/WebView2 evidence и пользовательское принятие остаются открытыми.
+Срез finish 2026-11-04 сохраняет specific feedback через reflection и останавливает
+одинаковые отказы в Core. Он не добавляет отдельный semantic verdict исходного
+запроса в UI; это открытый gap [диагностики](../diagnostics.md#карта-экранов-и-маршрутов).
 
 Scope — прямой запрос пользователя: Dock-вкладка, общие стили дерева, сокращение
 дублирования и удобный выбор запуска/шага с компактными деталями. Owner — Web

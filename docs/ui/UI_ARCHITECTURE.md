@@ -44,8 +44,11 @@ Office agent-started runs передают progress тем же `inbox:<chatId>`
 общий Chat View показывает reasoning, streaming и шаг «Жду сообщения агентов».
 Короткий sender ID вычисляет Core; Web только отображает его рядом с названием.
 Ожидание/пробуждение и terminal scheduling принадлежат общему Inbox, не UI.
+Peer input доставляется на границе завершённого model/tool действия без обязательного
+wait и без отмены текущего вызова. UI только показывает pending/active/paused из owner;
+отдельного переключателя автопродолжения или планировщика доставки в Web нет.
 
-Обновлено: 2026-11-03. Owner: Web presentation; host/runtime contracts — их текущие
+Обновлено: 2026-11-04. Owner: Web presentation; host/runtime contracts — их текущие
 domain owners. Стратегия и продолжение общего chat-среза разрешены пользователем;
 детали визуальных решений остаются на ревью.
 Это canonical document владения, зависимостей и lifecycle UI.
@@ -70,6 +73,9 @@ lazy payload reader. Core ModelProtocol/Kernel владеют причиной, 
 событий и не добавляет свой retry controller. Lifecycle events
 не создают самостоятельных обменов. Отсутствующая/неоднозначная связь показывается
 явно. Обзор строится из той же bounded projection, по 30 строк, без body reads.
+Срез finish (`ed8c4941`) сохраняет коррекцию в Core KernelState, без нового UI store.
+Отдельный semantic verdict исходной попытки ещё не реализован; причина доступна у
+следующего запроса и в terminal summary (см. [диагностику](../diagnostics.md#карта-экранов-и-маршрутов)).
 NavigationTree откладывает DOM свёрнутых веток журнала до раскрытия; модель дерева
 остаётся полной. Trajectory объединяет одинаковые pending reads по exact scope/query.
 Refresh сохраняет текущие строки до ответа; смена source/query очищает прежние данные.

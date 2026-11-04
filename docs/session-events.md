@@ -905,6 +905,8 @@ absence of input events means an empty queue.
 `ConversationInboxService.EndRun` owns the common terminal scheduling policy:
 Completed permits later input even with historical failed/unknown attempts;
 Failed/Cancelled pause it. Effect verification remains a kernel/tool responsibility.
+This includes a Failed run with `repeated_finish_no_progress`; receiving a peer reply
+does not clear that pause or retry the rejected finish automatically.
 Completion never clears explicit Stop or a replay pause.
 Kernel boundaries and `agents.wait` use transient wake signals and ready input
 IDs in this same Inbox projection. They select the leading queued agent inputs without
@@ -917,6 +919,7 @@ before the next dispatch. Peer input never cancels an in-flight call. Undispatch
 accepted calls receive terminal NotDispatched facts. Each wait has its own timeout;
 there is no separate cumulative waiting quota. Office queued binding uses the existing
 exact runtime-session guard; a stale path after Save As cannot override that identity.
+A closed/reopened document at the same path is still a different runtime session.
 
 Application `ConversationInboxService` owns persisted-delivery reconciliation for
 both consumers and updates its live projection with the same appended event. Before

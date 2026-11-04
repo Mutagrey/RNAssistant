@@ -33,7 +33,7 @@ Library/VBA header имеет minimum из `--page-header-height`, а факти
 Сравнение computed padding/radius с обычным bubble на одинаковом viewport прошло;
 общий Shell zoom overflow отмечен отдельно в RISK_REGISTER.
 
-Обновлено: 2026-11-03. Owner: Web presentation; визуальные решения утверждает
+Обновлено: 2026-11-04. Owner: Web presentation; визуальные решения утверждает
 пользователь. Canonical document tokens, компонентов и их повторного использования.
 Стратегия — [Architecture](UI_ARCHITECTURE.md), экраны — [Screen Map](UI_SCREEN_MAP.md).
 Направление Approved; продолжение общего chat-среза разрешено. S1b проходит визуальное ревью по эталону завершённого Demo.
@@ -197,6 +197,10 @@ production tokens. Адаптер tab spacing/close icon ограничен Dock
 каталог; крупный parent icon применяется только на первом уровне.
 Причина повтора использует обычные текст, кнопки и JSON viewer reader; новые
 карточки, цвета и локальные размеры не добавляются. Причина видна до загрузки тела.
+«Формат ответа модели принят» обозначает только parser acceptance. Semantic отказ
+finish использует существующие feedback/terminal message; отдельной отметки его
+допуска у исходного запроса пока нет. Нормализованная цитата в следующем запросе и
+точный исходный payload не подменяют друг друга.
 RunJournal CSS владеет только компоновкой дерева/reader. Нет второй палитры,
 своих selected/hover или копии списка событий в деталях. Повторные названия,
 счётчики и служебные пояснения убраны; JSON compact toolbar переносится целиком

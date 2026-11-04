@@ -123,7 +123,7 @@ ModelProtocol.
 
 Точный wire contract хранится в
 [conversation-protocol.md](conversation-protocol.md) и
-[CONVERSATION_RESPONSE_V7.md](protocols/CONVERSATION_RESPONSE_V7.md).
+[CONVERSATION_RESPONSE_V8.md](protocols/CONVERSATION_RESPONSE_V8.md).
 
 ## 6. Persistence, target и concurrency
 

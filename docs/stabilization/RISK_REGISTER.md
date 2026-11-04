@@ -328,7 +328,8 @@ ModelProtocol / Web RunJournal.
 - Причина нового запроса записывается в существующий request trace с source attempt:
   provider retry, format repair, rejected finish/partial/reflection или incoming input.
   RunJournal показывает feedback и exact исходный ответ через lazy reader; timeout
-  виден в снимке настроек. Новых лимитов повторов нет.
+  виден в снимке настроек. Этот срез (`da8bf807`) не менял retry limits; отдельная
+  защита одинаковых semantic finish отказов добавлена позже в `ed8c4941` (см. начало).
 
 Проверки: 10 communication, 12 Inbox, 3 completion rejection, 4 provider/repair,
 bound session lifetime, built-in skill dependencies, causal projection;

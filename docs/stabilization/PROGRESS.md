@@ -3,10 +3,12 @@
 ## Finish: коррекция и ограничение цикла — 2026-11-04
 
 Owners: Core AgentKernel / ModelProtocol / Persistence; Application — typed acceptance.
-Реализован первый срез: модель получает код/причину, конкретный claim/E и ограниченную
+Реализован первый срез (`ed8c4941`): модель получает код/причину, конкретный claim/E и ограниченную
 цитату непринятого finish. Причина сохраняется через reflection и восстановление.
 Три одинаковых отказа без нового terminal tool result/ввода останавливают run с
 `repeated_finish_no_progress` и исходной причиной, без принятия ответа или replay tools.
+Это Failed, поэтому очередь остаётся на паузе по общей политике Inbox. Новый peer
+ответ сам эту паузу не снимает; Completed со старыми failed/unknown попытками её не создаёт.
 Минимальная сборка Harness прошла; 20 целевых checks проходят, включая реальные
 scripted HTTP requests в обоих JSON-режимах. Шесть соседних baseline failures
 подтверждены на прежней сборке и зафиксированы в
@@ -36,6 +38,7 @@ reflection и общий feedback без claim/E при contradictory assessment
 ## Межагентная очередь и причины повторов — 2026-11-03, In Review
 
 Owners: Application Inbox, Core ModelProtocol/Kernel, Web RunJournal.
+Исправления закоммичены в `da8bf807`; UI и Windows evidence остаются In Review.
 Peer input автоматически доставляется на границе после model request/tool call,
 без отмены выполняющегося инструмента; незапущенные calls перепланируются.
 Убраны отдельная 30-секундная квота wait и пауза Completed по историческому unknown
@@ -43,15 +46,19 @@ Peer input автоматически доставляется на границ
 Office queue проверяет exact runtime session существующим guard, без повторной
 path-only проверки, которая расходится с ним после Save As.
 Request trace/typed journal передают причину повтора и source attempt; UI показывает
-feedback, исходный ответ по кнопке и сохранённый HTTP timeout. Новых retry limits нет.
+feedback, исходный ответ по кнопке и сохранённый HTTP timeout. В этом срезе provider
+retry/format budgets не менялись; более поздняя защита semantic finish описана выше.
+Текущий wait contract/binding — v2, communication skill — v3.0.0. Общий guard одинаковых
+tool results всё ещё может блокировать повторное ожидание; исправление этого пути открыто.
 Локальные проверки очереди, модельного протокола и UI пройдены; Windows-причина
 потери сессии и задержки реального API остаются открытыми в [Risk Register](RISK_REGISTER.md).
 
 ## HTML при общении агентов — 2026-11-03, In Review
 
 Owner: Office HTML domain / mutation routing; Core — prepared member guard.
-Защитный checkpoint `8d947574` закоммичен. Следующий согласованный срез отделяет
-model HTML от chat selection: именованный `html.workspace.create`, стабильная рабочая
+Первоначальный selection guard (`8d947574`) заменён явной адресацией workspace в
+`b49018f2`; аудит/recovery исправлены в `bf85ec27`. Model HTML отделён от chat selection:
+именованный `html.workspace.create`, стабильная рабочая
 цель, явный `workspace` для данных/assets, общий discovery в документе. Исторические
 цели read-only, запись использует прежние journal/CAS/publication owners. UI обновляет
 только выбранный logical workspace, сохраняя dirty drafts и stale-save guard.
@@ -96,19 +103,20 @@ strict VBA 32K budget gap, Windows/Office и точная причина пре�
 Выбор чата текущего Office-документа показывает view до завершения native очереди;
 промежуточный preview сохраняет загруженную ленту. Аудит устранил повторную
 постройку дерева на tokens и гонку Previous/Latest; 15 JS и 8 адресных Chromium
-проверок проходят. В параллельном рабочем HTML diff исправлен Materials callback;
-эта правка остаётся в HTML-срезе. Restore с drafts проходит и в изолированном chat diff. Отдельный Library deactivation pageerror, синхронная
+проверок проходят. Materials callback исправлен в HTML-срезе.
+Restore с drafts проходит и в изолированном chat diff. Отдельный Library deactivation pageerror, синхронная
 начальная постройка большого дерева и Windows/Office latency остаются открытыми.
 [Аудит и ограничения](../ui/UI_MIGRATION_PLAN.md#аудит-параллельных-чатов-и-производительности--in-review-2026-11-03).
 [Scope и ревью](../ui/UI_MIGRATION_PLAN.md#возврат-закрытых-вкладок-и-переключение-чатов--in-review-2026-11-03).
 
 ## Общение агентов между чатами — 2026-11-03, In Review
 
-По фото исправлены пропавший Office progress и ложная пауза позднего ответа после
+Первый срез (`2c8de087`) исправил пропавший Office progress и ложную паузу позднего ответа после
 Completed с известной ошибкой попытки. Теперь discovery включает self, адреса короткие
 и стабильные, подписи различают одинаковые названия. `agents.wait` принимает ответ в
-том же run (до 10 секунд за вызов, 30 за run); skill v2 не требует finish после send.
-23 адресные Harness проверки и Chromium agent communication проходят. Реальная
+том же run. Текущий контракт после `da8bf807`: до 10 секунд за вызов без суммарной
+квоты, skill v3.0.0 и автоматический приём между действиями даже без wait.
+На первом срезе пройдены 23 адресные Harness проверки и Chromium agent communication. Реальная
 Windows/Office latency и визуальное принятие остаются открытыми; уже сохранённая
 пауза требует одного явного продолжения. [Разбор](RISK_REGISTER.md#общение-агентов-поздний-ответ-и-невидимый-прогресс--2026-11-03).
 

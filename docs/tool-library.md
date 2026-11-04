@@ -29,7 +29,8 @@ when the application messaging owner is available and `MaxAgentMessages > 0`.
 Zero removes them from new catalogs and rejects old handlers before dispatch;
 an inherited nonzero chain budget cannot override the switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires all three tools; zero makes that package unavailable for loading.
+and requires all three tools at contract v2 (skill v3.0.0); zero makes that package
+unavailable for loading.
 List publishes all open chats, with `is_self` identifying the caller and stable short
 `agent_id` addresses, without history or effect evidence. Send accepts only `agent_id` and `text` (up to
 131072 characters), returns a queued receipt with recipient/title/text, and cannot
@@ -38,16 +39,24 @@ requested task. Closed/unavailable peers, exhausted budget, conflicting operatio
 and unresolved delivery have explicit error codes; no automatic retry is allowed.
 Not-found is not evidence that a chat closed. Sending is nonterminal: continue work
 or wait for the needed reply, rather than calling finish just because a message was sent.
+Busy recipients accept leading peer inputs at the next kernel boundary after the
+current model request/tool call, even without `agents.wait`. In-flight work and
+read-back finish first; unstarted accepted calls receive NotDispatched. Human FIFO,
+Stop and pending confirmation remain in force.
 
 `agents.wait(timeout_seconds?)` is an event-driven read with no effect evidence.
-It defaults to 5 seconds, accepts 1–10, and shares a 30-second wait budget per run.
-It returns typed status, remaining wait seconds and current peers. Ready messages
+It defaults to 5 seconds and accepts 1–10 per call, with no cumulative wait quota.
+It returns `MessagesReady`, `TimedOut` or `InputPending` and current peers; there is
+no remaining-wait field. Ready messages
 enter the current run through the common input channel; human FIFO/Stop take priority.
-No model polling or document gate is held. After the budget ends, finish the turn
-with pending work stated; later messages automatically start another turn.
+No model polling or document gate is held during the wait. On timeout, the model
+uses peer statuses to choose useful work or another wait; timeout does not finish
+the run. Repeated identical wait results still encounter the generic tool
+no-progress guard; this is an [open issue](conversation-protocol.md#межагентное-общение--2026-11-03),
+not a separate wait budget or a guarantee of unlimited waiting.
 
 Bindings: `conversation.agents.list.v2`, `conversation.agents.send.v2`,
-`conversation.agents.wait.v1`. The v1 raw `chat_id` send schema is removed; stale
+`conversation.agents.wait.v2`. The v1 raw `chat_id` send schema is removed; stale
 admissions must explicitly reload the current contract. Sending is a
 managed conversation write available in Agent and Plan; it has no document authority
 observer or per-message approval. Recipient actions retain their own exact policies.
