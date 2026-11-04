@@ -79,9 +79,10 @@ no remaining-wait field. Ready messages
 enter the current run through the common input channel; human FIFO/Stop take priority.
 No model polling or document gate is held during the wait. On timeout, the model
 uses peer statuses to choose useful work or another wait; timeout does not finish
-the run. Repeated identical wait results still encounter the generic tool
-no-progress guard; this is an [open issue](conversation-protocol.md#межагентное-общение--2026-11-03),
-not a separate wait budget or a guarantee of unlimited waiting.
+the run. Repeated elapsed timeouts are distinguished by typed runtime progress and
+do not hit the unchanged-result guard. Immediate replies/input retain normal guards;
+iteration/tool-step limits still apply. This does not restore an unfinished wait
+after restart. Details: [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
 
 Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v4`,
 `conversation.agents.spawn.v2`, `conversation.agents.wait.v3`. Stale admissions must

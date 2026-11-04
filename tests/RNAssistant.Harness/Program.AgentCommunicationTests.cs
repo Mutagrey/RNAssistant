@@ -215,6 +215,49 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void AgentRepeatedWaitTimeoutProgress()
+        {
+            WithTempExecutor((executor, adapter) => {
+                var store = new ChatStore(FixturePaths.Value);
+                var inbox = new ConversationInboxService(EventStore(store));
+                var service = new AgentCommunicationService();
+                var session = AgentChat(store, "Waiting for peers");
+                RegisterAgent(service, AgentEndpoint(session, inbox));
+                executor.AgentCommunication = service; executor.AgentInbox = inbox;
+                var requests = 0;
+                LlmCompletionDelegate completion = (settings, messages, options, stream, token) => {
+                    var response = ++requests <= 4
+                        ? ModelProtocolWire.WriteAcceptedCall("Keep waiting for the peer", null,
+                            new ConversationToolCall { Name = "agents.wait", Arguments = new JObject { ["timeout_seconds"] = 1 } })
+                        : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "No reply yet", "The peer has not replied yet.", results: new ConversationResultClaim[0],
+                            outcome: ConversationOutcome.UnableToComplete);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
+                };
+                var runtime = new ConversationRunService(adapter, executor, ConversationStore(store), EventStore(store),
+                    completion, null, inbox: inbox);
+                inbox.Bind(session);
+                runtime.ExecuteAsync(ChatModes.Agent, "Wait for a peer", session, NewContext(adapter),
+                    new AppSettings { AgentResponseMode = "json_object", StreamResponses = false, SmartChatTitles = false,
+                        AutoCompressContext = false, MaxAgentIterations = 6 }, executor.GetControllerTools().ToList(),
+                    null, null, null, BuiltInSkillProvider.GetSkills(adapter), CancellationToken.None).GetAwaiter().GetResult();
+                inbox.EndRun(session);
+                AssertEqual(RunLifecycle.Completed, session.LastRun.KernelState.Summary.Lifecycle,
+                    "repeated real timeouts leave the model able to finish its run: " +
+                    session.LastRun.KernelState.Summary.Reason + " " + session.LastRun.KernelState.Summary.AssistantMessage +
+                    " / " + string.Join("; ", session.Messages.Where(message => message.ExecutionProgress != null).Select(message => message.Content)));
+                AssertEqual(4, session.LastRun.KernelState.Summary.ToolCounts.ReadOk,
+                    "the fourth identical wait reaches the real runtime instead of the no-progress rejection");
+                AssertEqual(5, requests, "timeouts use the ordinary bounded model loop");
+                var restored = store.Load(session.Id);
+                var facts = restored.Messages.Where(message => message.Activity == null && message.ExecutionProgress != null).ToArray();
+                AssertEqual(4, facts.Count(message => message.ExecutionProgress.WaitTimedOut),
+                    "typed timeout facts survive the real Office terminal commit and ChatStore reload");
+                AssertTrue(facts.All(message => message.ExecutionProgress.Outcome == ToolExecutionOutcome.Ok),
+                    "no rejected repeated-wait call is hidden in the saved history");
+            });
+        }
+
         private static void AgentWaitBoundaries()
         {
             WithTempPaths(paths => {

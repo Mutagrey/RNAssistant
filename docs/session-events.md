@@ -32,6 +32,13 @@ lock, so early replies are retained and cannot fall between check/subscription.
 This is durable correlation, not a durable waiting Run: no new wait journal,
 automatic restart continuation or tool replay is introduced in 2a.
 
+Completed timeouts now carry optional `ToolExecutionProgress.WaitTimedOut` through
+the existing terminal result/activity facts. Replay preserves the distinction from
+an unchanged snapshot read; absent metadata grants no exception. The flag comes
+from the typed wait outcome, never model/result text, and cannot accompany errors,
+effects, resource evidence or independent snapshot reads. It neither clears other
+replay guards nor checkpoints an unfinished wait; no new journal/store is added.
+
 `ConversationInput.AgentCommunication` and the matching `ChatMessage` retain the
 same message/reply IDs, chain, sender address/run, root, accepted permission ceiling
 and pinned limit. Inbox replay validates provenance;

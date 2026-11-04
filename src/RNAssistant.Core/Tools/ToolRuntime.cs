@@ -345,7 +345,8 @@ namespace RNAssistant.Core.Tools
             var record = Record(context, outcome, result, dispatched, effect,
                 awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok,
                 resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack,
-                recovery: completed.Recovery, resourceEffect: completed.ResourceEffect, invocationCompleted: invocationCompleted);
+                recovery: completed.Recovery, resourceEffect: completed.ResourceEffect, invocationCompleted: invocationCompleted,
+                waitTimedOut: completed.WaitTimedOut);
             return completed.AuthorityCommit == null ? record : record.WithAuthorityCommit(completed.AuthorityCommit, false);
         }
 
@@ -406,7 +407,7 @@ namespace RNAssistant.Core.Tools
             IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
             ToolRecoveryContract recovery = null, bool wasCancelled = false, RNAssistant.Core.Models.ResourceEffect resourceEffect = null,
-            bool invocationCompleted = false)
+            bool invocationCompleted = false, bool waitTimedOut = false)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
@@ -415,7 +416,7 @@ namespace RNAssistant.Core.Tools
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect, invocationCompleted),
                 result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
                 resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack,
-                recovery: recovery, wasCancelled: wasCancelled, resourceEffect: resourceEffect);
+                recovery: recovery, wasCancelled: wasCancelled, resourceEffect: resourceEffect, waitTimedOut: waitTimedOut);
         }
 
     }

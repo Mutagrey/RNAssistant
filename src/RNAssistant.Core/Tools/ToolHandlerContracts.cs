@@ -300,12 +300,15 @@ namespace RNAssistant.Core.Tools
         public ResourceAuthorityCommit AuthorityCommit { get; private set; }
         public ResourceEffect ResourceEffect { get; private set; }
         public bool InvocationCompleted { get; private set; }
+        // A real bounded event wait reached its deadline. This is runtime
+        // progress metadata, not a model claim or evidence of task completion.
+        public bool WaitTimedOut { get; private set; }
 
         public ToolHandlerResult(ToolResult result, ToolEffectEvidence effect = ToolEffectEvidence.Unreported,
             bool awaitingUser = false, IEnumerable<ResourceEvidence> resourceEvidence = null,
             IEnumerable<ResourceMutationReadBack> resourceReadBack = null,
             ToolRecoveryContract recovery = null, ResourceAuthorityCommit authorityCommit = null, ResourceEffect resourceEffect = null,
-            bool invocationCompleted = false)
+            bool invocationCompleted = false, bool waitTimedOut = false)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (!Enum.IsDefined(typeof(ToolEffectEvidence), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
@@ -328,6 +331,11 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("A direct authority commit requires a verified changed result.", nameof(authorityCommit));
             AuthorityCommit = authorityCommit;
             ResourceEffect = resourceEffect;
+            if (waitTimedOut && (result.Status != ToolResultStatus.Ok || effect != ToolEffectEvidence.None ||
+                awaitingUser || invocationCompleted || recovery != null || authorityCommit != null || resourceEffect != null ||
+                ResourceEvidence.Count != 0 || ResourceReadBack.Count != 0))
+                throw new ArgumentException("A timed-out wait must be a successful observation without effects or recovery.", nameof(waitTimedOut));
+            WaitTimedOut = waitTimedOut;
         }
     }
 }

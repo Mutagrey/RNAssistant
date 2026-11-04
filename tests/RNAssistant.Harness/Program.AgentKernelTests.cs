@@ -323,6 +323,58 @@ namespace RNAssistant.Harness
             AssertEqual(4, result.Summary.IterationsUsed, "the same kernel owns all continuation accounting");
         }
 
+        private static async Task KernelTimedWaitProgressRetainsLimitsAndGuards()
+        {
+            var policy = new ToolPolicySnapshot("wait", "wait-v1", new ToolPolicy(ToolEffect.Read,
+                ToolVerification.None, false, false, new[] { "agent" }, evidenceEligibility: EvidenceEligibility.None));
+            foreach (var limits in new[] { new AgentRunLimits(4, 8), new AgentRunLimits(8, 3) })
+            {
+                var f = new KernelFixture(Enumerable.Range(0, 8).Select(_ => KernelResponse(KernelCall("wait"))).ToArray());
+                f.Tools.Policies["wait"] = policy;
+                f.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
+                    ToolExecutionOutcome.Ok, context.StartedUtc.AddSeconds(1), mayHaveDispatched: false,
+                    evidence: new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.None),
+                    result: RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Wait elapsed", "{\"Status\":\"TimedOut\"}"),
+                    waitTimedOut: true));
+                var result = await f.RunAsync(limits: limits);
+                AssertEqual(limits.MaxIterations == 4 ? "iteration_limit" : "tool_step_limit", result.Summary.Reason,
+                    "timed waits still consume the ordinary run budgets");
+                AssertEqual(Math.Min(limits.MaxIterations, limits.MaxToolSteps), f.Tools.Calls.Count,
+                    "only budgeted waits dispatch");
+                var tracker = new AgentProgressTracker();
+                tracker.Restore(result.AcceptedMessages);
+                string reason, message; int delay;
+                AssertTrue(tracker.CanDispatch(new ToolCall("next", "wait", "{}"), out reason, out message, out delay, policy),
+                    "restored timeout facts do not become an unchanged-result prohibition");
+            }
+
+            var history = new List<AgentMessage>();
+            Action<string, ToolExecutionProgress> add = (name, progress) => {
+                var call = new ToolCall("call-" + history.Count, name, "{}");
+                history.Add(AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
+                    "Observe runtime", null, new[] { call })));
+                // Use the exact same payload even for the ordinary snapshot read:
+                // only typed runtime metadata can distinguish an elapsed wait.
+                history.Add(AgentMessage.AcceptedToolResult(call.Id, "Observation", "{\"Status\":\"TimedOut\"}",
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(Newtonsoft.Json.JsonConvert.SerializeObject(progress))));
+            };
+            add("uncertain", new ToolExecutionProgress(ToolExecutionOutcome.Unknown));
+            add("failed", new ToolExecutionProgress(ToolExecutionOutcome.Error));
+            for (var i = 0; i < 3; i++)
+                add("snapshot", new ToolExecutionProgress(ToolExecutionOutcome.Ok, resultFingerprint: "same", independentLocalRead: true));
+            for (var i = 0; i < 4; i++)
+                add("wait", new ToolExecutionProgress(ToolExecutionOutcome.Ok, resultFingerprint: "same", waitTimedOut: true));
+            var restored = new AgentProgressTracker(); restored.Restore(history);
+            foreach (var guard in new[] { new[] { "uncertain", "repeated_unknown_tool_call" },
+                new[] { "failed", "repeated_tool_failure" }, new[] { "snapshot", "repeated_tool_no_progress" } })
+            {
+                string reason, message; int delay;
+                AssertTrue(!restored.CanDispatch(new ToolCall("again", guard[0], "{}"), out reason, out message, out delay),
+                    "elapsed waits do not release other guards after replay: " + guard[0]);
+                AssertEqual(guard[1], reason, "the original guard remains exact");
+            }
+        }
+
         private static async Task KernelBlocksIdenticalDefiniteFailure()
         {
             const string arguments = "{\"target\":\"same invalid target\"}";

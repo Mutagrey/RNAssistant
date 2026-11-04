@@ -295,7 +295,8 @@ User Stop/restart pause не снимается peer-командой без п�
 |---|---|---|
 | 1. Каталог/spawn | `AgentConversationScope`, `AgentCommunicationService.Spawn`; `ChatSessionService.PrepareAgentChat`; Workspace scope binding; catalog/skill; удаление presence bridge/leases | Работа без views, сохранение provenance, общий recursive budget, truthful partial receipt. Риск: binding/права при закрытом target. Локальные проверки пройдены; Office/controller evidence отдельно |
 | 2a. Корреляция | Existing Prepared/Accepted + input provenance, source recipient verification и Inbox matcher. Реализовано после 1 | Ранние/применённые ответы учитываются, any/all различаются, нет чужих match/потери сигнала, unrelated/human/policy input не выдаётся за ответ. 22 целевые проверки проходят |
-| 2b. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a | Сохраняемый suspension освобождает worker/document gate; resume даёт terminal wait result тому же accepted call. Не обходить текущий запрет восстановления незавершённых exchanges; crash/deadline/cancel проверяются отдельно |
+| 2b.1. Повтор ожидания | Реализован typed timeout progress через существующий terminal result; общий kernel не парсит имя tool/body. Зависит от 2a | Четвёртый одинаковый timeout исполняется; JSON/ChatStore replay сохраняет различие, остальные repeat guards и run limits действуют. 23 agent communication + 1 kernel wait + 15 tool runtime checks проходят; Windows отдельно |
+| 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; ещё не реализовано | Сохраняемый suspension освобождает worker/document gate; resume даёт terminal wait result тому же accepted call. Не обходить текущий запрет восстановления незавершённых exchanges; crash/deadline/cancel проверяются отдельно |
 | 3. Run control/лимиты | Existing run owner/leases/input channel, typed pause/resume/cancel; глобальный scheduler admission и budgets. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. Справедливость очереди и лимиты параллельных Run проверены |
 | 4a. Организация чатов | Optional group events/projection, creator в headers/DTO; `group`, целевой `chat.rename`, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
 | 4b. Поручения | Optional assignment events и bounded projection; `resolve`. Зависит от 2–3, membership не обязателен | Смена ролей без смены identity; finish не закрывает поручение; terminal assignment не доказывает внешний эффект без evidence |
@@ -308,8 +309,8 @@ Inspector. Лимит 8 созданий на causal chain — ограничи�
 Большие каталоги читаются через headers, без историй; model output ограничен 50 peers.
 В этапе 2a добавлена durable correlation. Сам wait всё ещё ограничен 1–10 секундами
 в текущем Run; await не держит рабочий поток/Office gate, но Run/queue ownership ещё
-не освобождается как отдельный durable suspension. Generic no-progress guard при
-повторяющихся timeout receipts остаётся открытым до следующего среза.
+не освобождается как отдельный durable suspension. В 2b.1 исправлен generic guard
+для повторяющихся elapsed timeout receipts; незавершённый wait по-прежнему не сохраняется.
 
 ## Семантика и проверяемые границы
 

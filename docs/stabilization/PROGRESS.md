@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Мультиагенты: повтор ожидания без ложного no-progress — In Review, 2026-11-04
+
+Документация группировки/удаления согласована и сохранена в `1a3e0c50`.
+Следующий срез плана 2b.1: owner Application сообщает typed WaitTimedOut, Core
+ToolRuntime проверяет read/no-effect contract, ProgressTracker учитывает факт без
+парсинга имени tool или JSON. Повторный timeout не блокируется как одинаковое чтение;
+ошибки/unknown/repeated reads и бюджеты не сбрасываются. Terminal metadata сохраняется
+в прежних events; нового store или model-facing поля нет.
+Проверены четыре последовательных реальных ожидания через Office service/fake adapter,
+ChatStore reload, JSON replay и лимиты. 23 agent communication, 1 kernel wait,
+15 tool runtime checks проходят. Это host-neutral evidence, Windows/Office открыто.
+Далее 2b.2: сохраняемый suspension незавершённого wait и продолжение того же Run;
+пока они не реализованы. Группировка/UI также остаются в плане.
+
 ## Мультиагенты: корреляция запросов и ответов — In Review, 2026-11-04
 
 Owner: Application/Conversations; Core — immutable provenance/catalog/skill.
@@ -19,7 +33,7 @@ context хранит правила один раз и сохраняет peer a
 Workspace wire после disable, escaping и неизменность durable Content.
 Роли переиспользуются через skills; отдельный постоянный Agent пока не вводится —
 [решение и следующий срез](../proposals/multi-agent-runtime-plan.md).
-Durable Run suspension/restart, generic repeated-wait guard, cancel/pause/resume,
+Durable Run suspension/restart, cancel/pause/resume,
 Collaboration/resolve и Inspector остаются впереди. Windows/Office evidence открыто.
 
 ## Мультиагенты: saved catalog и spawn — In Review, 2026-11-04

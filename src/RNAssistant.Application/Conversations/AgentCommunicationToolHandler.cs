@@ -43,7 +43,8 @@ namespace RNAssistant.Application.Conversations
                         : result.Status == AgentWaitStatus.RepliesReady ? "Указанные ответы получены. Matches подтверждает корреляцию, а не выполнение поручения. Уже обработанные ответы повторно в контекст не добавляются."
                         : result.Status == AgentWaitStatus.InputPending ? "Есть другой ввод или запрос с более строгими правами. Условие ожидания не подтверждено: обработайте ввод либо завершите ход для очередного запроса."
                         : "Время ожидания истекло. Проверьте состояния собеседников и выберите дальнейшее действие.",
-                        JsonConvert.SerializeObject(result)), ToolEffectEvidence.None);
+                        JsonConvert.SerializeObject(result)), ToolEffectEvidence.None,
+                        waitTimedOut: result.Status == AgentWaitStatus.TimedOut);
                 }
                 var operationId = "agent_" + RNAssistant.Core.Services.ConversationInputJournal.Fingerprint(new[] {
                     _session.Id, context.Execution.RunId, context.Execution.StepId, context.Execution.Call.Id });

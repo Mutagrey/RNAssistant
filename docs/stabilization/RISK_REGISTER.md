@@ -1,5 +1,15 @@
 # Stabilization risk register
 
+## Повтор тайм-аута agents.wait — исправлен host-neutral, 2026-11-04
+
+Ошибка из аудита ниже закрыта срезом 2b.1: typed WaitTimedOut в terminal progress
+отличает истёкший интервал ожидания от одинакового чтения. Четыре реальных wait через
+Office service/fake adapter завершаются без ложного repeat rejection; ChatStore/JSON
+сохраняют факт. Остальные guards и iteration/tool-step limits проверены отдельно.
+23 agent communication + 1 kernel wait + 15 tool runtime checks проходят.
+Сохраняемый suspension/restart, Windows/Office и live-model cooperation ещё открыты;
+эта проверка не квалифицирует их. Контракт — [общение](../conversation-protocol.md#межагентное-общение--2026-11-03).
+
 ## Finish: коррекция и ограничение цикла — 2026-11-04
 
 Реализован первый срез аудита ниже. Owners: Core AgentKernel / ModelProtocol /
@@ -35,7 +45,7 @@ confirmation/stale cursor, cancelled confirmation, known effect/preparation fail
 имеют старый finish без outcome либо расходятся с текущей skill preparation/очередью.
 Они не исправлялись в этом срезе; полный Harness не объявляется пройденным.
 
-Остаются открытыми repeated `agents.wait`, разделение инфраструктурного и исправимого
+На момент этого среза были открыты repeated `agents.wait` (исправлен выше), разделение инфраструктурного и исправимого
 model отказа, отдельный runtime verdict у исходной попытки и live статус ожидания.
 UI/Office COM не менялись. Живая модель, Windows/Office и причина исходной фотографии
 не квалифицированы. Для фото пригодны существующие Причина/feedback следующего

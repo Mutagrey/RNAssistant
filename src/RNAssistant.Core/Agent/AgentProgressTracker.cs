@@ -167,6 +167,10 @@ namespace RNAssistant.Core.Agent
                 _unchanged.Clear(); _seenResults.Clear();
                 return;
             }
+            // Equal timeout receipts describe separate elapsed wait intervals,
+            // not rereading one unchanged snapshot. Keep all other replay and
+            // no-progress guards: waiting neither inspects nor repairs effects.
+            if (progress.WaitTimedOut) return;
             var resultFingerprint = effect?.Outcome == ResourceEffectOutcome.VerifiedNoChange
                 ? "verified-no-change" : progress.ResultFingerprint;
             if (string.IsNullOrEmpty(resultFingerprint)) return;

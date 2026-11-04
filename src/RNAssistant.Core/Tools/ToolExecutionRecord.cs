@@ -75,7 +75,7 @@ namespace RNAssistant.Core.Tools
         public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
             string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null,
             DateTime? completedUtc = null, bool opaqueAction = false, EvidenceEligibility evidenceEligibility = EvidenceEligibility.None,
-            bool opaqueActionCompleted = false)
+            bool opaqueActionCompleted = false, bool waitTimedOut = false)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
             CompletedUtc = completedUtc;
@@ -87,7 +87,14 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Normal opaque completion must retain unknown effect health.");
             OpaqueActionCompleted = opaqueActionCompleted;
             AdmissionRevision = admissionRevision;
+            if (waitTimedOut && (outcome != ToolExecutionOutcome.Ok || recovery != null ||
+                independentLocalRead || opaqueAction || evidenceEligibility != EvidenceEligibility.None))
+                throw new ArgumentException("A timed-out wait is a successful non-evidentiary event observation.", nameof(waitTimedOut));
+            WaitTimedOut = waitTimedOut;
         }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool WaitTimedOut { get; private set; }
 
         public static ToolExecutionProgress Capture(ToolExecutionRecord record)
         {
@@ -104,7 +111,8 @@ namespace RNAssistant.Core.Tools
                 record.Context.Policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction,
                 record.Context.Policy.Policy?.EvidenceEligibility ?? EvidenceEligibility.None,
                 record.Context.Policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction &&
-                    record.Outcome == ToolExecutionOutcome.Unknown && record.Evidence.InvocationCompleted);
+                    record.Outcome == ToolExecutionOutcome.Unknown && record.Evidence.InvocationCompleted,
+                record.WaitTimedOut);
         }
     }
 
@@ -172,6 +180,7 @@ namespace RNAssistant.Core.Tools
         public string PreparedStateJson { get; private set; }
         public string ConfirmationDataJson { get; private set; }
         public bool AwaitingUser { get; private set; }
+        public bool WaitTimedOut { get; private set; }
         public int ToolStepsConsumed { get; private set; }
         public ToolExecutionEvidence Evidence { get; private set; }
         public System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> ResourceEvidence { get; private set; }
@@ -190,7 +199,7 @@ namespace RNAssistant.Core.Tools
             System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             RNAssistant.Core.Models.ResourceEffect resourceEffect = null, string authorityCommitId = null,
             System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null, bool wasCancelled = false)
+            ToolRecoveryContract recovery = null, bool wasCancelled = false, bool waitTimedOut = false)
         {
             Context = context ?? throw new ArgumentNullException(nameof(context));
             if (!Enum.IsDefined(typeof(ToolExecutionOutcome), outcome)) throw new ArgumentOutOfRangeException(nameof(outcome));
@@ -239,6 +248,13 @@ namespace RNAssistant.Core.Tools
             AuthorityCommitId = authorityCommitId;
             ResourceReadBack = resourceReadBack ?? new RNAssistant.Core.Models.ResourceMutationReadBack[0];
             Recovery = recovery;
+            if (waitTimedOut && (outcome != ToolExecutionOutcome.Ok || context.Policy.MayHaveSideEffects ||
+                context.Policy.RequiresConfirmation || context.Policy.IndependentLocalRead ||
+                context.Policy.Policy == null || context.Policy.Policy.EvidenceEligibility != EvidenceEligibility.None ||
+                Evidence.Effect != ToolEffectEvidence.None || awaitingUser || resourceEffect != null || authorityCommitId != null ||
+                ResourceEvidence.Count != 0 || ResourceReadBack.Count != 0))
+                throw new ArgumentException("A timed-out wait requires a read policy and no effect or resource evidence.", nameof(waitTimedOut));
+            WaitTimedOut = waitTimedOut;
         }
 
         public ToolExecutionRecord WithAuthorityCommit(RNAssistant.Core.Models.ResourceAuthorityCommit commit,
@@ -253,7 +269,7 @@ namespace RNAssistant.Core.Tools
             return new ToolExecutionRecord(Context, Outcome, CompletedUtc, Message, ModelResultJson,
                 MayHaveDispatched, PendingId, AwaitingUser, ToolStepsConsumed, DocumentRuntimeId, Evidence,
                 committedResult, PreparedStateJson, ConfirmationDataJson, ResourceEvidence, commit.Effect, commit.CommitId,
-                ResourceReadBack, Recovery, WasCancelled);
+                ResourceReadBack, Recovery, WasCancelled, WaitTimedOut);
         }
     }
 }

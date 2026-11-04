@@ -70,6 +70,12 @@ titles, unchanged durable body, no display scope, and one runtime authority inst
 The Workspace round trip also checks a real request after messaging is disabled;
 retained peer history cannot lose its authority boundary or prescribe unavailable tools.
 This does not yet test durable suspension/restoration of a waiting Run.
+Slice 2b.1 adds `agent communication: repeated wait timeout progress is persisted`:
+four real one-second waits through Office service/ToolRuntime/kernel, then ChatStore
+reload. The total is now 23 communication checks. `kernel: timed wait` covers replay,
+ordinary run budgets and preservation of unchanged-read/error/unknown guards even
+when the result JSON is identical. `tool runtime:` adds 15 relevant regressions.
+These tests restore completed facts, not an unfinished waiting Run.
 Quota reads use existing indexed canonical events without trace
 materialization. Relevant regressions: `inbox:`, `workspace: queue`, `unified policy:`,
 `tool pack: core`, `settings: invalid numeric`, `storage: indexed input journal`.
