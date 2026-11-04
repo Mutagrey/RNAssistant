@@ -62,7 +62,7 @@ var agentSettingsDefaults = {
   maxAgentIterations: 256,
   maxAgentFormatRetries: 3,
   maxConsecutiveReflections: 2,
-  maxAgentMessages: 20,
+  maxCollaborationAgents: 8,
   maxAgentToolSteps: 4096
 };
 
@@ -383,7 +383,7 @@ function renderSettings(options) {
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || agentSettingsDefaults.maxAgentIterations;
   $("maxConsecutiveReflectionsInput").value = compatibilityValue(s, "MaxConsecutiveReflections", "maxConsecutiveReflections", agentSettingsDefaults.maxConsecutiveReflections);
   $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || agentSettingsDefaults.maxAgentFormatRetries;
-  $("maxAgentMessagesInput").value = compatibilityValue(s, "MaxAgentMessages", "maxAgentMessages", agentSettingsDefaults.maxAgentMessages);
+  $("maxCollaborationAgentsInput").value = compatibilityValue(s, "MaxCollaborationAgents", "maxCollaborationAgents", agentSettingsDefaults.maxCollaborationAgents);
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || agentSettingsDefaults.maxAgentToolSteps;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(state.prompts);
@@ -446,7 +446,7 @@ function readSettings() {
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || agentSettingsDefaults.maxAgentIterations),
     MaxConsecutiveReflections: Math.max(0, Math.min(20, Math.trunc(Number($("maxConsecutiveReflectionsInput").value)))),
     MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
-    MaxAgentMessages: Number($("maxAgentMessagesInput").value || agentSettingsDefaults.maxAgentMessages),
+    MaxCollaborationAgents: Number($("maxCollaborationAgentsInput").value || agentSettingsDefaults.maxCollaborationAgents),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || agentSettingsDefaults.maxAgentToolSteps),
     AgentResponseMode: $("agentResponseModeInput").value,
     SystemPromptRole: $("systemPromptRoleInput").value,
@@ -467,7 +467,7 @@ async function persistSettingsFromForm() {
   var submittedRevision = settingsFormRevision;
   var submittedModelDraft = Object.assign({}, settingsModelDraft);
   var javascriptWasEnabled = compatibilityValue(state.settings, "EnableAgentJavaScript", "enableAgentJavaScript", false) === true;
-  var messagingWasEnabled = compatibilityValue(state.settings, "MaxAgentMessages", "maxAgentMessages", agentSettingsDefaults.maxAgentMessages) > 0;
+  var messagingWasEnabled = compatibilityValue(state.settings, "MaxCollaborationAgents", "maxCollaborationAgents", agentSettingsDefaults.maxCollaborationAgents) > 0;
   settingsSaveInProgress = true;
   updateSettingsSaveButton();
   try {
@@ -494,7 +494,7 @@ async function persistSettingsFromForm() {
     if (typeof refreshModelDiagnosticsSettings === "function") refreshModelDiagnosticsSettings();
     if (typeof renderChatModePicker === "function") renderChatModePicker();
     renderModelControls();
-    if ((javascriptWasEnabled !== nextSettings.EnableAgentJavaScript || messagingWasEnabled !== (nextSettings.MaxAgentMessages > 0)) &&
+    if ((javascriptWasEnabled !== nextSettings.EnableAgentJavaScript || messagingWasEnabled !== (nextSettings.MaxCollaborationAgents > 0)) &&
         typeof applyLibraryCatalogState === "function") {
       try {
         applyLibraryCatalogState({ tools: await send("getTools", {}) });
@@ -557,7 +557,7 @@ function resetAgentSettingsToDefaults() {
   $("maxAgentIterationsInput").value = agentSettingsDefaults.maxAgentIterations;
   $("maxAgentFormatRetriesInput").value = agentSettingsDefaults.maxAgentFormatRetries;
   $("maxConsecutiveReflectionsInput").value = agentSettingsDefaults.maxConsecutiveReflections;
-  $("maxAgentMessagesInput").value = agentSettingsDefaults.maxAgentMessages;
+  $("maxCollaborationAgentsInput").value = agentSettingsDefaults.maxCollaborationAgents;
   $("maxAgentToolStepsInput").value = agentSettingsDefaults.maxAgentToolSteps;
   updateAgentProtocolControls();
   markSettingsDirty();

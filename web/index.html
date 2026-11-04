@@ -782,7 +782,7 @@
                   <label><span>Лимит итераций запуска</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
                   <label><span>Попыток ответа (включая первую)</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20" title="Для каждого ответа агента или сжатия контекста: 1–20 попыток исправить формат, включая первую. Сетевые повторы (до двух) и schema fallback (один) ответа агента считаются отдельно."></label>
                   <label><span>Рефлексий подряд</span><input id="maxConsecutiveReflectionsInput" type="number" min="0" max="20" step="1" title="Принятых reflection подряд без нового результата инструмента или ввода пользователя. 0 — отключить, по умолчанию 2. Ошибки формата и сетевые повторы не считаются. После лимита модель получает просьбу перейти к действию или завершению."></label>
-                  <label><span>Межагентных сообщений на агента в цепочке (0 — отключить)</span><input id="maxAgentMessagesInput" type="number" min="0" step="1" title="0 отключает обмен между агентами. По умолчанию — 20 сообщений каждому агенту в цепочке."></label>
+                  <label><span>Максимум агентов в совместной работе (0 — отключить)</span><input id="maxCollaborationAgentsInput" type="number" min="0" max="64" step="1" title="Всего участников, включая исходный чат, созданные и привлечённые чаты. По умолчанию — 8. 1 — только исходный чат; 0 отключает межагентное общение."></label>
                   <label><span>Лимит вызовов инструментов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
                 </div>
               </section>

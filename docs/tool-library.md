@@ -25,11 +25,11 @@ generation from overwriting it, even if the chosen text matches a draft/placehol
 ## Agent communication tools — 2026-11-03
 
 `agents.list`, `agents.spawn`, `agents.send`, `agents.wait`, `agents.cancel`, `agents.pause` and `agents.resume` are built-in direct tools of the initial profile
-when the application messaging owner is available and `MaxAgentMessages > 0`.
+when the application messaging owner is available and `MaxCollaborationAgents > 0`.
 Zero removes them from new catalogs and rejects old handlers before dispatch;
-an inherited nonzero chain budget cannot override the switch.
+captured nonzero settings cannot override the current switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires list v3, send v4, spawn v2, wait v4 and cancel/pause/resume v1 (skill v8.0.0); zero makes that package
+and requires list v3, send v5, spawn v3, wait v4 and cancel/pause/resume v1 (skill v9.0.0); zero makes that package
 unavailable for loading.
 List reads saved chats in the caller's document/workspace, independently of tabs,
 with optional `query` (title substring) and `agent_id` (exact address). Its bounded
@@ -40,7 +40,7 @@ List includes `is_self` identifying the caller and stable short
 and `text` (up to 131072 characters), with optional `expect_reply` and `reply_to`.
 It returns a queued receipt with runtime `message_id`/recipient/title/text and cannot
 send to its own chat. A queued receipt proves intake only, never execution of the
-requested task. Unavailable/out-of-scope peers, exhausted budget, conflicting operations
+requested task. Unavailable/out-of-scope peers, a full participant roster, conflicting operations
 and unresolved delivery have explicit error codes; no automatic retry is allowed.
 Not-found is not evidence that a chat closed. Sending is nonterminal: continue work
 or wait for the needed reply, rather than calling finish just because a message was sent.
@@ -60,8 +60,15 @@ opening a view, selecting it or copying parent history. `title` is a single line
 expect_reply=true requires initial_message; accepted initial intake returns its
 message_id, usable as a request ID in wait. The child inherits the source scope, effective model and planning/mutation
 restrictions. Creation and initial intake are independent: the receipt retains
-the created `agent_id` even when initial intake is rejected or unknown. Eight
-creations per root chain include recursive creation and unresolved reservations.
+the created `agent_id` even when initial intake is rejected or unknown.
+`MaxCollaborationAgents` (default 8, range 0–64) bounds unique participants in the
+root chain: root + spawned + recruited existing chats. Recursive spawn and first
+send share durable root reservations; repeated contact/replies consume no slots.
+Unresolved reservations remain counted across restart. A lower current setting
+blocks new members without evicting existing ones; captured Run settings also cap
+admission. Zero disables communication. Old untracked chains require new human input.
+There is no message quota or grant/continue-message-budget action. Per-Run steps
+remain bounded; a chain-wide execution budget is still future work.
 Exact operation identity/fingerprint prevents duplicate creation; unknown effects
 are never automatically retried. Roles and task lists are not required.
 
@@ -88,8 +95,8 @@ observation; it does not resend messages or replay other tools. User Stop cancel
 live wait; runtime shutdown preserves it. An expired deadline is not renewed, and
 late replies remain input without retroactively satisfying that deadline. Details: [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
 
-Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v4`,
-`conversation.agents.spawn.v2`, `conversation.agents.wait.v4`, `conversation.agents.cancel.v1`, `conversation.agents.pause.v1`, `conversation.agents.resume.v1`. Stale admissions must
+Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v5`,
+`conversation.agents.spawn.v3`, `conversation.agents.wait.v4`, `conversation.agents.cancel.v1`, `conversation.agents.pause.v1`, `conversation.agents.resume.v1`. Stale admissions must
 explicitly reload the current contract. Send/spawn/cancel/pause/resume are managed conversation writes
 available in Agent and Plan, without a document authority observer or per-message
 approval. Recipients retain their own exact policies and the sender's recorded

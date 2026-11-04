@@ -1,5 +1,29 @@
 # Stabilization risk register
 
+## Максимум участников и снятие квоты сообщений — 2026-11-05
+
+Owner: Application/Conversations. Считаются root + unique targets прежней causal chain,
+включая spawn/recruitment/рекурсию; это ещё не именованная Collaboration. Закрытие
+вкладки не освобождает место; неизвестный резерв и удалённый участник сохраняют его.
+Недоступный корень/старый неучтённый состав запрещают новые действия, без reset/replay.
+При уменьшении настройки текущие участники сохраняются. Ограничение 0 отключает
+новые agents actions, но не отменяет уже принятую работу.
+
+По запросу пользователя удалена message quota. Iteration/tool budgets принадлежат
+отдельному Run; ping-pong с новыми Run может продолжаться без общего лимита стоимости.
+Process slots/fairness и общий execution budget — следующий срез плана, не закрытый
+риск. Наблюдение списка/состояния не вызывает модель. Windows/Office/controller и
+реальные provider latency/token costs остаются отдельной проверкой.
+
+Расширенная локальная проверка выявила пять прежних failures; все воспроизведены
+на изолированном срезе `ed930a76` до изменения participant settings:
+`bridge: typed settings`, `agent: prompt contains tools and skill catalog`,
+`settings: built-in skill references resolve to catalogs` (retired html.data),
+`html assets: catalog, pinned import and create-only publish`,
+`resource cutover: immutable skill catalog publication` (старый common.* create ID).
+Они не исправлялись в этом срезе; полного зелёного Harness не заявлено. Отдельная
+ошибка свежего catalog capture при 8 peers исправлена `ed930a76`, с contention-test.
+
 ## User Run controls — host-neutral, 2026-11-04
 
 Общая лента различает execution pause и queue pause; user cold cancel и exact resume

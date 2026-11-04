@@ -108,7 +108,7 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Область | Владелец текущего контракта |
 |---|---|
 | Model loop, modes, tool result/effect | [Conversation protocol](conversation-protocol.md) |
-| Межагентные адреса, доставка, ожидание и лимит сообщений | [Conversation protocol](conversation-protocol.md#межагентное-общение--2026-11-03); tools — [Tool Library](tool-library.md#agent-communication-tools--2026-11-03), skill — [Skill Library](skills.md#current-implementation) |
+| Межагентные адреса, доставка, ожидание и максимум участников | [Conversation protocol](conversation-protocol.md#межагентное-общение--2026-11-03); tools — [Tool Library](tool-library.md#agent-communication-tools--2026-11-03), skill — [Skill Library](skills.md#current-implementation) |
 | Wire JSON v8 | [Conversation response v8](protocols/CONVERSATION_RESPONSE_V8.md); [v7](protocols/CONVERSATION_RESPONSE_V7.md) — исторический формат |
 | Совместимость model endpoint и проверка ролей/формата | [Model endpoint compatibility](model-endpoint-compatibility.md) |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |

@@ -192,7 +192,7 @@ namespace RNAssistant.Office.Tools
         public IEnumerable<ToolCatalogEntry> GetControllerTools()
         {
             var enabled = AgentJavaScriptEnabled;
-            var agentCommunicationEnabled = (_loadSettings?.Invoke()?.MaxAgentMessages ?? AppSettings.DefaultMaxAgentMessages) > 0;
+            var agentCommunicationEnabled = (_loadSettings?.Invoke()?.MaxCollaborationAgents ?? AppSettings.DefaultMaxCollaborationAgents) > 0;
             foreach (var tool in _controllerTools)
             {
                 if (!enabled && string.Equals(tool.Id, JsToolHandler.RunId, StringComparison.Ordinal)) continue;

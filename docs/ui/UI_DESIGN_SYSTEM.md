@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Поле максимума агентов — In Review, 2026-11-05
+
+Переиспользуется существующий number input раздела «Агент», общие field/grid/tokens.
+Новое оформление не вводится. Удалён неиспользуемый `.agent-communication-status`;
+подпись отправителя и оформление входящих сообщений сохранены. Поле проверено при
+1440/100% и 420/125% внутри реального Dock content. Screenshots:
+[широкий экран](review/participant-limit-wide.png), [узкий](review/participant-limit-narrow.png).
+Frozen Demo не содержит этого production-поля и не изменяется.
+
 ## Размер Settings — исправление, In Review, 2026-11-05
 
 Settings получает геометрию от Dock content без дополнительного CSS zoom overlay.

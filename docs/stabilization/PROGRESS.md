@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Мультиагенты: максимум участников — In Review, 2026-11-05
+
+Настройка `MaxCollaborationAgents` 0–64 (default 8) считает исходный чат + созданных
+и приглашённых участников одной цепочки; общий root journal защищает recursion,
+concurrent spawn/send и restart. Старая квота сообщений, grant bridge и баннер удалены;
+прежнее отключение общения при миграции сохраняется. Лимиты шагов одного Run прежние.
+UI переиспользует Settings; «+», recovery и controls сохранены. Canonical docs/план
+обновлены; [UI ревью](../ui/UI_MIGRATION_PLAN.md#максимум-участников--in-review-2026-11-05).
+
+25 communication + 17 pause/cancel/recovery/user-control + core pack проходят;
+contention test и baseline 1/2/4/8 тоже проходят. Пять browser fixtures проверяют
+настройки/геометрию, ленту и controls. Пять failures расширенной проверки повторены
+на срезе до этой настройки и записаны в Risk Register; полного зелёного Harness нет.
+Windows/Office/controller/WebView2 и визуальное принятие остаются открытыми.
+Следующий срез — admission/active-step slots и общий execution budget; затем группы
+и Inspector. Per-Run steps не ограничивают бесконечный обмен через новые Run.
+
 ## Параллельная подготовка каталогов — 2026-11-05
 
 Baseline восьми получателей воспроизвёл IOException на первом `skills` capture:

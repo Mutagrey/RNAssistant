@@ -304,7 +304,7 @@ namespace RNAssistant.Core.Models
         public const int MaximumConsecutiveReflections = 20;
         public const int MaximumAgentFormatRetries = 20;
         public const int DefaultMaxAgentToolSteps = 4096;
-        public const int DefaultMaxAgentMessages = 20;
+        public const int DefaultMaxCollaborationAgents = 8;
         public const int DefaultAttachmentHelperMaxTokens = 0;
         public const int DefaultAttachmentEvidenceMaxTokens = 0;
         public const double DefaultTokenEstimateMultiplier = 1.0;
@@ -362,7 +362,18 @@ namespace RNAssistant.Core.Models
         public int MaxAgentFormatRetries { get; set; }
         public int MaxConsecutiveReflections { get; set; }
         public int MaxAgentToolSteps { get; set; }
-        public int MaxAgentMessages { get; set; } = DefaultMaxAgentMessages;
+        private int _maxCollaborationAgents = DefaultMaxCollaborationAgents;
+        private bool _hasCollaborationLimit;
+        private int? _legacyMessageLimit;
+        public int MaxCollaborationAgents
+        {
+            get { return _maxCollaborationAgents; }
+            set { _maxCollaborationAgents = value; _hasCollaborationLimit = true; }
+        }
+        // Read-only migration: removing the message quota must not enable a
+        // feature the user previously disabled. This key is never written back.
+        [Newtonsoft.Json.JsonProperty("MaxAgentMessages")]
+        private int LegacyMessageLimit { set { _legacyMessageLimit = value; } }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
         public string HistoryIntegrityMode { get; set; }
@@ -466,6 +477,18 @@ namespace RNAssistant.Core.Models
         private void ResetAgentPromptSchemaVersion(StreamingContext context)
         {
             AgentPromptSchemaVersion = 0;
+        }
+
+        [OnDeserialized]
+        private void MigrateAgentParticipantLimit(StreamingContext context)
+        {
+            if (_legacyMessageLimit.HasValue && !_hasCollaborationLimit)
+            {
+                _maxCollaborationAgents = _legacyMessageLimit == 0 ? 0 : DefaultMaxCollaborationAgents;
+                ProtocolMigrationNotice = "Лимит межагентных сообщений удалён. Максимум участников совместной работы: " +
+                    _maxCollaborationAgents + "." + (_legacyMessageLimit == 0 ? " Прежнее отключение общения сохранено." : "");
+            }
+            _legacyMessageLimit = null;
         }
 
         public void NormalizeAgentPrompts()

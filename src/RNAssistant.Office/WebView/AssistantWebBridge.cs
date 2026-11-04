@@ -83,7 +83,7 @@ namespace RNAssistant.Office.WebView
         {
             _controller = controller;
             _agentCommunication = new RNAssistant.Application.Conversations.AgentCommunicationService(
-                () => new RNAssistant.Core.Storage.SettingsService(_controller.StoragePaths).Load().MaxAgentMessages);
+                () => new RNAssistant.Core.Storage.SettingsService(_controller.StoragePaths).Load().MaxCollaborationAgents);
             ConfigureAgentCommunication();
             _workspaces = workspaces ?? throw new ArgumentNullException(nameof(workspaces));
             _postMessageJson = postMessageJson;
@@ -518,11 +518,6 @@ namespace RNAssistant.Office.WebView
                             new ProtectedChatDraftStore(_controller.StoragePaths).DeleteOffice(deletedChatId);
                             return result;
                         }, cancellationToken).ConfigureAwait(false);
-                        break;
-                    case BridgeOperationId.GetAgentCommunicationState:
-                    case BridgeOperationId.ContinueAgentCommunication:
-                        responsePayload = await RunBridgeWorkAsync(() => AgentCommunicationState(Payload<AgentCommunicationRequest>(payload),
-                            type == BridgeOperationId.ContinueAgentCommunication), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetRecoverableAgentWaits:
                         responsePayload = await RunBridgeWorkAsync(() => RecoverableAgentWaits(Payload<AgentRecoveryQuery>(payload)), cancellationToken).ConfigureAwait(false);

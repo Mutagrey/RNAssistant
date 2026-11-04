@@ -1,5 +1,13 @@
 # Архитектура UI RNAssistant
 
+## Максимум участников — In Review, 2026-11-05
+
+Core `MaxCollaborationAgents` проходит прежний SettingsControlsDto; Web не считает
+участников. Application root journal обеспечивает общий предел spawn/send.
+`app-agent-communication` сохраняет sender renderer и lifecycle recovery, но больше
+не запрашивает состояние квоты сообщений. Удалены grant bridge/DTO/banner/styles;
+общий Chat View не делает refresh этой квоты. Закрытие вкладки не управляет Run.
+
 ## Границы Settings — исправление, In Review, 2026-11-05
 
 Settings использует существующую policy `onlyWhenVisible`, как общий Chat View.
@@ -126,17 +134,15 @@ Office binding, сохраняя Workspace bindings. Нового UI registry/st
 
 Один sender renderer используется Office/Workspace/plugin для истории и очереди;
 origin приходит в typed DTO из durable факта. UI не назначает отправителя/цепочку.
-Состояние лимита читается при открытии и смене idle revision, без таймера и чтений на
-streaming chunks; stale ответы не меняют закрытый view. Продолжение адресует exact
-chat/chain/operation. Runtime, очередь и исполнение не зависят от наличия DOM.
-Сохранение `MaxAgentMessages=0` инвалидирует запрос состояния и скрывает продолжение;
-runtime повторно проверяет текущую настройку перед новой отправкой. Ноль проходит
-через существующий typed `SettingsControlsDto`, без UI-only выключателя.
+Runtime, очередь и исполнение не зависят от наличия DOM. С 2026-11-05 квота
+сообщений и её UI-state path удалены. `MaxCollaborationAgents=0` через существующий
+SettingsControlsDto отключает tools; runtime проверяет текущую настройку перед
+новым действием. UI не является владельцем ограничения.
 
 `agents.spawn` создаёт ordinary thread без mount/selection. Закрытие Chat View
 освобождает его presentation, не отменяет Run/wait и не запрещает новые сообщения.
-Typed запросы бюджета содержат source/workspace/session, независимо от открытой
-вкладки. Отдельное представление Collaboration/Inspector ещё не реализовано.
+Typed recovery/control запросы содержат source/workspace/session, независимо от
+открытой вкладки. Отдельное представление Collaboration/Inspector ещё не реализовано.
 
 Office agent-started runs передают progress тем же `inbox:<chatId>` маршрутом, что
 обычная очередь, с exact chat/run identity. Отдельный `agents:` маршрут удалён:

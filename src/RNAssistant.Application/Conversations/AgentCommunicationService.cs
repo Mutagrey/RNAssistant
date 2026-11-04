@@ -10,14 +10,14 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Application.Conversations
 {
+    // Granted is retained only to read historical journal entries; no writer remains.
     [JsonConverter(typeof(StringEnumConverter))]
-    internal enum AgentDeliveryState { Prepared, Accepted, Granted, SpawnPrepared, Spawned, CancelPrepared, CancelRecorded, PausePrepared, PauseRecorded, ResumePrepared, ResumeRecorded }
+    internal enum AgentDeliveryState { Prepared, Accepted, Granted, SpawnPrepared, Spawned, CancelPrepared, CancelRecorded, PausePrepared, PauseRecorded, ResumePrepared, ResumeRecorded, ParticipantReserved }
 
     internal sealed class AgentCommunicationEvent
     {
         public AgentDeliveryState State { get; set; }
         public string ChainId { get; set; }
-        public int Limit { get; set; }
         public string OperationId { get; set; }
         public string Fingerprint { get; set; }
         public AgentChatAddress Target { get; set; }
@@ -62,16 +62,6 @@ namespace RNAssistant.Application.Conversations
     {
         public IReadOnlyList<AgentPeer> Peers { get; set; }
         public bool Truncated { get; set; }
-    }
-
-    internal sealed class AgentCommunicationState
-    {
-        public bool Enabled { get; set; } = true;
-        public string ChainId { get; set; }
-        public int Limit { get; set; }
-        public int Sent { get; set; }
-        public int Remaining { get; set; }
-        public bool LimitReached { get; set; }
     }
 
     internal sealed class AgentDeliveryReceipt
@@ -122,7 +112,7 @@ namespace RNAssistant.Application.Conversations
         private void RequireEnabled(int limit)
         {
             if (!IsEnabled(limit)) throw new AgentCommunicationException("agent_communication_disabled",
-                "Межагентное общение отключено: лимит сообщений в настройках равен 0.");
+                "Межагентное общение отключено: максимум агентов в настройках равен 0.");
         }
 
         internal void Register(AgentConversationScope scope)
@@ -156,7 +146,7 @@ namespace RNAssistant.Application.Conversations
             return matches.SingleOrDefault();
         }
 
-        internal IReadOnlyList<AgentPeer> List(ChatSession source, int limit = AppSettings.DefaultMaxAgentMessages)
+        internal IReadOnlyList<AgentPeer> List(ChatSession source, int limit = AppSettings.DefaultMaxCollaborationAgents)
         {
             lock (_sync)
             {
@@ -231,49 +221,12 @@ namespace RNAssistant.Application.Conversations
             return result;
         }
 
-        internal static AgentCommunicationContext Context(ChatSession session, int limit)
+        internal static AgentCommunicationContext Context(ChatSession session)
         {
             var input = ConversationInputMessage.Latest(session);
             if (input == null) throw new AgentCommunicationException("agent_input_required", "Нет входящего запроса для общения.");
             return input.AgentCommunication ?? new AgentCommunicationContext {
-                ChainId = session.Id + ":" + input.Id, Limit = Math.Max(1, limit), Root = Address(session) };
-        }
-
-        internal AgentCommunicationState State(ConversationInboxService inbox, ChatSession session, int limit)
-        {
-            lock (_sync)
-            {
-                if (!IsEnabled(limit)) return new AgentCommunicationState { Enabled = false };
-                if (ConversationInputMessage.Latest(session) == null) return new AgentCommunicationState();
-                var chain = Context(session, limit);
-                return State(inbox.AgentEvents(session), chain);
-            }
-        }
-
-        internal AgentCommunicationState State(string chatId, int limit, string source = null, string workspaceId = null)
-        {
-            lock (_sync)
-            {
-                if (!IsEnabled(limit)) return new AgentCommunicationState { Enabled = false };
-                AgentConversationEndpoint target;
-                if ((target = Find(chatId, source, workspaceId)) == null) throw new InvalidOperationException("Область чата недоступна.");
-                RequireAddress(target, source, workspaceId);
-                return State(target.Inbox, target.Load(), limit);
-            }
-        }
-
-        private static AgentCommunicationState State(IReadOnlyList<AgentCommunicationEvent> events, AgentCommunicationContext chain)
-        {
-            var facts = events.Where(item => item.ChainId == chain.ChainId).ToArray();
-            var pinned = facts.FirstOrDefault();
-            var limit = pinned?.Limit ?? chain.Limit;
-            var sent = facts.Where(item => item.State == AgentDeliveryState.Prepared)
-                .Select(item => item.OperationId).Distinct(StringComparer.Ordinal).Count();
-            var grants = facts.Where(item => item.State == AgentDeliveryState.Granted)
-                .Select(item => item.OperationId).Distinct(StringComparer.Ordinal).Count();
-            var remaining = Math.Max(0L, (long)limit * (grants + 1L) - sent);
-            return new AgentCommunicationState { ChainId = chain.ChainId, Limit = limit, Sent = sent,
-                Remaining = (int)Math.Min(int.MaxValue, remaining), LimitReached = remaining == 0 };
+                ChainId = session.Id + ":" + input.Id, Root = Address(session) };
         }
 
         internal AgentDeliveryReceipt Send(ConversationInboxService sourceInbox, ChatSession source, int limit,
@@ -293,7 +246,7 @@ namespace RNAssistant.Application.Conversations
                     throw new AgentCommunicationException("agent_message_invalid", "Требуется текст до 128 КиБ.");
                 if (agentId == AgentChatAddress.IdFor(source.Id))
                     throw new AgentCommunicationException("agent_self_send", "Нельзя отправить сообщение своему чату.");
-                var chain = Context(source, limit);
+                var chain = Context(source);
                 if (replyTo != null)
                 {
                     var original = sourceInbox.FindAgentMessage(source, replyTo);
@@ -305,7 +258,7 @@ namespace RNAssistant.Application.Conversations
                 var senderPolicy = source.LastRun?.ConversationPolicy ?? ConversationRunPolicy.ForSession(source);
                 var facts = sourceInbox.AgentEvents(source);
                 var fingerprint = ConversationInputJournal.Fingerprint(new[] { agentId, text, expectReply ? "reply" : "message", replyTo });
-                var existing = facts.FirstOrDefault(item => item.OperationId == operationId);
+                var existing = facts.FirstOrDefault(item => item.OperationId == operationId && item.State == AgentDeliveryState.Prepared);
                 if (existing != null && existing.Fingerprint != fingerprint)
                     throw new AgentCommunicationException("agent_operation_conflict", "Операция уже принадлежит другому сообщению.");
                 if (existing != null && facts.Any(item => item.OperationId == operationId && item.State == AgentDeliveryState.Accepted))
@@ -314,9 +267,6 @@ namespace RNAssistant.Application.Conversations
                 if ((target = FindAgent(source, existing == null ? agentId : existing.Target.AgentId)) == null)
                     throw new AgentCommunicationException(existing == null ? "agent_chat_not_found" : "agent_delivery_unknown",
                         existing == null ? "Агент не найден в области документа/проекта. Обновите agents.list и скопируйте точный адрес; закрытие вкладки не удаляет участника." : "Получатель недоступен для проверки прежней доставки. Повтор запрещён.");
-                var budget = State(facts, chain);
-                if (existing == null && budget.LimitReached)
-                    throw new AgentCommunicationException("agent_message_limit", "Лимит общения исчерпан. Пользователь может продолжить общение в чате.");
                 string runtimeKey;
                 try
                 {
@@ -342,21 +292,21 @@ namespace RNAssistant.Application.Conversations
                 var input = new ConversationInput { Id = Guid.NewGuid().ToString("N"), OperationId = operationId,
                     RequestFingerprint = fingerprint, Text = text, CreatedUtc = DateTime.UtcNow,
                     Delivery = InputDelivery.Queue, DocumentRuntimeKey = runtimeKey,
-                    AgentCommunication = new AgentCommunicationContext { ChainId = chain.ChainId, Limit = budget.Limit,
+                    AgentCommunication = new AgentCommunicationContext { ChainId = chain.ChainId,
                         Sender = Address(source), SenderRunId = runId, Root = chain.Root, Policy = senderPolicy,
                         MessageId = messageId, ReplyTo = replyTo, ExpectReply = expectReply } };
-                // Reserve before destination append. An unresolved reservation conservatively
-                // consumes one slot, and is never replayed on recovery.
-                dispatch();
+                // Root membership is reserved before delivery. Replies/repeated contact
+                // do not consume additional participant slots.
+                ReserveParticipant(source, chain, limit, operationId, fingerprint, target.Address, dispatch);
                 sourceInbox.AppendAgentEvent(source, new AgentCommunicationEvent { State = AgentDeliveryState.Prepared,
-                    ChainId = chain.ChainId, Limit = budget.Limit, OperationId = operationId,
+                    ChainId = chain.ChainId, OperationId = operationId,
                     Fingerprint = fingerprint, Target = target.Address, MessageId = messageId, ReplyTo = replyTo, ExpectReply = expectReply });
                 target.Inbox.Submit(recipient, input);
                 if (target.Inbox.FindOperation(recipient, operationId, fingerprint)?.AgentCommunication?.MessageId != messageId)
                     throw new InvalidOperationException("Нет подтверждения записи сообщения в очередь.");
                 schedule = true;
                 sourceInbox.AppendAgentEvent(source, new AgentCommunicationEvent { State = AgentDeliveryState.Accepted,
-                    ChainId = chain.ChainId, Limit = budget.Limit, OperationId = operationId,
+                    ChainId = chain.ChainId, OperationId = operationId,
                     Fingerprint = fingerprint, Target = target.Address, MessageId = messageId, ReplyTo = replyTo, ExpectReply = expectReply });
                 receipt = Receipt(target, text, messageId);
             }
@@ -381,38 +331,5 @@ namespace RNAssistant.Application.Conversations
                 throw new ArgumentException("Чат не принадлежит указанной области.");
         }
 
-        internal AgentCommunicationState Continue(string chatId, string chainId, string operationId, int limit,
-            string source = null, string workspaceId = null)
-        {
-            AgentConversationEndpoint target;
-            ChatSession session;
-            AgentCommunicationState result;
-            lock (_sync)
-            {
-                RequireEnabled(limit);
-                if ((target = Find(chatId, source, workspaceId)) == null) throw new InvalidOperationException("Область чата недоступна.");
-                RequireAddress(target, source, workspaceId);
-                session = target.Load();
-                if (target.Inbox.HasActiveWork(chatId)) throw new InvalidOperationException("Дождитесь завершения текущего запроса.");
-                var chain = Context(session, limit);
-                if (chain.ChainId != chainId) throw new InvalidOperationException("Цепочка общения уже изменилась.");
-                var facts = target.Inbox.AgentEvents(session);
-                var grant = facts.FirstOrDefault(item => item.OperationId == operationId && item.State == AgentDeliveryState.Granted);
-                var state = State(facts, chain);
-                if (grant == null && !state.LimitReached) throw new InvalidOperationException("Лимит общения ещё не исчерпан.");
-                var runtimeKey = target.Validate(session);
-                target.Inbox.ContinueAgentCommunication(session, chainId,
-                    grant == null ? new AgentCommunicationEvent { State = AgentDeliveryState.Granted,
-                        ChainId = chainId, Limit = state.Limit, OperationId = operationId } : null,
-                    new ConversationInput { Id = operationId, OperationId = operationId,
-                    RequestFingerprint = ConversationInputJournal.Fingerprint(chainId), Delivery = InputDelivery.Queue,
-                    Text = "Продолжи межагентное общение. Пользователь предоставил следующий бюджет сообщений. Не повторяй доставки с неизвестным результатом.",
-                    CreatedUtc = DateTime.UtcNow, DocumentRuntimeKey = runtimeKey,
-                    AgentCommunication = new AgentCommunicationContext { ChainId = chainId, Limit = state.Limit, Root = chain.Root } });
-                result = State(target.Inbox.AgentEvents(session), chain);
-            }
-            target.Start(session);
-            return result;
-        }
     }
 }

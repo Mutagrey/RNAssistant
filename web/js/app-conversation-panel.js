@@ -51,7 +51,7 @@
       inboxState: { inboxEditing: null, inboxEditDraft: null },
       loading: false, loadError: "", error: "", isCurrent: function () { return !disposed; },
       snapshot: function () { return adapter.snapshot(); },
-      refresh: function (options) { return Promise.resolve(adapter.refresh(options)).finally(function () { if (!disposed && communication && adapter.snapshot()) communication.refresh(adapter.running()); }); },
+      refresh: function (options) { return Promise.resolve(adapter.refresh(options)); },
       accept: function (snapshot, options) { return adapter.accept(snapshot, options); },
       pendingUnits: function () { return adapter.pendingUnits ? adapter.pendingUnits() : []; },
       pollInbox: function () { return adapter.pollInbox ? adapter.pollInbox() : component.refresh(); },
@@ -154,7 +154,6 @@
     on(window, "resize", component.layout);
     function renderControls() {
       if (disposed) return;
-      if (communication) communication.refresh(adapter.running());
       if (!view.canRender()) return;
       var presentation = adapter.presentation(), editing = edit();
       var disabled = component.loading || !!component.loadError || state.bridgeUnavailable || !address.sessionId;

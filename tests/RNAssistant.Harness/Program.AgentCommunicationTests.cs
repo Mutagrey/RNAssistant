@@ -456,44 +456,57 @@ namespace RNAssistant.Harness
             WithTempPaths(paths => {
                 var settingsStore = new SettingsService(paths);
                 var controls = RNAssistant.Office.Contracts.SettingsControlsDto.From(new AppSettings());
-                foreach (var limit in new[] { 7, 0, 1 })
+                foreach (var limit in new[] { 7, 0, 2 })
                 {
-                    controls.MaxAgentMessages = limit;
+                    controls.MaxCollaborationAgents = limit;
                     var request = JsonConvert.DeserializeObject<RNAssistant.Office.Contracts.SettingsControlsDto>(JsonConvert.SerializeObject(controls));
                     settingsStore.Save(request.ApplyTo(new AppSettings()));
-                    AssertEqual(limit, settingsStore.Load().MaxAgentMessages, "limit survives typed bridge and settings persistence");
-                    AssertEqual(limit, RNAssistant.Office.Contracts.SettingsControlsDto.From(settingsStore.Load()).MaxAgentMessages, "saved limit returns to UI");
+                    AssertEqual(limit, settingsStore.Load().MaxCollaborationAgents, "limit survives typed bridge and settings persistence");
+                    AssertEqual(limit, RNAssistant.Office.Contracts.SettingsControlsDto.From(settingsStore.Load()).MaxCollaborationAgents, "saved limit returns to UI");
                 }
-                AssertEqual(20, JsonConvert.DeserializeObject<AppSettings>("{}").MaxAgentMessages, "missing property retains default");
+                AssertEqual(8, JsonConvert.DeserializeObject<AppSettings>("{}").MaxCollaborationAgents, "missing property retains default");
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
-                var service = new AgentCommunicationService(() => settingsStore.Load().MaxAgentMessages);
+                var service = new AgentCommunicationService(() => settingsStore.Load().MaxCollaborationAgents);
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
                 RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox));
-                service.Send(inbox, a, 1, "run", "before-disable", AgentChatAddress.IdFor(b.Id), "Already accepted", () => { });
-                var before = service.State(inbox, a, 1);
-                AssertTrue(before.LimitReached, "old chain has exhausted its pinned budget");
-                var settings = settingsStore.Load(); settings.MaxAgentMessages = 0; settingsStore.Save(settings);
+                var settings = settingsStore.Load(); settings.MaxCollaborationAgents = 1; settingsStore.Save(settings);
+                AssertEqual("agent_participant_limit", RuntimeThrows<AgentCommunicationException>(() => service.Send(
+                    inbox, a, 2, "run", "root-only", AgentChatAddress.IdFor(b.Id), "No room", () => { })).Code,
+                    "one participant includes the originating chat");
+                settings.MaxCollaborationAgents = 2; settingsStore.Save(settings);
+                service.Send(inbox, a, 2, "run", "before-disable", AgentChatAddress.IdFor(b.Id), "Already accepted", () => { });
+                settings.MaxCollaborationAgents = 1; settingsStore.Save(settings);
+                service.Send(inbox, a, 2, "run", "existing-after-decrease", AgentChatAddress.IdFor(b.Id), "Existing member", () => { });
+                var c = AgentChat(store, "C"); RegisterAgent(service, AgentEndpoint(c, inbox));
+                AssertEqual("agent_participant_limit", RuntimeThrows<AgentCommunicationException>(() => service.Send(
+                    inbox, a, 2, "run", "new-after-decrease", AgentChatAddress.IdFor(c.Id), "No room", () => { })).Code,
+                    "lowered setting blocks new members in a captured run without evicting existing ones");
+                settings.MaxCollaborationAgents = 0; settingsStore.Save(settings);
                 var dispatched = false;
                 foreach (Action operation in new Action[] {
                     () => service.List(a),
-                    () => service.Send(inbox, a, 20, "captured-running-turn", "disabled", AgentChatAddress.IdFor(b.Id), "Must not arrive", () => dispatched = true),
-                    () => service.Continue(a.Id, before.ChainId, "disabled-grant", 20)
+                    () => service.Send(inbox, a, 20, "captured-running-turn", "disabled", AgentChatAddress.IdFor(b.Id), "Must not arrive", () => dispatched = true)
                 })
                 {
                     var refused = false;
                     try { operation(); } catch (AgentCommunicationException error) { refused = error.Code == "agent_communication_disabled"; }
                     AssertTrue(refused, "zero blocks discovery, live dispatch and old-chain continuation");
                 }
-                AssertTrue(!dispatched && !service.State(inbox, a, 20).Enabled, "disable takes precedence over captured settings and pinned budget");
-                AssertEqual(1, inbox.Snapshot(b).Items.Count, "accepted messages remain, disabled sends add no input");
-                settings.MaxAgentMessages = 5; settingsStore.Save(settings);
-                AssertEqual(1, service.State(inbox, a, 5).Limit, "re-enabling does not reset the chain budget");
-                AssertEqual(1, service.Continue(a.Id, before.ChainId, "enabled-grant", 5).Remaining, "human can continue after re-enabling");
+                AssertTrue(!dispatched && !service.IsEnabled(20), "disable takes precedence over captured settings");
+                AssertEqual(2, inbox.Snapshot(b).Items.Count, "accepted messages remain, disabled sends add no input");
+                settings.MaxCollaborationAgents = 5; settingsStore.Save(settings);
+                service.Send(inbox, a, 5, "run", "after-enable", AgentChatAddress.IdFor(b.Id), "Next message", () => { });
+                AssertEqual(1, inbox.AgentEvents(a).Count(e => e.State == AgentDeliveryState.ParticipantReserved), "re-enable preserves the existing participant");
+                var migrated = JsonConvert.DeserializeObject<AppSettings>("{\"MaxAgentMessages\":0}");
+                AssertEqual(0, migrated.MaxCollaborationAgents, "removing message quota preserves disabled choice");
+                AssertEqual(8, JsonConvert.DeserializeObject<AppSettings>("{\"MaxAgentMessages\":20}").MaxCollaborationAgents, "old positive message quota becomes default participant limit");
+                AssertTrue(!JsonConvert.SerializeObject(migrated).Contains("MaxAgentMessages"), "old key is not written back");
+                AssertEqual(6, JsonConvert.DeserializeObject<AppSettings>("{\"MaxCollaborationAgents\":6,\"MaxAgentMessages\":0}").MaxCollaborationAgents, "explicit new setting takes priority");
             });
-            var config = new AppSettings { MaxAgentMessages = 0 };
+            var config = new AppSettings { MaxCollaborationAgents = 0 };
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), config, (executor, adapter) => {
                 AssertTrue(!executor.GetControllerTools().Any(t => AgentCommunicationToolCatalog.Owns(t.Id)), "disabled tools are absent from Office request catalog");
-                config.MaxAgentMessages = 20;
+                config.MaxCollaborationAgents = 20;
                 AssertEqual(7, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
                 var office = RNAssistant.Office.Services.BuiltInSkillProvider.GetSkills(adapter).Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 var workspace = WorkspaceSkillProvider.GetSkills().Single(s => s.Id == AgentCommunicationSkillProvider.Id);
@@ -506,7 +519,7 @@ namespace RNAssistant.Harness
         {
             WithTempPaths(paths => {
                 var store = new ChatStore(paths); var events = new ChatEventStoreAdapter(store);
-                var inbox = new ConversationInboxService(events); var service = new AgentCommunicationService();
+                var inbox = new ConversationInboxService(events); var service = new AgentCommunicationService(() => 3);
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B"); var c = AgentChat(store, "C");
                 RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox)); RegisterAgent(service, AgentEndpoint(c, inbox));
                 var peers = service.List(a);
@@ -521,8 +534,9 @@ namespace RNAssistant.Harness
                 inbox.Get(b); b.Title = "Renamed B";
                 AssertEqual(b.Title, service.List(a).Single(peer => peer.AgentId == AgentChatAddress.IdFor(b.Id)).Title, "discovery follows the live conversation title");
                 var dispatches = 0;
-                service.Send(inbox, a, 2, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
-                service.Send(inbox, a, 99, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
+                var firstReceipt = service.Send(inbox, a, 3, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
+                var repeatedReceipt = service.Send(inbox, a, 99, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
+                AssertEqual(firstReceipt.MessageId, repeatedReceipt.MessageId, "membership reservation cannot shadow the delivery receipt");
                 AssertEqual(1, dispatches, "retry observes one accepted operation");
                 var question = inbox.TakeNext(b);
                 var received = new ChatMessage { Id = question.Id, Role = "user", Content = question.Text,
@@ -534,23 +548,26 @@ namespace RNAssistant.Harness
                 AssertTrue(!ConversationInputMessage.ModelText(received).Contains(a.Id), "incoming label keeps storage IDs runtime-only");
                 service.Send(inbox, b, 100, "b-run", "b1", AgentChatAddress.IdFor(a.Id), "ANSWER", () => { });
                 service.Send(inbox, a, 99, "a-run2", "a2", AgentChatAddress.IdFor(c.Id), "JOIN", () => { });
+                var d = AgentChat(store, "D"); RegisterAgent(service, AgentEndpoint(d, inbox));
+                for (var i = 0; i < 25; i++)
+                    service.Send(inbox, b, 3, "b-run", "many-" + i, AgentChatAddress.IdFor(a.Id), "Useful reply " + i, () => { });
+                AssertEqual(2, inbox.AgentEvents(a).Count(e => e.State == AgentDeliveryState.ParticipantReserved), "only B and C consume places beside the root");
                 var failed = false;
-                try { service.Send(inbox, a, 99, "a-run2", "a3", AgentChatAddress.IdFor(b.Id), "EXCESS", () => { }); }
-                catch (AgentCommunicationException e) { failed = e.Code == "agent_message_limit"; }
-                AssertTrue(failed, "setting changes and extra recipients cannot reset the pinned budget");
-                AssertEqual(1, service.State(inbox, b, 99).Remaining, "recipient has an independent budget in the same chain");
+                try { service.Send(inbox, b, 99, "b-run", "recruit-d", AgentChatAddress.IdFor(d.Id), "JOIN", () => { }); }
+                catch (AgentCommunicationException e) { failed = e.Code == "agent_participant_limit"; }
+                AssertTrue(failed, "delegating recruitment cannot bypass the shared participant maximum");
                 store.AppendTrace(a, SessionEventTypes.LlmRequest, new { Marker = "unrelated trace" }, "body", "text/plain", "run", "turn", "step");
-                var eventReads = store.InputJournalEventReads;
-                AssertEqual(4, events.Read(a, SessionEventReadMode.RequireCompleteAgentCommunicationJournal).Count, "only communication events are materialized");
-                AssertEqual(4L, store.InputJournalEventReads - eventReads, "budget reads skip model traces and message commits");
                 var restored = new ConversationInboxService(events); var reloaded = store.Load(a.Id);
-                var state = service.State(restored, reloaded, 99);
-                AssertTrue(state.LimitReached && state.Sent == 2 && state.Limit == 2, "counter is reconstructed from events");
-                AssertTrue(restored.Snapshot(reloaded).Paused, "pending reply is paused after restart");
-                RegisterAgent(service, AgentEndpoint(reloaded, restored));
-                var continued = service.Continue(a.Id, state.ChainId, "grant-one", 99);
-                AssertEqual(2, continued.Remaining, "human grants the next pinned budget");
-                AssertEqual(2, service.Continue(a.Id, state.ChainId, "grant-one", 99).Remaining, "duplicate grant is idempotent");
+                service = new AgentCommunicationService(() => 3);
+                foreach (var chat in new[] { reloaded, store.Load(b.Id), store.Load(c.Id), store.Load(d.Id) })
+                    RegisterAgent(service, AgentEndpoint(chat, restored));
+                failed = false;
+                try { service.Send(restored, reloaded, 3, "a-later", "after-restart", AgentChatAddress.IdFor(d.Id), "JOIN", () => { }); }
+                catch (AgentCommunicationException e) { failed = e.Code == "agent_participant_limit"; }
+                AssertTrue(failed && restored.Snapshot(d).Items.Count == 0, "root membership is reconstructed after restart");
+                AssertTrue(restored.Snapshot(reloaded).Paused, "pending replies remain paused after restart");
+                service.Send(restored, reloaded, 3, "a-later", "existing-after-restart", AgentChatAddress.IdFor(b.Id), "Continue", () => { });
+                AssertEqual(2, restored.AgentEvents(reloaded).Count(e => e.State == AgentDeliveryState.ParticipantReserved), "repeated contact is not a new participant");
             });
         }
 
@@ -585,7 +602,7 @@ namespace RNAssistant.Harness
                 AssertTrue(policy.Allows(send.Id, send.Policy, send.Binding) &&
                     !policy.EffectiveToolPolicy(send.Id, send.Policy, send.Binding).RequiresConfirmation,
                     "messaging is permitted independently of document mutation approval");
-                AssertEqual(20, new AppSettings().MaxAgentMessages, "default is 20");
+                AssertEqual(8, new AppSettings().MaxCollaborationAgents, "default is 8 including root");
             });
         }
 
@@ -596,7 +613,7 @@ namespace RNAssistant.Harness
                 var source = new ConversationInboxService(events); var failing = new InboxFailingEvents(events);
                 var target = new ConversationInboxService(failing); var service = new AgentCommunicationService();
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
-                RegisterAgent(service, AgentEndpoint(b, target)); failing.Fail = true;
+                RegisterAgent(service, AgentEndpoint(a, source)); RegisterAgent(service, AgentEndpoint(b, target)); failing.Fail = true;
                 var dispatches = 0; var failed = false;
                 try { service.Send(source, a, 20, "run", "uncertain", AgentChatAddress.IdFor(b.Id), "Task", () => dispatches++); }
                 catch (System.IO.IOException) { failed = true; }
@@ -606,7 +623,7 @@ namespace RNAssistant.Harness
                 try { service.Send(source, a, 20, "run", "uncertain", AgentChatAddress.IdFor(b.Id), "Task", () => dispatches++); }
                 catch (AgentCommunicationException e) { unknown = e.Code == "agent_delivery_unknown"; }
                 AssertTrue(unknown && dispatches == 1 && target.Snapshot(b).Items.Count == 0, "recovery does not replay a possible delivery");
-                AssertEqual(19, service.State(source, a, 20).Remaining, "unknown reservation remains charged conservatively");
+                AssertEqual(1, source.AgentEvents(a).Count(e => e.State == AgentDeliveryState.ParticipantReserved), "unknown participant remains reserved conservatively");
             });
         }
 
@@ -634,6 +651,7 @@ namespace RNAssistant.Harness
                 var source = new ConversationInboxService(new AgentReceiptFailureEvents(events));
                 var target = new ConversationInboxService(events); var service = new AgentCommunicationService();
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B"); var starts = 0;
+                RegisterAgent(service, AgentEndpoint(a, source));
                 RegisterAgent(service, AgentEndpoint(b, target, _ => starts++));
                 try { service.Send(source, a, 20, "run", "receipt-failure", AgentChatAddress.IdFor(b.Id), "Accepted", () => { }); }
                 catch (IOException) { }
@@ -735,10 +753,8 @@ namespace RNAssistant.Harness
                         AssertEqual(1, saved.Messages.Count(m => m.AgentCommunication?.Sender?.ChatId == b.SessionId), "exactly one durable reply");
                         AssertEqual(b.SessionId, ChatMessageViewDto.From(saved.Messages.Single(m => m.Content == "ANSWER_FROM_B")).AgentSender.ChatId,
                             "shared UI projection carries sender");
-                        settings.MaxAgentMessages = 0; new SettingsService(paths).Save(settings);
+                        settings.MaxCollaborationAgents = 0; new SettingsService(paths).Save(settings);
                         AssertTrue(!application.Conversations.AvailableToolIds(workspace).Any(AgentCommunicationToolCatalog.Owns), "zero removes messaging from Workspace catalog");
-                        var disabled = WorkspaceBridgeCall(bridge, bridgeToken, "getAgentCommunicationState", new { source = "workspace", workspaceId, sessionId = a.SessionId });
-                        AssertTrue((bool)disabled["ok"] && !(bool)disabled["payload"]["enabled"] && !(bool)disabled["payload"]["limitReached"], "typed bridge hides continuation when disabled");
                         var disabledServer = Task.Run(async () => {
                             var request = await listener.GetContextAsync().ConfigureAwait(false);
                             JObject body; using (var reader = new StreamReader(request.Request.InputStream)) body = JObject.Parse(await reader.ReadToEndAsync().ConfigureAwait(false));

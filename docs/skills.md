@@ -34,13 +34,14 @@ authority.
 ## Current implementation
 
 `skills.agents.communication` (Common, `AgentCommunicationSkillProvider`) is shared
-by Office, Workspace and plugin chats. Version 8.0.0 requires `agents.list` v3,
-`agents.send` v4, `agents.spawn` v2, `agents.wait` v4 and `agents.cancel/pause/resume` v1;
+by Office, Workspace and plugin chats. Version 9.0.0 requires `agents.list` v3,
+`agents.send` v5, `agents.spawn` v3, `agents.wait` v4 and `agents.cancel/pause/resume` v1;
 the existing `core.skills.load` path exposes its complete instructions. It covers
 saved same-scope discovery with `is_self`, stable short addresses, ordinary-thread
 creation without views/history copies, inherited permission ceilings, self-contained requests,
 explicit replies, independent work after sending and bounded event-driven waiting,
-human authority, budget/disabled/unknown handling and stopping resolved exchanges.
+human authority, shared participant limits/disabled/unknown handling and stopping resolved exchanges.
+The root, spawned and recruited chats share the cap; repeated messages have no separate quota.
 It tracks parallel requests by runtime message_id, validates reply_to and uses
 any/all filtered waits, prioritizes answering before
 waiting, and distinguishes a finished turn from a completed user task. Peer metadata

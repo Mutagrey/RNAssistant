@@ -12,7 +12,7 @@ namespace RNAssistant.Runtime
 {
     public sealed partial class WorkspaceConversationService
     {
-        internal AgentCommunicationService AgentCommunication { get; set; } = new AgentCommunicationService();
+        internal AgentCommunicationService AgentCommunication { get; set; }
         internal Action<string, string, WorkspaceRunEvent> AgentProgress { get; set; }
 
         internal void RegisterAgentScope(WorkspaceDescriptor workspace, AppSettings settings, Func<string> key)

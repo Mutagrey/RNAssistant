@@ -42,7 +42,7 @@ ConversationWaitCancellation projects it through CommitRun under the existing le
 and CAS, preserving the accepted result role. Cancelled requires durable read-back.
 Partial append/failed receipt remains unknown; queued input stays paused and intact.
 No new event type, store, schema migration, model dispatch or tool replay is introduced.
-Current-format chats require no rewrite; cancel/pause/resume v1/communication skill v8 use the
+Current-format chats require no rewrite; cancel/pause/resume v1/communication skill v9 use the
 current catalog. Abandoned ordinary execution and pending approval are not turned
 into a wait cancellation.
 
@@ -53,14 +53,19 @@ there is no cross-chat transaction. A partial/unknown response never authorizes
 replaying tools or resuming a newer wait. Restart still requires explicit user
 action even if the previous process saved Resume before it stopped.
 
-`conversation.agents.changed` is a mandatory conversation event: `Prepared`
-reserves a source operation/budget slot before destination intake, `Accepted`
-records a read-back of that exact destination Inbox operation, and `Granted`
-records an explicit user budget extension. Message bodies remain in existing CAS
-and conversation/tool events; there is no independent outbox store.
+`conversation.agents.changed` is a mandatory conversation event. As of 2026-11-05,
+`ParticipantReserved` in the root chain records a new target before spawn/first
+send. Unique targets plus the root count toward `MaxCollaborationAgents`; recursive
+creation and recruitment share the root Inbox lock. An unresolved reservation
+conservatively keeps its place. `Prepared` reserves the exact source message
+operation before destination intake; `Accepted` records read-back of that exact
+Inbox operation. Message bodies remain in existing CAS/conversation/tool events;
+there is no independent membership/outbox store. `Granted` is read-only history;
+its writer and message quotas are removed. Old chains with operations but no
+membership facts fail explicitly; the journal is never rewritten or deleted.
 
-As of 2026-11-04, `SpawnPrepared` reserves one of 8 creation slots in the root
-conversation's causal chain, before a new ordinary ChatSession is committed.
+`SpawnPrepared` records the exact creation operation in the root conversation,
+after participant reservation and before a new ordinary ChatSession is committed.
 `Spawned` records its read-back. Both use the existing mandatory event type and
 index; no second store/schema is introduced. `AgentCreation` is whitelisted session
 metadata carrying creator/root, operation ID and fingerprint. It is provenance, not

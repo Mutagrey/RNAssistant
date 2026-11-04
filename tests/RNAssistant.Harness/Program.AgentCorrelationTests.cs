@@ -39,7 +39,7 @@ namespace RNAssistant.Harness
                 foreach (var enabled in new[] { true, false })
                 foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
                 {
-                    var settings = new AppSettings { AgentResponseMode = mode, MaxAgentMessages = enabled ? 20 : 0, SystemPromptRole = "developer" };
+                    var settings = new AppSettings { AgentResponseMode = mode, MaxCollaborationAgents = enabled ? 20 : 0, SystemPromptRole = "developer" };
                     var tools = enabled ? AgentCommunicationToolCatalog.GetTools().ToArray() : new ToolCatalogEntry[0];
                     var required = new ConversationPromptComposer().BuildRequiredMessages(ChatModes.Agent, "", adapter, tools,
                         new SkillDefinition[0], null, settings, session, null, replayCurrentUserInHistory: true);

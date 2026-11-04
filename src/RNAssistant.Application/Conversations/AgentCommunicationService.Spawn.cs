@@ -18,8 +18,6 @@ namespace RNAssistant.Application.Conversations
 
     internal sealed partial class AgentCommunicationService
     {
-        internal const int MaximumSpawnedThreads = 8;
-
         internal AgentSpawnReceipt Spawn(ConversationInboxService inbox, ChatSession source, int limit,
             string runId, string operationId, string title, string initialMessage, Action dispatch, bool expectReply = false)
         {
@@ -36,7 +34,7 @@ namespace RNAssistant.Application.Conversations
                 var scope = Scope(source);
                 if (scope.Prepare == null || scope.Commit == null || scope.Endpoint == null)
                     throw new AgentCommunicationException("agent_spawn_unavailable", "Создание участников в этой области недоступно.");
-                var chain = Context(source, limit);
+                var chain = Context(source);
                 if (chain.Root == null)
                     throw new AgentCommunicationException("agent_spawn_chain_unavailable", "Для создания участников начните новую цепочку пользовательским сообщением.");
                 var rootEndpoint = FindAgent(source, chain.Root.AgentId);
@@ -60,8 +58,6 @@ namespace RNAssistant.Application.Conversations
                     }
                     else
                     {
-                        if (facts.Count(item => item.ChainId == chain.ChainId && item.State == AgentDeliveryState.SpawnPrepared) >= MaximumSpawnedThreads)
-                            throw new AgentCommunicationException("agent_spawn_limit", "В этой цепочке уже зарезервированы 8 новых участников, включая вложенные создания.");
                         child = scope.Prepare(source, title.Trim());
                         if (child == null || child.Revision != 0 || child.Id == source.Id || !scope.Contains(child))
                             throw new InvalidOperationException("Creation must prepare a fresh conversation in the exact source scope.");
@@ -73,9 +69,9 @@ namespace RNAssistant.Application.Conversations
                         child.TitleAssignedByAgent = true;
                         child.AgentCreation = new AgentThreadCreation { OperationId = operationId, Fingerprint = fingerprint,
                             ChainId = chain.ChainId, Creator = Address(source), Root = chain.Root };
-                        dispatch();
+                        ReserveParticipant(source, chain, limit, operationId, fingerprint, Address(child), dispatch);
                         rootEndpoint.Inbox.AppendAgentEvent(root, new AgentCommunicationEvent {
-                            State = AgentDeliveryState.SpawnPrepared, ChainId = chain.ChainId, Limit = chain.Limit,
+                            State = AgentDeliveryState.SpawnPrepared, ChainId = chain.ChainId,
                             OperationId = operationId, Fingerprint = fingerprint, Target = Address(child) });
                         scope.Commit(child);
                         var saved = scope.Endpoint(child).Load();
@@ -83,7 +79,7 @@ namespace RNAssistant.Application.Conversations
                             throw new InvalidOperationException("Created conversation read-back failed.");
                         child = saved;
                         rootEndpoint.Inbox.AppendAgentEvent(root, new AgentCommunicationEvent {
-                            State = AgentDeliveryState.Spawned, ChainId = chain.ChainId, Limit = chain.Limit,
+                            State = AgentDeliveryState.Spawned, ChainId = chain.ChainId,
                             OperationId = operationId, Fingerprint = fingerprint, Target = Address(child) });
                     }
                 }

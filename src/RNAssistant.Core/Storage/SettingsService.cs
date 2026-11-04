@@ -320,7 +320,7 @@ namespace RNAssistant.Core.Storage
             settings.MaxAgentFormatRetries = Math.Max(
                 1,
                 Math.Min(AppSettings.MaximumAgentFormatRetries, settings.MaxAgentFormatRetries));
-            if (settings.MaxAgentMessages < 0) settings.MaxAgentMessages = AppSettings.DefaultMaxAgentMessages;
+            if (settings.MaxCollaborationAgents < 0 || settings.MaxCollaborationAgents > 64) settings.MaxCollaborationAgents = AppSettings.DefaultMaxCollaborationAgents;
             if (settings.MaxAgentToolSteps <= 0)
             {
                 settings.MaxAgentToolSteps = defaults.MaxAgentToolSteps;

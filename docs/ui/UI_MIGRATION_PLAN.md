@@ -1,5 +1,19 @@
 # План модернизации production UI
 
+## Максимум участников — In Review, 2026-11-05
+
+Согласованный scope: настройка числа участников одной совместной работы, включая
+исходный чат; удаление квоты сообщений. Owners: Core settings, Application membership,
+Web existing Settings и common chat. Нового UI/store нет; старые bridge/banner/poll
+и CSS удалены. Лимит 8 по умолчанию, диапазон 0–64; прежний disabled choice мигрирует.
+
+Ревью: открыть Настройки → Агент; проверить 8/reset, сохранить 1 и отказ приглашения;
+при 2 отправлять повторные сообщения тому же участнику, проверить отказ третьего;
+сохранить 0. В узком окне/125% поле остаётся в Dock. Проверить прежний «+»/файлы/сжатие
+и recovery/Run controls. [Широкий](review/participant-limit-wide.png) /
+[узкий](review/participant-limit-narrow.png) вид. Host-neutral и Chromium проверены;
+визуальное принятие и Windows/Office/WebView2 остаются открытыми. S2 не запускается.
+
 ## Settings bounds — исправление, In Review, 2026-11-05
 
 При проверке нового параметра участников обнаружен прежний retained overlay Settings:
@@ -165,10 +179,10 @@ Windows/Office/WebView2 evidence. S4 целиком и формальный вы
 
 Самостоятельный согласованный срез поверх независимых Chat View, не автоматический
 старт оставшегося S2. Owners: Application/Conversations, Core provenance/settings,
-общая Web presentation. Реализованы discovery/queued send, явные ответы, лимит 20
-отправок каждому чату в цепочке, продолжение человеком и отличимый incoming bubble.
-По уточнению пользователя 0 отключает новые отправки/discovery/продолжение даже для
-старого run; сохранённый бюджет не обходится. Добавлен общий встроенный skill.
+общая Web presentation. Реализованы discovery/queued send, явные ответы и отличимый
+incoming bubble. Историческая квота 20 сообщений и её продолжение заменены
+2026-11-05 максимумом участников (срез выше). Ноль отключает межагентные tools даже
+для старого handler. Добавлен общий встроенный skill.
 
 После Windows-фото исправлены Office progress route и ложная пауза очереди после
 Completed со старыми failed/unknown попытками. Список включает текущий чат с `is_self`;

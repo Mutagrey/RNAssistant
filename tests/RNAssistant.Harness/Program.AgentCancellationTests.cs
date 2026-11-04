@@ -81,6 +81,9 @@ namespace RNAssistant.Harness
                 AgentCancellationReceipt receipt;
                 if (fault == "receipt")
                 {
+                    // A new Inbox starts from durable state, including the root's
+                    // membership and delivery events written through the old owner.
+                    source = store.Load(source.Id);
                     var failing = new ConversationInboxService(new AgentReceiptFailureEvents(EventStore(store), AgentDeliveryState.CancelRecorded));
                     RuntimeThrows<IOException>(() => service.Cancel(failing, source, 20, "cancel-saved", AgentChatAddress.IdFor(target.Id), () => dispatched++));
                     receipt = service.Cancel(failing, source, 20, "cancel-saved", AgentChatAddress.IdFor(target.Id), () => dispatched++);

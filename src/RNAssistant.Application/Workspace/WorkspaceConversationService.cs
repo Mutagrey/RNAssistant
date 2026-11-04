@@ -99,6 +99,8 @@ namespace RNAssistant.Runtime
             CallableToolProfile toolProfile = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            var communicationSettings = new SettingsService(paths);
+            AgentCommunication = new AgentCommunicationService(() => communicationSettings.Load().MaxCollaborationAgents);
             _conversationLeases = ConversationLeaseService.ForWorkspace(paths);
             _activeRuns = new ConversationRunOwner(_conversationLeases);
             _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
@@ -1273,8 +1275,8 @@ namespace RNAssistant.Runtime
                         Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
                     }
                 }
-                if (agentCommunication != null && agentCommunication.IsEnabled(settings.MaxAgentMessages)) foreach (var entry in AgentCommunicationToolCatalog.GetTools())
-                    Register(registry, entries, entry, new AgentCommunicationToolHandler(agentCommunication, agentInbox, session, settings.MaxAgentMessages));
+                if (agentCommunication != null && agentCommunication.IsEnabled(settings.MaxCollaborationAgents)) foreach (var entry in AgentCommunicationToolCatalog.GetTools())
+                    Register(registry, entries, entry, new AgentCommunicationToolHandler(agentCommunication, agentInbox, session, settings.MaxCollaborationAgents));
                 Register(registry, entries, ChatRenameToolHandler.Entry(), new ChatRenameToolHandler(session));
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));

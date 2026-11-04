@@ -7,6 +7,7 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
  try {
  browser = await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
   const page = await browser.newPage({viewport:{width:1440,height:900}}), errors=[];
+  page.setDefaultTimeout(8000);
   page.on('pageerror', error=>errors.push(error.message));
   await page.goto(url+'preview/web/?scenario=ready');
   await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise&&RNAssistantConversationPanel.office('preview-chat'));
@@ -22,25 +23,20 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   assert.equal(await page.evaluate(()=>RNAssistantConversationPanel.office('preview-chat').node('messages').textContent.includes('Visible peer answer')),false,'recipient progress stays in its own chat');
   assert.deepEqual(await page.evaluate(()=>{
    renderSettings({committed:true});
-   const initial=readSettings().MaxAgentMessages;
-   document.getElementById('maxAgentMessagesInput').value='7';
-   const changed=readSettings().MaxAgentMessages;
-   state.settings.MaxAgentMessages=0; renderSettings({committed:true});
-   const disabled=readSettings().MaxAgentMessages;
-   state.settings.MaxAgentMessages=initial;
+   const initial=readSettings().MaxCollaborationAgents;
+   document.getElementById('maxCollaborationAgentsInput').value='7';
+   const changed=readSettings().MaxCollaborationAgents;
+   state.settings.MaxCollaborationAgents=0; renderSettings({committed:true});
+   const disabled=readSettings().MaxCollaborationAgents;
+   state.settings.MaxCollaborationAgents=initial;
    resetAgentSettingsToDefaults();
-   return [initial,changed,disabled,readSettings().MaxAgentMessages,document.getElementById('maxAgentMessagesInput').min];
-  }),[20,7,0,20,'0'],'agent budget defaults, zero, editing and reset use common settings');
+   return [initial,changed,disabled,readSettings().MaxCollaborationAgents,document.getElementById('maxCollaborationAgentsInput').min];
+  }),[8,7,0,8,'0'],'participant limit defaults, zero, editing and reset use common settings');
   await page.evaluate(async()=>{
    const original=send; window.agentCalls=[];
    window.send=async(type,payload,progress)=>{
     agentCalls.push({type,payload});
     if(type==='setAgentChatPresence') throw new Error('View presence must not control messaging');
-    if(type==='getAgentCommunicationState'){
-     if(window.holdAgentState){holdAgentState=false;await new Promise(resolve=>window.releaseAgentState=resolve);}
-     return {enabled:true,chainId:'chain-ui',limit:20,sent:20,remaining:0,limitReached:true};
-    }
-    if(type==='continueAgentCommunication'){return {chainId:'chain-ui',limit:20,sent:20,remaining:20,limitReached:false};}
     return original(type,payload,progress);
    };
    const component=RNAssistantConversationPanel.office('preview-chat'); component.communication.rebind();
@@ -51,24 +47,12 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
    const normal=renderMessageArticle({Id:'human-incoming',Role:'user',Content:'Обычный запрос'},1,{}); normal.id='human-test-bubble';component.node('messages').append(normal);
    window.agentTestMessage=incoming;
   });
-  await page.waitForSelector('.agent-communication-status:not([hidden])');
   assert.equal(await page.locator('#agent-test-bubble .agent-message-origin').textContent(),'Агент a-7mh2p4x9qd · Проверка расчётов');
   const styles=await page.evaluate(()=>['agent-test-bubble','human-test-bubble'].map(id=>{const s=getComputedStyle(document.querySelector('#'+id+' .markdown'));return {bg:s.backgroundColor,padding:s.padding,border:s.borderRadius};}));
   assert.notEqual(styles[0].bg,styles[1].bg);assert.equal(styles[0].padding,styles[1].padding);assert.equal(styles[0].border,styles[1].border);
-  await page.evaluate(()=>{window.holdAgentState=true;RNAssistantAgentCommunication.settingsChanged();});
-  await page.waitForFunction(()=>!!window.releaseAgentState);
-  await page.evaluate(async()=>{state.settings.MaxAgentMessages=0;RNAssistantAgentCommunication.settingsChanged();releaseAgentState();await new Promise(requestAnimationFrame);});
-  assert.equal(await page.locator('.agent-communication-status:not([hidden])').count(),0,'zero hides continuation even after stale state response');
-  await page.evaluate(()=>{state.settings.MaxAgentMessages=20;RNAssistantAgentCommunication.settingsChanged();});
-  await page.waitForSelector('.agent-communication-status:not([hidden])');
-  await page.locator('.agent-communication-status:not([hidden]) button').first().click();
-  assert.equal(await page.evaluate(()=>agentCalls.filter(c=>c.type==='continueAgentCommunication').length),1);
-  await page.evaluate(async()=>{
-   holdAgentState=true;
-   RNAssistantConversationPanel.office('preview-chat').communication.rebind();
-  });
-  await page.waitForFunction(()=>!!window.releaseAgentState);
-  await page.evaluate(()=>{RNAssistantConversationPanel.office('preview-chat').communication.rebind();releaseAgentState();window.releaseAgentState=null;});
+  await page.evaluate(()=>{RNAssistantAgentCommunication.settingsChanged();RNAssistantConversationPanel.office('preview-chat').communication.rebind();});
+  assert.equal(await page.locator('.agent-communication-status').count(),0,'message-budget banner is removed');
+  assert.equal(await page.evaluate(()=>agentCalls.filter(c=>/^(getAgentCommunicationState|continueAgentCommunication)$/.test(c.type)).length),0,'no message-budget polling or grants');
   await page.evaluate(()=>RNAssistantConversationPanel.open(agentTarget,{direction:'right'}));
   await page.waitForFunction(()=>RNAssistantConversationPanel.find(agentTarget));
   await page.evaluate(()=>RNAssistantDockWorkspace.close(RNAssistantConversationPanel.key(agentTarget)));
@@ -90,7 +74,23 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   await page.setViewportSize({width:1440,height:900});
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   await page.screenshot({path:'/tmp/rnassistant-agent-communication.png'});
+  await page.locator('.rail-button[data-tab="settings"]').click();
+  await page.locator("#settingsPageSelect:visible, #settingsNavTree:visible").first().waitFor();
+  if (await page.locator("#settingsPageSelect").isVisible()) await page.locator("#settingsPageSelect").selectOption("agent");
+  else await page.locator('#settingsNavTree [data-tree-key="settings:agent"] .navigation-tree-label').click();
+  const limit=page.locator('#maxCollaborationAgentsInput');
+  await limit.scrollIntoViewIfNeeded();
+  assert.equal(await page.locator('#maxAgentMessagesInput').count(),0);
+  assert.equal(await limit.getAttribute('max'),'64');
+  assert.ok((await limit.getAttribute('title')).includes('исходный чат'));
+  await page.screenshot({path:'/tmp/rnassistant-participant-limit-wide.png'});
+  await page.evaluate(()=>document.documentElement.style.zoom='1.25'); await page.setViewportSize({width:420,height:800});
+  await limit.scrollIntoViewIfNeeded();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const bounds=await limit.evaluate(node=>{const a=node.getBoundingClientRect(),b=node.closest('.settings-page').getBoundingClientRect();return {left:a.left,right:a.right,areaLeft:b.left,areaRight:b.right};});
+  assert.ok(bounds.left>=bounds.areaLeft-1&&bounds.right<=bounds.areaRight+1,'setting remains inside the shared narrow Settings view');
+  await page.screenshot({path:'/tmp/rnassistant-participant-limit-narrow.png'});
   assert.deepEqual(errors,[]);
-  console.log('PASS agent communication: shared bubble, settings, exact continuation, reload race, tab-independent messaging, narrow zoom');
+  console.log('PASS agent communication: shared bubble, settings, no message quota, tab-independent messaging, narrow zoom');
  } finally {if(browser)await browser.close();server.kill();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,0 +1,146 @@
+{
+  "date": "2026-11-05",
+  "source": "Program.AgentConcurrencyTests.cs in the commit containing this evidence",
+  "qualification": "local host-neutral smoke; fake Office adapter, no Controller/COM/WebView2/live provider",
+  "scenario": "1/2/4/8 recipients plus one idle root; first input -> saved wait -> second input -> same Run completion",
+  "modelDelayMs": 60,
+  "percentiles": [
+    50,
+    95,
+    99
+  ],
+  "samplesPerMetric": "one per recipient in each scenario",
+  "units": {
+    "latency": "milliseconds",
+    "requestCharacters": "characters in all flattened model requests; not tokens"
+  },
+  "boundaries": {
+    "intakeDurableMs": "send entry to durable receipt; destination scheduling is invoked before return",
+    "idleContextMs": "first send entry to first scripted model adapter entry",
+    "busyContextMs": "wake send entry to second scripted model adapter entry",
+    "wakeNextStepMs": "saved checkpoint clearing pending wait to second scripted model adapter entry"
+  },
+  "limits": "participant cap set to workers + 1; no active-step admission scheduler yet",
+  "assertions": [
+    "exactly two model requests per recipient",
+    "same Run before and after wait",
+    "exactly two durable peer inputs",
+    "completed Run for each recipient",
+    "status listing adds zero model calls"
+  ],
+  "notes": [
+    "Small local samples are not p95/p99 service guarantees.",
+    "Send and provider work are scripted; role negotiation and real coordination token costs are not measured.",
+    "The initial run exposed nonblocking first-catalog publication contention, fixed by ed930a76; this records the final run."
+  ],
+  "runs": [
+    {
+      "workers": 1,
+      "participants": 2,
+      "peakModelRequests": 1,
+      "modelRequests": 2,
+      "requestCharacters": 126230,
+      "intakeDurableMs": [
+        45.25,
+        45.25,
+        45.25
+      ],
+      "idleContextMs": [
+        296.99,
+        296.99,
+        296.99
+      ],
+      "busyContextMs": [
+        128.52,
+        128.52,
+        128.52
+      ],
+      "wakeNextStepMs": [
+        93.91,
+        93.91,
+        93.91
+      ]
+    },
+    {
+      "workers": 2,
+      "participants": 3,
+      "peakModelRequests": 2,
+      "modelRequests": 4,
+      "requestCharacters": 252722,
+      "intakeDurableMs": [
+        23.32,
+        24.12,
+        24.12
+      ],
+      "idleContextMs": [
+        211.86,
+        255.87,
+        255.87
+      ],
+      "busyContextMs": [
+        151.46,
+        215.02,
+        215.02
+      ],
+      "wakeNextStepMs": [
+        99.68,
+        117.18,
+        117.18
+      ]
+    },
+    {
+      "workers": 4,
+      "participants": 5,
+      "peakModelRequests": 3,
+      "modelRequests": 8,
+      "requestCharacters": 506492,
+      "intakeDurableMs": [
+        24.92,
+        99.1,
+        99.1
+      ],
+      "idleContextMs": [
+        268.77,
+        362.6,
+        362.6
+      ],
+      "busyContextMs": [
+        176.14,
+        331.79,
+        331.79
+      ],
+      "wakeNextStepMs": [
+        73.07,
+        75.97,
+        75.97
+      ]
+    },
+    {
+      "workers": 8,
+      "participants": 9,
+      "peakModelRequests": 3,
+      "modelRequests": 16,
+      "requestCharacters": 1017176,
+      "intakeDurableMs": [
+        26.75,
+        104.8,
+        104.8
+      ],
+      "idleContextMs": [
+        465.79,
+        630.72,
+        630.72
+      ],
+      "busyContextMs": [
+        430.41,
+        689.7,
+        689.7
+      ],
+      "wakeNextStepMs": [
+        61.21,
+        73.25,
+        73.25
+      ]
+    }
+  ]
+}

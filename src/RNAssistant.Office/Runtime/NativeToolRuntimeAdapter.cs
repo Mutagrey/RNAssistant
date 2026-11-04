@@ -258,7 +258,7 @@ namespace RNAssistant.Office.Runtime
                 {
                     binding = AgentCommunicationToolCatalog.Binding(registration.Descriptor.Id);
                     handler = new RNAssistant.Application.Conversations.AgentCommunicationToolHandler(
-                        agentCommunication, agentInbox, session, settings.MaxAgentMessages);
+                        agentCommunication, agentInbox, session, settings.MaxCollaborationAgents);
                 }
                 else if (TaskListToolCatalog.Owns(
                     registration.Descriptor.Id))

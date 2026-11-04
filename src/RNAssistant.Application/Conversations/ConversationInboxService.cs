@@ -117,19 +117,6 @@ namespace RNAssistant.Application.Conversations
                     box.Paused ? "paused" : PendingConfirmationId(box.Session) != null ? "awaiting_approval" : "idle" };
         }
 
-        internal void ContinueAgentCommunication(ChatSession session, string chainId,
-            AgentCommunicationEvent grant, ConversationInput input)
-        {
-            var box = Get(session);
-            lock (box.Sync)
-            {
-                if (box.Running || box.Worker || AgentCommunicationService.Context(box.Session, input.AgentCommunication.Limit).ChainId != chainId)
-                    throw new InvalidOperationException("Запуск или цепочка общения уже изменились.");
-                if (grant != null) AppendAgentEvent(box.Session, grant);
-                SubmitLocked(box, input);
-            }
-        }
-
         internal bool HasActiveWork(string chatId)
         {
             List<Inbox> candidates;

@@ -73,9 +73,14 @@ namespace RNAssistant.Harness
                 var service = new AgentCommunicationService(); var parent = AgentChat(store, "Parent");
                 var peer = AgentChat(store, "Peer");
                 service.Register(StoredAgentScope(store, inbox, parent));
-                service.Send(inbox, parent, 1, "run", "consume-budget", AgentChatAddress.IdFor(peer.Id), "Question", () => { });
-                var result = service.Spawn(inbox, parent, 1, "run", "created-but-not-sent", "New peer", "Work", () => { });
-                AssertTrue(result.Created && result.InitialMessage == "rejected" && result.Error == "agent_message_limit",
+                service.Send(inbox, parent, 3, "run", "recruit-peer", AgentChatAddress.IdFor(peer.Id), "Question", () => { });
+                var failingScope = StoredAgentScope(store, inbox, parent);
+                var commit = failingScope.Commit;
+                failingScope.Commit = child => { commit(child); child.MutationPolicy = MutationPolicy.Ask; store.Save(child); };
+                parent = store.Load(parent.Id); parent.MutationPolicy = MutationPolicy.Deny; store.Save(parent);
+                service.Register(failingScope);
+                var result = service.Spawn(inbox, parent, 3, "run", "created-but-not-sent", "New peer", "Work", () => { });
+                AssertTrue(result.Created && result.InitialMessage == "rejected" && result.Error == "agent_chat_unavailable",
                     "initial input failure preserves the successful creation receipt");
                 AssertEqual(3, store.ListHeaders(false).Count, "one participant was saved despite input refusal");
                 var foreign = store.CreateTransient("Excel", "foreign-document", "Foreign", "Foreign");
@@ -93,7 +98,7 @@ namespace RNAssistant.Harness
         {
             WithTempPaths(paths => {
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
-                var service = new AgentCommunicationService(); var parent = AgentChat(store, "Parent");
+                var service = new AgentCommunicationService(() => 4); var parent = AgentChat(store, "Parent");
                 service.Register(StoredAgentScope(store, inbox, parent));
                 var first = service.Spawn(inbox, parent, 20, "run", "first", "Child", "Join", () => { });
                 AssertEqual("queued", first.InitialMessage, "first input is durably queued");
@@ -101,19 +106,19 @@ namespace RNAssistant.Harness
                 var input = inbox.TakeNext(child);
                 var message = new ChatMessage { Id = input.Id, Role = "user", Content = input.Text, AgentCommunication = input.AgentCommunication };
                 child.Messages.Add(message); store.Commit(child, ConversationCommit.UserInput(message)); inbox.Applied(child, input.Id);
-                for (var i = 1; i < AgentCommunicationService.MaximumSpawnedThreads; i++)
+                for (var i = 1; i < 3; i++)
                     service.Spawn(inbox, child, 20, "child-run", "nested-" + i, "Nested " + i, null, () => { });
                 inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
-                service = new AgentCommunicationService(); parent = store.Load(parent.Id);
+                service = new AgentCommunicationService(() => 4); parent = store.Load(parent.Id);
                 service.Register(StoredAgentScope(store, inbox, parent));
                 var limited = false;
                 try { service.Spawn(inbox, parent, 20, "later-run", "excess", "Excess", null, () => { }); }
-                catch (AgentCommunicationException error) { limited = error.Code == "agent_spawn_limit"; }
-                AssertTrue(limited && store.ListHeaders(false).Count == 9, "nested creation shares the root limit across restart");
+                catch (AgentCommunicationException error) { limited = error.Code == "agent_participant_limit"; }
+                AssertTrue(limited && store.ListHeaders(false).Count == 4, "nested creation shares the root limit across restart");
             });
             WithTempPaths(paths => {
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
-                var service = new AgentCommunicationService(); var parent = AgentChat(store, "Parent");
+                var service = new AgentCommunicationService(() => 4); var parent = AgentChat(store, "Parent");
                 var scope = StoredAgentScope(store, inbox, parent); scope.Commit = _ => { throw new IOException("Injected creation failure"); };
                 service.Register(scope);
                 try { service.Spawn(inbox, parent, 20, "run", "uncertain", "Child", null, () => { }); }
@@ -249,15 +254,27 @@ namespace RNAssistant.Harness
             WithTempPaths(paths => {
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
                 var source = AgentChat(store, "Source");
-                var services = new[] { new AgentCommunicationService(), new AgentCommunicationService() };
+                var peers = Enumerable.Range(0, 5).Select(i => AgentChat(store, "Existing " + i)).ToArray();
+                var services = new[] { new AgentCommunicationService(() => 5), new AgentCommunicationService(() => 5) };
                 foreach (var service in services) service.Register(StoredAgentScope(store, inbox, source));
-                var created = 0; var limited = 0;
+                var admitted = 0; var spawned = 0; var limited = 0;
                 Task.WaitAll(Enumerable.Range(0, 10).Select(index => Task.Run(() => {
-                    try { services[index % 2].Spawn(inbox, source, 20, "run", "parallel-" + index, "Child " + index, null, () => { }); Interlocked.Increment(ref created); }
-                    catch (AgentCommunicationException error) when (error.Code == "agent_spawn_limit") { Interlocked.Increment(ref limited); }
+                    try
+                    {
+                        if (index % 2 == 0)
+                            services[0].Send(inbox, source, 20, "run", "parallel-" + index, AgentChatAddress.IdFor(peers[index / 2].Id), "Join", () => { });
+                        else
+                        {
+                            services[1].Spawn(inbox, source, 20, "run", "parallel-" + index, "Child " + index, null, () => { });
+                            Interlocked.Increment(ref spawned);
+                        }
+                        Interlocked.Increment(ref admitted);
+                    }
+                    catch (AgentCommunicationException error) when (error.Code == "agent_participant_limit") { Interlocked.Increment(ref limited); }
                 })).ToArray());
-                AssertTrue(created == 8 && limited == 2 && store.ListHeaders(false).Count == 9,
-                    "concurrent bound services share the durable root reservation limit");
+                AssertTrue(admitted == 4 && limited == 6 && store.ListHeaders(false).Count == 6 + spawned,
+                    "existing and spawned peers compete for the same four places beside the root");
+                AssertEqual(4, inbox.AgentEvents(source).Count(e => e.State == AgentDeliveryState.ParticipantReserved), "no oversubscription across bound services");
             });
         }
     }

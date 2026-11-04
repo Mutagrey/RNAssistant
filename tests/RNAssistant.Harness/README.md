@@ -1,5 +1,25 @@
 # RNAssistant Harness
 
+## Agent participant limit and concurrency — 2026-11-05
+
+`agent communication:` covers default 8/0/off/1/root-only, typed settings persistence,
+read-only old-key migration, lowering the current cap, recursive/recovered membership,
+concurrent recruitment + spawn, and 25 repeated replies without a message quota.
+Regressions: `agent pause:`, `agent cancel:`, `agent recovery:`, `agent user control:`,
+`tool pack: core and atomic`, `bridge: typed settings`.
+`tests/web/agent-communication.test.js` checks Settings/reset/narrow zoom, unchanged
+sender navigation, no obsolete budget RPC/banner and tab-independent runs.
+
+`agent concurrency:` uses real Inbox/ChatStore/Office service with a fake host and
+60 ms scripted model, for 1/2/4/8 recipients plus one idle root. Two model calls per
+recipient (wait + same-Run wake), persisted inputs, terminal outcomes and zero status
+LLM calls are asserted. MEASURE reports p50/p95/p99 at adapter boundaries and request
+characters, not provider/network latency or tokens. Run it alone for timing; this
+small fixture is not an SLA/load qualification. `RNA_AGENT_BENCH_WORKERS=8` narrows
+failure diagnostics. `resource cutover: concurrent catalog initialization` separately
+checks waiting for the existing first-publication lease and reuse of its head.
+Production Controller/COM/WebView2 and live-model costs remain separate evidence.
+
 ## Finish correction — 2026-11-04
 
 Run one substring filter per invocation: `kernel: finish correction`,
@@ -80,12 +100,12 @@ keyboard and stale close cleanup. `active-chat-runs.test.js` covers the shared
 ActionMenu detail layout. Real Office/COM/controller qualification remains open.
 
 `agent communication:` checks the real Workspace A → B → A path against a scripted
-HTTP provider (including typed bridge state and model wire), independent pinned
-budgets, idempotent continuation, restart, stopped queues, tab-independent discovery,
+HTTP provider (including typed settings and model wire), shared participant limits,
+idempotent receipts, restart, stopped queues, tab-independent discovery,
 immutable sender provenance, uncertain delivery and accepted work after sender
 receipt failure. The real model wire also loads the shared communication skill.
 Zero is checked through typed settings and disk persistence, live old-handler denial,
-Office/Workspace catalogs, continuation and re-enable without budget reset.
+Office/Workspace catalogs and re-enable without resetting membership.
 The native Office queue check uses real Application/Kernel/bridge owners with a fake
 Office adapter and scripted model: bad-address recovery, same-run `agents.wait` wakeup,
 late next-turn delivery and exact inbox progress routing. Wait boundaries cover timeout,

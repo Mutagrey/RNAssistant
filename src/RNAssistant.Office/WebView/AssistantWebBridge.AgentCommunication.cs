@@ -51,18 +51,5 @@ namespace RNAssistant.Office.WebView
                 throw new ArgumentException("Требуется точная область чата.");
         }
 
-        private AgentCommunicationStateResponse AgentCommunicationState(AgentCommunicationRequest request, bool resume)
-        {
-            if (request == null || string.IsNullOrWhiteSpace(request.SessionId) || resume &&
-                (string.IsNullOrWhiteSpace(request.ChainId) || string.IsNullOrWhiteSpace(request.OperationId) || request.OperationId.Length > 128))
-                throw new ArgumentException("Требуется точная цепочка общения.");
-            var settings = new SettingsService(_controller.StoragePaths);
-            PrepareAgentScope(request.Source, request.WorkspaceId);
-            var limit = settings.Load().MaxAgentMessages;
-            var state = resume ? _agentCommunication.Continue(request.SessionId, request.ChainId, request.OperationId, limit, request.Source, request.WorkspaceId) :
-                _agentCommunication.State(request.SessionId, limit, request.Source, request.WorkspaceId);
-            return new AgentCommunicationStateResponse { Enabled = state.Enabled, ChainId = state.ChainId, Limit = state.Limit,
-                Sent = state.Sent, Remaining = state.Remaining, LimitReached = state.LimitReached };
-        }
     }
 }

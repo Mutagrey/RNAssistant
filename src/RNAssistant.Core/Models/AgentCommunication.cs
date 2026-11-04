@@ -68,7 +68,6 @@ namespace RNAssistant.Core.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ExpectReply { get; set; }
         public string ChainId { get; set; }
-        public int Limit { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public AgentChatAddress Sender { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
