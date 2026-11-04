@@ -19,10 +19,14 @@ namespace RNAssistant.Office
         internal RNAssistant.Application.Conversations.AgentCommunicationService AgentCommunication { get; private set; }
         internal Func<string, string, Action<string, string, string, ChatActivity>, Action<ChatStateResponse>,
             RNAssistant.Application.Conversations.AgentConversationEndpoint> AgentEndpointFactory { get; set; }
-        internal void ConfigureAgentCommunication(RNAssistant.Application.Conversations.AgentCommunicationService service) { AgentCommunication = service; }
+        private Action<string, string, string, string, ChatActivity> _agentProgress;
+        private Action<ChatStateResponse> _agentChanged;
+        internal void ConfigureAgentCommunication(RNAssistant.Application.Conversations.AgentCommunicationService service,
+            Action<string, string, string, string, ChatActivity> progress = null, Action<ChatStateResponse> changed = null)
+        { AgentCommunication = service; _agentProgress = progress; _agentChanged = changed; }
         internal RNAssistant.Application.Conversations.AgentConversationEndpoint AgentEndpoint(string chatId, string viewId,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
-        { return AgentEndpointFactory?.Invoke(chatId, viewId, progress, changed) ??
+        { return AgentEndpointFactory?.Invoke(chatId, viewId, progress ?? ((run, phase, text, activity) => _agentProgress?.Invoke(chatId, run, phase, text, activity)), changed ?? _agentChanged) ??
             throw new NotSupportedException("Office endpoint requires the real controller."); }
         internal bool StopActiveChatRun(string chatId, string runId) { return false; }
         public AssistantController() : this(RNAssistant.Core.Storage.AppDataPaths.CreateDefault()) { }

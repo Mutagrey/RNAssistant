@@ -564,6 +564,16 @@ namespace RNAssistant.Office.Services
             return session;
         }
 
+        internal ChatSession PrepareAgentChat(ChatSession source, string title)
+        {
+            // Addressed creation must neither replace an active draft nor select
+            // the child. The caller has already validated the exact live target.
+            var session = _conversations.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, title);
+            session.DocumentAuthorityId = source.DocumentAuthorityId;
+            session.DocumentPath = source.DocumentPath;
+            return session;
+        }
+
         private ChatSession BuildNewChat(string title)
         {
             var host = _adapter.HostName;

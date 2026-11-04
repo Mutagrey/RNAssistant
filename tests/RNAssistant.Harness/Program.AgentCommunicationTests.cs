@@ -36,8 +36,25 @@ namespace RNAssistant.Harness
             return session;
         }
         private static AgentConversationEndpoint AgentEndpoint(ChatSession session, ConversationInboxService inbox, Action<ChatSession> start = null)
-        { return new AgentConversationEndpoint { ViewId = session.Id, Address = AgentCommunicationService.Address(session),
+        { return new AgentConversationEndpoint { Address = AgentCommunicationService.Address(session),
             Load = () => session, Inbox = inbox, Validate = current => current.DocumentKey, Start = start ?? (_ => { }) }; }
+
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<AgentCommunicationService,
+            System.Collections.Generic.Dictionary<string, AgentConversationEndpoint>> AgentTestCatalogs =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<AgentCommunicationService,
+                System.Collections.Generic.Dictionary<string, AgentConversationEndpoint>>();
+
+        private static string AgentScopeKey(ChatSession session)
+        { return session.WorkspaceId != null ? "workspace:" + session.WorkspaceId : session.Host + ":" + session.DocumentKey; }
+
+        private static void RegisterAgent(AgentCommunicationService service, AgentConversationEndpoint endpoint)
+        {
+            var catalog = AgentTestCatalogs.GetOrCreateValue(service);
+            catalog[endpoint.Address.ChatId] = endpoint;
+            var key = AgentScopeKey(endpoint.Load());
+            service.Register(new AgentConversationScope { Key = key, Contains = session => AgentScopeKey(session) == key,
+                ReadCatalog = () => catalog.Values.Where(item => AgentScopeKey(item.Load()) == key).ToArray() });
+        }
 
         private static void AgentOfficeQueueProgress()
         { AgentOfficePeerProgress(true); }
@@ -119,7 +136,7 @@ namespace RNAssistant.Harness
                                 null, BuiltInSkillProvider.GetSkills(adapter), token, appendUserMessage: false).ConfigureAwait(false);
                         };
                         ports.Add(chatId, port);
-                        return new AgentConversationEndpoint { Address = AgentCommunicationService.Address(session), ViewId = viewId,
+                        return new AgentConversationEndpoint { Address = AgentCommunicationService.Address(session),
                             Inbox = inbox, Load = () => store.Load(chatId), Validate = current => current.DocumentKey,
                             Start = current => application.StartQueue(current, port) };
                     };
@@ -128,12 +145,11 @@ namespace RNAssistant.Harness
                         var bridgeToken = BridgeToken(bridge);
                         foreach (var chat in new[] { a, b, c })
                         {
-                            var presence = WorkspaceBridgeCall(bridge, bridgeToken, "setAgentChatPresence", new {
-                                source = "office", sessionId = chat.Id, viewId = chat.Id, open = true });
-                            AssertTrue((bool)presence["ok"], "Office presence registered through the real bridge");
+                            RegisterAgent(controller.AgentCommunication,
+                                controller.AgentEndpoint(chat.Id, chat.Id, null, null));
                         }
                         controller.AgentCommunication.Send(inbox, a, 20, "sender-run", "office-question", AgentChatAddress.IdFor(b.Id), "Please reply", () => { });
-                        AssertTrue(explicitWait ? SpinWait.SpinUntil(() => controller.AgentCommunication.List(a.Id).Any(p =>
+                        AssertTrue(explicitWait ? SpinWait.SpinUntil(() => controller.AgentCommunication.List(a).Any(p =>
                             p.IsSelf && p.Status == "waiting"), 10000) : modelStarted.Task.Wait(10000), "recipient is active before the peer replies");
                         followupAllowed.TrySetResult(true);
                         AssertTrue(ports[b.Id].Completed.Task.Wait(10000) && ports[a.Id].Completed.Task.Wait(10000) &&
@@ -166,8 +182,8 @@ namespace RNAssistant.Harness
             WithTempPaths(paths => {
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(EventStore(store));
                 var service = new AgentCommunicationService(); var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
-                a.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn" };
-                inbox.Bind(a); service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
+                a.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn", ConversationPolicy = ConversationRunPolicy.ForSession(a) };
+                inbox.Bind(a); RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox));
                 var f = new KernelFixture(KernelResponse(tool == "write" ? new[] { KernelCall(tool) } :
                     new[] { KernelCall(tool), KernelCall(tool, "{\"next\":true}") }), KernelResponse());
                 using (var channel = new ConversationRunInputChannel(inbox, a, (input, token) => {
@@ -205,25 +221,25 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(EventStore(store));
                 var service = new AgentCommunicationService();
                 var a = AgentChat(store, "Same name"); var b = AgentChat(store, "Same name");
-                a.LastRun = new ChatRunRecord { RunId = "wait-run", TurnId = "wait-turn" };
-                inbox.Bind(a); service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
+                a.LastRun = new ChatRunRecord { RunId = "wait-run", TurnId = "wait-turn", ConversationPolicy = ConversationRunPolicy.ForSession(a) };
+                inbox.Bind(a); RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox));
                 var timeout = service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(AgentWaitStatus.TimedOut, timeout.Status, "timeout returns control rather than ending the run");
                 AssertTrue(inbox.Snapshot(a).ActiveRun, "timeout keeps the run active");
-                b.LastRun = new ChatRunRecord { RunId = "b-wait-run", TurnId = "b-wait-turn" }; inbox.Bind(b);
+                b.LastRun = new ChatRunRecord { RunId = "b-wait-run", TurnId = "b-wait-turn", ConversationPolicy = ConversationRunPolicy.ForSession(b) }; inbox.Bind(b);
                 var bothWaiting = new[] { service.WaitAsync(inbox, a, 20, "wait-run", 1, CancellationToken.None),
                     service.WaitAsync(inbox, b, 20, "b-wait-run", 1, CancellationToken.None) };
-                AssertTrue(service.List(a.Id).All(p => p.Status == "waiting"), "both agents can wait without holding each other's locks");
+                AssertTrue(service.List(a).All(p => p.Status == "waiting"), "both agents can wait without holding each other's locks");
                 AssertTrue(Task.WaitAll(bothWaiting, 3000) && bothWaiting.All(w => w.Result.Status == AgentWaitStatus.TimedOut),
                     "mutual waiting returns control to both models within the bounded interval");
                 inbox.End(b, true, false);
                 using (var cancel = new CancellationTokenSource())
                 {
                     var waiting = service.WaitAsync(inbox, a, 20, "wait-run", 10, cancel.Token);
-                    AssertEqual("waiting", service.List(a.Id).Single(p => p.IsSelf).Status, "wait has a distinct visible peer status");
+                    AssertEqual("waiting", service.List(a).Single(p => p.IsSelf).Status, "wait has a distinct visible peer status");
                     cancel.Cancel(); var cancelled = false;
                     try { waiting.GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
-                    AssertTrue(cancelled && service.List(a.Id).Single(p => p.IsSelf).Status == "working", "cancellation wakes and cleans up the waiter");
+                    AssertTrue(cancelled && service.List(a).Single(p => p.IsSelf).Status == "working", "cancellation wakes and cleans up the waiter");
                 }
                 var waitingForStop = service.WaitAsync(inbox, a, 20, "wait-run", 10, CancellationToken.None);
                 inbox.Pause(a, "stop"); var stopped = false;
@@ -265,14 +281,14 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
                 var service = new AgentCommunicationService(() => settingsStore.Load().MaxAgentMessages);
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
-                service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
+                RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox));
                 service.Send(inbox, a, 1, "run", "before-disable", AgentChatAddress.IdFor(b.Id), "Already accepted", () => { });
                 var before = service.State(inbox, a, 1);
                 AssertTrue(before.LimitReached, "old chain has exhausted its pinned budget");
                 var settings = settingsStore.Load(); settings.MaxAgentMessages = 0; settingsStore.Save(settings);
                 var dispatched = false;
                 foreach (Action operation in new Action[] {
-                    () => service.List(a.Id),
+                    () => service.List(a),
                     () => service.Send(inbox, a, 20, "captured-running-turn", "disabled", AgentChatAddress.IdFor(b.Id), "Must not arrive", () => dispatched = true),
                     () => service.Continue(a.Id, before.ChainId, "disabled-grant", 20)
                 })
@@ -291,7 +307,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), config, (executor, adapter) => {
                 AssertTrue(!executor.GetControllerTools().Any(t => AgentCommunicationToolCatalog.Owns(t.Id)), "disabled tools are absent from Office request catalog");
                 config.MaxAgentMessages = 20;
-                AssertEqual(3, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
+                AssertEqual(4, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
                 var office = RNAssistant.Office.Services.BuiltInSkillProvider.GetSkills(adapter).Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 var workspace = WorkspaceSkillProvider.GetSkills().Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 AssertEqual(office.BodyMarkdown, workspace.BodyMarkdown, "Office and Workspace use the same communication skill");
@@ -305,9 +321,9 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(paths); var events = new ChatEventStoreAdapter(store);
                 var inbox = new ConversationInboxService(events); var service = new AgentCommunicationService();
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B"); var c = AgentChat(store, "C");
-                service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox)); service.Open(AgentEndpoint(c, inbox));
-                var peers = service.List(a.Id);
-                AssertEqual(3, peers.Count, "all three open chats are discovered");
+                RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox)); RegisterAgent(service, AgentEndpoint(c, inbox));
+                var peers = service.List(a);
+                AssertEqual(3, peers.Count, "all three saved chats are discovered");
                 AssertEqual(AgentChatAddress.IdFor(a.Id), peers.Single(peer => peer.IsSelf).AgentId, "current chat is explicitly identified");
                 AssertEqual(2, peers.Count(peer => !peer.IsSelf), "two distinct other agents are available");
                 AssertTrue(peers.All(peer => peer.AgentId.Length == 12) && peers.Select(peer => peer.AgentId).Distinct().Count() == 3,
@@ -316,7 +332,7 @@ namespace RNAssistant.Harness
                     "address survives storage reload without reassignment");
                 AssertTrue(!JsonConvert.SerializeObject(peers).Contains(a.Id), "discovery does not expose storage chat IDs");
                 inbox.Get(b); b.Title = "Renamed B";
-                AssertEqual(b.Title, service.List(a.Id).Single(peer => peer.AgentId == AgentChatAddress.IdFor(b.Id)).Title, "discovery follows the live conversation title");
+                AssertEqual(b.Title, service.List(a).Single(peer => peer.AgentId == AgentChatAddress.IdFor(b.Id)).Title, "discovery follows the live conversation title");
                 var dispatches = 0;
                 service.Send(inbox, a, 2, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
                 service.Send(inbox, a, 99, "a-run", "a1", AgentChatAddress.IdFor(b.Id), "QUESTION", () => dispatches++);
@@ -344,7 +360,7 @@ namespace RNAssistant.Harness
                 var state = service.State(restored, reloaded, 99);
                 AssertTrue(state.LimitReached && state.Sent == 2 && state.Limit == 2, "counter is reconstructed from events");
                 AssertTrue(restored.Snapshot(reloaded).Paused, "pending reply is paused after restart");
-                service.Open(AgentEndpoint(reloaded, restored));
+                RegisterAgent(service, AgentEndpoint(reloaded, restored));
                 var continued = service.Continue(a.Id, state.ChainId, "grant-one", 99);
                 AssertEqual(2, continued.Remaining, "human grants the next pinned budget");
                 AssertEqual(2, service.Continue(a.Id, state.ChainId, "grant-one", 99).Remaining, "duplicate grant is idempotent");
@@ -356,7 +372,7 @@ namespace RNAssistant.Harness
             WithTempPaths(paths => {
                 var store = new ChatStore(paths); var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
                 var service = new AgentCommunicationService(); var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
-                service.Open(AgentEndpoint(a, inbox)); service.Open(AgentEndpoint(b, inbox));
+                RegisterAgent(service, AgentEndpoint(a, inbox)); RegisterAgent(service, AgentEndpoint(b, inbox));
                 inbox.Pause(b, "Остановлено пользователем");
                 service.Send(inbox, a, 20, "run", "stop-message", AgentChatAddress.IdFor(b.Id), "Pending task", () => { });
                 AssertTrue(inbox.Snapshot(b).Paused && inbox.TakeNext(b) == null, "agent cannot resume a stopped chat");
@@ -368,16 +384,9 @@ namespace RNAssistant.Harness
                     catch (InvalidOperationException) { rejected = true; }
                     AssertTrue(rejected, "agent origin cannot be edited or steered");
                 }
-                service.Close(b.Id);
-                var reopenedView = AgentEndpoint(b, inbox); reopenedView.ViewId = "reopened-view";
-                service.Open(reopenedView); service.Close(b.Id);
-                AssertEqual(2, service.List(a.Id).Count, "late close cannot remove a recreated view");
-                service.Close(reopenedView.ViewId);
-                AssertTrue(service.List(a.Id).Single().IsSelf, "closed recipient disappears but current chat remains");
-                var closed = false;
-                try { service.Send(inbox, a, 20, "run", "closed", AgentChatAddress.IdFor(b.Id), "new", () => { }); }
-                catch (AgentCommunicationException e) { closed = e.Code == "agent_chat_not_found"; }
-                AssertTrue(closed, "closed recipient refuses new messages");
+                AssertEqual(2, service.List(a).Count, "saved peers are discovered without view presence");
+                AssertEqual("queued", service.Send(inbox, a, 20, "run", "closed", AgentChatAddress.IdFor(b.Id), "new", () => { }).Status,
+                    "recipient accepts messages independently of views");
                 AssertEqual("queued", service.Send(inbox, a, 20, "run", "stop-message", AgentChatAddress.IdFor(b.Id), "Pending task", () => {
                     throw new Exception("Duplicate dispatch"); }).Status, "recorded acceptance remains readable after close");
                 inbox.Resume(b);
@@ -400,7 +409,7 @@ namespace RNAssistant.Harness
                 var source = new ConversationInboxService(events); var failing = new InboxFailingEvents(events);
                 var target = new ConversationInboxService(failing); var service = new AgentCommunicationService();
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B");
-                service.Open(AgentEndpoint(b, target)); failing.Fail = true;
+                RegisterAgent(service, AgentEndpoint(b, target)); failing.Fail = true;
                 var dispatches = 0; var failed = false;
                 try { service.Send(source, a, 20, "run", "uncertain", AgentChatAddress.IdFor(b.Id), "Task", () => dispatches++); }
                 catch (System.IO.IOException) { failed = true; }
@@ -437,7 +446,7 @@ namespace RNAssistant.Harness
                 var source = new ConversationInboxService(new AgentReceiptFailureEvents(events));
                 var target = new ConversationInboxService(events); var service = new AgentCommunicationService();
                 var a = AgentChat(store, "A"); var b = AgentChat(store, "B"); var starts = 0;
-                service.Open(AgentEndpoint(b, target, _ => starts++));
+                RegisterAgent(service, AgentEndpoint(b, target, _ => starts++));
                 try { service.Send(source, a, 20, "run", "receipt-failure", AgentChatAddress.IdFor(b.Id), "Accepted", () => { }); }
                 catch (IOException) { }
                 AssertTrue(starts == 1 && target.Snapshot(b).Items.Count == 1, "accepted work is scheduled even if sender receipt fails");
@@ -468,12 +477,6 @@ namespace RNAssistant.Harness
                     var store = new ChatStore(paths);
                     var bSession = store.Load(b.SessionId); bSession.Model = "fixture-B"; store.Save(bSession);
                     var bridgeToken = BridgeToken(bridge);
-                    foreach (var id in new[] { a.SessionId, b.SessionId })
-                    {
-                        var registration = WorkspaceBridgeCall(bridge, bridgeToken, "setAgentChatPresence", new {
-                            source = "workspace", workspaceId, sessionId = id, viewId = id, open = true });
-                        AssertTrue((bool)registration["ok"] && (bool)registration["payload"]["registered"], "native bridge registers exact peer: " + registration);
-                    }
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
                     var aRequests = 0; var bRequests = 0;
                     var server = Task.Run(async () => {
@@ -542,7 +545,7 @@ namespace RNAssistant.Harness
                             "shared UI projection carries sender");
                         settings.MaxAgentMessages = 0; new SettingsService(paths).Save(settings);
                         AssertTrue(!application.Conversations.AvailableToolIds(workspace).Any(AgentCommunicationToolCatalog.Owns), "zero removes messaging from Workspace catalog");
-                        var disabled = WorkspaceBridgeCall(bridge, bridgeToken, "getAgentCommunicationState", new { sessionId = a.SessionId });
+                        var disabled = WorkspaceBridgeCall(bridge, bridgeToken, "getAgentCommunicationState", new { source = "workspace", workspaceId, sessionId = a.SessionId });
                         AssertTrue((bool)disabled["ok"] && !(bool)disabled["payload"]["enabled"] && !(bool)disabled["payload"]["limitReached"], "typed bridge hides continuation when disabled");
                     }
                     finally { listener.Stop(); try { application.Conversations.CloseAsync().Wait(5000); server.Wait(5000); } catch { } }

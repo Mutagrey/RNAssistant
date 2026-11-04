@@ -19,9 +19,18 @@ namespace RNAssistant.Office.WebView
             set
             {
                 if (_plugins?.Conversations != null)
+                {
                     _plugins.Conversations.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
+                    _plugins.Conversations.AgentProgress = null;
+                }
                 _plugins = value;
-                if (_plugins?.Conversations != null) _plugins.Conversations.AgentCommunication = _agentCommunication;
+                if (_plugins?.Conversations != null)
+                {
+                    _plugins.Conversations.AgentCommunication = _agentCommunication;
+                    _plugins.Conversations.AgentProgress = (workspaceId, chatId, progress) =>
+                        ReportWorkspaceProgress("agents:" + chatId,
+                            new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chatId }, progress);
+                }
                 if (_plugins?.Conversations != null)
                     _plugins.Conversations.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
             }

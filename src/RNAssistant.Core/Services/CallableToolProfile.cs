@@ -25,7 +25,7 @@ namespace RNAssistant.Core.Services
 
         public static readonly IReadOnlyList<string> CoreIds = Array.AsReadOnly(new[] {
             "core.find", "core.read", "core.search", "core.write", "core.patch", "core.replace", "core.ask",
-            "core.tools.search", "core.tools.read", "core.skills.load", "chat.rename", "agents.list", "agents.send", "agents.wait" });
+            "core.tools.search", "core.tools.read", "core.skills.load", "chat.rename", "agents.list", "agents.send", "agents.wait", "agents.spawn" });
         public static CallableToolProfile Core() { return Explicit("resource-core-v1", CoreIds); }
 
         public static CallableToolProfile Explicit(string id, IEnumerable<string> initialIds)

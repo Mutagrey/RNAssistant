@@ -42,5 +42,19 @@ namespace RNAssistant.Core.Models
         public AgentChatAddress Sender { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string SenderRunId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public AgentChatAddress Root { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public Services.ConversationRunPolicy Policy { get; set; }
+    }
+
+    // Creation identity is conversation metadata, never an instruction or a grant.
+    public sealed class AgentThreadCreation
+    {
+        public string OperationId { get; set; }
+        public string Fingerprint { get; set; }
+        public string ChainId { get; set; }
+        public AgentChatAddress Creator { get; set; }
+        public AgentChatAddress Root { get; set; }
     }
 }

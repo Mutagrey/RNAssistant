@@ -486,6 +486,7 @@ namespace RNAssistant.Runtime
             if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl))
                 throw new ArgumentException("An LLM endpoint and model are required.", nameof(settings));
             ValidateMessageRoles(settings);
+            RegisterAgentScope(workspace, settings, apiKeyProvider);
             var acceptedContract = PrepareAcceptance(request.Acceptance);
             var session = string.IsNullOrWhiteSpace(sessionId)
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
@@ -515,7 +516,7 @@ namespace RNAssistant.Runtime
                 var acceptedMode = mode ?? ChatModes.Require(session.Mode);
                 var policy = ConversationRunPolicy.For(acceptedMode,
                     workspace.ReadOnly ? MutationPolicy.Deny : request.MutationPolicy ?? session.MutationPolicy,
-                    request.AutoConfirmToolActions ?? settings.AutoConfirmToolActions);
+                    request.AutoConfirmToolActions ?? settings.AutoConfirmToolActions).ForPeerInput(queuedInput?.AgentCommunication);
                 var changedPolicy = session.Mode != policy.Mode || session.MutationPolicy != policy.MutationPolicy;
                 if (changedPolicy && session.LastRun?.KernelState?.Summary?.Lifecycle == RunLifecycle.AwaitingConfirmation)
                 {
@@ -672,6 +673,7 @@ namespace RNAssistant.Runtime
             if (approve && (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl)))
                 throw new ArgumentException("The LLM endpoint and model are required after approval.", nameof(settings));
             if (approve) ValidateMessageRoles(settings);
+            if (approve) RegisterAgentScope(workspace, settings, apiKeyProvider);
             using (var runReservation = ReserveRun(sessionId, wait: waitForLease, cancellationToken: cancellationToken))
             {
                 var session = _workspaces.LoadSession(_chats, workspace, sessionId);

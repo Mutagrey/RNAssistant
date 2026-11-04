@@ -8,8 +8,20 @@ records a read-back of that exact destination Inbox operation, and `Granted`
 records an explicit user budget extension. Message bodies remain in existing CAS
 and conversation/tool events; there is no independent outbox store.
 
+As of 2026-11-04, `SpawnPrepared` reserves one of 8 creation slots in the root
+conversation's causal chain, before a new ordinary ChatSession is committed.
+`Spawned` records its read-back. Both use the existing mandatory event type and
+index; no second store/schema is introduced. `AgentCreation` is whitelisted session
+metadata carrying creator/root, operation ID and fingerprint. It is provenance, not
+authority or a mandatory hierarchy. Root Inbox serialization protects concurrent
+reservations; restart reads the same records. An unresolved creation is not replayed.
+If a matching saved child is found, an exact duplicate returns its identity.
+Creation and optional initial delivery have separate receipts; an unknown delivery
+cannot erase the known created child. Re-observing historical uncertainty does not
+invent a new invocation dispatch.
+
 `ConversationInput.AgentCommunication` and the matching `ChatMessage` retain the
-same chain, sender address/run and pinned limit. Inbox replay validates provenance;
+same chain, sender address/run, root, accepted permission ceiling and pinned limit. Inbox replay validates provenance;
 peer text cannot be edited or steered, but pending input can be removed. Peer
 intake never clears a paused queue, approves a pending action or produces typed
 human answers. Receipt retries are idempotent, including after a view closes.
@@ -22,8 +34,11 @@ Budget recovery reads only these canonical records through the existing disposab
 SQLite event locators (`RequireCompleteAgentCommunicationJournal`). Projection
 schema 9 adds the new event type; an old sidecar is rebuilt, user events are retained.
 Budget queries do not materialize model trace bodies or the full message journal.
-Closing the application retains pending inputs as paused; view close alone does not
-cancel accepted work. Windows/Office delivery evidence remains open.
+Closing the application retains pending inputs as paused; view close changes neither
+discovery nor new delivery or execution. Scope bindings read the canonical chat
+catalog; their live status is not another durable projection. Older peer inputs with
+no recorded policy are refused at run admission, not silently granted permissions.
+Windows/Office delivery evidence remains open.
 
 ## Decision
 

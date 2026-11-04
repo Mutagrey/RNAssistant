@@ -26,10 +26,13 @@ namespace RNAssistant.Application.Conversations
             try
             {
                 if (_service == null || _session == null)
-                    throw new AgentCommunicationException("agent_communication_unavailable", "Общение доступно в открытых чатах приложения.");
+                    throw new AgentCommunicationException("agent_communication_unavailable", "Runtime общения недоступен.");
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.List)
-                    return new ToolHandlerResult(RuntimeResult.Ok("Все открытые чаты. is_self=true — ваш текущий чат; остальные — собеседники.",
-                        JsonConvert.SerializeObject(_service.List(_session.Id, _limit))), ToolEffectEvidence.None);
+                {
+                    var list = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
+                    return new ToolHandlerResult(RuntimeResult.Ok("Сохранённые чаты этой области, независимо от вкладок. is_self=true — ваш чат.",
+                        JsonConvert.SerializeObject(_service.Discover(_session, _limit, list.Query, list.AgentId))), ToolEffectEvidence.None);
+                }
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Wait)
                 {
                     var wait = JObject.FromObject(context.Arguments).ToObject<WaitRequest>();
@@ -37,14 +40,29 @@ namespace RNAssistant.Application.Conversations
                         wait.TimeoutSeconds, token).ConfigureAwait(false);
                     return new ToolHandlerResult(RuntimeResult.Ok(
                         result.Status == AgentWaitStatus.MessagesReady ? "Сообщения поступили; они будут переданы в этом запуске перед следующим шагом модели."
-                        : result.Status == AgentWaitStatus.InputPending ? "Есть пользовательский ввод. Обработайте уточнение или завершите ход для очередного запроса."
+                        : result.Status == AgentWaitStatus.InputPending ? "Есть ввод, требующий приоритета или отдельного запуска с более строгими правами. Обработайте уточнение или завершите ход для очередного запроса."
                         : "Время ожидания истекло. Проверьте состояния собеседников и выберите дальнейшее действие.",
                         JsonConvert.SerializeObject(result)), ToolEffectEvidence.None);
                 }
+                var operationId = "agent_" + RNAssistant.Core.Services.ConversationInputJournal.Fingerprint(new[] {
+                    _session.Id, context.Execution.RunId, context.Execution.StepId, context.Execution.Call.Id });
+                if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Spawn)
+                {
+                    var spawn = JObject.FromObject(context.Arguments).ToObject<SpawnRequest>();
+                    var created = _service.Spawn(_inbox, _session, _limit, context.Execution.RunId,
+                        operationId, spawn.Title, spawn.InitialMessage, context.MarkDispatchPossible);
+                    var data = JsonConvert.SerializeObject(created);
+                    var unknown = created.InitialMessage == "unknown";
+                    var result = unknown ? (context.MayHaveDispatched
+                        ? RuntimeResult.Unknown("Чат создан; доставка начального сообщения неизвестна. Не создавайте замену и не повторяйте сообщение.", data)
+                        : RuntimeResult.Error("Чат уже создан; прежняя доставка начального сообщения неизвестна. Новая попытка не выполнялась; повтор запрещён.", data))
+                        : created.InitialMessage == "rejected" ? RuntimeResult.Error("Чат создан, начальное сообщение не принято. Используйте адрес созданного чата; не создавайте замену.", data)
+                        : RuntimeResult.Ok("Обычный чат создан без открытия вкладки. queued означает принятие сообщения, а не запуск или завершение работы.", data);
+                    return context.Complete(new ToolHandlerResult(result, unknown && context.MayHaveDispatched
+                        ? ToolEffectEvidence.Unknown : context.MayHaveDispatched ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange));
+                }
                 var request = JObject.FromObject(context.Arguments).ToObject<SendRequest>();
-                var receipt = _service.Send(_inbox, _session, _limit, context.Execution.RunId,
-                    "agent_" + RNAssistant.Core.Services.ConversationInputJournal.Fingerprint(new[] {
-                        _session.Id, context.Execution.RunId, context.Execution.StepId, context.Execution.Call.Id }),
+                var receipt = _service.Send(_inbox, _session, _limit, context.Execution.RunId, operationId,
                     request.AgentId, request.Text, context.MarkDispatchPossible);
                 return context.Complete(new ToolHandlerResult(RuntimeResult.Ok(
                     "Сообщение принято в очередь; выполнение поручения ещё не подтверждено.", JsonConvert.SerializeObject(receipt)),
@@ -62,7 +80,17 @@ namespace RNAssistant.Application.Conversations
             [JsonProperty("agent_id")] public string AgentId { get; set; }
             [JsonProperty("text")] public string Text { get; set; }
         }
+        private sealed class ListRequest
+        {
+            [JsonProperty("query")] public string Query { get; set; }
+            [JsonProperty("agent_id")] public string AgentId { get; set; }
+        }
         private sealed class WaitRequest
         { [JsonProperty("timeout_seconds")] public int TimeoutSeconds { get; set; } = 5; }
+        private sealed class SpawnRequest
+        {
+            [JsonProperty("title")] public string Title { get; set; }
+            [JsonProperty("initial_message")] public string InitialMessage { get; set; }
+        }
     }
 }

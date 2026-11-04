@@ -49,6 +49,25 @@ namespace RNAssistant.Core.Services
             ForSession(session, accepted.AutoConfirmToolActions).RequireSame(accepted);
             return accepted;
         }
+        // Peer data can restrict a run, never grant permissions or approval.
+        public ConversationRunPolicy ForPeerInput(AgentCommunicationContext context)
+        {
+            if (context?.Sender == null) return this;
+            var ceiling = context.Policy;
+            if (ceiling == null || !FitsPeerRestrictions(ceiling))
+                throw new InvalidOperationException("Peer input has no compatible recorded permissions. Remove it or use a chat with matching restrictions.");
+            return For(Mode, MutationPolicy, AutoConfirmToolActions && ceiling.AutoConfirmsToolActions);
+        }
+        private bool FitsPeerRestrictions(ConversationRunPolicy ceiling)
+        {
+            return (ceiling.Mode != ChatModes.Plan || Mode == ChatModes.Plan) &&
+                (ceiling.MutationPolicy != MutationPolicy.Deny || MutationPolicy == MutationPolicy.Deny);
+        }
+        public bool CanIncludePeerInput(AgentCommunicationContext context)
+        {
+            return context?.Sender != null && context.Policy != null && FitsPeerRestrictions(context.Policy) &&
+                (!AutoConfirmsToolActions || context.Policy.AutoConfirmsToolActions);
+        }
         public static void RequireCurrentSession(ChatSession session)
         {
             if (session == null || !session.UsesCurrentProtocol)
@@ -100,7 +119,7 @@ namespace RNAssistant.Core.Services
                 }).ToList();
         }
         private static bool IsAgentMessage(string id, ToolBinding binding)
-        { return id == AgentCommunicationToolCatalog.Send && binding != null &&
+        { return (id == AgentCommunicationToolCatalog.Send || id == AgentCommunicationToolCatalog.Spawn) && binding != null &&
             binding.HandlerId == AgentCommunicationToolCatalog.Binding(id).HandlerId && string.IsNullOrEmpty(binding.EntryPoint); }
         private static bool IsChatRename(string id, ToolBinding binding)
         { return id == ChatRenameToolHandler.ToolId && binding != null &&

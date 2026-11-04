@@ -30,6 +30,9 @@ Library/VBA header имеет minimum из `--page-header-height`, а факти
 Общее numeric-поле принимает 0; подпись явно поясняет «0 — отключить».
 Активная работа/ожидание используют общие status/activity/tool components;
 для `agents.wait` — подпись «Жду сообщения агентов», без отдельного spinner/style.
+Срез spawn/tab-independent discovery (2026-11-04) не добавляет визуального семейства:
+созданные участники используют обычный Chat View, те же bubbles/activity/receipts.
+Закрытие вкладки не получает скрытого действия Stop. Геометрия компонентов не меняется.
 Сравнение computed padding/radius с обычным bubble на одинаковом viewport прошло;
 общий Shell zoom overflow отмечен отдельно в RISK_REGISTER.
 

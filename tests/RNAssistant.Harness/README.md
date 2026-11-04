@@ -40,8 +40,8 @@ race coverage. These are host-neutral checks, not Windows/Office qualification.
 ## Agent communication — 2026-11-03
 
 `agent communication:` checks the real Workspace A → B → A path against a scripted
-HTTP provider (including typed bridge presence and model wire), independent pinned
-budgets, idempotent continuation, restart, stopped queues, view replacement/close,
+HTTP provider (including typed bridge state and model wire), independent pinned
+budgets, idempotent continuation, restart, stopped queues, tab-independent discovery,
 immutable sender provenance, uncertain delivery and accepted work after sender
 receipt failure. The real model wire also loads the shared communication skill.
 Zero is checked through typed settings and disk persistence, live old-handler denial,
@@ -52,6 +52,12 @@ late next-turn delivery and exact inbox progress routing. Wait boundaries cover 
 cancellation, total budget, Stop, human FIFO and unknown-effect pause. Stable short
 addresses, self discovery and individual sender provenance are checked across reload.
 This does not qualify real Office/COM or remote-model latency.
+The 2026-11-04 slice adds ordinary-thread spawn without views, effective model/policy
+inheritance, no history copy, exact operation reuse/conflict, partial/unknown initial
+intake, recursive/recovered/concurrent root budget, cross-scope refusal and policy
+ceiling checks. A real Workspace model-wire run creates and runs a child without UI;
+global automatic approval cannot widen the sender's accepted policy. 17 targeted
+checks pass. The production Office Controller remains outside Harness compilation.
 Quota reads use existing indexed canonical events without trace
 materialization. Relevant regressions: `inbox:`, `workspace: queue`, `unified policy:`,
 `tool pack: core`, `settings: invalid numeric`, `storage: indexed input journal`.
@@ -59,7 +65,7 @@ Each Harness invocation accepts **one** substring filter.
 
 `node tests/web/agent-communication.test.js` uses Playwright (bundled `NODE_PATH`,
 optional `BROWSER_EXECUTABLE`) to compare agent/human bubble geometry, exercise budget
-settings/continuation, reload races and late presence ACK cleanup, and inspect narrow/zoom.
+settings/continuation, reload races and close/rebind without presence calls, and inspect narrow/zoom.
 Zero rendering and hiding continuation against a stale response are covered as well.
 Office inbox reasoning/streaming is injected into a separate mounted recipient; short
 sender labels are checked with the common bubble. Temporary

@@ -108,7 +108,7 @@ namespace RNAssistant.Application.Conversations
             Inbox box;
             lock (_sync) box = _inboxes.Values.FirstOrDefault(item => item.Session.Id == address.ChatId);
             if (box == null) return new AgentPeer { AgentId = address.AgentId, Title = address.Title,
-                ScopeTitle = address.ScopeTitle, Source = address.Source, Status = "idle" };
+                ScopeTitle = address.ScopeTitle, Source = address.Source, Status = "not_loaded" };
             lock (box.Sync) return new AgentPeer { AgentId = address.AgentId, Title = box.Session.Title,
                 ScopeTitle = box.Session.DocumentTitle, Source = address.Source,
                 Status = box.AgentWaiting ? "waiting" : box.Running || box.Worker ? "working" :
@@ -610,9 +610,11 @@ namespace RNAssistant.Application.Conversations
         private static void ReadyQueuedAgentsLocked(Inbox box)
         {
             if (!box.Running || !box.Accepting || box.Paused || PendingConfirmationId(box.Session) != null) return;
-            foreach (var input in PendingQueuedInputs(box).TakeWhile(i => i.AgentCommunication?.Sender != null))
+            foreach (var input in PendingQueuedInputs(box).TakeWhile(i => CanIncludePeerInput(box, i)))
                 box.ReadyAgentInputs.Add(input.Id);
         }
+        private static bool CanIncludePeerInput(Inbox box, ConversationInput input)
+        { return box.Session.LastRun?.ConversationPolicy?.CanIncludePeerInput(input.AgentCommunication) == true; }
         private static IEnumerable<ConversationInput> PendingQueuedInputs(Inbox box)
         { return box.Inputs.Where(i => i.Status == ConversationInputStatus.Pending &&
             i.AcceptedRunId == null && i.Delivery == InputDelivery.Queue); }
@@ -643,7 +645,7 @@ namespace RNAssistant.Application.Conversations
                                 return AgentWaitStatus.InputPending;
                             var pending = PendingQueuedInputs(box).ToArray();
                             // Keep FIFO: a queued human request is not skipped to reach later peers.
-                            var ready = pending.TakeWhile(i => i.AgentCommunication?.Sender != null).ToArray();
+                            var ready = pending.TakeWhile(i => CanIncludePeerInput(box, i)).ToArray();
                             if (ready.Length > 0)
                             {
                                 foreach (var input in ready) box.ReadyAgentInputs.Add(input.Id);

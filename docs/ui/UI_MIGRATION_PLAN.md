@@ -1,5 +1,21 @@
 # План модернизации production UI
 
+## Участники без открытых вкладок — In Review, 2026-11-04
+
+Owner: Application/Conversations; Web — существующая общая presentation.
+Первый срез [мультиагентного плана](../proposals/multi-agent-runtime-plan.md): saved
+catalog discovery и `agents.spawn`, без нового Inspector/demo. Presence bridge/leases
+удалены; UI init не сбрасывает runtime scopes. Проверены production DOM, narrow/125%,
+stale state при rebind/close и сквозной Workspace spawn/run вообще без views.
+Геометрия и placement не меняются. Office controller проверен по исходникам; Harness
+использует его stub. Windows/Office/WebView2 evidence и визуальная приёмка открыты.
+
+Ревью: 1) создать участника агентом, 2) открыть его из обычного каталога,
+3) закрыть вкладку во время обмена и отправить ещё сообщение,
+4) открыть повторно и проверить историю, 5) нажать Stop и проверить сохранение паузы.
+Rollback — обратный diff кода без удаления пользовательских журналов; старый binary
+не должен продолжать новые tool admissions/peer envelopes по скрытому fallback.
+
 HTML target cutover (2026-11-03): owner — HTML domain/Controller, явный workspace
 для model mutations и обновление только выбранного logical view. Dockview placement
 не меняется. Ревью: открыть общий HTML в двух чатах, изменить CSS агентом, проверить
@@ -55,7 +71,7 @@ Windows/Office/WebView2 evidence. S4 целиком и формальный вы
 Completed со старыми failed/unknown попытками. Список включает текущий чат с `is_self`;
 короткий стабильный `agent_id` используется в tool wire и подписи bubble. Добавлен
 `agents.wait` v2: 1–10 секунд за вызов (default 5), без суммарной квоты, немедленное
-пробуждение через общий input channel. Skill v3.0.0 требует продолжать работу после
+пробуждение через общий input channel. Skill v4.0.0 требует продолжать работу после
 send и учитывать ID/тему. Peer input доставляется между model/tool действиями и без
 wait; начатый вызов/read-back завершается, незапущенные calls перепланируются.
 Host-neutral native queue + kernel + bridge воспроизводит ошибку адреса, ответ,
@@ -65,7 +81,7 @@ Host-neutral native queue + kernel + bridge воспроизводит ошиб�
 Приёмка: открыть три чата; попросить A обратиться к B/C через `agents.list/send/wait`;
 проверить self/ID, активность получателей, ответ в текущем run, подпись и переход;
 в новой цепочке с лимитом 1 проверить продолжение;
-закрыть получателя и проверить отказ новых отправок при сохранении уже принятых.
+закрыть вкладку получателя и проверить приём новых отправок и сохранение уже принятых.
 Сохранить лимит 0, проверить отсутствие обмена/кнопки продолжения; включить обратно.
 Визуальное принятие пользователем ещё открыто. Проверки и сценарии — в
 [Harness guide](../../tests/RNAssistant.Harness/README.md#agent-communication--2026-11-03).

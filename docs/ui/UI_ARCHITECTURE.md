@@ -26,9 +26,11 @@ domain/dirty/write owners сохранены; несколько независ�
 
 Scope утверждён пользователем; owner — Application/Conversations для доставки и
 общий Chat View для presentation. `app-agent-communication` подключается к lifecycle
-существующей factory: mount регистрирует endpoint, deactivate/move/split его сохраняют,
-dispose снимает только свой view lease. Поздний ACK закрытого view не удаляет новый.
-Host rebind повторно регистрирует открытые views. Нового UI registry/store нет.
+существующей factory только для presentation. С 2026-11-04 mount/deactivate/move/split/
+dispose не регистрируют и не удаляют runtime endpoints. Участники обнаруживаются по
+сохранённому ChatStore через bound scope runtime; `SetAgentChatPresence` удалён вместе
+с DTO и UI lease/ACK path. Init UI не очищает каталог. Host rebind заменяет только
+Office binding, сохраняя Workspace bindings. Нового UI registry/store нет.
 
 Один sender renderer используется Office/Workspace/plugin для истории и очереди;
 origin приходит в typed DTO из durable факта. UI не назначает отправителя/цепочку.
@@ -38,6 +40,11 @@ chat/chain/operation. Runtime, очередь и исполнение не за�
 Сохранение `MaxAgentMessages=0` инвалидирует запрос состояния и скрывает продолжение;
 runtime повторно проверяет текущую настройку перед новой отправкой. Ноль проходит
 через существующий typed `SettingsControlsDto`, без UI-only выключателя.
+
+`agents.spawn` создаёт ordinary thread без mount/selection. Закрытие Chat View
+освобождает его presentation, не отменяет Run/wait и не запрещает новые сообщения.
+Typed запросы бюджета содержат source/workspace/session, независимо от открытой
+вкладки. Отдельное представление Collaboration/Inspector ещё не реализовано.
 
 Office agent-started runs передают progress тем же `inbox:<chatId>` маршрутом, что
 обычная очередь, с exact chat/run identity. Отдельный `agents:` маршрут удалён:

@@ -27,7 +27,7 @@ namespace RNAssistant.Core.Storage
         {
             "FormatVersion", "ReferenceContractVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId", "ResourceCopies",
             "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath", "DocumentAuthorityId", "LastContextReceipt",
-            "Title", "TitleAssignedByAgent", "Model", "Mode", "MutationPolicy", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc", "ArtifactLinks"
+            "Title", "TitleAssignedByAgent", "AgentCreation", "Model", "Mode", "MutationPolicy", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc", "ArtifactLinks"
         };
 
         private JObject ToProjectionToken(ChatSession session, bool includeMessages = true)

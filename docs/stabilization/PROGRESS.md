@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Мультиагенты: saved catalog и spawn — In Review, 2026-11-04
+
+Owner: Application/Conversations; Core — provenance/policy, Web — общий Chat View.
+Первый срез [плана](../proposals/multi-agent-runtime-plan.md): участники берутся из
+ChatStore в пределах документа/workspace; `agents.spawn` создаёт обычный чат без
+вкладки/копирования истории. Presence bridge/leases удалены. Закрытие вкладки не
+останавливает Run/wait и не запрещает новые сообщения. Root journal ограничивает
+рекурсивные создания; unknown/partial intake не скрывает созданный чат и не replay.
+Peer policy запрещает расширение Plan/Deny/auto approval через другого участника.
+17 agent communication + 12 inbox + 6 unified policy + 1 core tool pack checks проходят;
+Chrome проверяет close/rebind, общую presentation и narrow/125%. Workspace spawn/run
+проверен без views. Controller проверен по исходникам, Harness использует stub.
+Windows/Office/WebView2 и live-model cooperation остаются открытыми. Durable wait,
+pause/resume/cancel, Collaboration/resolve и Inspector ещё не реализованы.
+
 ## Finish: коррекция и ограничение цикла — 2026-11-04
 
 Owners: Core AgentKernel / ModelProtocol / Persistence; Application — typed acceptance.

@@ -70,8 +70,10 @@ Owner — Core/Application; после принятия diff это истори
 циклов. [Первый срез](stabilization/RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04)
 исправляет finish feedback и ограничивает одинаковые отказы; текущий контракт —
 [v8 admission/correction](protocols/CONVERSATION_RESPONSE_V8.md#admission-persistence-and-presentation).
-Текущая доставка между действиями, wait v2/skill v3 и оставшиеся ограничения — в
+Текущие saved catalog/spawn, доставка между действиями, wait v2/skill v4 и ограничения — в
 [межагентном общении](conversation-protocol.md#межагентное-общение--2026-11-03).
+[План мультиагентного runtime](proposals/multi-agent-runtime-plan.md) отделяет первый
+реализованный срез от следующих durable wait/control/Collaboration/Inspector этапов.
 HTML model operations используют явный document workspace независимо от выбора
 редактора; текущая публикация и recovery — в
 [Artifact Library](artifact-library.md#implemented-shared-html-publication--2026-09-08).

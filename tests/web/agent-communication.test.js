@@ -32,18 +32,15 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
    return [initial,changed,disabled,readSettings().MaxAgentMessages,document.getElementById('maxAgentMessagesInput').min];
   }),[20,7,0,20,'0'],'agent budget defaults, zero, editing and reset use common settings');
   await page.evaluate(async()=>{
-   const original=send; window.agentCalls=[]; window.holdPresence=false;
+   const original=send; window.agentCalls=[];
    window.send=async(type,payload,progress)=>{
-    if(type==='setAgentChatPresence') {
-     agentCalls.push({type,payload});
-     if(payload.open&&holdPresence){holdPresence=false;await new Promise(resolve=>window.releaseAgentPresence=resolve);}
-     return {registered:!!payload.open};
-    }
+    agentCalls.push({type,payload});
+    if(type==='setAgentChatPresence') throw new Error('View presence must not control messaging');
     if(type==='getAgentCommunicationState'){
      if(window.holdAgentState){holdAgentState=false;await new Promise(resolve=>window.releaseAgentState=resolve);}
      return {enabled:true,chainId:'chain-ui',limit:20,sent:20,remaining:0,limitReached:true};
     }
-    if(type==='continueAgentCommunication'){agentCalls.push({type,payload});return {chainId:'chain-ui',limit:20,sent:20,remaining:20,limitReached:false};}
+    if(type==='continueAgentCommunication'){return {chainId:'chain-ui',limit:20,sent:20,remaining:20,limitReached:false};}
     return original(type,payload,progress);
    };
    const component=RNAssistantConversationPanel.office('preview-chat'); component.communication.rebind();
@@ -66,15 +63,22 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   await page.waitForSelector('.agent-communication-status:not([hidden])');
   await page.locator('.agent-communication-status:not([hidden]) button').first().click();
   assert.equal(await page.evaluate(()=>agentCalls.filter(c=>c.type==='continueAgentCommunication').length),1);
-  await page.evaluate(()=>{window.presenceBeforeReload=agentCalls.filter(c=>c.type==='setAgentChatPresence'&&c.payload.open&&c.payload.sessionId==='preview-chat').length;holdPresence=true;RNAssistantConversationPanel.office('preview-chat').communication.rebind();});
-  await page.waitForFunction(()=>!!window.releaseAgentPresence);
-  await page.evaluate(()=>{RNAssistantConversationPanel.office('preview-chat').communication.rebind();releaseAgentPresence();window.releaseAgentPresence=null;});
-  await page.waitForFunction(()=>agentCalls.filter(c=>c.type==='setAgentChatPresence'&&c.payload.open&&c.payload.sessionId==='preview-chat').length===presenceBeforeReload+2);
-  await page.evaluate(()=>{holdPresence=true;RNAssistantConversationPanel.open(agentTarget,{direction:'right'});});
-  await page.waitForFunction(()=>!!window.releaseAgentPresence);
-  await page.evaluate(()=>RNAssistantConversationPanel.closeDeleted(agentTarget));
-  await page.evaluate(()=>releaseAgentPresence());
-  await page.waitForFunction(()=>agentCalls.some(c=>c.type==='setAgentChatPresence'&&!c.payload.open&&c.payload.viewId===agentCalls.filter(c=>c.payload.open&&c.payload.sessionId===agentTarget.sessionId).slice(-1)[0].payload.viewId));
+  await page.evaluate(async()=>{
+   holdAgentState=true;
+   RNAssistantConversationPanel.office('preview-chat').communication.rebind();
+  });
+  await page.waitForFunction(()=>!!window.releaseAgentState);
+  await page.evaluate(()=>{RNAssistantConversationPanel.office('preview-chat').communication.rebind();releaseAgentState();window.releaseAgentState=null;});
+  await page.evaluate(()=>RNAssistantConversationPanel.open(agentTarget,{direction:'right'}));
+  await page.waitForFunction(()=>RNAssistantConversationPanel.find(agentTarget));
+  await page.evaluate(()=>RNAssistantDockWorkspace.close(RNAssistantConversationPanel.key(agentTarget)));
+  assert.equal(await page.evaluate(()=>{
+   const run=state.chatRuns['preview-summary'];
+   RNAssistantDockWorkspace.close(RNAssistantConversationPanel.key({source:'office',sessionId:'preview-summary'}));
+   return !!run && state.chatRuns['preview-summary']===run;
+  }),true,'closing a streaming Office tab retains its run state');
+  assert.equal(await page.evaluate(()=>agentCalls.filter(c=>c.type==='setAgentChatPresence').length),0,'view lifecycle does not register or unregister participants');
+  assert.equal(await page.evaluate(()=>agentCalls.filter(c=>/^(cancel|stop)/i.test(c.type)).length),0,'closing tabs sends no execution cancellation');
   await page.evaluate(()=>{const c=RNAssistantConversationPanel.office('preview-chat');const article=renderMessageArticle(agentTestMessage,0,{});article.id='agent-narrow-bubble';c.node('messages').append(article);document.documentElement.style.zoom='1.25';});
   await page.setViewportSize({width:640,height:800});
   const sizes=await page.evaluate(()=>{const n=document.querySelector('#agent-narrow-bubble');return {width:n.clientWidth,scroll:n.scrollWidth};});
@@ -87,6 +91,6 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   await page.screenshot({path:'/tmp/rnassistant-agent-communication.png'});
   assert.deepEqual(errors,[]);
-  console.log('PASS agent communication: shared bubble, settings, exact continuation, reload race, late mount cleanup, narrow zoom');
+  console.log('PASS agent communication: shared bubble, settings, exact continuation, reload race, tab-independent messaging, narrow zoom');
  } finally {if(browser)await browser.close();server.kill();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

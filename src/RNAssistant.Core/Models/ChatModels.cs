@@ -365,6 +365,8 @@ namespace RNAssistant.Core.Models
         public string DocumentPath { get; set; }
         public string Title { get; set; }
         public bool TitleAssignedByAgent { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public AgentThreadCreation AgentCreation { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
         public RNAssistant.Core.Services.MutationPolicy MutationPolicy { get; set; }

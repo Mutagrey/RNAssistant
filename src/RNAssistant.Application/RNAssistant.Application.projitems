@@ -1,5 +1,7 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentConversationScope.cs" Link="Application\Conversations\AgentConversationScope.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Spawn.cs" Link="Application\Conversations\AgentCommunicationService.Spawn.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.AgentCommunication.cs" Link="Application\Workspace\WorkspaceConversationService.AgentCommunication.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Input.cs" Link="Application\Workspace\WorkspaceConversationService.Input.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.cs" Link="Application\Conversations\AgentCommunicationService.cs" />

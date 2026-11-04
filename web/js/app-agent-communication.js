@@ -18,41 +18,25 @@
     node.appendChild(link);
   }
   function mount(component) {
-    var target = component.target, viewId = "agents-" + crypto.randomUUID(), closed = false, registered = false;
-    var registering = null, checking = null, signature = null, generation = 0, presenceVersion = 0, budget = null, retryOperation = null, lastRunning = false;
+    var target = component.target, closed = false;
+    var checking = null, signature = null, generation = 0, budget = null, retryOperation = null, lastRunning = false;
     var box = document.createElement("div"); box.className = "agent-communication-status"; box.hidden = true;
     var label = document.createElement("span"), button = document.createElement("button");
     button.type = "button"; button.textContent = "Продолжить общение";
     box.setAttribute("role", "status"); box.append(label, button);
     component.node("chatForm").before(box);
     function available() { return !closed && !!target.sessionId && !state.initializePromise && !state.bridgeUnavailable && !component.loading && !component.loadError; }
-    function register() {
-      if (registered || registering || !available()) return;
-      var version = presenceVersion;
-      registering = send("setAgentChatPresence", Object.assign({}, target, { viewId: viewId, open: true })).then(function (result) {
-        if (closed && result && result.registered) return send("setAgentChatPresence", { viewId: viewId, open: false });
-        if (version !== presenceVersion) return;
-        registered = !!(result && result.registered);
-      }).catch(function (error) {
-        if (!closed && version === presenceVersion) { box.hidden = false; label.textContent = "Общение недоступно: " + (error.detail || error.message); button.hidden = true; }
-      }).finally(function () {
-        registering = null;
-        if (!closed && version !== presenceVersion) register();
-        else if (!closed && registered) refresh(lastRunning);
-      });
-    }
     function refresh(running) {
       lastRunning = !!running;
       if (closed) return;
       if (!enabled()) { signature = null; ++generation; budget = null; box.hidden = true; return; }
-      if (!registered) { register(); return; }
       if (!available()) return;
       if (running) { signature = null; ++generation; box.hidden = true; return; }
       var data = component.snapshot(), revision = field(data, "SessionRevision") || field(field(data, "State"), "Revision");
       var next = String(revision || "idle");
       if (checking || signature === next) return;
       signature = next; var version = ++generation;
-      checking = send("getAgentCommunicationState", { sessionId: target.sessionId }).then(function (result) {
+      checking = send("getAgentCommunicationState", Object.assign({}, target)).then(function (result) {
         if (closed || version !== generation) return;
         if (!budget || budget.chainId !== result.chainId) retryOperation = null;
         budget = result; box.hidden = result.enabled === false || !result.limitReached; button.hidden = false;
@@ -67,18 +51,16 @@
       if (!enabled() || !budget || button.disabled) return;
       button.disabled = true; retryOperation = retryOperation || "agent-continue-" + crypto.randomUUID();
       try {
-        await send("continueAgentCommunication", { sessionId: target.sessionId, chainId: budget.chainId, operationId: retryOperation });
+        await send("continueAgentCommunication", Object.assign({}, target, { chainId: budget.chainId, operationId: retryOperation }));
         if (closed) return;
         retryOperation = null; signature = null; box.hidden = true; await component.refresh();
       } catch (error) { if (!closed) label.textContent = error.detail || error.message; }
       finally { button.disabled = false; }
     });
-    register();
+    refresh(false);
     return { refresh: refresh, settingsChanged: function () { signature = null; ++generation; refresh(lastRunning); },
-      rebind: function () { registered = false; signature = null; ++generation; ++presenceVersion; register(); }, dispose: function () {
+      rebind: function () { signature = null; ++generation; refresh(lastRunning); }, dispose: function () {
       if (closed) return; closed = true; ++generation; box.remove();
-      // Serialize unregister after a pending mount acknowledgement.
-      if (!registering && registered) send("setAgentChatPresence", { viewId: viewId, open: false }).catch(function () {});
     } };
   }
   window.RNAssistantAgentCommunication = Object.freeze({ sender: sender, appendSender: appendSender, mount: mount,
