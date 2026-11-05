@@ -1,5 +1,13 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Предел параллельности и очередь — In Review, 2026-11-05
+
+Переиспользуются number input, label/grid и activity row, без новых размеров и CSS.
+Поле проверено внутри actual Dock content при 1440/100% и 420/125%; длинная подпись
+переносится. [Широкий](review/admission-settings-wide.png) /
+[узкий](review/admission-settings-narrow.png) вид. Frozen Demo не содержит этой настройки
+и остаётся неизменным. Queue caption не создаёт новый стиль сообщения или автора.
+
 ## Поле максимума агентов — In Review, 2026-11-05
 
 Переиспользуется существующий number input раздела «Агент», общие field/grid/tokens.

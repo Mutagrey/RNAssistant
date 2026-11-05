@@ -12,26 +12,26 @@ namespace RNAssistant.Core.Agent
     {
         public static Task<AgentRunResult> RunAsync(AgentRunRequest request,
             IModelProtocol model, IToolRuntime tools, IRunStore store,
-            CancellationToken cancellationToken, IRunInputChannel input = null, Func<bool> suspendOnCancellation = null)
+            CancellationToken cancellationToken, IRunInputChannel input = null, Func<bool> suspendOnCancellation = null, IRunExecutionAdmission admission = null)
         {
-            var kernel = new AgentKernel(model, tools, store, input: input, suspendOnCancellation: suspendOnCancellation);
+            var kernel = new AgentKernel(model, tools, store, input: input, suspendOnCancellation: suspendOnCancellation, admission: admission);
             return DrainWaitsAsync(kernel, kernel.RunAsync(request, cancellationToken), cancellationToken, suspendOnCancellation);
         }
 
         public static Task<AgentRunResult> ResumeAsync(string runId, string pendingId,
             AgentRunContinuation continuation, IModelProtocol model, IToolRuntime tools,
             IRunStore store, CancellationToken cancellationToken,
-            bool supersedePending = false, IRunInputChannel input = null, bool rejectPending = false, Func<bool> suspendOnCancellation = null)
+            bool supersedePending = false, IRunInputChannel input = null, bool rejectPending = false, Func<bool> suspendOnCancellation = null, IRunExecutionAdmission admission = null)
         {
-            var kernel = new AgentKernel(model, tools, store, input: input, suspendOnCancellation: suspendOnCancellation);
+            var kernel = new AgentKernel(model, tools, store, input: input, suspendOnCancellation: suspendOnCancellation, admission: admission);
             return DrainWaitsAsync(kernel, kernel.ResumeAsync(
                 runId, pendingId, continuation, cancellationToken, supersedePending, rejectPending), cancellationToken, suspendOnCancellation);
         }
 
         public static Task<AgentRunResult> ContinueAsync(AgentRunContinuation continuation,
-            IModelProtocol model, IToolRuntime tools, IRunStore store, CancellationToken cancellationToken, IRunInputChannel input = null, Func<bool> suspendOnCancellation = null)
+            IModelProtocol model, IToolRuntime tools, IRunStore store, CancellationToken cancellationToken, IRunInputChannel input = null, Func<bool> suspendOnCancellation = null, IRunExecutionAdmission admission = null)
         {
-            var kernel = new AgentKernel(model, tools, store, input: input, suspendOnCancellation: suspendOnCancellation);
+            var kernel = new AgentKernel(model, tools, store, input: input, suspendOnCancellation: suspendOnCancellation, admission: admission);
             return DrainWaitsAsync(kernel, continuation.Summary.Lifecycle == RunLifecycle.Waiting
                 ? kernel.ResumeWaitAsync(continuation, cancellationToken) : kernel.ContinueAsync(continuation, cancellationToken), cancellationToken, suspendOnCancellation);
         }

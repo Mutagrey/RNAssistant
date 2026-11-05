@@ -172,7 +172,7 @@ namespace RNAssistant.Runtime
             { System.Diagnostics.Trace.TraceError("Workspace queue paused: {0}", error.Message); }
         }
 
-        private sealed class WorkspaceInputChannel : IRunInputChannel, IRunPauseChannel, IDisposable
+        private sealed class WorkspaceInputChannel : IRunInputChannel, IRunPauseChannel, IRunPauseSignal, IDisposable
         {
             private readonly WorkspaceConversationService _owner;
             private readonly ChatSession _session;
@@ -223,6 +223,7 @@ namespace RNAssistant.Runtime
             }
 
             public string PauseId { get { return _channel.PauseId; } }
+            public Task WaitForPauseRequestAsync(CancellationToken token) { return _channel.WaitForPauseRequestAsync(token); }
             public void AcknowledgePause(string pauseId) { _channel.AcknowledgePause(pauseId); }
             public Task WaitForResumeAsync(string pauseId, CancellationToken token) { return _channel.WaitForResumeAsync(pauseId, token); }
 

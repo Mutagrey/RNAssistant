@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Contracts
         public bool SmartChatTitles { get; set; }
         public int MaxAgentIterations { get; set; }
         public int MaxCollaborationAgents { get; set; } = AppSettings.DefaultMaxCollaborationAgents;
+        public int MaxConcurrentAgentSteps { get; set; } = AppSettings.DefaultMaxConcurrentAgentSteps;
         public int MaxAgentFormatRetries { get; set; }
         public int MaxConsecutiveReflections { get; set; } = AppSettings.DefaultMaxConsecutiveReflections;
         public int MaxAgentToolSteps { get; set; }
@@ -78,6 +79,7 @@ namespace RNAssistant.Office.Contracts
                 SmartChatTitles = settings.SmartChatTitles,
                 MaxAgentIterations = settings.MaxAgentIterations,
                 MaxCollaborationAgents = settings.MaxCollaborationAgents,
+                MaxConcurrentAgentSteps = settings.MaxConcurrentAgentSteps,
                 MaxAgentFormatRetries = settings.MaxAgentFormatRetries,
                 MaxConsecutiveReflections = settings.MaxConsecutiveReflections,
                 MaxAgentToolSteps = settings.MaxAgentToolSteps,
@@ -130,6 +132,8 @@ namespace RNAssistant.Office.Contracts
             result.MaxAgentIterations = MaxAgentIterations;
             if (MaxCollaborationAgents < 0 || MaxCollaborationAgents > 64) throw new System.ArgumentOutOfRangeException(nameof(MaxCollaborationAgents));
             result.MaxCollaborationAgents = MaxCollaborationAgents;
+            if (MaxConcurrentAgentSteps < 0 || MaxConcurrentAgentSteps > 64) throw new System.ArgumentOutOfRangeException(nameof(MaxConcurrentAgentSteps));
+            result.MaxConcurrentAgentSteps = MaxConcurrentAgentSteps;
             result.MaxAgentFormatRetries = MaxAgentFormatRetries;
             if (MaxConsecutiveReflections < 0 || MaxConsecutiveReflections > AppSettings.MaximumConsecutiveReflections)
                 throw new System.ArgumentOutOfRangeException(nameof(MaxConsecutiveReflections));

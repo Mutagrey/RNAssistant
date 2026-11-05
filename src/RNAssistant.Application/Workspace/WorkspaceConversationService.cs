@@ -42,6 +42,7 @@ namespace RNAssistant.Runtime
         }
 
         private readonly AppDataPaths _paths;
+        private readonly IRunExecutionAdmission _executionAdmission;
         private readonly ConversationLeaseService _conversationLeases;
         private readonly ConversationRunOwner _activeRuns;
         private readonly ConversationInboxService _conversationInbox;
@@ -99,6 +100,7 @@ namespace RNAssistant.Runtime
             CallableToolProfile toolProfile = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            _executionAdmission = ConversationExecutionScheduler.ForStorage(paths);
             var communicationSettings = new SettingsService(paths);
             AgentCommunication = new AgentCommunicationService(() => communicationSettings.Load().MaxCollaborationAgents);
             _conversationLeases = ConversationLeaseService.ForWorkspace(paths);
@@ -531,7 +533,7 @@ namespace RNAssistant.Runtime
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, currentRunOnly: true)),
-                        pendingPorts, pendingPorts.Tools, pendingPorts, cancellationToken, rejectPending: true).ConfigureAwait(false);
+                        pendingPorts, pendingPorts.Tools, pendingPorts, cancellationToken, rejectPending: true, admission: _executionAdmission).ConfigureAwait(false);
                 }
                 if (ConversationInboxService.HasPendingWait(session))
                     throw new InvalidOperationException("Resume the saved wait before starting another run.");
@@ -653,7 +655,7 @@ namespace RNAssistant.Runtime
                     var result = await ConversationRunCoordinator.RunAsync(
                         new AgentRunRequest(runId, runId, ConversationInputMessage.ModelText(userMessage),
                             new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections), previous),
-                        ports, ports.Tools, ports, control.Token, input: inputChannel, suspendOnCancellation: () => _titleLifetime.IsCancellationRequested).ConfigureAwait(false);
+                        ports, ports.Tools, ports, control.Token, input: inputChannel, suspendOnCancellation: () => _titleLifetime.IsCancellationRequested, admission: _executionAdmission).ConfigureAwait(false);
                     if (acceptedContract.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptedContract);
@@ -737,7 +739,7 @@ namespace RNAssistant.Runtime
                     cancellationToken.ThrowIfCancellationRequested();
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingId, continuation, ports, ports.Tools, ports, control.Token,
-                        rejectPending: !approve, input: inputChannel, suspendOnCancellation: () => _titleLifetime.IsCancellationRequested).ConfigureAwait(false);
+                        rejectPending: !approve, input: inputChannel, suspendOnCancellation: () => _titleLifetime.IsCancellationRequested, admission: _executionAdmission).ConfigureAwait(false);
                     if (acceptance.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);
@@ -1993,6 +1995,8 @@ namespace RNAssistant.Runtime
                 _session.LastRun.Status = fact.Summary.Lifecycle == RunLifecycle.Waiting ? "running" : fact.Summary.Lifecycle.ToString().ToLowerInvariant();
                 if (fact.Summary.Lifecycle == RunLifecycle.Waiting) _session.LastRun.Phase = fact.Summary.PauseId == null ? "waiting_agents" : "paused";
                 else if (_session.LastRun.Phase == "waiting_agents" || _session.LastRun.Phase == "paused") _session.LastRun.Phase = null;
+                if (fact.Kind == AgentRunEventKind.ExecutionQueued) _session.LastRun.Phase = "queued_execution";
+                else if (_session.LastRun.Phase == "queued_execution") _session.LastRun.Phase = null;
                 _session.LastRun.IterationsUsed = fact.Summary.IterationsUsed;
                 _session.LastRun.ToolStepsUsed = fact.Summary.ToolStepsUsed;
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted)

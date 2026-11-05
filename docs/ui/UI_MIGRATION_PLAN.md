@@ -1,5 +1,22 @@
 # План модернизации production UI
 
+## Очередь выполнения — In Review, 2026-11-05
+
+Scope: существующий Settings + общий Chat View; owners Application admission/Core
+kernel, Web presentation. Настройка parallel steps 4/0 unlimited не ограничивает общий
+бюджет. Очередь использует existing activity; streaming cache учитывает queued state.
+Новых CSS, runtime/store UI, controls или Shell нет. Rollback — diff этого среза;
+старые settings без поля получают default 4, данные/история не переписываются.
+
+Проверки: agent-communication (Settings edit/reset/0, Office queued/admitted, close),
+workspace-chat-progress (queued до первого model/между шагами, terminal clear,
+project/plugin progress и сохранение DOM), runtime tests в Harness. Narrow/125%
+поле остаётся внутри Dock; [wide](review/admission-settings-wide.png) /
+[narrow](review/admission-settings-narrow.png). Визуальное принятие и Windows/WebView2
+отдельно. Для ревью: 1) открыть Настройки → Агент, сохранить 1; 2) запустить два чата,
+увидеть очередь и остановить ожидающий; 3) сохранить 0, проверить продолжение после
+следующего admission/release. Closing tab по-прежнему не отменяет Run. S2 не запускается.
+
 ## Максимум участников — In Review, 2026-11-05
 
 Согласованный scope: настройка числа участников одной совместной работы, включая

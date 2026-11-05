@@ -37,6 +37,9 @@ namespace RNAssistant.Harness
                 var clock = Stopwatch.StartNew(); var active = 0; var peak = 0; long wireCharacters = 0;
                 var settings = new AppSettings { SmartChatTitles = false, AutoCompressContext = false, StreamResponses = false,
                     MaxCollaborationAgents = count + 1, MaxAgentIterations = 4 };
+                int limit;
+                if (int.TryParse(Environment.GetEnvironmentVariable("RNA_AGENT_BENCH_SLOTS"), out limit)) settings.MaxConcurrentAgentSteps = limit;
+                new SettingsService(FixturePaths.Value).Save(settings);
                 for (var index = 0; index < count; index++)
                 {
                     var i = index; var port = ports[i] = new ConversationQueueFake(inbox, store);
@@ -98,7 +101,8 @@ namespace RNAssistant.Harness
                         AssertEqual(2, calls[i], "one wait and one result step");
                         AssertEqual(2, saved.Messages.Count(m => m.AgentCommunication?.Sender?.ChatId == source.Id), "both messages persist exactly once");
                     }
-                    Console.WriteLine("MEASURE " + JsonConvert.SerializeObject(new { workers = count, participants = count + 1,
+                    AssertTrue(settings.MaxConcurrentAgentSteps == 0 || peak <= settings.MaxConcurrentAgentSteps, "model concurrency respects the shared step cap");
+                    Console.WriteLine("MEASURE " + JsonConvert.SerializeObject(new { workers = count, participants = count + 1, stepLimit = settings.MaxConcurrentAgentSteps,
                         peakModelRequests = peak, modelRequests = calls.Sum(), requestCharacters = wireCharacters,
                         intakeDurableMs = AgentLatency(durable), idleContextMs = AgentLatency(first),
                         busyContextMs = AgentLatency(busy), wakeNextStepMs = AgentLatency(next) }));

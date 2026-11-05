@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-05",
+  "source": "Program.AgentConcurrencyTests.cs in the commit containing this evidence",
+  "qualification": "local host-neutral smoke; fake Office adapter, no Controller/COM/WebView2/live provider",
+  "scenario": "1/2/4/8 recipients plus one idle root; first input -> saved wait -> second input -> same Run completion",
+  "modelDelayMs": 60,
+  "percentiles": [
+    50,
+    95,
+    99
+  ],
+  "samplesPerMetric": "one per recipient in each scenario",
+  "units": {
+    "latency": "milliseconds",
+    "requestCharacters": "characters in all flattened model requests; not tokens"
+  },
+  "boundaries": {
+    "intakeDurableMs": "send entry to durable receipt; destination scheduling is invoked before return",
+    "idleContextMs": "first send entry to first scripted model adapter entry",
+    "busyContextMs": "wake send entry to second scripted model adapter entry",
+    "wakeNextStepMs": "saved checkpoint clearing pending wait to second scripted model adapter entry"
+  },
+  "assertions": [
+    "exactly two model requests per recipient",
+    "same Run before and after wait",
+    "exactly two durable peer inputs",
+    "completed Run for each recipient",
+    "status listing adds zero model calls"
+  ],
+  "limits": "9 participants, 8 recipients; active-step admission 1 and default 4; aggregate budget unlimited",
+  "notes": [
+    "Small scripted host-neutral smoke, not SLA, real tokens or Office qualification.",
+    "Preparation before kernel and helper LLM calls are outside admission; scheduling is process-local.",
+    "Exactly 16 model calls and 1017176 request characters in both cases; no status model overhead.",
+    "Baseline comparison is diagnostic only: separate runs have different local contention."
+  ],
+  "runs": [
+    {
+      "workers": 8,
+      "participants": 9,
+      "stepLimit": 1,
+      "peakModelRequests": 1,
+      "modelRequests": 16,
+      "requestCharacters": 1017176,
+      "intakeDurableMs": [
+        24.03,
+        61.17,
+        61.17
+      ],
+      "idleContextMs": [
+        1236.8,
+        1807.61,
+        1807.61
+      ],
+      "busyContextMs": [
+        853.11,
+        1471.38,
+        1471.38
+      ],
+      "wakeNextStepMs": [
+        657.88,
+        1122.61,
+        1122.61
+      ]
+    },
+    {
+      "workers": 8,
+      "participants": 9,
+      "stepLimit": 4,
+      "peakModelRequests": 3,
+      "modelRequests": 16,
+      "requestCharacters": 1017176,
+      "intakeDurableMs": [
+        24.95,
+        381.88,
+        381.88
+      ],
+      "idleContextMs": [
+        570.17,
+        916.1,
+        916.1
+      ],
+      "busyContextMs": [
+        512.91,
+        843.53,
+        843.53
+      ],
+      "wakeNextStepMs": [
+        102.54,
+        300.6,
+        300.6
+      ]
+    }
+  ]
+}

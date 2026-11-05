@@ -11,6 +11,8 @@ namespace RNAssistant.Office.Services
     internal sealed partial class ConversationKernelAdapter
     {
         public string PauseId { get { return _runInput?.PauseId; } }
+        public Task WaitForPauseRequestAsync(CancellationToken token)
+        { return _runInput == null ? Task.Delay(System.Threading.Timeout.Infinite, token) : _runInput.WaitForPauseRequestAsync(token); }
         public void AcknowledgePause(string pauseId) { _runInput?.AcknowledgePause(pauseId); }
         public Task WaitForResumeAsync(string pauseId, CancellationToken token)
         {

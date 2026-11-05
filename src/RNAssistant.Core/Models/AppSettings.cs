@@ -305,6 +305,7 @@ namespace RNAssistant.Core.Models
         public const int MaximumAgentFormatRetries = 20;
         public const int DefaultMaxAgentToolSteps = 4096;
         public const int DefaultMaxCollaborationAgents = 8;
+        public const int DefaultMaxConcurrentAgentSteps = 4;
         public const int DefaultAttachmentHelperMaxTokens = 0;
         public const int DefaultAttachmentEvidenceMaxTokens = 0;
         public const double DefaultTokenEstimateMultiplier = 1.0;
@@ -362,6 +363,7 @@ namespace RNAssistant.Core.Models
         public int MaxAgentFormatRetries { get; set; }
         public int MaxConsecutiveReflections { get; set; }
         public int MaxAgentToolSteps { get; set; }
+        public int MaxConcurrentAgentSteps { get; set; } = DefaultMaxConcurrentAgentSteps;
         private int _maxCollaborationAgents = DefaultMaxCollaborationAgents;
         private bool _hasCollaborationLimit;
         private int? _legacyMessageLimit;

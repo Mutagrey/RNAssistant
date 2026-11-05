@@ -11,8 +11,12 @@ Owner: Application/Conversations. Считаются root + unique targets пр�
 
 По запросу пользователя удалена message quota. Iteration/tool budgets принадлежат
 отдельному Run; ping-pong с новыми Run может продолжаться без общего лимита стоимости.
-Process slots/fairness и общий execution budget — следующий срез плана, не закрытый
-риск. Наблюдение списка/состояния не вызывает модель. Windows/Office/controller и
+FIFO active-step slots реализованы; общий execution budget по решению пользователя
+не вводится. Предел действует внутри процесса/app-data root, не между Office hosts,
+не на helper calls/подготовку до kernel и не на память ожидающих Run. Длинный шаг
+удерживает slot до безопасной границы; bounded latency не обещается. Restart очереди
+Running не поддержан: interruption без автоматического replay. Эти границы остаются
+явными. Наблюдение списка/состояния не вызывает модель. Windows/Office/controller и
 реальные provider latency/token costs остаются отдельной проверкой.
 
 Расширенная локальная проверка выявила пять прежних failures; все воспроизведены

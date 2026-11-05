@@ -63,6 +63,7 @@ var agentSettingsDefaults = {
   maxAgentFormatRetries: 3,
   maxConsecutiveReflections: 2,
   maxCollaborationAgents: 8,
+  maxConcurrentAgentSteps: 4,
   maxAgentToolSteps: 4096
 };
 
@@ -384,6 +385,7 @@ function renderSettings(options) {
   $("maxConsecutiveReflectionsInput").value = compatibilityValue(s, "MaxConsecutiveReflections", "maxConsecutiveReflections", agentSettingsDefaults.maxConsecutiveReflections);
   $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || agentSettingsDefaults.maxAgentFormatRetries;
   $("maxCollaborationAgentsInput").value = compatibilityValue(s, "MaxCollaborationAgents", "maxCollaborationAgents", agentSettingsDefaults.maxCollaborationAgents);
+  $("maxConcurrentAgentStepsInput").value = compatibilityValue(s, "MaxConcurrentAgentSteps", "maxConcurrentAgentSteps", agentSettingsDefaults.maxConcurrentAgentSteps);
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || agentSettingsDefaults.maxAgentToolSteps;
   if (typeof renderPromptSettings === "function") {
     renderPromptSettings(state.prompts);
@@ -447,6 +449,7 @@ function readSettings() {
     MaxConsecutiveReflections: Math.max(0, Math.min(20, Math.trunc(Number($("maxConsecutiveReflectionsInput").value)))),
     MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
     MaxCollaborationAgents: Number($("maxCollaborationAgentsInput").value || agentSettingsDefaults.maxCollaborationAgents),
+    MaxConcurrentAgentSteps: Number($("maxConcurrentAgentStepsInput").value || agentSettingsDefaults.maxConcurrentAgentSteps),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || agentSettingsDefaults.maxAgentToolSteps),
     AgentResponseMode: $("agentResponseModeInput").value,
     SystemPromptRole: $("systemPromptRoleInput").value,
@@ -558,6 +561,7 @@ function resetAgentSettingsToDefaults() {
   $("maxAgentFormatRetriesInput").value = agentSettingsDefaults.maxAgentFormatRetries;
   $("maxConsecutiveReflectionsInput").value = agentSettingsDefaults.maxConsecutiveReflections;
   $("maxCollaborationAgentsInput").value = agentSettingsDefaults.maxCollaborationAgents;
+  $("maxConcurrentAgentStepsInput").value = agentSettingsDefaults.maxConcurrentAgentSteps;
   $("maxAgentToolStepsInput").value = agentSettingsDefaults.maxAgentToolSteps;
   updateAgentProtocolControls();
   markSettingsDirty();

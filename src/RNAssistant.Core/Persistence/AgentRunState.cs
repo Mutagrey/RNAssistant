@@ -16,10 +16,12 @@ namespace RNAssistant.Core.Persistence
         public int ConsecutiveReflections { get; private set; }
         public bool ReflectionFeedbackIssued { get; private set; }
         public FinishCorrection FinishCorrection { get; private set; }
+        public bool ExecutionQueued { get; private set; }
 
         [JsonConstructor]
         public AgentRunState(RunSummary summary, AgentRunLimits limits, ToolExecutionContext inFlightTool = null,
-            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false, FinishCorrection finishCorrection = null)
+            int consecutiveReflections = 0, bool reflectionFeedbackIssued = false, FinishCorrection finishCorrection = null,
+            bool executionQueued = false)
         {
             Summary = summary ?? throw new ArgumentNullException(nameof(summary));
             Limits = limits ?? throw new ArgumentNullException(nameof(limits));
@@ -32,6 +34,7 @@ namespace RNAssistant.Core.Persistence
             ConsecutiveReflections = consecutiveReflections;
             ReflectionFeedbackIssued = reflectionFeedbackIssued;
             FinishCorrection = finishCorrection;
+            ExecutionQueued = executionQueued;
         }
 
         public static AgentRunState Apply(AgentRunState previous, AgentRunEvent fact)
@@ -41,7 +44,8 @@ namespace RNAssistant.Core.Persistence
                 : fact.Kind == AgentRunEventKind.ToolCompleted || fact.Kind == AgentRunEventKind.ToolWaiting || fact.Kind == AgentRunEventKind.SummaryChanged
                     ? null : previous == null ? null : previous.InFlightTool;
             return new AgentRunState(fact.Summary, limits, active,
-                fact.ConsecutiveReflections, fact.ReflectionFeedbackIssued, fact.FinishCorrection);
+                fact.ConsecutiveReflections, fact.ReflectionFeedbackIssued, fact.FinishCorrection,
+                fact.Kind == AgentRunEventKind.ExecutionQueued);
         }
 
         public AgentRunState Interrupt(bool cancelled, string message, string interruptedRunId = null)

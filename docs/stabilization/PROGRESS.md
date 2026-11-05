@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Мультиагенты: FIFO активных шагов — In Review, 2026-11-05
+
+`MaxConcurrentAgentSteps` 4 по умолчанию, 0 без ограничения. Общая очередь одного
+процесса/app-data root для Office/Workspace; kernel выдаёт permit на model+tools/read-back,
+освобождает на wait/pause/approval и между шагами. Очередь поддерживает Stop/pause,
+не расходует per-Run steps, сохраняет одного owner thread. По решению пользователя
+общего бюджета token/message/Run нет. Settings и лента используют прежние компоненты.
+
+4 admission checks, targeted pause/cancel/control/confirmation/wait regressions и
+25 communication checks проходят. 8 peers завершают прежние Run с 1 и 4 slots;
+ровно 16 model calls, ноль дополнительных calls для статуса. [Замеры](multi-agent-admission-20261105.json).
+Browser Settings/queued progress проверяются host-neutral; [UI ревью](../ui/UI_MIGRATION_PLAN.md#очередь-выполнения--in-review-2026-11-05).
+Не заявлены cross-process fairness, ограничение helper calls, restart очереди Running
+или Windows/Office/WebView2 qualification. Далее этап 4a — именованные группы чатов.
+
 ## Мультиагенты: максимум участников — In Review, 2026-11-05
 
 Настройка `MaxCollaborationAgents` 0–64 (default 8) считает исходный чат + созданных
@@ -14,8 +29,8 @@ contention test и baseline 1/2/4/8 тоже проходят. Пять browser 
 настройки/геометрию, ленту и controls. Пять failures расширенной проверки повторены
 на срезе до этой настройки и записаны в Risk Register; полного зелёного Harness нет.
 Windows/Office/controller/WebView2 и визуальное принятие остаются открытыми.
-Следующий срез — admission/active-step slots и общий execution budget; затем группы
-и Inspector. Per-Run steps не ограничивают бесконечный обмен через новые Run.
+Admission/active-step slots реализованы срезом выше; далее группы и Inspector.
+Per-Run steps не ограничивают обмен через новые Run; общий бюджет по решению пользователя не вводится.
 
 ## Параллельная подготовка каталогов — 2026-11-05
 
@@ -41,8 +56,8 @@ lease/CAS/read-back. Отмена не запускает модель/tools; st
 3 новых user-control + 14 pause/cancel/recovery checks и 3 web fixtures проходят;
 Windows/Office/controller/WebView2 и пользовательское визуальное принятие открыты.
 [Ревью](../ui/UI_MIGRATION_PLAN.md#пауза-и-отмена-сохранённого-run--in-review-2026-11-04).
-Далее по плану: baseline 1/2/4/8 участников и admission/slots/budgets; группы и Inspector
-остаются отдельными этапами.
+Baseline и active-step admission реализованы срезами выше; группы и Inspector
+остаются отдельными этапами. Общий бюджет не ограничен.
 
 ## Мультиагенты: agents.pause/resume — In Review, 2026-11-04
 
@@ -62,7 +77,7 @@ Office service crash/reload и Workspace live/restart/Stop без views. 7 pause
 регрессии (cancel/communication/Inbox/recovery/policy/core pack/kernel wait) прошли;
 минимальная сборка и version gate прошли. UI не менялся.
 Windows/Office/controller/WebView2 и live-model qualification открыты. Далее —
-пользовательский cold control/представление паузы (следующий срез выше), затем admission/slots/budgets.
+пользовательский cold control и active-step admission уже реализованы срезами выше; далее группы.
 
 ## Мультиагенты: agents.cancel — In Review, 2026-11-04
 

@@ -60,6 +60,24 @@ const { chromium } = require('playwright');
       const attachedLive = activeList.querySelectorAll('article.agent-run').length === 1 &&
         !!activeList.querySelector('article.agent-run.live .agent-stream-step') &&
         activeList.textContent.includes('Формирую ответ.');
+      activeChat.state.executionQueued = true;
+      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      const queued = activeList.querySelectorAll('article.agent-run').length === 1 &&
+        activeList.textContent.includes('Ожидаю свободный слот выполнения…') &&
+        !activeList.querySelector('.agent-stream-step');
+      activeChat.state.executionQueued = false;
+      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      const admitted = !activeList.textContent.includes('Ожидаю свободный слот выполнения…') &&
+        !!activeList.querySelector('.agent-stream-step');
+      const queuedList = document.createElement('section');
+      const queuedChat = { project: { workspaceId: 'workspace' }, sessionId: 'queued-empty', messages: [],
+        state: { status: 'running', runId: 'new-queued', executionQueued: true } };
+      RNAssistantWorkspaceChat.renderMessages(queuedList, queuedChat);
+      const queuedBeforeModel = queuedList.querySelectorAll('article.agent-run').length === 1 &&
+        queuedList.textContent.includes('Ожидаю свободный слот выполнения…');
+      queuedChat.state.status = 'cancelled';
+      RNAssistantWorkspaceChat.renderMessages(queuedList, queuedChat);
+      const cancelledQueue = !queuedList.textContent.includes('Ожидаю свободный слот выполнения…');
       const stableList = document.createElement('section'); document.body.appendChild(stableList);
       const activity = (id, step) => ({ RunId: 'stable', Kind: 'tool', ToolId: 'core.read',
         ToolCallId: id, StepId: step, StepMessage: 'Читаю ' + step,
@@ -212,7 +230,7 @@ const { chromium } = require('playwright');
         state: { status: 'completed', runId: 'run', revision: 7 } }).messages[0].Id === 'accepted';
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
-      return { retained, replaced, updated, reset, finished, scoped, attachedLive, attachedFinal,
+      return { retained, replaced, updated, reset, finished, scoped, attachedLive, queued, admitted, queuedBeforeModel, cancelledQueue, attachedFinal,
         stableHistory, stableGrowingGroup,
         oneReflection, cleanClaims, uncleanClaims, reflectionMarkdown, retainedReflection, officeReflectionMarked,
         ordered, lostOwner, terminalStays, acceptedStays, acceptedNotReplaced, zero };
@@ -221,8 +239,10 @@ const { chromium } = require('playwright');
     for (const owner of ['project', 'plugin']) {
       if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
       else {
-        await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-        await page.getByRole('button', { name: 'Чат исходников', exact: true }).click();
+        await page.evaluate(async () => {
+          const chat = await send('getPluginChat', { pluginId: 'data-templates' });
+          await RNAssistantConversationPanel.open({ source: 'workspace', workspaceId: chat.project.workspaceId, sessionId: chat.sessionId });
+        });
       }
       await page.waitForFunction(expected => RNAssistantWorkspaceChat.owner() === expected &&
         RNAssistantWorkspaceChat.selectedSession(expected === 'project' ? 'preview-data-workspace' : 'preview-plugin-workspace') && !RNAssistantConversationPanel.selected().loading, owner);

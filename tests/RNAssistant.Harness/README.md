@@ -1,5 +1,20 @@
 # RNAssistant Harness
 
+## Active-step admission — 2026-11-05
+
+`agent admission:` covers FIFO, lowering/increasing/zero, cancellation/grant races,
+queued pause/Stop, failed queue/admitted journal, shared Office/Workspace settings,
+confirmation/read-back occupancy, serialized diagnostic state and no nested permits.
+Regressions: `agent pause:`, `agent cancel:`, `agent user control:`,
+`kernel: confirmation`, `kernel: durable wait continuation`,
+`kernel: timed wait progress`, cancelled/denied/stale confirmation and `agent communication:`.
+`RNA_AGENT_BENCH_WORKERS=8 RNA_AGENT_BENCH_SLOTS=1` with `agent concurrency:`
+forces eight recipients through one slot, retaining same-Run wait/resume. Without
+SLOTS, default 4 is used; zero is unlimited. Peak model requests must not exceed
+the chosen cap. This controls concurrency, not an aggregate budget.
+Web: agent-communication covers Settings/Office queued progress; workspace-chat-progress
+covers queued pre-model/saved Run, cancellation, admission and project/plugin streaming.
+
 ## Agent participant limit and concurrency — 2026-11-05
 
 `agent communication:` covers default 8/0/off/1/root-only, typed settings persistence,

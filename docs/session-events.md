@@ -1,5 +1,19 @@
 # Session event stream
 
+## Active-step admission — 2026-11-05
+
+Kernel events `ExecutionQueued` / `ExecutionAdmitted` reuse existing `run.updated`
+and AgentRunState projection. Optional boolean `ExecutionQueued` defaults to false;
+queued sets it, the next kernel fact clears it. Queue time does not charge iterations
+or tool steps. This is diagnosis, not a durable semaphore or dispatch authority.
+No new stream, side store, protocol version, history rewrite or dual-write.
+
+Live Office phase is queued_execution; Workspace sends typed executionQueued only
+for a live owner. Agent discovery reports queued under the same ownership condition.
+Interruption clears the flag. Restart never reconstructs a permit or starts a queued
+Running automatically; existing interrupted-Run rules apply. Saved Waiting/Paused
+continue through existing explicit recovery, retaining IDs/counters/evidence.
+
 ## Agent communication journal — 2026-11-03
 
 Exact user control (3a, 2026-11-04) adds typed bridge/projection fields only: `runPaused`

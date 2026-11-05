@@ -42,6 +42,12 @@ namespace RNAssistant.Office.Services
             ChatMessage activity = null;
             switch (fact.Kind)
             {
+                case AgentRunEventKind.ExecutionQueued:
+                    run.Phase = "queued_execution";
+                    break;
+                case AgentRunEventKind.ExecutionAdmitted:
+                    run.Phase = "running";
+                    break;
                 case AgentRunEventKind.ModelStepStarted:
                     run.Phase = "thinking";
                     break;
@@ -303,7 +309,11 @@ namespace RNAssistant.Office.Services
         private void Report(AgentRunEvent fact, ChatMessage activity)
         {
             if (_progress == null) return;
-            if (fact.Kind == AgentRunEventKind.ModelStepStarted)
+            if (fact.Kind == AgentRunEventKind.ExecutionQueued)
+                _progress("queued_execution", "Ожидаю свободный слот выполнения…", null);
+            else if (fact.Kind == AgentRunEventKind.ExecutionAdmitted)
+                _progress("preparing_context", "Продолжаю выполнение…", null);
+            else if (fact.Kind == AgentRunEventKind.ModelStepStarted)
                 _progress("preparing_context", "Подготавливаю контекст…", null);
             else if (fact.Kind == AgentRunEventKind.ResponseAccepted &&
                 fact.Response.Action == ConversationResponse.ReflectionAction)

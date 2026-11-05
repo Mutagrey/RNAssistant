@@ -23,6 +23,17 @@ namespace RNAssistant.Core.Agent
         System.Threading.Tasks.Task WaitForResumeAsync(string pauseId, System.Threading.CancellationToken token);
     }
 
+    // Process scheduling never owns the Run or its durable lifecycle.
+    public interface IRunExecutionAdmission
+    {
+        System.Threading.Tasks.Task<IDisposable> EnterAsync(System.Threading.CancellationToken token);
+    }
+
+    public interface IRunPauseSignal
+    {
+        System.Threading.Tasks.Task WaitForPauseRequestAsync(System.Threading.CancellationToken token);
+    }
+
     public sealed class AgentRunLimits
     {
         public int MaxIterations { get; private set; }
@@ -65,7 +76,7 @@ namespace RNAssistant.Core.Agent
         }
     }
 
-    public enum AgentRunEventKind { Started, ModelStepStarted, ResponseAccepted, ToolStarted, ToolCompleted, SummaryChanged, ToolWaiting }
+    public enum AgentRunEventKind { Started, ModelStepStarted, ResponseAccepted, ToolStarted, ToolCompleted, SummaryChanged, ToolWaiting, ExecutionQueued, ExecutionAdmitted }
 
     public sealed class AgentRunEvent
     {

@@ -55,6 +55,7 @@ namespace RNAssistant.Office.Tools
         private readonly Func<AppSettings> _loadSettings;
         internal RNAssistant.Application.Conversations.AgentCommunicationService AgentCommunication { get; set; }
         internal RNAssistant.Application.Conversations.ConversationInboxService AgentInbox { get; set; }
+        internal RNAssistant.Core.Agent.IRunExecutionAdmission ExecutionAdmission { get; private set; }
         internal ResourceAuthorityService ResourceAuthority { get { return _resourceAuthority; } }
         internal ChatBlobStore Payloads { get; private set; }
 
@@ -77,6 +78,7 @@ namespace RNAssistant.Office.Tools
         {
             if (vbaJournalStore == null) throw new ArgumentNullException(nameof(vbaJournalStore));
             paths = paths ?? vbaJournalStore.Paths;
+            ExecutionAdmission = RNAssistant.Application.Conversations.ConversationExecutionScheduler.ForStorage(paths);
             _persistResourceFacts = persistResourceFacts;
             _toolStore = toolStore;
             _loadSettings = loadSettings;

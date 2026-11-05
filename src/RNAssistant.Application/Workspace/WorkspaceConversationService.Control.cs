@@ -80,7 +80,7 @@ namespace RNAssistant.Runtime
                     // worker may still hold an older projection of the same chat.
                     if (!queuedWait) _conversationInbox.Resume(session);
                     var result = await ConversationRunCoordinator.ContinueAsync(continuation,
-                        ports, ports.Tools, ports, control.Token, input, () => _titleLifetime.IsCancellationRequested).ConfigureAwait(false);
+                        ports, ports.Tools, ports, control.Token, input, () => _titleLifetime.IsCancellationRequested, _executionAdmission).ConfigureAwait(false);
                     if (acceptance.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);

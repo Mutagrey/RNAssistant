@@ -1,5 +1,29 @@
 # Conversation JSON flow
 
+## Очередь активных шагов — 2026-11-05
+
+`MaxConcurrentAgentSteps`: default 4, 0 — без ограничения, диапазон 0–64.
+Общий Application scheduler для Office/Workspace одного app-data root **в одном
+процессе** выдаёт FIFO permit на один шаг kernel: входящие → model/retries → tools и
+read-back. Следующий шаг повторно участвует в очереди. Один thread сохраняет одного
+execution owner. Начальная подготовка до kernel и helper LLM calls вне этого предела.
+
+Ожидание агента, execution pause и подтверждение пользователя освобождают permit;
+возобновление того же Run снова получает его. Confirmed tool держит отдельный permit
+до terminal read-back и освобождает перед следующим model step. Ожидание очереди не
+расходует iterations/tool steps, не держит document gate/UI/рабочий поток. Текущий
+шаг при снижении лимита не прерывается; изменение читается при admission/release.
+
+Stop удаляет waiter; pause будит его через существующий Inbox signal и фиксируется
+на kernel boundary. `ExecutionQueued/ExecutionAdmitted` — runtime events, не сообщения
+модели; `agents.list` показывает queued при live owner. Queue не является durable
+разрешением на dispatch: restart обрабатывает Running как interruption, без replay
+слотов/tools. Сохранённые Waiting/Paused используют прежнее явное продолжение.
+
+Общий бюджет токенов, сообщений и новых Run **не ограничен по решению пользователя**.
+Обычные per-Run limits и число участников сохраняются. Закрытие вкладки не меняет
+очередь или выполнение. Межпроцессной очереди и дополнительных LLM для наблюдения нет.
+
 ## Межагентное общение — 2026-11-03
 
 Пользовательские controls (3a, 2026-11-04): Office Inbox/Workspace snapshot возвращают
@@ -161,8 +185,8 @@ owner другого процесса не перехватывается. User 
 ответы до deadline учитываются даже после restart. Stop до получения результата закрывает wait единственным NotDispatched result и
 Cancelled; уже установленный terminal result сохраняется при гонке с отменой. Shutdown
 без установленного terminal result сохраняет Waiting. Повторное продолжение со старым cursor отклоняется.
-Ожидание Run/поручения, peer cancel/pause/resume, dependency graph и общий scheduler
-относятся к следующим этапам.
+Peer cancel/pause/resume и FIFO active-step scheduler реализованы (см. выше).
+Ожидание Run/поручения и dependency graph относятся к следующим этапам.
 Первоначальное воспроизведение и оставшиеся риски — в
 [аудите повторов](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03).
 Поздний ответ автоматически начинает следующий ход. Completed с историческими
@@ -230,8 +254,8 @@ causal chain; именованные Collaboration/группы ещё не ре
 
 Лимита числа сообщений, `Granted` writer и «Продолжить общение» больше нет.
 Лимиты итераций/tools продолжают действовать на один Run: они **не ограничивают**
-суммарное число новых Run в длительном обмене. Общий бюджет выполнения — будущий
-срез, его нельзя считать уже реализованным. Старый положительный `MaxAgentMessages`
+суммарное число новых Run в длительном обмене. По решению пользователя общий бюджет
+выполнения не ограничен; отдельный cap параллельности описан выше. Старый положительный `MaxAgentMessages`
 однократно превращается в default 8, старый 0 сохраняет отключение; явное новое поле
 имеет приоритет. Старый ключ больше не сохраняется, миграция даёт notice.
 
@@ -239,7 +263,7 @@ causal chain; именованные Collaboration/группы ещё не ре
 нового сообщения с текущим provenance. Старая цепочка без root или записанного состава
 явно отклоняет новый send/spawn (`agent_participants_untracked`); новое человеческое
 сообщение начинает текущую цепочку. Пользовательские журналы не переписываются и не удаляются. Durable wait и cancel/pause/resume реализованы;
-Collaboration, admission/slots и Inspector — последующие этапы [плана](proposals/multi-agent-runtime-plan.md).
+Collaboration и Inspector — последующие этапы [плана](proposals/multi-agent-runtime-plan.md).
 
 The current `main` uses the [v8 response contract](protocols/CONVERSATION_RESPONSE_V8.md)
 and format-8 execution streams with [typed short references](decisions/ADR-0018-typed-model-references.md).

@@ -113,6 +113,7 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync) return new AgentPeer { AgentId = address.AgentId, Title = box.Session.Title,
                 ScopeTitle = box.Session.DocumentTitle, Source = address.Source,
                 Status = box.Paused && box.Session.LastRun?.KernelState?.Summary.PauseId != null ? "paused" :
+                    (box.Running || box.Worker) && box.Session.LastRun?.KernelState?.ExecutionQueued == true ? "queued" :
                     box.AgentWaiting ? "waiting" : box.Running || box.Worker ? "working" :
                     box.Paused ? "paused" : PendingConfirmationId(box.Session) != null ? "awaiting_approval" : "idle" };
         }
@@ -510,6 +511,25 @@ namespace RNAssistant.Application.Conversations
             if (box.Running && box.Accepting && box.AgentPause != null && box.AgentPause.RunId == session.LastRun?.RunId &&
                 box.AgentPause.PauseId == pauseId && !box.Paused)
                 Write(box, null, true, "Приостановлено агентом", box.AgentPause, true);
+        }
+
+        internal async Task WaitForPauseRequestAsync(ChatSession session, CancellationToken token)
+        {
+            var box = Get(session);
+            var cancelled = NewInputSignal();
+            using (token.Register(() => cancelled.TrySetResult(true)))
+                while (true)
+                {
+                    token.ThrowIfCancellationRequested();
+                    Task signal;
+                    lock (box.Sync)
+                    {
+                        if (box.Running && box.Accepting && box.AgentPause != null &&
+                            box.AgentPause.RunId == session.LastRun?.RunId) return;
+                        signal = box.InputChanged.Task;
+                    }
+                    await Task.WhenAny(signal, cancelled.Task).ConfigureAwait(false);
+                }
         }
 
         internal async Task WaitForResumeAsync(ChatSession session, string pauseId, CancellationToken token)

@@ -8,6 +8,40 @@ Office/Workspace — binding к существующим execution owners.
 [Tools](../tool-library.md#agent-communication-tools--2026-11-03),
 [Events](../session-events.md#agent-communication-journal--2026-11-03).
 
+## Этап 3: очередь активных шагов — In Review, 2026-11-05
+
+Решение пользователя: **общий бюджет не ограничен**. Не вводятся token/message/Run
+quota или фиктивное большое число. Per-Run iteration/tool limits сохраняются.
+Отдельно ограничивается параллельность: `MaxConcurrentAgentSteps` 0–64, default 4,
+0 — без ограничения. Owner — Application/Conversations; kernel владеет границами шага.
+
+| Решение | Реализация и инвариант | Отказ / проверка |
+| --- | --- | --- |
+| FIFO на активный шаг, не на весь Run | `ConversationExecutionScheduler` и `AgentKernel.Execution`: input boundary → model/retries → accepted tools/read-back; следующий шаг встаёт в конец очереди | 8 peers при 1 slot достигают wait и завершают прежние Run; ожидание не блокирует адресата |
+| Wait/pause/approval освобождают slot | Ожидания прежнего coordinator вне permit; confirmed tool получает отдельный permit и освобождает его перед следующим model step | Тест подтверждения держит slot до read-back, пропускает peer перед следующим шагом; нет nested admission |
+| Отмена и pause работают в очереди | Cancellation удаляет waiter; optional `IRunPauseSignal` использует существующий Inbox signal, без polling | cancel/grant race, queued pause того же Run, ошибки queued/admitted journal; counters не расходуются |
+| Общий предел Office/Workspace | Один scheduler на app-data root внутри процесса; настройки читаются при admission/release, снижение не прерывает начатое | Два независимых binding делят слот; изменение 1 → 0 выпускает очередь при следующем admission/release |
+| Диагностика без LLM | Typed `ExecutionQueued/ExecutionAdmitted`, прежний `run.updated`, `KernelState.ExecutionQueued`; agents.list показывает queued только при live owner | Journal round-trip и restart interruption; статус не даёт права dispatch |
+
+Не выбраны: semaphore на весь Run (deadlock ожидающих), отдельный scheduler store,
+счётчики в UI, одновременные независимые Run одного thread и межпроцессный dispatcher.
+Сохраняются exact session leases и Office document gate. Queue не блокирует UI/рабочий поток
+и не держит document gate. Сам worker/контекст живого Run остаётся в памяти; это не memory cap.
+
+Queue — временное состояние. Restart не восстанавливает permits и не повторяет
+действия; queued Running следует существующим правилам interrupted Run. Сохранённые
+Waiting/Paused восстанавливаются только явной командой. Начальная подготовка до kernel,
+вспомогательные title/compression calls и процессы разных Office hosts не входят в этот
+предел. Fairness кооперативная: длинный tool/read-back удерживает slot до своей границы.
+
+Проверки: `agent admission:`, pause/cancel/user controls/confirmation/wait regressions,
+`agent communication:`, 8 peers с 1 и 4 slots. [Замеры](../stabilization/multi-agent-admission-20261105.json)
+не являются SLA или измерением токенов. [UI ревью](../ui/UI_MIGRATION_PLAN.md#очередь-выполнения--in-review-2026-11-05).
+Новых tool schemas/permissions/stream migrations нет. Windows/Office/WebView2 и
+пользовательское визуальное принятие открыты. Следующий срез — **4a, группы чатов**;
+затем Run/dependency wait и опциональные поручения (4b), Inspector (5), qualification (6).
+
+
 ## Этап 3: максимум участников — In Review, 2026-11-05
 
 По уточнению пользователя ограничивается число участников одной совместной работы,
@@ -31,11 +65,8 @@ quota. UI использует прежнее поле Settings, без новы
 Windows/Office/WebView2 и визуальное принятие остаются открытыми.
 
 Снятие квоты сообщений — принятое пользователем изменение. Per-Run iterations/tools
-не ограничивают обмен, запускающий новые Run. Следующий срез: process admission и
-справедливые active-step slots с освобождением на wait/pause/approval, затем явный
-общий execution budget. Нельзя занимать slot на всё время unfinished Run: ожидающие
-участники могут заблокировать запуск адресатов. Значения и пользовательское поведение
-общего бюджета уточняются в этом срезе; молчаливый новый лимит сообщений не вводится.
+не ограничивают обмен, запускающий новые Run. Active-step admission реализован следующим срезом выше; ожидания освобождают slots.
+По уточнению пользователя общий execution budget не вводится, обмен не имеет новой квоты.
 
 ## Baseline параллельного выполнения — 2026-11-05
 
@@ -83,8 +114,8 @@ live owner и сохраняет историю/очередь. Source scope п�
 черновик, busy/late close, narrow/125%; общий «+»/файлы/сжатие проверены отдельно.
 [UI scope и ревью](../ui/UI_MIGRATION_PLAN.md#пауза-и-отмена-сохранённого-run--in-review-2026-11-04).
 Windows/Office/controller/WebView2 и визуальное принятие открыты. Baseline и максимум
-участников добавлены срезом выше; admission/slots/budgets, Run wait/dependencies
-и Inspector остаются дальнейшей работой.
+участников и admission добавлены срезами выше; Run wait/dependencies, группы
+и Inspector остаются дальнейшей работой. Общий бюджет не ограничен.
 
 ## Этап 3a: агентская пауза/продолжение — In Review, 2026-11-04
 
@@ -155,8 +186,7 @@ counters. Ошибки сохраняются обычным ToolRuntime, без
 процесса возвращают Unavailable. Existing user Stop/Workspace pipe не заменены;
 user cold cancel добавлен следующим срезом выше; list не стал terminal Run monitor.
 Windows/Office/controller и live-model qualification открыты. Pause/resume authority и user cold control реализованы следующими срезами выше; далее
-Run wait/dependencies и лимиты. Latency baseline 1/2/4/8
-и scheduler fairness остаются перед срезом admission/slots. Дополнительных фоновых
+Run wait/dependencies и группы. Baseline и FIFO admission реализованы срезами выше. Дополнительных фоновых
 LLM-вызовов для диагностики здесь нет.
 
 ## Решения с наибольшими последствиями
@@ -473,7 +503,7 @@ User Stop/restart pause снимается только явным действ�
 | 2a. Корреляция | Existing Prepared/Accepted + input provenance, source recipient verification и Inbox matcher. Реализовано после 1 | Ранние/применённые ответы учитываются, any/all различаются, нет чужих match/потери сигнала, unrelated/human/policy input не выдаётся за ответ. 22 целевые проверки проходят |
 | 2b.1. Повтор ожидания | Реализован typed timeout progress через существующий terminal result; общий kernel не парсит имя tool/body. Зависит от 2a | Четвёртый одинаковый timeout исполняется; JSON/ChatStore replay сохраняет различие, остальные repeat guards и run limits действуют. 23 agent communication + 1 kernel wait + 15 tool runtime checks проходят; Windows отдельно |
 | 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; реализовано, In Review | Waiting + PendingToolWait в прежних events/CAS; явный resume того же call/Run, абсолютный deadline, однократный учёт. Exact chat lease остаётся за живым Run, рабочий поток и document gate свободны. Shutdown сохраняет wait, Stop отменяет живой wait. Непроверенная Windows document binding остаётся открытым gate |
-| 3. Run control/лимиты | User batch resume, exact user controls сохранённого Run и agents.cancel/pause/resume v1 (3a) реализованы, In Review. Настраиваемый максимум участников и baseline 1/2/4/8 реализованы. Далее scheduler admission/slots и общий execution budget. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. Справедливость очереди и лимиты параллельных Run ещё предстоит проверить |
+| 3. Run control/лимиты | User batch resume, exact user controls сохранённого Run и agents.cancel/pause/resume v1 (3a) реализованы, In Review. Настраиваемый максимум участников и baseline 1/2/4/8 реализованы. FIFO active-step admission реализован, default 4/0 unlimited; общего бюджета по решению пользователя нет. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. FIFO, cancellation races, wait/pause/approval release и 8 peers при 1 slot проверены host-neutral; Windows отдельно |
 | 4a. Организация чатов | Optional group events/projection, creator в headers/DTO; `group`, целевой `chat.rename`, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
 | 4b. Поручения | Optional assignment events и bounded projection; `resolve`. Зависит от 2–3, membership не обязателен | Смена ролей без смены identity; finish не закрывает поручение; terminal assignment не доказывает внешний эффект без evidence |
 | 5. Inspector | Typed DTO/cursors поверх существующих SessionEvent/kernel/trajectory readers; production Inspector, без demo/store | Участники + отдельные communication/dependency graphs + timeline, навигация thread/message/Run/step/resource/E; control использует этап 3; subscriptions очищаются при dispose, Run сохраняется |

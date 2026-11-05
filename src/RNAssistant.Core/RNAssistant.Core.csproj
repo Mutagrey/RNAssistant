@@ -188,6 +188,7 @@
     <Compile Include="Agent\RunSummary.cs" />
     <Compile Include="Agent\AgentRunContracts.cs" />
     <Compile Include="Agent\AgentKernel.cs" />
+    <Compile Include="Agent\AgentKernel.Execution.cs" />
     <Compile Include="Agent\ConversationRunCoordinator.cs" />
     <Compile Include="Agent\AgentProgressTracker.cs" />
     <Compile Include="Tools\ToolExecutionRecord.cs" />

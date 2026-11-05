@@ -35,6 +35,10 @@ List reads saved chats in the caller's document/workspace, independently of tabs
 with optional `query` (title substring) and `agent_id` (exact address). Its bounded
 `Peers` page contains at most 50 entries; `Truncated` requests a narrower query.
 An unobserved live Inbox reports `not_loaded`, not an invented idle state.
+A live owner awaiting active-step admission reports `queued`; this is execution
+queue diagnosis, distinct from a send receipt proving durable message intake.
+`MaxConcurrentAgentSteps` controls process-local concurrency (default 4, 0 unlimited),
+not a total message/token/Run budget. No extra LLM calls are used for this status.
 List includes `is_self` identifying the caller and stable short
 `agent_id` addresses, without history or effect evidence. Send requires `agent_id`
 and `text` (up to 131072 characters), with optional `expect_reply` and `reply_to`.

@@ -135,7 +135,7 @@ namespace RNAssistant.Office.Services
             {
                 var result = await ConversationRunCoordinator.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
                     user == null ? text : ConversationInputMessage.ModelText(user), new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections)),
-                    ports, ports, ports, cancellationToken, ports, _suspendOnCancellation).ConfigureAwait(false);
+                    ports, ports, ports, cancellationToken, ports, _suspendOnCancellation, _toolExecutor.ExecutionAdmission).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }
@@ -157,7 +157,7 @@ namespace RNAssistant.Office.Services
                 progress, pendingToolRegistrar, cancellationToken, command, refreshModelInput, continuation.Revision))
             {
                 var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
-                    pendingId, continuation, ports, ports, ports, cancellationToken, supersedePending, ports, suspendOnCancellation: _suspendOnCancellation).ConfigureAwait(false);
+                    pendingId, continuation, ports, ports, ports, cancellationToken, supersedePending, ports, suspendOnCancellation: _suspendOnCancellation, admission: _toolExecutor.ExecutionAdmission).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }
@@ -171,7 +171,7 @@ namespace RNAssistant.Office.Services
             using (var ports = CreatePorts(ValidateMode(session.Mode, session), LatestUserRequest(session), session, input,
                 progress, registrar, token, revision: continuation.Revision))
             {
-                var result = await ConversationRunCoordinator.ContinueAsync(continuation, ports, ports, ports, token, ports, _suspendOnCancellation).ConfigureAwait(false);
+                var result = await ConversationRunCoordinator.ContinueAsync(continuation, ports, ports, ports, token, ports, _suspendOnCancellation, _toolExecutor.ExecutionAdmission).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }
         }

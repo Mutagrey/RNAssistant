@@ -21,6 +21,11 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   await page.waitForFunction(()=>RNAssistantConversationPanel.office('preview-summary').node('messages').textContent.includes('Visible peer answer'));
   assert.equal(await page.evaluate(()=>state.chatRuns['preview-summary'].reasoning),'Peer reasoning','recipient reasoning uses the common progress route');
   assert.equal(await page.evaluate(()=>RNAssistantConversationPanel.office('preview-chat').node('messages').textContent.includes('Visible peer answer')),false,'recipient progress stays in its own chat');
+  await page.evaluate(()=>applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'queued_execution',message:'Ожидаю свободный слот выполнения…'},null,'inbox:preview-summary'));
+  await page.waitForFunction(()=>RNAssistantConversationPanel.office('preview-summary').node('messages').textContent.includes('Ожидаю свободный слот выполнения…'));
+  assert.equal(await page.evaluate(()=>state.chatRuns['preview-summary'].stream),'','queue removes the superseded live draft');
+  await page.evaluate(()=>applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'preparing_context',message:'Продолжаю выполнение…'},null,'inbox:preview-summary'));
+  await page.waitForFunction(()=>!RNAssistantConversationPanel.office('preview-summary').node('messages').textContent.includes('Ожидаю свободный слот выполнения…'));
   assert.deepEqual(await page.evaluate(()=>{
    renderSettings({committed:true});
    const initial=readSettings().MaxCollaborationAgents;
@@ -32,6 +37,15 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
    resetAgentSettingsToDefaults();
    return [initial,changed,disabled,readSettings().MaxCollaborationAgents,document.getElementById('maxCollaborationAgentsInput').min];
   }),[8,7,0,8,'0'],'participant limit defaults, zero, editing and reset use common settings');
+  assert.deepEqual(await page.evaluate(()=>{
+   const initial=readSettings().MaxConcurrentAgentSteps;
+   document.getElementById('maxConcurrentAgentStepsInput').value='2';
+   const changed=readSettings().MaxConcurrentAgentSteps;
+   state.settings.MaxConcurrentAgentSteps=0;renderSettings({committed:true});
+   const unlimited=readSettings().MaxConcurrentAgentSteps;
+   resetAgentSettingsToDefaults();
+   return [initial,changed,unlimited,readSettings().MaxConcurrentAgentSteps];
+  }),[4,2,0,4],'concurrency setting preserves zero and resets independently of participant count');
   await page.evaluate(async()=>{
    const original=send; window.agentCalls=[];
    window.send=async(type,payload,progress)=>{
@@ -83,13 +97,17 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   assert.equal(await page.locator('#maxAgentMessagesInput').count(),0);
   assert.equal(await limit.getAttribute('max'),'64');
   assert.ok((await limit.getAttribute('title')).includes('исходный чат'));
-  await page.screenshot({path:'/tmp/rnassistant-participant-limit-wide.png'});
+  const concurrency=page.locator('#maxConcurrentAgentStepsInput');
+  await concurrency.scrollIntoViewIfNeeded();
+  assert.equal(await concurrency.getAttribute('min'),'0');
+  assert.ok((await concurrency.getAttribute('title')).includes('бюджет'));
+  await page.screenshot({path:'/tmp/rnassistant-admission-settings-wide.png'});
   await page.evaluate(()=>document.documentElement.style.zoom='1.25'); await page.setViewportSize({width:420,height:800});
-  await limit.scrollIntoViewIfNeeded();
+  await concurrency.scrollIntoViewIfNeeded();
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  const bounds=await limit.evaluate(node=>{const a=node.getBoundingClientRect(),b=node.closest('.settings-page').getBoundingClientRect();return {left:a.left,right:a.right,areaLeft:b.left,areaRight:b.right};});
+  const bounds=await concurrency.evaluate(node=>{const a=node.getBoundingClientRect(),b=node.closest('.dv-content-container').getBoundingClientRect();return {left:a.left,right:a.right,areaLeft:b.left,areaRight:b.right};});
   assert.ok(bounds.left>=bounds.areaLeft-1&&bounds.right<=bounds.areaRight+1,'setting remains inside the shared narrow Settings view');
-  await page.screenshot({path:'/tmp/rnassistant-participant-limit-narrow.png'});
+  await page.screenshot({path:'/tmp/rnassistant-admission-settings-narrow.png'});
   assert.deepEqual(errors,[]);
   console.log('PASS agent communication: shared bubble, settings, no message quota, tab-independent messaging, narrow zoom');
  } finally {if(browser)await browser.close();server.kill();}

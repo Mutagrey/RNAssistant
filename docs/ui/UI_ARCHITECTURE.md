@@ -1,5 +1,15 @@
 # Архитектура UI RNAssistant
 
+## Очередь активных шагов — In Review, 2026-11-05
+
+Core settings/typed SettingsControlsDto передают `MaxConcurrentAgentSteps` в прежнюю
+форму. FIFO принадлежит Application/Conversations; Web не считает и не выдаёт slots.
+Office progress phase queued_execution и Workspace typed executionQueued используют
+общую activity row. Workspace run signature учитывает очередь; live draft отсутствует
+до admission. Старый transient текст Office очищается на входе в очередь.
+Нет дополнительных сообщений, stores, LLM calls, CSS или registry. Close/hide не
+отменяет выполнение; restored snapshot без live owner не показывает старую очередь.
+
 ## Максимум участников — In Review, 2026-11-05
 
 Core `MaxCollaborationAgents` проходит прежний SettingsControlsDto; Web не считает

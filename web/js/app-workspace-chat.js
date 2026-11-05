@@ -131,12 +131,13 @@
     var presentation = createMessagePresentation(view, chat, commands || chatComposer().capture());
     var changed = frame.changed, following = frame.follow;
     var snapshot = field(chat, "state"), status = runStatus(snapshot), live = field(snapshot, "modelProgress");
-    if (status !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
+    var executionQueued = status === "running" && field(snapshot, "executionQueued") === true;
+    if (executionQueued || status !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
     var start = field(chat, "messageStartIndex") || 0;
     var messages = chat.messages || [];
     var actionMessage = messages.find(visibleMessage);
     var historyActions = !!actionMessage && presentation.invoke("canMessageAction", { name: "fork", message: actionMessage, index: 0 });
-    var signature = JSON.stringify([presentation.actionKey, chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions,
+    var signature = JSON.stringify([presentation.actionKey, chat.messages || [], live, executionQueued, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions,
       field(snapshot, "hasPendingWait"), field(snapshot, "runPaused"), field(snapshot, "waitTarget"), field(snapshot, "canSteer"),
       RNAssistantConversationPanel.find(conversationTarget(chat))?.inboxState?.inboxRunControlBusy,
       RNAssistantConversationPanel.find(conversationTarget(chat))?.inboxState?.inboxEditing]);
@@ -151,43 +152,44 @@
       });
     }
     var visible = messages.filter(visibleMessage);
-    if (!visible.length && !start && !live) {
+    if (!visible.length && !start && !live && !executionQueued) {
       appendMessageUnit(units, "empty", JSON.stringify(emptyOptions || {}), function () { return renderChatEmptyState(emptyOptions || (!field(chat, "sessionId")
         ? { title: "Чатов пока нет", text: "Нажмите «+», чтобы создать чат." }
         : { title: "С чего начнём?", text: "Опишите задачу или задайте вопрос." })); });
     }
     var liveAttached = false;
     view.cache.liveUnitKey = null;
-    var liveRunId = field(live, "runId");
+    var liveRunId = executionQueued ? field(snapshot, "runId") : field(live, "runId");
     var liveProgress = live ? { content: field(live, "message"), reasoning: field(live, "reasoning"),
       reasoningTruncated: field(live, "reasoningTruncated"), retrying: field(live, "retrying"), showStatus: true } : null;
     forEachChatDisplayEntry(messages, visibleMessage, function (run) {
         run.workspace = true;
-        if (live && !run.finalMessage && !run.continued && run.nextIndex >= messages.length &&
+        if ((live || executionQueued) && !run.finalMessage && !run.continued && run.nextIndex >= messages.length &&
             agentRunId(run.items, run.finalMessage) === liveRunId) {
           var savedView = agentRunViewState(run.items, null);
           if (!savedView || ["completed", "failed", "cancelled"].indexOf(savedView.lifecycle) < 0) {
             run.live = true;
             run.workspaceProgress = liveProgress;
+            run.executionQueued = executionQueued;
             liveAttached = true;
           }
         }
         appendSavedRunUnit(units, run, presentation, presentation.actionKey + ":" + historyActions,
-          run.live ? (function (progress) {
+          run.live && liveProgress ? (function (progress) {
             return function (node) { paintLiveModelOutput(node.querySelector(".agent-stream-step"), progress); };
           }(liveProgress)) : null);
         if (run.live) view.cache.liveUnitKey = agentRunUnitKey(run);
       }, function (message, index) {
         appendSavedMessageUnit(units, message, index, presentation, presentation.actionKey + ":" + historyActions);
       });
-    if (live && !liveAttached) {
-      var liveRun = { items: [], runId: liveRunId, workspace: true, live: true, workspaceProgress: liveProgress };
+    if ((live || executionQueued) && !liveAttached) {
+      var liveRun = { items: [], runId: liveRunId, workspace: true, live: true, workspaceProgress: liveProgress, executionQueued: executionQueued };
       view.cache.liveUnitKey = agentRunUnitKey(liveRun);
-      appendMessageUnit(units, view.cache.liveUnitKey, String(liveRunId), function () {
+      appendMessageUnit(units, view.cache.liveUnitKey, String(liveRunId) + ":" + executionQueued, function () {
         return renderAgentRunArticle(liveRun, presentation);
-      }, "", null, function (node) {
+      }, "", null, liveProgress ? function (node) {
         paintLiveModelOutput(node.querySelector(".agent-stream-step"), liveProgress);
-      });
+      } : null);
       units[units.length - 1].transient = true;
     }
     if (start + messages.length < field(chat, "messageTotalCount")) {

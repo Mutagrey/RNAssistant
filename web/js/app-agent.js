@@ -583,6 +583,8 @@ function renderAgentRunArticle(run, presentation) {
     if (section.childNodes.length) process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);
+  if (run.live && run.executionQueued) process.appendChild(renderActivityRow({ Kind: "notice",
+    Title: "Ожидаю свободный слот выполнения…", Status: "running", RunId: run.runId || agentRunId(items, finalMessage) }, true, false));
   if (process.childNodes.length || run.live) body.appendChild(process);
   if (run.live && run.workspaceProgress) {
     var stream = document.createElement("section");

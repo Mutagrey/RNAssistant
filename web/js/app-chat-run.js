@@ -88,11 +88,16 @@ function applyOfficeChatProgress(progress, progressPending, requestId) {
   }
   if (isChatProgress) {
     var activityPhase = String(progress.phase || "").toLowerCase();
-    if ((activityPhase === "thinking" || activityPhase === "preparing_context") && !progress.activity && progressChatId) {
+    if ((activityPhase === "thinking" || activityPhase === "preparing_context" || activityPhase === "queued_execution") && !progress.activity && progressChatId) {
       // The next request is being compiled; the previous request is no longer current.
-      state.chatRuns[progressChatId].requestContext = { phase: "preparing_context" };
+      state.chatRuns[progressChatId].requestContext = { phase: activityPhase === "queued_execution" ? activityPhase : "preparing_context" };
       state.chatRuns[progressChatId].modelAttemptActive = false;
       state.chatRuns[progressChatId].streamRetrying = false;
+      if (activityPhase === "queued_execution") {
+        state.chatRuns[progressChatId].stream = "";
+        state.chatRuns[progressChatId].reasoning = "";
+        state.chatRuns[progressChatId].reasoningComplete = false;
+      }
       if (selected && typeof renderContextMeter === "function") renderContextMeter();
     }
     var acceptedStepReasoning = null;
@@ -155,7 +160,8 @@ function stopActiveSend() { return chatComposer().dispatch("stop"); }
 function chatModelStageText(run) {
   if (run && run.cancelRequested) return "Останавливаю…";
   var phase = run && run.requestContext && run.requestContext.phase;
-  return ({ preparing_context: "Подготавливаю контекст…", preparing: "Собираю запрос…",
+  return ({ queued_execution: "Ожидаю свободный слот выполнения…",
+    preparing_context: "Подготавливаю контекст…", preparing: "Собираю запрос…",
     sending: "Думаю… Ожидаю ответ модели", headers: "Думаю… Ожидаю данные модели",
     first_chunk: "Получаю ответ модели…", persisting: "Сохраняю ответ модели…",
     completed: "Проверяю ответ и сохраняю шаг…", cancelled: "Запрос модели отменён",

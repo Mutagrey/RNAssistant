@@ -722,6 +722,7 @@ function agentRunUnitKey(run) {
 function agentRunUnitSignature(run) {
   return JSON.stringify({
     live: !!run.live,
+    executionQueued: !!run.executionQueued,
     continued: !!run.continued,
     usage: run.usage || null,
     items: (run.items || []).map(function (item) {

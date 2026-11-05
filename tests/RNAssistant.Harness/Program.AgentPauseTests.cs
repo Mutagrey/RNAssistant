@@ -26,9 +26,21 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private sealed class KernelPauseInput : IRunInputChannel, IRunPauseChannel
+        private sealed class KernelPauseInput : IRunInputChannel, IRunPauseChannel, IRunPauseSignal
         {
-            public string PauseId { get; set; }
+            private string _pauseId;
+            private TaskCompletionSource<bool> _requested = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public string PauseId { get { return _pauseId; } set {
+                _pauseId = value;
+                if (value == null) _requested = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                else _requested.TrySetResult(true);
+            } }
+            public async Task WaitForPauseRequestAsync(CancellationToken token)
+            {
+                var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using (token.Register(() => cancelled.TrySetCanceled()))
+                    await await Task.WhenAny(_requested.Task, cancelled.Task);
+            }
             public CancellationToken InterruptToken => CancellationToken.None;
             public bool HasPendingInput => false;
             public Task<IReadOnlyList<AgentMessage>> TakeInputAsync(CancellationToken token)
@@ -68,10 +80,12 @@ namespace RNAssistant.Harness
                     AssertTrue(!token.IsCancellationRequested, "peer pause never cancels an in-flight tool/read-back");
                     return Task.FromResult(KernelRecord(context, boundary == "during-tool" ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok));
                 };
-                var kernel = new AgentKernel(f.Model, f.Tools, f.Store, input: input);
+                var scheduler = new ConversationExecutionScheduler(() => 1);
+                var kernel = new AgentKernel(f.Model, f.Tools, f.Store, input: input, admission: scheduler);
                 var paused = await kernel.RunAsync(new AgentRunRequest("run", "turn", "Task", new AgentRunLimits(4, 4)), CancellationToken.None);
                 AssertEqual(RunLifecycle.Waiting, paused.Summary.Lifecycle, "cooperative pause is recoverable: " + boundary + " " + paused.Summary.Reason + " " + paused.Summary.AssistantMessage);
                 AssertEqual("pause-1", paused.Summary.PauseId, "runtime identity retained");
+                AssertEqual(0, scheduler.ActiveCount, "safe pause releases the execution slot");
                 AssertTrue(paused.Summary.PendingWait == null, "pause is not a fabricated wait tool call");
                 AssertEqual(boundary == "during-tool" || boundary == "during-batch" ? 1 : 0, f.Tools.Calls.Count, "only the already dispatched tool may run");
                 AssertEqual(boundary == "before-model" ? 0 : 1, f.Model.Requests.Count, "pause does not poll the model");

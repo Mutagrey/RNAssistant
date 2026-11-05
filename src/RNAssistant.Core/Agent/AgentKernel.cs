@@ -9,7 +9,7 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Agent
 {
-    public sealed class AgentKernel
+    public sealed partial class AgentKernel
     {
         private readonly IModelProtocol _model;
         private readonly IToolRuntime _tools;
@@ -18,10 +18,13 @@ namespace RNAssistant.Core.Agent
         private readonly Func<string> _newCallId;
         private readonly IRunInputChannel _input;
         private readonly Func<bool> _suspendOnCancellation;
+        private readonly IRunExecutionAdmission _admission;
 
         public AgentKernel(IModelProtocol model, IToolRuntime tools, IRunStore store, Func<DateTime> utcNow = null,
-            Func<string> newCallId = null, IRunInputChannel input = null, Func<bool> suspendOnCancellation = null)
+            Func<string> newCallId = null, IRunInputChannel input = null, Func<bool> suspendOnCancellation = null,
+            IRunExecutionAdmission admission = null)
         {
+            _admission = admission;
             _input = input;
             _suspendOnCancellation = suspendOnCancellation;
             _model = model ?? throw new ArgumentNullException(nameof(model));
@@ -227,11 +230,15 @@ namespace RNAssistant.Core.Agent
                 new ModelRequestCause(ModelRequestCauseKind.ReflectionLimit, null, completionFeedback);
             var partialFinishRechecked = false;
             while (state.Iterations < state.Limits.MaxIterations)
+            using (var permit = await EnterExecutionAsync(state, cancellationToken).ConfigureAwait(false))
             {
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
                 var pauseId = (_input as IRunPauseChannel)?.PauseId;
                 if (pauseId != null) return await PauseAsync(state, pauseId).ConfigureAwait(false);
+                if (permit.Error != null)
+                    return await FinishAsync(state, RunLifecycle.Failed, "execution_admission", permit.Error).ConfigureAwait(false);
+                if (!permit.Acquired) continue;
                 if (await TakeInputAsync(state, cancellationToken).ConfigureAwait(false))
                 {
                     completionFeedback = null;
@@ -507,6 +514,29 @@ namespace RNAssistant.Core.Agent
         }
 
         private async Task<RunSummary> ExecuteOneAsync(State state, ToolCall call, ToolPolicySnapshot policy,
+            string stepId, bool confirmed, int chargedSteps, string preparedStateJson,
+            CancellationToken cancellationToken)
+        {
+            if (!confirmed)
+                return await ExecuteAdmittedAsync(state, call, policy, stepId, false, chargedSteps,
+                    preparedStateJson, cancellationToken).ConfigureAwait(false);
+            using (var permit = await EnterExecutionAsync(state, cancellationToken).ConfigureAwait(false))
+            {
+                if (permit.Error != null || !permit.Acquired || (_input as IRunPauseChannel)?.PauseId != null ||
+                    (_input != null && _input.HasPendingInput))
+                {
+                    await RecordNotDispatchedAsync(state, call, policy, stepId,
+                        permit.Error ?? "Incoming control prevented confirmed dispatch.", confirmed,
+                        cancelled: cancellationToken.IsCancellationRequested).ConfigureAwait(false);
+                    if (cancellationToken.IsCancellationRequested) return state.Summary(RunLifecycle.Cancelled, "cancelled");
+                    return permit.Error == null ? null : state.Summary(RunLifecycle.Failed, "execution_admission", permit.Error);
+                }
+                return await ExecuteAdmittedAsync(state, call, policy, stepId, true, chargedSteps,
+                    preparedStateJson, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private async Task<RunSummary> ExecuteAdmittedAsync(State state, ToolCall call, ToolPolicySnapshot policy,
             string stepId, bool confirmed, int chargedSteps, string preparedStateJson,
             CancellationToken cancellationToken)
         {
