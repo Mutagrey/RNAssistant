@@ -8,6 +8,7 @@
     compress: '<path d="m4 4 5 5M4 9h5V4m11 16-5-5m0 5v-5h5M4 20l5-5m-5 0h5v5M20 4l-5 5m0-5v5h5"/>',
     compaction: '<path d="M5 8h14M8 12h8M10 16h4"/>',
     chat: '<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-1 1V11.5a9 9 0 0 1 18 0Z"/><path d="M7 9h10M7 13h7"/>',
+    group: '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3M17 5a3 3 0 0 1 0 6M21 21v-3a4 4 0 0 0-3-3.9"/>',
     folder: '<path d="M3 7V5h6l2 2h10v12H3Z"/>',
     files: '<path d="M7 3h9l4 4v13H7Z"/><path d="M16 3v5h4M3 7v14h12"/>',
     file: '<path d="M5 3h10l4 4v14H5Z"/><path d="M14 3v5h5M9 12h6M9 16h6"/>',

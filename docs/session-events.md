@@ -1,5 +1,25 @@
 # Session event stream
 
+## Named chat groups — 2026-11-05
+
+ChatStore.Groups reuses ResourceAuthorityStore append-only commits and immutable CAS:
+one runtime state/chat_group_* head per group, exact document/workspace scope. Group
+payload contains name, unique member ChatIds, revision and creation operation key.
+No dedicated journal, hidden owner chat, membership dual-write or history rewrite.
+The authority journal is already a CAS reachability source; empty groups survive GC.
+
+Group mutation shares chat deletion's persistence/document lock and compares the
+expected revision. Delete publishes Removed; reusing the creation operation never
+resurrects it. Reads filter out missing chat event files; deleting a creator doesn't
+delete groups or children. Unknown publication/read-back never authorizes replay.
+A group is navigation metadata, separate from causal-chain ParticipantReserved facts.
+
+ChatHeaderReducer now projects existing DocumentAuthorityId and AgentCreation.Creator
+as DocumentAuthorityId/CreatorChatId. Disposable SQLite projection version 10 rebuilds
+older version 9; canonical chat events and stream version stay unchanged. Unsupported
+streams are not silently migrated. Old group/list tool admissions must reload exact
+current contracts (group v1/list v4/communication skill v10).
+
 ## Active-step admission — 2026-11-05
 
 Kernel events `ExecutionQueued` / `ExecutionAdmitted` reuse existing `run.updated`
@@ -56,7 +76,7 @@ ConversationWaitCancellation projects it through CommitRun under the existing le
 and CAS, preserving the accepted result role. Cancelled requires durable read-back.
 Partial append/failed receipt remains unknown; queued input stays paused and intact.
 No new event type, store, schema migration, model dispatch or tool replay is introduced.
-Current-format chats require no rewrite; cancel/pause/resume v1/communication skill v9 use the
+Current-format chats require no rewrite; cancel/pause/resume v1/communication skill v10 use the
 current catalog. Abandoned ordinary execution and pending approval are not turned
 into a wait cancellation.
 

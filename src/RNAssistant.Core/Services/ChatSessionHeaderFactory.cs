@@ -39,6 +39,8 @@ namespace RNAssistant.Core.Services
                 DocumentKey = session.DocumentKey,
                 DocumentTitle = session.DocumentTitle,
                 DocumentPath = session.DocumentPath,
+                DocumentAuthorityId = session.DocumentAuthorityId,
+                CreatorChatId = session.AgentCreation?.Creator?.ChatId,
                 Title = session.Title,
                 Model = session.Model,
                 Mode = ChatModes.Normalize(session.Mode),

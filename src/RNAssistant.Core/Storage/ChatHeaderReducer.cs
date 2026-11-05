@@ -29,6 +29,8 @@ namespace RNAssistant.Core.Storage
         private string _documentKey;
         private string _documentTitle;
         private string _documentPath;
+        private string _documentAuthorityId;
+        private string _creatorChatId;
         private string _title;
         private string _model;
         private string _mode;
@@ -61,7 +63,8 @@ namespace RNAssistant.Core.Storage
             {
                 long total = StringLength(_id) + StringLength(_host) + StringLength(_workspaceId) + StringLength(_documentKey) +
                     StringLength(_documentTitle) + StringLength(_documentPath) + StringLength(_title) +
-                    StringLength(_model) + StringLength(_mode) + StringLength(_activeHtmlArtifactId) + 256;
+                    StringLength(_model) + StringLength(_mode) + StringLength(_activeHtmlArtifactId) +
+                    StringLength(_documentAuthorityId) + StringLength(_creatorChatId) + 256;
                 total += _messages.Items.Sum(item => StringLength(item.Id) + 16L);
                 total += _artifacts.Items.Sum(item => StringLength(item.Id) + StringLength(item.Kind) +
                     StringLength(item.ContentSha256) + 48L);
@@ -126,6 +129,8 @@ namespace RNAssistant.Core.Storage
                 _documentKey = _documentKey,
                 _documentTitle = _documentTitle,
                 _documentPath = _documentPath,
+                _documentAuthorityId = _documentAuthorityId,
+                _creatorChatId = _creatorChatId,
                 _title = _title,
                 _model = _model,
                 _mode = _mode,
@@ -156,6 +161,8 @@ namespace RNAssistant.Core.Storage
                 ["DocumentKey"] = _documentKey,
                 ["DocumentTitle"] = _documentTitle,
                 ["DocumentPath"] = _documentPath,
+                ["DocumentAuthorityId"] = _documentAuthorityId,
+                ["CreatorChatId"] = _creatorChatId,
                 ["Title"] = _title,
                 ["Model"] = _model,
                 ["Mode"] = _mode,
@@ -192,6 +199,8 @@ namespace RNAssistant.Core.Storage
                 _documentKey = (string)checkpoint["DocumentKey"],
                 _documentTitle = (string)checkpoint["DocumentTitle"],
                 _documentPath = (string)checkpoint["DocumentPath"],
+                _documentAuthorityId = (string)checkpoint["DocumentAuthorityId"],
+                _creatorChatId = (string)checkpoint["CreatorChatId"],
                 _title = (string)checkpoint["Title"],
                 _model = (string)checkpoint["Model"],
                 _mode = (string)checkpoint["Mode"],
@@ -256,6 +265,8 @@ namespace RNAssistant.Core.Storage
                 DocumentKey = documentKey,
                 DocumentTitle = documentTitle,
                 DocumentPath = _documentPath,
+                DocumentAuthorityId = _documentAuthorityId,
+                CreatorChatId = _creatorChatId,
                 Title = title,
                 Model = _model,
                 Mode = ChatModes.Normalize(_mode),
@@ -407,6 +418,8 @@ namespace RNAssistant.Core.Storage
             _workspaceId = StringValue(root["WorkspaceId"]);
             _documentTitle = StringValue(root["DocumentTitle"]);
             _documentPath = StringValue(root["DocumentPath"]);
+            _documentAuthorityId = StringValue(root["DocumentAuthorityId"]);
+            _creatorChatId = root["AgentCreation"]?.ToObject<AgentThreadCreation>()?.Creator?.ChatId;
             _title = StringValue(root["Title"]);
             _model = StringValue(root["Model"]);
             _mode = StringValue(root["Mode"]);
@@ -494,6 +507,8 @@ namespace RNAssistant.Core.Storage
                     case "WorkspaceId": _workspaceId = StringValue(property.Value); break;
                     case "DocumentTitle": _documentTitle = StringValue(property.Value); break;
                     case "DocumentPath": _documentPath = StringValue(property.Value); break;
+                    case "DocumentAuthorityId": _documentAuthorityId = StringValue(property.Value); break;
+                    case "AgentCreation": _creatorChatId = property.Value?.ToObject<AgentThreadCreation>()?.Creator?.ChatId; break;
                     case "Title": _title = StringValue(property.Value); break;
                     case "Model": _model = StringValue(property.Value); break;
                     case "Mode": _mode = StringValue(property.Value); break;

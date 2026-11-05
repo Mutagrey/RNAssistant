@@ -862,6 +862,8 @@ namespace RNAssistant.Office.Services
                 DocumentKey = header.DocumentKey,
                 DocumentTitle = header.DocumentTitle,
                 DocumentPath = ResolveDocumentPath(header.DocumentPath, header.DocumentKey),
+                DocumentAuthorityId = header.DocumentAuthorityId,
+                CreatorChatId = header.CreatorChatId,
                 Title = header.Title,
                 Model = header.Model,
                 Mode = ChatModes.Normalize(header.Mode),

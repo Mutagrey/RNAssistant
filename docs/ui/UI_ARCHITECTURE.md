@@ -102,17 +102,21 @@ hide/dispose освобождают чтения, не отменяют Run. С�
 разрешении её операций. Controller обновляет выбранный logical workspace до текущей
 публикации при выдаче состояния. HtmlWorkspaceView сохраняет собственные dirty buffers.
 
-## Группы и происхождение чатов — Proposed, 2026-11-04
+## Группы и происхождение чатов — In Review, 2026-11-05
 
 Для дерева и Inspector используется одна optional Collaboration, не второй каталог
-UI-папок. Application выдаёт typed group/creator metadata через существующие headers
-и projections; Web строит вложенность общим NavigationTree. Creator берётся из
+UI-папок. ConversationGroupService выдаёт typed group scopes с generation из
+ResourceAuthorityStore, headers передают creator; Web строит вложенность общим NavigationTree. Creator берётся из
 AgentCreation, не из fork ParentSessionId. Membership не управляет Run, правами или
 Dockview placement. Подробнее — [runtime-план](../proposals/multi-agent-runtime-plan.md#группы-вложенность-и-обзор-чатов--proposed-2026-11-04).
 
 Tree node key различает вхождения одного чата по group_id/chat_id; маршрут открытия
 по-прежнему адресует единственный ChatId. Remove membership и delete chat идут разным
 typed domain commands; удаление чата сохраняет existing deletion owner/guards.
+Общий app-chat-groups декорирует прежние nodes Office/Workspace/plugin; кеш ≤256
+областей, collapse ≤512 ключей, stale generations/reset replies отбрасываются.
+Цвет точки определяется стабильным ChatId в общем AgentCommunication presentation;
+запись цвета в runtime и отдельный registry не нужны. Group ID не становится ключом Chat View; закрытие вкладки не меняет выполнение.
 
 ## Live HTML и размещение редакторов — In Review, 2026-11-03
 

@@ -229,6 +229,8 @@ namespace RNAssistant.Office
             return ChatState(host, documentKey);
         }
         public ChatStateResponse RenameChat(string chatId, string title) { return ChatState(title, chatId); }
+        public RNAssistant.Application.Contracts.ChangeChatGroupResponse ChangeChatGroup(RNAssistant.Application.Contracts.ChangeChatGroupRequest request)
+        { throw new InvalidOperationException("Office group controller requires Windows evidence; use the shared domain in this harness."); }
         public ChatPreferenceResponse SetChatModel(string chatId, string model)
         { NavigationWork?.Invoke(); return new ChatPreferenceResponse { ChatId = chatId, Model = model, Mode = "chat" }; }
         public ChatStateResponse SetChatMutationPolicy(string chatId, RNAssistant.Core.Services.MutationPolicy policy)

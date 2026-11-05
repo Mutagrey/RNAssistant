@@ -35,6 +35,8 @@
     var query = { workspaceId: target.workspaceId, sessionId: target.sessionId };
     if (pending) query.receiptRequestId = pending.input.requestId;
     var snapshot = await source.read(function () { return send("getProjectChat", query); });
+    var groupVersion = RNAssistantChatGroups.version(); RNAssistantChatGroups.accept(snapshot.groupScopes);
+    if (groupVersion !== RNAssistantChatGroups.version()) renderTree();
     if (pending &&
         window.RNAssistantConversationInput.accepted("workspace", target, pending.input.requestId,
           snapshot.inputReceipt, pending.input.SteerRunId, pending.input.Enqueue)) {
@@ -62,7 +64,7 @@
     return result;
   }
   function projects() { return catalog && catalog.projects || []; }
-  function replaceCatalog(value) { catalog = value; ++catalogRevision; }
+  function replaceCatalog(value) { catalog = value; RNAssistantChatGroups.accept(value.groupScopes); ++catalogRevision; }
   async function refreshCatalog(isCurrent) {
     for (var attempt = 0; attempt < 3; attempt++) {
       var revision = catalogRevision, result = await send("getProjectChats", {});
@@ -118,7 +120,7 @@
     var root = el("Tree"), selected = currentId(), needle = query.trim().toLocaleLowerCase("ru");
     var pluginSource = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId();
     var selectedRun = runState();
-    var key = JSON.stringify([catalogRevision, selectedWorkspaceId, selected, needle, pluginSource,
+    var key = JSON.stringify([catalogRevision, RNAssistantChatGroups.version(), selectedWorkspaceId, selected, needle, pluginSource,
       runStatus(selectedRun), field(selectedRun, "title", "Title"),
       field(selectedRun, "modelProgressUnavailable", "ModelProgressUnavailable"),
       projects().map(function (entry) { return (entry.chats || []).map(function (chat) { var data = chatState(entry, chat);
@@ -126,9 +128,12 @@
     if (key === treeRenderKey && root.firstChild) return;
     treeRenderKey = key;
     var nodes = projects().map(function (entry) {
+      var groupScope = { host: "Workspace", documentKey: entry.workspaceId, workspaceId: entry.workspaceId,
+        sessionId: entry.chats && entry.chats.length ? entry.chats[0].Id : null, disabled: !entry.available };
       var ownMatch = entry.name.toLocaleLowerCase("ru").includes(needle);
       var items = (entry.chats || []).filter(function (chat) {
-        return !needle || ownMatch || chat.Title.toLocaleLowerCase("ru").includes(needle);
+        return !needle || ownMatch || chat.Title.toLocaleLowerCase("ru").includes(needle) ||
+          RNAssistantChatGroups.matches(groupScope, chat.Id, needle);
       }).map(function (chat) {
         var runStatus = chatRunStatus(entry, chat);
         var current = chatState(entry, chat);
@@ -137,7 +142,6 @@
           runStatus === "running",
           runStatus === "awaitingconfirmation");
         return { key: "project-chat:" + entry.workspaceId + ":" + chat.Id, kind: "chat",
-          iconHtml: window.RNAssistantNavigationTree.icon("chat"),
           title: entry.workspaceId === projectId() && chat.Id === selected && runState()
             ? field(runState(), "title", "Title") || chat.Title : chat.Title,
           selected: entry.workspaceId === projectId() && chat.Id === selected,
@@ -155,6 +159,7 @@
               onClick: function () { remove(entry, chat); } }
           ]), workspaceId: entry.workspaceId, sessionId: chat.Id };
       });
+      items = RNAssistantChatGroups.decorate(items, entry.chats || [], groupScope, needle);
       if (needle && !ownMatch && !items.length) return null;
       return { key: "project:" + entry.workspaceId, kind: "parent", selectable: true,
         title: entry.name, selected: entry.workspaceId === projectId() && !currentSnapshot(),
@@ -163,6 +168,7 @@
         iconHtml: window.RNAssistantNavigationTree.icon("folder"), expanded: needle ? true : expanded[entry.workspaceId] !== false,
         workspaceId: entry.workspaceId, children: items,
         actions: [
+          RNAssistantChatGroups.createAction(groupScope),
           { title: "Новый чат в «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("plus"),
             disabled: !entry.available, onClick: function () {
               if (pluginSource === entry.workspaceId) create();
@@ -177,12 +183,14 @@
     window.RNAssistantNavigationTree.render(root, nodes, {
       label: "Проекты и чаты", emptyText: projects().length ? "Ничего не найдено." : "Подключите папку проекта, чтобы видеть её чаты.",
       onSelect: function (item) {
+        RNAssistantChatGroups.select(item);
         var entry = projects().find(function (project) { return project.workspaceId === item.workspaceId; });
         if (entry && entry.pluginId && window.RNAssistantPlugins)
           window.RNAssistantPlugins.select(entry.pluginId, item.sessionId);
         else window.RNAssistantProjectChats.open(item.workspaceId, item.sessionId);
       },
-      onToggle: function (item, isExpanded) { expanded[item.workspaceId] = isExpanded; }
+      onToggle: function (item, isExpanded) { if (item.chatGroupBranch) RNAssistantChatGroups.toggle(item, isExpanded);
+        else expanded[item.workspaceId] = isExpanded; }
     });
   }
   function updateControls() {

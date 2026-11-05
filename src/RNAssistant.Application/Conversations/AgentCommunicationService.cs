@@ -62,6 +62,7 @@ namespace RNAssistant.Application.Conversations
     {
         public IReadOnlyList<AgentPeer> Peers { get; set; }
         public bool Truncated { get; set; }
+        public string NextAgent { get; set; }
     }
 
     internal sealed class AgentDeliveryReceipt
@@ -167,13 +168,18 @@ namespace RNAssistant.Application.Conversations
                 ScopeTitle = session.DocumentTitle };
         }
 
-        internal AgentPeerPage Discover(ChatSession source, int limit, string query = null, string agentId = null)
+        internal AgentPeerPage Discover(ChatSession source, int limit, string query = null, string agentId = null, string group = null, string afterAgent = null)
         {
+            RequireEnabled(limit);
+            var members = group == null ? null : GroupMembers(source, group);
             var peers = List(source, limit).Where(peer =>
+                (members == null || members.Contains(peer.AgentId)) &&
+                (afterAgent == null || string.CompareOrdinal(peer.AgentId, afterAgent) > 0) &&
                 (string.IsNullOrEmpty(agentId) || peer.AgentId == agentId) &&
                 (string.IsNullOrWhiteSpace(query) || (peer.Title ?? "").IndexOf(query.Trim(), StringComparison.OrdinalIgnoreCase) >= 0))
-                .Take(51).ToArray();
-            return new AgentPeerPage { Peers = peers.Take(50).ToArray(), Truncated = peers.Length > 50 };
+                .OrderBy(peer => peer.AgentId, StringComparer.Ordinal).Take(51).ToArray();
+            return new AgentPeerPage { Peers = peers.Take(50).ToArray(), Truncated = peers.Length > 50,
+                NextAgent = peers.Length > 50 ? peers[49].AgentId : null };
         }
 
         internal AgentWaitCondition PrepareWait(ConversationInboxService inbox, ChatSession session, int limit,

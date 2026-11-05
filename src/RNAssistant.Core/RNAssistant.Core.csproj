@@ -128,6 +128,7 @@
     <Compile Include="Services\StrictJsonSourceReader.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\ChatGroup.cs" />
     <Compile Include="Models\HtmlVisualSelection.cs" />
     <Compile Include="Models\ChatMessageViewDto.cs" />
     <Compile Include="Models\PluginModels.cs" />
@@ -334,6 +335,7 @@
     <Compile Include="Storage\RuntimeStorageActivity.cs" />
     <Compile Include="Storage\ChatHeaderReducer.cs" />
     <Compile Include="Storage\ChatStore.cs" />
+    <Compile Include="Storage\ChatStore.Groups.cs" />
     <Compile Include="Storage\ChatEventStoreAdapter.cs" />
     <Compile Include="Storage\ChatStore.EventReader.cs" />
     <Compile Include="Storage\ChatConversationStoreAdapter.cs" />

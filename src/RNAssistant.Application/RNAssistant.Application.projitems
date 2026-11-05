@@ -1,6 +1,8 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationExecutionScheduler.cs" Link="Application\Conversations\ConversationExecutionScheduler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationGroupService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Groups.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Participants.cs" Link="Application\Conversations\AgentCommunicationService.Participants.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationWaitCancellation.cs" Link="Application\Conversations\ConversationWaitCancellation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Control.cs" Link="Application\Conversations\AgentCommunicationService.Control.cs" />
@@ -24,6 +26,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)PluginTools.cs" Link="Application\PluginTools.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceToolContribution.cs" Link="Application\Workspace\Contracts\WorkspaceToolContribution.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\PluginContracts.cs" Link="Application\Contracts\PluginContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\ConversationGroupContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.cs" Link="Application\PluginApplicationService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginInstance.cs" Link="Application\PluginInstance.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceApplicationService.cs" Link="Application\WorkspaceApplicationService.cs" />

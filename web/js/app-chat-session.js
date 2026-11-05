@@ -400,6 +400,7 @@ function applyBridgeUnavailableState(error) {
   state.officeContext = null;
   state.chats = [];
   state.documents = [];
+  RNAssistantChatGroups.reset();
   state.activeChatId = "";
   state.chatDetailPending = false;
   state.chatDetailError = "";

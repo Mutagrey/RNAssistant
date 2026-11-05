@@ -16,11 +16,17 @@
     });
     node.appendChild(link);
   }
+  function marker(chatId) {
+    // Identity colour is stable across rename, grouping, tab order and restart.
+    var palette = ["green", "blue", "violet", "rose", "amber"], hash = 2166136261;
+    for (var i = 0; i < chatId.length; i++) hash = Math.imul(hash ^ chatId.charCodeAt(i), 16777619);
+    return '<span class="agent-color-dot" style="--agent-color:var(--palette-' + palette[(hash >>> 0) % palette.length] + ')"></span>';
+  }
   function mount(component) {
     var recovery = RNAssistantAgentRecovery.create(component);
     return { openRecovery: recovery.open, closeRecovery: recovery.reset,
       settingsChanged: recovery.reset, rebind: recovery.reset, dispose: recovery.dispose };
   }
-  window.RNAssistantAgentCommunication = Object.freeze({ sender: sender, appendSender: appendSender, mount: mount,
+  window.RNAssistantAgentCommunication = Object.freeze({ sender: sender, marker: marker, appendSender: appendSender, mount: mount,
     settingsChanged: function () { RNAssistantConversationPanel.each(function (component) { component.communication.settingsChanged(); }); } });
 })();

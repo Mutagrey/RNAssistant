@@ -15,11 +15,24 @@ namespace RNAssistant.Runtime
         internal AgentCommunicationService AgentCommunication { get; set; }
         internal Action<string, string, WorkspaceRunEvent> AgentProgress { get; set; }
 
+        public System.Collections.Generic.IReadOnlyList<RNAssistant.Application.Contracts.ConversationGroupScopeView> ChatGroupCatalog(
+            System.Collections.Generic.IEnumerable<ChatSessionHeader> headers)
+        { return new ConversationGroupService(_chats).Catalog(headers); }
+
+        public RNAssistant.Application.Contracts.ChangeChatGroupResponse ChangeChatGroup(RNAssistant.Application.Contracts.ChangeChatGroupRequest request)
+        {
+            var workspace = _workspaces.OpenConnected(request.WorkspaceId);
+            var scope = string.IsNullOrEmpty(request.SessionId) ? new ChatSession { Id = null, Host = "Workspace",
+                DocumentKey = workspace.WorkspaceId, WorkspaceId = workspace.WorkspaceId } : GetSession(workspace, request.SessionId);
+            return new ConversationGroupService(_chats).Change(scope, request);
+        }
+
         internal void RegisterAgentScope(WorkspaceDescriptor workspace, AppSettings settings, Func<string> key)
         {
             var captured = settings.Clone();
             AgentCommunication.Register(new AgentConversationScope {
                 Key = "workspace:" + workspace.WorkspaceId,
+                Groups = new ConversationGroupService(_chats),
                 Contains = session => session?.WorkspaceId == workspace.WorkspaceId,
                 ReadCatalog = () => _chats.ListHeaders(includeStorageUsage: false)
                     .Where(header => header.WorkspaceId == workspace.WorkspaceId)

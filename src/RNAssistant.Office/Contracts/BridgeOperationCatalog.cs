@@ -54,6 +54,7 @@ namespace RNAssistant.Office.Contracts
         CreateOfficeHostChat,
         DeleteDocument,
         RenameChat,
+        ChangeChatGroup,
         SetChatModel,
         SetChatMode,
         SetChatMutationPolicy,

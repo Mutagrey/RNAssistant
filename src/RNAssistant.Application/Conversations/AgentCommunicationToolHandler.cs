@@ -34,7 +34,7 @@ namespace RNAssistant.Application.Conversations
                 {
                     var list = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
                     return new ToolHandlerResult(RuntimeResult.Ok("Сохранённые чаты этой области, независимо от вкладок. is_self=true — ваш чат.",
-                        JsonConvert.SerializeObject(_service.Discover(_session, _limit, list.Query, list.AgentId))), ToolEffectEvidence.None);
+                        JsonConvert.SerializeObject(_service.Discover(_session, _limit, list.Query, list.AgentId, list.Group, list.AfterAgent))), ToolEffectEvidence.None);
                 }
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Wait)
                 {
@@ -44,6 +44,14 @@ namespace RNAssistant.Application.Conversations
                 }
                 var operationId = "agent_" + RNAssistant.Core.Services.ConversationInputJournal.Fingerprint(new[] {
                     _session.Id, context.Execution.RunId, context.Execution.StepId, context.Execution.Call.Id });
+                if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Group)
+                {
+                    var groupRequest = JObject.FromObject(context.Arguments).ToObject<AgentGroupRequest>();
+                    var result = _service.Group(_session, _limit, groupRequest, operationId, context.MarkDispatchPossible);
+                    return context.Complete(new ToolHandlerResult(RuntimeResult.Ok("Группы — ссылки на чаты. История и выполнение участников сохранены.",
+                        JsonConvert.SerializeObject(result)), groupRequest.Action == "list" ? ToolEffectEvidence.VerifiedNoChange :
+                        result.Changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange));
+                }
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Pause || context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume)
                 {
                     var control = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
@@ -131,6 +139,8 @@ namespace RNAssistant.Application.Conversations
         {
             [JsonProperty("query")] public string Query { get; set; }
             [JsonProperty("agent_id")] public string AgentId { get; set; }
+            [JsonProperty("group")] public string Group { get; set; }
+            [JsonProperty("after_agent")] public string AfterAgent { get; set; }
         }
         private sealed class WaitRequest
         {

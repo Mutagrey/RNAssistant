@@ -1,5 +1,18 @@
 # Stabilization risk register
 
+## Группы чатов — 2026-11-05
+
+Owner: ConversationGroupService/ChatStore.Groups, UI common NavigationTree.
+Локально проверены same-scope CAS, restart/GC и races add/delete. Production Office
+controller не входит в Harness (stub); Windows/WebView2 delivery и визуальное принятие
+открыты. Списки model bounded (50), UI membership menu — 30; authority catalog читает
+metadata всех групп области, не истории. Масштаб тысяч групп не квалифицирован;
+при росте сначала измерить capture/read/render, без фонового LLM summarizer.
+Группы одной области не дают междокументного доступа. Общий participant cap прежней
+causal chain независим от membership; move/delete группы не освобождает места.
+Overview старых чатов и адресный rename ещё не реализованы — не заявлять полную
+автоклассификацию по содержимому. Нельзя повторять неизвестный результат mutation.
+
 ## Максимум участников и снятие квоты сообщений — 2026-11-05
 
 Owner: Application/Conversations. Считаются root + unique targets прежней causal chain,

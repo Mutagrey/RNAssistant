@@ -340,7 +340,7 @@ namespace RNAssistant.Office
             string activeId;
             var chats = _chatSessions.GetChatCatalogForOfficeState(out activeId);
             var response = new ChatCatalogResponse { ActiveChatId = activeId,
-                Chats = chats, Documents = ListOpenDocuments() };
+                Chats = chats, Documents = ListOpenDocuments(), GroupScopes = ChatGroupCatalog(chats) };
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                     "Chat catalog timing: recovery=" + recoveryMs + "ms, catalog=" +
@@ -824,6 +824,7 @@ namespace RNAssistant.Office
             response.ChatReadOnly = session != null && !session.UsesCurrentProtocol;
             response.ActiveChatReasoning = session != null && session.ReasoningEnabled;
             response.Chats = chats;
+            response.GroupScopes = ChatGroupCatalog(chats ?? new[] { _chatSessions.GetChatSummary(session) });
             response.Documents = documents;
             response.Context = context;
             response.Messages = bridgeMessages;

@@ -755,6 +755,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ChatCatalogResponse
     {
+        [JsonProperty("groupScopes")] public IReadOnlyList<RNAssistant.Application.Contracts.ConversationGroupScopeView> GroupScopes { get; set; }
         [JsonProperty("activeChatId")] public string ActiveChatId { get; set; }
         [JsonProperty("chats")] public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
         [JsonProperty("documents")] public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
@@ -768,6 +769,7 @@ namespace RNAssistant.Office.Contracts
 
     public class ChatStateResponse
     {
+        [JsonProperty("groupScopes", NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<RNAssistant.Application.Contracts.ConversationGroupScopeView> GroupScopes { get; set; }
         [JsonProperty("detailDeferred", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool DetailDeferred { get; set; }
 

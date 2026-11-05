@@ -218,6 +218,7 @@ namespace RNAssistant.Core.Storage
             _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
             _blobs = new ChatBlobStore(paths, _protectionProvider);
             var authority = new ResourceAuthorityStore(paths);
+            _groupAuthority = authority;
             DocumentArtifacts = new DocumentArtifactStore(authority, authority, _blobs);
             _projectionCache = new BoundedLruCache<ProjectionCacheEntry>(
                 MaxProjectionCacheEntries,

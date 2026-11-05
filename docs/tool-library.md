@@ -24,16 +24,18 @@ generation from overwriting it, even if the chosen text matches a draft/placehol
 
 ## Agent communication tools — 2026-11-03
 
-`agents.list`, `agents.spawn`, `agents.send`, `agents.wait`, `agents.cancel`, `agents.pause` and `agents.resume` are built-in direct tools of the initial profile
+`agents.list`, `agents.spawn`, `agents.send`, `agents.wait`, `agents.cancel`, `agents.pause`, `agents.resume` and `agents.group` are built-in direct tools of the initial profile
 when the application messaging owner is available and `MaxCollaborationAgents > 0`.
 Zero removes them from new catalogs and rejects old handlers before dispatch;
 captured nonzero settings cannot override the current switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires list v3, send v5, spawn v3, wait v4 and cancel/pause/resume v1 (skill v9.0.0); zero makes that package
+and requires list v4, send v5, spawn v3, wait v4 and cancel/pause/resume/group v1 (skill v10.0.0); zero makes that package
 unavailable for loading.
 List reads saved chats in the caller's document/workspace, independently of tabs,
-with optional `query` (title substring) and `agent_id` (exact address). Its bounded
-`Peers` page contains at most 50 entries; `Truncated` requests a narrower query.
+with optional `query` (title substring), `agent_id` (exact address), `group` (name)
+and `after_agent` (previous NextAgent). Peers are ordered by agent_id, at most 50
+per page. Truncated/NextAgent indicate continuation. Concurrent changes are not a
+snapshot transaction; rescan when reorganizing a changing catalog.
 An unobserved live Inbox reports `not_loaded`, not an invented idle state.
 A live owner awaiting active-step admission reports `queued`; this is execution
 queue diagnosis, distinct from a send receipt proving durable message intake.
@@ -72,7 +74,7 @@ Unresolved reservations remain counted across restart. A lower current setting
 blocks new members without evicting existing ones; captured Run settings also cap
 admission. Zero disables communication. Old untracked chains require new human input.
 There is no message quota or grant/continue-message-budget action. Per-Run steps
-remain bounded; a chain-wide execution budget is still future work.
+remain bounded; no aggregate execution budget is imposed by user choice.
 Exact operation identity/fingerprint prevents duplicate creation; unknown effects
 are never automatically retried. Roles and task lists are not required.
 
@@ -99,9 +101,21 @@ observation; it does not resend messages or replay other tools. User Stop cancel
 live wait; runtime shutdown preserves it. An expired deadline is not renewed, and
 late replies remain input without retroactively satisfying that deadline. Details: [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
 
-Bindings: `conversation.agents.list.v3`, `conversation.agents.send.v5`,
+`agents.group(action, group?, name?, agent_ids?, after?)` v1 uses unique, case-insensitive
+names (trimmed single line, 1–120 characters) in the current document/workspace.
+list returns ≤50 groups, NextGroup → after; member samples contain ≤50 public
+addresses with MemberCount/Truncated. Use agents.list(group=...) for all members.
+create requires name; rename requires group + name; add/remove require group +
+1–50 agent_ids; delete requires group and deletes only that group. Repeated membership
+is a set. Runtime binds ID/revision under the existing metadata CAS; the model cannot
+supply revisions, URIs or storage ChatIds. These fields never enter model results.
+No peer wake, rights grant, cap reset, history copy or background LLM summarizer.
+The unified managed-write policy permits Plan; list/no-op reports VerifiedNoChange.
+Current schemas are in AgentCommunicationToolCatalog, shared guidance in skill v10.
+
+Bindings: `conversation.agents.group.v1`, `conversation.agents.list.v4`, `conversation.agents.send.v5`,
 `conversation.agents.spawn.v3`, `conversation.agents.wait.v4`, `conversation.agents.cancel.v1`, `conversation.agents.pause.v1`, `conversation.agents.resume.v1`. Stale admissions must
-explicitly reload the current contract. Send/spawn/cancel/pause/resume are managed conversation writes
+explicitly reload the current contract. Send/spawn/cancel/pause/resume/group are managed conversation writes
 available in Agent and Plan, without a document authority observer or per-message
 approval. Recipients retain their own exact policies and the sender's recorded
 ceiling: Plan/Deny cannot be laundered, and automatic approval can only decrease.
@@ -144,7 +158,7 @@ a tool/model never supplies it. See [reference revision 4](protocols/CONVERSATIO
 Исторический [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
 включая условные и manual-only записи. Начальный профиль модели — 10 доступных
-Core tools плюс `chat.rename`; `agents.list/spawn/send/wait/cancel/pause/resume` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
+Core tools плюс `chat.rename`; `agents.list/spawn/send/wait/cancel/pause/resume/group` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
 78 не входят. Общая грамматика patch принадлежит его schema; skills дополняют её
 предметными правилами без копирования всего контракта.
 

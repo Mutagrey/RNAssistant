@@ -13,18 +13,24 @@ namespace RNAssistant.Core.Services
             return new SkillDefinition {
                 Id = Id, Host = "Common", Name = "Agent communication",
                 Description = "Coordinate questions, delegated tasks and explicit replies with agents in other saved chats in the same document/workspace. Load for inter-agent collaboration.",
-                BuiltIn = true, Enabled = true, Version = "9.0.0",
+                BuiltIn = true, Enabled = true, Version = "10.0.0",
                 Package = new SkillPackageManifest { PackageId = Id, RequiredTools = new List<SkillToolDependency> {
-                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.List, ContractVersion = "3" },
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.List, ContractVersion = "4" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Send, ContractVersion = "5" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Wait, ContractVersion = "4" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Spawn, ContractVersion = "3" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Cancel, ContractVersion = "1" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Pause, ContractVersion = "1" },
-                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Resume, ContractVersion = "1" }
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Resume, ContractVersion = "1" },
+                    new SkillToolDependency { Id = AgentCommunicationToolCatalog.Group, ContractVersion = "1" }
                 } },
                 BodyMarkdown = @"# Agent communication
 Use agents.list to see saved chats in your own document/workspace regardless of open tabs, including yourself (is_self=true). Every is_self=false entry is another agent; do not subtract yourself again or guess identity from repeated titles. Copy the exact short agent_id of a peer from that result or an incoming sender address. A not-found address can be a transcription error; refresh the list instead of claiming the chat was closed. The list contains title, document/project title, source and status only. A working status does not reveal the task, current tool, progress, history or capabilities. Ask the peer if you need that information. Never invent an address or assume another chat shares your context or permissions.
+
+## Organize chats when requested
+- agents.group manages optional named groups in this document/workspace. Use action=list, then create/rename with name, add/remove with exact agent_ids, or delete the group. Group names are unique. list returns NextGroup for after; agents.list returns NextAgent for after_agent and accepts a group name filter. Page through unique chats, not duplicate tree entries.
+- A group is a set of links. One chat can belong to several groups with one history and run. Remove affects one membership; delete affects only the group. Neither deletes chats, wakes a participant, changes permissions nor resets collaboration limits. Prefer one useful group for an unorganized chat; keep existing memberships unless reorganization was requested. Never infer permission to delete history from a request to organize chats.
+- Group membership does not imply that spawned children join automatically. Add them explicitly. A creator relation in the tree is provenance, not a mandatory supervisor. If topic information is insufficient, leave the chat unclassified or ask for a focused clarification; do not claim to have read its private history.
 
 ## Create participants when useful
 - agents.spawn creates an ordinary chat with title and optional initial_message. It inherits your model and restrictions, without copying history or opening a tab. Give the necessary context explicitly. Set expect_reply=true when you need a response to that initial input; preserve the returned message_id. Agents may choose and change roles freely.

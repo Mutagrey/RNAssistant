@@ -1,5 +1,21 @@
 # RNAssistant Harness
 
+## Named chat groups (4a.1, 2026-11-05)
+
+Filter `agent groups:` covers resource-authority CAS, duplicate memberships,
+remove/delete without writing chat history, creator deletion, restart + GC,
+competing revision mutations, add/delete races, no resurrection, exact tool binding
+and Plan policy, group-scoped discovery and 55-chat paging with no peer startup.
+Regressions: `storage: header`, `tool pack: core and atomic`, `agent communication:`
+(8 tools when enabled). No Office/VSTO validation on this host.
+
+`node tests/web/agent-groups.test.js` runs the production UI with intercepted typed
+bridge fixtures: Office/Workspace/plugin share tree/actions; two links use one tab,
+creator nesting, remove one/last link, delete group, stale/unknown responses,
+collapse/menu keyboard and narrow/125% bounds. Screenshots go to /tmp. The previous
+agent-communication fixture still checks settings/feed/tab-independent execution.
+These checks don't qualify native Office controller/WebView2 delivery.
+
 ## Active-step admission — 2026-11-05
 
 `agent admission:` covers FIFO, lowering/increasing/zero, cancellation/grant races,

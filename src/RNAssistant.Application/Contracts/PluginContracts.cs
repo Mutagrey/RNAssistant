@@ -208,6 +208,7 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class ProjectChatCatalogDto
     {
+        [JsonProperty("groupScopes")] public IReadOnlyList<ConversationGroupScopeView> GroupScopes { get; set; }
         [JsonProperty("projects")] public IReadOnlyList<ProjectChatProjectDto> Projects { get; set; }
         [JsonProperty("selectedWorkspaceId", NullValueHandling = NullValueHandling.Ignore)] public string SelectedWorkspaceId { get; set; }
     }
@@ -217,6 +218,7 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class ProjectChatStateDto
     {
+        [JsonProperty("groupScopes")] public IReadOnlyList<ConversationGroupScopeView> GroupScopes { get; set; }
         [JsonProperty("inputReceipt", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceInputReceipt InputReceipt { get; set; }
         [JsonProperty("project")] public ProjectChatProjectDto Project { get; set; }
         [JsonProperty("sessionId")] public string SessionId { get; set; }

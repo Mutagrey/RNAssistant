@@ -1,5 +1,28 @@
 # План модернизации production UI
 
+## Группы чатов — In Review, 2026-11-05
+
+Срез 4a.1: группы + creator nesting, agents.group/list paging; owners Application
+ConversationGroupService/Core storage, общий Web app-chat-groups. Старые row actions
+переведены в общий ActionMenu; удаления/rename/open вызывают прежних owners.
+Одна history/tab для всех вхождений; no automatic wake/resume/permission/budget reset.
+Нового Shell/demo нет; уточнение пользователя: убрать chat icons, внутри групп
+использовать общую цветную точку 6px, для групп — значок участников из Icons. Rollback — код среза без удаления журналов/групп; новые tool
+admissions требуют актуальный contract. SQLite header cache перестраивается v9→v10.
+
+Проверки: `agent-groups.test.js` — production Office/Workspace/plugin, creator/dangling
+parent, два вхождения/одна вкладка, remove первой/последней связи, delete группы,
+stale generation/unknown, collapse/menu Escape, стабильный цвет в разных группах,
+shared row geometry (сверено с Demo на том же viewport) и narrow/125%.
+[Широкий вид](review/agent-groups-wide.png), [узкий](review/agent-groups-narrow.png).
+Harness проверяет CAS/restart/GC/delete races и отсутствие изменения истории/Run.
+Windows/Office/WebView2 и пользовательское визуальное принятие остаются открытыми.
+
+Ревью: 1) у документа/проекта создать две группы; 2) через «… → Группы чата…» включить
+один чат в обе и открыть обе строки; 3) убрать одну связь; 4) удалить группу и убедиться,
+что чат/вкладка сохраняются. Следующий срез 4a.2 — overview + адресный chat.rename;
+Inspector и S2 этим не запускаются.
+
 ## Очередь выполнения — In Review, 2026-11-05
 
 Scope: существующий Settings + общий Chat View; owners Application admission/Core

@@ -1,5 +1,20 @@
 # Conversation JSON flow
 
+## Группы чатов — 2026-11-05
+
+`agents.group` управляет optional именованным набором ссылок внутри документа/workspace.
+Модель использует уникальное имя группы и публичные agent_id, UI — typed
+changeChatGroup с exact runtime revision. Один чат может иметь несколько memberships,
+но одну историю и одного execution owner. Remove меняет одну связь, Delete — только
+группу. Delete chat остаётся у прежнего владельца с его guards, без каскадного удаления
+детей. Удалённые чаты не появляются в membership после rebuild/restart.
+
+ConversationGroupService пишет через ChatStore.Groups в существующий ResourceAuthority
+journal/CAS под тем же document lock, что и удаление чатов. Конфликт/unknown не
+повторяется автоматически. Группы не запускают/продолжают/останавливают Run, не
+снимают ограничения и не меняют participant roster цепочки. Дочерний чат добавляется
+явно. CreatorChatId — provenance из AgentCreation, не ParentSessionId fork истории.
+
 ## Очередь активных шагов — 2026-11-05
 
 `MaxConcurrentAgentSteps`: default 4, 0 — без ограничения, диапазон 0–64.
@@ -59,15 +74,16 @@ User Stop и recovery не снимаются агентом. Replay всегд�
 После restart пользователь использует прежнее явное/batch продолжение из любого
 чата области. `agents.cancel` может завершить сохранённую паузу без model/tool call.
 Close вкладки не меняет выполнение. Межпроцессный peer control
-не добавлен; пользовательский UI описан выше. Точные схемы — AgentCommunicationToolCatalog, skill v8.0.0.
+не добавлен; пользовательский UI описан выше. Точные схемы — AgentCommunicationToolCatalog, skill v10.0.0.
 
 Owner — Application/Conversations (`AgentCommunicationService`), общий Inbox и
 существующий ConversationRunService/AgentKernel. Срез 2026-11-04 использует сохранённый
 каталог ChatStore в exact document/workspace; runtime связывает область с существующим
 Inbox/queue owner. Открытые вкладки не регистрируют участников.
-`agents.list(query?, agent_id?)` возвращает до 50 сохранённых чатов этой области,
-включая текущий (`is_self=true`), и `Truncated`; для уточнения есть поиск по названию
-и точному адресу. Между областями отправка запрещена, даже если адрес известен.
+`agents.list(query?, agent_id?, group?, after_agent?)` v4 возвращает до 50 уникальных
+чатов, упорядоченных по agent_id, `Truncated` и `NextAgent` для следующей страницы.
+Текущий отмечен is_self; поиск — по названию/адресу, фильтр — по имени группы.
+Пагинация не закрепляет каталог: параллельные изменения требуют повторного чтения. Между областями отправка запрещена, даже если адрес известен.
 Публичный `agent_id` — стабильный короткий адрес `a-` + 10 base32 знаков от SHA-256
 storage chat ID; порядок вкладок, rename и restart его не меняют. Runtime разрешает
 его в exact chat endpoint; неоднозначное совпадение отклоняется, fuzzy/prefix lookup нет.
@@ -118,7 +134,7 @@ all — каждый. RepliesReady и Matches[{request_id,message_id,agent_id}] 
 Проверка durable Inbox и захват сигнала проходят под одним lock: ответ до wait и
 между проверкой/подпиской не теряется. Корреляция восстанавливается из журнала;
 само ожидание восстанавливается только по явному действию пользователя.
-`agents.wait` contract/binding v4; communication skill v8.0.0. Wait возвращается один,
+`agents.wait` contract/binding v4; communication skill v10.0.0. Wait возвращается один,
 не в batch: его policy не разрешает independent-read batching.
 Ожидание не держит Office gate, service lock или рабочий поток. Exact chat lease и
 владелец очереди остаются за тем же Run; второй Run в этом thread запрещён.

@@ -690,6 +690,7 @@ function applyChatState(response, skipDraftCapture, options) {
       state.chats, response.catalogChanges || response.CatalogChanges, state.chatProjectionRevisions);
   }
   if (typeof reconcileTerminalChatRuns === "function") reconcileTerminalChatRuns();
+  RNAssistantChatGroups.accept(response.groupScopes);
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
   }
@@ -724,6 +725,9 @@ function applyChatState(response, skipDraftCapture, options) {
 
 function applyRevisionedChatSummaryState(response) {
   response = response || {};
+  var groupVersion = RNAssistantChatGroups.version();
+  RNAssistantChatGroups.accept(response.groupScopes);
+  if (groupVersion !== RNAssistantChatGroups.version()) renderChatSessions({ navigationOnly: true });
   if (response.chats === undefined && response.Chats === undefined) return;
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   state.chats = window.RNAssistantRunViewState.mergeCatalog(
@@ -744,6 +748,7 @@ function applyChatCatalogState(response) {
       state.chats, response.catalogChanges || response.CatalogChanges, state.chatProjectionRevisions);
   }
   if (typeof reconcileTerminalChatRuns === "function") reconcileTerminalChatRuns();
+  RNAssistantChatGroups.accept(response.groupScopes);
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
   }
@@ -758,11 +763,11 @@ function chatSessionListKey(chats) {
     state.officeHostChatAvailable, state.officeHostChatPending, state.officeHostChatTarget,
     state.officeHostChatError, state.officeHostLaunchOpen, officeHostChatUnavailableReason(),
     !chats.length && [state.chatDetailPending, state.chatDetailError],
-    state.documents, state.collapsedChatDocuments,
+    state.documents, state.collapsedChatDocuments, RNAssistantChatGroups.version(),
     chats.map(function (chat) {
       var activity = chatTreeActivity(chat);
       return [chatId(chat), !!(state.chatDeletions && state.chatDeletions[chatId(chat)]), chatTitle(chat), chatHost(chat), chatDocumentKey(chat),
-        chatDocumentTitle(chat), chatDocumentPath(chat), chatIsCurrentDocument(chat),
+        chatDocumentTitle(chat), chatDocumentPath(chat), chatIsCurrentDocument(chat), chat.CreatorChatId || chat.creatorChatId,
         chatJsonlByteLength(chat), chatCasBlobCount(chat), chatCasLogicalByteLength(chat),
         chatCasStoredByteLength(chat), chatCasMissingBlobCount(chat), chatCasReferenceIssueCount(chat),
         chatStorageWarningLevel(chat), activity.run && activity.run.runId, activity.active,
@@ -818,7 +823,8 @@ function renderChatSessionList(chats) {
 
   var documents = {};
   chats.forEach(function (chat) {
-    if (query && [chatTitle(chat), chatDocumentTitle(chat), chatHost(chat)].join(" ").toLowerCase().indexOf(query) < 0) {
+    if (query && [chatTitle(chat), chatDocumentTitle(chat), chatHost(chat)].join(" ").toLowerCase().indexOf(query) < 0 &&
+        !RNAssistantChatGroups.matches({ host: chatHost(chat), documentKey: chatDocumentKey(chat) }, chatId(chat), query)) {
       return;
     }
     var key = chatHost(chat) + "|" + chatDocumentKey(chat);
@@ -903,9 +909,11 @@ function renderChatSessionList(chats) {
   list.appendChild(tree);
   window.RNAssistantNavigationTree.render(tree, nodes, {
     label: "Документы и чаты", positionKey: "chat",
-    focusKey: (focusKey || officeWasFocused) && selectionChanged && state.activeChatId ? "chat:" + state.activeChatId : focusKey,
-    onToggle: function (node, expanded) { state.collapsedChatDocuments[node.documentKey] = !expanded; },
-    onSelect: function (node) { if (node.chatId && !state.bridgeUnavailable) selectChat(node.chatId); }
+    focusKey: (focusKey || officeWasFocused) && selectionChanged && state.activeChatId &&
+      (!focusKey || focusKey.indexOf("chat:" + state.activeChatId) !== 0) ? "chat:" + state.activeChatId : focusKey,
+    onToggle: function (node, expanded) { if (node.chatGroupBranch) RNAssistantChatGroups.toggle(node, expanded);
+      else state.collapsedChatDocuments[node.documentKey] = !expanded; },
+    onSelect: function (node) { RNAssistantChatGroups.select(node); if (node.chatId && !state.bridgeUnavailable) selectChat(node.chatId); }
   });
   list.scrollTop = previousScroll;
   // Document expansion is initialized during rendering; retain its final state.
@@ -973,7 +981,9 @@ function chatDocumentTreeNode(documentItem, query) {
   var tree = window.RNAssistantNavigationTree;
   var collapsed = !query && !!state.collapsedChatDocuments[documentItem.key];
   var status = documentItem.current ? "Активен" : documentItem.open ? "Открыт" : "Закрыт";
-  var children = documentItem.chats.map(chatTreeNode);
+  var groupScope = { host: documentItem.host, documentKey: documentItem.documentKey,
+    sessionId: documentItem.chats.length ? chatId(documentItem.chats[0]) : null, disabled: !!state.bridgeUnavailable };
+  var children = RNAssistantChatGroups.decorate(documentItem.chats.map(chatTreeNode), documentItem.chats, groupScope, query);
   if (!children.length) children.push({
     key: "chat:empty:" + documentItem.key, kind: "leaf", title: "Нет чатов", disabled: true
   });
@@ -985,6 +995,7 @@ function chatDocumentTreeNode(documentItem, query) {
     className: documentHostClass(documentItem.host).trim(),
     children: children,
     actions: [
+      RNAssistantChatGroups.createAction(groupScope),
       { title: "Новый чат для документа", iconHtml: tree.icon("plus"), onClick: function () { createDocumentChat(documentItem); } },
       { title: documentItem.open ? "Активировать документ" : "Открыть документ", iconHtml: tree.icon("open"),
         hidden: !documentItem.open && !documentItem.path,
@@ -1028,7 +1039,6 @@ function chatTreeNode(chat) {
   var storageTooltip = badgeLevel !== "none" ? buildChatStorageTooltip(chat, badgeLevel) : "";
   return {
     key: "chat:" + id, kind: "leaf", title: (deleting ? "Удаление… · " : "") + chatTitle(chat), chatId: id,
-    iconHtml: window.RNAssistantNavigationTree.icon("chat"),
     selected: id === state.activeChatId, disabled: !!state.bridgeUnavailable || deleting,
     tooltip: chatTitle(chat),
     badge: badgeLevel !== "none" ? "!" : "", badgeKind: badgeLevel, badgeTitle: storageTooltip,

@@ -503,6 +503,8 @@ namespace RNAssistant.Core.Models
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
         public string DocumentPath { get; set; }
+        public string DocumentAuthorityId { get; set; }
+        public string CreatorChatId { get; set; }
         public string Title { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }
@@ -538,6 +540,8 @@ namespace RNAssistant.Core.Models
         public string DocumentKey { get; set; }
         public string DocumentTitle { get; set; }
         public string DocumentPath { get; set; }
+        public string DocumentAuthorityId { get; set; }
+        public string CreatorChatId { get; set; }
         public string Title { get; set; }
         public string Model { get; set; }
         public string Mode { get; set; }

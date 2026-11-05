@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Мультиагенты: группы и дерево — In Review, 2026-11-05
+
+Этап 4a.1: agents.group v1, list v4 с paging/group, skill v10. Группы — optional links
+в существующем ResourceAuthorityStore/CAS; revision CAS + chat deletion lock,
+tombstone, restart/GC. Creator/authority проецируются existing header reducer;
+SQLite cache v10 перестраивается без переписи истории. Общий NavigationTree/ActionMenu
+для Office/Workspace/plugin: один чат в нескольких группах открывает ту же вкладку,
+remove/delete group сохраняют историю и Run. У чатов без группы нет иконок; внутри
+групп — маленькие цветные точки, у групп — значок участников. Общий token/component,
+без фоновых model calls.
+
+3 group checks, 25 communication, 3 header, core pack и production browser fixture
+проходят локально. [UI ревью](../ui/UI_MIGRATION_PLAN.md#группы-чатов--in-review-2026-11-05).
+Windows/Office/controller/WebView2 и визуальное принятие открыты. Далее 4a.2 — bounded
+chat overview/core.find/read и адресное переименование; затем 4b/Inspector/resources.
+Общего бюджета token/message/Run по решению пользователя нет.
+
 ## Мультиагенты: FIFO активных шагов — In Review, 2026-11-05
 
 `MaxConcurrentAgentSteps` 4 по умолчанию, 0 без ограничения. Общая очередь одного

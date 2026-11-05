@@ -784,13 +784,20 @@ namespace RNAssistant.Application
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
                 var plugins = _store.List().Where(item => !item.Hidden).ToArray();
-                return new ProjectChatCatalogDto { Projects = Conversations.ListConnectedWorkspaces().Select(connection => {
+                var connections = Conversations.ListConnectedWorkspaces();
+                return new ProjectChatCatalogDto { GroupScopes = Conversations.ChatGroupCatalog(connections.SelectMany(item => item.Chats.Concat(new[] { new ChatSessionHeader { Host = "Workspace",
+                    DocumentKey = item.WorkspaceId, WorkspaceId = item.WorkspaceId } }))), Projects = connections.Select(connection => {
                     var project = ProjectChatProject(connection);
                     var plugin = plugins.FirstOrDefault(item => item.SourceWorkspaceId == project.WorkspaceId);
                     if (plugin != null) { project.PluginId = plugin.PluginId; project.Name = plugin.Appearance?.Name ?? plugin.Name; }
                     return project;
                 }).ToArray() };
             }
+        }
+
+        public ChangeChatGroupResponse ChangeChatGroup(ChangeChatGroupRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) return Conversations.ChangeChatGroup(request);
         }
 
         private static string ProjectRoot(ProjectConnectionRequest request)
@@ -845,6 +852,7 @@ namespace RNAssistant.Application
             var messages = PresentWorkspaceWindow(workspace, session, session.Messages.Count);
             ReportChatReadStage(reportStage, "messages", timer.ElapsedMilliseconds - stateMs);
             return new ProjectChatStateDto { Project = ProjectChatProject(workspace), SessionId = session.Id,
+                GroupScopes = Conversations.ChatGroupCatalog(new[] { RNAssistant.Core.Services.ChatSessionHeaderFactory.Create(session) }),
                 InputReceipt = request.ReceiptRequestId == null ? null :
                     Conversations.ReadInputReceipt(session, request.ReceiptRequestId),
                 State = snapshot,

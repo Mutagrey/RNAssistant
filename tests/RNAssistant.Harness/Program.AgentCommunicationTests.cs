@@ -507,7 +507,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), config, (executor, adapter) => {
                 AssertTrue(!executor.GetControllerTools().Any(t => AgentCommunicationToolCatalog.Owns(t.Id)), "disabled tools are absent from Office request catalog");
                 config.MaxCollaborationAgents = 20;
-                AssertEqual(7, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
+                AssertEqual(8, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
                 var office = RNAssistant.Office.Services.BuiltInSkillProvider.GetSkills(adapter).Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 var workspace = WorkspaceSkillProvider.GetSkills().Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 AssertEqual(office.BodyMarkdown, workspace.BodyMarkdown, "Office and Workspace use the same communication skill");

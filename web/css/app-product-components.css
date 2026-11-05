@@ -140,6 +140,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree .navigation-tree-expander { display: grid; place-items: center; flex: 0 0 var(--tree-expander); width: var(--tree-expander); height: 18px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ink-muted); }
 .navigation-tree-expander svg { width: var(--tree-expander); height: var(--tree-expander); }
 .navigation-tree-icon { display: grid; place-items: center; flex: 0 0 var(--tree-icon); color: inherit; }
+.agent-color-dot { display: inline-block; width: var(--agent-marker-size); height: var(--agent-marker-size); flex: none; border-radius: 50%; background: var(--agent-color); }
 .navigation-tree-icon svg { width: var(--tree-icon); height: var(--tree-icon); fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 .navigation-tree-item[aria-level="1"][aria-expanded] > .navigation-tree-row > .navigation-tree-icon { --tree-icon: var(--tree-parent-icon); }
 .office-app-mark {

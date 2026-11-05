@@ -474,6 +474,11 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.RenameChat(renameChat.ChatId, renameChat.Title), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.ChangeChatGroup:
+                        var groupRequest = Payload<RNAssistant.Application.Contracts.ChangeChatGroupRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => string.IsNullOrEmpty(groupRequest.WorkspaceId)
+                            ? _controller.ChangeChatGroup(groupRequest) : Plugins.ChangeChatGroup(groupRequest), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.SetChatModel:
                         var setChatModel = Payload<SetChatModelPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
