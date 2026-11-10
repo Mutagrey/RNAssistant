@@ -34,7 +34,7 @@ authority.
 ## Current implementation
 
 `skills.agents.communication` (Common, `AgentCommunicationSkillProvider`) is shared
-by Office, Workspace and plugin chats. Version 11.0.0 requires `agents.list` v4,
+by Office, Workspace and plugin chats. Version 12.0.0 requires `agents.list` v4,
 `agents.send` v5, `agents.spawn` v3, `agents.wait` v4 and `agents.cancel/pause/resume/group` v1;
 the existing `core.skills.load` path exposes its complete instructions. It covers
 saved same-scope discovery with `is_self`, stable short addresses, ordinary-thread
@@ -44,11 +44,16 @@ ordered batches of independent sends with separate receipts and no mixed tools,
 human authority, shared participant limits/disabled/unknown handling and stopping resolved exchanges.
 Optional named groups are links, separate from that cap: list/create/rename/add/remove/delete,
 unique addresses with pagination, no implicit wake/history access/rights changes.
+Version 12 adds topic organization through bounded `core.find/read` chat overviews,
+explicit historical-data/provenance limits, and addressed `chat.rename` after a fresh
+read. Busy/stale targets are not stopped or automatically retried. It does not teach
+agents to poll every chat or expose complete histories for grouping.
 The root, spawned and recruited chats share the cap; repeated messages have no separate quota.
 It tracks parallel requests by runtime message_id, validates reply_to and uses
 any/all filtered waits, prioritizes answering before
 waiting, and distinguishes a finished turn from a completed user task. Peer metadata
-includes no task description or private history; ask for details.
+includes no live task description or private history; use an overview for topic
+organization and ask the peer only for information the runtime does not supply.
 Cancellation instructions distinguish a live signal from durable terminal cancellation,
 prohibit unknown retries and preserve the chat, queue and other participants.
 Pause guidance separates Requested/Paused/Released, keeps the same Run and budget,

@@ -354,6 +354,8 @@
     <Compile Include="Storage\ChatStore.Caching.cs" />
     <Compile Include="Storage\ChatStore.EventLog.cs" />
     <Compile Include="Storage\ChatStore.SqliteProjection.cs" />
+    <Compile Include="Storage\ChatStore.Overview.cs" />
+    <Compile Include="Models\ChatOverview.cs" />
     <Compile Include="Storage\ChatStore.FinishEvidence.cs" />
     <Compile Include="Storage\ChatStore.EventLocators.cs" />
     <Compile Include="Storage\ChatStore.SessionProjection.cs" />

@@ -24,14 +24,16 @@ namespace RNAssistant.Runtime
         private readonly WorkspacePlanService _plans;
         private readonly IReadOnlyToolHandler _office;
         private readonly WorkspaceChatAttachmentResourceProvider _chatAttachments;
+        private readonly RNAssistant.Application.Conversations.ConversationCatalogAccess _chats;
         private readonly int _maximumTextReadCharacters;
 
         internal WorkspaceResourceHandler(WorkspaceFileResourceProvider files, SkillPublicationService publications,
             Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceEvidence> observed, bool find,
             WorkspacePlanService plans, int maximumTextReadCharacters, IReadOnlyToolHandler office = null,
-            WorkspaceChatAttachmentResourceProvider chatAttachments = null)
+            WorkspaceChatAttachmentResourceProvider chatAttachments = null,
+            RNAssistant.Application.Conversations.ConversationCatalogAccess chats = null)
         { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans;
-            _office = office; _chatAttachments = chatAttachments;
+            _office = office; _chatAttachments = chatAttachments; _chats = chats;
             if (maximumTextReadCharacters < 1 || maximumTextReadCharacters > WorkspaceFileService.MaximumWindowTextCharacters)
                 throw new ArgumentOutOfRangeException(nameof(maximumTextReadCharacters));
             _maximumTextReadCharacters = maximumTextReadCharacters; }
@@ -42,6 +44,15 @@ namespace RNAssistant.Runtime
             try
             {
                 var type = Value(context, "type");
+                if (type == "chat")
+                {
+                    if (_chats == null) throw Error("Chat overview is unavailable.", "chat_catalog_unavailable");
+                    if (!_find) return Task.FromResult(_chats.Read(context, _maximumTextReadCharacters, cancellationToken));
+                    if (context.Arguments.Keys.Any(key => key != "type" && key != "query"))
+                        throw Error("Chat discovery accepts only type and query.", "chat_overview_invalid");
+                    var chats = _chats.Find(Value(context, "query"));
+                    return Return(ToolResult.Ok(ResourceFindProjection.Message(chats), ResourceFindProjection.Serialize(chats)));
+                }
                 if (string.IsNullOrEmpty(type)) type = !_find && PlanSourceDocument.IsTarget(Value(context, "target")) ? "plan" : "file";
                 if (type == "office")
                 {

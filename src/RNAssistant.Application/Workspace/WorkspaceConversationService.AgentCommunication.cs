@@ -33,6 +33,7 @@ namespace RNAssistant.Runtime
             AgentCommunication.Register(new AgentConversationScope {
                 Key = "workspace:" + workspace.WorkspaceId,
                 Groups = new ConversationGroupService(_chats),
+                Catalog = new ConversationCatalogService(_chats, _payloads),
                 Contains = session => session?.WorkspaceId == workspace.WorkspaceId,
                 ReadCatalog = () => _chats.ListHeaders(includeStorageUsage: false)
                     .Where(header => header.WorkspaceId == workspace.WorkspaceId)

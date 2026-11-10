@@ -17,6 +17,7 @@ namespace RNAssistant.Office
             service.Register(new AgentConversationScope {
                 Key = "office",
                 Groups = new ConversationGroupService(_chatStore),
+                Catalog = new ConversationCatalogService(_chatStore, _toolExecutor.Payloads),
                 Contains = session => session?.WorkspaceId == null && _chatSessions.IsCurrentDocument(session),
                 ReadCatalog = () => {
                     var host = _adapter.HostName;

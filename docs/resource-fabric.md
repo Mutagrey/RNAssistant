@@ -10,6 +10,50 @@ Read its normative documents in order: [URF](stabilization/resource-cutover/UNIV
 [Authority](stabilization/resource-cutover/RESOURCE_AUTHORITY.md), then
 [Evidence/Compiler](stabilization/resource-cutover/EVIDENCE_CONTEXT_COMPILER.md).
 This file maps implementation owners, not a fourth normative architecture.
+
+
+## Bounded chat overviews — 2026-11-10
+
+`ConversationCatalogAccess` is the shared Office/Workspace owner behind existing
+`core.find/read`: Office opts into `scope=chats`, Workspace/plugin into `type=chat`.
+It uses `AgentConversationScope`'s saved catalog and exact public addresses;
+existence/access does not depend on tabs. Same host/document/workspace and document
+authority are checked. `MaxCollaborationAgents=0` rejects access through old handlers
+as well. Reading does not recruit a participant or consume a place in the cap.
+No default cross-chat enumeration, worker startup, history merge or LLM summarizer.
+
+`ChatStore.ReadChatOverview` reads the existing verified SQLite projection of chat
+events: metadata, first 4 / last 32 message rows, at most 64 KiB per protected row
+and 1 MiB total admitted row payload. SQL excludes oversized payloads before managed
+materialization. At most 6 excerpts of 600 characters are exposed, with role,
+peer sender when present, timestamp and truncation. System/developer, protocol tool
+results, activity/runtime projections and model reasoning are excluded. Current v8
+assistant responses contribute only visible finish text. An incompatible stream
+contributes metadata only, without interpretation or migration.
+
+Shared summaries come only from `DocumentArtifactStore.PublishedContext`, an exact
+existing ResourceAuthority head. Local compaction checkpoints are derived projections
+and are not a publication source. Up to 4 user/assistant-source claims of 400
+characters are copied from a bounded published body (at most 2 MiB); publication
+time/status identify freshness and missing/unavailable summaries. Claims remain
+model-authored historical data. No raw provenance messages or private checkpoint
+body are copied. The resulting JSON text is at most 8000 characters and fits the
+run's configured read budget with a 1024-character envelope allowance; reduced
+records set `budgetTruncated`. If metadata alone does not fit, reading fails explicitly.
+
+The existing CAS stores an immutable overview observation. Its runtime reference
+pins target chat/revision and payload hash, and evidence retains any exact published
+summary dependency. `complete=true` covers only this derived observation;
+`sourceComplete=false` / `historyComplete=false` never prove a whole-history read or
+an external effect. No mutable overview head, new durable catalog or schema migration.
+Run-local revision observations authorize only addressed title metadata changes;
+callers cannot supply revisions or resource URIs. Accepted evidence survives replay/GC.
+
+Bounds describe warm projection reads. A missing/damaged SQLite cache uses the
+existing full event replay to rebuild; cold rebuild cost and very large catalogs
+are not newly qualified. Addressed rename loads the existing idle session under its
+lease, then appends scalar metadata only. Native controller/UI notification remains
+separate Windows evidence; host-neutral checks cover both model/tool routes.
 Earlier R61 whole-read/accepted-tool-result binding explanations are superseded.
 
 ## Shared text exploration — 2026-10-25

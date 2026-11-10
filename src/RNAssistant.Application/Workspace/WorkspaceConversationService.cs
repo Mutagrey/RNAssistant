@@ -1234,6 +1234,7 @@ namespace RNAssistant.Runtime
                 }, payloads, office?.ModelProjection);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
+                var chatCatalog = new ConversationCatalogAccess(agentCommunication, session, _settings.MaxCollaborationAgents);
                 var entries = new List<ToolCatalogEntry>();
                 var authorityStore = new ResourceAuthorityStore(paths);
                 _catalogAuthority = authorityStore;
@@ -1246,21 +1247,21 @@ namespace RNAssistant.Runtime
                     ModelContextBudget.ApproximateTextCharacterCapacity(
                         ModelContextBudget.InputBudgetTokens(_settings), _settings));
                 Register(registry, entries, "core.find", (_mode.AllowsSkills ? "Browse workspace files and directories (default type=file, up to 200; explicit recursive/glob selectors return files only; recursive=true includes descendants) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Browse workspace files and directories, up to 200; explicit recursive/glob selectors return files only; recursive=true includes descendants. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
-                    " Use type=attachment to find accepted message attachments in this chat." +
+                    " Use type=chat to find bounded overviews of saved chats in this project without starting them; query filters title or agent address. Use type=attachment to find accepted message attachments in this chat." +
                     (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document."),
                     ResourceSchema(true, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
                         maximumFileReadCharacters,
-                        office?.ResourceFind, _chatAttachments));
+                        office?.ResourceFind, _chatAttachments, chatCatalog));
                 Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts structured substring edits and full-line context from a delivered excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
                     " For PDF files, representation=text with startPage/pageCount reads consecutive complete pages within the model budget; nextPageIndex continues the range. Use pageIndex with optional startChar/charCount for a long page. Extracted text may omit visual or scanned content." +
-                    " Use type=attachment with the exact semantic target from discovery to read an immutable attachment; it does not authorize a source edit." +
+                    " Use type=chat with target=Chat overview: <agent_id> from discovery, representation=text or metadata, and no history selectors to read a bounded historical overview without starting that chat. Use type=attachment with the exact semantic target from discovery to read an immutable attachment; it does not authorize a source edit." +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document; VBA source supports the same procedure selector with representation=source."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
                         maximumFileReadCharacters,
-                        office?.ResourceRead, _chatAttachments));
+                        office?.ResourceRead, _chatAttachments, chatCatalog));
                 var searchObservation = new ResourceSearchObservation();
                 Register(registry, entries, "core.search", ResourceModelSearchSchema.Description,
                     ResourceModelSearchSchema.Create(true, office != null), false,
@@ -1279,7 +1280,7 @@ namespace RNAssistant.Runtime
                 }
                 if (agentCommunication != null && agentCommunication.IsEnabled(settings.MaxCollaborationAgents)) foreach (var entry in AgentCommunicationToolCatalog.GetTools())
                     Register(registry, entries, entry, new AgentCommunicationToolHandler(agentCommunication, agentInbox, session, settings.MaxCollaborationAgents));
-                Register(registry, entries, ChatRenameToolHandler.Entry(), new ChatRenameToolHandler(session));
+                Register(registry, entries, ChatRenameToolHandler.Entry(), new ChatRenameToolHandler(session, chatCatalog.Rename));
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);
@@ -1385,12 +1386,23 @@ namespace RNAssistant.Runtime
                 var files = ResourceVariant(find, false, maximumFileReadCharacters);
                 // Complete alternatives: the exact runtime gate and structured output
                 // must reject selectors belonging to the other resource kind.
-                var variants = new JArray(files, AttachmentResourceVariant(find, maximumFileReadCharacters));
+                var variants = new JArray(files, AttachmentResourceVariant(find, maximumFileReadCharacters), ChatResourceVariant(find));
                 if (allowSkills) { variants.Add(ResourceVariant(find, true, maximumFileReadCharacters)); variants.Add(PlanResourceVariant(find, maximumFileReadCharacters)); }
                 if (allowOffice) variants.Add(OfficeResourceVariant(find));
                 return new JObject { ["type"] = "object", ["properties"] = new JObject(),
                     ["required"] = new JArray(), ["additionalProperties"] = false,
                     ["anyOf"] = variants }.ToString(Formatting.None);
+            }
+
+            private static JObject ChatResourceVariant(bool find)
+            {
+                var schema = JObject.Parse(find ? Schema("query", false) : Schema("target", true));
+                var properties = (JObject)schema["properties"];
+                properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("chat") };
+                ((JArray)schema["required"]).Add("type");
+                if (!find) properties["representation"] = new JObject { ["type"] = "string",
+                    ["enum"] = new JArray("text", "metadata") };
+                return schema;
             }
 
             private static JObject AttachmentResourceVariant(bool find, int maximumTextCharacters)

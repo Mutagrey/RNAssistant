@@ -1,5 +1,18 @@
 # RNAssistant Harness
 
+
+## Chat overviews and addressed rename (4a.2, 2026-11-10)
+
+Filter `chat overview:` covers bounded SQLite samples/bytes, private content filtering,
+existing published summary, incompatible metadata-only reads, restart/stable projection,
+model budget, unsupported history selectors, exact scope/disabled/delete guards,
+no implicit execution load/wake, busy lease/stale revision, metadata preservation,
+post-write unknown/no replay, and immutable evidence retention through replay/CAS GC.
+Scripted Office and Workspace model loops exercise core.find/read + chat.rename v2.
+Regressions: `chat rename:`, `agent groups:`, `tool pack: core and atomic`.
+Cold full-index rebuild cost, live-model classification and native Office/controller/
+WebView2 notifications remain separate evidence; no Office/VSTO validation here.
+
 ## Agent send batches — 2026-11-10
 
 `agent communication: send batch` checks schema/parser parity, 32-call bounds,

@@ -1,5 +1,46 @@
 # Мультиагентный runtime: последовательная реализация
 
+
+## Этап 4a.2: обзор и адресное переименование — In Review, 2026-11-10
+
+Реализован общий `ConversationCatalogAccess` для Office/Workspace/plugin:
+`core.find(scope=chats)` в Office, `core.find(type=chat)` в Workspace;
+`core.read(target="Chat overview: <agent_id>")` (Workspace также type=chat).
+До 50 результатов, уточнение query или обход через agents.list. Явное чтение даёт
+название/дату, существующую опубликованную сводку и ограниченные user/assistant
+фрагменты. Не запускает адресата и не создаёт LLM summary. Несовместимый stream —
+только metadata. Полные истории, system/developer, tool payload и reasoning не выдаются.
+
+Owners: `ChatStore.Overview` использует existing SQLite projection/event log;
+`DocumentArtifactStore.PublishedContext` читает точный published ResourceAuthority head;
+`ConversationCatalogAccess` удерживает bounded observations для текущего binding.
+Новые immutable overview payload/evidence проходят прежний CAS и model compiler.
+Нет нового durable store, mutable overview head или миграции event format.
+Точные bounds и источник evidence — [Resource Fabric](../resource-fabric.md).
+
+`chat.rename` v2 принимает title и необязательный agent_id. Текущий чат сохраняет
+прежний kernel commit. Для другого чата нужны fresh overview и exact reservation;
+общий owner пишет только scalar metadata. Выбран **отказ занятому чату**, включая
+живой wait/pause/worker: отдельная запись изменила бы ревизию активного Run.
+Параллельное сохранение detached session, скрытая остановка и отдельная очередь
+rename не вводятся. Новое входящее сообщение после чтения даёт stale; перечитать и
+решить заново. Ошибка после dispatch остаётся unknown без retry. Self rename прежний.
+
+| Инвариант | Отказ | Проверка |
+|---|---|---|
+| Обзор ограничен и не исполняет чужой чат | Большие payload/старый protocol/недоступная сводка | Bound rows/bytes/excerpts, privacy, metadata-only, стабильный повтор и restart |
+| Чтение доступно только в исходной области | Чужой адрес, disabled setting, delete | Нет load/start чужого execution; явная недоступность |
+| Rename не теряет чужие изменения | Lease занят / новые события после read | No-effect preflight, exact revision; history сохраняется, header обновляется |
+| Unknown не маскируется под no-effect | Сбой после записи metadata | Одна запись, unknown, durable title сохранён |
+| Evidence описывает только обзор | Полная история не прочитана | sourceComplete=false, immutable payload после kernel replay и CAS GC |
+
+4 новых `chat overview:` проходят, плюс 3 `chat rename:`, 3 `agent groups:` и core
+pack. Scripted Office и Workspace model loops проверяют реальные контракты; нет
+добавочных model calls для сводки. Controller/WebView2 delivery, live-model
+классификация и cold rebuild/очень большие каталоги остаются открытым evidence.
+UI этого среза не менялся. Skill v12 учит читать обзор перед rename и не опрашивать
+обязательно каждый чат. Следующий этап — 4b, необязательные поручения; затем Inspector.
+
 ## Этап 4a.1: группы и дерево — In Review, 2026-11-05
 
 Реализованы `agents.group` v1 (list/create/rename/add/remove/delete), `agents.list` v4
@@ -34,8 +75,8 @@ NavigationTree/ActionMenu. По уточнению пользователя об
 tools), 3 header, core pack, browser groups + прежний agent communication fixture.
 Windows/Office/WebView2 и пользовательское визуальное принятие открыты.
 
-**Следующий срез 4a.2:** bounded chat overview через core.find/read и адресное
-chat.rename. Без этого агент группирует по каталогу/известному контексту, не утверждает,
+**Срез 4a.2 реализован выше:** bounded chat overview через core.find/read и адресное
+chat.rename. До него агент группировал по каталогу/известному контексту, не утверждая,
 что прочёл все старые истории. Далее optional поручения (4b), Inspector (5),
 конкурентные ресурсы (6). Общего бюджета tokens/messages/Run нет по решению пользователя.
 
@@ -450,9 +491,9 @@ Projection исключает удалённые чаты/группы даже 
 delete относится только к группе. Вложенные папки групп пока не нужны. `agents.list`
 получил фильтр группы и bounded pagination для обхода более 50 чатов. Для rename
 расширяется существующий `chat.rename(title, agent_id?)`: без адреса — текущий чат.
-Сейчас handler меняет только bound session. Целевую запись должен выполнять общий
-Application owner с проверкой scope и наблюдавшейся ревизии metadata; нельзя сохранять
-полную устаревшую session поверх чужого активного Run. Конфликт возвращается явно.
+В 4a.2 целевую запись выполняет общий Application owner с проверкой scope,
+наблюдавшейся ревизии и existing lease. Занятый чат отклоняется; полная устаревшая
+session поверх чужого Run не сохраняется. Конфликт возвращается явно.
 
 ### Как организатор узнаёт содержание
 
@@ -518,8 +559,8 @@ rename занятого чата с revision conflict, каталог >50, от�
 | `agents.cancel(agent_id)` | Exact live signal или terminal cancellation сохранённого wait; отдельные receipts | Реализовано v1, этап 3a In Review |
 | `agents.group` | Именованные группы чатов: list/create/rename/add/remove/delete | Реализовано v1, 4a.1 In Review |
 | `agents.resolve` | Явное разрешение опционального поручения с результатом | Этап 4b |
-| `chat.rename(title, agent_id?)` | Переименовать текущий или выбранный доступный чат | Сейчас только title / текущий чат; расширение в 4a |
-| `core.find/read` | Читать опубликованные ресурсы и краткий обзор выбранного чата | Ресурсы реализованы; общий chat overview — 4a |
+| `chat.rename(title, agent_id?)` | Переименовать текущий или выбранный доступный чат | Реализовано v2, 4a.2 In Review; чужой чат только idle + observed revision |
+| `core.find/read` | Читать опубликованные ресурсы и краткий обзор выбранного чата | Реализован bounded chat overview, 4a.2 In Review |
 
 Нереализованные tools не добавляются в registry/skill. Точные текущие JSON Schema
 межагентных tools находятся в `AgentCommunicationToolCatalog.GetTools`. Следующие версии фиксируются
@@ -543,7 +584,7 @@ User Stop/restart pause снимается только явным действ�
 | 2b.1. Повтор ожидания | Реализован typed timeout progress через существующий terminal result; общий kernel не парсит имя tool/body. Зависит от 2a | Четвёртый одинаковый timeout исполняется; JSON/ChatStore replay сохраняет различие, остальные repeat guards и run limits действуют. 23 agent communication + 1 kernel wait + 15 tool runtime checks проходят; Windows отдельно |
 | 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; реализовано, In Review | Waiting + PendingToolWait в прежних events/CAS; явный resume того же call/Run, абсолютный deadline, однократный учёт. Exact chat lease остаётся за живым Run, рабочий поток и document gate свободны. Shutdown сохраняет wait, Stop отменяет живой wait. Непроверенная Windows document binding остаётся открытым gate |
 | 3. Run control/лимиты | User batch resume, exact user controls сохранённого Run и agents.cancel/pause/resume v1 (3a) реализованы, In Review. Настраиваемый максимум участников и baseline 1/2/4/8 реализованы. FIFO active-step admission реализован, default 4/0 unlimited; общего бюджета по решению пользователя нет. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. FIFO, cancellation races, wait/pause/approval release и 8 peers при 1 slot проверены host-neutral; Windows отдельно |
-| 4a. Организация чатов | 4a.1 реализован: ResourceAuthority group heads, creator в headers/DTO; `group`, целевой `chat.rename`, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
+| 4a. Организация чатов | 4a.1/4a.2 реализованы: ResourceAuthority group heads, creator в headers/DTO; `group`, адресный `chat.rename` v2, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
 | 4b. Поручения | Optional assignment events и bounded projection; `resolve`. Зависит от 2–3, membership не обязателен | Смена ролей без смены identity; finish не закрывает поручение; terminal assignment не доказывает внешний эффект без evidence |
 | 5. Inspector | Typed DTO/cursors поверх существующих SessionEvent/kernel/trajectory readers; production Inspector, без demo/store | Участники + отдельные communication/dependency graphs + timeline, навигация thread/message/Run/step/resource/E; control использует этап 3; subscriptions очищаются при dispose, Run сохраняется |
 | 6. Ресурсы/qualification | Existing Resource Registry, patch/preparation/read-back и HostRuntime/DocumentAccessGate; конфликтные multi-agent сценарии | Stale snapshots отклоняются, инструменты с неизвестными side effects не повторяются; Windows/Office и live-model evidence отдельно; никакой новой истории или COM abstraction |

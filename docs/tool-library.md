@@ -9,18 +9,44 @@ follow an explicit rename request. Use a concise, specific title in the user's
 language; preserve explicitly user-chosen names unless the user requests a rename,
 and avoid per-step or cosmetic renames. This does not require loading a skill.
 
-The only argument is `title`: a nonempty single line, at most 200 characters;
-surrounding whitespace is trimmed. The run's current session is the only target;
-the model supplies no chat/document ID. Core `ChatRenameToolHandler` owns the shared
-metadata mutation; the existing kernel commit persists it with the tool result.
-Exact binding `conversation.chat.rename.v1` permits this conversation-only write
-in Agent and Plan without confirmation, independently of document mutation policy.
-Office document authority and resource mutation journals are not involved.
+`chat.rename` v2 takes `title` (trimmed, nonempty single line, at most 200 characters)
+and optional `agent_id`. Omit the address, or use self, for the current chat: Core
+`ChatRenameToolHandler` updates the bound session and the kernel persists the result.
+An address from the same document/project selects another saved chat. First read
+its `Chat overview: <agent_id>` with `core.read` in the current runtime binding;
+`ConversationCatalogAccess` retains the observed revision, bounded to 128 observations.
+Find alone does not authorize rename. Rebinding/restart may require another read.
+
+The shared Application owner acquires the existing exact chat reservation, rejects
+live/queued workers, unavailable or incompatible chats and stale observations,
+then uses `ChatStore.SetAgentTitle` / `CommitScalarMetadata`. It appends only title,
+TitleAssignedByAgent and UpdatedUtc; it never saves a detached whole history over a
+Run. The target is not started, stopped or resumed. A race at persistence still
+uses existing CAS; a storage failure after dispatch stays unknown and is not retried.
+A saved rename with failed UI notification returns a refresh warning.
+Exact binding `conversation.chat.rename.v2` permits this metadata write in Agent
+and Plan without confirmation, independently of document mutation policy.
+Cross-chat access also obeys the current agent-enabled setting and bound scope.
 
 Runtime draft/smart naming remains available until the agent assigns a title.
 The durable `TitleAssignedByAgent` metadata then prevents fallback or late smart
 generation from overwriting it, even if the chosen text matches a draft/placeholder.
 `SmartChatTitles` controls automatic naming, not the availability of this tool.
+
+## Chat overview — 2026-11-10
+
+Office: `core.find({"scope":"chats","query":"optional title or address"})`.
+Workspace/plugin: `core.find({"type":"chat","query":"optional title or address"})`.
+Discovery returns up to 50 semantic targets; refine query or page `agents.list`.
+Read `{"target":"Chat overview: a-…","representation":"text"}` through `core.read`
+(Workspace also requires `"type":"chat"`). An exact discovered agent address may
+be used in this target. `metadata` omits excerpts and summary; history selectors
+are rejected. Office's default `all` does not enumerate other chats.
+
+The overview is bounded historical data, with update time, published summary
+excerpts when available, and a few visible user/assistant excerpts. It uses no LLM
+and does not wake peers. Unsupported streams expose metadata only. See
+[Resource Fabric](resource-fabric.md) for bounds, provenance and evidence semantics.
 
 ## Agent communication tools — 2026-11-03
 
@@ -29,7 +55,7 @@ when the application messaging owner is available and `MaxCollaborationAgents > 
 Zero removes them from new catalogs and rejects old handlers before dispatch;
 captured nonzero settings cannot override the current switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires list v4, send v5, spawn v3, wait v4 and cancel/pause/resume/group v1 (skill v10.0.0); zero makes that package
+and requires list v4, send v5, spawn v3, wait v4 and cancel/pause/resume/group v1 (skill v12.0.0); zero makes that package
 unavailable for loading.
 List reads saved chats in the caller's document/workspace, independently of tabs,
 with optional `query` (title substring), `agent_id` (exact address), `group` (name)
@@ -111,7 +137,7 @@ is a set. Runtime binds ID/revision under the existing metadata CAS; the model c
 supply revisions, URIs or storage ChatIds. These fields never enter model results.
 No peer wake, rights grant, cap reset, history copy or background LLM summarizer.
 The unified managed-write policy permits Plan; list/no-op reports VerifiedNoChange.
-Current schemas are in AgentCommunicationToolCatalog, shared guidance in skill v11.
+Current schemas are in AgentCommunicationToolCatalog, shared guidance in skill v12.
 
 Bindings: `conversation.agents.group.v1`, `conversation.agents.list.v4`, `conversation.agents.send.v5`,
 `conversation.agents.spawn.v3`, `conversation.agents.wait.v4`, `conversation.agents.cancel.v1`, `conversation.agents.pause.v1`, `conversation.agents.resume.v1`. Stale admissions must

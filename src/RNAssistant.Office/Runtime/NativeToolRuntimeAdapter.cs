@@ -80,6 +80,8 @@ namespace RNAssistant.Office.Runtime
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
+            var chatCatalog = new RNAssistant.Application.Conversations.ConversationCatalogAccess(
+                agentCommunication, session, settings.MaxCollaborationAgents);
             var searchObservation = new RNAssistant.Core.Services.ResourceSearchObservation();
             _ownedToolIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var registration in snapshot.Registrations.Where(OwnsRegistration))
@@ -107,12 +109,12 @@ namespace RNAssistant.Office.Runtime
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.FindToolId, StringComparison.Ordinal))
                 {
                     binding = ResourceFindToolHandler.Binding;
-                    handler = new ResourceFindToolHandler(gateway, session);
+                    handler = new ResourceFindToolHandler(gateway, session, chatCatalog);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.ReadToolId, StringComparison.Ordinal))
                 {
                     binding = ResourceReadToolHandler.Binding;
-                    handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments, settings);
+                    handler = new ResourceReadToolHandler(gateway, session, CaptureResourceReadAttachments, settings, chatCatalog);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
                 {
@@ -252,7 +254,7 @@ namespace RNAssistant.Office.Runtime
                 else if (registration.Descriptor.Id == ChatRenameToolHandler.ToolId)
                 {
                     binding = ChatRenameToolHandler.Binding;
-                    handler = new ChatRenameToolHandler(session);
+                    handler = new ChatRenameToolHandler(session, chatCatalog.Rename);
                 }
                 else if (AgentCommunicationToolCatalog.Owns(registration.Descriptor.Id))
                 {

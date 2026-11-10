@@ -1,5 +1,21 @@
 # Stabilization progress
 
+
+## Мультиагенты: обзор чатов и адресный rename — In Review, 2026-11-10
+
+Этап 4a.2: общий ConversationCatalogAccess, bounded core.find/read overview и
+chat.rename v2 (agent_id optional), skill v12. Чтение использует прежние catalog,
+SQLite events projection, опубликованные Shared context и CAS evidence; нет LLM
+summarizer, wake или копирования полной истории. Чужой чат переименовывается только
+после read и под exact idle lease; scalar metadata CAS защищает новые сообщения.
+Busy/stale отказы явные; post-dispatch fault остаётся unknown без replay.
+
+4 overview checks (privacy/bounds/restart, scope/lease/CAS/fault, Office и Workspace
+model wire, evidence GC), 3 rename, 3 group и core pack проходят host-neutral.
+UI не менялся. Windows/controller/WebView2 delivery, live-model grouping и холодный
+rebuild большого каталога не квалифицированы. [План](../proposals/multi-agent-runtime-plan.md):
+далее 4b — необязательные поручения, затем Inspector и resource qualification.
+
 ## Пакетная отправка агентам — 2026-11-10
 
 Убран `invalid_batch` для независимых `agents.send`: один ответ модели отправляет
@@ -22,8 +38,8 @@ remove/delete group сохраняют историю и Run. У чатов бе
 
 3 group checks, 25 communication, 3 header, core pack и production browser fixture
 проходят локально. [UI ревью](../ui/UI_MIGRATION_PLAN.md#группы-чатов--in-review-2026-11-05).
-Windows/Office/controller/WebView2 и визуальное принятие открыты. Далее 4a.2 — bounded
-chat overview/core.find/read и адресное переименование; затем 4b/Inspector/resources.
+Windows/Office/controller/WebView2 и визуальное принятие открыты. Этап 4a.2
+реализован выше; далее 4b/Inspector/resources.
 Общего бюджета token/message/Run по решению пользователя нет.
 
 ## Мультиагенты: FIFO активных шагов — In Review, 2026-11-05

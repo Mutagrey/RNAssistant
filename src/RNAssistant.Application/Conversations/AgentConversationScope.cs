@@ -15,5 +15,6 @@ namespace RNAssistant.Application.Conversations
         internal Action<ChatSession> Commit;
         internal Func<ChatSession, AgentConversationEndpoint> Endpoint;
         internal ConversationGroupService Groups;
+        internal ConversationCatalogService Catalog;
     }
 }

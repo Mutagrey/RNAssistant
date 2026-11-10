@@ -21,6 +21,14 @@ namespace RNAssistant.Core.Storage
     public sealed partial class DocumentArtifactStore
     {
         public const string SharedContextKind = "shared-context";
+        public ResourceRef PublishedContext(ChatSession session)
+        {
+            if (string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)) return null;
+            var scope = Scope(session);
+            return CurrentSnapshot(session, new ResourceIdentity(ResourceUri.Create("state", scope.Kind,
+                scope.Id, "artifact_ctx_" + TextPatternEngine.Sha256(session.Id))));
+        }
+
         public static string ContextLogicalId(string id)
         {
             var match = System.Text.RegularExpressions.Regex.Match(id ?? "", @"^(artifact_ctx_[0-9a-f]{64})_r[1-9][0-9]*_[0-9a-f]{8}$",

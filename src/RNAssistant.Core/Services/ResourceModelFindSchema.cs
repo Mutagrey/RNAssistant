@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Services
                     {
                         ["type"] = "string",
                         ["description"] = "Optional user-level resource category. Catalog bodies are historical resources, not callable admission.",
-                        ["enum"] = new JArray("all", "conversation", "document", "selection", "html", "vba", "backups", "catalogs"),
+                        ["enum"] = new JArray("all", "conversation", "document", "selection", "html", "vba", "backups", "catalogs", "chats"),
                         ["default"] = "all"
                     }
                 },
