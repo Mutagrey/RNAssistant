@@ -91,7 +91,7 @@ namespace RNAssistant.Core.Storage
             return summary;
         }
 
-        private static bool IsIncompleteJson(string text, JsonException error)
+        internal static bool IsIncompleteJson(string text, JsonException error)
         {
             // A complete JSON value rejected by the record contract (including duplicate or
             // unknown fields) must never be treated as a torn write and erased on append.

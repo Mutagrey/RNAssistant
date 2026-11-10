@@ -211,7 +211,7 @@ namespace RNAssistant.Core.Storage
                     BlobPurpose(hash, bytes.LongLength));
                 try
                 {
-                    StorageFileSystem.WriteAtomic(path, tempPath => File.WriteAllBytes(tempPath, stored));
+                    StorageFileSystem.WriteAtomic(path, tempPath => StorageFileSystem.WriteBytesDurable(tempPath, stored));
                     verified = Matches(path, hash, bytes.LongLength, protector);
                 }
                 catch (IOException)

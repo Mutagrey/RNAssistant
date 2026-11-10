@@ -379,6 +379,8 @@
     <Compile Include="Storage\StorageProtection.cs" />
     <Compile Include="Storage\SkillStore.cs" />
     <Compile Include="Storage\StorageFileSystem.cs" />
+    <Compile Include="Storage\StorageJournal.cs" />
+    <Compile Include="Storage\StorageJournal.Inventory.cs" />
     <Compile Include="Models\RetainedToolResultBody.cs" />
     <Compile Include="Services\ToolResultPersistence.cs" />
     <Compile Include="Storage\ToolStore.cs" />

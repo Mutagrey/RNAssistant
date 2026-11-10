@@ -52,7 +52,7 @@ namespace RNAssistant.Core.Storage
             _position = offset;
         }
 
-        public JsonlByteLine ReadLine()
+        public JsonlByteLine ReadLine(int maximumBytes = int.MaxValue)
         {
             if (_position >= _length) return null;
             var startOffset = _position;
@@ -80,6 +80,7 @@ namespace RNAssistant.Core.Storage
                 if (terminatorIndex < 0)
                 {
                     var count = _bufferCount - segmentStart;
+                    if (content.Length + count > maximumBytes) throw new InvalidDataException("JSONL record exceeds its byte bound.");
                     content.Write(_buffer, segmentStart, count);
                     _bufferIndex = _bufferCount;
                     _position += count;
@@ -87,6 +88,7 @@ namespace RNAssistant.Core.Storage
                 }
 
                 var contentCount = terminatorIndex - segmentStart;
+                if (content.Length + contentCount + 1 > maximumBytes) throw new InvalidDataException("JSONL record exceeds its byte bound.");
                 if (contentCount > 0) content.Write(_buffer, segmentStart, contentCount);
                 var terminator = _buffer[terminatorIndex];
                 _bufferIndex = terminatorIndex + 1;

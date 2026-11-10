@@ -78,6 +78,29 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        // Publish immutable names (journal headers). A racing creator owns the name;
+        // the caller must validate its bytes, never replace them.
+        internal static bool PublishNewFile(string path, byte[] bytes)
+        {
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                WriteBytesDurable(temporary, bytes);
+                try { File.Move(temporary, path); return true; }
+                catch (IOException) { if (!File.Exists(path) || IsReparsePoint(path)) throw; return false; }
+            }
+            finally { TryDeleteFile(temporary); }
+        }
+
+        internal static void WriteBytesDurable(string path, byte[] bytes)
+        {
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush(true);
+            }
+        }
+
         public static IEnumerable<string> GetFilesRecursive(string directory, string pattern)
         {
             return GetFilesRecursive(directory, pattern, null);
