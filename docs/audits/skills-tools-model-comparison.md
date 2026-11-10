@@ -127,8 +127,12 @@ required by transport and correctly handled by production after bypassing the he
 [Evidence archive](evidence/skills-guidance-pilot-20261026.tar.gz) includes the manifest,
 per-file hashes, paired exact HTTP requests/responses, context/acceptance/session/CAS,
 invalid initial runs and the common harness fix. SHA-256:
-`9f3a9ef2d1880c219e4e9fee6c2f4f3b4d7110d9db322f81f6c0e5a47ee05386`.
+`e83c3a96560bea3137b9eee9c083796fb351f788be09286570194aa44f27c485`.
 Local working evidence: `/tmp/rna-skills-ab-5uXf01`; the archive is the retained copy.
+Personal absolute paths in `manifest.json` and `run_pairs.py` were normalized;
+the contents of the other 804 files are byte-identical. The original archive hash is
+`9f3a9ef2d1880c219e4e9fee6c2f4f3b4d7110d9db322f81f6c0e5a47ee05386`.
+Set `RNA_REPO` to the repository path when rerunning the archived script.
 The script records DLL paths for provenance; rebuilding on another machine requires
 both pinned sources, the same harness-only patch and newly recorded binary hashes.
 

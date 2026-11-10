@@ -165,7 +165,7 @@ plugin chat, то есть целевая компоновка central chat/righ
 Команды для повторения на этой машине:
 
 ```sh
-export NODE_PATH=/Users/mutagrey/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules
+export NODE_PATH="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules"
 export BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 node /tmp/rnassistant-shell-audit-20261023/probe.cjs
 node tests/web/chat-input-delivery.test.js

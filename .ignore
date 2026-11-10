@@ -3,6 +3,8 @@ packages/
 vendor/
 web/css/vendor/
 web/js/vendor/
+docs/audits/evidence/
+docs/stabilization/**/evidence/
 
 # Generated output.
 **/bin/

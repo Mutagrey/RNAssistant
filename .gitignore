@@ -5,6 +5,12 @@ obj/
 *.suo
 *.cache
 *.log
+.DS_Store
+Thumbs.db
+desktop.ini
+.env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 TestResults/
