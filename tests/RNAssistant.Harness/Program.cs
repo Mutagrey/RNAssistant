@@ -37,6 +37,8 @@ namespace RNAssistant.Harness
 
         public static int Main(string[] args)
         {
+            if (args != null && args.Length == 2 && args[0] == "--journal-maintenance-probe")
+                return StorageMaintenanceProbe(args[1]);
             if (args != null && args.Length == 3 && args[0] == "--storage-index-probe")
                 return StorageIndexProbe(args[1], args[2]);
             if (args != null && args.Length == 3 && args[0] == "--conversation-journal-probe")
@@ -675,6 +677,8 @@ namespace RNAssistant.Harness
                 Test("storage optimization: run checkpoints and invocation ownership", ConversationJournalRunCheckpoints),
                 Test("storage optimization: durable pause controls and pending input", ConversationJournalQueueControls),
                 Test("storage optimization: optional diagnostics and mandatory manifest", ModelDiagnosticsManifestAndRetention),
+                Test("storage optimization: canonical closure and backup restore", StorageJournalMaintenanceAndRestore),
+                Test("storage optimization: maintenance excludes publication", StorageJournalMaintenanceExcludesPublish),
                 Test("storage optimization: host parity and retained mutation guards", RetainedResultHostParity),
                 Test("storage: indexed input journal", IndexedInputJournalPreservesCanonicalReplay),
                 Test("storage perf: chat navigation with traces", ChatNavigationWithTracesProfile),

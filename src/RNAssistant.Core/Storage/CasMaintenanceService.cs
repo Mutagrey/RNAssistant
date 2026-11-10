@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Storage
     /// Builds CAS reachability only from fully validated canonical streams. Audit and Collect enter
     /// the supplied runtime maintenance gate so a blob write cannot race event append/GC.
     /// </summary>
-    public sealed class CasMaintenanceService
+    public sealed partial class CasMaintenanceService
     {
         private readonly AppDataPaths _paths;
         private readonly ChatStore _chatStore;
@@ -19,6 +19,7 @@ namespace RNAssistant.Core.Storage
         private readonly ChatBlobStore _blobs;
         private readonly Func<IDisposable> _maintenanceLeaseProvider;
         private readonly Action _ensureQuiescent;
+        private readonly Func<StorageProtector> _protectionProvider;
 
         public CasMaintenanceService(
             AppDataPaths paths,
@@ -32,6 +33,7 @@ namespace RNAssistant.Core.Storage
             _chatStore = chatStore ?? throw new ArgumentNullException("chatStore");
             _vbaJournalStore = vbaJournalStore ?? throw new ArgumentNullException("vbaJournalStore");
             _blobs = new ChatBlobStore(paths, protectionProvider);
+            _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
             _maintenanceLeaseProvider = maintenanceLeaseProvider ?? throw new ArgumentNullException("maintenanceLeaseProvider");
             _ensureQuiescent = ensureQuiescent ?? throw new ArgumentNullException("ensureQuiescent");
         }
@@ -68,6 +70,9 @@ namespace RNAssistant.Core.Storage
                 {
                     try
                     {
+                        // Conservative crash-leftover grace for the new generation.
+                        // Quiescence, not age, is the publication safety boundary.
+                        if (scan.JournalStreams.Count > 0 && File.GetLastWriteTimeUtc(orphan.Path) > DateTime.UtcNow.AddHours(-1)) continue;
                         if (!_blobs.IsCanonicalPath(orphan.Path, orphan.Sha256))
                         {
                             failures.Add(DeleteFailure(orphan, "The orphan path is not a canonical CAS path."));
@@ -116,6 +121,10 @@ namespace RNAssistant.Core.Storage
             new ResourceAuthorityStore(_paths).ScanCasReferences(reachability);
             new ResourceMutationJournal(_paths).ScanCasReferences(reachability);
             ScanOutlookArchiveCache(reachability);
+            IReadOnlyList<JournalStream> streams = new JournalStream[0];
+            try { streams = JournalIndex.ScanCanonical(_paths, _protectionProvider(), reachability); }
+            catch (Exception error)
+            { reachability.AddSourceIssue(CasHealthIssueKinds.SourceInvalid, "storage-journal", "canonical-inventory", error.Message); }
 
             var issues = new List<CasHealthIssue>(reachability.Issues);
             var stored = EnumerateStoredBlobs(issues);
@@ -137,6 +146,7 @@ namespace RNAssistant.Core.Storage
                         SourceId = reference.SourceId,
                         Location = reference.Location,
                         Sha256 = reference.Reference.Sha256,
+                        BlocksGarbageCollection = reference.SourceType == "storage-journal",
                         Message = "A referenced CAS blob is missing."
                     });
                     continue;
@@ -151,6 +161,7 @@ namespace RNAssistant.Core.Storage
                         SourceId = reference.SourceId,
                         Location = reference.Location,
                         Sha256 = reference.Reference.Sha256,
+                        BlocksGarbageCollection = reference.SourceType == "storage-journal",
                         Message = "A referenced CAS blob is corrupt, unreadable, or protected with another key."
                     });
                 }
@@ -185,7 +196,8 @@ namespace RNAssistant.Core.Storage
                     StoredByteLength = item.StoredByteLength
                 }).ToList()
             };
-            return new CasAuditSnapshot { Report = report, OrphanCandidates = orphans };
+            return new CasAuditSnapshot { Report = report, OrphanCandidates = orphans, JournalStreams = streams,
+                References = references.Values.Select(item => item.Reference).ToArray() };
         }
 
         private void ScanOutlookArchiveCache(CasReachabilityScan scan)
@@ -381,6 +393,8 @@ namespace RNAssistant.Core.Storage
         {
             public CasHealthReport Report { get; set; }
             public List<StoredCasBlob> OrphanCandidates { get; set; }
+            internal IReadOnlyList<JournalStream> JournalStreams { get; set; }
+            internal IReadOnlyList<ChatBlobReference> References { get; set; }
         }
     }
 

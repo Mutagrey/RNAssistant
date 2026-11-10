@@ -367,6 +367,7 @@
     <Compile Include="Storage\DocumentAuthorityRegistry.cs" />
     <Compile Include="Storage\ResourceMutationJournal.cs" />
     <Compile Include="Storage\CasMaintenanceService.cs" />
+    <Compile Include="Storage\CasMaintenanceService.Backup.cs" />
     <Compile Include="Storage\DisposablePair.cs" />
     <Compile Include="Storage\EventProtectionSupport.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />
@@ -387,6 +388,7 @@
     <Compile Include="Storage\ConversationJournal.Run.cs" />
     <Compile Include="Storage\ConversationJournal.Control.cs" />
     <Compile Include="Storage\JournalIndex.cs" />
+    <Compile Include="Storage\JournalIndex.Maintenance.cs" />
     <Compile Include="Storage\JournalIndexAdmission.cs" />
     <Compile Include="Storage\ResourceJournal.cs" />
     <Compile Include="Storage\ResourceOutcomeLink.cs" />
