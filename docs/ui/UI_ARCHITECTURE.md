@@ -158,6 +158,24 @@ typed domain commands; удаление чата сохраняет existing del
 Цвет точки определяется стабильным ChatId в общем AgentCommunication presentation;
 запись цвета в runtime и отдельный registry не нужны. Group ID не становится ключом Chat View; закрытие вкладки не меняет выполнение.
 
+### Встроенные диалоги групп — In Review, 2026-11-07
+
+Создание, переименование и удаление используют общий `RNAssistantDialog.open(options)`
+из `app-dialog.js`. Компонент владеет только временным DOM, вводом, фокусом и состоянием
+отправки. Он не зависит от Shell/bridge и не хранит группы или команды. HTML `<dialog>`
+в top layer находится вне clipped Dockview content; controls и CSS принадлежат общим
+product components/tokens. Специализированные Questions/Approval и редактор аннотаций
+сохраняют своих owners.
+
+`app-chat-groups` фиксирует исходные scope, group/revision и lifetime при открытии.
+Смена области дерева через `setScope`/reset закрывает представление; ввод не переносится на новый target.
+Отправка идёт через прежний `changeChatGroup`, busy admission и проверки scope,
+generation/lifetime. Закрытие после dispatch не отменяет принятую мутацию.
+Неподтверждённый результат остаётся ошибкой исходного scope: повтор submit заблокирован,
+нужно явно перечитать каталог и открыть действие заново; автоматического retry нет.
+Resolver возврата фокуса принадлежит вызывающему view и учитывает замену DOM дерева;
+сначала фокусирует строку, если её action скрыт после ухода фокуса.
+
 ## Live HTML и размещение редакторов — In Review, 2026-11-03
 
 `HtmlWorkspaceView` — адресный owner по chatId (до четырёх вкладок). Он владеет

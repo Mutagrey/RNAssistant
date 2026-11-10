@@ -52,6 +52,16 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 .shell .form-grid label > textarea,
 .rna-form-control { min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 7px 10px; background: var(--surface); color: var(--ink); font: 400 13px var(--font); }
 .rna-form-control.compact { min-height: var(--control-compact); padding: var(--space-1) var(--space-2); font-size: var(--text-sm); border-radius: var(--radius-sm); }
+.rna-dialog { box-sizing: border-box; position: fixed; inset: auto; margin: 0; width: var(--dialog-width); max-width: calc(100% - 2 * var(--space-4)); max-height: calc(100% - 2 * var(--space-4)); overflow: auto; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font: var(--text-sm)/1.5 var(--font); overflow-wrap: anywhere; }
+.rna-dialog::backdrop { background: var(--scrim); }
+.rna-dialog form { display: grid; gap: var(--space-3); min-width: 0; margin: 0; }
+.rna-dialog h2 { margin: 0; font-size: var(--text-lg); line-height: var(--line-height-heading); font-weight: 600; }
+.rna-dialog p { margin: 0; }
+.rna-dialog-field { display: grid; gap: var(--space-1); min-width: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 500; }
+.rna-dialog-field input { width: 100%; }
+.rna-dialog-status { color: var(--ink-muted); }
+.rna-dialog-status.is-error { color: var(--danger); }
+.rna-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .shell .form-grid label > small { color: var(--ink-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
 .rna-skill-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; min-height: 0; padding: 16px 0 12px; overflow: visible; }
 .rna-skill-fields label { display: grid; gap: 5px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 500; }

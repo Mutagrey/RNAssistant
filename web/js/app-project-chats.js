@@ -338,6 +338,7 @@
       if (selected) notice(error.detail || error.message, true); }
   }
   function setScope(next, target) {
+    RNAssistantChatGroups.dismissDialog();
     scope = next; ++serial;
     if (next === "projects") window.RNAssistantWorkspaceChat.mount("project");
     document.getElementById("chatLayout").hidden = next === "projects";

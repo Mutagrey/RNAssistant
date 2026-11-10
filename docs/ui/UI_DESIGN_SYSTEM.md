@@ -141,6 +141,32 @@ Optional reply link появляется только при полезной с
 Компонент/размер заданы один раз, без screen overrides и новых карточек/badges.
 Выделено одно выбранное вхождение чата; все вхождения открывают ту же вкладку.
 
+### Встроенные диалоги групп — In Review, 2026-11-07
+
+Общий [Dialog](../../web/js/app-dialog.js), `RNAssistantDialog.open(options)`, обслуживает
+ввод имени и подтверждение удаления в `app-chat-groups`. Это небольшой DOM-компонент:
+текст, необязательное поле, подписи действий, callback отправки и resolver возврата
+фокуса передаются consumer-ом. Компонент не вызывает bridge и не вводит очередь команд,
+registry или store. Публичный plugin API этим не объявляется.
+
+HTML `<dialog>.showModal()` размещает форму в top layer вне clip-контейнеров Dockview.
+Используются `.rna-form-control.compact`, `.button.compact`, primary и `danger-soft`;
+геометрия композиции — в `app-product-components.css`, общие spacing/type/surface/
+line/focus/scrim tokens — в `app-product-tokens.css`. Локальной темы групп нет.
+Ширина/высота ограничены viewport, длинные имена и ошибки переносятся, содержимое
+прокручивается при недостатке высоты. Ревью требует доступности формы при 125%
+и узких панелях.
+
+Состояния: ввод, validation, submitting, error, закрытие. Поле получает фокус при вводе,
+«Отмена» — при удалении; Tab/Shift+Tab не выходят из формы. Enter учитывает IME,
+Escape закрывает представление. После отправки повтор запрещён, «Закрыть» не отменяет
+мутацию. Подписи и inline-ошибка доступны assistive technology; имя группы выводится
+через text content. Возврат фокуса учитывает перерисованную или удалённую строку.
+Закрытие/reset/scope change освобождают DOM и обработчики, поздний ответ не открывает
+форму заново. Browser fixture прошёл в Chrome на macOS 2026-11-10;
+[Migration Plan](UI_MIGRATION_PLAN.md#встроенные-диалоги-групп--in-review-2026-11-07)
+содержит текущий статус. Windows/WebView2 и визуальное принятие остаются открытыми.
+
 ## Редакторы в Dockview — In Review, 2026-11-03
 
 Instance CodeEditor используется для live HTML и ограниченного просмотра исходников.
@@ -484,6 +510,7 @@ L1 = host-independent component; L2 = browser requirements; L3 = host integratio
 | [NavigationTree](../../web/js/app-navigation-tree.js) | Реальный общий renderer, options/callbacks + icons; L1 candidate | selected/expanded/filter/keyboard; unmount освобождает state |
 | [TreeAdapter](../../web/js/app-tree-adapter.js) | Resource/domain adapter поверх NavigationTree, не второй widget | read/loading/error, destroy; host calls не уходят в UI Core |
 | [EditorTabs](../../web/js/app-editor-tabs.js), [ActionMenu](../../web/js/app-action-menu.js) | Внутренние режимы/меню; не docking engine | focus/keyboard/active; callback actions |
+| [Dialog](../../web/js/app-dialog.js) | Ввод/подтверждение в app-chat-groups; DOM/controls и callbacks, без bridge/store | input/validation/submitting/error; Enter/IME, Escape, focus return, close/dispose |
 | [ViewerRegistry](../../web/js/app-viewer-registry.js), [ViewerUI](../../web/js/app-viewer-ui.js) | Сохранить register/mount/unmount форматов | destroy старого controller и decorations при замене |
 | [JSON](../../web/js/app-json-viewer.js), [text/Markdown](../../web/js/app-text-viewer.js), text-diff | Повторно используют registry; portable rendering выделять без bridge | bounded DOM/depth, search/copy/source, unmount |
 | [ResourceViewer](../../web/js/app-resource-viewer.js), [SequenceViewer](../../web/js/app-sequence-viewer.js) | Общие PDF/image/sequence/task-list; resource/lease adapter остаётся L3 | lazy pages, zoom, unavailable, destroy/release; не загружать всё заранее |

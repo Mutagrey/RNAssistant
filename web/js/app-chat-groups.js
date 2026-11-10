@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   // Presentation of the existing catalog. Authority, revisions and membership belong to runtime.
-  var scopes = new Map(), collapsed = new Map(), selected = new Map(), busy = new Set(), version = 0, lifetime = 0;
+  var scopes = new Map(), collapsed = new Map(), selected = new Map(), busy = new Set(), version = 0, lifetime = 0, dialog = null;
   function key(scope) { return JSON.stringify([scope.workspaceId || "", scope.host || "", scope.documentKey || ""]); }
   function snapshot(scope) { return scopes.get(key(scope)) || { groups: [] }; }
   function accept(values) {
@@ -34,20 +34,69 @@
       if (admittedLifetime !== lifetime) return;
       log(error.detail || error.message, "error");
       // Keep failure visible in the existing menu; uncertainty never retries the write.
-      var current = snapshot(scope);
-      accept([Object.assign({}, current, scope, { error: (error.detail || error.message) + " Обновите список." })]);
+      var current = snapshot(scope), message = (error.detail || error.message) + " Обновите список без повтора команды.";
+      accept([Object.assign({}, current, scope, { error: message })]);
+      return message;
     } finally { if (admittedLifetime === lifetime) { busy.delete(id); version++; repaint(); } }
   }
-  function create(scope) {
-    var name = window.prompt("Название группы", "");
-    if (name && name.trim()) return change(scope, "Create", null, { name: name.trim() });
+  function dismissDialog() {
+    if (dialog) { var previous = dialog; dialog = null; previous.view.close(false); }
   }
-  function rename(scope, group) {
-    var name = window.prompt("Название группы", group.name);
-    if (name && name.trim() && name.trim() !== group.name) return change(scope, "Rename", group, { name: name.trim() });
+  function navigationScope() { return window.RNAssistantProjectChats ? RNAssistantProjectChats.scope() : "office"; }
+  function focusResolver(button) {
+    var item = button && button.closest("[data-tree-key]"), root = item && item.closest('[role="tree"]');
+    var mount = root && root.parentElement, keys = [], action = button && button.dataset.treeAction;
+    while (item) { keys.push(item.dataset.treeKey); item = item.parentElement && item.parentElement.closest("[data-tree-key]"); }
+    function visible(node) { return node && node.isConnected && !node.disabled && node.getClientRects().length && getComputedStyle(node).visibility === "visible"; }
+    function revealAction(target) {
+      var row = target && target.closest("[data-tree-key]");
+      // Tree actions hide when focus leaves the row; focus its current item first.
+      if (!visible(target) && visible(row)) row.focus({ preventScroll: true });
+      return visible(target) ? target : null;
+    }
+    return function () {
+      var original = revealAction(button); if (original) return original;
+      // Mutation repaint replaces rows; resolve their current controls by stable tree identity.
+      var currentRoot = root && root.isConnected ? root : mount && mount.isConnected ? mount : null;
+      if (currentRoot) {
+        var nodes = Array.from(currentRoot.querySelectorAll("[data-tree-key]"));
+        for (var index = 0; index < keys.length; index++) {
+          var row = nodes.find(function (node) { return node.dataset.treeKey === keys[index]; });
+          if (!row) continue;
+          var target = !index && Array.from(row.querySelectorAll(":scope > .navigation-tree-row [data-tree-action]"))
+            .find(function (node) { return node.dataset.treeAction === action; });
+          target = revealAction(target); if (target) return target;
+          if (visible(row)) return row;
+        }
+      }
+      return Array.from(document.querySelectorAll(".chat-scope-switcher > summary, #productMobileMenuButton")).find(visible);
+    };
   }
-  function removeGroup(scope, group) {
-    if (window.confirm("Удалить группу «" + group.name + "»? Чаты и их история сохранятся.")) return change(scope, "Delete", group);
+  function editGroup(scope, action, group, button) {
+    if (disabled(scope)) return;
+    dismissDialog(); RNAssistantActionMenu.closeAll();
+    // A custom dialog yields to host updates; keep the exact displayed target/revision, not live objects.
+    var boundScope = Object.assign({}, scope), boundGroup = group && { id: group.id, name: group.name, revision: group.revision };
+    var openedLifetime = lifetime, openedScope = navigationScope(), restore = focusResolver(button), current = {};
+    var naming = action !== "Delete";
+    dialog = current;
+    current.view = RNAssistantDialog.open({
+      title: action === "Create" ? "Новая группа чатов" : naming ? "Переименовать группу" : "Удалить группу",
+      label: naming ? "Название группы" : null, value: group ? group.name : "",
+      message: naming ? null : "Удалить группу «" + boundGroup.name + "»? Чаты и их история сохранятся.",
+      submitLabel: action === "Create" ? "Создать" : naming ? "Сохранить" : "Удалить", danger: !naming,
+      validate: function (value) { return naming && !value.trim() ? "Введите название группы." : ""; },
+      onSubmit: async function (value) {
+        if (dialog !== current || openedLifetime !== lifetime || openedScope !== navigationScope()) return;
+        if (disabled(boundScope)) throw new Error("Группы недоступны. Закройте окно и обновите список.");
+        var name = naming ? value.trim() : null;
+        if (naming && (!name || boundGroup && name === boundGroup.name)) return;
+        var error = await change(boundScope, action, boundGroup, naming ? { name: name } : null);
+        if (error) throw new Error(error);
+      },
+      restoreFocus: function () { return openedLifetime === lifetime && openedScope === navigationScope() ? restore() : null; },
+      onClose: function () { if (dialog === current) dialog = null; }
+    });
   }
   function menuAction(label, items) {
     return { title: label, iconHtml: RNAssistantNavigationTree.icon("more"), onClick: function (node, button) {
@@ -65,7 +114,7 @@
     });
     if (offset) items.push({ label: "Предыдущие группы", icon: "left", onSelect: function () { membershipMenu(scope, chatId, button, offset - 30); } });
     if (offset + page.length < groups.length) items.push({ label: "Следующие группы", onSelect: function () { membershipMenu(scope, chatId, button, offset + 30); } });
-    items.push({ label: "Новая группа…", icon: "plus", disabled: disabled(scope), onSelect: function () { create(scope); } });
+    items.push({ label: "Новая группа…", icon: "plus", disabled: disabled(scope), onSelect: function () { editGroup(scope, "Create", null, button); } });
     RNAssistantActionMenu.open(button, items, { label: "Группы чата" });
   }
   function decorate(nodes, chats, scope, query) {
@@ -118,9 +167,9 @@
       var id = "chat-group:" + key(scope) + ":" + group.id;
       return { key: id, kind: "parent", title: group.name, tooltip: group.name, chatGroupBranch: true,
         iconHtml: RNAssistantNavigationTree.icon("group"), expanded: !!query || !collapsed.get(id),
-        children: forest(group.members, group), actions: [menuAction("Действия группы «" + group.name + "»", function () {
-          return [{ label: "Переименовать группу", icon: "edit", disabled: disabled(scope), onSelect: function () { rename(scope, group); } },
-            { label: "Удалить группу", icon: "trash", disabled: disabled(scope), onSelect: function () { removeGroup(scope, group); } }];
+        children: forest(group.members, group), actions: [menuAction("Действия группы «" + group.name + "»", function (node, button) {
+          return [{ label: "Переименовать группу", icon: "edit", disabled: disabled(scope), onSelect: function () { editGroup(scope, "Rename", group, button); } },
+            { label: "Удалить группу", icon: "trash", disabled: disabled(scope), onSelect: function () { editGroup(scope, "Delete", group, button); } }];
         })] };
     });
     if (view.error) result.push({ key: "group-error:" + key(scope), kind: "leaf", title: "Группы недоступны", tooltip: view.error, disabled: true });
@@ -139,9 +188,10 @@
   }
   window.RNAssistantChatGroups = { accept: accept, decorate: decorate, matches: matches, version: function () { return version; },
     createAction: function (scope) { return { title: "Новая группа чатов…", iconHtml: RNAssistantNavigationTree.icon("group"),
-      disabled: disabled(scope), onClick: function () { create(scope); } }; },
+      disabled: disabled(scope), onClick: function (node, button) { editGroup(scope, "Create", null, button); } }; },
+    dismissDialog: dismissDialog,
     select: function (node) { if (node.chatGroupScope) { selected.set(node.chatGroupScope, node.key); version++; } },
     toggle: function (node, expanded) { collapsed.set(node.key, !expanded); if (collapsed.size > 512) collapsed.delete(collapsed.keys().next().value); version++; },
-    reset: function () { lifetime++; scopes.clear(); collapsed.clear(); selected.clear(); busy.clear(); version++; }
+    reset: function () { lifetime++; dismissDialog(); scopes.clear(); collapsed.clear(); selected.clear(); busy.clear(); version++; }
   };
 }());

@@ -23,6 +23,40 @@ Windows/Office/WebView2 и пользовательское визуальное
 что чат/вкладка сохраняются. Следующий срез 4a.2 — overview + адресный chat.rename;
 Inspector и S2 этим не запускаются.
 
+### Встроенные диалоги групп — In Review, 2026-11-07
+
+В create/rename/delete заменены `window.prompt/confirm` на общий `app-dialog` и
+существующие form/button tokens. Scope/revision, `changeChatGroup`, stale guards,
+ошибка каталога и запрет повтора неопределённой мутации остаются у прежнего owner.
+Нового UI framework, хранилища или механизма команд нет. Rollback — diff этого
+дополнения без изменения групп и истории.
+
+Сценарии `agent-groups.test.js`: отсутствие native dialogs, создание/переименование/
+удаление, trim/пустое/неизменившееся имя, Escape/Enter/IME, focus return, pending и
+двойной submit, ошибка/revision conflict, reset/поздний ответ, Office/Workspace/plugin,
+узкие панели и 125%. Baseline и дополненный browser fixture прошли в Chrome на macOS
+2026-11-10: реальные DOM/focus, split Dockview, light/dark, 420/418 px при 125%,
+длинные имена как текст. IME проверен синтетическими composition/key events;
+нативный IME, Windows/Office/WebView2 и пользовательское визуальное принятие открыты.
+Просмотрены screenshots диалогов wide/narrow/dark (`/tmp/rnassistant-agent-group-dialog-*.png`).
+Прежние screenshots выше относятся к исходному срезу.
+
+Локально прошли 12 VM-сценариев `agent-group-dialog-guards.test.js`: точный scope и
+копия показанной revision; cancel/reset/source switch; pending admission; поздние
+success/error; неизвестный результат без replay, включая более новое чтение каталога.
+Syntax/diff checks пройдены. Это проверка адаптера и команд, не browser evidence.
+Source review также исправил возврат фокуса после полной замены Office tree root и
+расчёт масштаба по дробной computed width вместо округлённого `offsetWidth`.
+Browser review 2026-11-10 обнаружил потерю фокуса при Cancel: action дерева уже скрыт
+через `visibility:hidden`. Resolver теперь фокусирует актуальную строку перед её
+кнопкой; existing Cancel/create/rename focus assertions проходят без изменения теста.
+
+Ревью: создать группу клавиатурой; переименовать и отменить через Escape; подтвердить
+удаление и проверить сохранность чатов; повторить в узкой раскладке/125% и другом
+источнике. Остальные native prompts в chat-session/project-chats, skills и HTML/VBA
+остаются отдельной очередью: переиспользовать этот компонент с guards каждого owner,
+не расширять текущий срез массовой заменой.
+
 ## Очередь выполнения — In Review, 2026-11-05
 
 Scope: существующий Settings + общий Chat View; owners Application admission/Core

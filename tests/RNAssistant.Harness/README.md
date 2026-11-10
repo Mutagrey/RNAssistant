@@ -57,6 +57,21 @@ collapse/menu keyboard and narrow/125% bounds. Screenshots go to /tmp. The previ
 agent-communication fixture still checks settings/feed/tab-independent execution.
 These checks don't qualify native Office controller/WebView2 delivery.
 
+Group-dialog follow-up (2026-11-07): the same browser fixture covers the shared
+in-app input/confirmation component instead of accepting `window.prompt/confirm`.
+Check create/rename/delete semantics, blank/unchanged names, Escape/Enter/IME,
+focus return after tree replacement, one submit while pending, visible errors and
+revision conflict without retry, reset/late replies, and Office/Workspace/plugin
+at narrow widths and 125% zoom. Native dialog interception is a regression failure,
+not an input mechanism. Run browser fixtures sequentially with Playwright and an
+allowed Chromium executable (`BROWSER_EXECUTABLE`); current execution evidence is
+tracked in [UI Migration Plan](../../docs/ui/UI_MIGRATION_PLAN.md#встроенные-диалоги-групп--in-review-2026-11-07).
+
+`node tests/web/agent-group-dialog-guards.test.js` runs 12 browser-independent VM
+checks against the shipped group adapter: pinned scope/revision, stale form and
+response lifetimes, one pending write, retained uncertainty and no replay. It does
+not qualify dialog keyboard/focus, native top-layer behavior or viewport geometry.
+
 ## Active-step admission — 2026-11-05
 
 `agent admission:` covers FIFO, lowering/increasing/zero, cancellation/grant races,

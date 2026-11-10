@@ -112,6 +112,7 @@
   --menu-offset: 6px;
   --menu-row-padding: 7px var(--space-2);
   --menu-radius: var(--shell-radius);
+  --dialog-width: 400px;
   --page-header-height: 52px;
   --page-inset: 18px;
   --list-width: 250px;
