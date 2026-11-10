@@ -122,6 +122,9 @@ ActionMenu плагина и «Обсудить» без второго composer
 расширение адреса по фокусу, сведения под иконкой, CAS/files metadata, upload/экспорт.
 Удалены постоянная подпись сохранённого проекта, title/path row и plugin decision strip;
 кнопка публикации сохраняет прежний guarded handler. До 600 px tools раскрываются через ⋯.
+HtmlWorkspaceView также исправлен: reload перечитывает metadata/source; resourceChanged
+инвалидирует только document scope, hidden view читает при activate; dirty buffer и
+новые события во время read защищены. Это Web fix поверх existing RefreshSelected.
 История HTML/plugin теперь использует общий portalled ActionMenu; прежние version
 popover DOM/CSS удалены. Exact guards и загрузка порциями сохранены.
 

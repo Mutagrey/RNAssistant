@@ -130,8 +130,9 @@
     }
     function show(label, message) {
       bar.hidden = false; currentLabel = label && typeof label === "object" ? label : { title: label };
-      updateAddress(); updateInfo(); setStatus(message, false); reload.disabled = options.canReload ? !options.canReload() : false;
+      updateAddress(); updateInfo(); setStatus(message, false); refresh();
     }
+    function refresh() { reload.disabled = options.canReload ? !options.canReload() : false; }
     function fail(label, message) { detach(); show(label, ""); setStatus(String(message || "Предпросмотр недоступен.").slice(0, 500), true); }
     function watch(frame, label) {
       detach(); show(label, "Загрузка…");
@@ -141,7 +142,7 @@
       };
       pending = current; frame.addEventListener("load", current.load); frame.addEventListener("error", current.error);
     }
-    return { actions: actions, discussButton: discuss,
+    return { actions: actions, discussButton: discuss, refresh: refresh,
       setAnnotation: function (button) { annotate.replaceWith(button); annotate = button; button.classList.add("icon-btn", "compact"); },
       updateLabel: function (value) { currentLabel = Object.assign({}, currentLabel, value); updateAddress(); updateInfo(); },
       collapse: function () { expand(false); RNAssistantActionMenu.closeWithin(bar); },

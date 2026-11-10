@@ -17,6 +17,7 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     await page.evaluate(() => {
       window.htmlTest = { calls: [], versions: {}, contents: {}, uploads: {} };
+      state.chats.push(...['html-a','html-b'].map(Id=>({Id,DocumentAuthorityId:'html-document'})));
       const original = send;
       function response(id) {
         const version = htmlTest.versions[id] || 1, artifact = id + '-r' + version, uri = 'rna://chat/' + id + '/html/file1';
@@ -32,6 +33,10 @@ const { chromium } = require('playwright');
         htmlTest.calls.push({ command, payload });
         if (command === 'getHtmlWorkspace') {
           if (payload.chatId === 'late') return new Promise(resolve => { htmlTest.release = () => resolve(response('late')); });
+          if (htmlTest.deferNext === payload.chatId) {
+            htmlTest.deferNext=null; const value=response(payload.chatId);
+            return new Promise(resolve=>{htmlTest.releaseRefresh=()=>resolve(value);});
+          }
           return Promise.resolve(response(payload.chatId));
         }
         if (command === 'beginHtmlWorkspaceMutationUpload') return Promise.resolve({ leaseId: 'b'.repeat(64) });
@@ -78,6 +83,34 @@ const { chromium } = require('playwright');
     assert.deepEqual(await page.evaluate(() => { const p = htmlTest.calls.find(c => c.command === 'stageHtmlVisualSelection').payload; return [p.chatId, p.artifactId, p.artifactRevision]; }), ['html-a', 'html-a-r1', 1]);
     assert.equal(await page.evaluate(() => state.activeChatId), 'preview-chat');
     assert.equal(await page.evaluate(() => (readOfficeDraft('preview-chat')?.attachments || []).length), 0);
+    // Reload reads the current publication, even without the source Chat View.
+    await page.evaluate(()=>{htmlTest.versions['html-a']=2;htmlTest.contents['html-a']='<h1>agent v2</h1>';});
+    await toolbar.getByRole('button',{name:'Обновить HTML',exact:true}).click();
+    await a.getByRole('heading',{name:'agent v2',exact:true}).waitFor();
+    await page.evaluate(()=>{htmlTest.versions['html-a']=3;htmlTest.contents['html-a']='<h1>agent v3</h1>';
+      handleResourceAuthorityChanged({scope:'document:html-document',generation:3,resources:[],allInScope:true});});
+    await a.getByRole('heading',{name:'agent v3',exact:true}).waitFor();
+    assert.ok(await toolbar.getByRole('button',{name:'Обновить HTML',exact:true}).isEnabled(),'reload stays available after an automatic refresh');
+    const readCount=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace').length);
+    await page.evaluate(()=>{
+      handleResourceAuthorityChanged({scope:'document:other-document',generation:4,resources:[],allInScope:true});
+      handleResourceAuthorityChanged({scope:'document:html-document',generation:3,resources:[],allInScope:true});
+    });
+    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace').length),readCount,'other scopes and duplicate generations do not reload');
+    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-b',{mode:'edit'}));
+    const hiddenReads=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length);
+    await page.evaluate(()=>{htmlTest.versions['html-a']=4;htmlTest.contents['html-a']='<h1>agent v4</h1>';
+      handleResourceAuthorityChanged({scope:'document:html-document',generation:4,resources:[],allInScope:true});});
+    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length),hiddenReads,'hidden view defers refresh');
+    assert.equal(await root('html-b').locator('.CodeMirror').evaluate(n=>n.CodeMirror.getValue()),'<main>draft B</main>','another project publication preserves the dirty buffer');
+    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'preview'}));
+    await a.getByRole('heading',{name:'agent v4',exact:true}).waitFor();
+    await page.evaluate(()=>{htmlTest.deferNext='html-a';htmlTest.versions['html-a']=5;htmlTest.contents['html-a']='<h1>agent v5</h1>';
+      handleResourceAuthorityChanged({scope:'document:html-document',generation:5,resources:[],allInScope:true});});
+    await page.waitForFunction(()=>!!htmlTest.releaseRefresh);
+    await page.evaluate(()=>{htmlTest.versions['html-a']=6;htmlTest.contents['html-a']='<h1>agent v6</h1>';
+      handleResourceAuthorityChanged({scope:'document:html-document',generation:6,resources:[],allInScope:true});htmlTest.releaseRefresh();});
+    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
     await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.open('html-b', { mode: 'edit' }));
     assert.equal(await root('html-b').locator('.CodeMirror').evaluate(node => node.CodeMirror.getValue()), '<main>draft B</main>');
     page.once('dialog', dialog => dialog.dismiss());
@@ -88,7 +121,9 @@ const { chromium } = require('playwright');
     assert.deepEqual(await page.evaluate(() => { const p = htmlTest.calls.find(c => c.command === 'saveHtmlWorkspaceFile').payload; return [p.chatId, p.expectedActiveHtmlArtifactId, htmlTest.contents[p.chatId]]; }), ['html-b', 'html-b-r1', '<main>draft B</main>']);
     // A changed source cannot replace an unsaved editor buffer or accept its stale write.
     await root('html-b').locator('.CodeMirror').evaluate(node => { node.CodeMirror.execCommand('selectAll'); node.CodeMirror.replaceSelection('unsaved B', 'end', '+input'); });
-    await page.evaluate(() => editorView('html-b').onSnapshot({ activeChatId: 'html-b', activeHtmlArtifactId: 'html-b-r3', sessionRevision: 3 }));
+    await page.evaluate(() => {htmlTest.versions['html-b']=3;
+      handleResourceAuthorityChanged({scope:'document:html-document',generation:7,resources:[],allInScope:true});});
+    await page.waitForFunction(()=>document.querySelector('[data-chat-id="html-b"] [data-html-node="saveHtmlWorkspaceButton"]').disabled);
     assert.equal(await root('html-b').locator('.CodeMirror').evaluate(node => node.CodeMirror.getValue()), 'unsaved B');
     assert.equal(await root('html-b').locator('[data-html-node="saveHtmlWorkspaceButton"]').isDisabled(), true);
     await page.setViewportSize({ width: 420, height: 900 });
@@ -101,6 +136,6 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => !editorView('late'));
     assert.equal(await root('late').count(), 0);
     assert.deepEqual(errors, []);
-    console.log('HTML editor views: independent buffers, source chat, annotation, restore, close guard, stale source, narrow/zoom and late close OK');
+    console.log('HTML editor views: buffers, scoped annotation, reload/current publication, hidden and concurrent refresh, dirty guards, restore, narrow/zoom and late close OK');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,10 +1,10 @@
 # Universal Browser: статус
 
-Дата: 2026-11-10. Scope: P0/P1 + Browser address/controls.
+Дата: 2026-11-10. Scope: P0/P1 + Browser address/controls + live HTML refresh.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — будущий native adapter. P1 реализован в production JS, **In Review**.
 
-## Строка браузера — In Review, 2026-11-10
+## Строка браузера и обновление HTML — In Review, 2026-11-10
 
 Реализовано уточнение пользователя: слева назад/вперёд/reload/аннотация, затем адрес
 и provider actions. Фокус раскрывает адрес на всю строку и показывает инструменты;
@@ -13,8 +13,15 @@ blur/Escape сворачивает. До 600 px правая группа отк
 у адреса через общий ActionMenu. CAS/files — место хранения; export не объявляется
 созданием независимого workspace. Публикация plugin сохраняет прежние проверки.
 
+Исправлен Web bug живого HTML: reload вызывал только reloadPreview локальной копии,
+а resourceChanged уведомлял только привязанные данные. Теперь reload читает metadata
+через existing getHtmlWorkspace/RefreshSelected, document notice обновляет чистую view,
+hidden view читает при activate. Новое событие во время read требует свежего результата.
+Dirty buffer сохраняется; смена исходника блокирует stale write. C#/bridge не менялись.
+
 Проверены saved Browser, live HTML editor и plugin selection в локальном Chromium.
-HTML checks покрывают независимые буферы и guard сохранения. Saved fixture
+Новые HTML checks покрывают manual reload, другой agent/chat, hidden activation,
+событие во время read, чужой scope, повторную generation и dirty buffer. Saved fixture
 проверяет ширину адреса, неизменную геометрию iframe, focus/menu/narrow/125%, retained
 input/modes и late cleanup. Два HTML читаются дважды, два release открываются дважды;
 source page 32K, overflow 0. Ранее пройденный lifetime повторно не запускался.

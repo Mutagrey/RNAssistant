@@ -13,6 +13,7 @@
   var exportButton = $("exportHtmlWorkspaceButton"), exportHost = exportButton.parentElement, exportNext = exportButton.nextSibling;
   $("htmlWorkspacePreviewFrame").dataset.chatId = target.chatId;
   var active = false, disposed = false, loading = null, loadGeneration = 0, loaded = false, sourceConflict = false;
+  var sourceGeneration = 0, checkedSourceGeneration = 0, authorityGeneration = -1;
   var events = new AbortController();
   var ingestionQueue = window.state.chatResourceIngestions || (window.state.chatResourceIngestions = {});
   var state = { activeChatId: target.chatId, activeHtmlArtifactId: "", activePlanDocumentArtifactId: "", artifacts: [],
@@ -67,6 +68,12 @@
   var resourcePreviewEpoch = 0;
 
   function handleResourceAuthorityChanged(notice) {
+    if (disposed || !notice) return;
+    if (target.documentId && notice.scope === "document:" + target.documentId &&
+        Number.isSafeInteger(notice.generation) && notice.generation > authorityGeneration) {
+      authorityGeneration = notice.generation; sourceGeneration++;
+      if (active && !workspaceActions.isBusy()) ready(true);
+    }
     var frame = $("htmlWorkspacePreviewFrame");
     if (!frame || !frame.contentWindow) return;
     var sources = dataSources();
@@ -198,8 +205,12 @@
     } });
   var previewSurface = window.RNAssistantPreviewSurface.attach($("htmlWorkspacePreview"), {
     storage: { kind: "managed" },
-    reload: function () { workspaceEditor.reloadPreview(); },
-    canReload: function () { return loaded && !state.htmlWorkspaceDirty; },
+    reload: async function () {
+      var revision = state.activeHtmlArtifactId;
+      if (await reloadHtmlWorkspaceSources()) { if (revision === state.activeHtmlArtifactId) workspaceEditor.reloadPreview(); }
+      else if (!disposed && state.chatDetailError) throw new Error(state.chatDetailError);
+    },
+    canReload: function () { return loaded && !loading && !state.htmlWorkspaceDirty && !workspaceActions.isBusy(); },
     discuss: function () { if (!disposed) return RNAssistantConversationPanel.open({ source: "office", sessionId: target.chatId },
       { referencePanel: key(target), beside: true }); },
     reloadLabel: "Обновить HTML"
@@ -564,12 +575,13 @@
   }
   function renderHtmlWorkspace() {
     if (disposed || !active) return;
+    if (loaded && !loading && sourceGeneration !== checkedSourceGeneration && !workspaceActions.isBusy()) ready(true);
     workspace(); ensureSelection(); renderFiles();
-    renderHtmlWorkspaceEditor(); applyHtmlWorkspaceMode(); updateHtmlWorkspaceStatus(); syncBrowser();
+    renderHtmlWorkspaceEditor(); applyHtmlWorkspaceMode(); updateHtmlWorkspaceStatus(); previewSurface.refresh(); syncBrowser();
     if (sourceConflict) log("HTML изменился в чате. Правки сохранены в этой вкладке; обновите исходники перед записью.", "error");
   }
   function refreshChat() { var panel = chatPanel(); if (panel) panel.refresh(); }
-  function ready(force) {
+  function ready(force, discard) {
     if (loading) return loading;
     if (loaded && !force) return Promise.resolve(true);
     var generation = ++loadGeneration, editVersion = state.htmlWorkspaceEditVersion;
@@ -577,19 +589,32 @@
     code.readOnly(true);
     loading = (async function () {
       try {
-        var response = await send("getHtmlWorkspace", { chatId: target.chatId });
-        if (disposed || generation !== loadGeneration) return false;
-        if (state.htmlWorkspaceEditVersion !== editVersion) throw new Error("Появились новые правки. Рабочая копия не заменена.");
+        var response, requestedSourceGeneration;
+        do {
+          requestedSourceGeneration = sourceGeneration;
+          response = await send("getHtmlWorkspace", { chatId: target.chatId });
+          if (disposed || generation !== loadGeneration) return false;
+          if (state.htmlWorkspaceEditVersion !== editVersion) throw new Error("Появились новые правки. Рабочая копия не заменена.");
+        } while (requestedSourceGeneration !== sourceGeneration);
+        checkedSourceGeneration = requestedSourceGeneration;
+        if (state.htmlWorkspaceDirty && !discard) {
+          if ((response.activeChatId || response.ActiveChatId) !== target.chatId) throw new Error("Получено состояние другого чата.");
+          if ((response.activeHtmlArtifactId || response.ActiveHtmlArtifactId) !== state.activeHtmlArtifactId) {
+            sourceConflict = true; state.chatDetailError = "Исходник изменён. Ваши несохранённые правки сохранены во вкладке.";
+          }
+          return false;
+        }
         if (!applyHtmlWorkspaceResponse(response, target.chatId)) throw new Error("Получено устаревшее состояние HTML или другой чат.");
         return true;
-      } catch (error) { if (!disposed && generation === loadGeneration) { state.chatDetailError = error.detail || error.message; log(state.chatDetailError, "error"); } return false; }
+      } catch (error) { if (!disposed && generation === loadGeneration) { checkedSourceGeneration = sourceGeneration; state.chatDetailError = error.detail || error.message; log(state.chatDetailError, "error"); } return false; }
       finally { if (generation === loadGeneration) { loading = null; state.chatDetailPending = false; renderHtmlWorkspace(); } }
-    })(); return loading;
+    })(); previewSurface.refresh(); return loading;
   }
   async function reloadHtmlWorkspaceSources() {
-    if (workspaceActions.isBusy() || !confirmDiscardHtmlChanges("Перезагрузить исходники")) return;
+    if (loading) await loading;
+    if (disposed || workspaceActions.isBusy() || !confirmDiscardHtmlChanges("Перезагрузить исходники")) return false;
     workspaceSource.release(); workspaceActions.cancelWrite();
-    await ready(true);
+    return ready(true, true);
   }
   async function downloadHtmlWorkspaceExport(exportState) {
     exportState = exportState || {};
@@ -721,13 +746,14 @@
       if (snapshot.sessionRevision < (state.chatProjectionRevisions[target.chatId] || 0)) return;
       acceptChatAuthority(snapshot);
       if (snapshot.activeHtmlArtifactId !== state.activeHtmlArtifactId) {
+        sourceGeneration++;
         sourceConflict = true;
         if (state.htmlWorkspaceDirty) { state.chatDetailError = "Исходник изменён"; renderHtmlWorkspace(); }
         else if (active && !workspaceActions.isBusy()) ready(true);
       } else if (Number.isSafeInteger(snapshot.sessionRevision)) state.chatProjectionRevisions[target.chatId] = snapshot.sessionRevision;
     },
     authorityChanged: handleResourceAuthorityChanged,
-    activate: function () { active = true; ready(sourceConflict && !state.htmlWorkspaceDirty); renderHtmlWorkspace(); updateDrafts(); },
+    activate: function () { active = true; ready(sourceGeneration !== checkedSourceGeneration || sourceConflict && !state.htmlWorkspaceDirty); renderHtmlWorkspace(); updateDrafts(); },
     deactivate: function () { active = false; previewSurface.collapse(); browserView.deactivate(); visualInspector.deactivate(); visualAnnotations.collapseEditor(); },
     layout: function () { browserView.layout(); code.refresh(); },
     dispose: function () {

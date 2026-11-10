@@ -72,6 +72,15 @@ Run/iteration budget/unknown guards и exact invocation/pause fencing прове
 `agent pause:`; наблюдаемость не требует LLM. Срез не вводит scheduler/slots или
 циклическое ожидание Run; эти ограничения остаются в плане этапов 3–4.
 
+## Saved HTML history freshness — Open, 2026-11-10
+
+Живой HtmlWorkspaceView теперь перечитывает current publication при reload и document
+resourceChanged; hidden и dirty cases проверены. Saved exact Browser остаётся immutable:
+reload перечитывает выбранную версию, а ArtifactVersions использует captured head/session
+revision. Для свежей истории без переоткрытия нужен адресный resolve logical head через
+domain owner; нельзя незаметно подменять exact snapshot или угадывать lineage по title.
+Owner: Artifact Library / saved HTML provider. Это не закрыто исправлением live refresh.
+
 ## Browser annotation pointer routing — Open, 2026-11-05
 
 `browser-views.test.js` нестабилен уже до toolbar-правок: timeout при выборе элемента

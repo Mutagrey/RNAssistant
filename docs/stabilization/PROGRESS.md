@@ -132,7 +132,9 @@ play/code/annotation/history/discuss icons; rare plugin actions перенесе
 target закреплён за выбранным source chat. Исправлен preserveChatOwner при возврате
 из менеджера плагинов. Уточнение 2026-11-10: одна строка Browser, раскрываемый адрес,
 сведения о версии/CAS/files под иконкой, публикация plugin и экспорт HTML через existing
-handlers. CAS, bridge и runtime не изменялись.
+handlers. Исправлен live HTML refresh после агента: current metadata при reload,
+document invalidation, hidden activation, dirty guard и повторное чтение при новом
+событии во время read. CAS, bridge и runtime не изменялись.
 
 Saved Browser, lifetime, plugin selection и HTML editor fixtures проходят: retained
 iframe/draft, exact адресат, late cleanup и narrow/125%. Live browser-views нестабилен

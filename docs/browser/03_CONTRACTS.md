@@ -150,7 +150,8 @@ Label/attach options содержат storage metadata (`managed`, `directory`, 
   `presentation` и `selectMode(mode)`, возвращающий обновлённую presentation.
   Provider владеет выбранным mode/file/page; raw source не входит в descriptor.
 - `PreviewSurface.attach` возвращает дополнительно
-  `setDocument(presentation, onModeChange)` и `clearDocument()`; это UI-only
+  `setDocument(presentation, onModeChange)`, `clearDocument()` и `refresh()`
+  доступности reload; это UI-only
   rendering read-only адреса и доступных modes, без data fetch и send().
 - `BrowserObjectView.load` передаёт descriptor в PreviewSurface; при выборе вызывает
   `value.selectMode` и отражает возвращённое состояние. Reload/stop при незавершённой

@@ -94,6 +94,8 @@ Saved HTML fixture/evidence готовит `tests/web/browser-saved-views.test.j
 4. Открыть clock и `⋯`, закрыть через Escape, вернуть вкладку/раскладку; проверить
    light/dark, 420 px и 125%, narrow tools под ⋯. Upload plugin и restore сохраняют
    прежние domain guards; HTML export скачивает файлы выбранного снимка.
+5. В живом HTML изменить текущую публикацию из другого агента: активная view обновится,
+   скрытая — при возврате. Reload перечитывает current; dirty buffer сохраняется.
 
 Saved fixture использует keyboard activation для layout save/restore: быстрые mouse
 clicks в overlay над iframe воспроизводят известный pointer-routing gap. Успех fixture

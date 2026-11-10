@@ -293,6 +293,12 @@ when the selected revision and every file's exact ref, size and SHA-256 agree. A
 bounded in-memory cache (3 million UTF-16 characters and 200 files, including empty
 files) reuses verified exact source on chat revisit; new revisions and explicit
 source reloads obtain fresh source.
+Since 2026-11-10, the live Browser reload also requests current workspace metadata
+before rebuilding its preview. Document-scoped resourceChanged notifications invalidate
+open editor views without requiring the source Chat View. Hidden views defer the read
+until activation; newer invalidations during a read supersede that response. A dirty
+buffer is retained and a changed source blocks stale writes. Saved exact Browser
+snapshots remain pinned to their revision.
 Uploaded HTML remains an immutable original; authored JSON is an ordinary file
 artifact. Export requires a saved document snapshot and does not create a revision.
 

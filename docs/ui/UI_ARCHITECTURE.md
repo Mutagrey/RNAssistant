@@ -71,6 +71,12 @@ iframe; BrowserObjectView — lazy load, stale generation и dispose. Live HTML 
 перемещает прежние mode/export controls в общий toolbar, исходный editor сохраняет
 владение буфером. При deactivate/dispose раскрытие закрывается.
 
+Исправление 2026-11-10: HtmlWorkspaceView перечитывает existing getHtmlWorkspace при
+reload и resourceChanged своего document scope. Скрытая view откладывает чтение до
+activate; событие во время чтения требует свежего результата до применения. Dirty
+buffer сохраняется, смена исходника блокирует устаревшую запись. Runtime уже разрешает
+актуальный logical head через RefreshSelected; новый bridge/storage не понадобился.
+
 «Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
 тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.
 Нет второго composer, chat store или вложенного chat UI. HTML использует свой chatId;

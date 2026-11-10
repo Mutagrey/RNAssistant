@@ -71,7 +71,9 @@ The shared icon toolbar uses the existing `browser-saved-views` fixture for exac
 View reuse, separate Dock groups, draft retention and retained iframe. `browser-views`
 checks live annotation intake; `plugin-view-selection` checks the pinned recipient
 after another chat is selected and preservation when returning from plugin manager.
-`html-editor-views` covers source modes/buffers/guards.
+`html-editor-views` covers source modes/buffers/guards and current publication refresh:
+manual reload, document-scoped notices from another agent, hidden activation, notices
+during a read, duplicate generations, unrelated scopes and dirty-buffer preservation.
 `browser-saved-views` also checks full-width address focus without iframe reflow,
 metadata and narrow tool menus. Its layout actions use keyboard activation; fast
 pointer routing over an iframe remains an open gap. `browser-lifetime` covers restores.

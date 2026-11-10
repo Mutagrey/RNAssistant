@@ -69,8 +69,9 @@ Windows/WebView2 остаётся отдельной проверкой.
 
 Saved HTML сохраняет read-only адрес, ▶ / `</>`, file picker и 32K source pages.
 Аннотация есть слева у всех providers: работает в живом HTML/plugin, у снимков
-недоступна с пояснением. Live preview использует прежние editor controls.
-Reload сохранённого снимка остаётся exact.
+недоступна с пояснением. Live preview использует прежние editor controls. Reload живого
+HTML читает свежие исходники; изменения других агентов обновляют чистую view, скрытую —
+при activate. Dirty buffer сохраняется. Reload сохранённого снимка остаётся exact.
 
 Upload плагина вызывает прежнюю guarded публикацию. Экспорт HTML скачивает файлы
 выбранной версии; создание самостоятельного workspace/plugin из CAS ещё требует
