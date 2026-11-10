@@ -78,7 +78,7 @@ namespace RNAssistant.Harness
             var parser = new ConversationResponseParser();
             var schema = ExpandResponseSchema(JObject.Parse(ConversationResponseSchemaBuilder.Build(tools, context)));
             var message = V8Call(send.Id, new JObject { ["agent_id"] = "a-recipient", ["text"] = "Question",
-                ["expect_reply"] = true, ["reply_to"] = JValue.CreateNull() });
+                ["expect_reply"] = true, ["reply_to"] = JValue.CreateNull(), ["assignment"] = JValue.CreateNull() });
             Action<bool, JObject[]> check = (expected, calls) => {
                 var raw = V8Envelope(calls);
                 foreach (var strict in new[] { false, true })
@@ -95,7 +95,8 @@ namespace RNAssistant.Harness
             var list = V8Call(read.Id, new JObject { ["query"] = JValue.CreateNull(), ["group"] = JValue.CreateNull(), ["after_agent"] = JValue.CreateNull() });
             foreach (var other in new[] { list, V8Call(AgentCommunicationToolCatalog.Wait, new JObject {
                     ["timeout_seconds"] = 1, ["requests"] = JValue.CreateNull(), ["mode"] = JValue.CreateNull() }),
-                V8Call(AgentCommunicationToolCatalog.Cancel, new JObject { ["agent_id"] = "a-recipient" }) })
+                V8Call(AgentCommunicationToolCatalog.Cancel, new JObject { ["agent_id"] = "a-recipient" }),
+                V8Call(AgentCommunicationToolCatalog.Resolve, new JObject { ["request_id"] = "m-request", ["outcome"] = "completed", ["text"] = "Report" }) })
             {
                 check(false, new[] { (JObject)message.DeepClone(), other });
                 check(false, new[] { other, (JObject)message.DeepClone() });
@@ -450,6 +451,12 @@ namespace RNAssistant.Harness
         }
 
         private static void AgentDurableWaitOfficeRecovery()
+        { AgentDurableWaitOfficeRecovery(false); }
+
+        private static void AgentAssignmentDurableWaitRecovery()
+        { AgentDurableWaitOfficeRecovery(true); }
+
+        private static void AgentDurableWaitOfficeRecovery(bool assignment)
         {
             WithTempExecutor((executor, adapter) => {
                 var store = new ChatStore(FixturePaths.Value);
@@ -457,6 +464,13 @@ namespace RNAssistant.Harness
                 var service = new AgentCommunicationService();
                 var session = AgentChat(store, "Durable waiting");
                 RegisterAgent(service, AgentEndpoint(session, inbox));
+                string requestId = null;
+                if (assignment)
+                {
+                    var peer = AgentChat(store, "Recipient"); RegisterAgent(service, AgentEndpoint(peer, inbox));
+                    requestId = service.Send(inbox, session, 8, "before-wait", "assignment", AgentChatAddress.IdFor(peer.Id),
+                        "Report the result", () => { }, assignment: true).MessageId;
+                }
                 executor.AgentCommunication = service; executor.AgentInbox = inbox;
                 var settings = new AppSettings { AgentResponseMode = "json_object", StreamResponses = false,
                     SmartChatTitles = false, AutoCompressContext = false, MaxAgentIterations = 5 };
@@ -464,7 +478,9 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate completion = (config, messages, options, stream, token) => {
                     var response = ++calls == 1
                         ? ModelProtocolWire.WriteAcceptedCall("Observe peer replies", null,
-                            new ConversationToolCall { Name = "agents.wait", Arguments = new JObject { ["timeout_seconds"] = 1 } })
+                            new ConversationToolCall { Name = "agents.wait", Arguments = assignment
+                                ? new JObject { ["timeout_seconds"] = 1, ["requests"] = new JArray(requestId), ["until"] = "completion" }
+                                : new JObject { ["timeout_seconds"] = 1 } })
                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "No reply yet", "Wait finished.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.UnableToComplete);
                     return Task.FromResult(new LlmCompletionResult { Content = response });
@@ -485,6 +501,7 @@ namespace RNAssistant.Harness
                 session = store.Load(session.Id);
                 var pending = session.LastRun.KernelState.Summary.PendingWait;
                 AssertTrue(pending != null, "waiting checkpoint survives the real ChatStore/CAS append");
+                AssertEqual(assignment, pending.Condition.Completion, "completion predicate survives the persisted checkpoint");
                 AssertEqual(1, calls, "suspension performs no background model calls");
                 AssertTrue(!ConversationRecoveryService.NeedsInterruption(session.LastRun), "recovery does not classify saved wait as unknown work");
                 var runId = session.LastRun.RunId;
@@ -511,6 +528,8 @@ namespace RNAssistant.Harness
                 AssertTrue(results[0].ExecutionProgress.WaitTimedOut, "deadline concludes the saved observation");
                 AssertEqual(pending.Context.Call.Id, results[0].ToolCallId, "original call resolved");
                 AssertEqual(2, calls, "one post-wait model step");
+                if (assignment) AssertEqual(AgentAssignmentState.Open, service.Assignments(inbox, session, 8, "outgoing", null).Items.Single().State,
+                    "terminal Run after wait timeout does not resolve the assignment");
             });
         }
 
@@ -662,7 +681,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), config, (executor, adapter) => {
                 AssertTrue(!executor.GetControllerTools().Any(t => AgentCommunicationToolCatalog.Owns(t.Id)), "disabled tools are absent from Office request catalog");
                 config.MaxCollaborationAgents = 20;
-                AssertEqual(8, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
+                AssertEqual(9, executor.GetControllerTools().Count(t => AgentCommunicationToolCatalog.Owns(t.Id)), "tools return when enabled");
                 var office = RNAssistant.Office.Services.BuiltInSkillProvider.GetSkills(adapter).Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 var workspace = WorkspaceSkillProvider.GetSkills().Single(s => s.Id == AgentCommunicationSkillProvider.Id);
                 AssertEqual(office.BodyMarkdown, workspace.BodyMarkdown, "Office and Workspace use the same communication skill");

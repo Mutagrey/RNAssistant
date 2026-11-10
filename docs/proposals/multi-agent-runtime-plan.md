@@ -1,5 +1,52 @@
 # Мультиагентный runtime: последовательная реализация
 
+## Этап 4b: необязательные поручения — In Review, 2026-11-10
+
+Owner — прежний Application `AgentCommunicationService`/`ConversationInboxService`;
+Core хранит typed provenance/условие wait, catalog и общую skill v13. Нового runtime,
+Task Registry, роли координатора, обязательного списка задач или UI этого среза нет.
+
+- `assignment=true` на send/spawn initial_message отмечает запрос явного результата.
+  Адрес — исходный message_id. Участник может иметь много независимых поручений;
+  ordinary chat и смена ролей свободны. Open не означает согласие выполнять работу.
+- `agents.resolve(request_id, outcome, text)` принимает completed/failed/declined
+  только от получателя Applied поручения. Отправитель определяется runtime.
+  Один terminal report, обычные send/finish/cancel/pause его не заменяют.
+- `agents.wait(requests, until=completion, mode=any/all)` ждёт эти отчёты,
+  включая отрицательные исходы. Прежние early/applied matching, FIFO/policy,
+  absolute deadline и продолжение exact Run сохраняются.
+- `agents.list(assignments=incoming/outgoing, after_request?)` даёт до 50 локальных
+  записей, краткий текст и раздельные delivery/report/input состояния. Это проекция
+  прежних events/Inbox, без peer load/wake, фоновых LLM calls или нового store.
+
+| Решение и отклонённая альтернатива | Инвариант / отказ | Код и проверка |
+|---|---|---|
+| Metadata сообщения вместо отдельной Task identity/store | Одно поручение = исходный message_id; ordinary input не становится задачей | AgentCommunicationContext + Prepared/Accepted; identity/scope/Applied guards |
+| Явный report вместо вывода из finish или обычного ответа | Completed — оценка исполнителя, не read-back proof; Run может закончиться с Open | Assignments partial + Inbox matcher; ordinary reply, negative outcome, terminal Run after timeout |
+| Single terminal report вместо заменяемого task status | Prepared запрещает вторую операцию даже при unknown; exact retry только читает receipt | Source Inbox check+append, existing send read-back; fault до intake/после intake и restart |
+| Completion predicate прежнего durable wait вместо нового scheduler | Same Run/call/deadline; ранний ответ не теряется; FIFO не обходится | AgentWaitCondition.Completion + existing kernel checkpoint; actual ChatStore/CAS interruption/resume |
+| Пагинация через list вместо отдельного task tool/read model | ≤50 записей и ≤160 символов запроса + ellipsis; body результата идёт через Inbox | Own journal projection; 51 requests, read-only, pending report за human FIFO |
+
+Формат результата остаётся обычным peer message с reply_to и SenderRunId, связанным
+с прежней трассой инструментов. Resolve receipt доказывает доставку отчёта. E-aliases
+чужого Run не переносятся: внешние эффекты проверяются существующими resources/read-back.
+Нет отдельного accept/progress/cancel/reassign task workflow; нужны уточнения — обычные
+сообщения. Эти расширения не являются обязательными для этапа 4b.
+
+Версии list5/send6/spawn4/wait5/resolve1, skill13. Нового event type/backfill нет:
+неотмеченные сообщения обычные, Completion=false по умолчанию. Старые suspended
+admissions с другим binding не мигрируют скрыто; runtime требует актуальный контракт.
+Canonical семантика — [conversation protocol](../conversation-protocol.md#необязательные-поручения),
+точные JSON schemas — AgentCommunicationToolCatalog.
+
+Прошли 35 проверок: `agent assignments:` (6), `agent communication:` (28) и core pack.
+Изолированная host-neutral копия d0ab9d09 + этот срез, чтобы не смешать параллельную
+переработку хранения. Office/Workspace scripted model wire, оба JSON formats,
+негативные исходы, uncertainty/no-replay и durable wait проверяются локально.
+Windows/Office/WebView2 и live-model collaboration остаются открыты. Output списка
+ограничен, но чтение его local metadata journal пока полное; cold-scale замеры и
+обнаружение циклов в Inspector ещё впереди. Далее этап 5 — Inspector, затем 6.
+
 
 ## Этап 4a.2: обзор и адресное переименование — In Review, 2026-11-10
 
@@ -448,7 +495,7 @@ Dockview groups относятся к размещению вкладок и н�
 |---|---|---|
 | Создатель → созданный чат | Происхождение участника | Существующая provenance; вложенность в дереве, без управляющей иерархии |
 | Группа / Collaboration | Именованный набор чатов | Одна optional сущность для дерева и Inspector; можно добавить ранее независимые чаты |
-| Поручение | Кто принял обязательство и чем оно завершилось | Отдельный optional contract этапа 4b; группа не требует поручений |
+| Поручение | Кому запрошен результат и что он явно сообщил | Optional contract этапа 4b, без неявного согласия исполнителя; группа не требует поручений |
 
 Один чат может входить в несколько групп без копирования истории/вкладки. Внутри
 группы дочерний чат вложен под создателем, только если оба представлены в ней;
@@ -550,15 +597,15 @@ rename занятого чата с revision conflict, каталог >50, от�
 
 | Tool | Назначение | Текущий статус |
 |---|---|---|
-| `agents.list(query?, agent_id?, group?, after_agent?)` | Saved participants и runtime status своей области, страницы по 50 | Реализовано, v4 |
-| `agents.spawn(title, initial_message?, expect_reply?)` | Создание ordinary thread, отдельно optional intake/request | Реализовано, v3 |
-| `agents.send(agent_id, text, expect_reply?, reply_to?)` | Durable intake, корреляция и явные ответы | Реализовано, v5 |
-| `agents.wait(timeout_seconds?, requests?, mode?)` | Следующее сообщение или any/all ответов на свои запросы | Durable v4, 2b.2 In Review; длительность 1–10 секунд сохранена |
+| `agents.list(query?, agent_id?, group?, after_agent?; assignments?, after_request?)` | Saved participants либо входящие/исходящие поручения текущего чата, страницы по 50 | Реализовано, v5 |
+| `agents.spawn(title, initial_message?, expect_reply?, assignment?)` | Создание ordinary thread, отдельно optional intake/request | Реализовано, v4 |
+| `agents.send(agent_id, text, expect_reply?, reply_to?, assignment?)` | Durable intake, корреляция, optional поручения и явные ответы | Реализовано, v6 |
+| `agents.wait(timeout_seconds?, requests?, mode?, until?)` | Следующее сообщение, any/all ответов либо отчётов о результате поручений | Durable v5, 4b In Review; длительность 1–10 секунд сохранена |
 | `agents.pause(agent_id)` | Запрос паузы живого Run на безопасной границе; Requested ≠ Paused | Реализовано v1, этап 3a In Review |
 | `agents.resume(agent_id)` | Снять агентскую паузу exact live invocation; не снимает user/recovery pause | Реализовано v1, этап 3a In Review |
 | `agents.cancel(agent_id)` | Exact live signal или terminal cancellation сохранённого wait; отдельные receipts | Реализовано v1, этап 3a In Review |
 | `agents.group` | Именованные группы чатов: list/create/rename/add/remove/delete | Реализовано v1, 4a.1 In Review |
-| `agents.resolve` | Явное разрешение опционального поручения с результатом | Этап 4b |
+| `agents.resolve(request_id, outcome, text)` | Единственный явный terminal report получателя поручения; outcome completed/failed/declined | Реализовано v1, 4b In Review |
 | `chat.rename(title, agent_id?)` | Переименовать текущий или выбранный доступный чат | Реализовано v2, 4a.2 In Review; чужой чат только idle + observed revision |
 | `core.find/read` | Читать опубликованные ресурсы и краткий обзор выбранного чата | Реализован bounded chat overview, 4a.2 In Review |
 
@@ -585,7 +632,7 @@ User Stop/restart pause снимается только явным действ�
 | 2b.2. Durable wait | Kernel continuation, `ConversationRunCoordinator`, `AgentRunContinuation`, history restoration и exact tool admission. Зависит от 2a/2b.1; реализовано, In Review | Waiting + PendingToolWait в прежних events/CAS; явный resume того же call/Run, абсолютный deadline, однократный учёт. Exact chat lease остаётся за живым Run, рабочий поток и document gate свободны. Shutdown сохраняет wait, Stop отменяет живой wait. Непроверенная Windows document binding остаётся открытым gate |
 | 3. Run control/лимиты | User batch resume, exact user controls сохранённого Run и agents.cancel/pause/resume v1 (3a) реализованы, In Review. Настраиваемый максимум участников и baseline 1/2/4/8 реализованы. FIFO active-step admission реализован, default 4/0 unlimited; общего бюджета по решению пользователя нет. Зависит от 2b | Нет второго Run/thread, user pause сильнее peer wake; cancel requested отличается от confirmed cancellation; unknown tool effect сохраняется. FIFO, cancellation races, wait/pause/approval release и 8 peers при 1 slot проверены host-neutral; Windows отдельно |
 | 4a. Организация чатов | 4a.1/4a.2 реализованы: ResourceAuthority group heads, creator в headers/DTO; `group`, адресный `chat.rename` v2, bounded overview через core.find/read и общее дерево. Зависит от 1, не требует durable wait/control | Один чат в двух группах, restart/rebuild, rename без потери параллельной записи; нет неявного запуска/обмена историей/изменения прав или budget. Общий UI slice с визуальным ревью |
-| 4b. Поручения | Optional assignment events и bounded projection; `resolve`. Зависит от 2–3, membership не обязателен | Смена ролей без смены identity; finish не закрывает поручение; terminal assignment не доказывает внешний эффект без evidence |
+| 4b. Поручения | Реализовано, In Review: optional metadata прежних событий/Inbox, paged projection через list, resolve и completion wait. Зависит от 2–3, membership не обязателен | Точный получатель, ранние/applied отчёты, negative outcome, restart/unknown/no-replay. finish не закрывает поручение; terminal report не доказывает внешний эффект. Перенос evidence между Run не вводится |
 | 5. Inspector | Typed DTO/cursors поверх существующих SessionEvent/kernel/trajectory readers; production Inspector, без demo/store | Участники + отдельные communication/dependency graphs + timeline, навигация thread/message/Run/step/resource/E; control использует этап 3; subscriptions очищаются при dispose, Run сохраняется |
 | 6. Ресурсы/qualification | Existing Resource Registry, patch/preparation/read-back и HostRuntime/DocumentAccessGate; конфликтные multi-agent сценарии | Stale snapshots отклоняются, инструменты с неизвестными side effects не повторяются; Windows/Office и live-model evidence отдельно; никакой новой истории или COM abstraction |
 
@@ -613,11 +660,11 @@ admissions требуют актуального контракта, скрыт�
 | Обработать | Трасса принятого model action после этого input | Текстовое обещание стало runtime proof |
 | Ответить | Отдельный send; на этапе 2 — validated reply_to | Другой Run завершён |
 | Завершить Run | Kernel terminal lifecycle/outcome | Все поручения или работа группы выполнены |
-| Завершить поручение | Этап 4: terminal assignment event и ссылки на результат | Внешние эффекты подтверждены без read-back |
+| Сообщить результат поручения | Этап 4b: source Prepared/Accepted с typed Resolution, destination input с reply_to и result body | Модель доказала внешний эффект; сообщение уже применено; Run завершён |
 
 В 2b.2 реализованы durable reply any/all и следующий доступный peer input через
 прежний Inbox matcher; отдельного event cursor для произвольных событий нет.
-Terminal Run/assignment и dependency graph — последующие этапы 3–4. Timeout
+Run controls реализованы в этапе 3, assignment report — в 4b. Отдельный wait на terminal Run не введён; dependency graph относится к Inspector (5). Timeout
 по сохранённому UTC deadline, отдельные cancelled/expired/failed outcomes. Polling
 оставляется только bounded reconnect сверке, не основному механизму.
 Wait dependency graph отделён от communication graph. Цикл без внешнего источника
@@ -636,7 +683,9 @@ Wait dependency graph отделён от communication graph. Цикл без �
 | Busy recipient, user FIFO, текущая запись | Existing boundary/input channel; no cancellation/replay in-flight tool; queue tests |
 | Stop/restart | Durable paused queue; shared-controller recovery и explicit resume checks |
 | Ответ пришёл раньше wait; несколько отправителей | 2a: ранний/applied ответ, any/all, частичный timeout, late signal, restart и настоящий Workspace spawn→reply→filtered wait; durable suspension — 2b.2, cold recovery в Office service/Workspace |
-| Циклическое ожидание/timeout/cancel | Этапы 2–3: dependency graph и восстановление exact suspension |
+| Несколько поручений одному/разным участникам | Этап 4b: исходный message_id, точный получатель, explicit completed/failed/declined; ordinary reply и finish не разрешают поручение |
+| Terminal report до wait / сбой source receipt / restart | Этап 4b: durable Applied matching, same-Run checkpoint, один Prepared report, запрет replay/replacement; 6 targeted checks |
+| Циклическое ожидание/timeout/cancel | Этапы 2–3: actionable peer input, deadline/Stop и exact suspension; dependency graph/обнаружение циклов — этап 5, ещё не реализовано |
 | Chess: согласовать роли, создать/сыграть игру | После 2–6: несколько ordinary threads, проверяемый игровой артефакт/правила ходов, смена ролей, close/restore, запись в Inspector; пока не qualified |
 | Общий Office/file ресурс и unknown mutation | Этап 6: contention, stale revision, подготовка до dispatch, read-back и запрет автоматического replay |
 

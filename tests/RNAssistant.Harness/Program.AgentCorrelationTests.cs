@@ -201,6 +201,12 @@ namespace RNAssistant.Harness
         }
 
         private static void AgentCorrelatedWorkspaceWire()
+        { AgentCorrelatedWorkspaceWire(false); }
+
+        private static void AgentAssignmentWorkspaceWire()
+        { AgentCorrelatedWorkspaceWire(true); }
+
+        private static void AgentCorrelatedWorkspaceWire(bool assignment)
         {
             WithPluginPaths(paths => {
                 var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
@@ -236,15 +242,18 @@ namespace RNAssistant.Harness
                                 if (child == null)
                                     response = ModelProtocolWire.WriteAcceptedCall("Ask a new peer", null, new ConversationToolCall {
                                         Name = AgentCommunicationToolCatalog.Spawn, Arguments = new JObject {
-                                            ["title"] = "Peer", ["initial_message"] = "CORRELATED_CHILD", ["expect_reply"] = true } });
+                                            ["title"] = "Peer", ["initial_message"] = "CORRELATED_CHILD", ["expect_reply"] = !assignment,
+                                            ["assignment"] = assignment } });
                                 else if (!parent.Messages.Any(message => message.ToolName == AgentCommunicationToolCatalog.Wait &&
-                                    message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok && (message.Content ?? "").Contains("RepliesReady")))
+                                    message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok &&
+                                    (message.Content ?? "").Contains(assignment ? "ResolutionsReady" : "RepliesReady")))
                                 {
                                     var sent = new ChatEventStoreAdapter(store).Read(parent, SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
                                         .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged)
                                         .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).Single(item => item.State == AgentDeliveryState.Prepared);
                                     response = ModelProtocolWire.WriteAcceptedCall("Wait for the exact response", null, new ConversationToolCall {
-                                        Name = AgentCommunicationToolCatalog.Wait, Arguments = new JObject { ["requests"] = new JArray(sent.MessageId), ["timeout_seconds"] = 10 } });
+                                        Name = AgentCommunicationToolCatalog.Wait, Arguments = new JObject { ["requests"] = new JArray(sent.MessageId),
+                                            ["timeout_seconds"] = 10, ["until"] = assignment ? "completion" : "reply" } });
                                 }
                                 else
                                 {
@@ -257,14 +266,18 @@ namespace RNAssistant.Harness
                             {
                                 var incoming = child.Messages.Single(message => message.AgentCommunication?.Sender != null).AgentCommunication;
                                 AssertContains(body, incoming.MessageId, "child model sees the runtime request identity");
+                                AssertEqual(assignment, incoming.Assignment, "spawn preserves optional assignment on its initial message");
                                 response = ModelProtocolWire.WriteAcceptedCall("Answer the exact request", null, new ConversationToolCall {
-                                    Name = AgentCommunicationToolCatalog.Send, Arguments = new JObject { ["agent_id"] = incoming.Sender.AgentId,
+                                    Name = assignment ? AgentCommunicationToolCatalog.Resolve : AgentCommunicationToolCatalog.Send,
+                                    Arguments = assignment ? new JObject { ["request_id"] = incoming.MessageId, ["outcome"] = "completed", ["text"] = "CORRELATED_RESULT" }
+                                        : new JObject { ["agent_id"] = incoming.Sender.AgentId,
                                         ["text"] = "CORRELATED_RESULT", ["reply_to"] = incoming.MessageId } });
                             }
                             else
                             {
                                 childDone = true;
-                                response = ScriptedVerifiedFinish(store.Load(child.Id), "Answer sent", "Done", "Reply queued", AgentCommunicationToolCatalog.Send);
+                                response = ScriptedVerifiedFinish(store.Load(child.Id), "Answer sent", "Done", "Reply queued",
+                                    assignment ? AgentCommunicationToolCatalog.Resolve : AgentCommunicationToolCatalog.Send);
                             }
                             await SteeringReply(request, response).ConfigureAwait(false);
                         }

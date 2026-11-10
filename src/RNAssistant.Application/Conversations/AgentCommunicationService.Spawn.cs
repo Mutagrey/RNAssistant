@@ -10,6 +10,7 @@ namespace RNAssistant.Application.Conversations
     {
         [JsonProperty("agent_id")] public string AgentId { get; set; }
         [JsonProperty("message_id", NullValueHandling = NullValueHandling.Ignore)] public string MessageId { get; set; }
+        [JsonProperty("assignment", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool Assignment { get; set; }
         public string Title { get; set; }
         public bool Created { get; set; }
         public string InitialMessage { get; set; }
@@ -19,15 +20,15 @@ namespace RNAssistant.Application.Conversations
     internal sealed partial class AgentCommunicationService
     {
         internal AgentSpawnReceipt Spawn(ConversationInboxService inbox, ChatSession source, int limit,
-            string runId, string operationId, string title, string initialMessage, Action dispatch, bool expectReply = false)
+            string runId, string operationId, string title, string initialMessage, Action dispatch, bool expectReply = false, bool assignment = false)
         {
             ChatSession child;
             lock (_sync)
             {
                 RequireEnabled(limit);
                 ConversationRunPolicy.RequireCurrentSession(source);
-                if (expectReply && initialMessage == null)
-                    throw new AgentCommunicationException("agent_spawn_invalid", "expect_reply требует initial_message.");
+                if ((expectReply || assignment) && initialMessage == null)
+                    throw new AgentCommunicationException("agent_spawn_invalid", "expect_reply и assignment требуют initial_message.");
                 if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 200 || title.IndexOfAny(new[] { '\r', '\n' }) >= 0 ||
                     initialMessage != null && (string.IsNullOrWhiteSpace(initialMessage) || initialMessage.Length > 128 * 1024))
                     throw new AgentCommunicationException("agent_spawn_invalid", "Требуется название в одну строку до 200 знаков; начальное сообщение — до 128 КиБ.");
@@ -44,7 +45,8 @@ namespace RNAssistant.Application.Conversations
                 rootEndpoint.Validate(root);
                 lock (rootEndpoint.Inbox.Get(root).Sync)
                 {
-                    var fingerprint = ConversationInputJournal.Fingerprint(new[] { source.Id, title.Trim(), initialMessage, expectReply ? "reply" : "message" });
+                    var parts = new[] { source.Id, title.Trim(), initialMessage, expectReply ? "reply" : "message" };
+                    var fingerprint = ConversationInputJournal.Fingerprint(assignment ? parts.Concat(new[] { "assignment" }) : parts);
                     var facts = rootEndpoint.Inbox.AgentEvents(root);
                     var prior = facts.FirstOrDefault(item => item.OperationId == operationId && item.State == AgentDeliveryState.SpawnPrepared);
                     if (prior != null)
@@ -89,8 +91,9 @@ namespace RNAssistant.Application.Conversations
             if (initialMessage == null) return receipt;
             try
             {
-                var initial = Send(inbox, source, limit, runId, operationId + "_initial", receipt.AgentId, initialMessage, dispatch, expectReply);
+                var initial = Send(inbox, source, limit, runId, operationId + "_initial", receipt.AgentId, initialMessage, dispatch, expectReply, assignment: assignment);
                 receipt.MessageId = initial.MessageId;
+                receipt.Assignment = initial.Assignment;
                 receipt.InitialMessage = "queued";
             }
             catch (AgentCommunicationException error)

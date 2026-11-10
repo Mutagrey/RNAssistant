@@ -713,7 +713,7 @@ namespace RNAssistant.Application.Conversations
 
         internal async Task<AgentWaitResult> WaitForAgentsAsync(ChatSession session, string runId,
             DateTime deadlineUtc, CancellationToken token, IReadOnlyDictionary<string, AgentChatAddress> requests = null,
-            bool all = false)
+            bool all = false, bool completion = false)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -753,18 +753,19 @@ namespace RNAssistant.Application.Conversations
                                 // state check and signal capture below share the intake lock.
                                 var readyIds = new HashSet<string>(ready.Select(input => input.Id), StringComparer.Ordinal);
                                 var matches = box.Inputs.Where(input => input.Status == ConversationInputStatus.Applied || readyIds.Contains(input.Id))
-                                    .Where(input => input.CreatedUtc <= deadlineUtc && MatchesReply(input, requests))
+                                    .Where(input => input.CreatedUtc <= deadlineUtc && MatchesReply(input, requests, completion))
                                     .GroupBy(input => input.AgentCommunication.ReplyTo, StringComparer.Ordinal)
                                     .Select(group => group.First()).Select(input => new AgentReplyMatch {
                                         RequestId = input.AgentCommunication.ReplyTo, MessageId = input.AgentCommunication.MessageId,
-                                        AgentId = input.AgentCommunication.Sender.AgentId }).ToArray();
+                                        AgentId = input.AgentCommunication.Sender.AgentId,
+                                        ReportedOutcome = input.AgentCommunication.Resolution }).ToArray();
                                 if (pending.Length > 0 && ready.Length == 0)
                                     return CompleteAgentWait(box, AgentWaitStatus.InputPending, ready, matches);
                                 if (matches.Length > 0 && (!all || matches.Length == requests.Count))
-                                    return CompleteAgentWait(box, AgentWaitStatus.RepliesReady, ready, matches);
+                                    return CompleteAgentWait(box, completion ? AgentWaitStatus.ResolutionsReady : AgentWaitStatus.RepliesReady, ready, matches);
                                 // Questions from peers must remain actionable while waiting;
                                 // unrelated input is not evidence that the requested reply arrived.
-                                if (ready.Any(input => !MatchesReply(input, requests)) || pending.Length > ready.Length)
+                                if (ready.Any(input => !MatchesReply(input, requests, completion)) || pending.Length > ready.Length)
                                     return CompleteAgentWait(box, AgentWaitStatus.InputPending, ready, matches);
                                 if (timeout.IsCompleted || DateTime.UtcNow >= deadlineUtc)
                                     return CompleteAgentWait(box, AgentWaitStatus.TimedOut, ready, matches);
@@ -786,11 +787,12 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
-        private static bool MatchesReply(ConversationInput input, IReadOnlyDictionary<string, AgentChatAddress> requests)
+        private static bool MatchesReply(ConversationInput input, IReadOnlyDictionary<string, AgentChatAddress> requests, bool completion)
         {
             var message = input.AgentCommunication;
             AgentChatAddress target;
             return message?.ReplyTo != null && message.MessageId != null && message.Sender != null &&
+                (!completion || message.Resolution.HasValue && Enum.IsDefined(typeof(AgentAssignmentOutcome), message.Resolution.Value)) &&
                 requests.TryGetValue(message.ReplyTo, out target) && target.ChatId == message.Sender.ChatId &&
                 target.Source == message.Sender.Source && target.WorkspaceId == message.Sender.WorkspaceId;
         }

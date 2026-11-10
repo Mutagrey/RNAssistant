@@ -50,12 +50,12 @@ and does not wake peers. Unsupported streams expose metadata only. See
 
 ## Agent communication tools — 2026-11-03
 
-`agents.list`, `agents.spawn`, `agents.send`, `agents.wait`, `agents.cancel`, `agents.pause`, `agents.resume` and `agents.group` are built-in direct tools of the initial profile
+`agents.list`, `agents.spawn`, `agents.send`, `agents.wait`, `agents.cancel`, `agents.pause`, `agents.resume`, `agents.group` and `agents.resolve` are built-in direct tools of the initial profile
 when the application messaging owner is available and `MaxCollaborationAgents > 0`.
 Zero removes them from new catalogs and rejects old handlers before dispatch;
 captured nonzero settings cannot override the current switch.
 The shared `skills.agents.communication` package teaches request/reply coordination
-and requires list v4, send v5, spawn v3, wait v4 and cancel/pause/resume/group v1 (skill v12.0.0); zero makes that package
+and requires list v5, send v6, spawn v4, wait v5 and cancel/pause/resume/group/resolve v1 (skill v13.0.0); zero makes that package
 unavailable for loading.
 List reads saved chats in the caller's document/workspace, independently of tabs,
 with optional `query` (title substring), `agent_id` (exact address), `group` (name)
@@ -86,7 +86,7 @@ incoming message_id to reply_to and address its sender. Runtime rejects foreign,
 unknown or not-yet-applied messages and wrong recipients before dispatch; reply
 provenance retains the original chain. Correlation is part of operation identity.
 
-`agents.spawn(title, initial_message?, expect_reply?)` creates an ordinary saved chat without
+`agents.spawn(title, initial_message?, expect_reply?, assignment?)` creates an ordinary saved chat without
 opening a view, selecting it or copying parent history. `title` is a single line,
 1–200 characters; optional input uses the same 131072-character bound as send.
 expect_reply=true requires initial_message; accepted initial intake returns its
@@ -104,11 +104,33 @@ remain bounded; no aggregate execution budget is imposed by user choice.
 Exact operation identity/fingerprint prevents duplicate creation; unknown effects
 are never automatically retried. Roles and task lists are not required.
 
-`agents.wait(timeout_seconds?, requests?, mode?)` is an event-driven read with no effect evidence.
+Optional `assignment=true` on send or spawn initial_message requests an explicit
+terminal report. Its original message_id is the request_id; no separate task
+registry or mandatory workflow. `agents.resolve(request_id, outcome, text)` routes
+to the original sender, accepts only an Applied assignment received by this chat,
+and allows one terminal report (completed/failed/declined). Source Prepared guards
+against another resolve even when delivery is unknown. Exact-operation receipt
+read-back never redispatches. Ordinary replies, finish and Run controls do not
+resolve an assignment. The tool's verified effect is delivery of the report only;
+reported completed is not proof of external work. Resolve is allowed in Plan/Deny
+under its exact built-in binding, with no permission elevation or mixed send batch.
+
+`agents.list(assignments=incoming/outgoing, after_request?)` selects a separate
+local projection mode, without participant filters. At most 50 items/NextRequest;
+original request excerpts are at most 160 characters plus ellipsis. Delivery and
+report state stay separate from input_status; queued report bodies are not read
+through this view. No peer is loaded or awakened. Output is bounded; the existing
+full local metadata journal remains the source, without a new durable task store.
+No separate accepted/progress/cancel/reassign task lifecycle is introduced.
+
+`agents.wait(timeout_seconds?, requests?, mode?, until?)` is an event-driven read with no effect evidence.
 It defaults to 5 seconds and accepts 1–10 per call, with no cumulative wait quota.
 Without requests it returns MessagesReady, TimedOut or InputPending. With 1–32 unique
-IDs of the caller's expect_reply requests, mode any (default) or all requires replies
+IDs of the caller's expect_reply or assignment requests, mode any (default) or all requires replies
 from their exact recipients. RepliesReady confirms that condition, not task completion.
+until=completion requires assignment IDs and returns ResolutionsReady only for
+typed reports from the original recipients, including failed/declined. Matches
+then includes reported_outcome; ordinary progress replies are not terminal reports.
 Matches contains request_id/message_id/agent_id pairs; timeout may include partial
 matches. Early/applied replies count without duplicate context delivery. Unrelated
 input yields InputPending so peers can answer each other; it is not a false match.
@@ -137,11 +159,11 @@ is a set. Runtime binds ID/revision under the existing metadata CAS; the model c
 supply revisions, URIs or storage ChatIds. These fields never enter model results.
 No peer wake, rights grant, cap reset, history copy or background LLM summarizer.
 The unified managed-write policy permits Plan; list/no-op reports VerifiedNoChange.
-Current schemas are in AgentCommunicationToolCatalog, shared guidance in skill v12.
+Current schemas are in AgentCommunicationToolCatalog, shared guidance in skill v13.
 
-Bindings: `conversation.agents.group.v1`, `conversation.agents.list.v4`, `conversation.agents.send.v5`,
-`conversation.agents.spawn.v3`, `conversation.agents.wait.v4`, `conversation.agents.cancel.v1`, `conversation.agents.pause.v1`, `conversation.agents.resume.v1`. Stale admissions must
-explicitly reload the current contract. Send/spawn/cancel/pause/resume/group are managed conversation writes
+Bindings: `conversation.agents.group.v1`, `conversation.agents.list.v5`, `conversation.agents.send.v6`,
+`conversation.agents.spawn.v4`, `conversation.agents.wait.v5`, `conversation.agents.cancel.v1`, `conversation.agents.pause.v1`, `conversation.agents.resume.v1`, `conversation.agents.resolve.v1`. Stale admissions must
+explicitly reload the current contract. Send/spawn/cancel/pause/resume/group/resolve are managed conversation writes
 available in Agent and Plan, without a document authority observer or per-message
 approval. Recipients retain their own exact policies and the sender's recorded
 ceiling: Plan/Deny cannot be laundered, and automatic approval can only decrease.
@@ -191,7 +213,7 @@ a tool/model never supplies it. See [reference revision 4](protocols/CONVERSATIO
 Исторический [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
 включая условные и manual-only записи. Начальный профиль модели — 10 доступных
-Core tools плюс `chat.rename`; `agents.list/spawn/send/wait/cancel/pause/resume/group` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
+Core tools плюс `chat.rename`; `agents.list/spawn/send/wait/cancel/pause/resume/group/resolve` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
 78 не входят. Общая грамматика patch принадлежит его schema; skills дополняют её
 предметными правилами без копирования всего контракта.
 

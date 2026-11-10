@@ -34,8 +34,8 @@ authority.
 ## Current implementation
 
 `skills.agents.communication` (Common, `AgentCommunicationSkillProvider`) is shared
-by Office, Workspace and plugin chats. Version 12.0.0 requires `agents.list` v4,
-`agents.send` v5, `agents.spawn` v3, `agents.wait` v4 and `agents.cancel/pause/resume/group` v1;
+by Office, Workspace and plugin chats. Version 13.0.0 requires `agents.list` v5,
+`agents.send` v6, `agents.spawn` v4, `agents.wait` v5 and `agents.cancel/pause/resume/group/resolve` v1;
 the existing `core.skills.load` path exposes its complete instructions. It covers
 saved same-scope discovery with `is_self`, stable short addresses, ordinary-thread
 creation without views/history copies, inherited permission ceilings, self-contained requests,
@@ -44,6 +44,11 @@ ordered batches of independent sends with separate receipts and no mixed tools,
 human authority, shared participant limits/disabled/unknown handling and stopping resolved exchanges.
 Optional named groups are links, separate from that cap: list/create/rename/add/remove/delete,
 unique addresses with pagination, no implicit wake/history access/rights changes.
+Version 13 adds optional assignment messages, explicit terminal reports through
+resolve, completion waits and a local paged assignment view. A terminal report is
+a peer assessment, not external-effect evidence. Ordinary chat, finish and Run
+controls never implicitly resolve assignments; unknown reports cannot be replaced
+or replayed. No mandatory task list, roles, acceptance workflow or extra LLM calls.
 Version 12 adds topic organization through bounded `core.find/read` chat overviews,
 explicit historical-data/provenance limits, and addressed `chat.rename` after a fresh
 read. Busy/stale targets are not stopped or automatically retried. It does not teach

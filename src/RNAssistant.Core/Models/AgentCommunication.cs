@@ -14,18 +14,21 @@ namespace RNAssistant.Core.Models
         public DateTime DeadlineUtc { get; private set; }
         public IReadOnlyList<string> RequestIds { get; private set; }
         public bool All { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Completion { get; private set; }
 
         [JsonConstructor]
-        public AgentWaitCondition(DateTime registeredUtc, DateTime deadlineUtc, IEnumerable<string> requestIds = null, bool all = false)
+        public AgentWaitCondition(DateTime registeredUtc, DateTime deadlineUtc, IEnumerable<string> requestIds = null, bool all = false,
+            bool completion = false)
         {
             var ids = (requestIds ?? new string[0]).Take(33).ToArray();
             if (registeredUtc.Kind != DateTimeKind.Utc || deadlineUtc.Kind != DateTimeKind.Utc ||
                 deadlineUtc <= registeredUtc || deadlineUtc - registeredUtc > TimeSpan.FromHours(1) ||
                 ids.Length > 32 || ids.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 64) ||
-                ids.Distinct(StringComparer.Ordinal).Count() != ids.Length || all && ids.Length == 0)
+                ids.Distinct(StringComparer.Ordinal).Count() != ids.Length || (all || completion) && ids.Length == 0)
                 throw new ArgumentException("Invalid bounded agent wait condition.");
             RegisteredUtc = registeredUtc; DeadlineUtc = deadlineUtc;
-            RequestIds = Array.AsReadOnly(ids); All = all;
+            RequestIds = Array.AsReadOnly(ids); All = all; Completion = completion;
         }
     }
 
@@ -67,6 +70,10 @@ namespace RNAssistant.Core.Models
         public string ReplyTo { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ExpectReply { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Assignment { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public AgentAssignmentOutcome? Resolution { get; set; }
         public string ChainId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public AgentChatAddress Sender { get; set; }
@@ -77,6 +84,10 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public Services.ConversationRunPolicy Policy { get; set; }
     }
+
+    // A peer's explicit report, never runtime proof of arbitrary external work.
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum AgentAssignmentOutcome { Completed, Failed, Declined }
 
     // Creation identity is conversation metadata, never an instruction or a grant.
     public sealed class AgentThreadCreation

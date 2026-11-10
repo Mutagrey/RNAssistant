@@ -45,6 +45,10 @@ namespace RNAssistant.Core.Services
                     text.Append("When a reply is needed, use agents.send with the sender's agent_id and reply_to=message_id if present; finish is not forwarded. " +
                         "Continue independent work after send. Inputs arrive between actions. Wait only for needed replies; on timeout check peer status. " +
                         "Answer peer questions before waiting; end resolved exchanges without acknowledgement loops.\n");
+                if (callable.Contains(AgentCommunicationToolCatalog.Resolve))
+                    text.Append("An incoming assignment=true requests an explicit result: use agents.resolve(request_id=message_id, outcome, text). " +
+                        "Ordinary replies and finish do not resolve it. reported_outcome is the peer's claim, not proof of external effects. " +
+                        "Wait for resolutions with agents.wait requests and until=completion; failed/declined also end that wait.\n");
             }
             text.Append("\n## Capabilities — load on demand\n");
             var loaded = new HashSet<string>((context["loaded_skills"] as JArray ?? new JArray()).Values<string>(), StringComparer.Ordinal);

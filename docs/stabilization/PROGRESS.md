@@ -1,6 +1,22 @@
 # Stabilization progress
 
 
+## Мультиагенты: необязательные поручения — In Review, 2026-11-10
+
+Этап 4b: optional assignment на send/spawn, agents.resolve v1, completion wait и
+постраничный список входящих/исходящих поручений. Общий Application owner использует
+прежние Prepared/Accepted и Inbox; нет Task store, обязательных ролей, второго Run
+или фоновых LLM calls. Completed — явная оценка получателя, не доказательство
+внешнего эффекта. Обычный ответ/finish/cancel не закрывают поручение; unknown report
+не повторяется и не заменяется. Skill13 и runtime guidance объясняют это модели.
+
+Прошли 35 проверок в изолированной host-neutral копии d0ab9d09 + срез: 6 assignment,
+28 communication и core pack. Они охватывают scripted Office/Workspace,
+Plan/Deny, FIFO, early/applied results, negative outcome, fault/restart/no-replay и
+сохранённый completion wait в том же Run. Windows/Office, live-model evidence и
+cold-scale full metadata read остаются открыты. UI не менялся. Далее
+[этап 5: Inspector](../proposals/multi-agent-runtime-plan.md), затем ресурсы/qualification.
+
 ## Мультиагенты: обзор чатов и адресный rename — In Review, 2026-11-10
 
 Этап 4a.2: общий ConversationCatalogAccess, bounded core.find/read overview и

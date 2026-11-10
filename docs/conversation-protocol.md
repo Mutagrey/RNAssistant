@@ -80,7 +80,7 @@ Owner — Application/Conversations (`AgentCommunicationService`), общий In
 существующий ConversationRunService/AgentKernel. Срез 2026-11-04 использует сохранённый
 каталог ChatStore в exact document/workspace; runtime связывает область с существующим
 Inbox/queue owner. Открытые вкладки не регистрируют участников.
-`agents.list(query?, agent_id?, group?, after_agent?)` v4 возвращает до 50 уникальных
+`agents.list(query?, agent_id?, group?, after_agent?)` v5 возвращает до 50 уникальных
 чатов, упорядоченных по agent_id, `Truncated` и `NextAgent` для следующей страницы.
 Текущий отмечен is_self; поиск — по названию/адресу, фильтр — по имени группы.
 Пагинация не закрепляет каталог: параллельные изменения требуют повторного чтения. Между областями отправка запрещена, даже если адрес известен.
@@ -93,7 +93,7 @@ storage chat ID; порядок вкладок, rename и restart его не м
 прогресс не передаются. Уточнить занятие можно сообщением. Общий skill
 `skills.agents.communication` описывает выбор адресата, контекст поручения, явный ответ
 и завершение обмена без повторных acknowledgements.
-`agents.send(agent_id, text, expect_reply?, reply_to?)` принимает текст в FIFO получателя.
+`agents.send(agent_id, text, expect_reply?, reply_to?, assignment?)` принимает текст в FIFO получателя.
 Независимые отправки разрешены одним `execute` (до 32 calls), без дополнительного
 обращения к модели между адресатами. В таком пакете только `agents.send`; runtime
 исполняет их по порядку с отдельными ID, prepared/terminal и receipt каждого сообщения.
@@ -123,6 +123,60 @@ run с более строгими правами. При изменении mod
 поэтому длительный HTTP-запрос задерживает эту границу. Его timeout и причины повторов
 видны в [диагностике сохранённого запроса](diagnostics.md#карта-экранов-и-маршрутов).
 
+### Необязательные поручения
+
+`assignment=true` на send или spawn initial_message запрашивает явный результат.
+Адрес поручения — исходный message_id, без отдельного Task ID/store. Это запрос,
+не подтверждённое согласие исполнителя. Обычные сообщения остаются без поручения;
+роль и план можно обсуждать свободно. assignment нельзя совмещать с reply_to.
+
+Только исходный получатель уже Applied сообщения может вызвать
+`agents.resolve(request_id, outcome, text)`, где outcome — completed/failed/declined.
+Runtime выбирает исходного отправителя, проверяет собственное входящее поручение и
+пишет обычный ответ с typed Resolution и reply_to. Один terminal report на поручение:
+source Prepared уже запрещает новый resolve даже при неизвестной доставке. Точный
+повтор той же операции допускает только receipt read-back, без нового dispatch.
+Коррекция ранее сообщённого результата — обычное сообщение. Run finish, cancel,
+pause, закрытая вкладка и промежуточный ответ не разрешают поручение.
+
+`until=completion` в agents.wait требует собственные assignment IDs; any/all
+учитывает только terminal reports от точного адресата. ResolutionsReady означает
+получение отчётов, включая failed/declined, а не успешное выполнение работ. Matches
+содержит reported_outcome. Действуют прежние absolute deadline, FIFO/policy,
+early/applied matching, same-Run continuation и явное восстановление после restart.
+Обычный ответ без Resolution не выполняет условие: InputPending даёт обработать его.
+При циклическом ожидании peer-вопросы и timeout остаются выходом; автоматического
+разрешения зависимостей или обнаружения цикла этот срез не добавляет.
+
+`agents.list(assignments="incoming"|"outgoing", after_request?)` — отдельный режим
+проекции своего чата, без query/agent_id/group/after_agent. До 50 записей, NextRequest
+для продолжения. Open — запрос без отчёта; DeliveryUnknown — нет source Accepted;
+Removed — входящее поручение убрано из очереди; ResolutionPrepared — отчёт подготовлен
+без подтверждённого receipt; ResolutionReceived — наблюдаемое получение отчёта.
+input_status отдельно показывает Pending/Applied/Removed. Локальные наблюдения двух
+сторон могут различаться при потере source receipt. Проекция не читает чужие чаты,
+не запускает Run, не выдаёт queued result body; сводка исходного запроса до 160
+символов плюс многоточие. Выход ограничен; чтение старого metadata journal ещё не
+является bounded indexed scan. Нет отдельного durable assignment projection.
+
+Сообщения остаются role=user с прежним escaping/provenance. Runtime добавляет в
+однострочный заголовок только assignment=true либо reported_outcome и reply_to.
+`Completed` — оценка модели. Runtime доказывает отправку/приём конкретного отчёта,
+а не произвольный внешний эффект. Результат хранится в body обычного сообщения;
+message_id/reply_to/SenderRunId связывают его с исходным запросом и трассой. Перенос
+E-aliases между Run и новая проверка внешнего результата не вводятся: существенные
+эффекты проверяются через существующие read-back/resources/evidence.
+
+Пример отдельных execute calls (request_id берётся из receipt первого вызова):
+
+```json
+{"name":"agents.send","arguments":{"agent_id":"a-peer","text":"Проверь правила игры и сообщи результат","assignment":true}}
+{"name":"agents.resolve","arguments":{"request_id":"m-request","outcome":"completed","text":"Проверены перечисленные правила; запуск игры ещё не проверен"}}
+{"name":"agents.wait","arguments":{"requests":["m-request"],"until":"completion","mode":"all"}}
+```
+
+### Ответы и ожидание
+
 Ответ отправляется явным `agents.send`; finish сам не пересылается. Отправка не
 завершает run: после неё агент продолжает свою работу. Если нужен ответ, `agents.wait`
 ждёт событие Inbox: default 5 секунд, от 1 до 10 за вызов, без отдельной суммарной квоты.
@@ -130,8 +184,8 @@ run с более строгими правами. При изменении mod
 с provenance каждого отправителя. Без фильтра tool возвращает MessagesReady/TimedOut/InputPending
 и до 50 состояний чатов (`PeersTruncated`). InputPending также означает peer input,
 которому нужен следующий run с более строгими правами.
-`agents.wait(requests?, mode?, timeout_seconds?)` принимает 1–32 уникальных message_id
-собственных запросов с expect_reply=true. mode=any (default) ждёт хотя бы один ответ,
+`agents.wait(requests?, mode?, timeout_seconds?, until?)` принимает 1–32 уникальных message_id
+собственных запросов с expect_reply=true или assignment=true. mode=any (default) ждёт хотя бы один ответ,
 all — каждый. RepliesReady и Matches[{request_id,message_id,agent_id}] подтверждают
 корреляцию с исходным получателем, но не выполнение поручения. Уже applied ответы
 считаются без повторного включения в контекст; pending ответы учитываются только в
@@ -141,7 +195,7 @@ all — каждый. RepliesReady и Matches[{request_id,message_id,agent_id}] 
 Проверка durable Inbox и захват сигнала проходят под одним lock: ответ до wait и
 между проверкой/подпиской не теряется. Корреляция восстанавливается из журнала;
 само ожидание восстанавливается только по явному действию пользователя.
-`agents.wait` contract/binding v4; communication skill v10.0.0. Wait возвращается один,
+`agents.wait` contract/binding v5; communication skill v13.0.0. Wait возвращается один,
 не в batch: его policy не разрешает independent-read batching.
 Ожидание не держит Office gate, service lock или рабочий поток. Exact chat lease и
 владелец очереди остаются за тем же Run; второй Run в этом thread запрещён.
@@ -225,7 +279,7 @@ replay инструментов нет. Закрытие Office-документ
 недоступным. Нет чтения чужой истории, управления чужими runs, пересылки вложений
 или связи с runtime другого процесса/окна.
 
-`agents.spawn(title, initial_message?, expect_reply?)` создаёт обычный сохранённый ChatSession без
+`agents.spawn(title, initial_message?, expect_reply?, assignment?)` создаёт обычный сохранённый ChatSession без
 открытия/выбора вкладки и без копирования истории. Наследуются effective model,
 reasoning, mode/mutation restrictions и область. Без initial_message нет Run;
 с ним выполняется обычный send. expect_reply=true требует initial_message;

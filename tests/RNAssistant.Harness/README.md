@@ -1,6 +1,20 @@
 # RNAssistant Harness
 
 
+## Optional assignments (4b, 2026-11-10)
+
+`agent assignments:` checks explicit result correlation (including failed/declined),
+foreign/unapplied/plain-message rejection, early/applied reports and restart,
+one terminal report with destination/receipt faults and no replay/replacement,
+50-item paging without peer wake or queued-body exposure, human FIFO, scripted
+Office Plan/Deny in both JSON formats, Workspace spawn/resolve/wait and the actual
+ChatStore/CAS saved completion wait resumed in its original Run. A terminal Run
+does not resolve the assignment. `agent communication:` covers existing ordinary
+messaging/control/wait boundaries; `tool pack: core and atomic` validates admission.
+These are host-neutral checks, not live-model or Windows/Office qualification.
+The initial verification uses an isolated d0ab9d09 plus assignment changes; ongoing
+storage work in the shared checkout is not included in this evidence.
+
 ## Chat overviews and addressed rename (4a.2, 2026-11-10)
 
 Filter `chat overview:` covers bounded SQLite samples/bytes, private content filtering,

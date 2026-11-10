@@ -1041,6 +1041,27 @@ Failed/Cancelled pause it. Effect verification remains a kernel/tool responsibil
 This includes a Failed run with `repeated_finish_no_progress`; receiving a peer reply
 does not clear that pause or retry the rejected finish automatically.
 Completion never clears explicit Stop or a replay pause.
+Optional assignments reuse `conversation.agents.changed` Prepared/Accepted and
+the same input journal. Prepared records Assignment, a bounded AssignmentSummary,
+or Resolution (Completed/Failed/Declined) plus ReplyTo. Destination input and the
+applied ChatMessage carry typed Assignment/Resolution provenance. Original public
+MessageId is the request ID; there is no new event type, Task store or backfill.
+Legacy entries have Assignment=false and no Resolution. Source check+Prepared is
+serialized under its existing Inbox lock, released before destination intake. A
+prepared terminal report prevents another operation reporting on that assignment;
+receipt uncertainty cannot cause replay/replacement. Accepted receipt and durable
+destination input are separate local observations, never an invented transaction.
+The assignment list derives from these facts (bounded output, currently full local
+metadata read); it distinguishes queued/applied/removed input from reported outcome.
+Result text remains in the input's existing immutable body, linked by MessageId,
+ReplyTo and SenderRunId. No full result is duplicated into assignment metadata.
+Run terminal state does not change assignment state. Reporting Completed does not
+prove an external effect; the existing tool terminal/read-back evidence still owns
+that distinction. PendingToolWait.Condition persists the optional Completion flag
+alongside RequestIds/All/absolute DeadlineUtc; the same kernel continuation applies.
+Changed tool bindings require fresh admission; old suspended admissions are not
+silently migrated or replayed.
+
 Kernel boundaries and `agents.wait` use transient wake signals and ready input
 IDs in this same Inbox projection. They select the leading queued agent inputs without
 skipping human FIFO; the existing run input channel claims, persists and applies each

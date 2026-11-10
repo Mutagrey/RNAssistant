@@ -16,6 +16,9 @@ namespace RNAssistant.Core.Services
                 (message.AgentCommunication.MessageId == null ? "" :
                     ", message_id=" + Newtonsoft.Json.JsonConvert.SerializeObject(message.AgentCommunication.MessageId) +
                     (message.AgentCommunication.ExpectReply ? ", expect_reply=true" : "") +
+                    (message.AgentCommunication.Assignment ? ", assignment=true" : "") +
+                    (message.AgentCommunication.Resolution.HasValue ? ", reported_outcome=" +
+                        Newtonsoft.Json.JsonConvert.SerializeObject(message.AgentCommunication.Resolution.Value.ToString().ToLowerInvariant()) : "") +
                     (message.AgentCommunication.ReplyTo == null ? "" : ", reply_to=" + Newtonsoft.Json.JsonConvert.SerializeObject(message.AgentCommunication.ReplyTo))) +
                 "]\n" + message.Content;
         }
