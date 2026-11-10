@@ -178,7 +178,7 @@ namespace RNAssistant.Office
             }
             LlmCompletionDelegate completion = async (settings, messages, requestOptions, streamProgress, cancellationToken) =>
             {
-                ConfigureModelTrace(requestOptions);
+                ConfigureModelTrace(requestOptions, settings.DebugModelTraffic);
                 var result = await rawCompletion(
                     settings,
                     messages,
@@ -224,9 +224,9 @@ namespace RNAssistant.Office
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
         }
 
-        private void ConfigureModelTrace(LlmRequestOptions options)
+        private void ConfigureModelTrace(LlmRequestOptions options, bool captureRaw)
         {
-            _modelTracePersistence.Configure(options);
+            _modelTracePersistence.Configure(options, captureRaw);
         }
 
         private void EnsureStartupRecovery()

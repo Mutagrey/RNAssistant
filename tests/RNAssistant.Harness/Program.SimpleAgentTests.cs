@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -1374,7 +1375,7 @@ namespace RNAssistant.Harness
                 {
                     AssertTrue(!FlattenSimple(messages.ToList()).Contains("REJECTED_TRACE_SENTINEL"),
                         "rejected payload is absent from every subsequent prompt");
-                    trace.Configure(options);
+                    trace.Configure(options, captureRaw: true);
                     var requestId = "transport-" + (++requestCount);
                     // Fake transport records; exact real HTTP materialization has its own existing test.
                     options.TraceSink(new LlmTraceRecord
@@ -1452,7 +1453,7 @@ namespace RNAssistant.Harness
                     var origin = message.AcceptedCallOrigin;
                     var raw = events.Single(item => item.Type == SessionEventTypes.LlmResponse &&
                         (string)item.Data["ModelAttemptId"] == origin.ModelAttemptId);
-                    var rawText = store.ReadEventPayload(raw);
+                    var rawText = Encoding.UTF8.GetString(ModelDiagnosticBuffer.Shared.Read(session.Id, raw.Data.ToObject<LlmTraceRecord>()));
                     AssertEqual(rawByAttempt[origin.ModelAttemptId], rawText, "raw accepted response is never rewritten to inject IDs");
                     AssertEqual((string)raw.Data["StepId"], origin.StepId, "origin retains the actual model step");
                     var sourceCall = JObject.Parse(rawText)["tool_calls"][origin.CallIndex];

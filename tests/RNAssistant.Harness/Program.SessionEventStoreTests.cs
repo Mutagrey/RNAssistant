@@ -1583,97 +1583,6 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void StreamingTraceQueueIsOrdered()
-        {
-            var queue = new SessionTraceWriteQueue(4);
-            var firstStarted = new ManualResetEventSlim(false);
-            var releaseFirst = new ManualResetEventSlim(false);
-            var order = new List<string>();
-            var orderSync = new object();
-
-            queue.Enqueue("session-a", () =>
-            {
-                firstStarted.Set();
-                releaseFirst.Wait();
-                lock (orderSync) order.Add("chunk-1");
-            });
-            AssertTrue(firstStarted.Wait(TimeSpan.FromSeconds(2)), "first queued write starts on a worker");
-            queue.Enqueue("session-a", () =>
-            {
-                lock (orderSync) order.Add("chunk-2");
-            });
-            AssertEqual(2, queue.PendingCount("session-a"), "SSE callback can enqueue behind a blocked fsync");
-
-            queue.EnqueueAndDrain("session-b", () =>
-            {
-                lock (orderSync) order.Add("other-session");
-            });
-            var terminal = Task.Run(() => queue.EnqueueAndDrain("session-a", () =>
-            {
-                lock (orderSync) order.Add("response");
-            }));
-            AssertTrue(!terminal.Wait(100), "terminal waits for earlier writes in its session");
-            releaseFirst.Set();
-            AssertTrue(terminal.Wait(TimeSpan.FromSeconds(2)), "terminal drain completes after the blocked write");
-            terminal.GetAwaiter().GetResult();
-
-            lock (orderSync)
-            {
-                AssertTrue(order.IndexOf("other-session") < order.IndexOf("chunk-1"),
-                    "another session is not blocked by this session queue");
-                AssertTrue(order.Where(value => value != "other-session")
-                    .SequenceEqual(new[] { "chunk-1", "chunk-2", "response" }),
-                    "writes retain enqueue order through the terminal barrier");
-            }
-
-            var terminalRan = false;
-            queue.Enqueue("session-failure", () => { throw new InvalidOperationException("queued-write-failed"); });
-            try
-            {
-                queue.EnqueueAndDrain("session-failure", () => terminalRan = true);
-                throw new InvalidOperationException("queue failure was not propagated");
-            }
-            catch (InvalidOperationException ex)
-            {
-                AssertEqual("queued-write-failed", ex.Message, "first queued failure reaches the terminal barrier");
-            }
-            AssertTrue(!terminalRan, "terminal write is skipped after an earlier persistence failure");
-            queue.EnqueueAndDrain("session-failure", () => terminalRan = true);
-            AssertTrue(terminalRan, "an idle failed queue can be retried by a later request");
-
-            var releaseFailure = new ManualResetEventSlim(false);
-            queue.Enqueue("session-concurrent-failure", () =>
-            {
-                releaseFailure.Wait();
-                throw new InvalidOperationException("concurrent-write-failed");
-            });
-            var afterFailureRan = false;
-            Func<Task<bool>> waitForFailure = () => Task.Run(() =>
-            {
-                try
-                {
-                    queue.EnqueueAndDrain("session-concurrent-failure", () => afterFailureRan = true);
-                    return false;
-                }
-                catch (InvalidOperationException ex)
-                {
-                    return ex.Message == "concurrent-write-failed";
-                }
-            });
-            var firstWaiter = waitForFailure();
-            var secondWaiter = waitForFailure();
-            var bothQueued = SpinWait.SpinUntil(() => queue.PendingCount("session-concurrent-failure") == 3,
-                TimeSpan.FromSeconds(2));
-            releaseFailure.Set();
-            AssertTrue(bothQueued, "both terminal barriers are queued behind the failed write");
-            AssertTrue(Task.WaitAll(new Task[] { firstWaiter, secondWaiter }, TimeSpan.FromSeconds(2)),
-                "both terminal waiters complete");
-            AssertTrue(firstWaiter.Result && secondWaiter.Result,
-                "each terminal waiter receives its own failed write outcome");
-            AssertTrue(!afterFailureRan, "later terminal writes remain skipped after failure");
-            AssertEqual(0, queue.QueueCount, "drained per-session queues are evicted");
-        }
-
         private static void CausalTraceScopesAreIsolated()
         {
             WithTempPaths(paths =>
@@ -1810,67 +1719,6 @@ namespace RNAssistant.Harness
                 AssertEqual("Answer.", final.AssistantText, "optional accepted trace failure preserves response");
                 AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "optional accepted trace failure preserves outcome");
                 AssertEqual(1, adapter.ExcelSheetRequests.Count(item => item.ToolId == "excel.sheet.add"), "trace failure never retries a write");
-            });
-        }
-
-        private static void StreamingTraceQueueDrainsBeforeTerminal()
-        {
-            WithTempPaths(paths =>
-            {
-                var store = new ChatStore(paths);
-                var session = store.Create("Word", "trace-queue", "Trace.docx", "Trace queue");
-                session.LastRun = new ChatRunRecord
-                {
-                    RunId = "run-queue",
-                    TurnId = "turn-queue",
-                    Status = "running",
-                    StartedUtc = DateTime.UtcNow
-                };
-                store.Save(session);
-
-                var service = new ModelTracePersistenceService(EventStore(store), new SessionTraceWriteQueue(4));
-                var options = new LlmRequestOptions { TraceSession = session, TracePurpose = "agent" };
-                service.Configure(options);
-                var requestRecord = new LlmTraceRecord
-                {
-                    Type = "request", RequestId = "request-queue", Purpose = "agent",
-                    ContextMessages = new List<ContextMessagePresentation> {
-                        new ContextMessagePresentation { MessageIndex = 0, SourceMessageId = "message-source",
-                            Parts = new List<ContextMessagePresentation> {
-                                new ContextMessagePresentation { Kind = "image_url", SourceAttachmentId = "attachment-source",
-                                    PartIndex = 1, Presentation = ContextPresentationKind.Full, ByteLength = 5 } } } },
-                    PayloadUtf8Bytes = Encoding.UTF8.GetBytes("{\"request\":\"точно\"}"),
-                    PayloadContentType = "application/json"
-                };
-                options.TraceSink(requestRecord);
-                AssertTrue(!requestRecord.PayloadTextMaterialized,
-                    "byte-backed request persists without materializing another UTF-16 string");
-                options.TraceSink(new LlmTraceRecord
-                {
-                    Type = "chunk", RequestId = "request-queue", Purpose = "agent",
-                    ChunkIndex = 0, ChunkCount = 2, Completed = true,
-                    PayloadJson = "[\"one\",\"two\"]", PayloadContentType = "application/json"
-                });
-                options.TraceSink(new LlmTraceRecord
-                {
-                    Type = "response", RequestId = "request-queue", Purpose = "agent", StatusCode = 200,
-                    PayloadJson = "{\"response\":true}", PayloadContentType = "application/json"
-                });
-
-                var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
-                var request = events.Single(item => item.Type == SessionEventTypes.LlmRequest);
-                var chunk = events.Single(item => item.Type == SessionEventTypes.AssistantChunk);
-                var response = events.Single(item => item.Type == SessionEventTypes.LlmResponse);
-                AssertEqual("request-queue", (string)request.Data["ModelAttemptId"], "non-loop request uses its existing transport id as attempt");
-                AssertEqual("request-queue", (string)request.Data["StepId"], "non-loop request uses its existing transport step");
-                AssertEqual("{\"request\":\"точно\"}", store.ReadEventPayload(request),
-                    "request CAS preserves the exact HTTP UTF-8 payload");
-                AssertEqual("attachment-source", (string)request.Data.SelectToken("ContextMessages[0].Parts[0].SourceAttachmentId"),
-                    "selected attachment provenance persists beside the immutable payload");
-                AssertTrue(chunk.Sequence < response.Sequence, "terminal response is durable after queued chunks");
-                AssertEqual("[\"one\",\"two\"]", store.ReadEventPayload(chunk), "queued chunk payload remains exact");
-                AssertEqual(SessionEventTypes.StepEnded, events.Last().Type,
-                    "response and step terminal boundary remain one durable append batch");
             });
         }
 
@@ -4343,7 +4191,7 @@ namespace RNAssistant.Harness
                     TraceContextReceipt = new ContextReceipt { Messages = messages.Select((message, index) =>
                         new ContextMessagePresentation { SourceMessageId = message.Id, MessageIndex = index,
                             Role = message.Role, Presentation = ContextPresentationKind.Full }).ToList() } };
-                new ModelTracePersistenceService(EventStore(store)).Configure(options);
+                new ModelTracePersistenceService(EventStore(store)).Configure(options, captureRaw: true);
                 var persist = options.TraceSink;
                 LlmTraceRecord trace = null;
                 options.TraceSink = record => { persist(record); trace = record;
@@ -4354,9 +4202,9 @@ namespace RNAssistant.Harness
                 AssertTrue(trace != null && trace.PayloadUtf8Bytes != null, "production serializer produced exact bytes");
                 var saved = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
                     .Single(item => item.Type == SessionEventTypes.LlmRequest);
-                var savedBytes = Encoding.UTF8.GetBytes(store.ReadEventPayload(saved));
+                var savedBytes = ModelDiagnosticBuffer.Shared.Read(session.Id, saved.Data.ToObject<LlmTraceRecord>());
                 AssertTrue(trace.PayloadUtf8Bytes.SequenceEqual(savedBytes),
-                    "request event CAS retains the exact bytes handed to HTTP content");
+                    "opt-in diagnostic buffer retains the exact bytes handed to HTTP content");
                 var request = JObject.Parse(Encoding.UTF8.GetString(savedBytes));
                 var wire = (JArray)request["messages"];
                 var entries = trace.ContextMessages.Where(item => item.MessageIndex.HasValue)

@@ -1228,7 +1228,7 @@ namespace RNAssistant.Runtime
                 {
                     options.TraceStepId = _session.LastRun.RunId + ":" + _session.LastRun.KernelState.Summary.IterationsUsed;
                     options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
-                    _modelTrace.Configure(options);
+                    _modelTrace.Configure(options, _settings.DebugModelTraffic);
                     return client.CompleteAsync(configuration, messages, options, stream, token);
                 }, payloads, office?.ModelProjection);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
@@ -1654,7 +1654,7 @@ namespace RNAssistant.Runtime
                 options.TraceContextReceipt = receipt;
                 options.TraceSession = _session;
                 options.TracePurpose = "conversation";
-                _modelTrace.Configure(options);
+                _modelTrace.Configure(options, _settings.DebugModelTraffic);
                 _session.LastContextReceipt = receipt;
                 _chats.Commit(_session, new ConversationCommit());
                 options.ContextPreparation = new LlmContextPreparationTiming

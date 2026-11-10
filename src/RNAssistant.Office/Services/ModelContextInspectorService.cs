@@ -9,6 +9,7 @@ using System.Threading;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 
@@ -140,6 +141,7 @@ namespace RNAssistant.Office.Services
                 .SingleOrDefault(e => e.SessionId == session.Id && e.EventId == query.EventId && IsModelEvent(e.Type));
             if (item == null) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact model event required.");
             var source = item.Payload;
+            byte[] diagnostic = null;
             if (query.OriginalIndex.HasValue)
             {
                 var entries = Trace(item).ContextMessages;
@@ -148,10 +150,12 @@ namespace RNAssistant.Office.Services
                     throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact context source required.");
                 source = entries[index].OriginalPayload?.ToBlobReference();
             }
-            if (source == null) throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: saved body unavailable.");
+            else if (source == null) diagnostic = ModelDiagnosticBuffer.Shared.Read(session.Id, Trace(item));
+            if (source == null && diagnostic == null) throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: точные байты не сохранены или срок временной диагностики истёк; manifest не восстанавливает исходный wire.");
             var owner = ChatDiagnosticsScope.DownloadOwner(Owner, session.WorkspaceId);
-            var lease = _data.OpenDownload(session, owner, Math.Max(1, source.ByteLength), cancellation =>
+            var lease = _data.OpenDownload(session, owner, Math.Max(1, source?.ByteLength ?? diagnostic.LongLength), cancellation =>
             {
+                if (diagnostic != null) return new ResourceDownloadContent { Bytes = diagnostic, ContentType = "application/json" };
                 try
                 {
                     return new ResourceDownloadContent {
@@ -181,9 +185,11 @@ namespace RNAssistant.Office.Services
         private static ModelContextEventDto Describe(SessionEvent item, bool detail, string alias)
         {
             var trace = Trace(item);
+            var available = item.Payload != null || ModelDiagnosticBuffer.Shared.Contains(item.SessionId, trace);
+            if (!available && trace.DiagnosticCapture == ModelDiagnosticCaptureStatus.Retained) trace.DiagnosticCapture = ModelDiagnosticCaptureStatus.Unavailable;
             if (!detail) trace.ContextMessages = null;
             return new ModelContextEventDto { EventId = item.EventId, Sequence = item.Sequence, CreatedUtc = item.CreatedUtc,
-                Type = item.Type, HasPayload = item.Payload != null, Trace = trace, Alias = alias };
+                Type = item.Type, HasPayload = available, Trace = trace, Alias = alias };
         }
 
         private static IReadOnlyList<ModelContextIdentityDto> DescribeIdentities(LlmTraceRecord trace,

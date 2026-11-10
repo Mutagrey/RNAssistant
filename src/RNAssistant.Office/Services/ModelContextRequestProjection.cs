@@ -10,6 +10,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -29,9 +30,9 @@ namespace RNAssistant.Office.Services
                 Parser = rejected != null ? ModelContextAcceptance.Rejected : accepted != null
                     ? ModelContextAcceptance.Accepted : ModelContextAcceptance.NotRecorded,
                 Runtime = ModelContextAcceptance.NotRecorded,
-                Reason = rejected?.Trace?.Error ?? failure?.Trace?.Error,
+                Reason = rejected?.Trace?.Error ?? failure?.Trace?.Error ?? CaptureReason(request, trace),
                 ResponseEventId = response?.EventId, RejectedEventId = rejected?.EventId,
-                RequestBytes = request.Payload?.ByteLength, RequestSha256 = request.Payload?.Sha256,
+                RequestBytes = request.Payload?.ByteLength ?? trace.WireBytes, RequestSha256 = request.Payload?.Sha256 ?? trace.WireSha256,
                 ResponseComplete = response?.Trace?.Completed,
                 CaptureTruncated = exchange.Any(item => item.Trace?.CaptureTruncated == true),
                 PreviousRequestEventId = all.LastOrDefault(item => item.Sequence < request.Sequence &&
@@ -47,16 +48,27 @@ namespace RNAssistant.Office.Services
         private const int MaxMessages = 8000;
         private const int MaxChanges = 200;
 
+        private static string CaptureReason(SessionEvent request, LlmTraceRecord trace)
+        {
+            if (trace.Manifest == null) return null;
+            if (ModelDiagnosticBuffer.Shared.Contains(request.SessionId, trace)) return "Точные байты доступны во временной диагностике (до 10 минут, в пределах общего буфера). Manifest доставки сохранён отдельно.";
+            return trace.DiagnosticCapture == ModelDiagnosticCaptureStatus.Disabled
+                ? "Сохранён manifest доставки. Точные байты запроса не сохранялись: диагностика выключена."
+                : "Manifest доставки сохранён; точные байты недоступны (лимит, срок хранения, перезапуск или ошибка диагностики). Реконструкция не является исходным wire.";
+        }
+
         internal static ModelContextComparisonDto Compare(SessionEvent before, SessionEvent after,
             ChatBlobStore blobs, CancellationToken token)
         {
+            var beforeTrace = before.Data?.ToObject<LlmTraceRecord>(); var afterTrace = after.Data?.ToObject<LlmTraceRecord>();
             var result = new ModelContextComparisonDto { BeforeEventId = before.EventId, AfterEventId = after.EventId,
-                BeforeBytes = before.Payload?.ByteLength, AfterBytes = after.Payload?.ByteLength,
-                BeforeSha256 = before.Payload?.Sha256, AfterSha256 = after.Payload?.Sha256,
+                BeforeBytes = before.Payload?.ByteLength ?? beforeTrace?.WireBytes, AfterBytes = after.Payload?.ByteLength ?? afterTrace?.WireBytes,
+                BeforeSha256 = before.Payload?.Sha256 ?? beforeTrace?.WireSha256, AfterSha256 = after.Payload?.Sha256 ?? afterTrace?.WireSha256,
                 SettingsChanged = new string[0], Changes = new ModelContextMessageChangeDto[0] };
-            if (before.Payload == null || after.Payload == null)
-            { result.Reason = "Тело одного из запросов не сохранено."; return result; }
-            if (before.Payload.ByteLength > MaxBytes || after.Payload.ByteLength > MaxBytes)
+            if (before.Payload == null && !ModelDiagnosticBuffer.Shared.Contains(before.SessionId, beforeTrace) ||
+                after.Payload == null && !ModelDiagnosticBuffer.Shared.Contains(after.SessionId, afterTrace))
+            { result.Reason = "Точные байты одного из запросов не сохранены или временная диагностика недоступна; manifest не заменяет wire."; return result; }
+            if (result.BeforeBytes > MaxBytes || result.AfterBytes > MaxBytes)
             { result.Reason = "Сравнение ограничено 8 МБ на запрос. Доступны точные исходники."; return result; }
             try
             {
@@ -103,7 +115,9 @@ namespace RNAssistant.Office.Services
 
         private static JObject Read(SessionEvent item, ChatBlobStore blobs, CancellationToken token)
         {
-            using (var stream = blobs.OpenVerifiedRead(item.Payload, MaxBytes, token))
+            using (var stream = item.Payload == null
+                ? new MemoryStream(ModelDiagnosticBuffer.Shared.Read(item.SessionId, item.Data?.ToObject<LlmTraceRecord>()) ?? throw new InvalidDataException("Diagnostic capture expired."), false)
+                : blobs.OpenVerifiedRead(item.Payload, MaxBytes, token))
             using (var text = new StreamReader(stream, new UTF8Encoding(false, true)))
             using (var json = new JsonTextReader(text) { DateParseHandling = DateParseHandling.None, MaxDepth = 128 })
             {

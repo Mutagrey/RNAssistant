@@ -83,7 +83,7 @@ namespace RNAssistant.Core.Llm
         public IReadOnlyList<LlmFunctionDefinition> NativeTools { get; set; }
         public bool RequireNativeToolCall { get; set; }
         public bool InspectNativeToolCalls { get; set; }
-        // Opt-in diagnostics only; ordinary streaming traces keep their existing bounded frame representation.
+        // Explicit diagnostic runner only; ordinary UI streaming has no durable SSE trace.
         public bool CaptureStreamBody { get; set; }
         public string ResponseFormat { get; set; }
         public string ResponseSchemaName { get; set; }
@@ -125,6 +125,23 @@ namespace RNAssistant.Core.Llm
     public sealed class LlmTraceRecord
     {
         private string _payloadJson;
+
+        // Hash/length describe captured wire, not a CAS reference or reconstruction promise.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string WireSha256 { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public long? WireBytes { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string DiagnosticCaptureId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ModelDiagnosticCaptureStatus? DiagnosticCapture { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ModelPayloadRepresentation? PayloadRepresentation { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ModelRequestManifest Manifest { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public long? DiagnosticDropped { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public long? DiagnosticEvicted { get; set; }
+
+        internal LlmTraceRecord CopyMetadata()
+        {
+            var copy = (LlmTraceRecord)MemberwiseClone();
+            copy._payloadJson = null; copy.PayloadUtf8Bytes = null; copy.PayloadContentType = null;
+            return copy;
+        }
 
         public string Stage { get; set; }
         public string SessionId { get; set; }
@@ -193,6 +210,26 @@ namespace RNAssistant.Core.Llm
         {
             get { return _payloadJson != null; }
         }
+    }
+
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ModelDiagnosticCaptureStatus { Disabled, Retained, SizeLimit, CaptureFailed, Unavailable }
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ModelPayloadRepresentation { RequestJson, ResponseJson, NormalizedStreamJson }
+
+    public sealed class ModelRequestManifest
+    {
+        public int Version { get; set; } = 1;
+        public string CompilerBuild { get; set; }
+        // Indices refer to the final provider messages, including runtime guidance.
+        public Dictionary<int, string> InstructionSha256 { get; set; } = new Dictionary<int, string>();
+        public LlmContextPreparationTiming ContextPreparation { get; set; }
+        public string ToolGeneration { get; set; }
+        public string SkillGeneration { get; set; }
+        public string SchemaGeneration { get; set; }
+        public string ResponseSchemaSha256 { get; set; }
+        public long ConversationHighWaterMark { get; set; }
+        public Dictionary<string, int> OmittedContext { get; set; } = new Dictionary<string, int>();
     }
 
     // Frozen, non-secret settings of this dispatch, including repair/fallback.

@@ -326,7 +326,7 @@ namespace RNAssistant.Harness
                     StreamResponses = false };
                 var options = new LlmRequestOptions { TraceSession = session, TraceContextReceipt = receipt,
                     TraceMessageContentChanged = new bool[0] };
-                new ModelTracePersistenceService(new ChatEventStoreAdapter(chats)).Configure(options);
+                new ModelTracePersistenceService(new ChatEventStoreAdapter(chats)).Configure(options, captureRaw: true);
                 var persist = options.TraceSink;
                 LlmTraceRecord trace = null;
                 options.TraceSink = record => { persist(record); trace = record;
@@ -338,7 +338,7 @@ namespace RNAssistant.Harness
                 AssertTrue(trace?.PayloadUtf8Bytes != null, "exact read request was serialized");
                 var saved = chats.ReadEvents(session.Host, session.DocumentKey, session.Id)
                     .Single(item => item.Type == SessionEventTypes.LlmRequest);
-                var savedBytes = Encoding.UTF8.GetBytes(chats.ReadEventPayload(saved));
+                var savedBytes = ModelDiagnosticBuffer.Shared.Read(session.Id, saved.Data.ToObject<LlmTraceRecord>());
                 AssertTrue(trace.PayloadUtf8Bytes.SequenceEqual(savedBytes), "cost uses the saved request bytes");
                 var wire = (JArray)JObject.Parse(Encoding.UTF8.GetString(savedBytes))["messages"];
                 var exact = (JObject)wire.Single();
@@ -607,7 +607,7 @@ namespace RNAssistant.Harness
                                 options);
                             var bytes = LlmHttpTransport.SerializeJson(body);
                             options.TraceSession = session;
-                            new ModelTracePersistenceService(new ChatEventStoreAdapter(store)).Configure(options);
+                            new ModelTracePersistenceService(new ChatEventStoreAdapter(store)).Configure(options, captureRaw: true);
                             var requestId = selection + "/" + mode;
                             options.TraceSink(new LlmTraceRecord { Type = "request", RequestId = requestId,
                                 PayloadUtf8Bytes = bytes, PayloadContentType = "application/json" });
@@ -1185,7 +1185,7 @@ namespace RNAssistant.Harness
                 var blobs = new ChatBlobStore(paths);
                 var original = PayloadRef.FromBlob(blobs.StoreText("original source", "text/plain"));
                 var options = new LlmRequestOptions { TraceSession = session, TraceStepId = "step", TraceModelAttemptId = "attempt" };
-                new ModelTracePersistenceService(new ChatEventStoreAdapter(store)).Configure(options);
+                new ModelTracePersistenceService(new ChatEventStoreAdapter(store)).Configure(options, captureRaw: true);
                 options.TraceSink(new LlmTraceRecord { Type = "request", RequestId = "first", PayloadJson = "{}",
                     PayloadContentType = "application/json", ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
                         new ContextMessagePresentation { MessageIndex = 0, Presentation = ContextPresentationKind.Summary,

@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Llm
 {
@@ -127,6 +128,10 @@ namespace RNAssistant.Core.Llm
                     RequestCause = requestOptions.TraceRequestCause,
                     Streaming = settings.StreamResponses,
                     ContextMessages = wireMessages,
+                    Manifest = new ModelRequestManifest { InstructionSha256 = ((JArray)body["messages"])
+                        .Select((message, index) => new { message, index })
+                        .Where(item => (string)item.message["role"] == "system" || (string)item.message["role"] == "developer")
+                        .ToDictionary(item => item.index, item => TextPatternEngine.Sha256(item.message.ToString(Formatting.None))) },
                     RequestComposition = LlmRequestCompositionBuilder.Describe(apiBuild, messageList,
                         requestOptions.TraceContextReceipt, requestOptions,
                         requestOptions.TraceMessageContentChanged),
@@ -151,7 +156,7 @@ namespace RNAssistant.Core.Llm
                     PayloadContentType = "application/json"
                 });
                 requestTraceRecorded = true;
-                if (settings.StreamResponses && requestOptions.TraceSink != null)
+                if (settings.StreamResponses && requestOptions.TraceSink != null && !requestOptions.TraceSinkConfigured)
                 {
                     streamTrace = new LlmStreamTraceBuffer(
                         requestOptions,
@@ -161,11 +166,6 @@ namespace RNAssistant.Core.Llm
                         requestOptions.ResponseFormat,
                         traceMessageCount,
                         traceEstimatedPromptTokens);
-                }
-                var trafficId = settings.DebugModelTraffic ? requestDiagnostics.RequestId : null;
-                if (settings.DebugModelTraffic)
-                {
-                    LogModelJson(settings, trafficId, "REQUEST POST " + requestUri, body.ToString(Formatting.Indented));
                 }
                 var content = LlmHttpTransport.CreateJsonContent(requestPayloadBytes);
                 var diagnostics = CreateDiagnostics(requestUri, settings, apiMessages.Count, !string.IsNullOrWhiteSpace(apiKey));
@@ -209,7 +209,6 @@ namespace RNAssistant.Core.Llm
                                     requestCancellation.Token,
                                     requestDiagnostics.FirstChunk).ConfigureAwait(false);
                                 failurePayload = errorBody;
-                                LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, errorBody);
                                 var failureKind = LlmHttpTransport.FailureKind(response.StatusCode, errorBody, requestOptions);
                                 if ((hasImages || hasAudio) && (int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                                 {
@@ -236,21 +235,7 @@ namespace RNAssistant.Core.Llm
                                 using (var capture = requestOptions.CaptureStreamBody ? new LlmResponseCaptureStream(stream) : null)
                                 {
                                     Action<string> rawResponseLog = null;
-                                    if (settings.DebugModelTraffic || streamTrace != null)
-                                    {
-                                        rawResponseLog = rawJson =>
-                                        {
-                                            if (settings.DebugModelTraffic)
-                                            {
-                                                LogModelJson(
-                                                    settings,
-                                                    trafficId,
-                                                    "RESPONSE HTTP " + (int)response.StatusCode + " SSE CHUNK",
-                                                    rawJson);
-                                            }
-                                            if (streamTrace != null) streamTrace.Add(rawJson);
-                                        };
-                                    }
+                                    if (streamTrace != null) rawResponseLog = streamTrace.Add;
                                     LlmCompletionResult streamed;
                                     try
                                     {
@@ -296,7 +281,6 @@ namespace RNAssistant.Core.Llm
                                 LlmHttpTransport.MaxResponseBodyBytes,
                                 requestCancellation.Token,
                                 requestDiagnostics.FirstChunk).ConfigureAwait(false);
-                            LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, responseJson);
                             // Preserve the actual provider payload even if its envelope cannot be parsed.
                             failurePayload = responseJson;
                             var parsed = LlmResponseParser.ParseCompletionResponse(responseJson, requestOptions.InspectNativeToolCalls);
@@ -531,33 +515,6 @@ namespace RNAssistant.Core.Llm
             return current.Message;
         }
 
-        private void LogModelJson(AppSettings settings, string trafficId, string label, string rawJson)
-        {
-            if (settings == null || !settings.DebugModelTraffic || _debugLog == null)
-            {
-                return;
-            }
-
-            var formatted = rawJson ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(formatted))
-            {
-                try
-                {
-                    formatted = JToken.Parse(formatted.TrimStart('\uFEFF')).ToString(Formatting.Indented);
-                }
-                catch (JsonException)
-                {
-                }
-            }
-            try
-            {
-                _debugLog("MODEL TRAFFIC [" + (trafficId ?? "unknown") + "] " + label + Environment.NewLine + formatted);
-            }
-            catch
-            {
-            }
-        }
-
         private static string CreateDiagnostics(Uri requestUri, AppSettings settings, int messageCount, bool hasBearerKey)
         {
             var headerNames = new List<string>();
@@ -677,6 +634,7 @@ namespace RNAssistant.Core.Llm
             Trace(requestOptions, new LlmTraceRecord
             {
                 Type = "response",
+                Streaming = settings.StreamResponses,
                 RequestId = requestId,
                 Purpose = requestOptions == null ? null : requestOptions.TracePurpose,
                 Endpoint = endpoint,
