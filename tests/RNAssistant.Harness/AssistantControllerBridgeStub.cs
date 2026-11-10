@@ -671,6 +671,9 @@ namespace RNAssistant.Office
         { LastChatId = request.ChatId; return new ArtifactLibraryPageResponse { ChatId = request.ChatId }; }
         public ArtifactLibraryHistoryResponse GetArtifactLibraryHistory(ArtifactLibraryHistoryRequest request)
         { LastChatId = request.ChatId; return new ArtifactLibraryHistoryResponse { ChatId = request.ChatId }; }
+        public SavedHtmlHistoryResponse GetSavedHtmlHistory(SavedHtmlHistoryRequest request)
+        { LastChatId = request.ChatId; LastArtifactViewerDocumentId = request.DocumentId; LastArtifactViewerResourceUri = request.ResourceUri;
+            return new SavedHtmlHistoryResponse { ChatId = request.ChatId, DocumentId = request.DocumentId, ResourceUri = request.ResourceUri }; }
         public ArtifactTransferDownload ExportArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
         { LastChatId = request.ChatId; return new ArtifactTransferDownload(); }
         public ChatStateResponse CopyArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)

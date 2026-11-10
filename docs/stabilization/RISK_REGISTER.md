@@ -77,14 +77,16 @@ Run/iteration budget/unknown guards и exact invocation/pause fencing прове
 `agent pause:`; наблюдаемость не требует LLM. Срез не вводит scheduler/slots или
 циклическое ожидание Run; эти ограничения остаются в плане этапов 3–4.
 
-## Saved HTML history freshness — Open, 2026-11-10
+## Saved HTML history freshness — Resolved host-neutral, 2026-11-10
 
-Живой HtmlWorkspaceView теперь перечитывает current publication при reload и document
-resourceChanged; hidden и dirty cases проверены. Saved exact Browser остаётся immutable:
-reload перечитывает выбранную версию, а ArtifactVersions использует captured head/session
-revision. Для свежей истории без переоткрытия нужен адресный resolve logical head через
-domain owner; нельзя незаметно подменять exact snapshot или угадывать lineage по title.
-Owner: Artifact Library / saved HTML provider. Это не закрыто исправлением live refresh.
+Saved HTML history читает текущий document head и метаданные через ArtifactCatalogService /
+DocumentArtifactStore, без captured chat head/revision и смены выбранного снимка.
+Меню есть и без captured head, перечитывается при каждом открытии; старые ответы
+отброшены, stale cursor перезапускается с первой страницы. Host-neutral CAS fixture:
+52 публикации другого чата, foreign document, 50-item pages, stale cursor и отсутствие
+изменений selection/links. Typed bridge и browser-saved-views проходят. C# проверен
+в isolated checkout d0ab9d09 + этот fix из-за незавершённых соседних agent/storage edits.
+Owner: Artifact Library / saved HTML provider. Windows controller delivery остаётся открытым.
 
 ## Browser annotation pointer routing — Open, 2026-11-05
 
@@ -101,6 +103,17 @@ Windows/WebView2 pointer evidence остаётся открытым, тольк�
 над iframe: DOM hit-test указывает кнопку, parent click не приходит. Задержка меняет
 результат, пробный pointer-events CSS не дал устойчивого исправления и удалён. Saved
 fixture проверяет layout save/restore клавиатурой; это явно не mouse qualification.
+
+2026-11-10: `BROWSER_POINTER_PROBE=1` у browser-saved-views включает воспроизводимый
+быстрый click вместо keyboard layout actions. На локальном Chromium parent DOM
+hit-test указывает menuitem, но pointerdown/up/click получает sandboxed iframe.
+Даже нативный modal dialog не дал исправления; top-layer/compositing эксперименты
+не оставлены в production. Движение указателя изменяет результат и не считается fix.
+Есть [похожий upstream report](https://github.com/microsoft/playwright/issues/43642),
+но точная причина в нашем runtime и Windows/WebView2 поведение не установлены.
+Отдельный fixture gap: artifact-catalog-layout не устанавливает уже требуемый
+RNAssistantHtmlWorkspaceSurface и падает до проверок истории; production saved-view
+fixture проверяет этот путь с настоящими owners.
 
 Отдельно исправлен возврат прежнего чата после открытия Browser из менеджера:
 preserveChatOwner действует для всех owners; plugin-view-selection проверяет другого

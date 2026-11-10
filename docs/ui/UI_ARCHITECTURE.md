@@ -77,6 +77,12 @@ activate; событие во время чтения требует свеже�
 buffer сохраняется, смена исходника блокирует устаревшую запись. Runtime уже разрешает
 актуальный logical head через RefreshSelected; новый bridge/storage не понадобился.
 
+Saved HTML history (2026-11-10) использует typed getSavedHtmlHistory: ArtifactCatalogService
+разрешает текущую публикацию документа по exact target и читает метаданные прежнего
+DocumentArtifactStore. Порции по 50 формирует существующий ArtifactLibraryProjectionService.
+ArtifactVersions перечитывает историю при открытии меню, отсеивает поздние ответы и
+перезапускает stale cursor с первой страницы. Выбранный снимок, iframe и chat links неизменны.
+
 «Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
 тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.
 Нет второго composer, chat store или вложенного chat UI. HTML использует свой chatId;
@@ -85,7 +91,8 @@ plugin view закрепляет workspace/session только при явно�
 доставляются адресному Chat View; закрытие чата не удаляет draft/run. Повторное
 «Обсудить» возвращает закреплённый чат. preserveChatOwner действует для всех owners.
 
-Domain authority, CAS, bridge и runtime не менялись. Новых registry/adapter/dual path нет.
+Domain authority, CAS и runtime прежние; новый bridge query только читает saved history.
+Новых registry/adapter/dual path нет.
 ArtifactVersions и plugin history используют общий ActionMenu вместо собственных
 details/popover DOM/CSS; exact revision guards и загрузка порциями сохранены.
 Session coordinator, независимый managed project, реальный Diff и native renderer

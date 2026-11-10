@@ -832,6 +832,11 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetArtifactLibraryHistory(libraryHistory), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.GetSavedHtmlHistory:
+                        var savedHtmlHistory = Payload<SavedHtmlHistoryRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.GetSavedHtmlHistory(savedHtmlHistory), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.ExportArtifact:
                         responsePayload = _controller.ExportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
                         break;

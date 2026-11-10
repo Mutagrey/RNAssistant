@@ -17,6 +17,9 @@ namespace RNAssistant.Office
         public ArtifactLibraryHistoryResponse GetArtifactLibraryHistory(ArtifactLibraryHistoryRequest request)
         { return ArtifactLibraryProjectionService.History(LoadArtifactViewerSession(request?.ChatId), request); }
 
+        public SavedHtmlHistoryResponse GetSavedHtmlHistory(SavedHtmlHistoryRequest request)
+        { return ArtifactCatalog().SavedHtmlHistory(LoadArtifactViewerSession(request?.ChatId), request); }
+
         private ArtifactCatalogService ArtifactCatalog()
         {
             return new ArtifactCatalogService(_documentAuthorityRegistry, _chatStore.DocumentArtifacts,

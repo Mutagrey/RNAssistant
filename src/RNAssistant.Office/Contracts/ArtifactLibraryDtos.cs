@@ -78,6 +78,25 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("nextCursor")] public string NextCursor { get; set; }
     }
 
+    public sealed class SavedHtmlHistoryRequest
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("documentId")] public string DocumentId { get; set; }
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+    }
+
+    public sealed class SavedHtmlHistoryResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("documentId")] public string DocumentId { get; set; }
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
+        [JsonProperty("headArtifactId")] public string HeadArtifactId { get; set; }
+        [JsonProperty("totalCount")] public int TotalCount { get; set; }
+        [JsonProperty("items")] public IReadOnlyList<ArtifactLibraryRevisionDto> Items { get; set; }
+        [JsonProperty("nextCursor")] public string NextCursor { get; set; }
+    }
+
     public sealed class ArtifactLibraryHistoryRequest
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }

@@ -76,10 +76,10 @@
         more.onclick = function () { RNAssistantActionMenu.open(more, [{ label: "Копировать точную ссылку", icon: "link", onSelect: function () {
           return copyTextResult(target.resourceUri).then(function () { context.status("Ссылка скопирована"); }).catch(context.error);
         } }].concat(RNAssistantArtifactCatalog.commands(target))); };
-        if (target.head) RNAssistantArtifactVersions.append(root, target.head, { resourceUri: target.resourceUri, revision: target.revision }, function (revision) {
+        RNAssistantArtifactVersions.append(root, target.head, { resourceUri: target.resourceUri, revision: target.revision }, function (revision) {
           return RNAssistantDockWorkspace.openTarget(Object.assign({}, target, { resourceUri: revision.resourceUri, revision: revision.revision,
             title: revision.title || target.title }), { referencePanel: RNAssistantMaterialView.key(target) });
-        }, { compact: true, chatId: target.chatId, sessionRevision: target.sessionRevision, isCurrent: context.isCurrent, send: send });
+        }, { compact: true, savedHtml: true, chatId: target.chatId, documentId: target.documentId, isCurrent: context.isCurrent, send: send });
         root.appendChild(more);
       }
     });

@@ -1,8 +1,29 @@
 # Universal Browser: статус
 
-Дата: 2026-11-10. Scope: P0/P1 + Browser address/controls + live HTML refresh.
+Дата: 2026-11-10. Scope: P0/P1 + Browser address/controls + live/saved HTML freshness.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — будущий native adapter. P1 реализован в production JS, **In Review**.
+
+## История сохранённого HTML — исправлена host-neutral, 2026-11-10
+
+Typed getSavedHtmlHistory разрешает current document publication из exact target;
+существующие DocumentArtifactStore и ArtifactLibraryProjectionService возвращают
+метаданные порциями по 50. Нет чтения HTML bodies, нового store или смены chat selection.
+Clock доступен без captured head и перечитывает список при каждом открытии. Поздние
+ответы старого меню не применяются; retry stale cursor начинает с первой страницы.
+Открытый снимок, iframe, файл исходника и ввод сохраняются.
+
+Прошли CAS history fixture (52 публикации другого чата, foreign document, paging,
+stale cursor), typed artifact bridge и browser-saved-views (свежая версия, no captured
+head, late menu response, другой активный чат, сохранённый iframe/input, 420 px/125%).
+C# проверен в isolated checkout d0ab9d09 + этот fix; в основном checkout параллельные
+agent/storage edits. Windows delivery и визуальное принятие пользователем открыты.
+[Меню истории](../ui/review/browser-history.png): v3 — текущая публикация, v1 — открытый снимок.
+
+Pointer-routing остаётся Open: быстрые клики по menuitem попадают в sandboxed iframe
+даже с нативным modal dialog. `BROWSER_POINTER_PROBE=1` сохраняет воспроизведение;
+обычный saved fixture использует keyboard layout actions, новые history actions —
+мышь над source view. Ненадёжные CSS/top-layer эксперименты удалены.
 
 ## Строка браузера и обновление HTML — In Review, 2026-11-10
 
@@ -34,8 +55,8 @@ source page 32K, overflow 0. Ранее пройденный lifetime повто
 
 Открыто: saved exact view перечитывает выбранный снимок, его lifetime не превращён в
 follow-latest. Независимый managed workspace, CAS → workspace/plugin, Diff и native URL
-остаются следующими domain-срезами. Saved history остаётся привязанной к captured head;
-актуализация этого head требует отдельного адресного чтения метаданных.
+остаются следующими domain-срезами. Свежая saved history реализована адресным чтением
+метаданных в срезе выше; выбранный exact snapshot автоматически не заменяется.
 Pointer routing поверх iframe по-прежнему Open: saved layout restore проверяется
 клавиатурой, быстрый mouse click воспроизводит старый риск. Windows/Office и визуальное
 принятие пользователем открыты. Build/commit/push не выполнялись.

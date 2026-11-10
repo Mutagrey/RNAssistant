@@ -99,6 +99,36 @@ namespace RNAssistant.Office.Services
                 Items = items.Skip(offset).Take(50).ToArray(), NextCursor = items.Count > offset + 50 ? stamp + "." + (offset + 50) : null,
                 Documents = documents.Select(d => new ArtifactCatalogDocument { Id = d.AuthorityId, Title = Title(d) }).ToArray() };
         }
+        internal SavedHtmlHistoryResponse SavedHtmlHistory(ChatSession actor, SavedHtmlHistoryRequest request)
+        {
+            if (actor == null || request == null || request.ChatId != actor.Id || string.IsNullOrWhiteSpace(request.ResourceUri) || request.ResourceUri.Length > 4096)
+                throw new InvalidOperationException("Требуется точная ссылка сохранённого HTML.");
+            var source = Source(actor, request.DocumentId);
+            var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(request.ResourceUri));
+            if (reference.Uri != request.ResourceUri) throw new InvalidOperationException("Требуется ссылка проекта, а не его файла.");
+            var selected = _artifacts.Read(source, reference, false);
+            var logicalId = HtmlWorkspaceIdentity.LogicalId(selected.Id);
+            if (selected.Kind != ChatArtifactKinds.HtmlWorkspace || logicalId == null || _artifacts.IsRemoved(source, selected))
+                throw new InvalidOperationException("История сохранённого HTML недоступна.");
+            var identity = HtmlWorkspaceIdentity.Identity(source, logicalId);
+            var current = _artifacts.CurrentSnapshot(source, identity);
+            if (current == null) throw new InvalidOperationException("Текущая версия проекта недоступна.");
+            var head = _artifacts.Read(source, current, false);
+            // A read-only projection of existing document metadata; never change the actor's selection or links.
+            var projection = new ChatSession { Id = actor.Id, DocumentAuthorityId = source.DocumentAuthorityId,
+                ActiveHtmlArtifactId = head.Id, Artifacts = _artifacts.SnapshotHistory(source, logicalId).ToList() };
+            if (!projection.Artifacts.Any(item => item.Id == selected.Id))
+                throw new InvalidOperationException("Выбранный снимок отсутствует в истории проекта.");
+            var history = ArtifactLibraryProjectionService.History(projection, new ArtifactLibraryHistoryRequest {
+                ChatId = actor.Id, ExpectedSessionRevision = projection.Revision, HeadArtifactId = head.Id, Cursor = request.Cursor });
+            var after = _artifacts.CurrentSnapshot(source, identity);
+            if (after == null || after.Uri != current.Uri || after.Revision != current.Revision)
+                throw new InvalidOperationException("История изменилась во время чтения. Обновите список версий.");
+            return new SavedHtmlHistoryResponse { ChatId = actor.Id, DocumentId = source.DocumentAuthorityId,
+                ResourceUri = request.ResourceUri, HeadArtifactId = history.HeadArtifactId,
+                TotalCount = history.TotalCount, Items = history.Items, NextCursor = history.NextCursor };
+        }
+
         private static bool CanTransfer(ChatArtifact item)
         { return string.IsNullOrEmpty(item.AvailabilityIssue) && (item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.File || item.OriginalAttachment != null); }
 

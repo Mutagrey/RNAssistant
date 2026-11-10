@@ -96,6 +96,15 @@ and a download action. Saved resources open read-only without changing the edito
 blocks mutations and editor source changes, but not independent read-only selection. Late list/preview/mutation responses
 cannot replace newer navigation or edits.
 
+Saved HTML version menus resolve the current document publication on every opening through
+typed `getSavedHtmlHistory(chatId, documentId, resourceUri, cursor)`. ArtifactCatalogService
+validates the exact snapshot, reads existing DocumentArtifactStore metadata and reuses
+ArtifactLibraryProjectionService for 50-item history pages. The response echoes the viewed
+snapshot and source document; it never links resources or changes editor selection. A changed
+head invalidates continuation; retry starts from the first page. The UI discards replies from
+earlier menu openings. This read does not depend on the chat's captured library head/revision
+and does not load HTML bodies or introduce a store. Reload of the saved page remains exact.
+
 **Экспорт проекта** writes `*.rna-html.zip` contract v1: `manifest.json`, HTML/CSS/JS
 files under `files/`, the entry file, JSON data snapshots under `data/`, and optional
 schema/mapping JSON dependencies. Origin metadata is descriptive provenance, never

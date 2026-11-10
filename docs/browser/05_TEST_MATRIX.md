@@ -100,6 +100,14 @@ Saved HTML fixture/evidence готовит `tests/web/browser-saved-views.test.j
 Saved fixture использует keyboard activation для layout save/restore: быстрые mouse
 clicks в overlay над iframe воспроизводят известный pointer-routing gap. Успех fixture
 не закрывает этот mouse/Windows evidence.
+`BROWSER_POINTER_PROBE=1` включает именно эти mouse clicks без задержек/повторов.
+
+Saved history regression (2026-11-10): проект без captured head, публикация после
+открытия вкладки, поздний ответ закрытого меню, stale cursor → первая страница,
+другой активный чат при прежнем exact target, retained iframe/input. Новые клики
+истории проверяются над source view. Host-neutral Harness filters:
+`shared HTML: saved history` и `bridge: typed artifact viewer`; первая проверка
+использует 52 реальные CAS публикации и foreign document. Windows delivery отдельно.
 
 Coverage: browser-saved-views (reuse/group placement/draft), browser-views (live annotations),
 browser-lifetime (iframe retention), plugin-view-selection (адресат, independent views,

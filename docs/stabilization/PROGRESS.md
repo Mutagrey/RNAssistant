@@ -140,6 +140,16 @@ restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wa
 control, terminal Run wait/dependencies, лимиты и Inspector ещё
 не реализованы; управление owner другого процесса этим tool не добавлено.
 
+## Saved HTML: актуальная история — host-neutral fix, 2026-11-10
+
+История читает текущую публикацию документа через typed getSavedHtmlHistory; новые
+версии другого чата видны при открытии меню без переоткрытия вкладки. Exact snapshot,
+iframe и ввод не заменяются. Нет нового store или чтения HTML bodies. Прошли CAS
+history (52 публикации/paging/foreign scope), typed bridge и saved Browser fixture.
+C# проверен в isolated checkout d0ab9d09 + fix из-за параллельных незавершённых edits;
+Windows controller delivery открыт. Pointer-routing над iframe воспроизведён и
+остаётся Open; задержка/keyboard activation не выдаются за исправление.
+
 ## Universal Browser: компактный toolbar и Chat View — In Review, 2026-11-05
 
 Согласованы концепция и отдельный Chat View рядом. PreviewSurface использует общие

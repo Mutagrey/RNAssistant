@@ -92,6 +92,15 @@ metadata and narrow tool menus. Its layout actions use keyboard activation; fast
 pointer routing over an iframe remains an open gap. `browser-lifetime` covers restores.
 Run sequentially with the existing Playwright setup. No C#/Office build is needed.
 
+Saved history follow-up (2026-11-10): `shared HTML: saved history` checks 52 actual CAS
+publications by another chat, cross-document reads, 50-item pages, stale continuation
+and unchanged selection/links. `bridge: typed artifact viewer` covers the addressed
+`getSavedHtmlHistory` DTO. `browser-saved-views` checks missing captured head, fresh
+history on reopening the menu, late response rejection, retry from the first page,
+another active chat and retained iframe/input. Its history clicks run above Source;
+`BROWSER_POINTER_PROBE=1` separately reproduces fast layout-menu clicks above iframe.
+This does not qualify Windows/Office delivery or close the pointer-routing risk.
+
 ## Universal Browser P1 — 2026-11-04
 
 `node tests/web/browser-saved-views.test.js` checks shared read-only artifact address,

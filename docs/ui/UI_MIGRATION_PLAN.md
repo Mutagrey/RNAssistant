@@ -128,6 +128,13 @@ HtmlWorkspaceView также исправлен: reload перечитывает
 История HTML/plugin теперь использует общий portalled ActionMenu; прежние version
 popover DOM/CSS удалены. Exact guards и загрузка порциями сохранены.
 
+2026-11-10: saved HTML history отвязана от captured chat head/revision. Typed query
+читает актуальную document history без смены exact snapshot; меню обновляется при
+каждом открытии, stale cursor начинает чтение заново. Пройдены host-neutral CAS history
+(52 публикации, foreign document, страницы/guards), typed bridge и browser-saved-views
+(no captured head, новые версии, поздний ответ старого меню, смена активного чата).
+Windows controller delivery остаётся открытым; pointer-routing этим не исправлен.
+
 Проверки: browser-saved-views, browser-views, browser-lifetime, plugin-view-selection,
 html-editor-views. browser-views периодически падает ещё с baseline на pointer routing
 HTML annotation; последнее выполнение красное, риск открыт. Остальные проверки проходят.

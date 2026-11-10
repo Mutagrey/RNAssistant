@@ -16,7 +16,6 @@ const {chromium}=require('playwright');
       const original=send,read=RNAssistantResourceDownload.read;
       const uri=id=>'rna://chat/preview-chat/artifact/saved-'+id+'/revision/1';
       savedTest.items=['A','B'].map(id=>({title:'Сохранённый HTML '+id,kind:'html_workspace',resourceUri:uri(id),revision:1,
-        libraryHead:{artifactId:'saved-'+id,resourceUri:uri(id),revision:1,historyCount:2,resourceClass:'versioned_aggregate'},
         documentId:id==='A'?'preview-document':'other-document',documentTitle:id==='A'?'Продажи.xlsx':'Другой документ.xlsx',linked:false,
         canTransfer:true,mimeType:'application/json',updatedUtc:'2026-11-02T12:00:00Z'}));
       const html='<h1>Точная версия</h1><label>Ввод <input value="initial"></label>';
@@ -30,8 +29,14 @@ const {chromium}=require('playwright');
           if(savedTest.delayExport)return new Promise(resolve=>{savedTest.lateLease=value.data.leaseId;savedTest.releaseExport=()=>resolve(value);});return Promise.resolve(value);
         }
         if(command==='closeArtifactTransfer')return Promise.resolve({});
-        if(command==='getArtifactLibraryHistory')return Promise.resolve({chatId:payload.chatId,sessionRevision:payload.expectedSessionRevision,headArtifactId:payload.headArtifactId,
-          items:[{artifactId:payload.headArtifactId+(payload.cursor?'-old':''),resourceUri:uri('A')+(payload.cursor?'-old':''),revision:payload.cursor?2:1}],nextCursor:payload.cursor?null:'history-2'});
+        if(command==='getSavedHtmlHistory'){
+          if(savedTest.staleCursor&&payload.cursor){savedTest.staleCursor=false;return Promise.reject(new Error('История изменилась. Обновите список.'));}
+          const result={chatId:payload.chatId,documentId:payload.documentId,resourceUri:payload.resourceUri,headArtifactId:'saved-head-'+(savedTest.latest||1),
+            items:[{artifactId:'saved-revision-'+(payload.cursor?2:1),resourceUri:payload.resourceUri+(payload.cursor?'-old':''),revision:payload.cursor?2:1}],nextCursor:payload.cursor?null:'history-2'};
+          if(savedTest.latest)result.items.unshift({artifactId:'saved-latest',resourceUri:payload.resourceUri+'-latest',revision:savedTest.latest,isHead:true});
+          if(savedTest.delayHistory){savedTest.delayHistory=false;return new Promise(resolve=>{savedTest.releaseHistory=()=>resolve(result);});}
+          return Promise.resolve(result);
+        }
         if(command==='getPluginVersions')return Promise.resolve({items:[1,2].map(n=>({releaseId:'saved-release-'+n,version:String(n),name:'Плагин',capturedUtc:'2026-11-02T12:00:00Z',active:false})),nextCursor:null});
         if(command==='openPlugin'&&payload.releaseId){
           const value={instanceId:'saved-instance-'+(++savedTest.nextLease),pluginId:payload.pluginId,releaseId:payload.releaseId,preview:true,entryUrl:'/preview/mock-plugin.html?name='+payload.releaseId};
@@ -103,10 +108,32 @@ const {chromium}=require('playwright');
       await openHtml('B');await openHtml('A');assert.equal(await a.getByRole('combobox',{name:'Файл проекта'}).inputValue(),'styles.css');
       assert.equal(await button(a,'Исходник').getAttribute('aria-pressed'),'true');
       await (await action(a,'Страница')).click();assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
-      // Keyboard activation avoids the separately tracked native iframe pointer-routing gap.
-      await page.locator('#workspaceLayout').click();await page.getByRole('menuitem',{name:'Сохранить раскладку',exact:true}).focus();await page.keyboard.press('Enter');
-      await page.locator('#workspaceLayout').click();await page.getByRole('menuitem',{name:'Вернуть сохранённую',exact:true}).focus();await page.keyboard.press('Enter');
+      // Keep the known Chromium overlay-input reproduction separate from saved-history coverage.
+      // BROWSER_POINTER_PROBE=1 uses physical clicks; the normal run preserves the existing keyboard path.
+      for(const name of ['Сохранить раскладку','Вернуть сохранённую']){
+        await page.locator('#workspaceLayout').click();const item=page.getByRole('menuitem',{name,exact:true});
+        if(process.env.BROWSER_POINTER_PROBE)await item.click();else{await item.focus();await page.keyboard.press('Enter');}
+      }
       assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
+      await (await action(a,'Исходник')).click();
+      await page.evaluate(()=>{savedTest.delayHistory=true;state.activeChatId='unrelated-chat';state.chatNavigationVersion++;});
+      await (await action(a,'Версии проекта · v1')).click();
+      await page.waitForFunction(()=>!!savedTest.releaseHistory);await page.keyboard.press('Escape');
+      await page.evaluate(()=>{savedTest.latest=3;savedTest.staleCursor=true;});
+      await (await action(a,'Версии проекта · v1')).click();
+      await page.getByRole('menuitemcheckbox',{name:'v3 · текущая',exact:true}).waitFor();
+      await page.evaluate(()=>savedTest.releaseHistory());
+      assert.ok(await page.getByRole('menuitemcheckbox',{name:'v3 · текущая',exact:true}).isVisible(),'late history from the closed menu cannot replace fresh publications');
+      await page.getByRole('menuitem',{name:'Показать ещё 50',exact:true}).click();
+      await page.getByRole('menuitem',{name:'Повторить загрузку',exact:true}).click();
+      await page.getByRole('menuitemcheckbox',{name:'v3 · текущая',exact:true}).waitFor();
+      assert.deepEqual(await page.evaluate(()=>savedTest.calls.filter(c=>c.command==='getSavedHtmlHistory').at(-1).payload),
+        {chatId:'preview-chat',documentId:'preview-document',resourceUri:exactAddress,cursor:null},'stale paging restarts with the exact saved document target');
+      if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-history1280.png'});
+      await page.keyboard.press('Escape');
+      await page.evaluate(()=>{state.activeChatId='preview-chat';state.chatNavigationVersion++;});
+      assert.equal(await address.inputValue(),exactAddress);
+      assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox',{includeHidden:true}).inputValue(),'retained','refreshing history preserves the selected snapshot and iframe');
       for(const [width,zoom,theme] of [[1280,1,'light'],[420,1.25,'dark']]){
         await page.setViewportSize({width,height:900});
         await page.evaluate(({zoom,theme})=>{document.documentElement.style.zoom=String(zoom);document.documentElement.dataset.theme=theme;},{zoom,theme});
