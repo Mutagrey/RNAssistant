@@ -360,8 +360,8 @@ namespace RNAssistant.Harness
             {
                 var owner = ConversationLeaseService.ForOffice(paths);
                 var secondOwner = ConversationLeaseService.ForOffice(paths);
-                var registry = new ConversationRunOwner(owner, ChatCloneService.CloneSessionSnapshot);
-                var secondRegistry = new ConversationRunOwner(secondOwner, ChatCloneService.CloneSessionSnapshot);
+                var registry = new ConversationRunOwner(owner);
+                var secondRegistry = new ConversationRunOwner(secondOwner);
                 var session = new ChatSession { Title = "Before run" };
                 var lease = registry.Start("chat-1", "run-1", session);
                 session.Title = "Mutated live object";
@@ -369,10 +369,10 @@ namespace RNAssistant.Harness
                 AssertTrue(registry.IsRunning("chat-1"), "run registered");
                 AssertTrue(secondRegistry.IsConversationReserved("chat-1"), "cross-registry lock is visible");
                 AssertTrue(secondOwner.AnyHeld(), "maintenance detects a run in another registry");
-                AssertEqual("Before run", registry.Get("chat-1").Session.Title, "run snapshot is immutable");
+                AssertEqual("Before run", registry.Get("chat-1").Title, "run snapshot is immutable");
                 var exposedSnapshot = registry.Get("chat-1");
-                exposedSnapshot.Session.Title = "Mutated returned snapshot";
-                AssertEqual("Before run", registry.Get("chat-1").Session.Title, "returned snapshot cannot mutate registry state");
+                exposedSnapshot.Title = "Mutated returned snapshot";
+                AssertEqual("Before run", registry.Get("chat-1").Title, "returned snapshot cannot mutate registry state");
                 using (registry.Start("chat-2", "run-2",
                     new ChatSession { Title = "Parallel chat" }))
                 {
@@ -473,7 +473,7 @@ namespace RNAssistant.Harness
 
         private static void ConfirmedToolRunLeaseRejectsDuplicateAndSupportsCancellation()
         {
-            var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(null), ChatCloneService.CloneSessionSnapshot);
+            var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(null));
             var session = new ChatSession();
             var cancellation = new CancellationTokenSource();
             var executions = 0;

@@ -22,6 +22,14 @@ invocation ID. Его Cancel/Dispose/IsActive не могут затронуть
 продолжение с тем же chat/run ID. Это уточнение existing Application owner;
 новые JSONL run/control contracts пока изолированы (см. Session events).
 
+Дополнение 2026-11-11: `ConversationRunOwner` хранит только identity, phase/action и
+локальные lease/cancellation handles, без `ChatSession` и копии истории. Progress и
+checkpoint обновляют scalar metadata. Каталог читает сохранённые headers, явное
+открытие чата — canonical session; live owner по-прежнему исключает ложный recovery.
+Текущие detail/streaming callbacks получают session от исполнителя. Stop в обоих
+hosts сначала сигналит cancellation, затем адресует существующий Inbox по exact
+host/workspace/document/chat/run, без загрузки истории и создания новой очереди.
+
 `MaxConcurrentAgentSteps`: default 4, 0 — без ограничения, диапазон 0–64.
 Общий Application scheduler для Office/Workspace одного app-data root **в одном
 процессе** выдаёт FIFO permit на один шаг kernel: входящие → model/retries → tools и

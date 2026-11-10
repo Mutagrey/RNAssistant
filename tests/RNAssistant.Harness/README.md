@@ -31,6 +31,13 @@ access. Relevant regressions: request snapshot/budget, compiler presentation, ex
 read cost, saved wire composition, active/archived selection, final read retention,
 skill exact dispatch and the scripted Office/Workspace retained-result parity case.
 
+`storage optimization: bounded live run metadata` measures 12 updates/reads at
+H=100/1000/10000. `storage optimization: live run` checks canonical catalog/detail,
+live recovery ownership and exact Inbox Stop without queue creation/replay. Relevant
+regressions: run lease/duplicate confirmation, invocation ownership, catalog reads,
+document-key migration, Workspace Stop, stale cancellation and shared run recovery.
+This does not qualify full-session persistence, detail I/O or native Office delivery.
+
 
 ## Optional assignments (4b, 2026-11-10)
 

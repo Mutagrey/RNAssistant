@@ -61,7 +61,13 @@ P3c extracts `ModelContextSnapshot` into its own model file and replaces all thr
 JSON-backed getters with typed copies/read-only immutable evidence. Compiler clones,
 repair and wire provenance use the same copy owners; nested mutable metadata stays
 detached. Removed snapshot JSON storage and the redundant repair copy; no adapter.
-Full-session progress/checkpoint delegates and aggregate storage remain open.
+
+P3d removes `ConversationRunOwner.Session`, its snapshot delegate/update/get copies
+and full-session catalog overlay. Office progress uses the existing scalar identity
+update; active document ownership uses metadata. Catalog/detail consumers read
+canonical headers/sessions; Office and Workspace Stop address the existing Inbox
+without hydration. No adapter or second store. Aggregate commits, explicit detail
+loads, kernel history/working-set restore and remaining context scans stay open.
 
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 

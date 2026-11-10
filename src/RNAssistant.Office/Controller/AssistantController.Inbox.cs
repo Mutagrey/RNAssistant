@@ -73,10 +73,10 @@ namespace RNAssistant.Office
 
         internal bool StopActiveChatRun(string chatId, string runId)
         {
-            var run = _activeRuns.Active().FirstOrDefault(item => item.ChatId == chatId && item.RunId == runId);
-            if (run == null || !_activeRuns.Cancel(chatId, runId)) return false;
+            var run = _activeRuns.Get(chatId);
+            if (run == null || run.RunId != runId || !_activeRuns.Cancel(chatId, runId)) return false;
             // Signal cancellation before any durable queue write can wait on storage.
-            if (run.Session != null) _inbox.PauseForRun(run.Session, runId);
+            _inbox.PauseActiveRun(run);
             return true;
         }
 

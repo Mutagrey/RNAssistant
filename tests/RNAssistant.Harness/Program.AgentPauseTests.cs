@@ -156,7 +156,7 @@ namespace RNAssistant.Harness
                 target.LastRun = new ChatRunRecord { RunId = "run", TurnId = "run", Status = "running",
                     KernelState = new AgentRunState(new RunSummary("run", "run", RunLifecycle.Running, new ToolCounts(), 1, 0, "", "", null), new AgentRunLimits(8, 8)) };
                 store.Commit(target, new ConversationCommit());
-                var owner = new ConversationRunOwner(ConversationLeaseService.ForOffice(FixturePaths.Value), session => session);
+                var owner = new ConversationRunOwner(ConversationLeaseService.ForOffice(FixturePaths.Value));
                 var service = new AgentCommunicationService(); RegisterCancellationScope(service, store, inbox, source, owner);
                 var address = AgentChatAddress.IdFor(target.Id);
                 using (var cancellation = new CancellationTokenSource())

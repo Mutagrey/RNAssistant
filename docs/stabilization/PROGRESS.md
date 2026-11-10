@@ -14,7 +14,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 это открытая [задача release tooling](BACKLOG.md#release-script-version-range--2026-11-11),
 которая не мешает обычным bumps. Release execution/Windows evidence остаётся открытым.
 
-## Оптимизация хранения/контекста — §8.3, P2, P3a–c, P4a, P5/P6, 2026-11-11
+## Оптимизация хранения/контекста — §8.3, P2, P3a–d, P4a, P5/P6, 2026-11-11
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace
@@ -64,7 +64,14 @@ P3c: `ModelContextSnapshot`, compiler clones и wire provenance использу
 копии вместо JSON; repair не копирует уже отделённые сообщения повторно. В fixture
 6 × 18 000 символов / 24 чтения выделения — 205 КБ вместо 18,8 МБ. Новый isolation
 check и восемь адресных регрессий проходят, включая scripted Office/Workspace.
-Полная history collection, progress snapshots и working-set restart остаются открыты.
+Полная history collection и working-set restart остаются открыты.
+
+P3d: live run owner больше не хранит/копирует `ChatSession`; progress/checkpoint
+обновляют metadata. Каталог использует сохранённые headers, Stop обоих hosts —
+существующий exact Inbox. На 12 updates + 12 reads при H=100/1000/10000 выделения
+снижены с 21,9/217,5/2172,5 МБ до 1576 байт во всех случаях. Три новых проверки и
+девять адресных регрессий проходят host-neutral. Explicit detail load и durable
+aggregate commit остаются полными; Windows controller/Office qualification открыта.
 
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10

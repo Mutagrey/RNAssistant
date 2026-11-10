@@ -2332,7 +2332,7 @@ namespace RNAssistant.Harness
                 AssertTrue(store.HasOpenToolExecution(session, "old-run"),
                     "startup fixture has a durable execution boundary, independent of UI labels");
 
-                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths));
                 var service = new ChatSessionService(adapter, ConversationStore(store))
                 {
                     RunOwnershipProvider = registry.IsConversationReserved,
@@ -2509,7 +2509,7 @@ namespace RNAssistant.Harness
                 session.Messages.Add(resultMessage);
                 store.Save(session);
 
-                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths));
                 var service = new ChatSessionService(adapter, ConversationStore(store))
                 {
                     RunOwnershipProvider = registry.IsConversationReserved,

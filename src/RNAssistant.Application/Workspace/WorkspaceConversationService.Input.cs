@@ -26,9 +26,7 @@ namespace RNAssistant.Runtime
         {
             var run = _activeRuns.Get(sessionId);
             if (run == null || run.RunId != runId || run.WorkspaceId != workspaceId || !_activeRuns.Cancel(sessionId, runId)) return false;
-            WorkspaceInputChannel channel;
-            if (_inputChannels.TryGetValue(sessionId, out channel))
-                _conversationInbox.PauseForRun(channel.Session, runId);
+            _conversationInbox.PauseActiveRun(run);
             return true;
         }
 

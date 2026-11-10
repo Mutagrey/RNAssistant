@@ -130,7 +130,7 @@ namespace RNAssistant.Office
                 _toolExecutor.ResourceAuthority, _toolExecutor.Payloads);
             _skillCatalog = new SkillCatalogService(_adapter.HostName, _toolExecutor.CapturePublishedSkills);
             _conversationLeases = ConversationLeaseService.ForOffice(_paths);
-            _activeRuns = new ConversationRunOwner(_conversationLeases, ChatCloneService.CloneSessionSnapshot);
+            _activeRuns = new ConversationRunOwner(_conversationLeases);
             _conversationApplication = new ConversationApplicationService(_inbox, _activeRuns);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,
@@ -148,7 +148,7 @@ namespace RNAssistant.Office
                 _documentAuthorityRegistry);
             _lifetimeCancellation = new CancellationTokenSource();
             _chatSessions.RunStateProvider = _activeRuns.Get;
-            _chatSessions.RunSessionsProvider = _activeRuns.Sessions;
+            _chatSessions.ActiveRunsProvider = _activeRuns.Active;
             _chatSessions.RunOwnershipProvider = _activeRuns.IsConversationReserved;
             _chatSessions.RunRecoveryLeaseProvider = session => ReserveChatOperation(session);
             _chatSessions.MaintenanceLeaseProvider = _conversationLeases.AcquireMaintenance;

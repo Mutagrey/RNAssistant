@@ -89,7 +89,7 @@ namespace RNAssistant.Application.Conversations
         public string Title { get; set; }
         public string ScopeTitle { get; set; }
         public string Host { get; set; }
-        public ChatSession Session { get; set; }
+        public string DocumentKey { get; set; }
         internal CancellationTokenSource Cancellation { get; set; }
         internal IDisposable RunLock { get; set; }
     }
@@ -102,12 +102,10 @@ namespace RNAssistant.Application.Conversations
         private readonly Dictionary<string, ConversationActiveSnapshot> _runs =
             new Dictionary<string, ConversationActiveSnapshot>(StringComparer.OrdinalIgnoreCase);
         private readonly ConversationLeaseService _leases;
-        private readonly Func<ChatSession, ChatSession> _snapshot;
 
-        public ConversationRunOwner(ConversationLeaseService leases, Func<ChatSession, ChatSession> snapshot = null)
+        public ConversationRunOwner(ConversationLeaseService leases)
         {
             _leases = leases ?? throw new ArgumentNullException(nameof(leases));
-            _snapshot = snapshot;
         }
 
         public ConversationRunHandle Start(string chatId, string runId, ChatSession session,
@@ -140,8 +138,6 @@ namespace RNAssistant.Application.Conversations
             {
                 throw new InvalidOperationException("Chat and run ids are required.");
             }
-            if (session != null && _snapshot == null)
-                throw new InvalidOperationException("A session snapshot adapter is required for this run.");
             using (_leases.AcquireMaintenance())
             {
                 lock (_sync)
@@ -162,7 +158,6 @@ namespace RNAssistant.Application.Conversations
                             Status = "running",
                             Phase = "starting",
                             StartedUtc = DateTime.UtcNow,
-                            Session = session == null ? null : _snapshot(session),
                             Cancellation = cancellation,
                             RunLock = runLock
                         };
@@ -194,26 +189,11 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
-        public void UpdateSessionSnapshot(string chatId, string runId, ChatSession session)
-        {
-            if (_snapshot == null) throw new InvalidOperationException("A session snapshot adapter is required.");
-            var snapshot = _snapshot(session);
-            lock (_sync)
-            {
-                ConversationActiveSnapshot run;
-                if (_runs.TryGetValue(chatId ?? string.Empty, out run) &&
-                    string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
-                {
-                    run.Session = snapshot;
-                    SetIdentity(run, session);
-                }
-            }
-        }
-
         private static void SetIdentity(ConversationActiveSnapshot run, ChatSession session)
         {
             run.WorkspaceId = session.WorkspaceId; run.Title = session.Title;
             run.ScopeTitle = session.DocumentTitle; run.Host = session.Host;
+            run.DocumentKey = session.DocumentKey;
         }
 
         internal void UpdateIdentity(ChatSession session, string runId, string scopeTitle = null)
@@ -279,14 +259,11 @@ namespace RNAssistant.Application.Conversations
 
         public ConversationActiveSnapshot Get(string chatId)
         {
-            ConversationActiveSnapshot snapshot;
             lock (_sync)
             {
                 ConversationActiveSnapshot run;
-                snapshot = _runs.TryGetValue(chatId ?? string.Empty, out run) ? ShallowClone(run) : null;
+                return _runs.TryGetValue(chatId ?? string.Empty, out run) ? ShallowClone(run) : null;
             }
-            if (snapshot?.Session != null) snapshot.Session = _snapshot(snapshot.Session);
-            return snapshot;
         }
 
         public bool IsRunning(string chatId)
@@ -318,19 +295,6 @@ namespace RNAssistant.Application.Conversations
                 if (_runs.ContainsKey(chatId)) return true;
             }
             return _leases.IsHeld(chatId);
-        }
-
-        public IReadOnlyList<ChatSession> Sessions()
-        {
-            lock (_sync)
-            {
-                // Session snapshots are immutable after assignment; callers only read them to
-                // build chat summaries. Avoid cloning the complete transcript on every UI poll.
-                return _runs.Values
-                    .Where(item => item.Session != null)
-                    .Select(item => item.Session)
-                    .ToList();
-            }
         }
 
         public void Complete(string chatId, string runId, string invocationId = null)
@@ -408,7 +372,7 @@ namespace RNAssistant.Application.Conversations
                 StartedUtc = source.StartedUtc,
                 WorkspaceId = source.WorkspaceId, Title = source.Title,
                 ScopeTitle = source.ScopeTitle, Host = source.Host,
-                Session = source.Session
+                DocumentKey = source.DocumentKey
             };
         }
     }

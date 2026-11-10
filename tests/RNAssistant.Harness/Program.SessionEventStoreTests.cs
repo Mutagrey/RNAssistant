@@ -413,7 +413,7 @@ namespace RNAssistant.Harness
                 var paths = FixturePaths.Value;
                 var store = new ChatStore(paths);
                 var session = NewSession(adapter);
-                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths));
                 var recovery = CreateTargetedRunRecovery(adapter, paths, registry);
                 var runLease = registry.Start(session.Id, "controller-start", session);
                 var responses = new Queue<string>(new[]
@@ -485,7 +485,7 @@ namespace RNAssistant.Harness
                 var pending = AssertKernelReplay(session);
                 var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
                 var command = PendingCommand(pending);
-                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths));
                 var recovery = CreateTargetedRunRecovery(adapter, paths, registry);
                 var runLease = registry.Start(pending.Id, "controller-confirmation", pending);
                 Action injectConcurrentCommit = () =>

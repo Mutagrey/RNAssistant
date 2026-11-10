@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.2.3-dev
+
+- Active run progress/checkpoints and status reads no longer copy chat history.
+  Catalogs use committed metadata; Office/Workspace Stop addresses the existing
+  exact-scope queue without history hydration.
+
 ### 16.2.2-dev
 
 - Model context snapshots, compiler copies and wire provenance share immutable text

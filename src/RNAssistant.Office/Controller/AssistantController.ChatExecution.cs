@@ -66,7 +66,7 @@ namespace RNAssistant.Office
             }
             if (session.LastRun == null || session.LastRun.KernelState == null)
                 SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex));
-            _activeRuns.UpdateSessionSnapshot(session.Id, runId, session);
+            _activeRuns.UpdateIdentity(session, runId);
         }
 
         private ConversationRunHandle StartControllerRun(
@@ -169,7 +169,7 @@ namespace RNAssistant.Office
             SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex)
                 .Concat(updatedMessages ?? new ChatMessage[0]).Where(message => message != null));
             RunCausalTrace.Summary(session);
-            _activeRuns.UpdateSessionSnapshot(session.Id, runId, session);
+            _activeRuns.UpdateIdentity(session, runId);
         }
 
         private static void CloseRunningActivities(ChatSession session, int firstMessageIndex, bool cancelled)
@@ -504,7 +504,7 @@ namespace RNAssistant.Office
                         _attachmentStore.DeleteMessage(removedMessage);
                     }
                     input.MessagesToDeleteAfterSave = null;
-                    _activeRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    _activeRuns.UpdateIdentity(session, runId);
                     if (turnTimer.ElapsedMilliseconds >= 500)
                         RuntimeLog.Info("Chat turn preparation timing: total=" +
                             turnTimer.ElapsedMilliseconds + "ms, initialSave=" + initialSaveMs +
@@ -531,7 +531,7 @@ namespace RNAssistant.Office
                         {
                             // Keep the original preparation failure. Draft files remain available.
                         }
-                        _activeRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                        _activeRuns.UpdateIdentity(session, runId);
                     }
                     throw;
                 }

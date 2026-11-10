@@ -173,9 +173,11 @@ namespace RNAssistant.Application.Conversations
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id))
                 throw new ArgumentException("A scoped conversation is required.", nameof(session));
-            return (session.Host ?? string.Empty) + "\0" + (session.WorkspaceId ?? string.Empty) +
-                "\0" + (session.DocumentKey ?? string.Empty) + "\0" + session.Id;
+            return ScopeKey(session.Host, session.WorkspaceId, session.DocumentKey, session.Id);
         }
+
+        private static string ScopeKey(string host, string workspaceId, string documentKey, string chatId)
+        { return (host ?? string.Empty) + "\0" + (workspaceId ?? string.Empty) + "\0" + (documentKey ?? string.Empty) + "\0" + chatId; }
 
         internal void Bind(ChatSession session, bool queuedWait = false)
         {
@@ -449,7 +451,23 @@ namespace RNAssistant.Application.Conversations
         }
         internal bool PauseForRun(ChatSession session, string runId, string reason = "Остановлено пользователем")
         {
-            var box = Get(session);
+            return PauseForRun(Get(session), runId, reason);
+        }
+
+        // A live Stop addresses the existing Inbox; it must not hydrate/replay history
+        // or create a queue from a detached run-owner snapshot.
+        internal bool PauseActiveRun(ConversationActiveSnapshot run, string reason = "Остановлено пользователем")
+        {
+            if (run == null) return false;
+            Inbox box;
+            lock (_sync)
+                if (!_inboxes.TryGetValue(ScopeKey(run.Host, run.WorkspaceId, run.DocumentKey, run.ChatId), out box))
+                    return false;
+            return PauseForRun(box, run.RunId, reason);
+        }
+
+        private bool PauseForRun(Inbox box, string runId, string reason)
+        {
             lock (box.Sync)
             {
                 if (box.Session.LastRun?.RunId != runId) return false;

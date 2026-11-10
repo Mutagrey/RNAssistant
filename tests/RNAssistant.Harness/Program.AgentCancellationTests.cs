@@ -149,7 +149,7 @@ namespace RNAssistant.Harness
                     KernelState = new AgentRunState(new RunSummary("same-run", "same-run", RunLifecycle.Running,
                         new ToolCounts(writeUnknown: 1), 1, 1, "", "", null), new AgentRunLimits(8, 8)) };
                 store.Commit(target, new ConversationCommit());
-                var owner = new ConversationRunOwner(ConversationLeaseService.ForOffice(FixturePaths.Value), session => session);
+                var owner = new ConversationRunOwner(ConversationLeaseService.ForOffice(FixturePaths.Value));
                 var service = new AgentCommunicationService(); RegisterCancellationScope(service, store, inbox, source, owner);
                 var cancellation = new CancellationTokenSource();
                 var handle = owner.Start(target.Id, target.LastRun.RunId, target, cancellation); inbox.Bind(target);

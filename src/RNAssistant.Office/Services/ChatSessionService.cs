@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Services
         private bool _aliasReconciliationPending;
         private long _lastSlowHeaderLogTicks;
         internal Func<string, ConversationActiveSnapshot> RunStateProvider { get; set; }
-        internal Func<IReadOnlyList<ChatSession>> RunSessionsProvider { get; set; }
+        internal Func<IReadOnlyList<ConversationActiveSnapshot>> ActiveRunsProvider { get; set; }
         internal Func<string, bool> RunOwnershipProvider { get; set; }
         internal Func<ChatSession, IDisposable> RunRecoveryLeaseProvider { get; set; }
         internal Func<IDisposable> MaintenanceLeaseProvider { get; set; }
@@ -374,19 +374,7 @@ namespace RNAssistant.Office.Services
             ChatSession session = null;
             if (!string.IsNullOrWhiteSpace(requestedSessionId))
             {
-                if (RunStateProvider != null)
-                {
-                    var running = RunStateProvider(requestedSessionId);
-                    if (running != null && (!currentDocumentOnly ||
-                        (running.Session != null &&
-                         string.Equals(running.Session.Host, host, StringComparison.OrdinalIgnoreCase) &&
-                         string.Equals(running.Session.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))))
-                        session = running.Session;
-                }
-                if (session == null)
-                {
-                    session = _conversations.Load(host, documentKey, requestedSessionId);
-                }
+                session = _conversations.Load(host, documentKey, requestedSessionId);
                 if (session == null && currentDocumentOnly && _activeSession != null &&
                     !_activeSessionPersisted &&
                     string.Equals(_activeSession.Id, requestedSessionId, StringComparison.OrdinalIgnoreCase) &&
@@ -419,12 +407,9 @@ namespace RNAssistant.Office.Services
                      string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
                      (string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase) || migrationDeferred))
             {
-                var running = RunStateProvider == null ? null : RunStateProvider(_activeSessionId);
-                session = running == null
-                    ? (_activeSessionPersisted
-                        ? _conversations.Load(_activeHost, _activeDocumentKey, _activeSessionId)
-                        : _activeSession)
-                    : running.Session;
+                session = _activeSessionPersisted
+                    ? _conversations.Load(_activeHost, _activeDocumentKey, _activeSessionId)
+                    : _activeSession;
             }
 
             if (session == null)
@@ -739,16 +724,6 @@ namespace RNAssistant.Office.Services
                 return null;
             }
 
-            if (RunStateProvider != null)
-            {
-                var running = RunStateProvider(_activeSessionId);
-                if (running != null && running.Session != null)
-                {
-                    _activeSession = running.Session;
-                    return _activeSession;
-                }
-            }
-
             if (_activeSessionPersisted)
             {
                 var stored = _conversations.Load(_activeHost, _activeDocumentKey, _activeSessionId);
@@ -789,22 +764,6 @@ namespace RNAssistant.Office.Services
             var currentDocumentMs = timer.ElapsedMilliseconds - headerMs;
             var summaries = headers.Select(header => ToSummary(header, currentHost, currentDocumentKey)).ToList();
             var summaryMs = timer.ElapsedMilliseconds - headerMs - currentDocumentMs;
-            foreach (var running in RunSessionsProvider == null ? new ChatSession[0] : RunSessionsProvider())
-            {
-                var runningId = running.Id;
-                var storedIndex = summaries.FindIndex(item =>
-                    string.Equals(item.Id, runningId, StringComparison.OrdinalIgnoreCase));
-                var runningSummary = ToSummary(running, currentHost, currentDocumentKey);
-                if (storedIndex >= 0)
-                {
-                    CopyStorageUsage(summaries[storedIndex], runningSummary);
-                    summaries[storedIndex] = runningSummary;
-                }
-                else
-                {
-                    summaries.Insert(0, runningSummary);
-                }
-            }
             if (_activeSession != null && !_activeSessionPersisted &&
                 string.Equals(_activeSession.Id, activeId, StringComparison.OrdinalIgnoreCase) &&
                 summaries.All(item => !string.Equals(item.Id, activeId, StringComparison.OrdinalIgnoreCase)))
@@ -888,18 +847,6 @@ namespace RNAssistant.Office.Services
                     ? ChatStorageWarningLevels.None
                     : header.StorageWarningLevel
             };
-        }
-
-        private static void CopyStorageUsage(ChatSessionSummary source, ChatSessionSummary target)
-        {
-            if (source == null || target == null) return;
-            target.JsonlByteLength = source.JsonlByteLength;
-            target.CasBlobCount = source.CasBlobCount;
-            target.CasLogicalByteLength = source.CasLogicalByteLength;
-            target.CasStoredByteLength = source.CasStoredByteLength;
-            target.CasMissingBlobCount = source.CasMissingBlobCount;
-            target.CasReferenceIssueCount = source.CasReferenceIssueCount;
-            target.StorageWarningLevel = source.StorageWarningLevel;
         }
 
         public bool IsCurrentDocument(ChatSession session)
@@ -1139,12 +1086,12 @@ namespace RNAssistant.Office.Services
 
         private bool IsDocumentRunOwned(string host, string documentKey)
         {
-            var runningSessions = RunSessionsProvider == null
-                ? new ChatSession[0]
-                : RunSessionsProvider();
-            if (runningSessions.Any(session => session != null &&
-                string.Equals(session.Host, host, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(session.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase)))
+            var activeRuns = ActiveRunsProvider == null
+                ? new ConversationActiveSnapshot[0]
+                : ActiveRunsProvider();
+            if (activeRuns.Any(run => run != null &&
+                string.Equals(run.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(run.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase)))
             {
                 return true;
             }

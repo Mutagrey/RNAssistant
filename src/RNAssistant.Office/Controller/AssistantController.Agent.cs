@@ -100,7 +100,7 @@ namespace RNAssistant.Office
                 {
                     Status = "running"
                 });
-                _activeRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                _activeRuns.UpdateIdentity(session, runId);
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
                 var runProgress = CreateControllerRunProgress(
@@ -216,7 +216,7 @@ namespace RNAssistant.Office
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
                 _inbox.Bind(session, queuedWait: true);
                 session.LastRun.RuntimeId = _runtimeId;
-                _activeRuns.UpdateSessionSnapshot(session.Id, runId, session);
+                _activeRuns.UpdateIdentity(session, runId);
                 trace = RunCausalTrace.Begin(_eventStore, session);
                 var firstMessage = session.Messages.Count;
                 var runProgress = CreateControllerRunProgress(session, runId, firstMessage, progress, changed);

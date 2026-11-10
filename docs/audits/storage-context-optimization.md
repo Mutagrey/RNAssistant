@@ -461,3 +461,40 @@ after-state/CAS ownership.
 7. Conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide updated; retained
    source wording now matches the already-migrated request/live-guard behavior.
    No temporary adapter; the new journal generation remains isolated until P7.
+
+## P3d — bounded live run metadata (2026-11-11)
+
+1. F11 live-runtime portion, P3: Application `ConversationRunOwner` owns scalar run
+   identity/status and handles only. Office progress/checkpoint use its existing
+   `UpdateIdentity`; document ownership also consumes bounded active metadata.
+2. Catalog reads committed headers; explicit detail reads canonical sessions while
+   the live lease still suppresses interrupted-run recovery. Executor callbacks
+   retain their current session/streaming path. Office/Workspace Stop signals
+   cancellation before addressing the existing exact-scope Inbox, without replay.
+3. Removed retained `ChatSession`, snapshot delegate, full-history update/get copies,
+   `Sessions()` and the catalog overlay that rebuilt headers from these snapshots.
+   Production C# delta: +49/-122 (net -73). No additional store or snapshot adapter.
+4. T02 and targeted lifecycle/recovery subset: three new checks plus nine regressions
+   pass on macOS/net8/C#7.3, isolated source-linked e8d719b6 + owned changes. Coverage:
+   metadata isolation/stale run, canonical detail/catalog, exact Inbox scope/Run,
+   pause persistence/failure, cross-owner leases, confirmation, invocation identity,
+   Save As, Workspace Stop and recovery. Not full current-HEAD/Office qualification.
+5. Same fixed 256-character message bodies, H=100/1000/10000, 12 progress updates +
+   12 registry reads. Fixture creation and initial run lease acquisition excluded:
+
+   | H | Historical messages copied before → after | Allocated bytes before → after | Local wall ms before → after |
+   |---:|---:|---:|---:|
+   | 100 | 2,400 → 0 | 21,908,776 → 1,576 | 8.21 → <0.01 |
+   | 1000 | 24,000 → 0 | 217,542,592 → 1,576 | 79.00 → <0.01 |
+   | 10000 | 240,000 → 0 | 2,172,487,528 → 1,576 | 771.63 → <0.01 |
+
+   The old snapshot adapter counted copied messages. The replacement reads only
+   scalar fields; allocation is independent of H. Neither measured operation does
+   storage I/O; explicit detail loads and actual durable checkpoints are outside
+   this measurement. CPU/physical I/O and Windows latency were not measured.
+6. F04 aggregate persistence, full explicit detail reads, kernel history/working-set
+   restart and other compiler scans remain open. Required gates: remaining P3/P7
+   cost curves and Windows x64/Office x64 controller delivery/Stop evidence. This
+   slice does not make the complete progress or persistence pipeline bounded.
+7. Conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide updated.
+   No temporary adapter. The journal generation/root switch remains isolated/P7.
