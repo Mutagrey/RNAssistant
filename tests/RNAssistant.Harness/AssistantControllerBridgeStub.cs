@@ -676,6 +676,14 @@ namespace RNAssistant.Office
             return new SavedHtmlHistoryResponse { ChatId = request.ChatId, DocumentId = request.DocumentId, ResourceUri = request.ResourceUri }; }
         public ArtifactTransferDownload ExportArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
         { LastChatId = request.ChatId; return new ArtifactTransferDownload(); }
+        public RNAssistant.Application.Contracts.HtmlProjectImportResult CreateHtmlProjectFromArtifact(
+            HtmlProjectImportRequest request, System.Threading.CancellationToken token)
+        {
+            LastChatId = request.ChatId; LastArtifactViewerDocumentId = request.DocumentId; LastArtifactViewerResourceUri = request.ResourceUri;
+            return new RNAssistant.Application.Contracts.HtmlProjectImportResult {
+                Status = RNAssistant.Application.Contracts.HtmlProjectImportStatus.Created, Backing = request.Backing,
+                WorkspaceId = "ws_imported", RootPath = "/managed/imported", EntryPath = "index.html", Name = "Imported HTML" };
+        }
         public ChatStateResponse CopyArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
         { LastChatId = request.ChatId; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
         public ChatStateResponse ImportArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)

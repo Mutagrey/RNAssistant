@@ -20,6 +20,24 @@ namespace RNAssistant.Office
         public SavedHtmlHistoryResponse GetSavedHtmlHistory(SavedHtmlHistoryRequest request)
         { return ArtifactCatalog().SavedHtmlHistory(LoadArtifactViewerSession(request?.ChatId), request); }
 
+        public RNAssistant.Application.Contracts.HtmlProjectImportResult CreateHtmlProjectFromArtifact(
+            HtmlProjectImportRequest request, CancellationToken token)
+        {
+            if (request == null || request.Backing != RNAssistant.Application.Contracts.HtmlProjectBacking.Managed)
+                throw new ArgumentException("Поддерживается создание проекта в хранилище приложения.");
+            ArtifactTransferPackage source;
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                var session = LoadArtifactViewerSession(request.ChatId);
+                source = ArtifactCatalog().ReadHtmlProjectSource(session, request.DocumentId, request.ResourceUri);
+            }
+            catch (Exception error) { return new RNAssistant.Application.Contracts.HtmlProjectImportResult {
+                Status = RNAssistant.Application.Contracts.HtmlProjectImportStatus.Rejected, Backing = request.Backing,
+                Message = error.Message }; }
+            return new RNAssistant.Application.HtmlProjectImportService(_paths).Import(source, token);
+        }
+
         private ArtifactCatalogService ArtifactCatalog()
         {
             return new ArtifactCatalogService(_documentAuthorityRegistry, _chatStore.DocumentArtifacts,

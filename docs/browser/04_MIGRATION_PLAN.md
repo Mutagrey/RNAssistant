@@ -1,8 +1,8 @@
 # Universal Browser: план реализации
 
-Статус: P0 documentation подготовлен; P1 **реализован / In Review**;
-P2–P7 **Planned / Proposed**. Дата: 2026-11-05. Пользователь продолжил работу после
-docs-only P0; реализован только описанный ниже P1. Основание:
+Статус: P0 documentation подготовлен; P1 и P2a **реализованы / In Review**;
+P2b/P2c–P7 **Planned / Proposed**. Дата: 2026-11-10. Пользователь продолжил работу после
+docs-only P0; реализованы описанные ниже срезы. Основание:
 [исходник](00_SOURCE_SPEC.md), [аудит](01_AUDIT.md), [ADR](02_ARCHITECTURE_ADR.md),
 [контракты](03_CONTRACTS.md). Общая очередь UI остаётся в
 [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md); названия P0–P7 здесь относятся только
@@ -14,7 +14,7 @@ docs-only P0; реализован только описанный ниже P1. 
 |---|---|---|
 | P0 Audit/ADR | Web/Application: реальная source/authority map, reuse/remove, contracts, Windows spike protocol | Docs-only diff/links/source integrity; native и runtime evidence остаются открыты |
 | P1 HTML Artifact | Web: address/modes в общем PreviewSurface, один saved HTML consumer | Сохранены current features/limits; browser baseline + визуальное ревью; локальный mode toolbar удалён |
-| P2 Targets/Sessions | Application/Core + Web: typed resolver/session owner, HTML Workspace/Resources adapters, detach/close distinction | Dirty/stale/exact scope/close checks; новый Application owner заменяет только live session responsibility, не editor data model |
+| P2 Targets/Sessions | P2a: import в самостоятельный workspace реализован; далее Application/Core + Web resolver/session owner и detach/close | Import bounds/read-back/no-replay; затем dirty/stale/exact scope/close checks, без замены editor data model |
 | P3 Plugin | Plugin Application + Web: source/candidate/release adapters, общий navigation/modes UI | Grants/revoke/check/publish/restore неизменны; удалены переведённые provider UI controls, instance ownership остаётся |
 | P4 Versions/Annotations | Domain owners + Web: bounded diff, version semantics, events-backed annotations и anchors | Branch/active pointer, unresolved/verified resolution, view-close retention; нет BrowserRevisionStore/Annotation DB |
 | P5 External WebView2 | Native adapter + Application: renderer по результату spike, profiles/navigation/popup/download policy | Windows embedding matrix либо явный управляемый separate-window fallback; привилегированный Shell control не используется |
@@ -94,30 +94,32 @@ P2 требует отдельного domain решения: независим
 плагина — у прежнего owner. UI не создаёт второй durable version/annotation store.
 При появлении реального сравнения Diff использует иконку двух колонок с +/−.
 
-## Следующий срез P2a — Proposed, 2026-11-10
+## P2a: импорт самостоятельного проекта — In Review, 2026-11-10
 
-Сначала [project ownership/backing](02_ARCHITECTURE_ADR.md#p2a-самостоятельный-проект-и-backing--proposed-2026-11-10),
-затем resolver и sessions. Scope реализации P2a: явный import exact сохранённого HTML
+Реализованы [project ownership/backing](02_ARCHITECTURE_ADR.md#p2a-самостоятельный-проект-и-backing--in-review-2026-11-10),
+далее resolver и sessions. Scope P2a: явный import exact сохранённого HTML
 в новый managed workspace; выбранная папка подключается существующим directory path.
 Managed здесь — файлы в каталоге приложения плюс existing CAS history, не второй
 CAS-only source store. Owner — Application Workspace + существующие HTML export/file owners.
 
-1. Typed import request/result: exact source и backing; никакого выбора через active tab/chat.
-2. До создания проверить переносимость пакета, bounds, entry point и безопасные пути.
-   В первом срезе document-bound data/SDK refs явно неподдерживаемы, без неполной копии.
-3. Создать workspace через existing file authority, проверить запись, затем опубликовать
-   association. Сохранённый исходник, его ссылки и история остаются неизменными.
-4. Подключить один явный UI action «Создать проект из снимка» к existing project navigation.
-   Dirty buffers, source editor и чат берутся у владельца workspace; отдельный store не создаётся.
-5. Минимальные проверки: exact snapshot после смены head; чужой document; path traversal /
-   collision / bounds; отказ для непереносимых данных до записи; fault без ложного успеха;
-   reopen созданного workspace, неизменный source artifact. Затем один browser flow.
+1. Typed command `createHtmlProjectFromArtifact` передаёт exact source и managed backing.
+2. Preflight проверяет entry point, безопасные пути/коллизии, 100 файлов / 16 МиБ;
+   document-bound data, распознаваемые SDK/vendor/external refs отклоняются до записи.
+3. Application import создаёт скрытый workspace, file owner пишет и сверяет SHA-256;
+   только затем association публикуется. Сохранённый исходник и его история не меняются.
+4. «Сохранение проекта» → «Создать проект из снимка» открывает existing project navigation.
+   Повторный переход использует тот же workspace; поздний ответ не меняет навигацию.
+   Новый чат/Run автоматически не создаётся; source editor и чат остаются у workspace owner.
+5. Три focused import checks, typed bridge и existing file-path check проходят host-neutral;
+   новый browser flow и saved Browser fixture проходят. Старый transfer roundtrip падает
+   также на чистом baseline при следующем HTML-tool вызове; риск записан отдельно.
 
 P2b — typed target resolver и capabilities существующих consumers. P2c — runtime
 session owner, detach/reattach и отдельное закрытие session с UI для повторного открытия.
 До P2c закрытие вкладки сохраняет прежний lifetime; новый ID не записывается в Dock layout.
 Pointer-routing/Windows evidence остаются открытыми и не блокируют domain-срез P2a.
-Этот раздел — конкретизация плана; import, managed backing и sessions ещё не реализованы.
+Import и managed source backing реализованы. Перенос зависимостей, browser resolver,
+sessions, Windows/controller delivery и пользовательское визуальное принятие открыты.
 
 ## Развитие после P1
 

@@ -156,11 +156,7 @@ namespace RNAssistant.Office.Services
 
         internal ArtifactTransferContent Export(ChatSession actor, ArtifactTransferRequest request)
         {
-            var source = Source(actor, request.DocumentId);
-            var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(request.ResourceUri));
-            if (reference.Uri != request.ResourceUri) throw new InvalidDataException("Требуется точная ссылка артефакта.");
-            var artifact = _artifacts.Read(source, reference, false);
-            if (_artifacts.IsRemoved(source, artifact)) throw new InvalidOperationException("Артефакт удалён из документа.");
+            var artifact = ReadTransferArtifact(actor, request.DocumentId, request.ResourceUri, out var source, out var reference);
             if (!CanTransfer(artifact) && !request.Preview) throw new InvalidOperationException("Перенос этого типа пока не поддерживается.");
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {
@@ -177,15 +173,42 @@ namespace RNAssistant.Office.Services
                 Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 } };
         }
 
-        private ArtifactTransferPackage CaptureProject(ChatSession source, ChatArtifact artifact)
+        private ChatArtifact ReadTransferArtifact(ChatSession actor, string documentId, string resourceUri,
+            out ChatSession source, out ResourceRef reference)
+        {
+            source = Source(actor, documentId);
+            reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(resourceUri));
+            if (reference.Uri != resourceUri) throw new InvalidDataException("Требуется точная ссылка артефакта.");
+            var artifact = _artifacts.Read(source, reference, false);
+            if (_artifacts.IsRemoved(source, artifact)) throw new InvalidOperationException("Артефакт удалён из документа.");
+            return artifact;
+        }
+
+        internal ArtifactTransferPackage ReadHtmlProjectSource(ChatSession actor, string documentId, string resourceUri)
+        {
+            if (string.IsNullOrWhiteSpace(documentId)) throw new InvalidDataException("Требуется исходный документ проекта.");
+            var artifact = ReadTransferArtifact(actor, documentId, resourceUri, out var source, out var reference);
+            if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace)
+                throw new InvalidDataException("Для создания проекта выберите сохранённый HTML.");
+            if (artifact.ContentByteLength > 2L * RNAssistant.Application.HtmlProjectImportService.MaximumSourceBytes)
+                throw new InvalidDataException("Снимок проекта превышает лимит переноса.");
+            artifact = _artifacts.Read(source, reference);
+            var project = CaptureProject(source, artifact, true);
+            project.Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 };
+            return project;
+        }
+
+        private ArtifactTransferPackage CaptureProject(ChatSession source, ChatArtifact artifact, bool sourceOnly = false)
         {
             var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText ?? "null");
             if (snapshot?.Files == null || snapshot.DataSources == null) throw new InvalidDataException("Исходники проекта недоступны.");
+            if (sourceOnly && snapshot.DataSources.Count != 0)
+                throw new InvalidDataException("Перенос привязок к данным документа пока не поддерживается. Исходный проект сохранён.");
             var entry = snapshot.Files.SingleOrDefault(f => f.Id == snapshot.ActiveFileId && f.Kind == "html") ?? snapshot.Files.FirstOrDefault(f => f.Kind == "html");
             var project = new ArtifactTransferPackage { Title = artifact.Title, EntryPath = entry?.Path,
                 Files = snapshot.Files.Select(f => new ArtifactTransferFile { Path = f.Path, Kind = f.Kind, Content = f.Content }).ToList() };
             var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(source.DocumentAuthorityId));
-            var authority = _authority.Capture(scope);
+            var authority = snapshot.DataSources.Count == 0 ? null : _authority.Capture(scope);
             foreach (var data in snapshot.DataSources)
             {
                 var binding = data.Binding;
@@ -197,7 +220,7 @@ namespace RNAssistant.Office.Services
                     SchemaJson = binding.Schema == null ? null : ReadSavedJson(source, scope, binding.Schema),
                     MappingJson = binding.Mapping == null ? null : ReadSavedJson(source, scope, binding.Mapping) });
             }
-            if (_authority.Capture(scope).Generation != authority.Generation)
+            if (authority != null && _authority.Capture(scope).Generation != authority.Generation)
                 throw new InvalidOperationException("Данные изменились во время экспорта. Повторите действие.");
             project.ExternalDependencies = project.Files.SelectMany(f => Regex.Matches(f.Content ?? "", @"https?://[^\s'""<>]+", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(200))
                 .Cast<Match>().Select(m => m.Value)).Distinct().Take(257).ToList();

@@ -1,6 +1,6 @@
 # Universal Browser: архитектурное решение
 
-Дата: 2026-11-04. Статус: **Proposed**; код не изменён.
+Дата: 2026-11-10. Общая архитектура — **Proposed**; P1 и P2a реализованы / In Review.
 Согласованы документы + план и страницы во вкладках существующего Dockview.
 Native renderer остаётся отдельным решением по evidence. Контекст — [аудит](01_AUDIT.md).
 
@@ -41,32 +41,42 @@ Adapters не копируют source model, dirty buffers, grants, revisions и
 | Evidence | Typed SessionEvent/trajectory + bounded CAS snapshots | Отдельного AgentEventLog/store не вводим; полный DOM не копируется в несколько context blocks |
 | Annotations | Расширить existing VisualAnnotations/attachment pipeline общим Application owner | Сохранить source evidence; добавить lifecycle/reanchoring, а не второй payload store |
 
-## P2a: самостоятельный проект и backing — Proposed, 2026-11-10
+## P2a: самостоятельный проект и backing — In Review, 2026-11-10
 
-Предлагаемый первый срез — явная копия сохранённого HTML в самостоятельный workspace.
+Реализован первый срез — явная копия сохранённого HTML в самостоятельный workspace.
 Owner identity — existing `WorkspaceId`; исходный document artifact остаётся exact
 снимком. Чат, Browser tab и BrowserSession не становятся владельцами исходников.
 
 `WorkspaceStore` сейчас открывает каталоги, а file authority принадлежит
-`WorkspaceFileService` / ResourceAuthority/CAS. Поэтому **managed** предлагается как
+`WorkspaceFileService` / ResourceAuthority/CAS. Поэтому **managed** реализован как
 обычный workspace в каталоге приложения: изменяемые исходники — файлы, CAS хранит
 точные версии/evidence. **Directory** использует выбранную пользователем папку через
 тот же owner. Это следует существующей [workspace-first границе](../decisions/ADR-0013-workspace-first-runtime.md),
 без CAS-only редактора, второго каталога проектов или BrowserRevisionStore.
 Нынешняя подпись «В приложении · CAS» описывает saved snapshot, не managed workspace.
-Новая подпись должна различать исходники и снимок; текущий UI этим решением не меняется.
+Меню «Сохранение проекта» различает скачивание архива и создание копии исходников.
 
 Application координирует import через существующих export/file/workspace owners;
 `WorkspaceApplicationService` с mutable selected workspace не становится глобальным
 resolver. Target содержит exact workspace binding, а не «открытый сейчас проект».
 Plugin source/release/data grants сохраняют прежних owners; import HTML не публикует plugin.
 
-Начальный import ограничен самодостаточным HTML/CSS/JS-пакетом. Document-bound data,
-SDK refs или зависимости без переносимого manifest — явный отказ **до записи**, без
+Начальный import переносит HTML/CSS/JS-исходники. Document-bound data,
+распознаваемые SDK/vendor/external refs — явный отказ **до записи**, без
 молчаливой потери данных. Проверяются entry point, пути, коллизии имён и общий размер.
 Новый workspace появляется в каталоге только после чтения записанных файлов и сверки;
 сбой не удаляет исходный artifact и не повторяет неизвестный effect автоматически.
 Existing document HTML остаётся у DocumentArtifactStore: это copy, не массовая миграция.
+
+`HtmlProjectImportService` создаёт скрытый workspace в `<AppData>/html-projects/<id>`;
+`WorkspaceFileService` пишет файлы с existing journal/CAS и повторно читает их для
+сверки SHA-256. Только после этого `WorkspaceStore.ConnectProject` открывает запись
+каталога. Optional `htmlEntryPath` — конфигурация existing workspace manifest, не head.
+`Created` подтверждает перенос исходников, а не выполнение страницы. `Rejected` не
+создаёт проект; `Unknown` сохраняет частичную папку для явной проверки, без cleanup/replay.
+Предел — 100 файлов и 16 МиБ UTF-8. Распознаваемые SDK/vendor references отклоняются;
+vendor activations берутся из того же embedded `web/vendor-manifest.json`, что и UI.
+Проверка исполнения произвольного JS и перенос зависимостей не входят в P2a.
 
 ## Lifetime, authority и восстановление
 

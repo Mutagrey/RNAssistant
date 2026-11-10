@@ -78,6 +78,12 @@ folder для файлов. Все кнопки используют общую 
 Diff пока скрыт: для будущего реального сравнения выбран знак двух колонок с +/−,
 без неработающей кнопки в текущей панели.
 
+P2a (2026-11-10) добавляет строку «Создать проект из снимка» в существующее меню
+сохранения. Общие ActionMenu rows/status/disabled и compact trigger остаются владельцами
+геометрии; новых CSS/tokens нет. Во время запроса trigger выключен; Unknown оставляет
+создание недоступным с читаемым пояснением. [Ревью 1280 px](review/browser-project-import-wide.png),
+[420 px / 125%](review/browser-project-import-narrow.png). Принятие пользователем открыто.
+
 [Замеры](review/browser-toolbar.json) сравнивают production и frozen Demo при одинаковых
 viewport/zoom/theme. Production controls используют общий compact token 30 CSS px,
 SVG 16 px; source text 12 px. Сохранённое содержимое проверено при 1280/100% и

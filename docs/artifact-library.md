@@ -149,6 +149,29 @@ archive refusal, exact bytes, upload/download and late UI responses. MockDemo br
 layout was inspected at 420 px without horizontal overflow. Windows/Office/WebView2
 qualification remains open; these checks are host-neutral.
 
+## Saved HTML to managed workspace — In Review, 2026-11-10
+
+`createHtmlProjectFromArtifact` takes an exact source chat/document/resource and
+`Managed` backing. `ArtifactCatalogService` resolves the retained snapshot;
+Application `HtmlProjectImportService` copies source files into a new workspace under
+`<AppData>/html-projects/<id>`. Source files are authoritative; WorkspaceFileService
+keeps existing journal/CAS history. Optional manifest `htmlEntryPath` is configuration.
+No new project catalog, revision store, chat or Run is created. The source is unchanged.
+
+Preflight accepts up to 100 HTML/CSS/JS files and 16 MiB UTF-8, checks portable paths,
+case/file-directory collisions and an HTML entry. Document data bindings, external
+dependencies and recognizable SDK/vendor refs are rejected before destination writes.
+Vendor activations come from the embedded UI vendor manifest; this conservative scan
+does not prove arbitrary JavaScript portable. Dependency transfer and standalone
+assembly/preview are later slices; `Created` proves a source copy, not page execution.
+
+The workspace stays hidden while files are written and their SHA-256 hashes read back.
+Only then does `ConnectProject` expose it. Typed results distinguish `Created`,
+pre-write `Rejected`, and `Unknown` after a possible effect. Unknown retains files and
+reports the exact folder for inspection, without deletion or automatic replay.
+The Browser action uses existing project navigation; late completion does not navigate.
+[Focused checks, screenshots and open delivery gates](browser/05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
+
 ## Document artifact removal — 2026-10-13
 
 Owner: `DocumentArtifactStore`; application coordination: `ArtifactWorkingSetService`.

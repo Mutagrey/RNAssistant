@@ -1720,6 +1720,19 @@ namespace RNAssistant.Harness
             AssertEqual(uri, (string)envelope["payload"]["resourceUri"], "history echoes the immutable viewed resource");
 
             response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                contractVersion = BridgeOperationCatalog.Version, id = "html-project-import", type = "createHtmlProjectFromArtifact", bridgeToken = token,
+                payload = new HtmlProjectImportRequest { ChatId = "chat-view", DocumentId = "source-document", ResourceUri = uri,
+                    Backing = RNAssistant.Application.Contracts.HtmlProjectBacking.Managed }
+            })).GetAwaiter().GetResult();
+            envelope = JObject.Parse(response);
+            AssertTrue(envelope["ok"].Value<bool>(), "HTML project import has a typed bridge route");
+            AssertEqual("Created", (string)envelope["payload"]["status"], "typed verified import status");
+            AssertEqual("Managed", (string)envelope["payload"]["backing"], "managed source backing");
+            AssertEqual("source-document", controller.LastArtifactViewerDocumentId, "import preserves exact source document");
+            AssertEqual(uri, controller.LastArtifactViewerResourceUri, "import preserves exact source revision");
+            AssertEqual("chat-view", controller.LastChatId, "import preserves addressed actor chat");
+
+            response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
                 contractVersion = BridgeOperationCatalog.Version, id = "artifact-link", type = "changeArtifactLink", bridgeToken = token,
                 payload = new ArtifactLinkChangeRequest { ChatId = "chat-view", ResourceUri = uri,
                     ExpectedSessionRevision = 4, Detached = true }

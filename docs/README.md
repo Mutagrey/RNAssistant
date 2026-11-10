@@ -68,8 +68,10 @@ Owner — Core/Application; после принятия diff это истори
 [ADR](browser/02_ARCHITECTURE_ADR.md), [контракты](browser/03_CONTRACTS.md),
 [план реализации](browser/04_MIGRATION_PLAN.md) и [матрица проверок](browser/05_TEST_MATRIX.md).
 P1 реализовал общую строку Browser с раскрываемым адресом, сведениями, modes и actions;
-исправлено обновление live HTML после изменений агента. Saved/editor/plugin fixtures
-проходят; pointer-routing gap остаётся открытым. Визуальное принятие In Review. Страницы остаются
+исправлено обновление live HTML после изменений агента. P2a копирует exact saved HTML
+в самостоятельный managed workspace с проверкой файлов; перенос зависимостей ещё открыт.
+Focused import и browser checks проходят; pointer-routing gap остаётся открытым.
+Визуальное принятие In Review. Страницы остаются
 вкладками Dockview. Sessions/tools/native runtime ещё Proposed; WebView2 требует
 отдельного Windows spike. Текущие domain contracts остаются у owners ниже.
 

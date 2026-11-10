@@ -135,6 +135,7 @@ namespace RNAssistant.Office.Contracts
         GetArtifactLibraryPage,
         GetArtifactLibraryHistory,
         GetSavedHtmlHistory,
+        CreateHtmlProjectFromArtifact,
         ExportArtifact,
         CopyArtifact,
         BeginArtifactImport,

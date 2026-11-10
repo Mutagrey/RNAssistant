@@ -58,6 +58,11 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("uploadLeaseId")] public string UploadLeaseId { get; set; }
         [JsonProperty("preview")] public bool Preview { get; set; }
     }
+    public sealed class HtmlProjectImportRequest : ArtifactResourcePayload
+    {
+        [JsonProperty("backing", Required = Required.Always)]
+        public RNAssistant.Application.Contracts.HtmlProjectBacking Backing { get; set; }
+    }
     public sealed class ArtifactDeleteRequest
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }

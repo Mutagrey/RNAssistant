@@ -38,8 +38,19 @@ namespace RNAssistant.Core.Storage
             return OpenCore(rootPath, createIfMissing, true, null, true);
         }
 
+        // Import writes into a new, hidden workspace. ConnectProject publishes it after verification.
+        public WorkspaceDescriptor CreateHiddenHtmlProject(string rootPath, string name, string entryPath)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || !ArtifactEntryPath(entryPath))
+                throw new InvalidDataException("HTML project configuration is invalid.");
+            var root = Path.GetFullPath(rootPath);
+            if (Directory.Exists(root) || File.Exists(root)) throw new IOException("Project folder already exists.");
+            return OpenCore(root, true, true, null, false, name, entryPath, true);
+        }
+
         private WorkspaceDescriptor OpenCore(string rootPath, bool createIfMissing, bool permitManifestWrite,
-            string expectedWorkspaceId, bool showInProjects)
+            string expectedWorkspaceId, bool showInProjects, string newName = null, string htmlEntryPath = null,
+            bool initiallyHidden = false)
         {
             if (string.IsNullOrWhiteSpace(rootPath)) throw new ArgumentException("A workspace path is required.", nameof(rootPath));
             var root = Path.GetFullPath(rootPath);
@@ -74,7 +85,7 @@ namespace RNAssistant.Core.Storage
                 var id = manifest?.WorkspaceId ?? previous?.WorkspaceId ?? NewId();
                 if (expectedWorkspaceId != null && id != expectedWorkspaceId)
                     throw new InvalidDataException("Workspace connection changed.");
-                var name = manifest?.Name ?? previous?.Name ?? new DirectoryInfo(root).Name;
+                var name = manifest?.Name ?? previous?.Name ?? newName ?? new DirectoryInfo(root).Name;
                 if (string.IsNullOrWhiteSpace(name)) name = "Workspace";
                 var saved = ReadAssociation(IdPath(id));
                 if (expectedWorkspaceId != null && (saved == null || saved.HiddenFromProjectTree))
@@ -87,7 +98,7 @@ namespace RNAssistant.Core.Storage
                 if (manifest == null && permitManifestWrite)
                 {
                     StorageFileSystem.EnsureRegularDirectory(control);
-                    manifest = new WorkspaceManifest { SchemaVersion = 1, WorkspaceId = id, Name = name, Root = "." };
+                    manifest = new WorkspaceManifest { SchemaVersion = 1, WorkspaceId = id, Name = name, Root = ".", HtmlEntryPath = htmlEntryPath };
                     using (var stream = new FileStream(manifestPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     using (var writer = new StreamWriter(stream, Utf8)) writer.Write(JsonConvert.SerializeObject(manifest, Formatting.Indented));
                 }
@@ -96,13 +107,14 @@ namespace RNAssistant.Core.Storage
                 {
                     WorkspaceId = id, RootPath = root, Name = name, ManifestStored = manifest != null,
                     HiddenFromProjectTree = !showInProjects &&
-                        ((previous != null && previous.HiddenFromProjectTree) || (saved != null && saved.HiddenFromProjectTree))
+                        (initiallyHidden || (previous != null && previous.HiddenFromProjectTree) || (saved != null && saved.HiddenFromProjectTree))
                 };
                 StorageFileSystem.WriteAllTextAtomic(IdPath(id), JsonConvert.SerializeObject(association), Utf8);
                 StorageFileSystem.WriteAllTextAtomic(byPath, JsonConvert.SerializeObject(association), Utf8);
                 return new WorkspaceDescriptor
                 {
-                    WorkspaceId = id, Name = name, RootPath = root, ReadOnly = !permitManifestWrite || manifest == null,
+                    WorkspaceId = id, Name = name, RootPath = root, HtmlEntryPath = manifest?.HtmlEntryPath,
+                    ReadOnly = !permitManifestWrite || manifest == null,
                     Mounts = new[] { new WorkspaceMountDescriptor
                     { Id = "root", Kind = "directory", RootPath = root, ReadOnly = !permitManifestWrite || manifest == null } }
                 };
@@ -272,9 +284,14 @@ namespace RNAssistant.Core.Storage
         private static void Validate(WorkspaceManifest value)
         {
             if (value == null || value.SchemaVersion != 1 || !ValidId(value.WorkspaceId) ||
-                string.IsNullOrWhiteSpace(value.Name) || value.Name.Length > 200 || value.Root != ".")
+                string.IsNullOrWhiteSpace(value.Name) || value.Name.Length > 200 || value.Root != "." ||
+                value.HtmlEntryPath != null && !ArtifactEntryPath(value.HtmlEntryPath))
                 throw new InvalidDataException("Workspace manifest is invalid or unsupported.");
         }
+
+        private static bool ArtifactEntryPath(string path)
+        { return RNAssistant.Core.Services.ArtifactTransferPackage.SafePath(path) &&
+            (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)); }
 
         private static bool ValidId(string id)
         {

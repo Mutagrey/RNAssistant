@@ -156,6 +156,19 @@ restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wa
 control, terminal Run wait/dependencies, лимиты и Inspector ещё
 не реализованы; управление owner другого процесса этим tool не добавлено.
 
+## Universal Browser P2a: копия исходников — In Review, 2026-11-10
+
+Saved HTML → «Создать проект из снимка» создаёт самостоятельный managed workspace
+через existing file/CAS owners. Exact source, безопасные пути, 100 файлов / 16 МиБ;
+data/SDK/vendor/external refs отклоняются до записи. Workspace виден после read-back;
+Unknown сохраняет возможные файлы без replay. Поздний ответ не меняет вкладку.
+Пять focused host-neutral checks и два browser fixtures прошли; старый transfer
+roundtrip падает также на чистом `c3a9427e`, риск записан отдельно. Создание подтверждает
+копию исходников; standalone preview/dependencies ещё в плане. Следующий срез — P2b
+resolver/capabilities. [Проверки и ревью](../browser/05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
+Визуальное принятие, pointer routing и Windows/controller qualification открыты.
+Office/VSTO validation не запускалась.
+
 ## Saved HTML: актуальная история — host-neutral fix, 2026-11-10
 
 История читает текущую публикацию документа через typed getSavedHtmlHistory; новые
@@ -183,8 +196,8 @@ iframe/draft, exact адресат, late cleanup и narrow/125%. Повтор 20
 Browser проходят после адаптации теста «Обсудить» к narrow toolbar. Opt-in pointer probe
 по-прежнему красный и теперь показывает доставку событий в iframe; риск открыт. [Результаты,
 изображения и открытые gates](../browser/06_PROGRESS.md). Визуальное принятие production
-открыто; следующий конкретный domain-срез — proposed P2a import в самостоятельный workspace,
-потом resolver/sessions. Diff и native URL остаются в плане.
+открыто; P2a import в самостоятельный workspace реализован выше, далее resolver/sessions.
+Diff и native URL остаются в плане.
 Builds/VSTO/Office validation не выполнялись; Windows qualification отдельно.
 
 ## Universal Browser: P0 документы и план — 2026-11-04

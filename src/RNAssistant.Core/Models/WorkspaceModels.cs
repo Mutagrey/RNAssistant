@@ -16,6 +16,8 @@ namespace RNAssistant.Core.Models
         public string Name { get; set; }
         [JsonProperty("root", Required = Required.Always)]
         public string Root { get; set; }
+        [JsonProperty("htmlEntryPath", NullValueHandling = NullValueHandling.Ignore)]
+        public string HtmlEntryPath { get; set; }
     }
 
     public sealed class WorkspaceDescriptor
@@ -23,6 +25,7 @@ namespace RNAssistant.Core.Models
         public string WorkspaceId { get; internal set; }
         public string Name { get; internal set; }
         public string RootPath { get; internal set; }
+        public string HtmlEntryPath { get; internal set; }
         public bool ReadOnly { get; internal set; }
         public IReadOnlyList<WorkspaceMountDescriptor> Mounts { get; internal set; }
     }

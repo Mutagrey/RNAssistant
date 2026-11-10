@@ -68,10 +68,42 @@
       discuss: function () { return RNAssistantConversationPanel.open({ source: "office", sessionId: target.chatId },
         { referencePanel: RNAssistantMaterialView.key(target), beside: true }); },
       actions: function (root, context) {
-        var publication = RNAssistantActionMenu.createTrigger("Экспорт проекта"); publication.classList.add("compact"); publication.innerHTML = RNAssistantIcons.render("upload"); root.appendChild(publication);
+        var importPending = false, importAttempted = false, imported = null, importIssue = "";
+        var publication = RNAssistantActionMenu.createTrigger("Сохранение проекта"); publication.classList.add("compact"); publication.innerHTML = RNAssistantIcons.render("upload"); root.appendChild(publication);
+        async function createProject() {
+          if (importPending || importAttempted || !context.isCurrent()) return;
+          var isCurrent = context.captureCurrent();
+          importPending = importAttempted = true; importIssue = ""; publication.disabled = true;
+          context.status("Создание проекта из выбранного снимка…");
+          try {
+            var result = await send("createHtmlProjectFromArtifact", { chatId: target.chatId,
+              documentId: target.documentId, resourceUri: target.resourceUri, backing: "Managed" });
+            if (result.status === "Rejected") {
+              importAttempted = false; importIssue = result.message || "Проект не создан.";
+              context.error(new Error(importIssue));
+              return;
+            }
+            if (result.status !== "Created" || !result.workspaceId) {
+              importIssue = result.message || "Создание не подтверждено. Проверьте список проектов перед повторным созданием.";
+              context.error(new Error(importIssue));
+              return;
+            }
+            imported = result;
+            context.status("Проект «" + result.name + "» создан.");
+            if (isCurrent()) {
+              try { await RNAssistantProjectChats.open(result.workspaceId); }
+              catch (error) { context.error(new Error("Проект создан, но открыть его не удалось. " + (error.detail || error.message))); }
+            }
+          } catch (error) {
+            importIssue = "Создание не подтверждено. Проверьте список проектов перед повторным созданием. " + (error.detail || error.message);
+            context.error(new Error(importIssue));
+          } finally { importPending = false; publication.disabled = false; }
+        }
         publication.onclick = function () { RNAssistantActionMenu.open(publication, [{ label: "Скачать проект в файлы", status: "Архив выбранной версии с HTML, CSS, JS и данными", icon: "folder", onSelect: function () {
           return RNAssistantArtifactDownload.save(target, { send: send, fetch: window.fetch.bind(window), signal: context.signal(), isCurrent: context.isCurrent, status: context.status });
-        } }]); };
+        } }, imported ? { label: "Открыть созданный проект", icon: "folder", onSelect: function () { return RNAssistantProjectChats.open(imported.workspaceId); } } :
+          { label: "Создать проект из снимка", status: importIssue || (importAttempted ? "Проверьте результат в списке проектов" : "Копия исходников в приложении"),
+            icon: "copy", disabled: importPending || importAttempted, onSelect: createProject }]); };
         var more = RNAssistantActionMenu.createTrigger("Действия с материалом"); more.classList.add("compact");
         more.onclick = function () { RNAssistantActionMenu.open(more, [{ label: "Копировать точную ссылку", icon: "link", onSelect: function () {
           return copyTextResult(target.resourceUri).then(function () { context.status("Ссылка скопирована"); }).catch(context.error);

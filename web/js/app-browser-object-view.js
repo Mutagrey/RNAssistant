@@ -39,7 +39,8 @@
       }
     }
     function reload() { stop(); surface.clearDocument(); disposeValue(value); value = null; content.replaceChildren(); return load(); }
-    if (options.actions) options.actions(surface.actions, { status: status, error: function (error) { if (!disposed) surface.fail(options.label, error.detail || error.message); }, signal: function () { return abort && abort.signal; }, isCurrent: function () { return active && !disposed; } });
+    if (options.actions) options.actions(surface.actions, { status: status, error: function (error) { if (!disposed) surface.fail(options.label, error.detail || error.message); }, signal: function () { return abort && abort.signal; }, isCurrent: function () { return active && !disposed; },
+      captureCurrent: function () { var version = generation; return function () { return current(version); }; } });
     surface.waiting(options.label, "Откройте вкладку для загрузки.");
     var events = new AbortController();
     window.addEventListener("pagehide", function (event) { if (!event.persisted) result.dispose(); }, { signal: events.signal });

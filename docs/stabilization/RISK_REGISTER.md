@@ -1,5 +1,21 @@
 # Stabilization risk register
 
+## HTML project import — In Review, 2026-11-10
+
+Owner: Application HtmlProjectImportService / Workspace files; UI HtmlArtifactView.
+Exact source, preflight, file read-back, hidden partial writes and no replay проверены
+host-neutral. При Unknown папка сохраняется для ручной проверки; автоматического
+recovery/cleanup нет, повтор без проверки каталога может создать вторую копию.
+Created подтверждает исходники, не исполнение страницы: сборка/preview и перенос
+SDK/data/vendor-зависимостей впереди. Windows/controller delivery и пользовательское
+визуальное принятие открыты; известный Browser pointer-routing риск остаётся отдельным.
+
+Соседний `artifact transfer: project roundtrip and independence` падает на
+`imported project can be continued through normal tools` также в чистом `c3a9427e`:
+fixture вызывает `html.source.write` без explicit workspace. Owner: HTML tools/transfer
+fixture. Это не pass и не регрессия P2a; требует отдельного исправления по текущему
+tool contract. [Evidence P2a](../browser/05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
+
 ## Standalone codec runner — 2026-11-05
 
 Owner: Core ModelProtocol tests. `RNAssistant.ProtocolTests/Program.cs` вызывает

@@ -1,8 +1,29 @@
 # Universal Browser: статус
 
-Дата: 2026-11-10. Scope: P0/P1 + Browser address/controls + live/saved HTML freshness.
+Дата: 2026-11-10. Scope: P0/P1 + Browser controls/freshness + P2a source import.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
-Office/WebView — будущий native adapter. P1 реализован в production JS, **In Review**.
+Office/WebView — будущий native adapter. P1 и P2a реализованы, **In Review**.
+
+## P2a: самостоятельный проект из снимка — In Review, 2026-11-10
+
+«Сохранение проекта» → «Создать проект из снимка» копирует exact сохранённые
+HTML/CSS/JS в managed workspace. Application import использует существующие
+WorkspaceStore/WorkspaceFileService; исходники — файлы, история/evidence — CAS.
+Каталог открывает проект после read-back всех файлов. Исходный artifact не меняется.
+Пределы: 100 файлов / 16 МиБ UTF-8; data bindings, распознаваемые SDK/vendor/external
+references отклоняются до записи. `Created` доказывает копирование исходников,
+не исполнение страницы; сборка/preview самостоятельного проекта ещё впереди.
+
+Typed результаты Created/Rejected/Unknown различают подтверждённую копию, отказ
+до записи и возможный эффект. Unknown сохраняет папку для явной проверки без replay.
+Поздний ответ не меняет активную вкладку; повторное открытие использует созданный
+workspace. Автоматического чата/Run нет. Новый revision store или adapter не введён.
+
+Пять focused host-neutral checks и два browser fixtures прошли; старый transfer
+roundtrip падает также на чистом `c3a9427e` и записан отдельным риском. Office/VSTO
+не запускались. [Scope и остаток](04_MIGRATION_PLAN.md#p2a-импорт-самостоятельного-проекта--in-review-2026-11-10),
+[проверки и скриншоты ревью](05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
+Визуальное принятие пользователем, pointer routing и Windows delivery остаются Open.
 
 ## Продолжение: проверки P1 и граница P2a — 2026-11-10
 
@@ -18,9 +39,9 @@ parent/iframe recipients. Повтор поймал все три события
 без RNAssistant не воспроизвели сбой; точная причина и Windows evidence остаются Open.
 Ненадёжные CSS/таймерные обходы в production не добавлены.
 
-Подготовлен конкретный [P2a](04_MIGRATION_PLAN.md#следующий-срез-p2a--proposed-2026-11-10):
+На этом этапе подготовлен конкретный [P2a](04_MIGRATION_PLAN.md#p2a-импорт-самостоятельного-проекта--in-review-2026-11-10):
 самостоятельный workspace из exact снимка, managed source files под existing workspace
-owner, CAS для версий/evidence. Решение Proposed; новый runtime/import ещё не написан.
+owner, CAS для версий/evidence. Последующая реализация import описана выше.
 
 ## История сохранённого HTML — исправлена host-neutral, 2026-11-10
 
@@ -144,7 +165,7 @@ Windows/Office/WebView2 qualification остаётся отдельной. Commi
   Остальные архитектурные решения Proposed; native renderer не выбран без Windows evidence.
 
 P0 documentation подготовлен; P1 browser implementation проверен локально.
-Пользовательское визуальное принятие P1 открыто; P2–P7 не начаты.
+На момент исходного P1 срезы P2–P7 ещё не начаты; текущий статус — в начале документа.
 Native/Office qualification не закрыта.
 Глобальные приоритеты стабилизации и очередь других UI-срезов не меняются.
 
@@ -177,7 +198,7 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Следующий implementation slice — [P2a import exact HTML в самостоятельный workspace](04_MIGRATION_PLAN.md#следующий-срез-p2a--proposed-2026-11-10).
-Ownership/backing конкретизированы в ADR как Proposed; resolver и session lifetime идут
-после него. Визуальное ревью P1 по [четырём действиям](05_TEST_MATRIX.md#toolbar-review),
-pointer routing и Windows evidence остаются отдельными открытыми gates.
+Следующий implementation slice — P2b: typed target resolver и capabilities existing
+HTML/resource consumers; после него P2c session owner и detach/reattach. Import P2a
+остаётся In Review. [План](04_MIGRATION_PLAN.md#p2a-импорт-самостоятельного-проекта--in-review-2026-11-10).
+Визуальное ревью P1/P2a, pointer routing и Windows evidence — отдельные открытые gates.

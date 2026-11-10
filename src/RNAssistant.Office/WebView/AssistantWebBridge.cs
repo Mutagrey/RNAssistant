@@ -840,6 +840,11 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ExportArtifact:
                         responsePayload = _controller.ExportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
                         break;
+                    case BridgeOperationId.CreateHtmlProjectFromArtifact:
+                        var htmlProjectImport = Payload<HtmlProjectImportRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.CreateHtmlProjectFromArtifact(htmlProjectImport, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.CopyArtifact:
                         responsePayload = _controller.CopyArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
                         break;

@@ -182,9 +182,17 @@ Saved restore проверяется клавиатурой: быстрый mous
 Для ревью: saved HTML → ▶/исходник → «Обсудить» дважды → другая вкладка → аннотация;
 [подробности](../browser/05_TEST_MATRIX.md#toolbar-review).
 
-Это продолжение P1 presentation, не полный P2–P7: независимое владение проектом,
-managed/directory backing, resolver/sessions, настоящий diff и external native browser
-ещё требуют соответствующих domain slices. Storage/bridge не переписаны. Концепция
+P2a (2026-11-10) реализован / In Review: явная копия exact saved HTML в managed
+workspace через typed command и existing file/CAS owners. 100 файлов / 16 МиБ;
+data/SDK/vendor/external dependencies отклоняются до записи. Только read-back даёт
+Created; Unknown не повторяется, поздний ответ не меняет вкладку. 5 focused host-neutral
+checks, `html-project-import` и `browser-saved-views` прошли. Старый transfer test падает
+также на чистом baseline и вынесен в риск. Ревью: снимок → меню сохранения → создать
+проект → вернуться и открыть ту же копию; отдельно проверить отказ на SDK/data пакете.
+[Скриншоты/проверки](../browser/05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
+
+Далее P2b resolver/capabilities, P2c sessions; preview standalone source, перенос
+зависимостей, настоящий diff и external native browser остаются в плане. Концепция
 Approved; визуальное принятие production и Windows/Office evidence остаются Open.
 
 ## Durable wait: existing Inbox control — In Review, 2026-11-04

@@ -2010,6 +2010,25 @@ pass is reusable only when its relevant sources/tests, dependencies, build setti
 and environment are unchanged. Explicit phase/release gates and the pre-commit
 version check still apply.
 
+## Saved HTML to managed workspace (P2a, 2026-11-10)
+
+`HTML project import:` covers exact CAS source after head drift, independent workspace
+reopen/history, unsafe/colliding paths, data/SDK/vendor refs and UTF-8/size bounds before
+writes, post-dispatch fault and read-back drift without replay or deleting partial files.
+Use `bridge: typed artifact viewer` for typed source/backing/result delivery and
+`workspace files: paths and historical view` for the shared path validation regression.
+These five checks pass host-neutral; the Harness controller is a stub.
+
+`node tests/web/html-project-import.test.js` checks exact actor/source, duplicate guard,
+Created/Rejected/Unknown, existing project navigation, late/closed view, no automatic
+chat/Run and 420 px / 125% overflow. Run sequentially with `browser-saved-views.test.js`
+for retained content regression. `BROWSER_SCREENSHOT=/tmp/html-import` saves wide/narrow
+review PNGs. Use existing Playwright `NODE_PATH` and optional `BROWSER_EXECUTABLE`.
+Clicks over Source do not qualify the known pointer-routing gap over iframe.
+The older `artifact transfer: project roundtrip and independence` also fails on clean
+`c3a9427e` at HTML continuation without explicit workspace; it is an open baseline risk.
+[Results and Windows/visual gaps](../../docs/browser/05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
+
 ## Artifact catalog and transfer
 
 The same working-set filter covers document removal for originals/Plan/HTML/MD/JSON,

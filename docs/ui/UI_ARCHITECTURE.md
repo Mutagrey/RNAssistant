@@ -83,6 +83,13 @@ DocumentArtifactStore. Порции по 50 формирует существу�
 ArtifactVersions перечитывает историю при открытии меню, отсеивает поздние ответы и
 перезапускает stale cursor с первой страницы. Выбранный снимок, iframe и chat links неизменны.
 
+P2a (2026-11-10): `HtmlProjectImportService` в Application копирует exact source из
+ArtifactCatalogService в скрытый managed workspace, проверяет file read-back и затем
+публикует existing association. Browser передаёт typed source/backing, хранит только
+состояние действия и captured view generation. Поздний ответ не открывает workspace;
+Created может открыть его через existing ProjectChats, без автоматического чата/Run.
+Unknown не повторяется. File authority/CAS остаются у WorkspaceFileService/WorkspaceStore.
+
 «Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
 тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.
 Нет второго composer, chat store или вложенного chat UI. HTML использует свой chatId;
@@ -91,11 +98,11 @@ plugin view закрепляет workspace/session только при явно�
 доставляются адресному Chat View; закрытие чата не удаляет draft/run. Повторное
 «Обсудить» возвращает закреплённый чат. preserveChatOwner действует для всех owners.
 
-Domain authority, CAS и runtime прежние; новый bridge query только читает saved history.
+Domain authority и CAS прежние; typed bridge читает history и запускает import P2a.
 Новых registry/adapter/dual path нет.
 ArtifactVersions и plugin history используют общий ActionMenu вместо собственных
 details/popover DOM/CSS; exact revision guards и загрузка порциями сохранены.
-Session coordinator, независимый managed project, реальный Diff и native renderer
+Session coordinator, preview managed project, реальный Diff и native renderer
 остаются отдельной работой: [план](../browser/04_MIGRATION_PLAN.md).
 Концепция и отдельный Chat View согласованы; текущая production компоновка проходит
 визуальное ревью. [Проверки и ограничения](../browser/06_PROGRESS.md).

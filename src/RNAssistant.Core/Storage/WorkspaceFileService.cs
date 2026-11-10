@@ -1655,20 +1655,7 @@ namespace RNAssistant.Core.Storage
             if (!Directory.Exists(workspace.RootPath) || StorageFileSystem.IsReparsePoint(workspace.RootPath))
                 throw new WorkspaceFileException("workspace_unavailable", "Workspace root is unavailable or linked.");
             if (directory && string.IsNullOrEmpty(relativePath)) return workspace.RootPath;
-            if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath) ||
-                relativePath.IndexOf(':') >= 0 || relativePath.Any(char.IsControl))
-                throw new WorkspaceFileException("path_outside_mount", "A safe relative path is required.");
-            var parts = relativePath.Replace('\\', '/').Split('/');
-            if (parts.Any(part => part.Length == 0 || part == "." || part == ".." ||
-                part.Equals(".rnassistant", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
-                part.Equals(".codex", StringComparison.OrdinalIgnoreCase) ||
-                part.StartsWith(".env", StringComparison.OrdinalIgnoreCase) ||
-                part.EndsWith(".pem", StringComparison.OrdinalIgnoreCase) ||
-                part.EndsWith(".key", StringComparison.OrdinalIgnoreCase) ||
-                forWrite && (part.Equals("AGENTS.md", StringComparison.OrdinalIgnoreCase) ||
-                    part.Equals("SKILL.md", StringComparison.OrdinalIgnoreCase))))
-                throw new WorkspaceFileException("path_outside_mount", "Path escapes or modifies workspace control metadata.");
+            var parts = PathParts(relativePath, forWrite);
             var path = workspace.RootPath;
             foreach (var part in parts)
             {
@@ -1689,6 +1676,28 @@ namespace RNAssistant.Core.Storage
             if (!full.StartsWith(root, Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                 throw new WorkspaceFileException("path_outside_mount", "Path is outside the workspace root.");
             return full;
+        }
+
+        // Import can check every member before creating any destination files.
+        public static void ValidateWritePath(string relativePath) { PathParts(relativePath, true); }
+
+        private static string[] PathParts(string relativePath, bool forWrite)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath) ||
+                relativePath.IndexOf(':') >= 0 || relativePath.Any(char.IsControl))
+                throw new WorkspaceFileException("path_outside_mount", "A safe relative path is required.");
+            var parts = relativePath.Replace('\\', '/').Split('/');
+            if (parts.Any(part => part.Length == 0 || part == "." || part == ".." ||
+                part.Equals(".rnassistant", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals(".git", StringComparison.OrdinalIgnoreCase) ||
+                part.Equals(".codex", StringComparison.OrdinalIgnoreCase) ||
+                part.StartsWith(".env", StringComparison.OrdinalIgnoreCase) ||
+                part.EndsWith(".pem", StringComparison.OrdinalIgnoreCase) ||
+                part.EndsWith(".key", StringComparison.OrdinalIgnoreCase) ||
+                forWrite && (part.Equals("AGENTS.md", StringComparison.OrdinalIgnoreCase) ||
+                    part.Equals("SKILL.md", StringComparison.OrdinalIgnoreCase))))
+                throw new WorkspaceFileException("path_outside_mount", "Path escapes or modifies workspace control metadata.");
+            return parts;
         }
 
         private static byte[] ReadBounded(string path)

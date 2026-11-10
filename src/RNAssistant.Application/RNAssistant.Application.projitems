@@ -1,5 +1,8 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)HtmlProjectImportService.cs" Link="Application\HtmlProjectImportService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\HtmlProjectImportContracts.cs" Link="Application\Contracts\HtmlProjectImportContracts.cs" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\web\vendor-manifest.json" LogicalName="RNAssistant.HtmlVendorManifest" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationExecutionScheduler.cs" Link="Application\Conversations\ConversationExecutionScheduler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationGroupService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationCatalogAccess.cs" />

@@ -3,10 +3,25 @@
 Статус: **Proposed**, 2026-11-04. Owner: Core contracts / Application services;
 Web и native host — consumers. Это минимальные границы будущих P2–P6, не объявление
 существующего runtime API. P1 presentation contract в конце реализован в Web,
-статус In Review; P2–P6 остаются Proposed.
+статус In Review; P2a import реализован ниже. Resolver/sessions и P3–P6 остаются Proposed.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
+
+## P2a: реализованный import contract — In Review, 2026-11-10
+
+`createHtmlProjectFromArtifact` принимает typed `HtmlProjectImportRequest`:
+`chatId`, `documentId`, exact `resourceUri`, enum `backing: Managed`. Source разрешает
+ArtifactCatalogService; UI не присылает исходники, absolute destination или session ID.
+Application `HtmlProjectImportService` возвращает `HtmlProjectImportResult`:
+enum `status: Created | Rejected | Unknown`, backing, workspaceId/name/rootPath/entryPath
+и message. `Created` выдаётся после file read-back и публикации existing workspace;
+`Rejected` — до создания папки, `Unknown` — после возможного эффекта. Нет auto-retry.
+Это explicit UI command, не browser tool или новый agent protocol.
+
+Закрытие Browser не отменяет начатый import. Поздний результат не открывает другую
+вкладку; retained view предлагает открыть уже созданный workspace. При `Unknown`
+повторное создание блокируется в этой view; пользователь проверяет каталог/точную папку.
 
 ## Runtime entities и capability negotiation
 

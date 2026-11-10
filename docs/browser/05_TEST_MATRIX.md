@@ -1,6 +1,6 @@
 # Universal Browser: матрица проверок
 
-Дата: 2026-11-04. Owner: владелец изменяемого среза; Windows — Office/WebView owner.
+Дата: 2026-11-10. Owner: владелец изменяемого среза; Windows — Office/WebView owner.
 В P0 был только статический просмотр fixtures. В P1 три browser fixtures выполнены
 на baseline и final; результаты ниже. Наличие теста не означает qualification.
 Выбор проверок — по
@@ -13,7 +13,7 @@
 | Live HTML/plugin Browser | [browser-views](../../tests/web/browser-views.test.js): scoped annotation, frame lifetime и actions | Регрессия общего toolbar после P1; затем detach/reattach и session-close | P1/P2/P3 |
 | Source/editor | [html-editor-views](../../tests/web/html-editor-views.test.js), [html-workspace-source](../../tests/web/html-workspace-source.test.js), [html-workspace-write](../../tests/web/html-workspace-write.test.js) | Session ownership, dirty buffers при закрытии, stale source и поздний write ack | P2 |
 | Typed application contracts | Existing Harness HTML/resource/bridge checks | Resolver ambiguity, permission intersection, exact scope, close/reopen generation; fake renderer | P2 |
-| Project import/backing | Existing workspace file authority / HTML export checks | Exact source, self-contained package, safe paths/bounds, no partial import of data refs, fault/read-back, reopen and unchanged source | P2a, Planned |
+| Project import/backing | `HTML project import:` (3 checks), typed artifact bridge, [html-project-import](../../tests/web/html-project-import.test.js) | Exact source/head drift, safe paths/bounds, unsupported refs before write, fault/read-back/no-replay, reopen, late UI and unchanged source | P2a host-neutral passed; Windows/visual Open |
 | Plugin isolation | [plugins](../../tests/web/plugins.test.js), [plugin-view-selection](../../tests/web/plugin-view-selection.test.js), saved-release fixture; Harness plugin tests | Wrong frame/origin/session, release vs candidate, revoke during action, чужие grants | P3 + Windows |
 | HTML versions/authority | Existing `shared HTML:` Harness family, publication/resource tests | Branch/active pointer, view vs restore, exact compare pair; plugin restore не меняет source | P4 |
 | Annotation capture | [html-annotations](../../tests/web/html-annotations.test.js), [html-visual-selection-draft](../../tests/web/html-visual-selection-draft.test.js); Harness `visual selection: workspace intake and common resource read` | Events replay, view close/restart retention, ambiguous reanchor, verified resolution, CAS reachability | P4 |
@@ -42,6 +42,26 @@ bounded source, поздний transfer cleanup, exact chat/document/URI и plug
 Дополнить только assertions нового общего UI. Не заводить тест, повторяющий устройство
 descriptor, вместо проверки пользовательского поведения. C#/VSTO tests для P1 не нужны.
 При изменении только docs эти команды не выполнять.
+
+## Результаты P2a — 2026-11-10
+
+Harness перед commit: изолированный `c3a9427e` + только P2a,
+без параллельных незавершённых storage-изменений.
+Прошли пять focused host-neutral checks: три `HTML project import:`,
+`bridge: typed artifact viewer`, `workspace files: paths and historical view`.
+Проверяются реальные CAS/source reads, 15 preflight refusals, read-back drift и fault
+после dispatch. Net8 Harness собран с C# 7.3; это не Office/controller qualification.
+Browser: `html-project-import.test.js` и `browser-saved-views.test.js` прошли в local
+Chromium; import clicks идут над Source. Pointer routing над iframe остаётся Open.
+
+Отдельный `artifact transfer: project roundtrip and independence` падает на утверждении
+`imported project can be continued through normal tools` и в чистом archive `c3a9427e`.
+Он не засчитывается как pass; [риск](../stabilization/RISK_REGISTER.md#html-project-import--in-review-2026-11-10).
+
+Ревью: открыть сохранённый HTML → меню сохранения → создать проект → вернуться
+к снимку и открыть уже созданный проект. Проверить отказ на SDK/data-bound пакете.
+[Широкий вид](../ui/review/browser-project-import-wide.png),
+[420 px / 125%, неподтверждённый результат](../ui/review/browser-project-import-narrow.png).
 
 ## Результаты P1 — 2026-11-04
 
