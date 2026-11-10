@@ -37,6 +37,12 @@ namespace RNAssistant.Harness
 
         public static int Main(string[] args)
         {
+            if (args != null && args.Length == 3 && args[0] == "--storage-index-probe")
+                return StorageIndexProbe(args[1], args[2]);
+            if (args != null && args.Length == 3 && args[0] == "--conversation-journal-probe")
+                return ConversationJournalProbe(args[1], args[2]);
+            if (args != null && args.Length == 6 && args[0] == "--conversation-send-probe")
+                return ConversationSendProbe(args[1], args[2], args[3], args[4], int.Parse(args[5]));
             if (args != null && args.Length == 2 && args[0] == "--capability-inventory")
                 return CapabilityInventory(args[1]);
             if (args != null && args.Length == 4 && args[0] == "--workspace-profile-live")
@@ -657,6 +663,18 @@ namespace RNAssistant.Harness
                 Test("storage: projection cache trusts only owned appends", ProjectionCacheTrustsOnlyOwnedAppends),
                 Test("storage: separate documents avoid a shared save wait", SeparateDocumentsAvoidSharedSaveWait),
                 Test("storage perf: large chat profile", LargeChatPerformanceProfile),
+                Test("storage optimization: baseline and index provider", StorageOptimizationBaseline),
+                Test("storage optimization: comparable append cost curve", StorageOptimizationCostCurve),
+                Test("storage optimization: journal durability rotation and recovery", StorageJournalDurability),
+                Test("storage optimization: retained results queries and context", RetainedResultsQueriesAndContext),
+                Test("storage optimization: shared index repair and processes", ConversationJournalRepairAndProcesses),
+                Test("storage optimization: resource publication and late outcome", ResourceJournalPublicationAndLateOutcome),
+                Test("storage optimization: atomic agent delivery and wait", ConversationJournalDeliveryAndWait),
+                Test("storage optimization: agent delivery process races", ConversationJournalDeliveryProcessRaces),
+                Test("storage optimization: atomic spawn with initial input", ConversationJournalAtomicSpawn),
+                Test("storage optimization: run checkpoints and invocation ownership", ConversationJournalRunCheckpoints),
+                Test("storage optimization: durable pause controls and pending input", ConversationJournalQueueControls),
+                Test("storage optimization: host parity and retained mutation guards", RetainedResultHostParity),
                 Test("storage: indexed input journal", IndexedInputJournalPreservesCanonicalReplay),
                 Test("storage perf: chat navigation with traces", ChatNavigationWithTracesProfile),
                 Test("storage: cache rejects tampered prefix before suffix", CacheRejectsTamperedPrefixBeforeSuffix),

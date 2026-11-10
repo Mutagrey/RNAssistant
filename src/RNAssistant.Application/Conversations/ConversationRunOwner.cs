@@ -51,31 +51,34 @@ namespace RNAssistant.Application.Conversations
         private readonly ConversationRunOwner _owner;
         private int _completed;
 
-        internal ConversationRunHandle(ConversationRunOwner owner, string chatId, string runId, CancellationToken token)
+        internal ConversationRunHandle(ConversationRunOwner owner, string chatId, string runId, string invocationId, CancellationToken token)
         {
             _owner = owner;
             ChatId = chatId;
             RunId = runId;
+            InvocationId = invocationId;
             Token = token;
         }
 
         public string ChatId { get; private set; }
         public string RunId { get; private set; }
+        internal string InvocationId { get; private set; }
         public CancellationToken Token { get; private set; }
-        public bool IsActive { get { return _owner.IsRunActive(ChatId, RunId); } }
-        public bool Cancel() { return _owner.Cancel(ChatId, RunId); }
+        public bool IsActive { get { return _owner.IsRunActive(ChatId, RunId, InvocationId); } }
+        public bool Cancel() { return _owner.Cancel(ChatId, RunId, expectedInvocation: InvocationId); }
 
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _completed, 1) == 0)
             {
-                _owner.Complete(ChatId, RunId);
+                _owner.Complete(ChatId, RunId, InvocationId);
             }
         }
     }
 
     internal sealed class ConversationActiveSnapshot
     {
+        internal string InvocationId { get; set; }
         public string ChatId { get; set; }
         public string RunId { get; set; }
         public string Status { get; set; }
@@ -155,6 +158,7 @@ namespace RNAssistant.Application.Conversations
                         {
                             ChatId = chatId,
                             RunId = runId,
+                            InvocationId = Guid.NewGuid().ToString("N"),
                             Status = "running",
                             Phase = "starting",
                             StartedUtc = DateTime.UtcNow,
@@ -164,7 +168,7 @@ namespace RNAssistant.Application.Conversations
                         };
                         if (session != null) SetIdentity(run, session);
                         _runs[chatId] = run;
-                        return new ConversationRunHandle(this, chatId, runId,
+                        return new ConversationRunHandle(this, chatId, runId, run.InvocationId,
                             cancellation == null ? CancellationToken.None : cancellation.Token);
                     }
                     catch
@@ -237,7 +241,7 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
-        public bool Cancel(string chatId, string runId, CancellationTokenSource expectedCancellation = null)
+        public bool Cancel(string chatId, string runId, CancellationTokenSource expectedCancellation = null, string expectedInvocation = null)
         {
             CancellationTokenSource cancellation;
             lock (_sync)
@@ -245,6 +249,7 @@ namespace RNAssistant.Application.Conversations
                 ConversationActiveSnapshot run;
                 if (!_runs.TryGetValue(chatId ?? string.Empty, out run) ||
                     !string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase) ||
+                    expectedInvocation != null && run.InvocationId != expectedInvocation ||
                     expectedCancellation != null && !ReferenceEquals(run.Cancellation, expectedCancellation))
                 {
                     return false;
@@ -289,13 +294,14 @@ namespace RNAssistant.Application.Conversations
             lock (_sync) return _runs.ContainsKey(chatId ?? string.Empty);
         }
 
-        internal bool IsRunActive(string chatId, string runId)
+        internal bool IsRunActive(string chatId, string runId, string invocationId = null)
         {
             lock (_sync)
             {
                 ConversationActiveSnapshot run;
                 return _runs.TryGetValue(chatId ?? string.Empty, out run) &&
-                    string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase);
+                    string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase) &&
+                    (invocationId == null || run.InvocationId == invocationId);
             }
         }
 
@@ -327,13 +333,13 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
-        public void Complete(string chatId, string runId)
+        public void Complete(string chatId, string runId, string invocationId = null)
         {
             lock (_sync)
             {
                 ConversationActiveSnapshot run;
                 if (_runs.TryGetValue(chatId ?? string.Empty, out run) &&
-                    string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase) && (invocationId == null || run.InvocationId == invocationId))
                 {
                     _runs.Remove(chatId);
                     if (run.Cancellation != null) run.Cancellation.Dispose();
@@ -395,6 +401,7 @@ namespace RNAssistant.Application.Conversations
             {
                 ChatId = source.ChatId,
                 RunId = source.RunId,
+                InvocationId = source.InvocationId,
                 Status = source.Status,
                 Phase = source.Phase,
                 CurrentAction = source.CurrentAction,

@@ -13,6 +13,8 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
+        private long _materializedMessageCount;
+        internal long MaterializedMessageCount { get { return System.Threading.Interlocked.Read(ref _materializedMessageCount); } }
         private static readonly JsonSerializerSettings ProjectionJsonSettings = new JsonSerializerSettings
         {
             ContractResolver = new ChatProjectionContractResolver(),
@@ -135,6 +137,7 @@ namespace RNAssistant.Core.Storage
             ChatSession session;
             try { session = readable.ToObject<ChatSession>(); }
             catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw new ProjectionDataException(ex); }
+            System.Threading.Interlocked.Add(ref _materializedMessageCount, session.Messages?.Count ?? 0);
             ArtifactWorkingSet.Validate(session);
             var sessionMs = timer.ElapsedMilliseconds;
             session.Revision = sequence;

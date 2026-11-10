@@ -111,7 +111,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static void InitializeSqliteProvider()
+        internal static void InitializeSqliteProvider()
         {
             if (_sqliteProviderReady) return;
             lock (SqliteProviderSync)

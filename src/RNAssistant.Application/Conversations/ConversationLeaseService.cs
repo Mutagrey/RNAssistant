@@ -36,6 +36,17 @@ namespace RNAssistant.Application.Conversations
                 id => TextPatternEngine.Sha256(id) + ".lck", null, "*.lck");
         }
 
+        // New-generation consumers in either host use the same exact scope/chat
+        // namespace. Existing binaries retain their old paths until cutover.
+        internal static ConversationLeaseService ForScope(AppDataPaths paths, string scope)
+        {
+            if (paths == null || string.IsNullOrWhiteSpace(scope) ||
+                !(scope.StartsWith("document:", StringComparison.Ordinal) || scope.StartsWith("workspace:", StringComparison.Ordinal)) || scope.EndsWith(":", StringComparison.Ordinal))
+                throw new ArgumentException("An exact document/workspace scope is required.");
+            return new ConversationLeaseService(Path.Combine(paths.Root, "locks"),
+                id => "run_scope_" + TextPatternEngine.Sha256(scope + "\n" + id) + ".lck", "run-registry.lck", "run_*.lck");
+        }
+
         // Short coordination excludes a concurrent Office-wide maintenance
         // operation while acquiring an exact chat lease. Workspace has no
         // Office-wide maintenance gate and uses only the exact lease.

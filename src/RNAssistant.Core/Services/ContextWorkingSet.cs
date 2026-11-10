@@ -15,6 +15,7 @@ namespace RNAssistant.Core.Services
         internal readonly List<Candidate> Operations = new List<Candidate>();
         internal readonly List<Candidate> Bodies = new List<Candidate>();
         internal int Budget;
+        internal int VisitedMessages;
 
         public static ContextWorkingSet Restore(ChatSession session, IReadOnlyList<ChatMessage> active,
             int budget, IReadOnlyList<ChatMessage> archive = null)
@@ -33,6 +34,7 @@ namespace RNAssistant.Core.Services
             var laterSuccesses = new List<ChatMessage>();
             for (var index = history.Count - 1; index >= 0; index--)
             {
+                result.VisitedMessages++;
                 var message = history[index];
                 // Success can satisfy an older recovery even when its body is
                 // active or excluded. Error candidates only see later successes.

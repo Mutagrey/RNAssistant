@@ -381,6 +381,15 @@
     <Compile Include="Storage\StorageFileSystem.cs" />
     <Compile Include="Storage\StorageJournal.cs" />
     <Compile Include="Storage\StorageJournal.Inventory.cs" />
+    <Compile Include="Storage\ConversationJournal.cs" />
+    <Compile Include="Storage\ConversationJournal.Delivery.cs" />
+    <Compile Include="Storage\ConversationJournal.Spawn.cs" />
+    <Compile Include="Storage\ConversationJournal.Run.cs" />
+    <Compile Include="Storage\ConversationJournal.Control.cs" />
+    <Compile Include="Storage\JournalIndex.cs" />
+    <Compile Include="Storage\JournalIndexAdmission.cs" />
+    <Compile Include="Storage\ResourceJournal.cs" />
+    <Compile Include="Storage\ResourceOutcomeLink.cs" />
     <Compile Include="Models\RetainedToolResultBody.cs" />
     <Compile Include="Services\ToolResultPersistence.cs" />
     <Compile Include="Storage\ToolStore.cs" />
