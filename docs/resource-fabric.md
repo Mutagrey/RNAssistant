@@ -174,6 +174,21 @@ unpublished revisions and missing/corrupt payloads without a live-file fallback.
 Reading an old revision does not refresh or republish the head; its currentness
 still comes from frozen authority.
 
+Workspace retained observations (2026-11-10): a new run may deliver the exact
+retained source again without a live recapture. `CaptureContextAuthority` no longer
+rehashes every file mentioned in conversation history. Published currentness is
+last observed authority, not a promise that an external process has left a file
+unchanged. Explicit live reads and mutations retain their current-source checks.
+File mutation guards consume only the actual request's delivered observations,
+matching authority scope, logical resource URI, revision, representation and
+coverage. A later partial read does not erase a complete delivered view of the same
+revision. Excerpts, omitted bodies and equal hashes of other resources confer no
+whole-source guard. Preparation captures the addressed live file and refuses a
+revision change; dispatch/read-back retain their existing exact prepared guard.
+The separate per-run Workspace observation dictionary and implicit post-mutation
+updates to it are removed. Verified after-state must be delivered in the next
+request before another model write can use it.
+
 Current file metadata/body reads, mutations and explicit recovery share
 `WorkspaceFileService.AcquireFileScope`. It resolves the locator, acquires that
 resource's lease, then verifies that the path still names the same file ID (or its

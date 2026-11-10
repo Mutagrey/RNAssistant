@@ -68,6 +68,11 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceReadProjection
     {
+        internal ResourceReadProjection CopyText(string text)
+        {
+            if (Table != null || Tree != null) throw new System.InvalidOperationException("Only an explicit text view can retain a text body.");
+            var copy = (ResourceReadProjection)MemberwiseClone(); copy.Text = text; return copy;
+        }
         [JsonProperty("version", NullValueHandling = NullValueHandling.Ignore)] public int? Version { get; set; }
         [JsonProperty("historical", NullValueHandling = NullValueHandling.Ignore)] public bool? Historical { get; set; }
         [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)] public int? StartLine { get; set; }

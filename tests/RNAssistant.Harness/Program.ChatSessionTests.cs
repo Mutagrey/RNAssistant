@@ -375,8 +375,7 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_chars_invalid", RuntimeThrows<WorkspaceFileException>(() =>
                     provider.ReadCharacters("long.txt", 2, 1)).Code,
                     "character window cannot start inside a surrogate pair");
-                var observed = new Dictionary<string, ResourceEvidence>();
-                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null, 16000);
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, false, null, 16000);
                 var execution = new ToolRuntimeFixture().Context(toolId: "core.read");
                 var whole = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt" }), CancellationToken.None)
@@ -389,7 +388,7 @@ namespace RNAssistant.Harness
                     (int)first["sourceCoverage"]["end"] == 16000 &&
                     (int)first["sourceEndChar"] == body.Length &&
                     (bool)first["selectionComplete"] && !(bool)first["sourceComplete"] &&
-                    observed["long.txt"].Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    whole.ResourceEvidence.Single().Coverage.Kind == ResourceCoverageKinds.CharacterRange,
                     "automatic first-window delivery never claims whole-file evidence");
                 AssertTrue(whole.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.Kind == ResourceCoverageKinds.Whole &&
                     whole.ResourceEvidence.Single().ReadMetadata.SelectionComplete == true &&
@@ -406,14 +405,13 @@ namespace RNAssistant.Harness
                 AssertTrue((bool)visible["selectionComplete"] && !(bool)visible["complete"] &&
                     (int)visible["startChar"] == start && (int)visible["requestedCharacters"] == 16000 &&
                     (int)visible["coverage"]["end"] == body.Length &&
-                    observed["long.txt"].Coverage.Kind == ResourceCoverageKinds.CharacterRange,
+                    result.ResourceEvidence.Single().Coverage.Kind == ResourceCoverageKinds.CharacterRange,
                     "model sees requested/actual coverage while runtime retains partial evidence");
                 var readMetadata = result.ResourceEvidence.Single().ReadMetadata;
                 AssertTrue(readMetadata.RequestedCoverage.Start == start && readMetadata.RequestedCoverage.End == (long)start + 16000 &&
                     readMetadata.SourceCoverage.End == body.Length && readMetadata.SelectionComplete == true &&
                     readMetadata.RepresentationComplete == false && readMetadata.SourceComplete == false,
                     "workspace evidence keeps the requested EOF-spanning window and actual source bounds independently");
-                AssertEqual(readMetadata, observed["long.txt"].ReadMetadata, "runtime uses the same enriched evidence without a second store");
                 var mixed = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt", ["startChar"] = 0,
                         ["charCount"] = 10, ["startLine"] = 1, ["lineCount"] = 1 }), CancellationToken.None)
@@ -424,8 +422,7 @@ namespace RNAssistant.Harness
                     "mixed selectors fail with a closed error code");
 
                 files.CreateText(workspace, "wide.txt", new string('z', 40000));
-                var expanded = new WorkspaceResourceHandler(provider, null, () => null,
-                    new Dictionary<string, ResourceEvidence>(), false, null, 50000);
+                var expanded = new WorkspaceResourceHandler(provider, null, () => null, false, null, 50000);
                 var expandedRead = expanded.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "wide.txt",
                         ["startChar"] = 0, ["charCount"] = 40000 }), CancellationToken.None)
@@ -448,8 +445,7 @@ namespace RNAssistant.Harness
                 var beyondOneMiB = new string('q', WorkspaceFileService.MaximumTextBytes + 1024);
                 File.WriteAllText(Path.Combine(workspace.RootPath, "beyond.txt"), beyondOneMiB,
                     new UTF8Encoding(false, true));
-                var largeBudget = new WorkspaceResourceHandler(provider, null, () => null,
-                    new Dictionary<string, ResourceEvidence>(), false, null, beyondOneMiB.Length + 10);
+                var largeBudget = new WorkspaceResourceHandler(provider, null, () => null, false, null, beyondOneMiB.Length + 10);
                 var completeLarge = largeBudget.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "beyond.txt" }), CancellationToken.None)
                     .GetAwaiter().GetResult();

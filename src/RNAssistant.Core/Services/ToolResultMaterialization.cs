@@ -14,7 +14,8 @@ namespace RNAssistant.Core.Services
     {
         private ResourceRef _resultResource;
         public TerminalResult Result { get; private set; }
-        public JToken Data { get; private set; }
+        private JToken _data;
+        public JToken Data { get { return _data ?? (_data = ToolResultWire.ParseData(Result.DataJson)); } }
         public IReadOnlyList<ChatAttachment> ModelAttachments { get; private set; }
         public IReadOnlyList<ResourceEvidence> ResourceEvidence { get; private set; }
         public ResourceEffect ResourceEffect { get; private set; }
@@ -33,7 +34,7 @@ namespace RNAssistant.Core.Services
             ResourceEffect resourceEffect = null, string authorityCommitId = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
-            Data = data ?? ToolResultWire.ParseData(result.DataJson);
+            _data = data;
             ModelAttachments = Array.AsReadOnly((attachments ?? new ChatAttachment[0]).ToArray());
             _resultResource = resultResource == null ? null : new ResourceRef(resultResource.Uri, resultResource.Revision);
             ResultResourceKind = resultResourceKind;
@@ -45,7 +46,7 @@ namespace RNAssistant.Core.Services
         public void ReplaceResult(TerminalResult result, JToken data = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
-            Data = data ?? ToolResultWire.ParseData(result.DataJson);
+            _data = data;
         }
 
         public void IncludeResultResource(ResourceRef reference, string kind)
@@ -55,7 +56,8 @@ namespace RNAssistant.Core.Services
             if (!resources.Any(item => string.Equals(item.Uri, reference.Uri, StringComparison.Ordinal) &&
                 string.Equals(item.Revision, reference.Revision, StringComparison.Ordinal)))
                 resources.Add(new ResourceRef(reference.Uri, reference.Revision));
-            Result = new TerminalResult(Result.Status, Result.Message, Result.DataJson, resources);
+            Result = new TerminalResult(Result.Status, Result.Message, Result.SourceRead == null ? Result.DataJson : null,
+                resources, Result.SourceRead);
             _resultResource = new ResourceRef(reference.Uri, reference.Revision);
             ResultResourceKind = kind;
         }

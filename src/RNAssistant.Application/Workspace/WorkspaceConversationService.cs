@@ -1188,7 +1188,6 @@ namespace RNAssistant.Runtime
             private LlmCompletionResult _lastCompletion;
             private ModelAuthoritySnapshot _lastAuthority;
             private readonly ModelTracePersistenceService _modelTrace;
-            private readonly Dictionary<string, ResourceEvidence> _observed = new Dictionary<string, ResourceEvidence>(StringComparer.Ordinal);
             private readonly Dictionary<string, ResourceEvidence> _delivered = new Dictionary<string, ResourceEvidence>(StringComparer.Ordinal);
             private long _cursor;
             public ToolRuntime Tools { get; private set; }
@@ -1250,7 +1249,7 @@ namespace RNAssistant.Runtime
                     " Use type=chat to find bounded overviews of saved chats in this project without starting them; query filters title or agent address. Use type=attachment to find accepted message attachments in this chat." +
                     (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document."),
                     ResourceSchema(true, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
-                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, true, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceFind, _chatAttachments, chatCatalog));
                 Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts structured substring edits and full-line context from a delivered excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
@@ -1259,7 +1258,7 @@ namespace RNAssistant.Runtime
                     " Use type=chat with target=Chat overview: <agent_id> from discovery, representation=text or metadata, and no history selectors to read a bounded historical overview without starting that chat. Use type=attachment with the exact semantic target from discovery to read an immutable attachment; it does not authorize a source edit." +
                     (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document; VBA source supports the same procedure selector with representation=source."),
                     ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
-                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
+                    new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, false, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceRead, _chatAttachments, chatCatalog));
                 var searchObservation = new ResourceSearchObservation();
@@ -1273,7 +1272,7 @@ namespace RNAssistant.Runtime
                 {
                     foreach (var entry in ResourceMutationToolCatalog.GetTools())
                     {
-                        var handler = new FileHandler(files, workspace, _observed,
+                        var handler = new FileHandler(files, workspace,
                             entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered, _plans.Handler(_delivered));
                         Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
                     }
@@ -1338,7 +1337,7 @@ namespace RNAssistant.Runtime
                     prepared.ArgumentsHash != TextPatternEngine.Sha256(call.ArgumentsJson) ||
                     prepared.Source != null && (prepared.Source.Resource?.IsExact != true || prepared.Source.Payload == null))
                     throw new InvalidOperationException("Pending file observation is incompatible or belongs to another call; request a new mutation.");
-                if (prepared.Source != null) _observed[path] = _delivered[path] = prepared.Source;
+                if (prepared.Source != null) _delivered["prepared:" + call.Id + ":" + path] = prepared.Source;
             }
 
             private void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
@@ -1813,39 +1812,11 @@ namespace RNAssistant.Runtime
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(CancellationToken cancellationToken)
             {
-                // Prepare live authority before compilation. The compiler receives
-                // only this frozen tuple and never invokes a filesystem provider.
-                // Revalidate retained reads across turns as well as the current
-                // run. This restores source currency, not the per-run write guard
-                // in _observed; the compiler still bounds delivery of old bodies.
+                // Retained exact bytes are not a live read. Explicit reads and
+                // mutation preparation validate their own source under its gate.
+                cancellationToken.ThrowIfCancellationRequested();
                 var active = _session.Messages.Where(item => ContextCompactionRuntime.IsReplayMessage(item) &&
                     ToolProtocolMessages.IsResult(item) && item.ResourceEvidence?.Count > 0).ToArray();
-                var paths = new HashSet<string>(_observed.Keys, StringComparer.Ordinal);
-                foreach (var fact in active)
-                {
-                    ToolResultWireReadResult wire; string readError;
-                    if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError)) continue;
-                    if (fact.ToolName == "web.verify" && fact.ResourceEvidence?.Count > 0)
-                    {
-                        var verification = JsonConvert.DeserializeObject<WebVerificationToolData>(wire.Result.DataJson);
-                        foreach (var path in verification.CheckedFiles) paths.Add(path);
-                        continue;
-                    }
-                    if (wire.Result.Status != ToolResultStatus.Ok) continue;
-                    var data = ToolResultWire.ParseData(wire.Result.DataJson) as JObject;
-                    if (fact.ToolName == "core.read" && (string)data?["type"] == "file" && data?["target"]?.Type == JTokenType.String)
-                        paths.Add((string)data["target"]);
-                }
-                foreach (var path in paths)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    try { _files.CaptureFile(_workspace, path, long.MaxValue,
-                        cancellationToken, markUnknownOnSizeRefusal: true); }
-                    catch (FileNotFoundException) { /* The file owner marked the old head unavailable. */ }
-                    catch (DirectoryNotFoundException) { /* The file owner marked the old head unavailable. */ }
-                    catch (WorkspaceFileException ex) when (ex.Code == "file_too_large")
-                    { /* The file owner marked the oversized source unknown under its lease. */ }
-                }
                 _taskLists.ReconcileInterrupted();
                 _plans.ReconcileInterrupted();
                 return _skillPublications.CaptureAuthority(active.SelectMany(item =>
@@ -1855,41 +1826,12 @@ namespace RNAssistant.Runtime
 
             private void RetainDeliveredObservations(ModelContextSnapshot snapshot)
             {
-                var delivered = snapshot.DeliveredObservations;
-                var reducer = new EvidenceStateReducer();
-                foreach (var path in _observed.Keys.ToArray())
-                    if (!delivered.Any(evidence => evidence.Resource.Uri == _observed[path].Resource.Uri &&
-                        evidence.Resource.Revision == _observed[path].Resource.Revision &&
-                        evidence.View == _observed[path].View && evidence.Complete == _observed[path].Complete &&
-                        evidence.Coverage.Kind == _observed[path].Coverage.Kind &&
-                        evidence.Coverage.Start == _observed[path].Coverage.Start &&
-                        evidence.Coverage.End == _observed[path].Coverage.End &&
-                        evidence.Payload?.Sha256 == _observed[path].Payload?.Sha256 &&
-                        reducer.Reduce(evidence, snapshot.Authority.Resources).State == EvidenceState.Current))
-                        _observed.Remove(path);
-                // Freeze guards for this model request. A sibling read/write result has not yet reached the model.
+                // Coverage belongs to this exact request. Prior-run observations
+                // and distinct whole/partial views coexist; sibling results cannot
+                // grant a guard before they reach a model request.
                 _delivered.Clear();
-                foreach (var item in _observed) _delivered.Add(item.Key, item.Value);
-                // Non-file owners match exact evidence, not filesystem paths. This also includes
-                // verified after-sources, but only after the compiler actually delivered their bodies.
-                foreach (var item in delivered.Where(e => ResourceUri.Parse(e.Resource.Uri).Provider != "file"))
-                    _delivered["resource:" + item.EvidenceId] = item;
-            }
-
-            private static string WireResult(ToolExecutionRecord record)
-            {
-                var result = record.Result;
-                if (result == null)
-                {
-                    if (record.Outcome == ToolExecutionOutcome.Ok)
-                        throw new InvalidOperationException("Successful tool execution has no terminal result.");
-                    result = record.Outcome == ToolExecutionOutcome.Unknown
-                        ? ToolResult.Unknown(record.Message)
-                        : ToolResult.Error(record.Message, record.Outcome == ToolExecutionOutcome.NotDispatched
-                            ? "{\"code\":\"not_dispatched\",\"dispatched\":false}"
-                            : "{\"code\":\"execution_error\"}");
-                }
-                return ToolResultWire.Write(record.Context.Call.Id, record.Context.Call.Name, result);
+                var index = 0;
+                foreach (var item in snapshot.DeliveredObservations) _delivered["request:" + index++] = item;
             }
 
             private string CurrentAttachmentTargets()
@@ -2065,18 +2007,12 @@ namespace RNAssistant.Runtime
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
                 {
                     var record = fact.Execution;
-                    _session.Messages.Add(new ChatMessage
-                    {
-                        Role = ToolResultRoles.User, ToolResultRole = ToolResultRoles.User,
-                        ProtocolMessage = true, ToolCallId = record.Context.Call.Id,
-                        ResultStepId = record.Context.StepId,
-                        ToolName = record.Context.Call.Name, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                        Content = WireResult(record),
-                        ExecutionProgress = ToolExecutionProgress.Capture(record),
-                        ResourceEvidence = record.ResourceEvidence.Concat(_plans.SourceEvidence(record.ResourceEffect)).ToList(), ResourceEffect = record.ResourceEffect,
-                        ResourceRefs = record.Result?.Resources.ToList() ?? new List<ResourceRef>(),
-                        RunId = fact.Summary.RunId
-                    });
+                    var materialized = new ToolResultMaterialization(ToolResultPersistence.Terminal(record),
+                        resourceEvidence: record.ResourceEvidence.Concat(_plans.SourceEvidence(record.ResourceEffect)),
+                        resourceEffect: record.ResourceEffect, authorityCommitId: record.AuthorityCommitId)
+                        { ExecutionProgress = ToolExecutionProgress.Capture(record) };
+                    _session.Messages.Add(ToolResultPersistence.Create(record.Context.Call.Id, record.Context.Call.Name,
+                        record.Context.StepId, materialized, _payloads, fact.Summary.RunId));
                 }
                 if (fact.Kind == AgentRunEventKind.SummaryChanged)
                 {
@@ -2098,7 +2034,9 @@ namespace RNAssistant.Runtime
                     activity, updated: projected == null ? null : new[] { projected }));
                 if (fact.Kind == AgentRunEventKind.ToolCompleted &&
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation && _callable != null)
-                    foreach (var message in _session.Messages.Skip(firstMessage)) _callable.StageReadResult(message);
+                    foreach (var message in _session.Messages.Skip(firstMessage))
+                        _callable.StageReadResult(message.ToolName == CapabilityToolCatalog.ReadToolId
+                            ? ToolResultPersistence.Hydrate(message, _payloads) : message);
                 _cursor++;
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted || fact.Summary.Lifecycle != RunLifecycle.Running)
                     _modelProgress?.Invoke(null);
@@ -2212,7 +2150,6 @@ namespace RNAssistant.Runtime
         {
             private readonly WorkspaceFileService _files;
             private readonly WorkspaceDescriptor _workspace;
-            private readonly Dictionary<string, ResourceEvidence> _observed;
             private readonly IReadOnlyDictionary<string, ResourceEvidence> _delivered;
             private readonly ChatBlobStore _payloads;
             private readonly string _operation;
@@ -2221,9 +2158,9 @@ namespace RNAssistant.Runtime
             private readonly PlanResourceToolHandler _plan;
             private bool IsOffice(ToolHandlerContext context) { return Value(context, "target").Contains(": "); }
             public FileHandler(WorkspaceFileService files, WorkspaceDescriptor workspace,
-                Dictionary<string, ResourceEvidence> observed, string operation, ChatBlobStore payloads,
+                string operation, ChatBlobStore payloads,
                 ResourceSearchObservation search, IToolHandler office = null, IReadOnlyDictionary<string, ResourceEvidence> delivered = null, PlanResourceToolHandler plan = null)
-            { _plan = plan; _office = (office as ResourcePatchBatchHandler)?.TargetHandler ?? office; _files = files; _workspace = workspace; _observed = observed; _delivered = delivered ?? observed; _operation = operation; _payloads = payloads; _search = search; }
+            { _plan = plan; _office = (office as ResourcePatchBatchHandler)?.TargetHandler ?? office; _files = files; _workspace = workspace; _delivered = delivered ?? throw new ArgumentNullException(nameof(delivered)); _operation = operation; _payloads = payloads; _search = search; }
 
             public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken token)
             {
@@ -2253,9 +2190,11 @@ namespace RNAssistant.Runtime
                             }
                             else
                             {
-                                _delivered.TryGetValue(path, out source);
-                                if (_operation == ResourceMutationToolCatalog.Patch && source?.Resource?.IsExact == true &&
-                                    (source.Resource.Uri != current.Reference.Uri || source.Resource.Revision != current.Reference.Revision))
+                                var candidates = _delivered.Values.Where(item => item.ScopeId.Equals(current.Evidence.ScopeId) &&
+                                    item.Resource.Uri == current.Reference.Uri).ToArray();
+                                source = candidates.Where(item => item.Resource.Revision == current.Reference.Revision && CanUse(item, context))
+                                    .OrderByDescending(item => item.Complete && item.Coverage.Kind == ResourceCoverageKinds.Whole).FirstOrDefault();
+                                if (source == null && candidates.Any(item => item.Resource.Revision != current.Reference.Revision))
                                     throw new WorkspaceFileException("target_conflict", "Source changed after the delivered read.");
                                 if (!CanUse(source, context) ||
                                     source.Resource.Uri != current.Reference.Uri || source.Resource.Revision != current.Reference.Revision)
@@ -2282,8 +2221,9 @@ namespace RNAssistant.Runtime
             private bool CanUse(ResourceEvidence source, ToolHandlerContext context)
             {
                 if (source?.Resource?.IsExact != true || source.Payload == null) return false;
-                if (source.Complete && source.Coverage.Kind == ResourceCoverageKinds.Whole) return true;
                 if (_operation == ResourceMutationToolCatalog.Move || _operation == ResourceMutationToolCatalog.Copy || _operation == ResourceMutationToolCatalog.Delete) return true;
+                if (source.View != ResourceRepresentations.Text && source.View != ResourceRepresentations.Source) return false;
+                if (source.Complete && source.Coverage.Kind == ResourceCoverageKinds.Whole) return true;
                 if (_operation != ResourceMutationToolCatalog.Patch) return false;
                 return source.Coverage.Kind == ResourceCoverageKinds.CharacterRange;
             }
@@ -2306,7 +2246,6 @@ namespace RNAssistant.Runtime
                     if (_operation == ResourceMutationToolCatalog.Delete)
                     {
                         var deleted = _files.DeleteText(_workspace, path, expected, context.MarkDispatchPossible, _operation);
-                        _observed.Remove(path);
                         return Return(ToolResult.Ok("Resource moved to managed trash and verified.", JsonConvert.SerializeObject(new { path, deleted = true })),
                             ToolEffectEvidence.VerifiedChange, authorityCommit: deleted.AuthorityCommit);
                     }
@@ -2317,18 +2256,16 @@ namespace RNAssistant.Runtime
                     else if (_operation == ResourceMutationToolCatalog.Move)
                     {
                         changed = _files.MoveText(_workspace, path, expected, Value(context, "destination"), context.MarkDispatchPossible, _operation);
-                        _observed.Remove(path);
                     }
                     else if (_operation == ResourceMutationToolCatalog.Write)
                         changed = expected == null ? _files.CreateText(_workspace, path, Value(context, "content"), context.MarkDispatchPossible, _operation)
                             : _files.ReplaceText(_workspace, path, expected, Value(context, "content"), context.MarkDispatchPossible, _operation);
                     else
                         changed = _operation == ResourceMutationToolCatalog.Patch
-                            ? _files.ApplyTextEdits(_workspace, path, expected, TextPatch.FromArguments(context.Arguments).WithCoverage(TextPatch.Coverage(new[] { _delivered[path] })), context.MarkDispatchPossible, token, effectOperation: _operation)
+                            ? _files.ApplyTextEdits(_workspace, path, expected, TextPatch.FromArguments(context.Arguments).WithCoverage(TextPatch.Coverage(new[] { state.Source })), context.MarkDispatchPossible, token, effectOperation: _operation)
                             : _files.ReplaceMatches(_workspace, path, expected, Value(context, "query"), Value(context, "replacement"),
                                 Mode(context), Flag(context, "matchCase"), Count(context), context.MarkDispatchPossible, token, effectOperation: _operation);
                     path = changed.RelativePath;
-                    if (changed.Evidence == null) _observed.Remove(path); else _observed[path] = changed.Evidence;
                     var didChange = expected == null || expected.Uri != changed.Reference.Uri || expected.Revision != changed.Reference.Revision;
                     return Return(ToolResult.Ok(didChange ? "Resource change verified by read-back." : "Source already matched; no change.",
                         JsonConvert.SerializeObject(new { path, changed = didChange })),

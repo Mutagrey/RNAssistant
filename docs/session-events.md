@@ -1,5 +1,18 @@
 # Session event stream
 
+## Retained result bodies — 2026-11-10
+
+Office and Workspace terminal messages use Core `ToolResultPersistence`. A typed
+text/source read retains raw view text in CAS and a versioned `ResultBody` header
+with projection metadata; the compact occurrence keeps call/run/step, outcome,
+eligibility and evidence separately. Large opaque data retains its exact JSON
+body, without inferring source fields from names such as `text` or `rows`.
+`ResultPayload` is not a serialized call envelope for this contract. Selected
+request/presentation consumers reconstruct the envelope from header + exact body.
+Missing or incompatible terminal bodies fail explicitly; no legacy payload reader
+or data migration is introduced. Other typed context-note payloads keep their own
+contract. Historical cloning preserves the header; body-omission projections clear it.
+
 ## Named chat groups — 2026-11-05
 
 ChatStore.Groups reuses ResourceAuthorityStore append-only commits and immutable CAS:

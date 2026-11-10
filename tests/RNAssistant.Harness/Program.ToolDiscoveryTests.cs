@@ -996,7 +996,7 @@ namespace RNAssistant.Harness
                     null,
                     false,
                     null,
-                    CancellationToken.None).GetAwaiter().GetResult())
+                    CancellationToken.None, payloads: executor.Payloads).GetAwaiter().GetResult())
                 {
                     const string callId = "read_oversized_capability";
                     modelSession.AppendToolCall(new AgentToolCall

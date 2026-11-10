@@ -29,8 +29,7 @@ namespace RNAssistant.Core.Services
                 if (payloads == null || fact.ResultPayload.ByteLength > 1024 * 1024)
                     throw new InvalidOperationException("The accepted question payload is unavailable or too large.");
                 fact = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(fact));
-                fact.Content = payloads.ReadText(fact.ResultPayload.ToBlobReference()) ??
-                    throw new InvalidOperationException("The accepted question payload is missing.");
+                fact.Content = ToolResultPersistence.ReadContent(fact, payloads);
             }
             ToolResultWireReadResult wire; string error;
             if (!ToolResultHistoryReader.TryRead(fact, out wire, out error) || wire.Result.Status != ToolResultStatus.Ok)

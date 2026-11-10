@@ -101,8 +101,7 @@ namespace RNAssistant.Harness
                     "CAS stores selected YAML view, not source bytes");
                 AssertEqual("application/json; charset=utf-8", selected.Evidence.Single().Payload.ContentType,
                     "workspace tree payload identifies serialized JSON rather than source YAML");
-                var handler = new WorkspaceResourceHandler(provider, null, () => null,
-                    new Dictionary<string, ResourceEvidence>(), false, null, 2000);
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, false, null, 2000);
                 var execution = new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.ReadToolId);
                 var result = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "large.yaml", ["representation"] = "tree",

@@ -44,7 +44,7 @@ namespace RNAssistant.Core.Services
                 source.ToolCalls?.Any(call => CapabilityNaming.IsRetiredTool(call.Name)) == true)
                 throw new InvalidOperationException("This conversation uses retired tool contracts. Start a new chat; stored history is preserved.");
             projected.ResourceRefs = new List<ResourceRef>();
-            projected.ResultPayload = null;
+            projected.ResultPayload = null; projected.ResultBody = null;
             projected.HtmlWorkspaceCheckpoint = null;
             if (source.ToolResultProtocolVersion != ToolResultWire.CurrentVersion)
             {

@@ -79,7 +79,7 @@ namespace RNAssistant.Harness
                 var entry = ResourceMutationToolCatalog.GetTools().Single(t => t.Id == ResourceMutationToolCatalog.Patch);
                 var registry = new ToolHandlerRegistry();
                 registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson), entry.Policy, entry.Binding),
-                    new ResourcePatchBatchHandler(new WorkspaceConversationService.FileHandler(files, workspace, observed, entry.Id, new ChatBlobStore(paths), new ResourceSearchObservation())));
+                    new ResourcePatchBatchHandler(new WorkspaceConversationService.FileHandler(files, workspace, entry.Id, new ChatBlobStore(paths), new ResourceSearchObservation(), delivered: observed)));
                 var runtime = new ToolRuntime(registry, "agent", false, true);
                 var invalid = new[] { "{", "{\"unexpected\":1}", "{\"targets\":[{\"target\":\"a.txt\",\"edits\":[{\"old\":\"\",\"new\":\"x\"}]}]}" };
                 foreach (var json in invalid)
@@ -631,7 +631,7 @@ namespace RNAssistant.Harness
                     var entry = ResourceMutationToolCatalog.GetTools().Single(t => t.Id == ResourceMutationToolCatalog.Patch);
                     var registry = new ToolHandlerRegistry();
                     registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson), entry.Policy, entry.Binding),
-                        new ResourcePatchBatchHandler(new WorkspaceConversationService.FileHandler(files, workspace, observed, entry.Id, blobs, new ResourceSearchObservation())));
+                        new ResourcePatchBatchHandler(new WorkspaceConversationService.FileHandler(files, workspace, entry.Id, blobs, new ResourceSearchObservation(), delivered: observed)));
                     var runtime = new ToolRuntime(registry, "agent", false, true, (ctx, prep) => "approval",
                         dispatchGuard: ctx => { if (scenario == "guard_throw" && ctx.TargetOrdinal == 1) throw new InvalidOperationException("Guard failed before dispatch."); return null; });
                     var second = scenario == "alias" ? "a.txt" : "b.txt";
@@ -822,7 +822,7 @@ namespace RNAssistant.Harness
                 var registry = new ToolHandlerRegistry();
                 foreach (var entry in ResourceMutationToolCatalog.GetTools())
                 {
-                    var handler = new WorkspaceConversationService.FileHandler(files, workspace, observed, entry.Id, blobs, search);
+                    var handler = new WorkspaceConversationService.FileHandler(files, workspace, entry.Id, blobs, search, delivered: observed);
                     registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson), entry.Policy, entry.Binding),
                         entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
                 }
@@ -859,14 +859,17 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Error, unseen.Outcome, "repeated text in an excerpt cannot authorize a different unseen coordinate");
                 AssertEqual(ToolRetryPolicy.RefreshRequired, unseen.Recovery.RetryPolicy, "a subsequent relevant read can repair excerpt coverage");
                 observed["a.txt"] = whole;
-                apply("core.patch", PatchArguments("a.txt", EditSet(Edit("repeat", "second", new[] { "repeat" }, null))));
+                var afterPatch = apply("core.patch", PatchArguments("a.txt", EditSet(Edit("repeat", "second", new[] { "repeat" }, null))));
                 AssertEqual("first\nrepeat\nsecond", File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "coordinate patch selects original repeated line");
-                apply("resources.copy", new JObject { ["target"] = "a.txt", ["destination"] = "b.txt" });
-                apply("resources.move", new JObject { ["target"] = "b.txt", ["destination"] = "c.txt" });
+                // Each following fake request explicitly receives the verified after-state.
+                // A mutation handler no longer writes a separate implicit observation cache.
+                observed["a.txt"] = afterPatch.ResourceEvidence.Single();
+                observed["b.txt"] = apply("resources.copy", new JObject { ["target"] = "a.txt", ["destination"] = "b.txt" }).ResourceEvidence.Single();
+                observed["c.txt"] = apply("resources.move", new JObject { ["target"] = "b.txt", ["destination"] = "c.txt" }).ResourceEvidence.Single();
                 apply("resources.delete", new JObject { ["target"] = "c.txt" });
                 apply("resources.restore", new JObject { ["target"] = "c.txt" });
                 AssertEqual(File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), File.ReadAllText(Path.Combine(workspace.RootPath, "c.txt")), "copy/move/delete/restore retain exact bytes");
-                apply("core.write", new JObject { ["target"] = "history.txt", ["content"] = "before" });
+                observed["history.txt"] = apply("core.write", new JObject { ["target"] = "history.txt", ["content"] = "before" }).ResourceEvidence.Single();
                 var historyBefore = observed["history.txt"];
                 var historyPatch = PatchArguments("history.txt", EditSet(Edit("before", "after")));
                 var recorded = apply("core.patch", historyPatch);
@@ -885,7 +888,7 @@ namespace RNAssistant.Harness
                 var page = new ResourceTextSearch().Search(request, provider.SearchSources(request, CancellationToken.None), CancellationToken.None);
                 search.Record(request, page, "same-step");
                 RuntimeThrows<ResourceRequestException>(() => search.Require("a.txt", "repeat", "literal", true, 1, "same-step"));
-                apply("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "repeat", ["replacement"] = "replaced", ["matchCase"] = true, ["expectedMatches"] = 1 });
+                observed["a.txt"] = apply("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "repeat", ["replacement"] = "replaced", ["matchCase"] = true, ["expectedMatches"] = 1 }).ResourceEvidence.Single();
                 AssertTrue(prepare("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "repeat", ["replacement"] = "bad", ["matchCase"] = true, ["expectedMatches"] = 1 }).Outcome == ToolExecutionOutcome.Error, "old search receipt cannot authorize changed source");
                 var uncertain = prepare("core.patch", PatchArguments("a.txt", EditSet(Edit("first", "written"))));
                 files.FaultPoint = point => { if (point == "after-dispatch") throw new IOException("read-back fault"); };

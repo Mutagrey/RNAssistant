@@ -573,8 +573,7 @@ namespace RNAssistant.Harness
                             AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
                                 ["type"] = "attachment", ["target"] = target, ["scope"] = "document"
                             }, schema, false, out schemaError), "schema rejects a foreign selector");
-                            var findHandler = new WorkspaceResourceHandler(null, null, () => null,
-                                new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), true, null, 16000,
+                            var findHandler = new WorkspaceResourceHandler(null, null, () => null, true, null, 16000,
                                 chatAttachments: provider);
                             var execution = new ToolRuntimeFixture().Context(toolId: "core.read");
                             var foundByTool = findHandler.ExecuteAsync(new ToolHandlerContext(execution,
@@ -585,8 +584,7 @@ namespace RNAssistant.Harness
                                 "core.find discovers the accepted target");
                             AssertEqual(body.Length, provider.Read(target, 16000).Result.CompleteViewPayload.ByteLength,
                                 "resource read owns the original body");
-                            var handler = new WorkspaceResourceHandler(null, null, () => null,
-                                new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), false, null, 16000,
+                            var handler = new WorkspaceResourceHandler(null, null, () => null, false, null, 16000,
                                 chatAttachments: provider);
                             var read = handler.ExecuteAsync(new ToolHandlerContext(execution,
                                 new System.Collections.Generic.Dictionary<string, object> {
@@ -621,8 +619,7 @@ namespace RNAssistant.Harness
                             AssertEqual("target_conflict", RuntimeThrows<WorkspaceFileException>(() =>
                                 files.ApplyTextEdits(sourceWorkspace, "index.html", source.Reference, LineHunk(anchor, anchor.Replace("Проверить команду", "Устаревшая правка")))).Code,
                                 "a stale source read cannot overwrite the verified annotation edit");
-                            var bounded = new WorkspaceResourceHandler(null, null, () => null,
-                                new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), false, null, 64,
+                            var bounded = new WorkspaceResourceHandler(null, null, () => null, false, null, 64,
                                 chatAttachments: provider).ExecuteAsync(new ToolHandlerContext(execution,
                                 new System.Collections.Generic.Dictionary<string, object> {
                                     ["type"] = "attachment", ["target"] = target }), CancellationToken.None)

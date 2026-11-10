@@ -163,6 +163,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string AcceptedCallNarration { get; set; }
         public PayloadRef ResultPayload { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RetainedToolResultBody ResultBody { get; set; }
         public ResourceEffect ResourceEffect { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public RNAssistant.Core.Tools.ToolExecutionProgress ExecutionProgress { get; set; }

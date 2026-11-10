@@ -402,6 +402,7 @@ namespace RNAssistant.Office.Services
                 AcceptedCallPayload = message.AcceptedCallPayload,
                 AcceptedCallNarration = message.AcceptedCallNarration,
                 ResultPayload = message.ResultPayload,
+                ResultBody = message.ResultBody,
                 ResourceEffect = message.ResourceEffect,
                 AuthorityCommitId = message.AuthorityCommitId,
                 HtmlWorkspaceCheckpoint = CloneResourceRef(message.HtmlWorkspaceCheckpoint),

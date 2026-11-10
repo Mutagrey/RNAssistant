@@ -88,8 +88,7 @@ namespace RNAssistant.Harness
                 var retained = new ChatBlobStore(paths).ReadText(first.Evidence.Single().Payload.ToBlobReference());
                 AssertEqual(JsonConvert.SerializeObject(first.Result.Tree), retained,
                     "CAS retains the model-visible typed tree rather than source bytes");
-                var observed = new Dictionary<string, ResourceEvidence>();
-                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null, 2000);
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, false, null, 2000);
                 var execution = new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.ReadToolId);
                 var args = new Dictionary<string, object> { ["target"] = "large.json", ["representation"] = "tree",
                     ["pointer"] = "/data", ["depth"] = 1, ["offset"] = 1, ["limit"] = 1 };
@@ -104,7 +103,7 @@ namespace RNAssistant.Harness
                 var metadata = result.ResourceEvidence.Single().ReadMetadata;
                 AssertTrue(metadata.RequestedDepth == 1 && metadata.RequestedCoverage.Path == "/data" &&
                     metadata.RequestedCoverage.Start == 1 && metadata.RequestedCoverage.End == 2 &&
-                    !observed["large.json"].Complete, "accepted selector survives evidence and cannot authorize overwrite");
+                    !result.ResourceEvidence.Single().Complete, "accepted selector survives evidence and cannot authorize overwrite");
                 var restored = JsonConvert.DeserializeObject<ResourceEvidence>(JsonConvert.SerializeObject(result.ResourceEvidence.Single()));
                 AssertEqual("/data", restored.ReadMetadata.RequestedCoverage.Path, "pointer survives durable metadata roundtrip");
                 File.WriteAllText(Path.Combine(workspace.RootPath, "large.json"), "{\"data\":[9]}");

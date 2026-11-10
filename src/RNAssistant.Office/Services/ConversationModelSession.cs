@@ -277,10 +277,6 @@ namespace RNAssistant.Office.Services
             ChatMessage model;
             var accepted = MaterializeToolResultMessage(
                 command, result, out model);
-            accepted.RunId = _session.LastRun == null
-                ? null
-                : _session.LastRun.RunId;
-            if (model != null) model.RunId = accepted.RunId;
             AppendPairedResult(_session.Messages, accepted);
             _lastSnapshot = null;
             _toolPack.StageReadResult(model);
@@ -510,44 +506,16 @@ namespace RNAssistant.Office.Services
         {
             var artifact = ToolResultResourceService.ExternalizeIfNeeded(_session, command, result,
                 AgentJsonProtocol.DefaultMaxToolResultDataTokens, _settings);
-            var message = AgentJsonProtocol.CreateToolResultMessage(command, result, int.MaxValue,
-                _settings.ToolResultRole, _settings);
+            var message = ToolResultPersistence.Create(command.ToolCallId, command.ToolId,
+                command.RuntimeStepId, result, _payloads, _session.LastRun?.RunId);
             AddVerifiedSourceEvidence(_session, _authority, _payloads, message, command, result);
-            message.ResourceRefs = AgentTranscript.CloneResourceRefs(result.Result.Resources);
             // Admission validates runtime-owned descriptor/revision evidence before
             // archival externalization. Model projection deliberately strips these
             // fields and can never be callable authority.
             // Only capability admission consumes this pre-archival projection.
             // Ordinary resource/tool results go directly to the durable CAS path.
             modelMessage = string.Equals(command.ToolId, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal)
-                ? HistoricalContextProjector.Project(message) : null;
-            if (_payloads != null && message.Content.Length > 8192)
-            {
-                message.ResultPayload = PayloadRef.FromBlob(_payloads.StoreText(message.Content, "application/vnd.rnassistant.tool-result+json"));
-                var compact = new JObject {
-                    ["payload_externalized"] = true,
-                    ["complete"] = result.ResourceEvidence.All(item => item.Complete),
-                    ["characters"] = message.Content.Length };
-                var readData = result.Data as JObject;
-                if (command.ToolId == ResourceToolCatalog.ReadToolId && (string)readData?["type"] == "shared context")
-                    compact["type"] = "shared context";
-                // Current after-source is selected before full result hydration,
-                // including after compaction. Preserve its semantic label here.
-                var sourceData = readData?["tool_data"] as JObject ?? readData;
-                foreach (var label in new[] { "target", "moduleName", "title" })
-                    if (sourceData?[label]?.Type == JTokenType.String &&
-                        !((string)sourceData[label]).Contains("://"))
-                        compact[label] = sourceData[label].DeepClone();
-                if (HtmlWorkspaceToolCatalog.Owns(command.ToolId) && sourceData?["members"] is JArray)
-                    compact["members"] = new JArray(((JArray)sourceData["members"]).OfType<JObject>()
-                        .Select(item => new JObject { ["path"] = item["path"]?.DeepClone(),
-                            ["target"] = item["target"]?.DeepClone(),
-                            ["uri"] = item["uri"]?.DeepClone() }));
-                var envelope = new RNAssistant.Core.Tools.Contracts.ToolResult(result.Result.Status,
-                    result.Result.Message, compact.ToString(Formatting.None), result.Result.Resources);
-                var json = ToolResultWire.WriteParsed(command.ToolCallId, command.ToolId, envelope, compact, result.ResultResource);
-                message.Content = json;
-            }
+                ? ToolResultPersistence.Hydrate(message, _payloads) : null;
             if (artifact != null && !string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase))
                 artifact.SourceMessageId = message.Id;
             return message;

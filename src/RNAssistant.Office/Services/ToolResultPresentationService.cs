@@ -69,7 +69,7 @@ namespace RNAssistant.Office.Services
                     {
                         if (terminal.ResultPayload.ByteLength > MaxSource * 4L) { Notice(result.Blocks); return result; }
                         read = RNAssistant.Core.Llm.HistoricalContextProjector.Project(terminal);
-                        read.Content = _payloads?.ReadText(terminal.ResultPayload.ToBlobReference());
+                        read.Content = ToolResultPersistence.ReadContent(terminal, _payloads);
                     }
                     ToolResultWireReadResult wire; string error;
                     if (ToolResultHistoryReader.TryRead(read, out wire, out error))

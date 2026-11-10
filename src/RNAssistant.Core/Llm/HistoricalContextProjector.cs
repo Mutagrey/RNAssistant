@@ -57,6 +57,7 @@ namespace RNAssistant.Core.Llm
                 AcceptedCallPayload = source.AcceptedCallPayload,
                 AcceptedCallNarration = source.AcceptedCallNarration,
                 ResultPayload = source.ResultPayload,
+                ResultBody = source.ResultBody,
                 ResourceEffect = source.ResourceEffect,
                 ExecutionProgress = source.ExecutionProgress,
                 AuthorityCommitId = source.AuthorityCommitId,

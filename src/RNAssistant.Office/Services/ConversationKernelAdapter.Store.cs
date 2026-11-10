@@ -256,16 +256,7 @@ namespace RNAssistant.Office.Services
                 result.ExecutionProgress = ToolExecutionProgress.Capture(record);
                 return result;
             }
-            var terminal = record.Result;
-            if (terminal == null)
-            {
-                var code = record.Context.IsConfirmed && !record.MayHaveDispatched && record.Outcome == ToolExecutionOutcome.Error
-                    ? "pending_tool_catalog_changed" : record.Outcome == ToolExecutionOutcome.NotDispatched
-                        ? "tool_not_dispatched" : "execution_interrupted";
-                terminal = new TerminalResult(record.Outcome == ToolExecutionOutcome.Ok ? ToolResultStatus.Ok :
-                    record.Outcome == ToolExecutionOutcome.Unknown ? ToolResultStatus.Unknown : ToolResultStatus.Error,
-                    record.Message, new JObject { ["code"] = code }.ToString(Formatting.None));
-            }
+            var terminal = ToolResultPersistence.Terminal(record);
             result = new ToolResultMaterialization(terminal,
                 resourceEvidence: record.ResourceEvidence, resourceEffect: record.ResourceEffect,
                 authorityCommitId: record.AuthorityCommitId);

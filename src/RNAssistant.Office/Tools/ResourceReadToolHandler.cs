@@ -262,7 +262,7 @@ namespace RNAssistant.Office.Tools
                     Members = manifest.Resources.Select(member => Gateway.DescribeHtmlMember(Session, member, selected.Descriptor)).ToList() });
                 projection.ReturnedCharacters = projection.TotalCharacters = projection.Text.Length;
             }
-            var result = RuntimeResult.Ok(
+            var result = RuntimeResult.OkRead(
                 htmlFileStructureAsSource
                     ? "HTML file has no structure view; returned source text with the reported coverage. The HTML workspace root has the structure view."
                     : tree ? "Exact structured tree read; navigate with pointer, depth and child offset. Values are decoded previews, not raw source lexemes."
@@ -273,7 +273,7 @@ namespace RNAssistant.Office.Tools
                     : parts ? "Exact selected text part read; coverage is limited to this part."
                     : section != null ? "Complete selected Markdown section read; coverage is limited to that section." : structured ? "Bounded exact structural view read."
                     : projection.Complete && projection.SourceComplete != false ? "Complete resource representation read." : "Exact source excerpt read; continue using the reported coverage and source bounds.",
-                Serialize(projection),
+                projection,
                 selection.ResourceRefs);
             var attachments = selection.ModelAttachments ?? new ChatAttachment[0];
             if (_captureAttachments != null && attachments.Count > 0)

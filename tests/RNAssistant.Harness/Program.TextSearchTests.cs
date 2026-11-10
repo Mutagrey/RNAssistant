@@ -32,8 +32,7 @@ namespace RNAssistant.Harness
                     System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
                     .Invoke(null, new object[] { true, true, false, 2000 });
                 var provider = new WorkspaceFileResourceProvider(new WorkspaceFileService(paths), workspace);
-                var handler = new RNAssistant.Runtime.WorkspaceResourceHandler(provider, null, () => null,
-                    new Dictionary<string, ResourceEvidence>(), true, null, 2000);
+                var handler = new RNAssistant.Runtime.WorkspaceResourceHandler(provider, null, () => null, true, null, 2000);
                 var fixture = new ToolRuntimeFixture(RuntimeRegistration("core.find", schema: schema));
                 fixture.Handler.Run = handler.ExecuteAsync;
                 Func<string, string[]> find = arguments => {

@@ -19,7 +19,6 @@ namespace RNAssistant.Runtime
         private readonly WorkspaceFileResourceProvider _files;
         private readonly SkillPublicationService _publications;
         private readonly Func<SkillCatalogSnapshot> _skills;
-        private readonly Dictionary<string, ResourceEvidence> _observed;
         private readonly bool _find;
         private readonly WorkspacePlanService _plans;
         private readonly IReadOnlyToolHandler _office;
@@ -28,11 +27,11 @@ namespace RNAssistant.Runtime
         private readonly int _maximumTextReadCharacters;
 
         internal WorkspaceResourceHandler(WorkspaceFileResourceProvider files, SkillPublicationService publications,
-            Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceEvidence> observed, bool find,
+            Func<SkillCatalogSnapshot> skills, bool find,
             WorkspacePlanService plans, int maximumTextReadCharacters, IReadOnlyToolHandler office = null,
             WorkspaceChatAttachmentResourceProvider chatAttachments = null,
             RNAssistant.Application.Conversations.ConversationCatalogAccess chats = null)
-        { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans;
+        { _files = files; _publications = publications; _skills = skills; _find = find; _plans = plans;
             _office = office; _chatAttachments = chatAttachments; _chats = chats;
             if (maximumTextReadCharacters < 1 || maximumTextReadCharacters > WorkspaceFileService.MaximumWindowTextCharacters)
                 throw new ArgumentOutOfRangeException(nameof(maximumTextReadCharacters));
@@ -294,13 +293,12 @@ namespace RNAssistant.Runtime
                 read = read.WithReadMetadata(projection, requestedCoverage,
                     requestedProcedure: hasProcedure ? procedure : null, requestedProcedureKind: procedureKind,
                     requestedDepth: isTree ? (int?)depth : null);
-                if (type == "file") _observed[target] = read.Evidence.Single();
                 var message = isTree ? "Exact structured tree read; navigate with pointer, depth and child offset. Values are decoded previews, not raw source lexemes." :
                     pageRange ? "Exact PDF page range extraction; only complete extracted pages are covered. Continue at nextPageIndex when present; visual content may require media inspection." :
                     pageIndex.HasValue ? "Exact PDF page text extraction; coverage is limited to this page and character window. Visual content may require media inspection." :
                     read.Result.Complete ? "Complete resource representation read." :
                     "Exact text excerpt read from the current version; other regions are not observed. Read another bounded range as needed; each read rechecks the current source.";
-                return Return(ToolResult.Ok(message, JsonConvert.SerializeObject(projection),
+                return Return(ToolResult.OkRead(message, projection,
                     new[] { read.Result.Resource.Reference }), read.Evidence);
             }
             catch (ResourceRequestException error)

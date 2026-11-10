@@ -21,13 +21,13 @@ namespace RNAssistant.Office.Services
             int inlineTokenBudget,
             AppSettings settings)
         {
+            if (IsExactReadEvidence(command)) return null;
             var data = result == null ? null : result.Result.DataJson;
             if (session == null || string.IsNullOrWhiteSpace(data) ||
                 data.Length > ChatArtifactLimits.MaximumTextCharacters)
             {
                 return null;
             }
-            if (IsExactReadEvidence(command)) return null;
             // An interaction is retained by its call/result and activity CAS,
             // not turned into a generic artifact that replaces the question body.
             if (command?.ToolId == RNAssistant.Core.Tools.UserQuestionToolCatalog.AskToolId) return null;

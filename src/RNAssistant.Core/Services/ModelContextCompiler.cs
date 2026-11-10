@@ -491,6 +491,7 @@ namespace RNAssistant.Core.Services
                         {
                             var content = _payloads.ReadText(message.ResultPayload.ToBlobReference());
                             if (content == null) throw new System.IO.InvalidDataException("Exact payload is missing.");
+                            content = ToolResultPersistence.Expand(message, content);
                             message.Content = message.SyntheticResourceObservation
                                 ? ResourceObservationContent(message.Content, content) :
                                 atom.ContextRole == ContextNoteRole.Unspecified ? content :
@@ -783,7 +784,7 @@ namespace RNAssistant.Core.Services
             var evidence = atom.Evidence[0];
             var message = atom.Messages.Last();
             string hash;
-            if (message.SyntheticResourceObservation && message.ResultPayload != null)
+            if ((message.SyntheticResourceObservation || message.ResultBody?.Kind == ToolResultBodyKind.ResourceText) && message.ResultPayload != null)
                 hash = message.ResultPayload.Sha256;
             else
             {
@@ -1123,7 +1124,7 @@ namespace RNAssistant.Core.Services
             var json = ToolResultWire.WriteParsed(
                 wire.ToolCallId, wire.Name, projected, data, null);
             result.Content = json;
-            result.ResultPayload = null;
+            result.ResultPayload = null; result.ResultBody = null;
             result.ContextClaims.Clear();
             result.ResourceRefs = new List<ResourceRef>();
             result.ResourceEvidence = new List<ResourceEvidence>();
@@ -1356,7 +1357,7 @@ namespace RNAssistant.Core.Services
             var projected = new RNAssistant.Core.Tools.Contracts.ToolResult(wire.Result.Status, wire.Result.Message, data.ToString(Formatting.None));
             var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, projected, data);
             result.Content = json;
-            result.ResultPayload = null;
+            result.ResultPayload = null; result.ResultBody = null;
             result.ResourceRefs.Clear();
             result.ResourceEvidence.Clear();
             result.ContextClaims.Clear();
@@ -1441,7 +1442,7 @@ namespace RNAssistant.Core.Services
         {
             atom.Kind = "context-unavailable";
             var message = atom.Messages.Last();
-            message.ResultPayload = null;
+            message.ResultPayload = null; message.ResultBody = null;
             message.Content = "CONTEXT_UNAVAILABLE:\n" + JsonConvert.SerializeObject(new {
                 title = atom.ContextTitle, reason, next_action = "Ask the user to add the required typed context again." });
         }
@@ -1454,7 +1455,7 @@ namespace RNAssistant.Core.Services
                 ContextExclusionKind.UnavailableEvidence;
             var message = atom.Messages.Last();
             message.Attachments.Clear();
-            message.ResultPayload = null;
+            message.ResultPayload = null; message.ResultBody = null;
             message.ContextClaims.Clear();
             if (message.SyntheticResourceObservation) message.ResourceEvidence.Clear();
             ToolResultWireReadResult wire;

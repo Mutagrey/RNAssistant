@@ -144,8 +144,7 @@ namespace RNAssistant.Harness
                     "procedure lookup does not allocate the 16-MiB workspace source body");
                 AssertEqual(procedure, read.Result.Text, "streaming lookup preserves BOM-relative UTF-16 offsets and CRLF/Unicode");
                 AssertEqual((long)commentLength + 4, read.Evidence.Single().Coverage.Start.Value, "selected source starts after BOM/comment/CRLF");
-                var observed = new Dictionary<string, ResourceEvidence>();
-                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null, 1000);
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, false, null, 1000);
                 var execution = new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.ReadToolId);
                 var args = new Dictionary<string, object> { ["target"] = "large.bas", ["procedure"] = "value", ["procedureKind"] = "property-get" };
                 var result = handler.ExecuteAsync(new ToolHandlerContext(execution, args), CancellationToken.None).GetAwaiter().GetResult();
@@ -153,7 +152,7 @@ namespace RNAssistant.Harness
                 var metadata = result.ResourceEvidence.Single().ReadMetadata;
                 AssertTrue(metadata.RequestedProcedure == "value" && metadata.RequestedProcedureKind == "property-get" &&
                     metadata.RequestedCoverage == null && metadata.SelectionComplete == true && metadata.SourceComplete == false &&
-                    !observed["large.bas"].Complete, "workspace metadata and mutation observations remain partial");
+                    !result.ResourceEvidence.Single().Complete, "workspace metadata and mutation observations remain partial");
                 args["startChar"] = 0; args["charCount"] = 1;
                 var mixed = handler.ExecuteAsync(new ToolHandlerContext(execution, args), CancellationToken.None).GetAwaiter().GetResult();
                 AssertContains(mixed.Result.DataJson, "resource_procedure_invalid", "workspace rejects mixed selectors before reading");

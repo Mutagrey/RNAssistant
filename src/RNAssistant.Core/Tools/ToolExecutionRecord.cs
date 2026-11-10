@@ -271,10 +271,10 @@ namespace RNAssistant.Core.Tools
         {
             if (commit == null) return this;
             var committedResult = Result == null ? null : new RNAssistant.Core.Tools.Contracts.ToolResult(
-                Result.Status, Result.Message, Result.DataJson, appendResultResources ? Result.Resources.Concat(commit.HeadChanges
+                Result.Status, Result.Message, Result.SourceRead == null ? Result.DataJson : null, appendResultResources ? Result.Resources.Concat(commit.HeadChanges
                     .Where(change => change.After.Knowledge == RNAssistant.Core.Models.HeadKnowledge.Known)
                     .Select(change => change.After.Revision)).GroupBy(reference => reference.Uri + "@" + reference.Revision)
-                    .Select(group => group.First()) : Result.Resources);
+                    .Select(group => group.First()) : Result.Resources, Result.SourceRead);
             return new ToolExecutionRecord(Context, Outcome, CompletedUtc, Message, ModelResultJson,
                 MayHaveDispatched, PendingId, AwaitingUser, ToolStepsConsumed, DocumentRuntimeId, Evidence,
                 committedResult, PreparedStateJson, ConfirmationDataJson, ResourceEvidence, commit.Effect, commit.CommitId,

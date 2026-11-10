@@ -221,8 +221,7 @@ namespace RNAssistant.Harness
                 var workspace = new WorkspaceStore(paths).Open(System.IO.Path.Combine(paths.Root, "pdf-workspace"));
                 System.IO.File.WriteAllBytes(System.IO.Path.Combine(workspace.RootPath, "pages.pdf"), builder.Build());
                 var provider = new WorkspaceFileResourceProvider(new WorkspaceFileService(paths), workspace);
-                var observed = new Dictionary<string, ResourceEvidence>();
-                var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null, 1000);
+                var handler = new WorkspaceResourceHandler(provider, null, () => null, false, null, 1000);
                 var execution = new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.ReadToolId);
                 var read = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
@@ -246,7 +245,7 @@ namespace RNAssistant.Harness
                     "workspace page evidence retains the shared extractor profile");
                 AssertEqual(2, read.ResourceEvidence.Single().ReadMetadata.SourcePageCount.Value,
                     "workspace page evidence retains the original PDF page count");
-                AssertEqual(ResourceCoverageKinds.CharacterRange, observed["pages.pdf"].Coverage.Kind,
+                AssertEqual(ResourceCoverageKinds.CharacterRange, read.ResourceEvidence.Single().Coverage.Kind,
                     "workspace observation never claims whole PDF");
                 var automatic = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "pages.pdf", ["representation"] = "text",
@@ -299,7 +298,7 @@ namespace RNAssistant.Harness
                     System.Threading.CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual("resource_page_window_required", (string)JObject.Parse(oversizedRange.Result.DataJson)["code"],
                     "one oversized page requires the existing character window");
-                var find = new WorkspaceResourceHandler(provider, null, () => null, observed, true, null, 1000);
+                var find = new WorkspaceResourceHandler(provider, null, () => null, true, null, 1000);
                 var found = find.ExecuteAsync(new ToolHandlerContext(
                     new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.FindToolId),
                     new Dictionary<string, object> { ["query"] = "pages.pdf" }),
