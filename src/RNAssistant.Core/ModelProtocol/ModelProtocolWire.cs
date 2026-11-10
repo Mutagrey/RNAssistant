@@ -66,15 +66,20 @@ namespace RNAssistant.Core.ModelProtocol
             "Runtime assigns IDs only AFTER accepting your response. Never generate or copy id, tool_call_id, type or function fields into a NEW call object. " +
             "This restriction applies to the call object, not its arguments: keep fields required by the tool schema, for example core.tools.read uses arguments.id. ";
 
+        public const string BatchGuidance =
+            "Batch only independent local reads together, or independent agents.send calls together. " +
+            "Calls execute in order with a separate result each; never mix sends with reads or other tools. " +
+            "Return other calls alone and wait for their results. ";
+
         public const string ExecuteGuidance =
             "Every new execute decision must contain a nonempty tool_calls array inside its JSON in content. " +
             NewCallFieldsGuidance + "action/reason/message alone is invalid: a progress sentence is not a tool call. " +
-            "Do not send provider-native calls instead of this array. ";
+            "Do not send provider-native calls instead of this array. " + BatchGuidance;
 
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object directly, without a response wrapper. Order fields: action, reason, action-specific fields, message last if present. " +
             ReasonGuidance + "Choose execute when an authorized tool step remains. " + ExecuteGuidance +
-            "Runtime issues E1 only for an eligible terminal result; R1@v2 identifies an observed resource version. R references are not finish evidence; R is not a tool argument. Reference lookup is case-insensitive; targets and source text are unchanged. Batch only independent local reads; return other calls alone and wait for their results. " +
+            "Runtime issues E1 only for an eligible terminal result; R1@v2 identifies an observed resource version. R references are not finish evidence; R is not a tool argument. Reference lookup is case-insensitive; targets and source text are unchanged. " +
             ReflectionInstruction +
             "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has criterion (an original user requirement), evidence (issued eligible references such as E1 from terminal results of this chat delivered in this request), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
             CriterionGuidance +
@@ -92,7 +97,7 @@ namespace RNAssistant.Core.ModelProtocol
         public const string SchemaGuidance =
             "Return the supplied json_schema exactly: the response property contains the conversation-response-v8 decision. " +
             ReasonGuidance + CriterionGuidance +
-            "Choose execute when a useful authorized tool step remains; batch only independent local reads. " + ExecuteGuidance +
+            "Choose execute when a useful authorized tool step remains. " + ExecuteGuidance +
             SchemaReflectionInstruction +
             "Choose finish only to deliver the answer or honest outcomes now. Assess original user criteria; cite issued eligible evidence (E1, E2) from terminal results of this chat delivered in this request. Discovery/schema/skill loading can finish with empty evidence. " +
             "Model assessments do not prove effects; failed or unknown outcomes cannot be reported as verified changes. " +

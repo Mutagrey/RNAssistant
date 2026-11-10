@@ -69,6 +69,161 @@ namespace RNAssistant.Harness
         private static void AgentOfficeQueueProgress()
         { AgentOfficePeerProgress(true); }
 
+        private static void AgentSendBatchProtocol()
+        {
+            var tools = AgentCommunicationToolCatalog.GetTools().ToArray();
+            var read = tools.Single(t => t.Id == AgentCommunicationToolCatalog.List);
+            var send = tools.Single(t => t.Id == AgentCommunicationToolCatalog.Send);
+            var context = new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(tools));
+            var parser = new ConversationResponseParser();
+            var schema = ExpandResponseSchema(JObject.Parse(ConversationResponseSchemaBuilder.Build(tools, context)));
+            var message = V8Call(send.Id, new JObject { ["agent_id"] = "a-recipient", ["text"] = "Question",
+                ["expect_reply"] = true, ["reply_to"] = JValue.CreateNull() });
+            Action<bool, JObject[]> check = (expected, calls) => {
+                var raw = V8Envelope(calls);
+                foreach (var strict in new[] { false, true })
+                {
+                    var parsed = parser.Parse(strict ? SchemaTransport(JObject.Parse(raw)).ToString() : raw, tools, tools, context, strict);
+                    AssertEqual(expected, parsed.Success, "parser send batch admission: " + parsed.Error);
+                }
+                string error;
+                AssertEqual(expected, ToolSchemaSupport.ValidateArguments(SchemaTransport(JObject.Parse(raw)), schema, false, out error),
+                    "schema send batch admission: " + error);
+            };
+            foreach (var count in new[] { 1, 3, 32, 33 })
+                check(count <= 32, Enumerable.Range(0, count).Select(i => (JObject)message.DeepClone()).ToArray());
+            var list = V8Call(read.Id, new JObject { ["query"] = JValue.CreateNull(), ["group"] = JValue.CreateNull(), ["after_agent"] = JValue.CreateNull() });
+            foreach (var other in new[] { list, V8Call(AgentCommunicationToolCatalog.Wait, new JObject {
+                    ["timeout_seconds"] = 1, ["requests"] = JValue.CreateNull(), ["mode"] = JValue.CreateNull() }),
+                V8Call(AgentCommunicationToolCatalog.Cancel, new JObject { ["agent_id"] = "a-recipient" }) })
+            {
+                check(false, new[] { (JObject)message.DeepClone(), other });
+                check(false, new[] { other, (JObject)message.DeepClone() });
+            }
+            var batch = V8Envelope((JObject)message.DeepClone(), (JObject)message.DeepClone());
+            AssertEqual("invalid_batch", parser.Parse(batch, tools, tools, new ModelProtocolCallContext(new string[0])).ErrorCode,
+                "message batching requires local admission");
+            var ordinaryWrite = send.Clone();
+            ordinaryWrite.Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" });
+            AssertEqual("invalid_batch", parser.Parse(batch, new[] { ordinaryWrite }, new[] { ordinaryWrite }, context).ErrorCode,
+                "the send name cannot grant message batching without its exact policy");
+            AssertTrue(!send.Policy.Matches(ordinaryWrite.Policy) &&
+                JsonConvert.DeserializeObject<ToolPolicy>(JsonConvert.SerializeObject(send.Policy)).IndependentAgentMessage,
+                "batch authority participates in exact policy comparison and durable snapshots");
+        }
+
+        private static void AgentSendBatch()
+        {
+            foreach (var format in new[] { "json_object", "json_schema" }) WithTempExecutor((executor, adapter) => {
+                var store = new ChatStore(FixturePaths.Value);
+                var inbox = new ConversationInboxService(EventStore(store));
+                var coordination = new AgentCommunicationService();
+                var chats = new[] { AgentChat(store, "Sender"), AgentChat(store, "B"), AgentChat(store, "C"), AgentChat(store, "D") };
+                foreach (var chat in chats)
+                {
+                    chat.Mode = ChatModes.Plan; chat.MutationPolicy = MutationPolicy.Deny; store.Save(chat);
+                    RegisterAgent(coordination, AgentEndpoint(chat, inbox));
+                }
+                var source = chats[0];
+                executor.AgentCommunication = coordination; executor.AgentInbox = inbox;
+                var requests = 0;
+                LlmCompletionDelegate complete = (config, messages, options, stream, token) => {
+                    AssertTrue(++requests <= 2, "send batch requires no format-repair or per-message model calls");
+                    var response = requests == 1
+                        ? ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction, "Ask all peers", null,
+                            calls: chats.Skip(1).Select(chat => new ConversationToolCall { Name = AgentCommunicationToolCatalog.Send,
+                                Arguments = new JObject { ["agent_id"] = AgentChatAddress.IdFor(chat.Id),
+                                    ["text"] = "Question for " + chat.Title, ["expect_reply"] = true } })))
+                        : ScriptedVerifiedFinish(source, "Questions queued", "Sent", "Questions queued for peers",
+                            AgentCommunicationToolCatalog.Send, AgentCommunicationToolCatalog.Send, AgentCommunicationToolCatalog.Send);
+                    if (format == "json_schema") response = new JObject { ["response"] = JObject.Parse(response) }.ToString();
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
+                };
+                var settings = new AppSettings { AgentResponseMode = format, StreamResponses = false,
+                    SmartChatTitles = false, AutoCompressContext = false, AutoConfirmToolActions = false };
+                var runtime = new ConversationRunService(adapter, executor, ConversationStore(store), EventStore(store), complete, null, inbox: inbox);
+                var result = runtime.ExecuteAsync(ChatModes.Plan, "Ask three peers", source, NewContext(adapter), settings,
+                    executor.GetControllerTools().ToList(), null, null, null, null, CancellationToken.None).GetAwaiter().GetResult();
+                var saved = store.Load(source.Id);
+                AssertTrue(!result.WaitingForConfirmation && requests == 2, "three sends complete with one execute and one finish in " + format);
+                AssertEqual(RunLifecycle.Completed, saved.LastRun.KernelState.Summary.Lifecycle,
+                    "batched sends complete the run: " + JsonConvert.SerializeObject(saved.LastRun.KernelState.Summary) +
+                    string.Join("\n", saved.Messages.Where(m => m.ExecutionProgress != null).Select(m => m.Content)));
+                var accepted = saved.Messages.Where(m => m.ToolName == AgentCommunicationToolCatalog.Send && m.AcceptedCallOrigin != null).ToArray();
+                AssertEqual(3, accepted.Length, "all send positions persisted");
+                AssertEqual(1, accepted.Select(m => m.AcceptedCallOrigin.StepId).Distinct().Count(), "one accepted batch");
+                AssertEqual(3, accepted.Select(m => m.ToolCallId).Distinct().Count(), "separate durable call identities");
+                AssertEqual(3, saved.Messages.Count(m => m.ToolName == AgentCommunicationToolCatalog.Send && m.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok),
+                    "each send has its own verified terminal receipt");
+                foreach (var chat in chats.Skip(1))
+                {
+                    var item = inbox.Snapshot(store.Load(chat.Id)).Items.Single();
+                    AssertEqual("Question for " + chat.Title, item.Text, "recipient receives exactly its message");
+                }
+            });
+        }
+
+        private static void AgentWorkspaceSendBatch()
+        {
+            foreach (var format in new[] { "json_object", "json_schema" }) WithPluginPaths(paths => {
+                var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
+                var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+                using (var listener = new HttpListener())
+                using (var runtime = new WorkspaceConversationService(paths))
+                {
+                    var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "send-batch"));
+                    var chats = new[] { "Sender", "B", "C", "D" }.Select(title => runtime.CreateSession(workspace, title)).ToArray();
+                    var store = new ChatStore(paths);
+                    var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "batch-fixture",
+                        AgentResponseMode = format, StreamResponses = false, SmartChatTitles = false,
+                        AutoCompressContext = false, AutoConfirmToolActions = false };
+                    listener.Prefixes.Add(settings.BaseUrl + "/"); listener.Start();
+                    var senderRequests = 0; var peerRequests = 0;
+                    var server = Task.Run(async () => {
+                        for (var i = 0; i < 5; i++)
+                        {
+                            var request = await listener.GetContextAsync().ConfigureAwait(false);
+                            string body; using (var reader = new StreamReader(request.Request.InputStream))
+                                body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                            string response;
+                            if (body.Contains("BATCH_ROOT_INPUT"))
+                            {
+                                AssertTrue(++senderRequests <= 2, "Workspace sends require no format-repair or per-message request");
+                                response = senderRequests == 1
+                                    ? new ConversationResponse(ConversationResponse.ExecuteAction, "Ask all peers", null,
+                                        calls: chats.Skip(1).Select(chat => new ConversationToolCall { Name = AgentCommunicationToolCatalog.Send,
+                                            Arguments = new JObject { ["agent_id"] = AgentChatAddress.IdFor(chat.Id),
+                                                ["text"] = "Question for " + chat.Title } })).ToJson()
+                                    : ScriptedVerifiedFinish(store.Load(chats[0].Id), "Questions queued", "Sent", "Three requests queued",
+                                        AgentCommunicationToolCatalog.Send, AgentCommunicationToolCatalog.Send, AgentCommunicationToolCatalog.Send);
+                            }
+                            else
+                            {
+                                peerRequests++;
+                                response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Question received", "Noted",
+                                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                            }
+                            if (format == "json_schema") response = SchemaTransport(JObject.Parse(response)).ToString();
+                            await SteeringReply(request, response).ConfigureAwait(false);
+                        }
+                    });
+                    try
+                    {
+                        var run = runtime.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                            SessionId = chats[0].Id, RequestId = "batch-human", Message = "BATCH_ROOT_INPUT" }, settings, () => "");
+                        AssertTrue(run.Wait(15000) && runtime.RunsDrained.Wait(10000) && server.Wait(5000),
+                            "Workspace send batch drains: sender=" + senderRequests + " peers=" + peerRequests + " server=" + server.Exception);
+                        AssertEqual(2, senderRequests, "one batch and one finish in Workspace " + format);
+                        AssertEqual(3, peerRequests, "each recipient starts once");
+                        AssertEqual(RunLifecycle.Completed, store.Load(chats[0].Id).LastRun.KernelState.Summary.Lifecycle, "sender completes");
+                        foreach (var chat in chats.Skip(1))
+                            AssertEqual(1, store.Load(chat.Id).Messages.Count(m => m.Content == "Question for " + chat.Title), "each peer input persists once");
+                    }
+                    finally { listener.Stop(); runtime.CloseAsync().Wait(5000); try { server.Wait(1000); } catch (AggregateException) { } }
+                }
+            });
+        }
+
         private static void AgentOfficePeerProgress(bool explicitWait)
         {
             WithTempExecutor((executor, adapter) => {

@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
                 .Where(tool => tool != null &&
                     !string.IsNullOrWhiteSpace(tool.Id) &&
                     tool.Policy != null &&
-                    tool.Policy.IndependentLocalRead)
+                    (tool.Policy.IndependentLocalRead || tool.Policy.IndependentAgentMessage))
                 .Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
         }
 

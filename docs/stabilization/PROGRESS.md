@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Пакетная отправка агентам — 2026-11-10
+
+Убран `invalid_batch` для независимых `agents.send`: один ответ модели отправляет
+сообщения по порядку с отдельными receipts. Owner — Core ModelProtocol/AgentKernel;
+Office и Workspace используют одну policy. Восемь адресных host-neutral checks
+проходят: оба JSON-формата, реальные Inbox, Workspace HTTP, отмена, unknown/no-replay,
+запрет смешанных/обычных mutation batches и tool admission. Windows/Office и реальная
+модель остаются отдельным evidence; сборка для выпуска не создавалась.
+
 ## Мультиагенты: группы и дерево — In Review, 2026-11-05
 
 Этап 4a.1: agents.group v1, list v4 с paging/group, skill v10. Группы — optional links

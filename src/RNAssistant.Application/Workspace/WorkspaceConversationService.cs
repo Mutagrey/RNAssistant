@@ -1748,7 +1748,7 @@ namespace RNAssistant.Runtime
             private ModelRequestPreparation PrepareRequest(SkillRequestSurface surface)
             {
                 return new ModelRequestPreparation(_settings, surface.Tools,
-                    new ModelProtocolCallContext(surface.Tools.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id),
+                    new ModelProtocolCallContext(surface.Tools.Where(tool => tool.Policy.IndependentLocalRead || tool.Policy.IndependentAgentMessage).Select(tool => tool.Id),
                         reflectionEnabled: _session.LastRun.KernelState.Limits.MaxConsecutiveReflections > 0),
                     RuntimeContextPrompt.ProjectJsonSchemaMessages);
             }

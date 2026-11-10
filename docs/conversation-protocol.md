@@ -94,6 +94,13 @@ storage chat ID; порядок вкладок, rename и restart его не м
 `skills.agents.communication` описывает выбор адресата, контекст поручения, явный ответ
 и завершение обмена без повторных acknowledgements.
 `agents.send(agent_id, text, expect_reply?, reply_to?)` принимает текст в FIFO получателя.
+Независимые отправки разрешены одним `execute` (до 32 calls), без дополнительного
+обращения к модели между адресатами. В таком пакете только `agents.send`; runtime
+исполняет их по порядку с отдельными ID, prepared/terminal и receipt каждого сообщения.
+Пакет не атомарен: исход каждого вызова учитывается отдельно. Принятая или неизвестная
+доставка не повторяется автоматически; Stop/pause/входящие сообщения закрывают
+неотправленный остаток как NotDispatched. Зависимую от результата отправку нужно
+предложить следующим шагом.
 Runtime выдаёт message_id и пишет его в source Prepared до destination intake;
 queued receipt и входящее provenance сохраняют этот же ID. expect_reply=true
 фиксирует ожидаемый ответ. Для ответа reply_to указывает message_id уже включённого
@@ -1610,13 +1617,17 @@ After whole-response validation, `AgentKernel` converts ID-less `ToolCallDraft` 
 
 Each accepted message persists `ToolCallId` and immutable `AcceptedCallOrigin { StepId, ModelAttemptId, CallIndex }` in the same `session.commit` before tool entry. The entire batch is saved before its first call. The raw model response is never rewritten to inject IDs; `SourceModelAttemptId` identifies the actual accepted attempt after any repair. Optional protocol verdicts do not allocate IDs or replace this durable mapping. Results, native history and continuation reuse these IDs; replay does not generate them. Argument strings, including HTML, literal backslashes and date-shaped values, remain intact through the ID boundary.
 
-Only independent local reads may share an ordered batch. Every mutation is a singleton,
-including a managed mutation with satisfied confirmation policy. A response mixing a
-read and a mutation, or containing several mutations, is rejected before any call
-dispatches. The next model step receives the previous mutation result before it can
-propose another edit. Confirmation-required, external, opaque and unclassified calls
-also remain singleton. Effective batch authority comes from the current local policy
-snapshot, not tool-name guesses, serialized catalog flags or model claims.
+Independent local reads may share an ordered batch. Independent `agents.send` calls
+may share a separate ordered batch, authorized by the exact local policy's
+`IndependentAgentMessage` flag. This is a verified conversation write, never a read.
+All other mutations remain singleton, including managed document mutations with
+satisfied confirmation policy. Mixing reads, sends or other actions is rejected
+before any dispatch. The next model step receives the previous document mutation
+result before another edit. Confirmation-required, external, opaque and unclassified
+calls remain singleton. Effective batch authority comes from the current local policy
+snapshot, not tool-name guesses, serialized catalog flags or model claims. Schema,
+parser and kernel enforce the same two separate batch groups; each call retains its
+own ID, receipt, step charge and unknown-effect/replay guard.
 Batch-repair diagnostics name the tool requiring a standalone call and state that
 none of the rejected response's calls executed. For `common.skills_load`, they
 explicitly require one load before using the skill's tools; rejected batched loads

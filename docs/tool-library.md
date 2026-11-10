@@ -111,7 +111,7 @@ is a set. Runtime binds ID/revision under the existing metadata CAS; the model c
 supply revisions, URIs or storage ChatIds. These fields never enter model results.
 No peer wake, rights grant, cap reset, history copy or background LLM summarizer.
 The unified managed-write policy permits Plan; list/no-op reports VerifiedNoChange.
-Current schemas are in AgentCommunicationToolCatalog, shared guidance in skill v10.
+Current schemas are in AgentCommunicationToolCatalog, shared guidance in skill v11.
 
 Bindings: `conversation.agents.group.v1`, `conversation.agents.list.v4`, `conversation.agents.send.v5`,
 `conversation.agents.spawn.v3`, `conversation.agents.wait.v4`, `conversation.agents.cancel.v1`, `conversation.agents.pause.v1`, `conversation.agents.resume.v1`. Stale admissions must
@@ -121,6 +121,13 @@ approval. Recipients retain their own exact policies and the sender's recorded
 ceiling: Plan/Deny cannot be laundered, and automatic approval can only decrease.
 Incompatible busy-run inputs remain queued for a compatible next run; wait reports
 InputPending rather than including them under broader permissions.
+
+Independent `agents.send` calls may share one ordered execute batch (up to 32 calls),
+with no model round trip between recipients. Only sends may join that batch; reads,
+wait, spawn and control/group mutations cannot. Local `IndependentAgentMessage`
+policy authorizes batching without changing write/evidence classification. Each call
+keeps its own durable identity and receipt; queued proves intake, not peer completion.
+Partial delivery is possible; completed/unknown sends are never automatically replayed.
 
 Cancel requires only `agent_id` of one other same-scope participant. Runtime pins the
 Run and cancellation lifetime: Requested proves an accepted signal, Cancelled durable

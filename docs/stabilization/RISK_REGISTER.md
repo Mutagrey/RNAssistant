@@ -1,5 +1,13 @@
 # Stabilization risk register
 
+## Standalone codec runner — 2026-11-05
+
+Owner: Core ModelProtocol tests. `RNAssistant.ProtocolTests/Program.cs` вызывает
+`ModelProtocolWire.FormatRepairContent` без обязательного `rejectedContent` (CS7036).
+Обнаружено при проверке send batches; отдельный runner не квалифицирован и здесь
+не ремонтируется. Schema/parser/runtime проверяются соответствующими cases основного
+host-neutral Harness. Windows/Office evidence остаётся отдельным.
+
 ## Группы чатов — 2026-11-05
 
 Owner: ConversationGroupService/ChatStore.Groups, UI common NavigationTree.
@@ -230,7 +238,7 @@ limit + 2 (default 5). Новый kernel step получает новые бюд
 | `missing_finish_results`, `invalid_finish_results`, `invalid_assessment`, `duplicate_evidence` | Неправильный results/criterion/evidence/assessment |
 | `invalid_outcome`, `contradictory_outcome` | Нет допустимого outcome или он противоречит assessments |
 | `unknown_tool`, `schema_not_loaded` | Tool не callable. Нужно выбрать точный доступный tool либо сначала допустить schema/skill и дождаться следующего запроса |
-| `invalid_arguments`, `invalid_batch` | Arguments нарушают схему; пакет содержит не независимые локальные reads. Весь ответ отклоняется до исполнения |
+| `invalid_arguments`, `invalid_batch` | Arguments нарушают схему; пакет не состоит только из независимых локальных reads либо только из разрешённых `agents.send`. Весь ответ отклоняется до исполнения |
 | `invalid_tool_schema`, `invalid_context` | Ошибка runtime/schema/context. Неполный CallContext client останавливает до HTTP; обнаруженный parser дефект схемы сейчас попадает в обычный repair — модель не может починить frozen schema |
 | `reflection_disabled` | Особый терминальный отказ **без** корректирующего запроса |
 

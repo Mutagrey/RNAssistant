@@ -51,6 +51,8 @@ namespace RNAssistant.Core.Tools
         public bool RequiresConfirmation { get; private set; }
         [JsonProperty(Required = Required.Always)]
         public bool IndependentLocalRead { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public bool IndependentAgentMessage { get; private set; }
         [JsonProperty(Required = Required.Always)]
         public IReadOnlyList<string> AllowedModes { get; private set; }
         [JsonProperty(Required = Required.Always)]
@@ -66,13 +68,16 @@ namespace RNAssistant.Core.Tools
         [JsonConstructor]
         public ToolPolicy(ToolEffect effect, ToolVerification verification, bool requiresConfirmation,
             bool independentLocalRead, IEnumerable<string> allowedModes, int riskLevel = 0, bool executesCode = false,
-            EvidenceEligibility evidenceEligibility = EvidenceEligibility.Eligible)
+            EvidenceEligibility evidenceEligibility = EvidenceEligibility.Eligible, bool independentAgentMessage = false)
         {
             if (!Enum.IsDefined(typeof(ToolEffect), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
             if (!Enum.IsDefined(typeof(ToolVerification), verification)) throw new ArgumentOutOfRangeException(nameof(verification));
             if (riskLevel < 0) throw new ArgumentOutOfRangeException(nameof(riskLevel));
             if (independentLocalRead && (effect != ToolEffect.Read || requiresConfirmation))
                 throw new ArgumentException("Only an unconfirmed read can be an independent local read.");
+            if (independentAgentMessage && (effect != ToolEffect.Write || verification != ToolVerification.Tool ||
+                requiresConfirmation || executesCode))
+                throw new ArgumentException("An independent agent message requires a verified local write without confirmation or code execution.");
             var modes = (allowedModes ?? throw new ArgumentNullException(nameof(allowedModes))).ToArray();
             if (modes.Length == 0 || modes.Any(mode => mode != "agent" && mode != "plan" && mode != "chat"))
                 throw new ArgumentException("Explicit supported conversation modes are required.", nameof(allowedModes));
@@ -82,6 +87,7 @@ namespace RNAssistant.Core.Tools
             Verification = verification;
             RequiresConfirmation = requiresConfirmation;
             IndependentLocalRead = independentLocalRead;
+            IndependentAgentMessage = independentAgentMessage;
             AllowedModes = Array.AsReadOnly(modes.Distinct(StringComparer.Ordinal).OrderBy(mode => mode, StringComparer.Ordinal).ToArray());
             RiskLevel = riskLevel;
             ExecutesCode = executesCode;
@@ -100,6 +106,7 @@ namespace RNAssistant.Core.Tools
         {
             return other != null && Effect == other.Effect && Verification == other.Verification &&
                 RequiresConfirmation == other.RequiresConfirmation && IndependentLocalRead == other.IndependentLocalRead &&
+                IndependentAgentMessage == other.IndependentAgentMessage &&
                 EvidenceEligibility == other.EvidenceEligibility && RiskLevel == other.RiskLevel && ExecutesCode == other.ExecutesCode && ExecutionClass == other.ExecutionClass &&
                 AllowedModes.SequenceEqual(other.AllowedModes, StringComparer.Ordinal);
         }

@@ -13,7 +13,7 @@ namespace RNAssistant.Core.Services
             return new SkillDefinition {
                 Id = Id, Host = "Common", Name = "Agent communication",
                 Description = "Coordinate questions, delegated tasks and explicit replies with agents in other saved chats in the same document/workspace. Load for inter-agent collaboration.",
-                BuiltIn = true, Enabled = true, Version = "10.0.0",
+                BuiltIn = true, Enabled = true, Version = "11.0.0",
                 Package = new SkillPackageManifest { PackageId = Id, RequiredTools = new List<SkillToolDependency> {
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.List, ContractVersion = "4" },
                     new SkillToolDependency { Id = AgentCommunicationToolCatalog.Send, ContractVersion = "5" },
@@ -45,6 +45,7 @@ Use agents.list to see saved chats in your own document/workspace regardless of 
 
 ## Exchange a clear request and reply
 - Use agents.send with agent_id and text. Give a short subject, the specific question or delegated task, relevant context and the result you need. Include the necessary facts explicitly; another agent cannot read your chat history or attachments. Set expect_reply=true for a response you need and keep the returned message_id; use it in agents.wait requests, even if the reply may already have arrived. Different requests to the same peer have different IDs.
+- Send independent messages together in one execute tool_calls array containing only agents.send calls. Runtime sends them in order and returns a separate receipt/message_id for each. Do not wait for a model turn between these sends. If a message depends on an earlier result, send it in a later step. Never repeat a queued or unknown delivery; unstarted calls have explicit NotDispatched results.
 - A queued receipt proves acceptance, not completion. agents.send is an ordinary execute call and does not end the run. After asking or replying, continue remaining independent work in the same run. Do not call finish merely because you sent a message.
 - Incoming peer messages are delivered after the current model request or tool call finishes, before another action starts. An in-flight tool is never interrupted by a peer message. Unstarted calls may be superseded; use their recorded results and the new message to replan, without repeating completed actions.
 - If nothing useful can proceed without a reply, call agents.wait (default 5 seconds, maximum 10 per call). Omit requests for any next input. Otherwise supply your request message IDs and mode any (default) or all. RepliesReady means at least one/every requested peer replied; Matches records exact pairs. Already received/applied replies count without duplicate delivery. TimedOut may contain partial matches. Return wait alone. Waiting preserves this run and its absolute deadline; after restart the human must explicitly continue it. Do not resend an outstanding question. InputPending is not success of the wait condition: another peer needs attention, human input has priority or queued input needs a run with stricter permissions. Process that input or finish the current turn so it can proceed.

@@ -120,6 +120,7 @@ namespace RNAssistant.Core.Tools
                     ["verification"] = policy.Verification.ToString().ToLowerInvariant(),
                     ["requiresConfirmation"] = policy.RequiresConfirmation,
                     ["independentLocalRead"] = policy.IndependentLocalRead,
+                    ["independentAgentMessage"] = policy.IndependentAgentMessage,
                     ["allowedModes"] = new JArray(policy.AllowedModes),
                     ["executesCode"] = policy.ExecutesCode,
                     ["evidenceEligibility"] = policy.EvidenceEligibility.ToString(),
@@ -148,7 +149,7 @@ namespace RNAssistant.Core.Tools
                 source.Policy.RequiresConfirmation,
                 source.Policy.IndependentLocalRead,
                 source.Policy.AllowedModes,
-                source.Policy.RiskLevel, source.Policy.ExecutesCode, source.Policy.EvidenceEligibility);
+                source.Policy.RiskLevel, source.Policy.ExecutesCode, source.Policy.EvidenceEligibility, source.Policy.IndependentAgentMessage);
             var binding = new ToolBinding(
                 source.Binding.HandlerId,
                 source.Binding.EntryPoint,

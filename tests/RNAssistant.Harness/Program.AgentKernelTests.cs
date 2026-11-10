@@ -870,6 +870,20 @@ namespace RNAssistant.Harness
                 .Select(call => call.Id)), "accepted history retains the runtime correlation ids");
         }
 
+        private static async Task KernelAgentMessageBatchPreservesUnknown()
+        {
+            var uncertain = KernelCall(AgentCommunicationToolCatalog.Send, "{\"agent_id\":\"a-first\",\"text\":\"Question\"}");
+            var other = KernelCall(AgentCommunicationToolCatalog.Send, "{\"agent_id\":\"a-second\",\"text\":\"Question\"}");
+            var f = new KernelFixture(KernelResponse(uncertain, uncertain, other));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
+                f.Tools.Calls.Count == 1 ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok));
+            var result = await f.RunAsync(limits: new AgentRunLimits(1, 10));
+            AssertEqual(2, f.Tools.Calls.Count, "uncertain send is not repeated; independent recipient still gets its message");
+            var outcomes = f.Store.Events.Where(e => e.Kind == AgentRunEventKind.ToolCompleted).Select(e => e.Execution.Outcome);
+            AssertEqual("Unknown,NotDispatched,Ok", string.Join(",", outcomes), "separate results retain uncertainty and rejected retry");
+            AssertEqual(1, result.Summary.ToolCounts.WriteUnknown, "unknown delivery remains unknown");
+        }
+
         private static async Task KernelRejectsManagedMutationBatches()
         {
             foreach (var calls in new[]
@@ -879,7 +893,10 @@ namespace RNAssistant.Harness
                 new[] { KernelCall("write"), KernelCall("read") },
                 new[] { KernelCall("read"), KernelCall("external") },
                 new[] { KernelCall("read"), KernelCall("confirm") },
-                new[] { KernelCall("read"), KernelCall("unclassified") }
+                new[] { KernelCall("read"), KernelCall("unclassified") },
+                new[] { KernelCall("agents.send"), KernelCall("read") },
+                new[] { KernelCall("read"), KernelCall("agents.send") },
+                new[] { KernelCall("agents.send"), KernelCall("write") }
             })
             {
                 var f = new KernelFixture(KernelResponse(calls));
@@ -1088,9 +1105,10 @@ namespace RNAssistant.Harness
 
         private static async Task KernelCancelledBatchClosesAllCalls()
         {
+            foreach (var tool in new[] { "read", "agents.send" })
             using (var cancellation = new CancellationTokenSource())
             {
-                var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall("read")));
+                var f = new KernelFixture(KernelResponse(KernelCall(tool), KernelCall(tool)));
                 f.Tools.OnExecute = (context, token) =>
                 {
                     cancellation.Cancel();
@@ -1098,7 +1116,7 @@ namespace RNAssistant.Harness
                 };
                 var result = await f.RunAsync(cancellation.Token);
                 AssertEqual(1, f.Tools.Calls.Count, "rest of batch never dispatched");
-                AssertEqual("1,0,0,0,0", KernelCounts(result.Summary), "only actual result counted");
+                AssertEqual(tool == "read" ? "1,0,0,0,0" : "0,0,1,0,0", KernelCounts(result.Summary), "only actual result counted");
                 AssertEqual("call_1,call_2", string.Join(",", result.AcceptedMessages.Where(m => m.Kind == AgentMessageKind.ToolResult)
                     .Select(m => m.ToolCallId)), "all accepted calls closed in returned history");
                 AssertEqual(AgentRunEventKind.SummaryChanged, f.Store.Events.Last().Kind, "summary follows closure");
@@ -1537,6 +1555,8 @@ namespace RNAssistant.Harness
             {
                 ["read"] = new ToolPolicySnapshot("read", "r1", new ToolPolicy(
                     ToolEffect.Read, ToolVerification.None, false, true, new[] { "agent" })),
+                ["agents.send"] = new ToolPolicySnapshot("agents.send", "r1",
+                    AgentCommunicationToolCatalog.GetTools().Single(tool => tool.Id == AgentCommunicationToolCatalog.Send).Policy),
                 ["write"] = new ToolPolicySnapshot("write", "r1", new ToolPolicy(
                     ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" })),
                 ["external"] = new ToolPolicySnapshot("external", "r1", new ToolPolicy(

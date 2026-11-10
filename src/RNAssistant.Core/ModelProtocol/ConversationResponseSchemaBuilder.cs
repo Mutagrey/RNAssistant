@@ -17,6 +17,7 @@ namespace RNAssistant.Core.ModelProtocol
                 throw new System.ArgumentException("V8 schema requires a complete local sequential-batch context.", nameof(context));
             if (callableTools == null) throw new System.ArgumentNullException(nameof(callableTools));
             var reads = new JArray();
+            var messages = new JArray();
             var singleCalls = new JArray();
             foreach (var tool in callableTools.Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, System.StringComparer.Ordinal).Select(group => group.First()))
@@ -24,7 +25,8 @@ namespace RNAssistant.Core.ModelProtocol
                 JObject parameters;
                 string error;
                 if (!ToolSchemaSupport.TryParse(tool, out parameters, out error)) continue;
-                var options = context.AllowsSequentialBatch(tool) ? reads : singleCalls;
+                var options = !context.AllowsSequentialBatch(tool) ? singleCalls
+                    : tool.Policy?.IndependentAgentMessage == true ? messages : reads;
                 options.Add(ClosedObject(new JObject
                 {
                     ["name"] = new JObject { ["type"] = "string", ["const"] = tool.Id },
@@ -34,11 +36,13 @@ namespace RNAssistant.Core.ModelProtocol
             var branches = new JArray();
             var definitions = new JObject();
             // Disjoint catalogs keep each argument contract once, and exclude mixed batches.
-            if (reads.Count > 0 || singleCalls.Count > 0)
+            if (reads.Count > 0 || messages.Count > 0 || singleCalls.Count > 0)
             {
-                var calls = reads.Count > 0 && singleCalls.Count > 0
-                    ? new JObject { ["anyOf"] = new JArray(CallArray(singleCalls, 1), CallArray(reads, MaximumToolCalls)) }
-                    : reads.Count > 0 ? CallArray(reads, MaximumToolCalls) : CallArray(singleCalls, 1);
+                var arrays = new JArray();
+                if (singleCalls.Count > 0) arrays.Add(CallArray(singleCalls, 1));
+                if (reads.Count > 0) arrays.Add(CallArray(reads, MaximumToolCalls));
+                if (messages.Count > 0) arrays.Add(CallArray(messages, MaximumToolCalls));
+                var calls = arrays.Count == 1 ? (JObject)arrays[0] : new JObject { ["anyOf"] = arrays };
                 calls["description"] = ModelProtocolWire.ExecuteGuidance;
                 definitions["calls"] = calls;
                 AddOptionalMessageBranches(branches, ConversationResponse.ExecuteAction, "tool_calls",

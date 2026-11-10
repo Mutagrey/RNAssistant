@@ -30,6 +30,7 @@ namespace RNAssistant.Core.ModelProtocol
             // effects must not be in this set; call identity belongs to runtime.
             var calls = parsed.Response.ToolCalls;
             var validatedCalls = new List<ConversationToolCall>();
+            bool? messageBatch = null;
             foreach (var call in calls)
             {
                 ToolCatalogEntry tool;
@@ -44,11 +45,14 @@ namespace RNAssistant.Core.ModelProtocol
                             new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for tool_pack_state with admitted=true, then call the tool when offered in a later request. A completed schema read alone does not grant admission."
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }
-                if (calls.Count > 1 && !context.AllowsSequentialBatch(tool))
+                var isAgentMessage = tool.Policy?.IndependentAgentMessage == true;
+                if (calls.Count > 1 && (!context.AllowsSequentialBatch(tool) ||
+                    (messageBatch.HasValue && messageBatch.Value != isAgentMessage)))
                     return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidBatch,
-                        "Only independent local reads may be returned in a sequential batch. " +
-                        tool.Id + " must be returned one at a time. No calls from this response were executed and no skills were loaded. " +
-                        "Return one required standalone call, then wait for its result before the next call.");
+                        ModelProtocolWire.BatchGuidance + tool.Id + " cannot join this batch. " +
+                        "No calls from this response were executed and no skills were loaded. " +
+                        "Return required standalone calls one at a time, waiting for each result before the next call.");
+                messageBatch = isAgentMessage;
 
                 JObject schema;
                 string error;

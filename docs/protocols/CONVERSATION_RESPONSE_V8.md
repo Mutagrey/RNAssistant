@@ -58,7 +58,7 @@ still validates action-specific fields, evidence, batching and outcomes independ
 
 | Action | Required action-specific field | Meaning |
 | --- | --- | --- |
-| `execute` | Nonempty `tool_calls` | Propose one or more validated calls. Each call has exactly `name` and root object `arguments`; runtime assigns IDs. Only independent local reads may batch. |
+| `execute` | Nonempty `tool_calls` | Propose one or more validated calls. Each call has exactly `name` and root object `arguments`; runtime assigns IDs. Batch independent local reads together, or independent `agents.send` calls together; never mix these groups. |
 | `reflection` | Nonblank `decision` | Record a useful interpretation and request another bounded model step. No tool dispatch, result or new authority. |
 | `finish` | `outcome`, `results` array, nonblank `message` | Assert the final answer and assessed task outcome. No questions, approval requests, offers to continue or promises of future work. |
 

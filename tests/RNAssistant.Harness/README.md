@@ -1,5 +1,19 @@
 # RNAssistant Harness
 
+## Agent send batches — 2026-11-10
+
+`agent communication: send batch` checks schema/parser parity, 32-call bounds,
+local policy admission and three real Inbox deliveries from one model response in
+both JSON modes: Office service under Plan/Deny, Workspace via scripted HTTP with
+one recipient run per message. `kernel: agent message batch`,
+`kernel: mutations require separate responses` and `kernel: cancelled batch` cover
+unknown delivery without replay, ordinary/mixed mutation refusal and cancelled tails.
+Use the host-neutral Harness; no Office/VSTO validation is required on this host.
+These six cases plus `conversation v8: batches` and `tool pack: core and atomic`
+pass locally (eight total); this does not qualify Windows/Office or a real provider.
+The standalone ProtocolTests runner has a stale FormatRepairContent call (see Risk
+Register); it is not evidence for this slice.
+
 ## Named chat groups (4a.1, 2026-11-05)
 
 Filter `agent groups:` covers resource-authority CAS, duplicate memberships,

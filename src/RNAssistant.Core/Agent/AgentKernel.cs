@@ -508,8 +508,9 @@ namespace RNAssistant.Core.Agent
                     throw new InvalidOperationException("Exact execution policy is unavailable: " + call.Name);
                 policies.Add(policy);
             }
-            if (policies.Count > 1 && policies.Any(policy => policy == null || !policy.IndependentLocalRead))
-                throw new InvalidOperationException("Only independent local reads can be batched; every mutation and other call must be returned alone.");
+            if (policies.Count > 1 && !policies.All(policy => policy.IndependentLocalRead) &&
+                !policies.All(policy => policy.Policy?.IndependentAgentMessage == true))
+                throw new InvalidOperationException(ModelProtocolWire.BatchGuidance);
             return policies.ToArray();
         }
 
