@@ -16,12 +16,20 @@ namespace RNAssistant.Core.Tools
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchCandidate
     {
+        internal PatchCandidate CopyForContext() { return (PatchCandidate)MemberwiseClone(); }
         public long Line { get; set; }
         public string Context { get; set; }
     }
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchDiagnostic
     {
+        internal PatchDiagnostic CopyForContext()
+        {
+            var copy = (PatchDiagnostic)MemberwiseClone();
+            copy.Candidates = Candidates?.Select(item => item?.CopyForContext()).ToArray();
+            return copy;
+        }
+
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? Edit { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? TargetIndex { get; set; }
         public string Code { get; set; }
@@ -88,6 +96,7 @@ namespace RNAssistant.Core.Tools
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchPreview
     {
+        internal PatchPreview CopyForContext() { return (PatchPreview)MemberwiseClone(); }
         public string Before { get; set; }
         public string After { get; set; }
         public bool Truncated { get; set; }
@@ -118,6 +127,14 @@ namespace RNAssistant.Core.Tools
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchTargetResult
     {
+        internal PatchTargetResult CopyForContext()
+        {
+            var copy = (PatchTargetResult)MemberwiseClone();
+            copy.Diagnostic = Diagnostic?.CopyForContext();
+            copy.Preview = Preview?.Select(item => item?.CopyForContext()).ToList();
+            return copy;
+        }
+
         public string Target { get; set; }
         public ResourceTargetStatus Status { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string CurrentTarget { get; set; }
@@ -128,6 +145,14 @@ namespace RNAssistant.Core.Tools
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchBatchResult
     {
+        internal PatchBatchResult CopyForContext()
+        {
+            var copy = (PatchBatchResult)MemberwiseClone();
+            copy.Diagnostic = Diagnostic?.CopyForContext();
+            copy.Targets = Targets?.Select(item => item?.CopyForContext()).ToList();
+            return copy;
+        }
+
         public string Type { get; set; } = "rnassistant.patch";
         public string Phase { get; set; }
         public bool WriteStarted { get; set; }

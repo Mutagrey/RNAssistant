@@ -431,3 +431,33 @@ after-state/CAS ownership.
    P3 gates. No Office qualification or overall optimization completion.
 7. Skills, MIGRATION_MAP, PROGRESS, risk register and Harness guide updated;
    product patch `16.2.1-dev`, no temporary adapter or storage cutover.
+
+## P3c — typed model snapshot and context copies (2026-11-11)
+
+1. F11, snapshot portion: `ModelContextSnapshot` has its own model file, registered
+   in the old-style Core project. Typed copy methods belong to the metadata types;
+   compiler and wire provenance reuse them instead of JSON cloning.
+2. Constructor/getter/repair copies detach mutable messages, receipt parts, Arsenal,
+   agent addresses, claims, attachments, pending patch diagnostics/previews and
+   recursive resource targets. Immutable text/refs/evidence are reused without I/O.
+   Actual delivery and live guards keep their previous owners and semantics.
+3. Removed snapshot JSON strings and all three deserializing getters, compiler
+   message JSON clones, four wire-provenance roundtrips and the second repair copy.
+   Production C# delta: +216/-38, net +178; explicit typed copying replaces generic
+   serialization of the mutable graph. No new store, generic clone framework or cache.
+4. T02/T05/T06 subset: new snapshot isolation fixture plus eight targeted regressions
+   pass, including actual Office/Workspace adapters with fake/scripted sources,
+   exact read delivery, partial/whole guard behavior and request repair/budget.
+   macOS/net8/C#7.3, same isolated source-linked e8d719b6 + owned changes; not a full
+   current-HEAD or Windows/Office qualification. An independent Office HTTP fixture
+   in the shared working tree is excluded from this slice.
+5. Same six 18,000-character messages, 24 accesses (2,592,000 characters), snapshot
+   construction plus getter copies: allocations 18,810,768 → 204,704 bytes; one local
+   wall sample 15.04 → 0.56 ms. Input construction and serialization comparisons
+   are excluded. Neither path does payload I/O; CPU/physical I/O are not measured.
+6. Normal compiler selection still receives full-session inputs; runtime history,
+   progress/checkpoint delegates, working-set restore and repeated body-key work
+   remain P3/F10/F11 tasks. No overall bounded-context or P3 completion claim.
+7. Conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide updated; retained
+   source wording now matches the already-migrated request/live-guard behavior.
+   No temporary adapter; the new journal generation remains isolated until P7.

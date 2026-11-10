@@ -35,6 +35,7 @@ namespace RNAssistant.Core.Models
     // Runtime-authored provenance. A chat address is public; document authority is not.
     public sealed class AgentChatAddress
     {
+        internal AgentChatAddress CopyForContext() { return (AgentChatAddress)MemberwiseClone(); }
         public string Source { get; set; }
         public string WorkspaceId { get; set; }
         public string ChatId { get; set; }
@@ -64,6 +65,13 @@ namespace RNAssistant.Core.Models
 
     public sealed class AgentCommunicationContext
     {
+        internal AgentCommunicationContext CopyForContext()
+        {
+            var copy = (AgentCommunicationContext)MemberwiseClone();
+            copy.Sender = Sender?.CopyForContext(); copy.Root = Root?.CopyForContext();
+            return copy;
+        }
+
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string MessageId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

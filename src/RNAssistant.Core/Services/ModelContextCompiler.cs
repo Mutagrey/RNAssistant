@@ -67,7 +67,7 @@ namespace RNAssistant.Core.Services
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (notice == null) throw new ArgumentNullException(nameof(notice));
-            var messages = snapshot.Messages.Select(Clone).ToList();
+            var messages = snapshot.Messages.ToList();
             messages.Add(Clone(notice));
             return messages;
         }
@@ -1319,7 +1319,7 @@ namespace RNAssistant.Core.Services
                 Evidence = (message.ResourceEvidence ?? new List<ResourceEvidence>()).ToList() };
         }
         private static ChatMessage Clone(ChatMessage message)
-        { return JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(message)); }
+        { return message?.CopyForContext(); }
 
         private static bool IsFailedResult(ChatMessage message)
         {

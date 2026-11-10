@@ -670,7 +670,7 @@ namespace RNAssistant.Core.Llm
                 var source = sources[entries.Count];
                 var entry = source == null ? new ContextMessagePresentation { SourceMessageId = message.Id,
                     Role = message.Role, Presentation = ContextPresentationKind.Unknown, Reason = "Нет однозначных сведений сборщика для этого сообщения." }
-                    : JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(source));
+                    : source.CopyForContext();
                 entry.MessageIndex = entries.Count;
                 entry.EstimatedWireMessageTokens = null;
                 if (entry.Parts == null) entry.Parts = new List<ContextMessagePresentation>();
@@ -711,7 +711,7 @@ namespace RNAssistant.Core.Llm
                             .Where(item => item.SourceMessageId == id && item.MessageIndex.HasValue &&
                                 item.Presentation != ContextPresentationKind.Excluded).ToArray();
                         if (candidates.Length != 1) continue;
-                        var part = JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(candidates[0]));
+                        var part = candidates[0].CopyForContext();
                         part.MessageIndex = entries.Count;
                         part.Presentation = part.EvidenceReference != null &&
                             message.ProjectedEvidenceReferences?.Contains(part.EvidenceReference.Alias) == true
@@ -730,8 +730,7 @@ namespace RNAssistant.Core.Llm
                         foreach (var part in wireParts[entries.Count])
                         {
                             if (part == null) continue;
-                            var captured = JsonConvert.DeserializeObject<ContextMessagePresentation>(
-                                JsonConvert.SerializeObject(part));
+                            var captured = part.CopyForContext();
                             if (captured.Presentation != ContextPresentationKind.Excluded &&
                                 !WireContainsAttachmentPart(wire, message, captured))
                             {
@@ -781,7 +780,7 @@ namespace RNAssistant.Core.Llm
             foreach (var omitted in (receipt?.Messages ?? new List<ContextMessagePresentation>())
                 .Where(m => m != null && !m.MessageIndex.HasValue))
             {
-                var entry = JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(omitted));
+                var entry = omitted.CopyForContext();
                 entry.EstimatedWireMessageTokens = null;
                 entries.Add(entry);
             }

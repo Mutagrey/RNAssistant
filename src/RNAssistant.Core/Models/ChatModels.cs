@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Models
@@ -105,6 +106,29 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatMessage
     {
+        // Context owns mutable presentation records; bodies and typed immutable
+        // evidence remain shared values. Wire batching provenance is request-local.
+        internal ChatMessage CopyForContext()
+        {
+            var copy = (ChatMessage)MemberwiseClone();
+            copy.ProjectedSourceMessageIds = null;
+            copy.ProjectedEvidenceReferences = null;
+            copy.AgentCommunication = AgentCommunication?.CopyForContext();
+            copy.RunViewState = RunViewState?.CopyForContext();
+            copy.ResourceModelReferences = ResourceModelReferences?.ToList();
+            copy.ToolCalls = ToolCalls?.Select(call => call == null ? null : new RNAssistant.Core.Llm.LlmToolCall {
+                Id = call.Id, Type = call.Type, Name = call.Name, ArgumentsJson = call.ArgumentsJson }).ToList();
+            copy.Attachments = Attachments?.Select(item => item?.CopyForContext()).ToList();
+            copy.AttachmentAnalysis = AttachmentAnalysis?.CopyForContext();
+            copy.ResourceRefs = ResourceRefs?.ToList();
+            copy.ResourceEvidence = ResourceEvidence?.ToList();
+            copy.ContextClaims = ContextClaims?.Select(item => item?.CopyForContext()).ToList();
+            copy.ResourceEffect = ResourceEffect?.CopyForContext();
+            copy.CompletedOperation = CompletedOperation?.CopyForContext();
+            copy.Activity = Activity?.CopyForContext();
+            return copy;
+        }
+
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public AgentCommunicationContext AgentCommunication { get; set; }
         // Request-local provenance for grouped JSON exchanges; never durable state.
@@ -197,6 +221,13 @@ namespace RNAssistant.Core.Models
 
     public sealed class AttachmentAnalysisContext
     {
+        internal AttachmentAnalysisContext CopyForContext()
+        {
+            var copy = (AttachmentAnalysisContext)MemberwiseClone();
+            copy.Models = Models?.ToList(); copy.AttachmentIds = AttachmentIds?.ToList();
+            return copy;
+        }
+
         public const int CurrentPromptVersion = 1;
 
         public int PromptVersion { get; set; }
@@ -217,6 +248,13 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatAttachment
     {
+        internal ChatAttachment CopyForContext()
+        {
+            var copy = (ChatAttachment)MemberwiseClone();
+            copy.PageTextLengths = PageTextLengths?.ToList();
+            return copy;
+        }
+
         public string Id { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string DraftChatId { get; set; }
@@ -256,6 +294,7 @@ namespace RNAssistant.Core.Models
     // Historical read activities retain this field for replay.
     public sealed class ResourceReadSummary
     {
+        internal ResourceReadSummary CopyForContext() { return (ResourceReadSummary)MemberwiseClone(); }
         public string Representation { get; set; }
         public int? ReturnedCharacters { get; set; }
         public int? ReturnedRows { get; set; }
@@ -267,6 +306,7 @@ namespace RNAssistant.Core.Models
     // execution-effect evidence or proof that a body reached the model.
     public sealed class ToolResultSummary
     {
+        internal ToolResultSummary CopyForContext() { return (ToolResultSummary)MemberwiseClone(); }
         public string Kind { get; set; }
         public string Representation { get; set; }
         public int? ReturnedItems { get; set; }
@@ -280,6 +320,16 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatActivity
     {
+        internal ChatActivity CopyForContext(int depth = 0)
+        {
+            if (depth > 64) throw new InvalidOperationException("Context activity nesting exceeds the supported depth.");
+            var copy = (ChatActivity)MemberwiseClone();
+            copy.ResultSummary = ResultSummary?.CopyForContext();
+            copy.ReadSummary = ReadSummary?.CopyForContext();
+            copy.Children = Children?.Select(item => item?.CopyForContext(depth + 1)).ToList();
+            return copy;
+        }
+
         public string RunId { get; set; }
         public int? Sequence { get; set; }
         public string StepId { get; set; }

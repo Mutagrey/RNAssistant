@@ -991,15 +991,23 @@ bounded exclusion summary in `LastContextReceipt`; the mandatory dispatch manife
 preserves the counters. Excluded details/counters never grant delivery authority.
 This does not yet remove the full-session inputs to working-set recovery.
 
+`ModelContextSnapshot` freezes typed message/receipt copies without a JSON roundtrip.
+Getters detach mutable metadata, including nested agent provenance, claims,
+attachments, confirmation previews and target outcomes; immutable text and exact
+evidence remain shared values. Compiler and final wire provenance use the same typed
+copy owners. Repair receives one detached copy and cannot alter the frozen source.
+This is request isolation, not a durable store, hydration or new delivery authority.
+
 The frozen `ModelContextSnapshot.DeliveredObservations` is the single runtime-only
 delivery projection consumed by Office and CLI. It includes current resource-read
 and synthetic source evidence only after materialization, projection and final
 budget selection. Native result roles and archived assistant views confer the
 same delivery evidence; diagnostics, operation receipts and omitted/stale bodies
-confer none. CLI refreshes retained source authority across user turns before
-compilation, so unchanged prior reads can remain in context and external changes
-invalidate their bytes. Its write guards still retain only previously admitted same-run file observations
-with exact coverage. Whole-file operations require whole-text delivery; workspace
+confer none. Request preparation uses published authority and retained immutable
+observations without recapturing all historically read live sources. Explicit reads
+and mutation preconditions validate the addressed live target. Workspace guards use
+exact observations actually delivered in the current request; whole and partial
+observations of one revision can coexist. Whole-file operations require whole-text delivery; workspace
 patch accepts structured substring edits inside delivered coverage; every used
 context/anchor line must also be delivered. Start/end insertion requires complete source. Verified patch
 after-source retains the same bounded coverage, including through approval/restart.

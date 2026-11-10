@@ -172,6 +172,15 @@ namespace RNAssistant.Core.Models
 
     public sealed class StructuredContextClaim
     {
+        internal StructuredContextClaim CopyForContext()
+        {
+            var copy = (StructuredContextClaim)MemberwiseClone();
+            copy.SourceRoles = SourceRoles?.ToList(); copy.SourceMessageIds = SourceMessageIds?.ToList();
+            copy.Evidence = Evidence?.ToList();
+            copy.SourceSnapshots = SourceSnapshots?.Select(item => item?.CopyForContext()).ToList();
+            return copy;
+        }
+
         public string ClaimId { get; set; }
         public string Kind { get; set; }
         public List<string> SourceRoles { get; set; } = new List<string>();
@@ -200,6 +209,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextClaimSource
     {
+        internal ContextClaimSource CopyForContext() { return (ContextClaimSource)MemberwiseClone(); }
         public string MessageId { get; set; }
         public string Role { get; set; }
         public string Text { get; set; }

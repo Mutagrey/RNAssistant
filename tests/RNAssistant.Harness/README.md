@@ -25,6 +25,12 @@ copy isolation and catalog getter allocations; selected-skill/dependency/dispatc
 regressions cover the common consumers. The old composition role expectation is
 recorded separately in the storage qualification risks.
 
+`storage optimization: typed model snapshot isolation` checks constructor/getter/
+repair isolation through nested mutable metadata and measures repeated snapshot
+access. Relevant regressions: request snapshot/budget, compiler presentation, exact
+read cost, saved wire composition, active/archived selection, final read retention,
+skill exact dispatch and the scripted Office/Workspace retained-result parity case.
+
 
 ## Optional assignments (4b, 2026-11-10)
 

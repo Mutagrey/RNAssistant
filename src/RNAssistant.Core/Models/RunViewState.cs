@@ -42,6 +42,14 @@ namespace RNAssistant.Core.Models
 
     public sealed class PendingConfirmationViewState
     {
+        internal PendingConfirmationViewState CopyForContext()
+        {
+            if (PatchPreview == null) return this;
+            var copy = (PendingConfirmationViewState)MemberwiseClone();
+            copy.PatchPreview = PatchPreview.CopyForContext();
+            return copy;
+        }
+
         public string PendingId { get; private set; }
         public string ToolCallId { get; private set; }
         public string ToolName { get; private set; }
@@ -88,6 +96,14 @@ namespace RNAssistant.Core.Models
     // and effect health are never inferred from its text or model-authored status.
     public sealed class RunViewState
     {
+        internal RunViewState CopyForContext()
+        {
+            if (PendingConfirmation == null) return this;
+            var copy = (RunViewState)MemberwiseClone();
+            copy.PendingConfirmation = PendingConfirmation.CopyForContext();
+            return copy;
+        }
+
         public string RunId { get; private set; }
         public string TurnId { get; private set; }
         public string Narrative { get; private set; }

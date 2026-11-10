@@ -388,6 +388,13 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceTargetEffect
     {
+        internal ResourceTargetEffect CopyForContext(int depth)
+        {
+            var copy = (ResourceTargetEffect)MemberwiseClone();
+            copy.Effect = Effect?.CopyForContext(depth);
+            return copy;
+        }
+
         public string Target { get; set; }
         public ResourceTargetStatus Status { get; set; }
         public bool WriteStarted { get; set; }
@@ -398,6 +405,15 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceEffect
     {
+        internal ResourceEffect CopyForContext(int depth = 0)
+        {
+            if (Targets == null) return this;
+            if (depth > 64) throw new InvalidOperationException("Context effect nesting exceeds the supported depth.");
+            var copy = (ResourceEffect)MemberwiseClone();
+            copy.Targets = Array.AsReadOnly(Targets.Select(item => item?.CopyForContext(depth + 1)).ToArray());
+            return copy;
+        }
+
         [JsonProperty("effectId", Required = Required.Always)]
         public string EffectId { get; private set; }
         [JsonProperty("operation", Required = Required.Always)]

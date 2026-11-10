@@ -14,7 +14,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 это открытая [задача release tooling](BACKLOG.md#release-script-version-range--2026-11-11),
 которая не мешает обычным bumps. Release execution/Windows evidence остаётся открытым.
 
-## Оптимизация хранения/контекста — §8.3, P2, P4a, P5/P6, 2026-11-11
+## Оптимизация хранения/контекста — §8.3, P2, P3a–c, P4a, P5/P6, 2026-11-11
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace
@@ -59,6 +59,12 @@ P3b: удалены JSON getters каталога skills; типизирован
 revision/generation и изоляцию запросов. На 16 skills / 24 чтениях выделения —
 191 КБ вместо 15,8 МБ. Новый check и три skill regressions проходят; ожидание старой
 роли в composition fixture воспроизводится до изменения. Полный P3 остаётся открыт.
+
+P3c: `ModelContextSnapshot`, compiler clones и wire provenance используют типизированные
+копии вместо JSON; repair не копирует уже отделённые сообщения повторно. В fixture
+6 × 18 000 символов / 24 чтения выделения — 205 КБ вместо 18,8 МБ. Новый isolation
+check и восемь адресных регрессий проходят, включая scripted Office/Workspace.
+Полная history collection, progress snapshots и working-set restart остаются открыты.
 
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10

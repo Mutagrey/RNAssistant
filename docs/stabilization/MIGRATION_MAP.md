@@ -50,12 +50,18 @@ work and P3 aggregate session paths are open.
 
 P3a removes per-source excluded receipt materialization and nested atom searches
 from the shared compiler. Office/Workspace and dispatch manifests use the bounded
-sample/reason counts directly, without an adapter. Full-session compiler inputs,
-working-set restoration and snapshot JSON getters remain for subsequent P3 slices.
+sample/reason counts directly, without an adapter. Full-session compiler inputs and
+working-set restoration remain for subsequent P3 slices.
 
 P3b replaces skill-catalog JSON storage/getters with typed defensive copies;
 `SkillCatalogSnapshot` consumers in both hosts use that owner directly. No adapter
-or additional cache. `ModelContextSnapshot` message/receipt JSON getters remain open.
+or additional cache.
+
+P3c extracts `ModelContextSnapshot` into its own model file and replaces all three
+JSON-backed getters with typed copies/read-only immutable evidence. Compiler clones,
+repair and wire provenance use the same copy owners; nested mutable metadata stays
+detached. Removed snapshot JSON storage and the redundant repair copy; no adapter.
+Full-session progress/checkpoint delegates and aggregate storage remain open.
 
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 

@@ -12,6 +12,13 @@ namespace RNAssistant.Core.Services
 {
     public sealed class ArsenalSkill
     {
+        internal ArsenalSkill CopyForContext()
+        {
+            var copy = (ArsenalSkill)MemberwiseClone();
+            copy.Tools = Tools?.ToList(); copy.References = References?.ToList();
+            return copy;
+        }
+
         public string Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
@@ -25,6 +32,13 @@ namespace RNAssistant.Core.Services
 
     public sealed class ArsenalTool
     {
+        internal ArsenalTool CopyForContext()
+        {
+            var copy = (ArsenalTool)MemberwiseClone();
+            copy.Skills = Skills?.ToList();
+            return copy;
+        }
+
         public string Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
@@ -37,6 +51,15 @@ namespace RNAssistant.Core.Services
     // Metadata only. Saved with the existing context receipt; never an authority store.
     public sealed class AgentArsenal
     {
+        internal AgentArsenal CopyForContext()
+        {
+            var copy = (AgentArsenal)MemberwiseClone();
+            copy.Selected = Selected?.Select(item => item?.CopyForContext()).ToList();
+            copy.Available = Available?.Select(item => item?.CopyForContext()).ToList();
+            copy.Tools = Tools?.Select(item => item?.CopyForContext()).ToList();
+            return copy;
+        }
+
         public string RunId { get; set; }
         public string StepId { get; set; }
         public string ToolFingerprint { get; set; }

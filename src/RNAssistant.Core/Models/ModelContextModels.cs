@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Services;
@@ -16,7 +15,7 @@ namespace RNAssistant.Core.Models
         public IReadOnlyList<SkillDefinition> Skills
         { get { return Array.AsReadOnly(_skills.Select(Copy).ToArray()); } }
         public IReadOnlyList<ArsenalSkill> Metadata
-        { get { return Array.AsReadOnly(_metadata.Select(Copy).ToArray()); } }
+        { get { return Array.AsReadOnly(_metadata.Select(item => item.CopyForContext()).ToArray()); } }
         public string Revision(string id)
         { string revision; return id != null && _revisions.TryGetValue(id, out revision) ? revision : null; }
         public SkillCatalogSnapshot(IEnumerable<SkillDefinition> skills, string publicationRevision = null)
@@ -50,10 +49,6 @@ namespace RNAssistant.Core.Models
         { return value == null ? null : new SkillToolDependency { Id = value.Id, ContractVersion = value.ContractVersion,
             Revision = value.Revision, Fallback = value.Fallback }; }
 
-        private static ArsenalSkill Copy(ArsenalSkill value)
-        { return new ArsenalSkill { Id = value.Id, Name = value.Name, Description = value.Description, Host = value.Host,
-            Revision = value.Revision, Status = value.Status, Reason = value.Reason,
-            Tools = value.Tools?.ToList(), References = value.References?.ToList() }; }
     }
 
     // Entries are the exact published heads, not draft bodies discovered in storage.
@@ -104,6 +99,7 @@ namespace RNAssistant.Core.Models
     // describes attribution to this exact message, not delivery elsewhere.
     public sealed class ContextEvidenceLink
     {
+        internal ContextEvidenceLink CopyForContext() { return (ContextEvidenceLink)MemberwiseClone(); }
         public string EvidenceId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public ResourceAuthorityScopeId ScopeId { get; set; }
@@ -121,6 +117,15 @@ namespace RNAssistant.Core.Models
     // Diagnostic provenance only; never serialized into provider messages.
     public sealed class ContextMessagePresentation
     {
+        internal ContextMessagePresentation CopyForContext(int depth = 0)
+        {
+            if (depth > 64) throw new InvalidOperationException("Context presentation nesting exceeds the supported depth.");
+            var copy = (ContextMessagePresentation)MemberwiseClone();
+            copy.EvidenceLinks = EvidenceLinks?.Select(item => item?.CopyForContext()).ToList();
+            copy.Parts = Parts?.Select(item => item?.CopyForContext(depth + 1)).ToList();
+            return copy;
+        }
+
         // A wire batch has one position but several canonical operations. Consumers
         // of source identities use its parts; attachment parts keep their old owner.
         public static IEnumerable<ContextMessagePresentation> Sources(IEnumerable<ContextMessagePresentation> entries)
@@ -178,6 +183,17 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextReceipt
     {
+        internal ContextReceipt CopyForContext()
+        {
+            var copy = (ContextReceipt)MemberwiseClone();
+            copy.Arsenal = Arsenal?.CopyForContext();
+            copy.Messages = Messages?.Select(item => item?.CopyForContext()).ToList();
+            copy.OmittedContext = OmittedContext == null ? null : new Dictionary<string, int>(OmittedContext);
+            copy.ResourceGenerations = ResourceGenerations == null ? null : new Dictionary<string, long>(ResourceGenerations);
+            copy.AtomCounts = AtomCounts == null ? null : new Dictionary<string, int>(AtomCounts);
+            return copy;
+        }
+
         internal const int MaximumExcludedDetails = 16;
         public RNAssistant.Core.Services.AgentArsenal Arsenal { get; set; }
         public List<ContextMessagePresentation> Messages { get; set; } = new List<ContextMessagePresentation>();
@@ -209,6 +225,13 @@ namespace RNAssistant.Core.Models
     // projection is reconstructed from terminal events, never inferred by an LLM.
     public sealed class CompletedToolOperation
     {
+        internal CompletedToolOperation CopyForContext()
+        {
+            var copy = (CompletedToolOperation)MemberwiseClone();
+            copy.Targets = Targets?.ToList();
+            return copy;
+        }
+
         public string ToolCallId { get; set; }
         public string ToolName { get; set; }
         public RNAssistant.Core.Tools.Contracts.ToolResultStatus Status { get; set; }
@@ -237,29 +260,4 @@ namespace RNAssistant.Core.Models
         public string NextAction { get; set; }
     }
 
-    public sealed class ModelContextSnapshot
-    {
-        private readonly string _messages;
-        private readonly string _receipt;
-        private readonly string _deliveredObservations;
-        public string Id { get; private set; }
-        public ModelAuthoritySnapshot Authority { get; private set; }
-        // Consumers get detached values: repairing a request cannot change its frozen source.
-        public IReadOnlyList<ChatMessage> Messages
-        { get { return Array.AsReadOnly(JsonConvert.DeserializeObject<ChatMessage[]>(_messages)); } }
-        // Current observations whose bodies survived materialization and the final budget.
-        // Presentation (native result or synthetic archive view) does not grant authority.
-        public IReadOnlyList<ResourceEvidence> DeliveredObservations
-        { get { return Array.AsReadOnly(JsonConvert.DeserializeObject<ResourceEvidence[]>(_deliveredObservations)); } }
-        public ContextReceipt Receipt { get { return JsonConvert.DeserializeObject<ContextReceipt>(_receipt); } }
-        public ModelContextSnapshot(ModelAuthoritySnapshot authority, IEnumerable<ChatMessage> messages,
-            ContextReceipt receipt, IEnumerable<ResourceEvidence> deliveredObservations)
-        {
-            Id = receipt.SnapshotId;
-            Authority = authority;
-            _messages = JsonConvert.SerializeObject(messages);
-            _receipt = JsonConvert.SerializeObject(receipt);
-            _deliveredObservations = JsonConvert.SerializeObject(deliveredObservations);
-        }
-    }
 }
