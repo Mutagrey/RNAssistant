@@ -74,7 +74,7 @@ an irreparable obstacle without reporting success or replaying a tool.
 
 ## Host-neutral checks
 
-- `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked production build
+- Временный smoke runner (позже удалён): source-linked production build
   and 26 focused checks plus 57 migrated `AgentKernel` and 14 context-continuity
   Harness fixture cases,
   including format-7 read-only policy,

@@ -325,6 +325,7 @@ namespace RNAssistant.Harness
                 Test("kernel: opaque unknown can finish and needs confirmation to repeat", KernelOpaqueUnknownFinishesWithoutImpossibleInspection),
                 Test("kernel: opaque normal return allows new calls with unknown effects", KernelOpaqueNormalReturnAllowsNewCalls),
                 Test("agent: Excel unknown continues through inspection", AgentExcelUnknownContinuesThroughInspection),
+                Test("agent: Office HTTP premature finish keeps partial outcome", OfficeHttpPrematureFinishKeepsPartialOutcome),
                 Test("kernel: narrative cannot claim effects", KernelNarrativeCannotClaimEffects),
                 Test("kernel: completion rejection continues within the run", KernelCompletionRejectionContinues),
                 Test("kernel: completion rejection stops at existing boundaries", KernelCompletionRejectionStops),

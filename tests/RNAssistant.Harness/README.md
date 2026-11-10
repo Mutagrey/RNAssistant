@@ -1527,9 +1527,10 @@ are not the new contract.
 `mode_questions_smoke.py` verifies Plan/Agent typed questions across processes.
 `conversation_v8_finish_smoke.py` checks rejection of an empty v8 finish after
 a verified CLI write, feedback to the model and continuation without write replay.
-`sh tests/RNAssistant.V8KernelSmoke/run.sh` also checks the production Office
-conversation service over controlled HTTP with fake Excel, including a rejected
-premature finish and a replayed partial outcome. It does not run Office/COM.
+`agent: Office HTTP premature finish keeps partial outcome` checks the production
+Office conversation service over controlled HTTP with fake Excel: rejected empty
+finish results, partial-finish recheck, no repeated sheet write and replayed outcome.
+It does not run Office/COM.
 `dotnet run --project demo/RNAssistant.MockDemo -- --unified-agent-test` exercises
 the actual controller with a fake host, including permission snapshot cloning,
 approval after settings changes/restart, AutoConfirm and planning wrappers.
@@ -1991,23 +1992,18 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
 Conversation v8 has narrow [protocol checks](../RNAssistant.ProtocolTests/README.md)
-and [source-linked kernel/prompt checks](../RNAssistant.V8KernelSmoke/run.sh).
-The latter builds host-neutral Core, Office and Workspace sources and runs the
-migrated `AgentKernel` and context-continuity fixtures while other Harness sources
-still use v7. It also runs the fake-Excel unknown-effect fixture in both response
-modes and result roles. The full Harness now builds; targeted Plan, optional
-schema, Markdown/HTML, VBA, Excel-report, approval and replay cases also pass.
-The controlled
+and integrated Harness cases under `kernel:`, `context continuity:`, `conversation v8:`,
+`v8 recovery:` and `agent: Office HTTP premature finish keeps partial outcome`.
+The temporary phase-2 smoke runner was retired after its fixture checks moved into
+Harness. The controlled
 `python3 -B tests/cli/response_mode_smoke.py` exercises v8 through actual
 CLI/HTTP requests. `interrupted_run_smoke.py`, `compaction_resume_smoke.py`
 and `run_control_smoke.py` cover process loss, compaction, confirmation and
 cancellation/continuation; `mode_questions_smoke.py` covers typed questions
-and answer/restart on the candidate branch. The full Harness still contains v7
-wire bodies and assertions, so its complete suite is not yet green; these
-focused checks do not replace its integration coverage at cutover.
+and answer/restart on the candidate branch.
 
 The phase-0 v7 red audit route has been retired after its failure was covered
-by the v8 fake-Excel HTTP scenario in `RNAssistant.V8KernelSmoke/run.sh`.
+by `agent: Office HTTP premature finish keeps partial outcome`.
 The original request/response bodies, decoded event export and UI projection
 remain in [Conversation v8 audit](../../docs/stabilization/conversation-v8/AUDIT.md).
 The green scenario checks rejection, continuation and replay without repeating

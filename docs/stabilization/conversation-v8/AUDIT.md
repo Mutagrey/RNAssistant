@@ -19,7 +19,7 @@ Workspace. База: `523ec66e2c3a6cf2b1829c51b669f3623e443523`.
 [PROGRESS](../PROGRESS.md), риск — в [RISK_REGISTER](../RISK_REGISTER.md#premature-terminal-narration--2026-10-13).
 
 Статус в кандидате v8: исходный красный route и его v7-файл удалены после
-замены [зелёной fake-Excel HTTP-проверкой](../../../tests/RNAssistant.V8KernelSmoke/run.sh).
+замены [зелёной fake-Excel HTTP-проверкой](../../../tests/RNAssistant.Harness/Program.OfficeHttpFinishTests.cs).
 Ниже сохранено историческое описание запуска на указанной базе и evidence;
 команда больше не существует в текущем дереве.
 

@@ -33,7 +33,7 @@ separate a completed run from task success.
 
 ## Host-neutral checks
 
-- `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked Core/Office/Workspace
+- Временный phase-2 smoke runner (позже удалён): source-linked Core/Office/Workspace
   compilation plus 17 focused passing checks. The checks cover direct finish,
   current-run terminal/failed/unknown evidence, forged/pending/naked references,
   confirmation-to-terminal transition, rejection without repeat dispatch,

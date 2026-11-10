@@ -24,7 +24,7 @@ response-mode smoke now uses v8 execute/finish envelopes and terminal IDs.
 
 - `dotnet run --project tests/RNAssistant.ProtocolTests/RNAssistant.ProtocolTests.csproj -- --export <empty-dir>`:
   153 cases / 2156 assertions passed.
-- `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked production build
+- Временный smoke runner (позже удалён): source-linked production build
   and 21 passing focused checks, including default/custom prompts and strict
   v8 schema projection.
 - `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj` and
