@@ -6,8 +6,8 @@ using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Core.Services
 {
-    // Bounded UTF-16 window over a verified UTF-8 source. Consume the full stream
-    // for integrity and coordinates while retaining only the selected text.
+    // Bounded UTF-16 window over a verified UTF-8 source. Small exact sources reuse
+    // the storage-owned line index; larger streams retain only the selected text.
     public sealed class ResourceTextWindow
     {
         private readonly int _requestedStart, _requestedCount;
@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Services
         public int Start { get; private set; }
         public int End { get; private set; }
         public int TotalCharacters { get; private set; }
+        internal long InspectedCharacters { get; private set; }
         public string Text { get { return _selected.ToString(); } }
 
         public ResourceTextWindow(int requestedStart, int requestedCount, bool lines, int maximumCharacters,
@@ -34,11 +35,13 @@ namespace RNAssistant.Core.Services
 
         public void Read(Stream input, CancellationToken token = default(CancellationToken))
         {
-            var decoder = new UTF8Encoding(false, true).GetDecoder();
-            var bytes = new byte[81920];
-            var chars = new char[81922];
             try
             {
+                var cached = input as ChatBlobStore.CachedReadStream;
+                if (cached != null && cached.Position == 0) { cached.ReadWindow(this, token); return; }
+                var decoder = new UTF8Encoding(false, true).GetDecoder();
+                var bytes = new byte[81920];
+                var chars = new char[81922];
                 int count;
                 while ((count = input.Read(bytes, 0, bytes.Length)) != 0)
                 {
@@ -56,6 +59,7 @@ namespace RNAssistant.Core.Services
 
         private void Accept(char value)
         {
+            InspectedCharacters++;
             if (TotalCharacters == int.MaxValue)
                 throw new WorkspaceFileException("file_too_large",
                     "Text exceeds the current UTF-16 coordinate range.");
@@ -106,6 +110,37 @@ namespace RNAssistant.Core.Services
                 throw new WorkspaceFileException("resource_chars_invalid",
                     "startChar exceeds the current source's " + TotalCharacters + " characters.");
             if (End < 0) End = _lines ? TotalCharacters : (int)Math.Min((long)TotalCharacters, (long)Start + _requestedCount);
+        }
+
+        internal void ReadIndexed(string text, int[] lineStarts, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            TotalCharacters = text.Length;
+            if (_lines)
+            {
+                if (_requestedStart < 1 || _requestedStart > lineStarts.Length)
+                    throw new WorkspaceFileException("resource_lines_invalid", "startLine exceeds the current source's " + lineStarts.Length + " lines.");
+                Start = lineStarts[_requestedStart - 1];
+                var next = (long)_requestedStart - 1 + _requestedCount;
+                End = next < lineStarts.Length ? lineStarts[(int)next] : text.Length;
+            }
+            else
+            {
+                Start = _requestedStart;
+                if (Start > text.Length) throw new WorkspaceFileException("resource_chars_invalid", "startChar exceeds the current source's " + text.Length + " characters.");
+                End = (int)Math.Min(text.Length, (long)Start + _requestedCount);
+                if (Start > 0 && Start < text.Length && char.IsLowSurrogate(text[Start]) && char.IsHighSurrogate(text[Start - 1]))
+                    throw new WorkspaceFileException("resource_chars_invalid", "The selected character range splits a UTF-16 surrogate pair.");
+                if (End > 0 && End < text.Length && char.IsLowSurrogate(text[End]) && char.IsHighSurrogate(text[End - 1]))
+                {
+                    if (!_trimSplitEnd) throw new WorkspaceFileException("resource_chars_invalid", "The selected character range splits a UTF-16 surrogate pair.");
+                    End--;
+                }
+            }
+            if (End - Start > _maximumCharacters)
+                throw new WorkspaceFileException("read_too_large", "Selected lines exceed " + _maximumCharacters + " characters; reduce lineCount or use startChar/charCount for a long line.");
+            InspectedCharacters += End - Start;
+            _selected.Append(text, Start, End - Start);
         }
     }
 

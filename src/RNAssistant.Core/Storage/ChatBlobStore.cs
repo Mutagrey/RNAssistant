@@ -8,13 +8,12 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
-    public sealed class ChatBlobStore
+    public sealed partial class ChatBlobStore
     {
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly string _rootDirectory;
         private readonly Func<StorageProtector> _protectionProvider;
-        private volatile VerifiedEncoding _verifiedEncoding;
 
         public ChatBlobStore(AppDataPaths paths)
             : this(paths, null)
@@ -95,18 +94,19 @@ namespace RNAssistant.Core.Storage
             var length = reference.ByteLength;
             try
             {
+                if (length <= MaximumCachedBodyBytes && ReadCachedBody(reference, protector, CancellationToken.None) != null) return true;
                 using (var stored = new FileStream(PathFor(hash), FileMode.Open, FileAccess.Read,
                     FileShare.Read, 81920, FileOptions.SequentialScan))
                 {
-                    // Cache only a fingerprint, never source bytes or filesystem metadata.
+                    // Larger bodies retain only a fingerprint in the same cache slot.
                     // Every hit still hashes the entire current stored file. Cold snapshots
                     // are bounded to 1 MiB and used only when encoding saves at least half.
                     var encodedLength = stored.Length;
                     if (encodedLength > 1024 * 1024 || encodedLength >= length / 2)
                         return CasBlobCodec.VerifyStream(stored, length, hash, protector, BlobPurpose(hash, length));
-                    var verified = _verifiedEncoding;
+                    var verified = _verifiedRead;
                     if (verified != null && verified.PlaintextHash == hash && verified.PlaintextLength == length &&
-                        ReferenceEquals(verified.Protector, protector))
+                        verified.Path == PathFor(hash) && ReferenceEquals(verified.Protector, protector))
                     {
                         if (CasBlobCodec.VerifyStoredBytes(stored, encodedLength, verified.StoredHash)) return true;
                         stored.Position = 0;
@@ -117,25 +117,12 @@ namespace RNAssistant.Core.Storage
                     if (encoded.Length != encodedLength || stored.ReadByte() >= 0) return false;
                     using (var snapshot = new MemoryStream(encoded, false))
                         if (!CasBlobCodec.VerifyStream(snapshot, length, hash, protector, BlobPurpose(hash, length))) return false;
-                    _verifiedEncoding = new VerifiedEncoding(hash, length, protector, Sha256(encoded));
+                    _verifiedRead = new VerifiedReadState(PathFor(hash), hash, length, protector, Sha256(encoded), null);
                     return true;
                 }
             }
             catch (Exception error) when (error is IOException || error is InvalidDataException || error is UnauthorizedAccessException || error is CryptographicException)
             { return false; }
-        }
-
-        private sealed class VerifiedEncoding
-        {
-            internal readonly string PlaintextHash, StoredHash;
-            internal readonly long PlaintextLength;
-            internal readonly StorageProtector Protector;
-
-            internal VerifiedEncoding(string plaintextHash, long plaintextLength, StorageProtector protector, string storedHash)
-            {
-                PlaintextHash = plaintextHash; PlaintextLength = plaintextLength;
-                Protector = protector; StoredHash = storedHash;
-            }
         }
 
         internal StorageSizeSnapshot CreateStorageSizeSnapshot()
@@ -229,6 +216,18 @@ namespace RNAssistant.Core.Storage
 
         public string ReadText(ChatBlobReference reference)
         {
+            if (ValidReference(reference) && reference.ByteLength <= MaximumCachedBodyBytes)
+            {
+                var protector = Protection();
+                if (!ProtectionMatches(reference, protector)) return null;
+                try
+                {
+                    var cached = ReadCachedBody(reference, protector, CancellationToken.None);
+                    if (cached != null) return cached.ReadText();
+                }
+                catch (Exception error) when (error is IOException || error is InvalidDataException || error is UnauthorizedAccessException || error is CryptographicException)
+                { return null; }
+            }
             var bytes = ReadBytes(reference);
             return bytes == null ? null : StrictUtf8.GetString(bytes);
         }
@@ -260,6 +259,11 @@ namespace RNAssistant.Core.Storage
             if (!ProtectionMatches(reference, protector)) return null;
             try
             {
+                if (reference.ByteLength <= MaximumCachedBodyBytes)
+                {
+                    var cached = ReadCachedBody(reference, protector, CancellationToken.None);
+                    if (cached != null) return (byte[])cached.Body.Clone();
+                }
                 var stored = File.ReadAllBytes(path);
                 var bytes = CasBlobCodec.Decode(
                     stored,
@@ -272,6 +276,10 @@ namespace RNAssistant.Core.Storage
                         : null;
             }
             catch (IOException)
+            {
+                return null;
+            }
+            catch (InvalidDataException)
             {
                 return null;
             }
@@ -298,8 +306,8 @@ namespace RNAssistant.Core.Storage
                 protector, BlobPurpose(reference.Sha256, reference.ByteLength), maximumBytes, token);
         }
 
-        // A format/application chooses admission size. This API never allocates
-        // the whole payload; the one-MiB preview budget does not apply to sources.
+        // Small bodies may use the common bounded verified cache. Large/seek
+        // consumers retain the streaming/scratch contract and their own admission.
         public Stream OpenVerifiedRead(ChatBlobReference reference, long maximumBytes,
             CancellationToken token = default(CancellationToken), Action<FileTransferProgress> progress = null,
             bool requireSeek = false)
@@ -310,6 +318,16 @@ namespace RNAssistant.Core.Storage
             if (reference.ByteLength > maximumBytes) throw new InvalidDataException("CAS source exceeds the requested byte budget.");
             var protector = Protection();
             if (!ProtectionMatches(reference, protector)) throw new InvalidDataException("CAS protection does not match its reference.");
+            if (!requireSeek && reference.ByteLength <= MaximumCachedBodyBytes)
+            {
+                var cached = ReadCachedBody(reference, protector, token);
+                if (cached != null)
+                {
+                    var reporter = new FileTransferReporter(FileTransferStage.Verifying, reference.ByteLength, token, progress);
+                    reporter.Advance((int)reference.ByteLength); reporter.Complete();
+                    return new CachedReadStream(cached, token);
+                }
+            }
             var stream = CasBlobCodec.OpenVerifiedRead(PathFor(reference.Sha256), reference.ByteLength, reference.Sha256,
                 protector, BlobPurpose(reference.Sha256, reference.ByteLength), token, progress);
             return requireSeek ? SeekableBlobReadStream.Create(stream, _rootDirectory, protector, token, progress) : stream;

@@ -361,6 +361,7 @@
     <Compile Include="Storage\ChatStore.SessionProjection.cs" />
     <Compile Include="Storage\ChatStore.TraceLifecycle.cs" />
     <Compile Include="Storage\ChatBlobStore.cs" />
+    <Compile Include="Storage\ChatBlobStore.ReadCache.cs" />
     <Compile Include="Storage\ResourceAuthorityStore.cs" />
     <Compile Include="Storage\AcceptedCallPayloadService.cs" />
     <Compile Include="Storage\RuntimePayloadService.cs" />

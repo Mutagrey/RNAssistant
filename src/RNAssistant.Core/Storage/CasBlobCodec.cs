@@ -198,9 +198,9 @@ namespace RNAssistant.Core.Storage
             { return false; }
         }
 
-        internal static bool VerifyStoredBytes(Stream stored, long length, string sha256)
+        internal static bool VerifyStoredBytes(Stream stored, long length, string sha256, CancellationToken token = default(CancellationToken))
         {
-            return HashStream(stored, length, sha256, null, 0, CancellationToken.None, null);
+            return HashStream(stored, length, sha256, null, 0, token, null);
         }
 
         // The caller owns a seekable file or an immutable, bounded encoded snapshot.
