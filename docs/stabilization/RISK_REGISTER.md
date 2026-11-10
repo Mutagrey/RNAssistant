@@ -111,6 +111,15 @@ hit-test указывает menuitem, но pointerdown/up/click получает
 не оставлены в production. Движение указателя изменяет результат и не считается fix.
 Есть [похожий upstream report](https://github.com/microsoft/playwright/issues/43642),
 но точная причина в нашем runtime и Windows/WebView2 поведение не установлены.
+
+Повтор 2026-11-10, Chrome 157.0.8103.51: probe теперь сразу проверяет и выводит
+recipients всех трёх событий. У «Сохранить раскладку» parent events пусты,
+pointerdown/up/click получил iframe «Сохранённый HTML A» (870, 2.5); скрытый B — нет.
+Простые изолированные overlay/iframe страницы сбой не воспроизвели, поэтому причина
+не объявлена дефектом Chromium. Production обход не добавлен. После адаптации
+`browser-views` к responsive «Инструменты страницы» обычные live/saved fixtures проходят;
+opt-in pointer probe красный. Это не физическая мышь и не Windows qualification.
+
 Отдельный fixture gap: artifact-catalog-layout не устанавливает уже требуемый
 RNAssistantHtmlWorkspaceSurface и падает до проверок истории; production saved-view
 fixture проверяет этот путь с настоящими owners.

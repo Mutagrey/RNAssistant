@@ -8,6 +8,12 @@ const {chromium}=require('playwright');
     const address=await new Promise((resolve,reject)=>{server.once('error',reject);server.once('exit',code=>reject(Error('preview exit '+code)));server.stdout.on('data',data=>{const m=/RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(data));if(m)resolve(m[1]);});});
     browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
     const page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'}),errors=[];
+    async function discussPlugin(){
+      const root=page.locator('[data-plugin-node="Workbench"]');
+      const button=root.getByRole('button',{name:'Обсудить в чате рядом',exact:true,includeHidden:true});
+      if(!await button.isVisible())await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
+      await button.click();
+    }
     await page.addInitScript({content:'if(location.pathname.endsWith("/data-templates/index.html")) {'+
       fs.readFileSync(path.resolve(__dirname,'../../web/js/app-visual-inspector.js'),'utf8')+';RNAssistantVisualInspector.install(1);}'});
     page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.stack||e.message));
@@ -65,7 +71,7 @@ const {chromium}=require('playwright');
     await page.evaluate(()=>{browserTest.pluginFrame=document.querySelector('[data-plugin-node="PreviewFrameHost"] iframe');browserTest.pluginDocument=browserTest.pluginFrame.contentDocument;});
     await layout('Сохранить раскладку');await layout('Вернуть сохранённую');
     assert.equal(await plugin.locator('#browserStateProbe').inputValue(),'plugin-retained');
-    await page.locator('[data-plugin-node="Workbench"]').getByRole('button',{name:'Обсудить в чате рядом',exact:true}).click();
+    await discussPlugin();
     await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
     await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));
     assert.equal(await plugin.locator('#browserStateProbe').inputValue(),'plugin-retained','moving workspace host to project chat retains plugin document');
@@ -104,7 +110,7 @@ const {chromium}=require('playwright');
     assert.ok(await page.evaluate(()=>document.querySelector('[data-plugin-node="Workbench"]').contains(document.activeElement)));
     // A late source-chat lookup cannot take navigation back after another conversation was selected.
     await page.evaluate(()=>{browserTest.delayChat=true;});
-    await page.locator('[data-plugin-node="Workbench"]').getByRole('button',{name:'Обсудить в чате рядом',exact:true}).click();
+    await discussPlugin();
     await page.waitForFunction(()=>!!browserTest.releaseChat);
     await page.evaluate(()=>{RNAssistantProjectChats.setScope('office');RNAssistantConversationPanel.open({source:'office',sessionId:'preview-chat'});browserTest.releaseChat();});
     await page.waitForFunction(()=>!RNAssistantPlugins.isChatBusy());

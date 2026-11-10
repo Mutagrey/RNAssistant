@@ -179,10 +179,12 @@ document invalidation, hidden activation, dirty guard и повторное чт
 событии во время read. CAS, bridge и runtime не изменялись.
 
 Saved Browser, lifetime, plugin selection и HTML editor fixtures проходят: retained
-iframe/draft, exact адресат, late cleanup и narrow/125%. Live browser-views нестабилен
-ещё с baseline: pointer routing HTML annotation; последнее выполнение красное, риск открыт. [Результаты,
+iframe/draft, exact адресат, late cleanup и narrow/125%. Повтор 2026-11-10: live/saved
+Browser проходят после адаптации теста «Обсудить» к narrow toolbar. Opt-in pointer probe
+по-прежнему красный и теперь показывает доставку событий в iframe; риск открыт. [Результаты,
 изображения и открытые gates](../browser/06_PROGRESS.md). Визуальное принятие production
-открыто; самостоятельные проекты, Diff, sessions и native URL — следующие срезы.
+открыто; следующий конкретный domain-срез — proposed P2a import в самостоятельный workspace,
+потом resolver/sessions. Diff и native URL остаются в плане.
 Builds/VSTO/Office validation не выполнялись; Windows qualification отдельно.
 
 ## Universal Browser: P0 документы и план — 2026-11-04

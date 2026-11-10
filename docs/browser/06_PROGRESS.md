@@ -4,6 +4,24 @@
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — будущий native adapter. P1 реализован в production JS, **In Review**.
 
+## Продолжение: проверки P1 и граница P2a — 2026-11-10
+
+`browser-views` исправлен под текущий responsive toolbar: «Обсудить» открывается
+через «Инструменты страницы», когда кнопка скрыта. Полный live HTML/plugin сценарий
+прошёл на локальном Chrome 157.0.8103.51: annotations, exact recipient, retained iframe,
+restore/move, narrow/zoom и late cleanup. Это исправление теста, не pointer routing.
+
+`BROWSER_POINTER_PROBE=1` теперь проверяет доставку pointerdown/up/click и печатает
+parent/iframe recipients. Повтор поймал все три события в «Сохранённый HTML A» вместо
+«Сохранить раскладку», без таймаута на следующем действии. Обычный saved fixture прошёл
+(2 exact HTML reads, retained input, source ≤32K, 420 px/125%). Изолированные простые страницы
+без RNAssistant не воспроизвели сбой; точная причина и Windows evidence остаются Open.
+Ненадёжные CSS/таймерные обходы в production не добавлены.
+
+Подготовлен конкретный [P2a](04_MIGRATION_PLAN.md#следующий-срез-p2a--proposed-2026-11-10):
+самостоятельный workspace из exact снимка, managed source files под existing workspace
+owner, CAS для версий/evidence. Решение Proposed; новый runtime/import ещё не написан.
+
 ## История сохранённого HTML — исправлена host-neutral, 2026-11-10
 
 Typed getSavedHtmlHistory разрешает current document publication из exact target;
@@ -159,7 +177,7 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Визуальное ревью компактного toolbar и отдельного Chat View по
-[четырём действиям](05_TEST_MATRIX.md#toolbar-review). Следующий domain slice —
-P2 Targets/Sessions с явным решением о project ownership и managed/directory backing;
-эту миграцию нельзя подменить UI-копией workspace или вторым version store.
+Следующий implementation slice — [P2a import exact HTML в самостоятельный workspace](04_MIGRATION_PLAN.md#следующий-срез-p2a--proposed-2026-11-10).
+Ownership/backing конкретизированы в ADR как Proposed; resolver и session lifetime идут
+после него. Визуальное ревью P1 по [четырём действиям](05_TEST_MATRIX.md#toolbar-review),
+pointer routing и Windows evidence остаются отдельными открытыми gates.

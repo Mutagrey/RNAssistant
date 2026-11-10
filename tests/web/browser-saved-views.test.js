@@ -9,6 +9,28 @@ const {chromium}=require('playwright');
     const url=await new Promise((resolve,reject)=>{server.once('error',reject);server.once('exit',code=>reject(Error('preview '+code)));server.stdout.on('data',data=>{const m=/RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(data));if(m)resolve(m[1]);});});
     browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
     const page=await browser.newPage({viewport:{width:1280,height:900},reducedMotion:'reduce'}),errors=[];
+    if(process.env.BROWSER_POINTER_PROBE)await page.addInitScript(()=>{
+      window.browserPointerProbe={enabled:false,events:[]};
+      for(const type of ['pointerdown','pointerup','click'])document.addEventListener(type,event=>{
+        const probe=window.browserPointerProbe;if(!probe.enabled)return;
+        const control=event.target.closest('[role="menuitem"]');
+        if(probe.events.length<12)probe.events.push({type,tag:event.target.tagName,
+          action:control?.getAttribute('aria-label'),x:event.clientX,y:event.clientY});
+      },true);
+    });
+    async function probeMenuClick(item,name){
+      const frames=page.frames();
+      for(const frame of frames)await frame.evaluate(()=>{browserPointerProbe.events=[];browserPointerProbe.enabled=true;});
+      await item.click();
+      const routes=[];
+      for(const frame of frames){
+        const events=await frame.evaluate(()=>{browserPointerProbe.enabled=false;return browserPointerProbe.events;});
+        routes.push({frame:frame===page.mainFrame()?'parent':await(await frame.frameElement()).getAttribute('title'),events});
+      }
+      assert.deepEqual(routes.find(route=>route.frame==='parent').events.map(event=>[event.type,event.action]),
+        ['pointerdown','pointerup','click'].map(type=>[type,name]),'Menu pointer routing: '+JSON.stringify(routes));
+      assert.ok(routes.filter(route=>route.frame!=='parent').every(route=>!route.events.length),'Menu input reached iframe: '+JSON.stringify(routes));
+    }
     page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
     await page.goto(url+'preview/web/?scenario=ready');await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise,null,{timeout:15000}).catch(error=>{throw new Error(error.message+'; page errors: '+errors.join(' | '));});
     await page.evaluate(()=>{
@@ -109,10 +131,10 @@ const {chromium}=require('playwright');
       assert.equal(await button(a,'Исходник').getAttribute('aria-pressed'),'true');
       await (await action(a,'Страница')).click();assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
       // Keep the known Chromium overlay-input reproduction separate from saved-history coverage.
-      // BROWSER_POINTER_PROBE=1 uses physical clicks; the normal run preserves the existing keyboard path.
+      // BROWSER_POINTER_PROBE=1 checks automated pointer delivery; this is not physical mouse evidence.
       for(const name of ['Сохранить раскладку','Вернуть сохранённую']){
         await page.locator('#workspaceLayout').click();const item=page.getByRole('menuitem',{name,exact:true});
-        if(process.env.BROWSER_POINTER_PROBE)await item.click();else{await item.focus();await page.keyboard.press('Enter');}
+        if(process.env.BROWSER_POINTER_PROBE)await probeMenuClick(item,name);else{await item.focus();await page.keyboard.press('Enter');}
       }
       assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
       await (await action(a,'Исходник')).click();

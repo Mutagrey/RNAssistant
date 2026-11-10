@@ -136,8 +136,9 @@ popover DOM/CSS удалены. Exact guards и загрузка порциям�
 Windows controller delivery остаётся открытым; pointer-routing этим не исправлен.
 
 Проверки: browser-saved-views, browser-views, browser-lifetime, plugin-view-selection,
-html-editor-views. browser-views периодически падает ещё с baseline на pointer routing
-HTML annotation; последнее выполнение красное, риск открыт. Остальные проверки проходят.
+html-editor-views. browser-views имел нестабильный baseline при выборе/сохранении HTML annotation.
+Повтор 2026-11-10 проходит после адаптации «Обсудить» к narrow tools; opt-in pointer probe
+остаётся красным и явно показывает события в iframe. Pointer risk остаётся открытым.
 Проверяются reuse Chat View/draft, retained iframe, точный адресат
 после выбора другого чата, source bounds, late cleanup, move/restore/narrow/zoom.
 [Новые замеры](review/browser-address.json), [результат и открытые gates](../browser/06_PROGRESS.md).

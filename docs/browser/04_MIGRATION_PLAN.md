@@ -94,6 +94,31 @@ P2 требует отдельного domain решения: независим
 плагина — у прежнего owner. UI не создаёт второй durable version/annotation store.
 При появлении реального сравнения Diff использует иконку двух колонок с +/−.
 
+## Следующий срез P2a — Proposed, 2026-11-10
+
+Сначала [project ownership/backing](02_ARCHITECTURE_ADR.md#p2a-самостоятельный-проект-и-backing--proposed-2026-11-10),
+затем resolver и sessions. Scope реализации P2a: явный import exact сохранённого HTML
+в новый managed workspace; выбранная папка подключается существующим directory path.
+Managed здесь — файлы в каталоге приложения плюс existing CAS history, не второй
+CAS-only source store. Owner — Application Workspace + существующие HTML export/file owners.
+
+1. Typed import request/result: exact source и backing; никакого выбора через active tab/chat.
+2. До создания проверить переносимость пакета, bounds, entry point и безопасные пути.
+   В первом срезе document-bound data/SDK refs явно неподдерживаемы, без неполной копии.
+3. Создать workspace через existing file authority, проверить запись, затем опубликовать
+   association. Сохранённый исходник, его ссылки и история остаются неизменными.
+4. Подключить один явный UI action «Создать проект из снимка» к existing project navigation.
+   Dirty buffers, source editor и чат берутся у владельца workspace; отдельный store не создаётся.
+5. Минимальные проверки: exact snapshot после смены head; чужой document; path traversal /
+   collision / bounds; отказ для непереносимых данных до записи; fault без ложного успеха;
+   reopen созданного workspace, неизменный source artifact. Затем один browser flow.
+
+P2b — typed target resolver и capabilities существующих consumers. P2c — runtime
+session owner, detach/reattach и отдельное закрытие session с UI для повторного открытия.
+До P2c закрытие вкладки сохраняет прежний lifetime; новый ID не записывается в Dock layout.
+Pointer-routing/Windows evidence остаются открытыми и не блокируют domain-срез P2a.
+Этот раздел — конкретизация плана; import, managed backing и sessions ещё не реализованы.
+
 ## Развитие после P1
 
 P2 добавляет новые typed browser records/commands в existing Core/Contracts и

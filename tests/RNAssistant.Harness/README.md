@@ -115,6 +115,12 @@ another active chat and retained iframe/input. Its history clicks run above Sour
 `BROWSER_POINTER_PROBE=1` separately reproduces fast layout-menu clicks above iframe.
 This does not qualify Windows/Office delivery or close the pointer-routing risk.
 
+Pointer follow-up: the opt-in probe asserts parent delivery of pointerdown/up/click
+and prints bounded event recipients for each iframe, so a misrouted click fails at
+that action rather than timing out on the next menu. These are automated Chromium
+events, not physical mouse evidence. `browser-views` opens narrow toolbar actions
+through the existing Tools button; no pointer delay or production workaround was added.
+
 ## Universal Browser P1 — 2026-11-04
 
 `node tests/web/browser-saved-views.test.js` checks shared read-only artifact address,
