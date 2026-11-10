@@ -48,6 +48,11 @@ explicit-seek streams retain their necessary bounded paths. No model authority o
 live file freshness is inferred from cache. Remaining large-source/index/search
 work and P3 aggregate session paths are open.
 
+P3a removes per-source excluded receipt materialization and nested atom searches
+from the shared compiler. Office/Workspace and dispatch manifests use the bounded
+sample/reason counts directly, without an adapter. Full-session compiler inputs,
+working-set restoration and snapshot JSON getters remain for subsequent P3 slices.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.

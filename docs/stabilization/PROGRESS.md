@@ -8,9 +8,9 @@ patch для исправлений/улучшений, minor для новых 
 [Versioning](../operations/VERSIONING.md). Release/tag/push и Windows qualification
 остаются отдельными действиями. Прежний запрет в AGENTS/development rules снят.
 
-Этот docs-only срез оставляет `16.1.0-alpha.1`. Следующий завершённый продуктовый срез
-учитывает накопленные возможности одним переходом на `16.2.0-dev` по canonical policy;
-задним числом версии не создаются. `Prepare-Release.ps1` пока принимает только `16.1.0`:
+Docs-only принятие политики оставило `16.1.0-alpha.1`; завершённый P3a ниже выполнил
+первый переход на `16.2.0-dev`, учитывающий накопленные возможности по canonical policy.
+Задним числом версии не создаются. `Prepare-Release.ps1` пока принимает только `16.1.0`:
 это открытая [задача release tooling](BACKLOG.md#release-script-version-range--2026-11-11),
 которая не мешает обычным bumps. Release execution/Windows evidence остаётся открытым.
 
@@ -48,6 +48,12 @@ GC под maintenance gate и restore всех новых journals/CAS без и
 текущих байтов и live guards. Далее оставшиеся P3/P4 и consumers.
 Multi-target/resource semantic-owner integration, P3/P4, production backup/GC integration,
 cutover и Windows/Office evidence открыты; общая оптимизация не завершена.
+
+P3a: общий compiler сохраняет все delivered entries, но только 16 примеров исключений
+и счётчики остальных причин; удалён поиск atoms для каждой строки архива. При
+H=100/1000/10000 размер receipt — около 5,5 КБ вместо 29/287/2861 КБ. Новый scale-check
+и четыре адресные регрессии проходят host-neutral. Полные session inputs и restart
+working set пока остаются; P3 целиком не закрыт.
 
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10

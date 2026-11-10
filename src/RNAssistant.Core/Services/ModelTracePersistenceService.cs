@@ -98,6 +98,7 @@ namespace RNAssistant.Core.Services
                     CompilerBuild = typeof(ModelContextCompiler).Module.ModuleVersionId.ToString("D"),
                     InstructionSha256 = source.Manifest?.InstructionSha256 ?? new Dictionary<int, string>(),
                     ContextPreparation = options.ContextPreparation,
+                    OmittedContext = new Dictionary<string, int>(receipt?.OmittedContext ?? new Dictionary<string, int>(), StringComparer.Ordinal),
                     SchemaGeneration = receipt?.SchemaGeneration, ConversationHighWaterMark = receipt?.ConversationHighWaterMark ?? 0,
                     ResponseSchemaSha256 = options.ResponseSchemaJson == null ? null : TextPatternEngine.Sha256(options.ResponseSchemaJson) };
                 var selected = new List<ContextMessagePresentation>();
@@ -105,7 +106,7 @@ namespace RNAssistant.Core.Services
                 foreach (var message in record.ContextMessages ?? new List<ContextMessagePresentation>())
                 {
                     if (message == null) continue;
-                    if (message.Presentation != ContextPresentationKind.Excluded || retainedExclusions++ < 16) { selected.Add(message); continue; }
+                    if (message.Presentation != ContextPresentationKind.Excluded || retainedExclusions++ < ContextReceipt.MaximumExcludedDetails) { selected.Add(message); continue; }
                     var reason = (message.ExclusionKind ?? ContextExclusionKind.Unknown).ToString();
                     int count; record.Manifest.OmittedContext.TryGetValue(reason, out count); record.Manifest.OmittedContext[reason] = count + 1;
                 }

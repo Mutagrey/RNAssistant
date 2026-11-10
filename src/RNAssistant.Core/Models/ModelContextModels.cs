@@ -155,8 +155,12 @@ namespace RNAssistant.Core.Models
 
     public sealed class ContextReceipt
     {
+        internal const int MaximumExcludedDetails = 16;
         public RNAssistant.Core.Services.AgentArsenal Arsenal { get; set; }
         public List<ContextMessagePresentation> Messages { get; set; } = new List<ContextMessagePresentation>();
+        // Reasons for excluded sources beyond the bounded diagnostic sample.
+        // Delivered messages retain their complete ordered provenance in Messages.
+        public Dictionary<string, int> OmittedContext { get; set; } = new Dictionary<string, int>();
         public string SnapshotId { get; set; }
         public string ToolGeneration { get; set; }
         public string SkillGeneration { get; set; }

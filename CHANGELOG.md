@@ -11,7 +11,15 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
-Alpha `16.1.0-alpha.1` is prepared in source; it is not yet a published or qualified release.
+### 16.2.0-dev
+
+- Records the accumulated unreleased UI, Workspace/Browser and agent capabilities
+  after adoption of completed-change versioning; this is not a release or Office qualification.
+- Context receipts retain all delivered-message provenance while limiting excluded
+  history details to 16 examples plus reason counts in both hosts and dispatch manifests.
+  Full-session runtime migration remains in progress.
+
+Previous alpha `16.1.0-alpha.1` was prepared in source; it was not a published or qualified release.
 
 ### Tools exploration alpha — 2026-10-26
 

@@ -471,6 +471,8 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
   build, prompt instruction hashes, schema/generations, preparation timing and
   ordered selected provenance/coverage. Exclusions retain at most 16 candidates
   plus aggregate reason counts; they are not a second full history receipt.
+  The same exclusion bound now applies in the compiler's `LastContextReceipt`;
+  `OmittedContext` counts transfer to the manifest without reconstructing entries.
   Existing source `OriginalPayload` references keep their semantic owner. A manifest
   is not exact-wire replay: changed prompts/renderers cannot reconstruct old bytes.
 - Raw request/response capture is off by default. `DebugModelTraffic` opts into one

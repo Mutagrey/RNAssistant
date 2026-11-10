@@ -34,7 +34,8 @@ namespace RNAssistant.Harness
                 contexts.AddRange(Enumerable.Range(0, 1000).Select(index => new ContextMessagePresentation {
                     SourceMessageId = "old-" + index, Presentation = ContextPresentationKind.Excluded, ExclusionKind = ContextExclusionKind.Budget }));
                 var options = new LlmRequestOptions { TraceSession = session, TraceContextReceipt = new ContextReceipt {
-                    SnapshotId = "snapshot", ToolGeneration = "tools", SkillGeneration = "skills", SchemaGeneration = "schema" }, ResponseSchemaJson = "{}" };
+                    SnapshotId = "snapshot", ToolGeneration = "tools", SkillGeneration = "skills", SchemaGeneration = "schema",
+                    OmittedContext = new Dictionary<string, int> { ["Budget"] = 7, ["Explicit"] = 321 } }, ResponseSchemaJson = "{}" };
                 service.Configure(options);
                 var request = new LlmTraceRecord { Type = "request", RequestId = "off", MessageCount = 1, ContextMessages = contexts,
                     PayloadUtf8Bytes = bytes, PayloadContentType = "application/json" };
@@ -50,7 +51,9 @@ namespace RNAssistant.Harness
                     "ordinary request/response never create raw CAS roots");
                 AssertEqual(0L, buffer.RetainedBytes, "diagnostics off retains no raw bytes");
                 AssertEqual(17, metadata.ContextMessages.Count, "manifest stores selected entries and only bounded excluded candidates");
-                AssertEqual(984, metadata.Manifest.OmittedContext["Budget"], "omitted archive entries remain an aggregate reason count");
+                AssertEqual(991, metadata.Manifest.OmittedContext["Budget"], "sink combines compiler omissions and additional defensive trimming");
+                AssertEqual(321, metadata.Manifest.OmittedContext["Explicit"], "compiler reasons survive in the mandatory manifest");
+                AssertEqual(7, options.TraceContextReceipt.OmittedContext["Budget"], "manifest aggregation cannot mutate the frozen compiler receipt");
                 AssertEqual("selected", metadata.ContextMessages[0].SourceMessageId, "actual selected source identity retained");
                 AssertEqual("tools", metadata.Manifest.ToolGeneration, "manifest pins captured generation");
                 AssertEqual(typeof(ModelContextCompiler).Module.ModuleVersionId.ToString("D"), metadata.Manifest.CompilerBuild, "compiler build is frozen rather than substituted by Inspector");

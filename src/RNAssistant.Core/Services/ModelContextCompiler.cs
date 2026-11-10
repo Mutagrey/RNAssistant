@@ -734,7 +734,7 @@ namespace RNAssistant.Core.Services
             var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             receipt.Messages = DescribeMessages(atoms, required, (facts ?? new ChatMessage[0])
                 .Concat(workingSet == null ? Enumerable.Empty<ChatMessage>() : workingSet.Operations.Concat(workingSet.Bodies)
-                    .SelectMany(item => new[] { item.Call, item.Source })).ToArray(), exclusions);
+                    .SelectMany(item => new[] { item.Call, item.Source })), exclusions, receipt);
             receipt.OperationReceipts = messages.Count(message => message.CompletedOperation != null);
             receipt.EstimatedTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
             receipt.AtomCounts = atoms.GroupBy(item => item.Kind).ToDictionary(group => group.Key, group => group.Count());
@@ -1195,12 +1195,12 @@ namespace RNAssistant.Core.Services
         }
 
         private static List<ContextMessagePresentation> DescribeMessages(List<ContextAtom> atoms,
-            IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
-            IReadOnlyDictionary<string, ContextExclusionKind> exclusions)
+            IReadOnlyList<ChatMessage> required, IEnumerable<ChatMessage> facts,
+            IReadOnlyDictionary<string, ContextExclusionKind> exclusions, ContextReceipt receipt)
         {
-            var sources = (required ?? new ChatMessage[0]).Concat(facts ?? new ChatMessage[0])
-                .Where(m => m != null && !string.IsNullOrEmpty(m.Id)).GroupBy(m => m.Id)
-                .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+            var sources = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            foreach (var source in (required ?? new ChatMessage[0]).Concat(facts ?? new ChatMessage[0]))
+                if (source != null && !string.IsNullOrEmpty(source.Id)) sources[source.Id] = source;
             var result = new List<ContextMessagePresentation>();
             foreach (var atom in atoms)
             foreach (var message in atom.PromptMessages)
@@ -1257,20 +1257,46 @@ namespace RNAssistant.Core.Services
                 result.Add(entry);
             }
             var retained = new HashSet<string>(result.Select(m => m.SourceMessageId).Where(id => id != null));
+            var excludedEntries = new Dictionary<string, ContextMessagePresentation>(StringComparer.Ordinal);
+            var excludedDetails = 0;
             foreach (var source in sources.Values.Where(m => !retained.Contains(m.Id)))
             {
                 ContextExclusionKind decision;
                 var kind = source.ExcludeFromModelContext ? ContextExclusionKind.Explicit :
                     exclusions.TryGetValue(source.Id, out decision) ? decision : ContextExclusionKind.Unknown;
-                result.Add(new ContextMessagePresentation { SourceMessageId = source.Id, Role = source.Role,
+                if (excludedDetails++ >= ContextReceipt.MaximumExcludedDetails)
+                {
+                    var reason = kind.ToString();
+                    int count;
+                    receipt.OmittedContext.TryGetValue(reason, out count);
+                    receipt.OmittedContext[reason] = count + 1;
+                    continue;
+                }
+                var entry = new ContextMessagePresentation { SourceMessageId = source.Id, Role = source.Role,
                     Presentation = ContextPresentationKind.Excluded, OriginalPayload = source.ResultPayload,
                     ExclusionKind = kind,
-                    RetainedAtMessageId = atoms.Where(atom => atom.ArchivedSourceMessageId == source.Id &&
-                        BodyKey(atom.RetainedBody) != null).Select(atom => atom.RetainedBody.Messages.Last().Id).FirstOrDefault(),
                     ToolCallId = source.CompletedOperation?.ToolCallId ?? source.ToolCallId,
                     EvidenceReference = source.AcceptedCallOrigin == null ? source.EvidenceReference : null,
                     EvidenceLinks = EvidenceLinks(source.ResourceEvidence, item => false),
-                    Reason = ExclusionReason(kind) });
+                    Reason = ExclusionReason(kind) };
+                excludedEntries.Add(source.Id, entry);
+                result.Add(entry);
+            }
+            // Only sampled exclusions need locations. Final atoms no longer change,
+            // so resolve each retained body once without archive-by-atom searches.
+            var bodyLocations = new Dictionary<ContextAtom, string>();
+            foreach (var atom in atoms)
+            {
+                ContextMessagePresentation entry;
+                if (atom.ArchivedSourceMessageId == null || atom.RetainedBody == null ||
+                    !excludedEntries.TryGetValue(atom.ArchivedSourceMessageId, out entry) || entry.RetainedAtMessageId != null) continue;
+                string location;
+                if (!bodyLocations.TryGetValue(atom.RetainedBody, out location))
+                {
+                    location = BodyKey(atom.RetainedBody) == null ? null : atom.RetainedBody.Messages.Last().Id;
+                    bodyLocations.Add(atom.RetainedBody, location);
+                }
+                entry.RetainedAtMessageId = location;
             }
             return result;
         }

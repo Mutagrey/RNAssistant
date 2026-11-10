@@ -14,6 +14,12 @@ old aggregate/provider baseline; `RNA_STORAGE_OPT_COST=1` enables the comparable
 H=100/1000/10000 curve. Leave both unset for routine checks.
 [Evidence and open gates](../../docs/audits/storage-context-optimization.md).
 
+`storage optimization: bounded context exclusion receipt` compares H=100/1000/10000
+with fixed delivered content and checks the exclusion sample/counts. Pair changes
+to this path with `model context: compiler presentation`, the two `context continuity:`
+cases for active/archived selection and final read retention, and the optional
+diagnostics/mandatory manifest check. This is not bounded full-session restart evidence.
+
 
 ## Optional assignments (4b, 2026-11-10)
 

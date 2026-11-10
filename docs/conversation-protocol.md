@@ -983,6 +983,14 @@ results and then checks the complete request budget. The durable event stream ke
 original calls/results; filtering never deletes them. Search results are bounded
 discovery metadata/snippets, not proof that the underlying body was read.
 
+The compiler receipt retains every delivered message's ordered provenance. Excluded
+sources have at most 16 diagnostic details; remaining unique source IDs contribute
+only per-reason `OmittedContext` counters. Final retained-body locations are resolved
+once for that sample, without an archive-by-atom search. Both hosts persist this
+bounded exclusion summary in `LastContextReceipt`; the mandatory dispatch manifest
+preserves the counters. Excluded details/counters never grant delivery authority.
+This does not yet remove the full-session inputs to working-set recovery.
+
 The frozen `ModelContextSnapshot.DeliveredObservations` is the single runtime-only
 delivery projection consumed by Office and CLI. It includes current resource-read
 and synthetic source evidence only after materialization, projection and final

@@ -680,6 +680,7 @@ namespace RNAssistant.Harness
                 Test("storage optimization: canonical closure and backup restore", StorageJournalMaintenanceAndRestore),
                 Test("storage optimization: maintenance excludes publication", StorageJournalMaintenanceExcludesPublish),
                 Test("storage optimization: verified cache and exact text windows", VerifiedReadCacheAndTextWindows),
+                Test("storage optimization: bounded context exclusion receipt", ContextReceiptBoundsExcludedHistory),
                 Test("storage optimization: host parity and retained mutation guards", RetainedResultHostParity),
                 Test("storage: indexed input journal", IndexedInputJournalPreservesCanonicalReplay),
                 Test("storage perf: chat navigation with traces", ChatNavigationWithTracesProfile),

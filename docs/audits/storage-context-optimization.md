@@ -373,3 +373,37 @@ after-state/CAS ownership.
    their existing owner/concurrency lifetime remains necessary.
 7. CAS maintenance and Resource Fabric describe the shared owner and limits.
    No new public registry, cache family, SDK, disk format or compatibility adapter.
+
+## P3a — bounded excluded-context receipts (2026-11-11)
+
+1. F10/F11, receipt portion: `ModelContextCompiler.DescribeMessages` keeps every
+   delivered entry and at most 16 excluded examples; remaining unique source IDs
+   contribute reason counts. Both hosts consume the same compiler result.
+2. `LastContextReceipt` and the mandatory dispatch manifest preserve these counts.
+   Excluded examples retain no delivery claim; selected message order/coverage is
+   unchanged. Sink-side defensive trimming adds counts without mutating the receipt.
+3. Removed the full excluded presentation list, source GroupBy/intermediate array
+   and per-exclusion atom search. Only sampled exclusions resolve final body
+   locations, with each retained body checked once. Core delta: +42/-11, net +31.
+4. T02/T05 (receipt subset): the new scale fixture fails on the baseline and passes
+   after the change; four relevant manifest/presentation/retained-body regressions
+   pass. It also checks unchanged model wire, all 40 selected entries, duplicate
+   source identity and zero excluded-body hydration. macOS/net8/C#7.3, isolated
+   e8d719b6 + owned changes as above; no Office/VSTO build.
+5. Fixed one-message active set; input construction excluded from measurements.
+   Compile + receipt access/serialization, single local samples:
+
+   | Excluded H | Receipt bytes before → after | Allocated before → after | Wall ms before → after |
+   |---:|---:|---:|---:|
+   | 100 | 29,464 → 5,473 | 589,352 → 266,960 | 4.34 → 3.34 |
+   | 1,000 | 286,864 → 5,474 | 3,820,104 → 232,624 | 13.10 → 0.44 |
+   | 10,000 | 2,860,864 → 5,475 | 37,834,304 → 1,289,568 | 140.50 → 1.32 |
+
+   Detail entries: H+1 → 17. No payload hydration in either case. CPU and physical
+   I/O were not measured; these timings are not Windows/production latency claims.
+6. Sources still arrive as a full collection and are indexed once for attribution;
+   allocations therefore remain H-dependent. Working-set restart, bounded metadata
+   selection and snapshot JSON roundtrips remain P3/F10/F11 work. No complete P3 claim.
+7. Conversation protocol, Session events, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated; no adapter or second store. Product `16.2.0-dev` follows the initial
+   transition in the version policy, not a storage cutover or qualified release.
