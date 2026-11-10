@@ -189,6 +189,13 @@ The separate per-run Workspace observation dictionary and implicit post-mutation
 updates to it are removed. Verified after-state must be delivered in the next
 request before another model write can use it.
 
+Small exact text sources (P4a, 2026-11-11) share the bounded Core CAS read cache
+and one lazy line index. Repeated windows retain exact CR/LF/UTF-16 coordinates,
+surrogate checks and partial coverage. Current stored bytes/key are checked on every
+cache hit; a missing/corrupt body cannot be replaced by a stale cached proof. Live
+file capture and mutation preconditions are unchanged. Large text/table/search
+paths still need the remaining P4 work; this does not claim bounded live-file I/O.
+
 Current file metadata/body reads, mutations and explicit recovery share
 `WorkspaceFileService.AcquireFileScope`. It resolves the locator, acquires that
 resource's lease, then verifies that the path still names the same file ID (or its

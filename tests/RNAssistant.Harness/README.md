@@ -1,5 +1,19 @@
 # RNAssistant Harness
 
+## Storage/context optimization — 2026-11-10
+
+`storage optimization:` selects isolated rotation/tail/protection tests, common
+retained results/context, Office/Workspace adapter parity with a scripted provider,
+cross-run file guards, two-process index repair, atomic send/spawn/run/control,
+optional diagnostics, verified small-body cache/text windows and canonical CAS
+closure/backup/restore. Maintenance fixtures
+cover missing cursors, nested refs, unknown effects and a second-process publication.
+No Office/VSTO/live model or DPAPI qualification.
+New storage is not enabled in production. `RNA_STORAGE_OPT_BASELINE=1` enables the
+old aggregate/provider baseline; `RNA_STORAGE_OPT_COST=1` enables the comparable
+H=100/1000/10000 curve. Leave both unset for routine checks.
+[Evidence and open gates](../../docs/audits/storage-context-optimization.md).
+
 
 ## Optional assignments (4b, 2026-11-10)
 

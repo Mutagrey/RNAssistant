@@ -14,6 +14,41 @@ patch для исправлений/улучшений, minor для новых 
 это открытая [задача release tooling](BACKLOG.md#release-script-version-range--2026-11-11),
 которая не мешает обычным bumps. Release execution/Windows evidence остаётся открытым.
 
+## Оптимизация хранения/контекста — §8.3, P2, P4a, P5/P6, 2026-11-11
+
+По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
+зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace
+используют общий retained result/body owner; удалены Workspace per-run observation
+cache и перечитывание всех исторических файлов перед запросом. Реальная доставка
+retained whole/partial и live mutation guards проверены на scripted/fake sources.
+
+Изолированное поколение JSONL/CAS реализует append/query, общий SQLite repair и
+single-resource publication с exact attempt/receipt linkage. Поздний outcome не
+повторяет effect, не переписывает terminal и не откатывает более новый head. Семь
+focused checks проходят на macOS/net8.0 (две дорогие baseline fixtures opt-in).
+При H=100/1000/10000 пар новый result append читает 3 metadata records вместо
+материализации 201/2001/20001 сообщений; это не замер production/Windows latency.
+[Замеры и отчёты](../audits/storage-context-optimization.md).
+
+В isolated P5a один frame принимает local send/input/membership; wait использует
+адресную correlation, включая applied early reply после restart/rebuild. Две
+проверки проходят, включая гонки двух процессов за слот и один operation ID.
+Production storage остаётся прежним до интеграции consumers и переключения root.
+В P5b готовы isolated atomic spawn, run checkpoint и control guards; общий набор
+из 12 checks проходит. Production handle теперь защищён от stale Cancel/Dispose
+другой invocation того же Run. Live Inbox paging/eviction и notify остаются открыты.
+P6a переключён в обоих hosts: обязательный manifest, opt-in RAM capture с byte/time
+limits, без durable SSE/очереди raw writes. Inspector явно показывает отсутствие
+точных байтов. Проходят 13 storage checks и 9 адресных регрессий (steering tool-entry
+падает также на чистом baseline и уже зарегистрирован). P6b проверен: независимый inventory/closure,
+GC под maintenance gate и restore всех новых journals/CAS без исходного индекса;
+общий набор после P4a — 16 checks. Backup APIs пока internal/isolated, DPAPI на Windows не
+проверен. P4a добавил общий bounded verified cache для малых CAS bodies и exact text windows:
+на 24 окнах просмотрено 72 144 вместо 1 728 000 символов с сохранением проверок
+текущих байтов и live guards. Далее оставшиеся P3/P4 и consumers.
+Multi-target/resource semantic-owner integration, P3/P4, production backup/GC integration,
+cutover и Windows/Office evidence открыты; общая оптимизация не завершена.
+
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10
 

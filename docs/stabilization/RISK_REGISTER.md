@@ -1,5 +1,19 @@
 # Stabilization risk register
 
+## Storage optimization qualification — 2026-11-10
+
+Owner: Core persistence/context. Isolated append/query/repair, single-resource
+linkage and all-stream CAS closure/backup have host-neutral evidence. Production
+still uses full-session consumers. Multi-target resources, remaining P3/P4/P5
+consumers and P7 cutover are open. Windows provider/filesystem, DPAPI, power loss
+and Office delivery remain separate.
+
+Three existing failures reproduce on clean `d0ab9d09`: oversized source continuity
+expects the retired developer role; archived media presentation's hydration flag
+assertion fails; public Office routing creates HTML without an explicit workspace.
+Owners: protocol/context fixtures and HTML tools. These are separate from the
+retained-body change; see [evidence](../audits/storage-context-optimization.md).
+
 ## HTML project import — In Review, 2026-11-10
 
 Owner: Application HtmlProjectImportService / Workspace files; UI HtmlArtifactView.

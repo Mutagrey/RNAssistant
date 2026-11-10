@@ -1,5 +1,53 @@
 # Current-to-target migration map
 
+## Storage/context optimization — 2026-11-10
+
+Owner: Core persistence/context; Application consumes common contracts.
+[Plan](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md),
+[ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md),
+[P0 evidence](../audits/storage-context-optimization.md).
+`StorageJournal` / `ConversationJournal` / `ResourceJournal` / `JournalIndex` /
+`JournalIndexAdmission` are internal
+new-generation owners used only in isolated Harness roots. They have no production
+storage consumer, feature flag or dual-write. Accepted calls/results, bounded
+context/windows, idempotent receipts and two-process index repair are exercised;
+single-resource prepared/dispatch/outcome and exact conversation linkage also
+rebuild from canonical frames. `ConversationJournal.Delivery` adds one-frame local
+send/membership, scoped alias lookup, pending pages and historical reply correlation.
+Existing Application communication/inbox consumers still use their previous path;
+their handshake/replay is removed only with the P5b/P7 integration switch.
+Atomic spawn, bounded run checkpoints and guarded queue controls also exist in the
+isolated owner. `ConversationLeaseService.ForScope` is not yet a production lease
+namespace; switch requires stopping old writers. Live Inbox paging/eviction and
+notify integration remain open. Production `ConversationRunHandle` already checks
+an exact invocation for Cancel/Dispose/IsActive; no storage adapter is involved.
+Production resource owners, multi-target publication
+and remaining consumers are not migrated. Existing storage
+remains active until P2/P6/P7 durability, index repair, CAS closure and integration
+gates. Removal condition: replace current journal transport with this single
+primitive and delete old transport/replay paths at cutover; do not retain a second
+production backend. No old chat data or keys are moved/deleted.
+
+Production result consumers already use common `ToolResultPersistence` and typed
+retained bodies. Removed Office envelope externalization, Workspace `WireResult`,
+the per-run Workspace observation cache and historical-file refresh loop. There is
+no adapter between the old aggregate store and the isolated journal. Full
+`ChatSession` save/context paths still exist and prevent claiming overall completion.
+
+Production diagnostics use mandatory compact manifests and optional bounded RAM
+captures. `SessionTraceWriteQueue`, normal durable SSE and raw debug-file writes
+are removed. Both hosts and Inspector consume the new semantics; there is no raw
+persistence adapter. Historical raw CAS roots are preserved. P6b now inventories and validates all new canonical streams independently of the
+production index; GC honors their typed/nested refs. Internal new-generation backup
+restores JSONL/CAS and rebuilds SQLite. Production root switch, backup command and
+actual Windows/DPAPI evidence remain P7/release gates.
+
+P4a replaces the per-instance CAS encoding fingerprint with one shared bounded
+verified entry plus lazy text coordinates. Common readers are switched; large/
+explicit-seek streams retain their necessary bounded paths. No model authority or
+live file freshness is inferred from cache. Remaining large-source/index/search
+work and P3 aggregate session paths are open.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.

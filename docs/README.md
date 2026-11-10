@@ -77,6 +77,11 @@ Focused import и browser checks проходят; pointer-routing gap оста�
 
 ## Канонические документы
 
+Оптимизация хранения и контекста: [план пользователя](proposals/RNAssistant_Architecture_and_Implementation_Plan.md),
+[решение JSONL/CAS/index](decisions/ADR-0019-bounded-jsonl-storage.md) и
+[baseline / ход реализации](audits/storage-context-optimization.md). Порядок P0 → §8.3 → §8.4;
+новое поколение хранения ещё не включено в production.
+
 [Карта повторов и блокировок](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03)
 содержит матрицы причин, исходные пределы и локальные воспроизведения semantic/inspection
 циклов. [Первый срез](stabilization/RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04)

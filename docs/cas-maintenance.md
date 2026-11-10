@@ -2,6 +2,43 @@
 
 `chat-blobs` is one immutable SHA-256 CAS shared by chat model payloads, artifact bodies, committed attachments, extracted attachment text, file snapshots, web manifests/verification records and VBA before/intended/backup source. Durable roots include chat `*.events.jsonl`, VBA journals, resource authority revisions/views and resource mutation journals. CAS files are not a second index.
 
+## New-generation journal closure and backup — 2026-11-10
+
+The collector independently inventories `conversation-streams/<scope-hash>` and
+`resource-stream`, including streams absent from SQLite. Segment gaps, unknown
+files, links, unknown fact kinds, incomplete tails and mismatched reducer cursors
+block collection. Only the known append lock and unpublished create-only header
+staging names are noncanonical. Maintenance does not truncate/adopt tails.
+
+The same domain reducers rebuild a private temporary SQLite projection; cursor
+completeness is checked against the scanned canonical ends. The production index
+is neither trusted nor changed by audit. Typed journal owners enumerate CAS refs,
+not observed-content checksums. Run checkpoint bodies must agree with their frozen
+metadata and explicit nested prepared-state closure. Missing/corrupt new-generation
+bodies block deletion. Recent new-generation orphans have a conservative one-hour
+grace; age never replaces the exclusive publication/run boundary.
+
+`ForScope` run leases join the existing `locks/run_*.lck`/`run-registry.lck` namespace.
+`RuntimeStorageActivity` remains held from CAS publication to acceptance or confirmed
+abort. A second-process publication and a live scope run both block collection.
+Index repair has its separate short admission and need not drain live runs.
+
+Internal `BackupJournals`/`RestoreJournals` are exercised only on isolated new roots
+until P7. Backup refuses mixed legacy roots; it copies every verified canonical
+segment and complete CAS closure, plus existing settings, salt and DPAPI-protected
+key files. It does not include SQLite, orphans, locks or optional diagnostics.
+A checksum/HMAC manifest authenticates the file set. Restore creates a private root,
+verifies all files/semantic closure, rebuilds the index and only then publishes a
+previously absent destination. Failure cannot overwrite an existing destination.
+Original source history/keys are never deleted or imported.
+
+Plaintext and AES/HMAC restore, unknown effects, cross-owner receipts, nested refs,
+unindexed streams and corrupt/missing backup bodies are checked on macOS/net8.
+DPAPI key files are copied unchanged, not decrypted/rekeyed for transport. Actual
+DPAPI restore requires its original supported Windows identity; that qualification
+and filesystem power-loss/Office checks remain open. No Settings UI backup command
+or production format switch is claimed by these internal APIs.
+
 ## Reachability audit
 
 Settings → Diagnostics → CAS storage runs a repository-wide audit under the cross-window maintenance gate. It:
@@ -39,20 +76,19 @@ through the flushed JSONL reference. A reachability snapshot cannot run between
 those steps and classify that new body as an orphan. Failed/uncommitted publications
 can still leave ordinary collectable orphans.
 
-The loading-path audit (2026-10-30) confirms that exact HTTP requests, responses,
-batched SSE frames, accepted/rejected model bodies, artifacts and runtime payloads
-are retained for replay/diagnostics. Equal plaintext bytes share one content address;
-compressible bodies are compressed before encryption. Similar requests with changed
-history are distinct blobs, and retained historical revisions are not garbage.
-The catalog reads CAS reference/file-size metadata only. There is no automatic
-trace pruning or evidence from the Windows photo about actual orphan volume.
+Raw HTTP/SSE capture is optional and RAM-only since P6a (2026-11-10), with byte,
+entry and time limits in `ModelDiagnosticBuffer`. Compact mandatory manifests have
+wire hashes/lengths, not raw CAS references. Existing historical raw payload roots
+remain retained; the new policy does not authorize deleting old semantic streams
+or reachable bodies. Inspector distinguishes unavailable capture from a manifest.
 
 `StoreFile` hashes and encodes the same open source handle with cancellable,
 bounded-buffer passes and stage progress. Temporary compressed/encoded writes
 are removed on failure/cancellation. `OpenVerifiedRead` authenticates, decodes and
-hashes the complete retained body before returning its read-only stream; it keeps
-that CAS handle open until disposal. Raw bodies are seekable; compressed/encrypted
-bodies remain sequential and never spill plaintext to a scratch file. Reads also
+hashes the complete retained body before returning its read-only stream. Small
+reads can pin the verified in-memory entry; larger reads keep the CAS handle until
+disposal. Raw bodies are seekable; compressed/encrypted large bodies remain sequential
+and never spill plaintext to a scratch file. Reads also
 observe cancellation. A caller supplies its source-byte budget independently of
 preview/text-response limits. Existing CAS format, protection and reachability
 rules apply unchanged to large workspace source revisions.
@@ -71,22 +107,24 @@ this optimization; reopening a body and maintenance audits still verify it.
 
 ## Repeated source verification
 
-`ChatBlobStore` retains at most one in-memory encoding fingerprint, bound to the
-plaintext hash/length and the exact immutable `StorageProtector` instance. A cold
-check captures at most 1 MiB of encoded bytes, verifies that immutable snapshot
-through the normal authentication/decompression/plaintext-hash path, then records
-its SHA-256. This shortcut applies only when the encoding is less than half the
-plaintext size. Larger or weakly compressed encodings keep streaming verification.
+P4a (2026-11-11) replaces the per-instance encoding fingerprint with one shared
+storage-owned entry, keyed by canonical CAS path, plaintext hash/length and the
+exact `StorageProtector` instance. Small bodies (up to 1 MiB plaintext and 1 MiB +
+64 KiB encoded) reuse verified immutable bytes. UTF-8 text and line offsets are
+lazy and bounded by that body. These are defensive caps, not measured optimal
+settings. Only one entry is cached; active read leases may independently pin it
+until disposal. No writable array is exposed. Larger bodies keep the prior bounded
+encoding fingerprint where useful and use streaming verification otherwise.
 
-Every later check opens the current file and hashes **all** stored bytes within
-its captured length. Only an exact fingerprint match under the same protector can
-avoid repeating decryption, decompression and plaintext hashing. Size and timestamp
-never prove integrity. A changed encoding is fully verified before replacing the
-fingerprint; missing/corrupt bytes or another protection key fail closed. No source
-body, read authority, persistent cache or new CAS format is retained. Restart drops
-the fingerprint; collection still checks current bytes, not a prior audit result.
-The raw and compressed paths share one bounded hash loop, including prefix reads
-and provisional index visitors.
+Every hit still opens and hashes **all current encoded bytes**. Missing/corrupt
+content or a different key fails closed; file size/time alone never establishes
+integrity. A miss verifies/decrypts/decompresses one bounded encoded snapshot before
+publishing its immutable entry. Concurrent same-key misses share that decode.
+Small `ResourceTextWindow` reads use the retained exact line/character metadata;
+large sources and explicitly seekable consumers keep existing streaming/scratch
+paths. No offsets seek into compressed bytes. Explicit live source reads still
+capture their addressed live file; cache presence grants no model delivery or
+mutation authority. Restart discards the cache; GC verifies current bytes.
 
 ## Fail-closed collection
 

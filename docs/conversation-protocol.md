@@ -17,6 +17,11 @@ journal/CAS под тем же document lock, что и удаление чат�
 
 ## Очередь активных шагов — 2026-11-05
 
+Дополнение 2026-11-10: каждый live `ConversationRunHandle` закреплён за отдельным
+invocation ID. Его Cancel/Dispose/IsActive не могут затронуть последующее
+продолжение с тем же chat/run ID. Это уточнение existing Application owner;
+новые JSONL run/control contracts пока изолированы (см. Session events).
+
 `MaxConcurrentAgentSteps`: default 4, 0 — без ограничения, диапазон 0–64.
 Общий Application scheduler для Office/Workspace одного app-data root **в одном
 процессе** выдаёт FIFO permit на один шаг kernel: входящие → model/retries → tools и
@@ -2111,10 +2116,19 @@ explicit review/reset. Built-in prompt authoring requires only model call
 name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
 prove that a document changed.
 
-`message` is bounded before it enters model context. Each accepted terminal result is parsed once into a strict detached token; externalization and semantic media selection reuse that raw representation, while sanitization and every request-budget candidate reuse one separate model projection. The immutable durable wire is archived before request compilation; storage externalization is not a per-result model-delivery limit. Eligible oversized generic `data` up to 2,000,000 characters is stored completely as a CAS-backed `tool_result` artifact before the next model dispatch. Durable materialization retains the exact `relation:"result"` reference, but every model projection removes all exact resource references; subsequent resource calls find and read semantic targets rather than accepting a URI. Generic/producing tool results also remove runtime `rna://` values from their model message/data while preserving ordinary business fields and non-runtime URIs. Resource/capability read evidence is provider-bounded and is neither rewrapped as an untrusted artifact nor silently truncated by transport; its model projection has no exact relation. Completed mutation folding consumes this same model projection rather than durable result prose/effect labels. A specialized chart payload is materialized once at the result boundary and follows the same durable-reference/model-projection separation. After the durable tool-result checkpoint, the controller queues that complete revisioned artifact projection before later progress or the next model step, including confirmation continuation; progress itself carries no artifact authority. Before every conversation model request, including initial dispatch, format repair and continuation after confirmation, ModelProtocol verifies the same messages + options + applicable repair + continuation calculation and stops with a visible diagnostic instead of sending an oversized request.
+`message` is bounded before it enters model context. Each accepted terminal result is parsed once into a strict detached token; externalization and semantic media selection reuse that raw representation, while sanitization and every request-budget candidate reuse one separate model projection. The immutable body and typed occurrence are committed before request compilation; storage externalization is not a per-result model-delivery limit. Eligible oversized generic `data` up to 2,000,000 characters is stored completely as a CAS-backed `tool_result` artifact before the next model dispatch. Durable materialization retains the exact `relation:"result"` reference, but every model projection removes all exact resource references; subsequent resource calls find and read semantic targets rather than accepting a URI. Generic/producing tool results also remove runtime `rna://` values from their model message/data while preserving ordinary business fields and non-runtime URIs. Resource/capability read evidence is provider-bounded and is neither rewrapped as an untrusted artifact nor silently truncated by transport; its model projection has no exact relation. Completed mutation folding consumes this same model projection rather than durable result prose/effect labels. A specialized chart payload is materialized once at the result boundary and follows the same durable-reference/model-projection separation. After the durable tool-result checkpoint, the controller queues that complete revisioned artifact projection before later progress or the next model step, including confirmation continuation; progress itself carries no artifact authority. Before every conversation model request, including initial dispatch, format repair and continuation after confirmation, ModelProtocol verifies the same messages + options + applicable repair + continuation calculation and stops with a visible diagnostic instead of sending an oversized request.
 
 Before request projection, the compiler hydrates selected `ResultPayload` bodies
 from CAS, including generic reads such as `excel.inspect` and terminal mutations.
+Office and Workspace use the same `ToolResultPersistence` boundary: typed text reads
+store raw view bytes once; versioned `ResultBody` and occurrence metadata reconstruct
+the result envelope only for a selected consumer. Large opaque `data` remains exact
+JSON and is not interpreted as source text by property-name heuristics. The former
+Office whole-envelope externalization and Workspace `WireResult` persistence are
+removed. A hash match only deduplicates body storage: observation scope, resource,
+revision, coverage and actual delivery remain separate authority checks. Changing
+run does not by itself invalidate delivered retained source. Incompatible old
+terminal payload shapes are unavailable explicitly; stored data is preserved.
 A single complete source exceeding request capacity may instead retain only its
 operation/effect receipt and an explicit body-omission recovery notice.
 Completed mutation frames fold only after hydration and sanitization, retaining
@@ -2134,7 +2148,7 @@ and accepted-call hydration use the same calibrated request capacity as result
 hydration. Media/materialization warnings preserve known mutation status, semantic
 data, effect, after-state evidence and publication identity; they cannot replace
 a completed action with an apparent failure to execute it.
-The 8192-character archival threshold and 8192-token tool-result artifact threshold
+The 8192-character opaque-data archival threshold and 8192-token tool-result artifact threshold
 control storage only: the model receives the complete recorded JSON whenever the
 whole request fits its calibrated budget and response/repair reserves. Complete
 results do not instruct the model to rediscover their already supplied data.

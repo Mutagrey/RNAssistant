@@ -13,6 +13,38 @@ Missing or incompatible terminal bodies fail explicitly; no legacy payload reade
 or data migration is introduced. Other typed context-note payloads keep their own
 contract. Historical cloning preserves the header; body-omission projections clear it.
 
+The new generation is still isolated from production storage. `StorageJournal` /
+`ConversationJournal` exercise accepted calls/results, runtime T/E allocation,
+bounded keyset windows, exact receipts, source hydration and shared-index repair.
+Only eligible terminals receive E. One reducer serves append, suffix catch-up and
+streaming rebuild; index failure cannot undo accepted JSONL. Repair drains short
+metadata sections, keeps run/CAS leases and inventories canonical streams without
+using the failed index. SQL error 1 is not classified as damaged data.
+The isolated resource stream also retains prepared/dispatch/outcome and immutable
+conversation linkage. Local `agent.accepted` accepts input, receipt and membership
+in one scope frame; `input.changed` retains exact revision/run application. Applied
+peer messages derive from the original CAS body/provenance. Indexed message/reply
+correlation survives eviction/rebuild; a pending input does not grant permission
+to start or resume a run. No production input/communication consumer is switched yet.
+Multi-target resources, remaining consumers and production cutover remain open in
+[ADR-0019](decisions/ADR-0019-bounded-jsonl-storage.md) and the
+[implementation evidence](audits/storage-context-optimization.md).
+
+The isolated generation additionally accepts `agent.spawned` (child + membership +
+optional first input), `run.checkpoint` and `queue.control`. Kernel checkpoint body
+is CAS-owned and lists nested prepared-state references; metadata holds exact
+run/invocation, revision, limits and monotonic counts. Control requests and safe-
+boundary acknowledgements are distinct. User/recovery pause cannot be released by
+a peer token; pending work is not started by replay. Live Inbox/lease/admission
+integration and eviction remain open, so these are not production storage claims.
+
+New-generation maintenance independently inventories all canonical files, validates
+strict complete prefixes with the same reducers, and retains typed CAS/nested run
+references even without an index cursor. Backup/restore is internal and refuses
+mixed old/new roots; restored history is byte-identical and SQLite is rebuilt.
+See [CAS maintenance](cas-maintenance.md#new-generation-journal-closure-and-backup--2026-11-10).
+No production journal writer is switched by this maintenance integration.
+
 ## Named chat groups — 2026-11-05
 
 ChatStore.Groups reuses ResourceAuthorityStore append-only commits and immutable CAS:
@@ -434,26 +466,25 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
 - Logical Plan deletion is another `artifact.revision.created`: an exact-current guarded `removed:true` child becomes the tombstone and the active Plan reference becomes null. It never emits `artifact.remove` and never rewrites historical message `ResourceRef` values. Replay, prune and fork derive removal from the applicable tombstone; a model-linked tombstone follows its source message, while a direct UI tombstone is session-level. Exact reads of retained removed revisions report `resource_removed`.
 - `turn.started` / `turn.ended` delimit one logical user turn. `TurnId` remains stable across a confirmation pause; older v7 runs could resume under a new runtime `RunId`, while v8 keeps the original one. Their data records the response protocol version; `turn.ended.Status` is a runtime-owned lifecycle projection, never a model-declared completion.
 - `step.started` / `step.ended` delimit one model request. Startup recovery appends a synthetic interrupted end for a request that never reached a terminal event.
-- `llm.request` records the exact final JSON body after messages, attachment parts, system instructions, tool schemas, and response schema are materialized. The body is serialized to UTF-8 once; those same bytes are written to CAS and then reused by HTTP without a duplicate JSON serialization or intermediate UTF-16 payload string. Persistence succeeds before HTTP dispatch.
-- `llm.request` diagnostic data may additionally carry typed `ContextMessages` and
-  `Streaming`. Compiler provenance is mapped to the final wire message indices;
-  excluded entries have no wire index. Per-message/part presentation and optional
-  existing `OriginalPayload` references remain outside the provider body. No new
-  body store is introduced. Missing provenance in older events means unknown,
-  not inferred full delivery.
-  Attribution requires a unique source message ID and a unique matching final
-  message index; duplicate IDs, conflicting positions or excluded entries cannot
-  supply completeness, original-payload bindings or evidence links for a sent
-  message. Presentation and composition use the same matching rule.
-  `RequestComposition` records disjoint baseline text/media estimates for final
-  messages plus response-format options. `ResourceReferences` covers working-set,
-  repeated-read and resource-state notices separately from `Resources` content.
-  These are whole-message estimates, not calibrated admission, measured API usage
-  or a token split of mixed message bodies. Diagnostics remain outside wire JSON.
-- `llm.response` records the raw non-stream response body or the normalized complete streaming result.
-- `assistant.chunk` records ordered provider SSE data frames in bounded JSON-array batches (up to roughly 64 KiB or one second while frames arrive). The event stores first frame index, count, completion marker, and a CAS payload. Batches enter one bounded ordered queue per session (up to 16 pending writes), so the SSE reader normally does not wait for `Flush(true)`; saturation applies backpressure instead of allowing unbounded memory growth.
-- `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.
-- `agent.response.rejected` keeps malformed Agent output for diagnosis without adding it to model replay or visible chat history.
+- `llm.request` is a mandatory compact dispatch manifest, flushed before HTTP. It
+  retains request/run/step/attempt, frozen settings, final wire hash/length, compiler
+  build, prompt instruction hashes, schema/generations, preparation timing and
+  ordered selected provenance/coverage. Exclusions retain at most 16 candidates
+  plus aggregate reason counts; they are not a second full history receipt.
+  Existing source `OriginalPayload` references keep their semantic owner. A manifest
+  is not exact-wire replay: changed prompts/renderers cannot reconstruct old bytes.
+- Raw request/response capture is off by default. `DebugModelTraffic` opts into one
+  bounded process buffer: 64 MiB total, 8 MiB per body, 256 entries, 10 minutes.
+  These are defensive caps, not measured optimal settings. Exact bytes are frozen;
+  eviction/drop/capture failure is explicit and never changes semantic acceptance.
+  Restart loses this optional capture. No raw CAS ownership or disk queue is added.
+- `llm.response`, `llm.failure`, `agent.response.rejected` and accepted verdicts are
+  compact best-effort diagnostic metadata. Raw non-stream responses and normalized
+  streaming JSON are identified separately. Numeric usage survives without a copy
+  of the full usage object. Accepted messages/calls/results remain mandatory facts.
+- Ordinary SSE belongs to transient UI delivery and creates no `assistant.chunk`
+  events. The explicitly invoked diagnostic runner can still capture bounded SSE
+  for its own report; it does not configure the semantic persistence adapter.
 - `tool_pack.extension.accepted` / `tool_pack.extension.rejected` are typed
   `ToolPackExtensionEventData` v2 records at the next model-step boundary. They carry
   mode/host/profile, catalog and before/after snapshot revisions. Each requested
@@ -485,35 +516,34 @@ Neither a raw event type string nor a tool name can choose these properties.
 The model-trace adapter rejects an unknown source type instead of relabelling it as a
 failure, and the causal writer accepts only best-effort Domain Diagnostic kinds.
 
-Office and the workspace CLI configure the same Core `ModelTracePersistenceService`
-over `IEventStore`. `LlmClient` records the exact serialized request before dispatch,
-responses and streamed frames; `ModelProtocolClient` records rejected bodies and
-accepted diagnostic verdicts. Each attempt retains its transport `RequestId`,
-`ModelAttemptId`, logical `StepId` and, when compiled, `ContextSnapshotId`. Format
-repair gets a new attempt/request identity while retaining the frozen snapshot.
-The bounded per-session queue drains before terminal trace writes. These records
-use the existing stream/CAS; there is no separate CLI trace store or synthetic
-request built from compiler messages. Authorization headers are not trace payloads.
+Office and Workspace configure the same Core `ModelTracePersistenceService` over
+`IEventStore`. Request manifest failure propagates before HTTP. Optional raw capture
+and outcome diagnostic failures are contained. The old raw write queue, terminal
+queue drain and duplicate debug-file JSON writes are removed. Compact outcome
+metadata still appends synchronously; no asynchronous throughput claim is made.
+Inspector reads exact bytes only while the capture is present, otherwise reports
+manifest-only/unavailable; it never substitutes reconstruction. Existing historical
+CAS payloads keep their owners. Authorization headers are never trace payloads.
 
 | Event group | Lane | Meaning | Durability | Writer |
 |---|---|---|---|---|
 | `session.*`, `turn.*`, `step.*` | Agent | authority | mandatory | `ChatStore` internal only |
 | `llm.request` | Agent | authority | mandatory | event port |
-| `llm.response`, `llm.failure`, `assistant.chunk` | Agent | diagnostic | mandatory | event port |
-| `agent.response.rejected`, `tool_pack.extension.rejected` | Agent | diagnostic | mandatory | event port |
+| `llm.response`, `llm.failure` | Agent | diagnostic | best effort | event port |
+| `agent.response.rejected` | Agent | diagnostic | best effort | event port |
+| `tool_pack.extension.rejected` | Agent | diagnostic | mandatory | event port |
 | `model.response.accepted` | Agent | diagnostic marker | best effort | event port |
 | `tool_pack.extension.accepted` | Agent | authority | mandatory | event port |
 | run/tool/domain/UI causal observations | Domain Diagnostic | diagnostic | best effort | event port |
 
 Accepted response/call/result authority still lives in the storage-internal
-`session.commit`; `model.response.accepted` cannot replace it. Mandatory diagnostics
-remain mandatory because they close or preserve the current transport/publication
-boundary, not because they prove a tool effect. Storage-internal descriptors are not
+`session.commit`; `model.response.accepted` cannot replace it. The mandatory request manifest closes the delivery boundary; publication rejection
+retains its existing consumer contract. Neither proves a tool effect. Storage-internal descriptors are not
 appendable through `IEventStore`. Historical unknown event types remain readable
 through validated stream reads, but cannot be manufactured by active Office writers.
 External payload hydration additionally requires the selected chat and rejects an
 event envelope with another `SessionId`. The adapter does not change JSONL schema,
-type strings, correlation, CAS payloads, hashing, revision CAS or lifecycle adjacency.
+type strings, correlation, hashing, revision CAS or accepted-fact authority.
 The replaced raw `ChatStore` append/read members are storage-internal, so production
 consumers outside Core cannot bypass the typed port.
 See [Phase 9D3 evidence](stabilization/PHASE_9D3_TYPED_EVENT_STORE.md).
@@ -701,8 +731,10 @@ Workspace compaction uses the same Core checkpoint/artifact owner as Office. The
 CLI saves its checkpoint through ChatStore before emitting `compacted` or sending
 a request based on the new window. `ReadState`/`inspect.ContextCheckpointId` exposes
 the active canonical checkpoint. A fresh process restores that checkpoint for
-model context, retains the latest user task verbatim, and refreshes file authority
-before compiling claims. Kernel counters and recovery still use complete accepted
+model context and retains the latest user task verbatim. Request preparation uses
+published authority and selected retained observations; it no longer recaptures all
+historically read live files. Explicit reads and mutation preparation/dispatch still
+validate the addressed current source. Kernel counters and recovery still use complete accepted
 history, including exchanges before the checkpoint. Neither compaction nor resume
 can grant mutation authority from a summary or reset acceptance requirements.
 
