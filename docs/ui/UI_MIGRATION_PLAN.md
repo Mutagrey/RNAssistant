@@ -111,6 +111,37 @@ Inbox Resume. Windows/Office binding и визуальная приёмка по
 открытии native picker. Regression проходит через реальные клики и filechooser,
 проверяет материал и доступное сжатие, без программного обхода обычного меню.
 
+## Universal Browser: компактный toolbar и Chat View — In Review, 2026-11-05
+
+Пользователь одобрил концепцию и выбрал отдельный Chat View рядом в Dockview.
+Owner среза: Web PreviewSurface + existing provider views, ConversationPanel и
+DockWorkspace. Реализованы play/code, компактные общие действия/версии/аннотации,
+ActionMenu плагина и «Обсудить» без второго composer. Plugin annotation target
+закреплён за явным source chat; preserveChatOwner больше не ограничен plugin owner.
+Уточнение пользователя реализовано: одна строка navigation/annotation/address/actions,
+расширение адреса по фокусу, сведения под иконкой, CAS/files metadata, upload/экспорт.
+Удалены постоянная подпись сохранённого проекта, title/path row и plugin decision strip;
+кнопка публикации сохраняет прежний guarded handler. До 600 px tools раскрываются через ⋯.
+История HTML/plugin теперь использует общий portalled ActionMenu; прежние version
+popover DOM/CSS удалены. Exact guards и загрузка порциями сохранены.
+
+Проверки: browser-saved-views, browser-views, browser-lifetime, plugin-view-selection,
+html-editor-views. browser-views периодически падает ещё с baseline на pointer routing
+HTML annotation; последнее выполнение красное, риск открыт. Остальные проверки проходят.
+Проверяются reuse Chat View/draft, retained iframe, точный адресат
+после выбора другого чата, source bounds, late cleanup, move/restore/narrow/zoom.
+[Новые замеры](review/browser-address.json), [результат и открытые gates](../browser/06_PROGRESS.md).
+После изменения строки отдельно прошли saved/HTML editor/plugin selection fixtures.
+Saved restore проверяется клавиатурой: быстрый mouse click поверх iframe всё ещё
+попадает в открытый pointer-routing риск; это не evidence исправления mouse routing.
+Для ревью: saved HTML → ▶/исходник → «Обсудить» дважды → другая вкладка → аннотация;
+[подробности](../browser/05_TEST_MATRIX.md#toolbar-review).
+
+Это продолжение P1 presentation, не полный P2–P7: независимое владение проектом,
+managed/directory backing, resolver/sessions, настоящий diff и external native browser
+ещё требуют соответствующих domain slices. Storage/bridge не переписаны. Концепция
+Approved; визуальное принятие production и Windows/Office evidence остаются Open.
+
 ## Durable wait: existing Inbox control — In Review, 2026-11-04
 
 Срез runtime 2b.2 подключает существующую кнопку Resume к сохранённому Waiting Run

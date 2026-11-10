@@ -298,7 +298,7 @@
       button.setAttribute("aria-pressed", active ? "true" : "false");
       if (button.dataset.browserControl === "true" && window.RNAssistantIcons) {
         button.classList.add("browser-annotate");
-        button.innerHTML = window.RNAssistantIcons.render("selection") + "<span>Аннотировать</span>";
+        button.innerHTML = window.RNAssistantIcons.render("selection");
         button.setAttribute("aria-label", active ? "Выключить выбор элемента" : "Аннотировать: выбрать элемент");
         button.title = button.getAttribute("aria-label");
       } else {

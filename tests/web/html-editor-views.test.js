@@ -62,6 +62,13 @@ const { chromium } = require('playwright');
     await layout('Сохранить раскладку'); await layout('Вернуть сохранённую');
     assert.equal(await page.evaluate(() => htmlTest.frame.contentDocument === htmlTest.document), true, 'restore retains live iframe');
     assert.equal(await a.getByRole('textbox').inputValue(), 'retained');
+    const toolbar=page.locator('.browser-view-surface:visible .preview-surface-toolbar');
+    assert.equal(await toolbar.getByRole('button',{name:'Аннотировать: выбрать элемент',exact:true}).count(),1);
+    if(process.env.HTML_EDITOR_SCREENSHOT)await page.screenshot({path:process.env.HTML_EDITOR_SCREENSHOT+'-preview.png'});
+    await toolbar.getByRole('button',{name:'Исходник',exact:true}).click();
+    await root('html-a').locator('.CodeMirror').waitFor();
+    await root('html-a').getByRole('button',{name:'Страница',exact:true}).click();
+    assert.equal(await a.getByRole('textbox').inputValue(),'retained','moving the shared mode controls does not reload the page');
     // Annotate A while the global selected chat is another chat. No shell interception.
     await page.locator('[data-html-node="inspectHtmlWorkspaceButton"]:visible').click();
     await a.getByRole('heading', { name: 'html-a', exact: true }).click();

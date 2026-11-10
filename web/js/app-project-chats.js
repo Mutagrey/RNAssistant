@@ -423,7 +423,7 @@
   }
   document.addEventListener("DOMContentLoaded", bind);
   window.RNAssistantProjectChats = { show: function (options) {
-    if (options && options.preserveChatOwner && window.RNAssistantWorkspaceChat.owner() === "plugin") {
+    if (options && options.preserveChatOwner) {
       render(); window.RNAssistantDockWorkspace.refreshPresentation(); return;
     }
     window.RNAssistantWorkspaceChat.mount(scope === "projects" ? "project" : "office");

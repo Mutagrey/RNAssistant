@@ -53,6 +53,41 @@ Escape возвращает фокус к «+», close view убирает porta
 Native composer picker и recovery portal взаимоисключаются: «+» всегда возвращает
 прежнее меню действий, без перекрывающего списка участников.
 
+## Universal Browser controls — In Review, 2026-11-05
+
+Общий PreviewSurface использует `icon-btn compact`, `view-switch`, `rna-form-control`
+и существующий RNAssistantIcons. Страница — `play`, исходник — `code` (`</>`),
+аннотация — `selection`, версии — `clock`, разделы — `layers`, обсуждение — `chat`.
+У каждой иконки есть title/aria-label; выбранный режим и выбор элемента имеют
+aria-pressed. Размеры, hover/focus/active принадлежат общим components/tokens.
+Слева: назад, вперёд, reload, selection. Затем округлый адрес; справа — provider
+controls. Публикация плагина — upload icon с tooltip; сведения — layers для CAS,
+folder для файлов. Все кнопки используют общую compact геометрию.
+
+Редкие действия плагина — общий ActionMenu `⋯`; версии открываются через clock.
+История HTML и plugin также использует portalled ActionMenu, чтобы меню не сжималось
+до ширины иконки и не обрезалось Dock surface; cursor/порции принадлежат прежним owners.
+Постоянной строки title/revision и поясняющей подписи под toolbar нет. Сведения
+открываются у адреса через общий ActionMenu с informational rows, без disabled opacity.
+Фокус адреса расширяет поле на всю строку; provider controls появляются под ним,
+не меняя геометрию iframe. Уход фокуса за пределы controls или Escape сворачивает поле;
+меню сохраняет фокус и доступность своего trigger. До 600 px ширины surface правая
+группа доступна через ⋯. File picker/source остаются у provider.
+Diff пока скрыт: для будущего реального сравнения выбран знак двух колонок с +/−,
+без неработающей кнопки в текущей панели.
+
+[Замеры](review/browser-toolbar.json) сравнивают production и frozen Demo при одинаковых
+viewport/zoom/theme. Production controls используют общий compact token 30 CSS px,
+SVG 16 px; source text 12 px. Сохранённое содержимое проверено при 1280/100% и
+420/125%, overflow 0. Новая [строка](review/browser-address-wide.png),
+[раскрытый адрес](review/browser-address-focused.png),
+[узкая панель](review/browser-address-narrow.png), [сведения](review/browser-address-info.png).
+[Новые замеры](review/browser-address.json). Production result In Review;
+историческое P1 evidence сохранено в browser-p1.json.
+Frozen Demo: header icon 28 px по высоте (на narrow ширина 25 px), source mode 24 px,
+текст 12 px. Это явное отличие существующего production compact token; локальные
+размеры для имитации Demo не добавляются.
+
 ## Ожидание и recovery — In Review, 2026-11-04
 
 Сохранённый wait использует существующие `inbox-pause`, `inboxButton` и waiting

@@ -7,33 +7,38 @@
     var chatId = context ? context.chatId : state.activeChatId, navigation = state.chatNavigationVersion;
     var sessionRevision = context ? context.sessionRevision : state.artifactLibrary.sessionRevision;
     var selected = selectedRevision || head;
-    var menu = document.createElement("details");
-    menu.className = "html-workspace-menu artifact-version-menu";
-    var summary = document.createElement("summary");
-    summary.textContent = (head.resourceClass === "versioned_aggregate" ? "Версия проекта" : "Версия") +
-      " · v" + selected.revision + " ▾";
-    menu.appendChild(summary);
-    var panel = document.createElement("div");
-    panel.className = "html-workspace-menu-items artifact-version-options";
-    var note = document.createElement("p");
-    note.textContent = head.resourceClass === "versioned_aggregate"
-      ? "HTML, CSS, JS и привязки данных — одна версия проекта."
-      : "Просмотр сохранённых версий этого файла.";
-    panel.appendChild(note);
-    var rows = document.createElement("div"); panel.appendChild(rows);
-    var message = document.createElement("p"); message.setAttribute("role", "status"); panel.appendChild(message);
-    var more = document.createElement("button");
-    more.type = "button"; more.textContent = "Показать ещё 50"; more.hidden = true; panel.appendChild(more);
-    menu.appendChild(panel); root.appendChild(menu);
-    var loaded = false, pending = false, cursor = null, ids = new Set();
+    var label = (head.resourceClass === "versioned_aggregate" ? "Версии проекта" : "Версии") + " · v" + selected.revision;
+    var trigger = RNAssistantActionMenu.createTrigger(label);
+    trigger.classList.add("compact", "artifact-version-menu"); trigger.innerHTML = RNAssistantIcons.render("clock");
+    if (!context || !context.compact) { trigger.className = "button compact artifact-version-menu"; trigger.appendChild(document.createTextNode(label)); }
+    root.appendChild(trigger);
+    var menu = null, loaded = false, pending = false, cursor = null, ids = new Set(), revisions = [], errorMessage = "";
     function current() {
-      if (context) return menu.isConnected && context.isCurrent();
-      return menu.isConnected && chatId === state.activeChatId && navigation === state.chatNavigationVersion &&
+      if (!trigger.isConnected || !menu || !menu.isOpen()) return false;
+      if (context) return context.isCurrent();
+      return chatId === state.activeChatId && navigation === state.chatNavigationVersion &&
         sessionRevision === (state.artifactLibrary || {}).sessionRevision && !state.chatDetailPending && !state.chatDetailError;
+    }
+    function entries() {
+      var items = [{ label: head.resourceClass === "versioned_aggregate" ? "История проекта" : "История файла", disabled: true, icon: false,
+        status: head.resourceClass === "versioned_aggregate" ? "HTML, CSS, JS и привязки данных — одна версия." : "Сохранённые версии этого файла." }];
+      revisions.forEach(function (revision) {
+        var date = new Date(revision.createdUtc);
+        items.push({ key: revision.artifactId, label: "v" + revision.revision + (revision.isHead ? " · текущая" : revision.relation === "branch" ? " · другая ветка" : ""),
+          status: revision.createdUtc && !isNaN(date.getTime()) ? date.toLocaleString() : "",
+          checked: revision.resourceUri === selected.resourceUri, keepOpen: true, onSelect: function () {
+            if (!current()) return;
+            if (onSelect(revision) !== false) { menu.close(); if (trigger.isConnected) trigger.focus(); }
+          } });
+      });
+      if (pending) items.push({ label: "Загрузка версий…", disabled: true, icon: false });
+      else if (errorMessage || cursor) items.push({ label: errorMessage ? "Повторить загрузку" : "Показать ещё 50", status: errorMessage,
+        icon: errorMessage ? "refresh" : "down", keepOpen: true, onSelect: load });
+      return items;
     }
     async function load() {
       if (pending || !current()) return;
-      pending = true; more.disabled = true; message.textContent = "Загрузка версий…";
+      pending = true; errorMessage = ""; menu.update(entries());
       try {
         var result = await (context ? context.send : send)("getArtifactLibraryHistory", { chatId: chatId, expectedSessionRevision: sessionRevision,
           headArtifactId: head.artifactId, cursor: cursor });
@@ -42,44 +47,17 @@
           throw new Error("История изменилась. Обновите список артефактов.");
         (result.items || []).forEach(function (revision) {
           if (!revision.artifactId || !revision.resourceUri || ids.has(revision.artifactId)) return;
-          ids.add(revision.artifactId);
-          var button = document.createElement("button"); button.type = "button";
-          var label = document.createElement("strong");
-          label.textContent = "v" + revision.revision + (revision.isHead ? " · текущая" :
-            revision.relation === "branch" ? " · другая ветка" : "");
-          button.appendChild(label);
-          var date = new Date(revision.createdUtc);
-          if (revision.createdUtc && !isNaN(date.getTime())) {
-            var time = document.createElement("span"); time.textContent = date.toLocaleString(); button.appendChild(time);
-          }
-          button.setAttribute("aria-current", String(revision.resourceUri === selected.resourceUri));
-          button.addEventListener("click", function () {
-            if (!current()) return;
-            if (onSelect(revision) !== false) {
-              menu.open = false;
-              var focus = root.querySelector(".artifact-version-menu summary");
-              if (focus) focus.focus();
-            }
-          });
-          rows.appendChild(button);
+          ids.add(revision.artifactId); revisions.push(revision);
         });
-        cursor = result.nextCursor || null; more.hidden = !cursor; loaded = true; message.textContent = "";
-      } catch (error) {
-        if (current()) { message.textContent = error.detail || error.message || "Не удалось загрузить версии.";
-          more.hidden = false; more.textContent = "Повторить загрузку"; }
-      } finally { pending = false; more.disabled = false; }
+        cursor = result.nextCursor || null; loaded = true;
+      } catch (error) { if (current()) errorMessage = error.detail || error.message || "Не удалось загрузить версии."; }
+      finally { pending = false; if (current()) menu.update(entries()); }
     }
-    more.addEventListener("click", function () { more.textContent = "Показать ещё 50"; load(); });
-    menu.addEventListener("toggle", function () { if (menu.open && !loaded) load(); });
-    menu.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") { menu.open = false; summary.focus(); event.stopPropagation(); }
-    });
+    trigger.onclick = function () {
+      if (menu && menu.isOpen()) { menu.close(); return; }
+      menu = RNAssistantActionMenu.open(trigger, entries());
+      if (!loaded) load();
+    };
   }
-
-  document.addEventListener("click", function (event) {
-    document.querySelectorAll(".artifact-version-menu[open]").forEach(function (menu) {
-      if (!menu.contains(event.target)) menu.open = false;
-    });
-  });
   window.RNAssistantArtifactVersions = { append: append };
 }());

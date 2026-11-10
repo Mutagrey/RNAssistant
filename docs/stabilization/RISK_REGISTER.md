@@ -72,6 +72,39 @@ Run/iteration budget/unknown guards и exact invocation/pause fencing прове
 `agent pause:`; наблюдаемость не требует LLM. Срез не вводит scheduler/slots или
 циклическое ожидание Run; эти ограничения остаются в плане этапов 3–4.
 
+## Browser annotation pointer routing — Open, 2026-11-05
+
+`browser-views.test.js` нестабилен уже до toolbar-правок: timeout при выборе элемента
+или сохранении HTML-аннотации. Диагностический повтор поймал pointerdown/up/click
+в iframe HTML по координатам видимой кнопки «Готово»; parent handler и
+stageHtmlVisualSelection не вызываются. Есть успешные повторы, но финальная попытка
+осталась красной. Ожидание activation ack/paint не дало устойчивого результата;
+пробный CSS compositing hint не помог и удалён. Это не исправление annotation runtime.
+Owner Web Browser/VisualAnnotations: изолировать iframe hit-test/portal routing;
+Windows/WebView2 pointer evidence остаётся открытым, только по фото. Остальные
+независимые toolbar/versions/discussion проверки не блокируются этим baseline дефектом.
+После сокращения Browser toolbar воспроизведён также быстрый mouse click по ActionMenu
+над iframe: DOM hit-test указывает кнопку, parent click не приходит. Задержка меняет
+результат, пробный pointer-events CSS не дал устойчивого исправления и удалён. Saved
+fixture проверяет layout save/restore клавиатурой; это явно не mouse qualification.
+
+Отдельно исправлен возврат прежнего чата после открытия Browser из менеджера:
+preserveChatOwner действует для всех owners; plugin-view-selection проверяет другого
+активного собеседника, закреплённого получателя аннотаций и late close.
+
+## Universal Browser — P0, 2026-11-04
+
+Статический [аудит](../browser/01_AUDIT.md) и [план](../browser/04_MIGRATION_PLAN.md)
+фиксируют gaps предлагаемого расширения, а не новые воспроизведённые сбои baseline.
+Owners: Web/Application и Office/WebView. UB-1 — native Dock embedding/DPI/focus
+не проверены; UB-2 — browser handles из исходного задания требуют runtime-only
+binding вместо model-facing IDs; UB-3 — universal annotation/session lifecycle и
+safe screenshot ещё отсутствуют; UB-4 — saved HTML code revision не фиксирует
+dynamic-head данные до observation; UB-5 — raw HTML/plugin targets нельзя объединять
+путём выдачи общей authority. Меры и gates — в ADR/contracts/test matrix пакета.
+Windows evidence только по фото; его отсутствие не блокирует независимые P1–P4.
+Docs-only P0 эти gates не закрывает и не меняет текущие permissions.
+
 ## Durable wait — host-neutral, Windows evidence открыт, 2026-11-04
 
 2b.2 сохраняет Waiting в прежнем run journal и возобновляет exact call/Run после

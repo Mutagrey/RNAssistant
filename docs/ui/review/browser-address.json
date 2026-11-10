@@ -1,0 +1,60 @@
+{
+  "mode": "after",
+  "fixture": {
+    "packageBytes": 3968476,
+    "selections": 5
+  },
+  "html": {
+    "reads": 2,
+    "returnInput": "retained",
+    "actionMs": [
+      222.277917,
+      181.28095899999994,
+      139.35550000000012,
+      139.050833,
+      145.92766600000004
+    ],
+    "sourceCharacters": 32000,
+    "sourceMs": 82.19133300000021,
+    "documentGeometry": [
+      {
+        "width": 1280,
+        "zoom": 1,
+        "overflow": 0,
+        "within": true,
+        "addressHeight": 30,
+        "modeHeight": 30,
+        "font": "12px"
+      },
+      {
+        "width": 420,
+        "zoom": 1.25,
+        "overflow": 0,
+        "within": true,
+        "addressHeight": 30,
+        "modeHeight": 30,
+        "font": "12px"
+      }
+    ]
+  },
+  "plugin": {
+    "opens": 2,
+    "actionMs": [
+      124.49979099999928,
+      132.3773339999998,
+      127.23754199999985,
+      134.3540840000005,
+      135.94866699999966
+    ]
+  },
+  "checks": [
+    "browser-saved-views",
+    "html-editor-views",
+    "plugin-view-selection"
+  ],
+  "limitations": [
+    "Synthetic Chromium; no Office/WebView2 qualification",
+    "Saved layout actions use keyboard; iframe pointer-routing gap remains open",
+    "Frozen Demo comparison retained in browser-toolbar.json"
+  ]
+}

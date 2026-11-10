@@ -1,0 +1,137 @@
+# Universal Browser: статус
+
+Дата: 2026-11-10. Scope: P0/P1 + Browser address/controls.
+Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
+Office/WebView — будущий native adapter. P1 реализован в production JS, **In Review**.
+
+## Строка браузера — In Review, 2026-11-10
+
+Реализовано уточнение пользователя: слева назад/вперёд/reload/аннотация, затем адрес
+и provider actions. Фокус раскрывает адрес на всю строку и показывает инструменты;
+blur/Escape сворачивает. До 600 px правая группа открывается через ⋯. Постоянная
+подпись снимка и отдельная title/path row удалены. Название/версия/хранение открываются
+у адреса через общий ActionMenu. CAS/files — место хранения; export не объявляется
+созданием независимого workspace. Публикация plugin сохраняет прежние проверки.
+
+Проверены saved Browser, live HTML editor и plugin selection в локальном Chromium.
+HTML checks покрывают независимые буферы и guard сохранения. Saved fixture
+проверяет ширину адреса, неизменную геометрию iframe, focus/menu/narrow/125%, retained
+input/modes и late cleanup. Два HTML читаются дважды, два release открываются дважды;
+source page 32K, overflow 0. Ранее пройденный lifetime повторно не запускался.
+
+[Строка](../ui/review/browser-address-wide.png),
+[фокус адреса](../ui/review/browser-address-focused.png),
+[420 px / 125%](../ui/review/browser-address-narrow.png),
+[сведения](../ui/review/browser-address-info.png),
+[live HTML](../ui/review/browser-address-live.png), [замеры](../ui/review/browser-address.json).
+
+Открыто: saved exact view перечитывает выбранный снимок, его lifetime не превращён в
+follow-latest. Независимый managed workspace, CAS → workspace/plugin, Diff и native URL
+остаются следующими domain-срезами. Saved history остаётся привязанной к captured head;
+актуализация этого head требует отдельного адресного чтения метаданных.
+Pointer routing поверх iframe по-прежнему Open: saved layout restore проверяется
+клавиатурой, быстрый mouse click воспроизводит старый риск. Windows/Office и визуальное
+принятие пользователем открыты. Build/commit/push не выполнялись.
+
+## Продолжение P1: toolbar и обсуждение — In Review, 2026-11-05
+
+Пользователь одобрил концепцию и выбрал **отдельный Chat View рядом в Dockview**.
+Общий PreviewSurface получил compact icons: play/code, selection/clock/layers/chat;
+редкие plugin actions перенесены в общий ActionMenu. Публикация использует прежний guarded handler; после уточнения — upload icon. HTML source modes сохраняют aria/title/pressed и прежние guards.
+История HTML/plugin также перенесена в ActionMenu: собственные details/popover и CSS
+удалены; проверены pagination, Escape/focus и меню при 420 px / 125% без обрезания.
+
+«Обсудить» повторно открывает exact существующий Chat View рядом; narrow использует
+одну группу. Draft/composer не клонируются, iframe не перезагружается. Plugin view
+закрепляет workspace/session по явному выбору исходного чата, ошибки и annotation
+drafts адресуются ему. Исправлен preserveChatOwner: переход из менеджера к Browser
+больше не возвращает старый чат через отложенную загрузку project catalog.
+
+Пройдены Chromium проверки: browser-saved-views, browser-lifetime,
+plugin-view-selection, html-editor-views. browser-views остаётся нестабильным. Проверены reuse/draft retention, две загрузки
+двух saved HTML/releases, 32K source pages, одна iframe load за пять restores,
+аннотация после выбора другого чата, late cleanup, narrow/125% и keyboard.
+Baseline и повторные live HTML annotation проверки периодически завершаются timeout;
+последняя попытка красная. Зафиксировано попадание pointer events в iframe под
+кнопкой сохранения без вызова stage; устойчивого исправления нет.
+[Открытый риск](../stabilization/RISK_REGISTER.md#browser-annotation-pointer-routing--open-2026-11-05).
+
+[Компоновка с чатом](../ui/review/browser-toolbar-wide.png),
+[420 px / 125%](../ui/review/browser-toolbar-narrow.png),
+[сверка controls с frozen Demo](../ui/review/browser-toolbar.json).
+Концепция Approved; production visual acceptance **Open**. CAS/project ownership,
+управляемые и файловые workspace, настоящий Diff, browser sessions и external native
+URL не реализованы этим presentation-срезом. Runtime/bridge/storage не менялись;
+Windows/Office/WebView2 qualification остаётся отдельной. Commit/push/build не выполнялись.
+
+## Вход и документы
+
+| Документ | Назначение |
+|---|---|
+| [00_SOURCE_SPEC](00_SOURCE_SPEC.md) | Точная копия задания пользователя, historical target input |
+| [01_AUDIT](01_AUDIT.md) | Реальные routes/owners, reuse/remove и открытые gaps |
+| [02_ARCHITECTURE_ADR](02_ARCHITECTURE_ADR.md) | Proposed решения, native alternatives и Windows spike |
+| [03_CONTRACTS](03_CONTRACTS.md) | Proposed semantic API/runtime bindings и P1 presentation interface |
+| [04_MIGRATION_PLAN](04_MIGRATION_PLAN.md) | Очередь P0–P7, конкретный P1, проверки/removal/rollback |
+| [05_TEST_MATRIX](05_TEST_MATRIX.md) | Existing coverage, минимальные новые сценарии, Windows gates |
+
+Исходное приложение: `RNAssistant_Universal_Browser_Agent_Spec(1).md`, сохранено
+2026-11-04 без изменения байтов. SHA-256:
+`0776c4c3d8f5a02c596b1a5b1d83554e8aa6f9a443b191ba7b27f86250f373d6`.
+Аудит закреплён за `b9173e0a7c060e7c60fceb2e2a4ce39996f4b5db` (`main`).
+Прежний предварительный обзор был на `ee43b98a`; источник задания ссылается на ещё
+более ранний `2c8de087`. Эти hashes не заменяют фактический baseline аудита.
+
+## Исходный P0/P1: выполнено и статус решений
+
+- Сохранён исходник и подготовлены шесть документов по фактическому коду.
+- Согласовано пользователем: сначала документы + план; затем продолжение P1.
+  Страницы — вкладки общего Dockview, без собственных вложенных tabs.
+- Учтены existing Browser/PreviewSurface, exact saved views, HTML lineage, plugin
+  publication/grants и annotation intake. Повторная миграция удалённых viewers не нужна.
+- Зафиксированы отличия от задания: runtime-only IDs, core reads, SessionEvent вместо
+  отдельного AgentEventLog, разные semantics HTML restore и plugin active-release restore.
+- P1 реализован от `c6659ed2`: PreviewSurface владеет read-only address и modes,
+  BrowserObjectView — lifecycle связи, HtmlArtifactView — содержимым/mode/file/page.
+  Локальный mode toolbar и его CSS удалены; повторной модели/iframe нет.
+- Other providers, exact links/versions/export, limits и data authority сохранены.
+  Остальные архитектурные решения Proposed; native renderer не выбран без Windows evidence.
+
+P0 documentation подготовлен; P1 browser implementation проверен локально.
+Пользовательское визуальное принятие P1 открыто; P2–P7 не начаты.
+Native/Office qualification не закрыта.
+Глобальные приоритеты стабилизации и очередь других UI-срезов не меняются.
+
+## Исходный P0/P1: проверки и ограничения
+
+P0: source integrity, diff и 88 внутренних ссылок/anchors проверены без ошибок,
+builds/tests не запускались. P1: JS syntax/diff и три browser fixtures на baseline
+и после изменения прошли: `browser-saved-views`, `browser-views`, `browser-lifetime`.
+Среда: Chrome 157.0.8103.38 на macOS, synthetic bridge, без моделей/Office.
+
+Сохранены два чтения двух HTML и два открытия двух plugin releases при пяти выборах,
+32 000 source chars/page, retained input и одна загрузка Browser iframe после пяти
+layout restores. Expanded saved fixture проверяет readonly/Enter, единственные controls,
+ready narrow/zoom и очистку старого descriptor при failed reload. Live HTML/plugin
+annotations проходят. [Замеры до/после](../ui/review/browser-p1.json).
+
+Локально просмотрены ready source/preview screenshots. [Wide source](../ui/review/browser-p1-source-wide.png),
+[420 px / 125%](../ui/review/browser-p1-source-narrow.png): overflow 0, address 30 CSS px,
+mode button 28 CSS px, font 12 px. Frozen Demo report/source измерен при тех же
+viewport/zoom: button 24 px, font 12 px. Сохранён существующий production view-switch,
+новых size overrides нет; визуальное принятие этой компоновки остаётся открытым.
+Builds, harness и VSTO/Office validation не выполнялись; Windows evidence отдельно.
+
+Открыты UB-1–UB-5 из [аудита](01_AUDIT.md): native embedding; semantic bindings;
+session/annotation lifecycle и screenshot privacy; code/data revision distinction;
+raw HTML/plugin authority. Windows evidence только по фотографиям, без запроса файлов.
+Новые adapters/dual paths не введены; MIGRATION_MAP не изменяется преждевременно.
+Параллельные изменения agent runtime/UI не входят в P0/P1 и не изменялись в их рамках;
+исторический аудит сохраняет свой baseline. Commit/push не выполнялись.
+
+## Ровно следующий шаг
+
+Визуальное ревью компактного toolbar и отдельного Chat View по
+[четырём действиям](05_TEST_MATRIX.md#toolbar-review). Следующий domain slice —
+P2 Targets/Sessions с явным решением о project ownership и managed/directory backing;
+эту миграцию нельзя подменить UI-копией workspace или вторым version store.

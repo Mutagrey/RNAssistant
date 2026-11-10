@@ -34,17 +34,22 @@
     return JSON.stringify(owner==='office'?[owner,state.activeChatId]:
       [owner,snapshot&&snapshot.project&&snapshot.project.workspaceId,snapshot&&snapshot.sessionId]);
   }
-  async function openSourceChat(sessionId,item){
+  async function openSourceChat(sessionId,item,placement){
     item=item||sourcePlugin()||items.find(function(value){return value.pluginId===selectedId();});if(!item)return false;
     var id=item.pluginId,workspaceId=item.sourceWorkspaceId,route=++chatSelectionSerial,previous=conversationAddress();
     await send('getPluginChat',{pluginId:id});
-    if(route!==chatSelectionSerial||conversationAddress()!==previous)return false;
+    if(route!==chatSelectionSerial||conversationAddress()!==previous||placement&&placement.isCurrent&&!placement.isCurrent())return false;
     await window.RNAssistantProjectChats.open(workspaceId,sessionId);
-    if(route!==chatSelectionSerial||window.RNAssistantProjectChats.workspaceId()!==workspaceId)return false;
+    if(route!==chatSelectionSerial||window.RNAssistantProjectChats.workspaceId()!==workspaceId||placement&&placement.isCurrent&&!placement.isCurrent())return false;
     window.RNAssistantWorkspaceChat.mount('plugin');
     window.RNAssistantProjectChats.render();controls();
-    RNAssistantPlugins.onChatSnapshot(RNAssistantProjectChats.snapshot());
-    window.RNAssistantDockWorkspace.show('conversation');
+    var snapshot=RNAssistantProjectChats.snapshot();
+    if(!snapshot||!snapshot.project||snapshot.project.workspaceId!==workspaceId||!snapshot.sessionId||sessionId&&snapshot.sessionId!==sessionId)return false;
+    var discussion=snapshot&&snapshot.sessionId?{source:'workspace',workspaceId:workspaceId,sessionId:snapshot.sessionId}:null;
+    if(discussion)each(function(view){if(view.pluginId===id)view.bindDiscussion(discussion);});
+    RNAssistantPlugins.onChatSnapshot(snapshot);
+    if(discussion&&placement)RNAssistantConversationPanel.open(discussion,placement);
+    else window.RNAssistantDockWorkspace.show('conversation');
     return true;
   }
   async function select(id,sessionId){
@@ -179,7 +184,7 @@
     showAnnotation:async function(annotation,target){
       var plugin=items.find(function(item){return item.sourceWorkspaceId===target.workspaceId;});
       if(!plugin||!await openSourceChat(target.sessionId,plugin)||!await select(plugin.pluginId))return;
-      var view=RNAssistantDockWorkspace.getView(RNAssistantPluginView.key(plugin));if(view)view.showAnnotation(annotation);
+      var view=RNAssistantDockWorkspace.getView(RNAssistantPluginView.key(plugin));if(view){view.bindDiscussion(target);view.showAnnotation(annotation);}
     },
     applyAppearance:applyAppearance,restoreVersion:restoreVersion,openSourceChat:openSourceChat,
     onChatSnapshot:function(snapshot){each(function(view){view.onChatSnapshot(snapshot);});},

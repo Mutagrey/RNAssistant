@@ -19,7 +19,7 @@
   flex: 0 0 auto;
 }
 
-.html-workspace-menu > summary {
+.html-workspace-menu > summary:not(.icon-btn) {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -503,6 +503,7 @@
 
 .html-workspace-editor > .html-workspace-head, .html-workspace-editor > .html-workspace-recovery,
 .html-workspace-editor > .html-workspace-create { flex: none; }
+.html-workspace-editor.is-browser-preview > .html-workspace-head { display:none; }
 .html-workspace-editor [data-html-node="htmlWorkspaceFileSelect"] { max-width: min(360px, 100%); }
 .html-editor-status { flex: none; margin: 0; padding: var(--space-1) var(--space-2); color: var(--ink-muted); font-size: var(--text-xs); }
 .html-editor-status[data-error="true"] { color: var(--danger); }

@@ -65,6 +65,28 @@ failure diagnostics. `resource cutover: concurrent catalog initialization` separ
 checks waiting for the existing first-publication lease and reuse of its head.
 Production Controller/COM/WebView2 and live-model costs remain separate evidence.
 
+## Browser toolbar / Discuss — 2026-11-05
+
+The shared icon toolbar uses the existing `browser-saved-views` fixture for exact Chat
+View reuse, separate Dock groups, draft retention and retained iframe. `browser-views`
+checks live annotation intake; `plugin-view-selection` checks the pinned recipient
+after another chat is selected and preservation when returning from plugin manager.
+`html-editor-views` covers source modes/buffers/guards.
+`browser-saved-views` also checks full-width address focus without iframe reflow,
+metadata and narrow tool menus. Its layout actions use keyboard activation; fast
+pointer routing over an iframe remains an open gap. `browser-lifetime` covers restores.
+Run sequentially with the existing Playwright setup. No C#/Office build is needed.
+
+## Universal Browser P1 — 2026-11-04
+
+`node tests/web/browser-saved-views.test.js` checks shared read-only artifact address,
+Preview/Source controls, retained file/page/input, 32K source pages, reload/late cleanup
+and ready surfaces at 1280/100% and 420/125%. Run with the existing bundled Playwright
+via `NODE_PATH` and optional `BROWSER_EXECUTABLE`. Companion `browser-views.test.js`
+checks live HTML/plugin annotations and `browser-lifetime.test.js` checks five Dock
+layout restores. Run these browser fixtures sequentially; no C#/Office build is needed.
+Baseline/final evidence and remaining gates: [Browser test matrix](../../docs/browser/05_TEST_MATRIX.md).
+
 ## Finish correction — 2026-11-04
 
 Run one substring filter per invocation: `kernel: finish correction`,

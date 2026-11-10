@@ -16,6 +16,7 @@ const {chromium}=require('playwright');
       const original=send,read=RNAssistantResourceDownload.read;
       const uri=id=>'rna://chat/preview-chat/artifact/saved-'+id+'/revision/1';
       savedTest.items=['A','B'].map(id=>({title:'Сохранённый HTML '+id,kind:'html_workspace',resourceUri:uri(id),revision:1,
+        libraryHead:{artifactId:'saved-'+id,resourceUri:uri(id),revision:1,historyCount:2,resourceClass:'versioned_aggregate'},
         documentId:id==='A'?'preview-document':'other-document',documentTitle:id==='A'?'Продажи.xlsx':'Другой документ.xlsx',linked:false,
         canTransfer:true,mimeType:'application/json',updatedUtc:'2026-11-02T12:00:00Z'}));
       const html='<h1>Точная версия</h1><label>Ввод <input value="initial"></label>';
@@ -29,6 +30,8 @@ const {chromium}=require('playwright');
           if(savedTest.delayExport)return new Promise(resolve=>{savedTest.lateLease=value.data.leaseId;savedTest.releaseExport=()=>resolve(value);});return Promise.resolve(value);
         }
         if(command==='closeArtifactTransfer')return Promise.resolve({});
+        if(command==='getArtifactLibraryHistory')return Promise.resolve({chatId:payload.chatId,sessionRevision:payload.expectedSessionRevision,headArtifactId:payload.headArtifactId,
+          items:[{artifactId:payload.headArtifactId+(payload.cursor?'-old':''),resourceUri:uri('A')+(payload.cursor?'-old':''),revision:payload.cursor?2:1}],nextCursor:payload.cursor?null:'history-2'});
         if(command==='getPluginVersions')return Promise.resolve({items:[1,2].map(n=>({releaseId:'saved-release-'+n,version:String(n),name:'Плагин',capturedUtc:'2026-11-02T12:00:00Z',active:false})),nextCursor:null});
         if(command==='openPlugin'&&payload.releaseId){
           const value={instanceId:'saved-instance-'+(++savedTest.nextLease),pluginId:payload.pluginId,releaseId:payload.releaseId,preview:true,entryUrl:'/preview/mock-plugin.html?name='+payload.releaseId};
@@ -43,7 +46,12 @@ const {chromium}=require('playwright');
       RNAssistantChatInspector.setOpen(false);switchTab('artifacts');RNAssistantArtifactCatalog.show('all');
     });
     const oldHtml='#artifactCatalogPreviewBody iframe',htmlTitle=id=>'Сохранённый HTML '+id;
-    const surface=title=>page.locator('.browser-object-view').filter({has:page.locator('.preview-surface-title').getByText(title,{exact:true})});
+    const surface=title=>page.locator('.browser-object-view[aria-label="'+title+'"]');
+    const button=(root,name)=>root.getByRole('button',{name,exact:true,includeHidden:true});
+    const action=async(root,name)=>{
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      const control=button(root,name);if(!await control.isVisible())await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();return control;
+    };
     const htmlSelector=id=>baseline?oldHtml:'.browser-object-view[aria-label="'+htmlTitle(id)+'"] iframe';
     const openHtml=async id=>{await page.locator('#htmlWorkspaceTree').getByText(htmlTitle(id),{exact:true}).click();await page.frameLocator(htmlSelector(id)).locator('h1').waitFor({state:'attached'});};
     await page.locator('#artifactCatalogOverviewRows tr').first().waitFor();assert.equal(await page.evaluate(()=>savedTest.reads),0);
@@ -58,6 +66,7 @@ const {chromium}=require('playwright');
     assert.equal(htmlReads,baseline?5:2);assert.equal(retained,baseline?'initial':'retained');
     const packageBytes=await page.evaluate(()=>savedTest.bytes.byteLength);
     let sourceCharacters,sourceMs;
+    const documentGeometry=[];
     if(baseline){
       const start=performance.now();await page.locator('#artifactCatalogPreviewBody').getByRole('button',{name:'Код',exact:true}).click();
       await page.locator('#artifactCatalogPreviewBody select').selectOption('styles.css');sourceMs=performance.now()-start;
@@ -65,31 +74,96 @@ const {chromium}=require('playwright');
     }
     if(!baseline){
       const a=surface(htmlTitle('A'));
+      const address=a.getByRole('textbox',{name:'Адрес материала',exact:true});
+      const exactAddress=await page.evaluate(()=>savedTest.items[0].resourceUri),pageUrl=page.url();
+      assert.equal(await address.inputValue(),exactAddress);assert.equal(await address.getAttribute('readonly'),'');
+      assert.deepEqual(await a.locator('.preview-surface-navigation button').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('aria-label'))),['Назад','Вперёд','Повторить загрузку','Аннотировать']);
+      const frameTop=(await a.locator('iframe').boundingBox()).y;
+      await address.focus();await page.keyboard.type('https://example.invalid/');await address.press('Enter');
+      assert.equal(await address.inputValue(),exactAddress);assert.equal(page.url(),pageUrl);
+      const expanded=await a.locator('.preview-surface-location').boundingBox(),toolbar=await a.locator('.preview-surface-toolbar').boundingBox();
+      assert.ok(Math.abs(expanded.x-toolbar.x)<1&&Math.abs(expanded.width-toolbar.width)<1,'focused address spans the toolbar');
+      assert.equal((await a.locator('iframe').boundingBox()).y,frameTop,'address expansion does not move the page');
+      if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-focused1280.png'});
+      await address.press('Escape');assert.equal(await a.locator('.is-address-focused').count(),0);
+      assert.equal(await page.evaluate(()=>savedTest.reads),htmlReads,'read-only address does not navigate/reload');
+      assert.equal(await a.getByRole('group',{name:'Представление HTML',exact:true}).count(),1);
+      assert.equal(await a.locator('iframe').count(),1);
+      assert.equal(await a.getByRole('button',{name:/^(Diff|Сравнить)$/}).count(),0);assert.ok(await button(a,'Назад').isDisabled());assert.ok(await button(a,'Вперёд').isDisabled());
+      assert.ok(await button(a,'Аннотировать').isDisabled());assert.equal(await a.locator('.browser-object-note').count(),0);
+      await button(a,'Сведения о странице').click();await page.getByRole('dialog',{name:'Сведения о странице',exact:true}).getByText('Хранение · В приложении',{exact:true}).waitFor();
+      if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-info1280.png'});
+      await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog',{name:'Сведения о странице',exact:true}).count(),0);
       const sourceStart=performance.now();
-      await a.getByRole('button',{name:'Исходник',exact:true}).click();await a.getByRole('combobox',{name:'Файл проекта'}).selectOption('styles.css');
+      await (await action(a,'Исходник')).click();await a.getByRole('combobox',{name:'Файл проекта'}).selectOption('styles.css');
       sourceMs=performance.now()-sourceStart;sourceCharacters=await a.locator('.CodeMirror').evaluate(n=>n.CodeMirror.getValue().length);
       assert.ok(sourceCharacters<=32000);
       if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-source1280.png'});
       await a.getByRole('button',{name:'Следующая страница',exact:true}).click();assert.match(await a.locator('.rn-text-viewer-status').innerText(),/32001/);
       await openHtml('B');await openHtml('A');assert.equal(await a.getByRole('combobox',{name:'Файл проекта'}).inputValue(),'styles.css');
-      assert.equal(await a.getByRole('button',{name:'Исходник',exact:true}).getAttribute('aria-pressed'),'true');
-      await a.getByRole('button',{name:'Страница',exact:true}).click();assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
-      await page.locator('#workspaceLayout').click();await page.getByRole('menuitem',{name:'Сохранить раскладку',exact:true}).click();
-      await page.locator('#workspaceLayout').click();await page.getByRole('menuitem',{name:'Вернуть сохранённую',exact:true}).click();
+      assert.equal(await button(a,'Исходник').getAttribute('aria-pressed'),'true');
+      await (await action(a,'Страница')).click();assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
+      // Keyboard activation avoids the separately tracked native iframe pointer-routing gap.
+      await page.locator('#workspaceLayout').click();await page.getByRole('menuitem',{name:'Сохранить раскладку',exact:true}).focus();await page.keyboard.press('Enter');
+      await page.locator('#workspaceLayout').click();await page.getByRole('menuitem',{name:'Вернуть сохранённую',exact:true}).focus();await page.keyboard.press('Enter');
       assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
+      for(const [width,zoom,theme] of [[1280,1,'light'],[420,1.25,'dark']]){
+        await page.setViewportSize({width,height:900});
+        await page.evaluate(({zoom,theme})=>{document.documentElement.style.zoom=String(zoom);document.documentElement.dataset.theme=theme;},{zoom,theme});
+        await page.waitForTimeout(150);
+        await (await action(a,'Исходник')).focus();await page.keyboard.press('Enter');
+        assert.equal(await button(a,'Исходник').getAttribute('aria-pressed'),'true');
+        assert.match(await a.locator('.rn-text-viewer-status').innerText(),/32001/);
+        assert.equal(await address.inputValue(),exactAddress);
+        await address.focus();
+        const focused=await a.locator('.preview-surface-location').boundingBox(),row=await a.locator('.preview-surface-toolbar').boundingBox();
+        assert.ok(Math.abs(focused.width-row.width)<1,'full-width address also works at zoom');
+        if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-focused'+width+'.png'});
+        await a.getByRole('combobox',{name:'Файл проекта'}).focus();
+        assert.equal(await a.locator('.is-address-focused').count(),0,'leaving the address tools folds the toolbar');
+        documentGeometry.push(await a.evaluate((root,{width,zoom})=>{
+          const input=root.querySelector('.preview-surface-location'),mode=root.querySelector('.preview-surface-navigation button');
+          const box=root.getBoundingClientRect(),controls=[input,...root.querySelectorAll('.preview-surface-navigation button')];
+          return {width,zoom,overflow:root.scrollWidth-root.clientWidth,within:controls.every(node=>{const r=node.getBoundingClientRect();return r.left>=box.left&&r.right<=box.right+1;}),
+            addressHeight:input.getBoundingClientRect().height/zoom,modeHeight:mode.getBoundingClientRect().height/zoom,font:getComputedStyle(mode).fontSize};
+        },{width,zoom}));
+        assert.equal(documentGeometry.at(-1).within,true);assert.ok(documentGeometry.at(-1).overflow<=1);
+        await (await action(a,'Версии проекта · v1')).click();
+        await page.getByRole('menuitemcheckbox',{name:'v1',exact:true}).waitFor();
+        if(width===1280){await page.getByRole('menuitem',{name:'Показать ещё 50',exact:true}).click();await page.getByRole('menuitemcheckbox',{name:'v2',exact:true}).waitFor();}
+        assert.ok(await page.locator('.rna-action-menu-popup').evaluate(menu=>{const r=menu.getBoundingClientRect();return r.width>200&&r.left>=0&&r.right<=innerWidth+1;}),'version menu remains readable and within the viewport');
+        await page.keyboard.press('Escape');assert.equal(await button(a,'Версии проекта · v1').evaluate(node=>node===document.activeElement),true);
+        if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-ready-source'+width+'.png'});
+        await (await action(a,'Страница')).focus();await page.keyboard.press('Enter');
+        assert.equal(await a.getByRole('combobox',{name:'Файл проекта'}).count(),0);
+        assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
+        if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-ready-preview'+width+'.png'});
+      }
+      await page.setViewportSize({width:1280,height:900});await page.evaluate(()=>{document.documentElement.style.zoom='';document.documentElement.dataset.theme='light';});
+      await page.evaluate(()=>{savedTest.chat=RNAssistantConversationPanel.office('preview-chat');const input=savedTest.chat.node('chatInput');input.value='Черновик рядом с браузером';input.dispatchEvent(new Event('input',{bubbles:true}));});
+      await (await action(a,'Обсудить в чате рядом')).click();
+      await (await action(a,'Обсудить в чате рядом')).click();
+      assert.ok(await page.evaluate(()=>savedTest.chat===RNAssistantConversationPanel.office('preview-chat')),'Discuss reuses the exact existing Chat View');
+      assert.equal(await page.evaluate(()=>savedTest.chat.node('chatInput').value),'Черновик рядом с браузером');
+      assert.ok(await page.evaluate(()=>{const anchor=Array.from(document.querySelectorAll('.browser-view-anchor')).find(node=>node.getBoundingClientRect().width>0);
+        const chat=savedTest.chat.element.closest('.dv-groupview'),browser=anchor?.closest('.dv-groupview');return chat&&browser&&chat!==browser;}),'chat and Browser occupy separate Dock groups');
+      assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
+      if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-discussion1280.png'});
       await page.evaluate(()=>{state.activeChatId='another-chat';state.chatNavigationVersion++;});
       await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await page.frameLocator(htmlSelector('A')).getByRole('heading',{name:'Точная версия'}).waitFor();
       assert.deepEqual(await page.evaluate(()=>{const p=savedTest.calls.filter(c=>c.command==='exportArtifact').at(-1).payload;return [p.chatId,p.documentId];}),['preview-chat','preview-document']);
       await page.evaluate(()=>{savedTest.large=true;});await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await a.getByRole('alert').filter({hasText:'16 МиБ'}).waitFor();
+      assert.equal(await address.count(),1,'failed reload keeps the addressed location');assert.equal(await address.inputValue(),exactAddress);
+      assert.equal(await a.getByRole('group',{name:'Представление HTML',exact:true}).count(),0);
       for(const [width,theme] of [[1280,'light'],[420,'dark']]){
         await page.setViewportSize({width,height:900});await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;document.documentElement.style.zoom='1.25';},theme);
         await page.waitForTimeout(150);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
         const box=await a.boundingBox();assert.ok(box.width<width&&box.x>=0&&box.x+box.width<=width+1,'Browser geometry follows Dock at zoom');
         await page.locator('.browser-view-anchor:visible').focus();await page.locator('.browser-view-anchor:visible').press('Enter');
         assert.ok(await a.evaluate(root=>root.contains(document.activeElement)),'keyboard enters the active Browser surface');
-        await a.getByRole('button',{name:'Действия с материалом',exact:true}).focus();await page.keyboard.press('Enter');
+        await (await action(a,'Действия с материалом')).focus();await page.keyboard.press('Enter');
         await page.getByRole('menuitem',{name:'Копировать точную ссылку',exact:true}).waitFor();await page.keyboard.press('Escape');
-        assert.equal(await a.getByRole('button',{name:'Действия с материалом',exact:true}).evaluate(node=>node===document.activeElement),true);
+        assert.equal(await button(a,'Действия с материалом').evaluate(node=>node===document.activeElement),true);
 
         if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-'+theme+width+'.png'});
       }
@@ -103,9 +177,17 @@ const {chromium}=require('playwright');
     }
     await page.setViewportSize({width:1280,height:900});
     await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));await page.locator('[data-plugin-node="PreviewFrameHost"] iframe').waitFor();
+    if(!baseline){
+      await page.setViewportSize({width:420,height:900});await page.evaluate(()=>{document.documentElement.style.zoom='1.25';});
+      await (await action(page.locator('[data-plugin-node="Workbench"]'),'Версии плагина')).click();await page.getByRole('menuitem',{name:'v1',exact:true}).waitFor();
+      assert.ok(await page.locator('.rna-action-menu-popup').evaluate(menu=>{const r=menu.getBoundingClientRect();return r.width>200&&r.left>=0&&r.right<=innerWidth+1;}));
+      await page.keyboard.press('Escape');
+      await page.setViewportSize({width:1280,height:900});await page.evaluate(()=>{document.documentElement.style.zoom='';});
+    }
     const openRelease=async n=>{
       await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));
-      await page.locator('[data-plugin-node="Versions"] summary').click();await page.locator('[data-plugin-node="VersionItems"]').getByRole('button',{name:new RegExp('^v'+n+' ')}).click();
+      if(baseline){await page.locator('[data-plugin-node="Versions"] summary').click();await page.locator('[data-plugin-node="VersionItems"]').getByRole('button',{name:new RegExp('^v'+n+' ')}).click();}
+      else{await (await action(page.locator('[data-plugin-node="Workbench"]'),'Версии плагина')).click();await page.getByRole('menuitem',{name:'v'+n,exact:true}).click();}
       if(baseline)await page.waitForFunction(n=>document.querySelector('[data-plugin-node="PreviewFrameHost"] iframe')?.src.includes('saved-release-'+n),n);
       else await page.locator('.browser-object-view iframe[src*="saved-release-'+n+'"]').waitFor({state:'visible'});
     };
@@ -114,11 +196,11 @@ const {chromium}=require('playwright');
     const opens=await page.evaluate(()=>savedTest.calls.filter(c=>c.command==='openPlugin'&&c.payload.releaseId).length);assert.equal(opens,baseline?5:2);
     if(!baseline){
       const release=page.locator('.browser-object-view').filter({has:page.locator('iframe[src*="saved-release-1"]')});
-      await release.getByRole('button',{name:'Действия с версией',exact:true}).click();await page.getByRole('menuitem',{name:'Восстановить эту версию',exact:true}).click();
+      await (await action(release,'Действия с версией')).click();await page.getByRole('menuitem',{name:'Восстановить эту версию',exact:true}).click();
       await release.getByRole('alert').filter({hasText:'Активная версия изменилась'}).waitFor();
       assert.ok(await page.evaluate(()=>savedTest.restored.releaseId==='saved-release-1'&&!!savedTest.restored.expectedActiveReleaseId));
       await page.evaluate(()=>{savedTest.restoreAllowed=true;savedTest.pinnedFrame=document.querySelector('.browser-object-view iframe[src*="saved-release-1"]');});
-      await release.getByRole('button',{name:'Действия с версией',exact:true}).click();await page.getByRole('menuitem',{name:'Восстановить эту версию',exact:true}).click();
+      await (await action(release,'Действия с версией')).click();await page.getByRole('menuitem',{name:'Восстановить эту версию',exact:true}).click();
       await release.getByRole('status').filter({hasText:'Версия восстановлена.'}).waitFor();
       assert.ok(await page.evaluate(()=>savedTest.pinnedFrame===document.querySelector('.browser-object-view iframe[src*="saved-release-1"]')),'restoration does not replace the saved preview');
       assert.ok(await page.evaluate(()=>savedTest.calls.some(c=>c.command==='closePlugin'&&c.payload.instanceId.startsWith('preview-plugin-instance'))),'restoration invalidates the old mutable development instance');
@@ -132,7 +214,7 @@ const {chromium}=require('playwright');
       assert.equal(await page.evaluate(()=>RNAssistantWorkspaceChat.owner()),'office');
     }
     assert.deepEqual(errors,[]);
-    const result={mode:baseline?'before':'after',fixture:{packageBytes,selections:5},html:{reads:htmlReads,returnInput:retained,actionMs:times,sourceCharacters,sourceMs},plugin:{opens,actionMs:pluginTimes}};
+    const result={mode:baseline?'before':'after',fixture:{packageBytes,selections:5},html:{reads:htmlReads,returnInput:retained,actionMs:times,sourceCharacters,sourceMs,documentGeometry},plugin:{opens,actionMs:pluginTimes}};
     if(process.env.BROWSER_RESULT)fs.writeFileSync(process.env.BROWSER_RESULT,JSON.stringify(result,null,2)+'\n');
     console.log(JSON.stringify(result));
   }finally{if(browser)await browser.close();server.kill('SIGTERM');}

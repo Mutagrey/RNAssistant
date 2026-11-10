@@ -63,6 +63,16 @@ Owner — Core/Application; после принятия diff это истори
 [Text mutations](text-mutations.md) задаёт единые core.write/patch/replace, структурированные пакетные правки подстрок с текстовыми ориентирами,
 маршрутизацию по owner, имена tools/skills и встроенное сравнение в шаге.
 
+По запросу пользователя сохранён [Universal Browser: документы и статус](browser/06_PROGRESS.md):
+[исходная спецификация](browser/00_SOURCE_SPEC.md), [аудит](browser/01_AUDIT.md),
+[ADR](browser/02_ARCHITECTURE_ADR.md), [контракты](browser/03_CONTRACTS.md),
+[план реализации](browser/04_MIGRATION_PLAN.md) и [матрица проверок](browser/05_TEST_MATRIX.md).
+P1 реализовал общую строку Browser с раскрываемым адресом, сведениями, modes и actions;
+Saved/editor/plugin fixtures
+проходят; pointer-routing gap остаётся открытым. Визуальное принятие In Review. Страницы остаются
+вкладками Dockview. Sessions/tools/native runtime ещё Proposed; WebView2 требует
+отдельного Windows spike. Текущие domain contracts остаются у owners ниже.
+
 ## Канонические документы
 
 [Карта повторов и блокировок](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03)

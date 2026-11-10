@@ -60,6 +60,33 @@ UI не выводит membership из переписки и не хранит �
 Открытие native picker «+»/модели закрывает recovery portal и инвалидирует его поздние
 чтения. Один trigger не держит одновременно два меню; принятое выполнение продолжается.
 
+## Universal Browser: toolbar и отдельный Chat View — In Review, 2026-11-05
+
+PreviewSurface владеет одной строкой navigation/address/actions, раскрытием адреса
+и сведениями о странице. Provider передаёт адрес, storage metadata, modes и доступные
+callbacks; navigation history и новый store в UI не создаются. Общий ActionMenu
+показывает статические сведения читаемыми строками; его позиционирование, Escape и
+возврат фокуса переиспользованы. HtmlArtifactView сохраняет mode/file/page и один
+iframe; BrowserObjectView — lazy load, stale generation и dispose. Live HTML preview
+перемещает прежние mode/export controls в общий toolbar, исходный editor сохраняет
+владение буфером. При deactivate/dispose раскрытие закрывается.
+
+«Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
+тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.
+Нет второго composer, chat store или вложенного chat UI. HTML использует свой chatId;
+plugin view закрепляет workspace/session только при явном открытии исходного чата.
+Смена активной вкладки/страницы не переназначает получателя аннотаций. Drafts и ошибки
+доставляются адресному Chat View; закрытие чата не удаляет draft/run. Повторное
+«Обсудить» возвращает закреплённый чат. preserveChatOwner действует для всех owners.
+
+Domain authority, CAS, bridge и runtime не менялись. Новых registry/adapter/dual path нет.
+ArtifactVersions и plugin history используют общий ActionMenu вместо собственных
+details/popover DOM/CSS; exact revision guards и загрузка порциями сохранены.
+Session coordinator, независимый managed project, реальный Diff и native renderer
+остаются отдельной работой: [план](../browser/04_MIGRATION_PLAN.md).
+Концепция и отдельный Chat View согласованы; текущая production компоновка проходит
+визуальное ревью. [Проверки и ограничения](../browser/06_PROGRESS.md).
+
 ## Сохранённое ожидание — In Review, 2026-11-04
 
 Application/Core сохраняют Waiting в прежних events/CAS. Web получает typed

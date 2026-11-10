@@ -1,0 +1,198 @@
+{
+  "scope": "Universal Browser P1: shared read-only address and preview/source controls for saved HTML",
+  "baseline": "c6659ed2",
+  "environment": {
+    "os": "macOS",
+    "browser": "157.0.8103.38",
+    "host": "production Shell with synthetic fixture bridge"
+  },
+  "checks": {
+    "before": [
+      "browser-saved-views",
+      "browser-views",
+      "browser-lifetime"
+    ],
+    "after": [
+      "browser-saved-views",
+      "browser-views",
+      "browser-lifetime"
+    ],
+    "status": "passed"
+  },
+  "saved": {
+    "before": {
+      "mode": "after",
+      "fixture": {
+        "packageBytes": 3968476,
+        "selections": 5
+      },
+      "html": {
+        "reads": 2,
+        "returnInput": "retained",
+        "actionMs": [
+          216.57408399999986,
+          169.76354199999992,
+          138.56904200000008,
+          134.1612500000001,
+          149.95554100000004
+        ],
+        "sourceCharacters": 32000,
+        "sourceMs": 46.89499999999998
+      },
+      "plugin": {
+        "opens": 2,
+        "actionMs": [
+          130.47608300000002,
+          183.82516599999963,
+          178.22658299999966,
+          172.11974999999984,
+          168.91741699999966
+        ]
+      }
+    },
+    "after": {
+      "mode": "after",
+      "fixture": {
+        "packageBytes": 3968476,
+        "selections": 5
+      },
+      "html": {
+        "reads": 2,
+        "returnInput": "retained",
+        "actionMs": [
+          230.28937500000006,
+          184.38245900000015,
+          136.3025,
+          135.09558300000003,
+          149.29358300000013
+        ],
+        "sourceCharacters": 32000,
+        "sourceMs": 43.82233300000007,
+        "documentGeometry": [
+          {
+            "width": 1280,
+            "zoom": 1,
+            "overflow": 0,
+            "within": true,
+            "addressHeight": 30,
+            "modeHeight": 28,
+            "font": "12px"
+          },
+          {
+            "width": 420,
+            "zoom": 1.25,
+            "overflow": 0,
+            "within": true,
+            "addressHeight": 30,
+            "modeHeight": 28,
+            "font": "12px"
+          }
+        ]
+      },
+      "plugin": {
+        "opens": 2,
+        "actionMs": [
+          119.12129099999947,
+          177.89554099999987,
+          183.2134159999996,
+          170.10329199999978,
+          180.8805000000002
+        ]
+      }
+    }
+  },
+  "lifetime": {
+    "before": {
+      "fixture": "same <input> iframe, 1280x900, five Dockview saved-layout restores",
+      "note": "Inline reproduces the replaced embedding mechanism on the same current Dockview. Timings include automation; not a global product speed claim.",
+      "results": [
+        {
+          "mode": "inline",
+          "initialLoads": 1,
+          "afterLoads": 6,
+          "inputAfter": "initial",
+          "restoreActionMs": [
+            91,
+            80.6,
+            82.9,
+            84.7,
+            83
+          ]
+        },
+        {
+          "mode": "browser",
+          "initialLoads": 1,
+          "afterLoads": 1,
+          "inputAfter": "retained",
+          "restoreActionMs": [
+            82.2,
+            78.1,
+            65,
+            69.7,
+            65.6
+          ]
+        }
+      ]
+    },
+    "after": {
+      "fixture": "same <input> iframe, 1280x900, five Dockview saved-layout restores",
+      "note": "Inline reproduces the replaced embedding mechanism on the same current Dockview. Timings include automation; not a global product speed claim.",
+      "results": [
+        {
+          "mode": "inline",
+          "initialLoads": 1,
+          "afterLoads": 6,
+          "inputAfter": "initial",
+          "restoreActionMs": [
+            93,
+            80.2,
+            78.7,
+            91,
+            77.5
+          ]
+        },
+        {
+          "mode": "browser",
+          "initialLoads": 1,
+          "afterLoads": 1,
+          "inputAfter": "retained",
+          "restoreActionMs": [
+            78.8,
+            81.9,
+            66.5,
+            66.7,
+            66.1
+          ]
+        }
+      ]
+    }
+  },
+  "demo": {
+    "browser": "157.0.8103.38",
+    "source": "Frozen Demo report, source mode; no changes to reference",
+    "controls": [
+      {
+        "width": 1280,
+        "zoom": 1,
+        "modeHeight": 24,
+        "font": "12px",
+        "padding": "2px 8px",
+        "groupHeight": 28
+      },
+      {
+        "width": 420,
+        "zoom": 1.25,
+        "modeHeight": 24,
+        "font": "12px",
+        "padding": "2px 8px",
+        "groupHeight": 28
+      }
+    ]
+  },
+  "notes": [
+    "Baseline and final fixtures pass. Intermediate live-annotation regression from added flex:none was isolated with baseline CSS and removed before final checks.",
+    "Demo mode button is 24 CSS px; existing production view-switch stays 28 CSS px. Both use 12px text. P1 adds no component size override.",
+    "New address is 30 CSS px; ready controls stay within the surface at 1280/100% and 420/125%.",
+    "Timing includes automation; no speedup claim. Browser results do not qualify Windows/Office/WebView2. User visual acceptance remains open."
+  ]
+}

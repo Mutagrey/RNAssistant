@@ -8,7 +8,14 @@
   function key(target) { return "plugin-release:" + encodeURIComponent(JSON.stringify([target.pluginId, target.releaseId])); }
   function create(target) {
     return RNAssistantBrowserObjectView.create({ label: { title: target.title, path: target.pluginId + " · " + target.releaseId },
-      note: "Сохранённая версия · пробная копия данных. Изменения здесь не публикуются.",
+      storage: { kind: "managed", detail: "CAS · опубликованная версия плагина" },
+      details: [{ label: "Просмотр версии", status: "Пробная копия данных; публикация не меняется", icon: "clock", disabled: true }],
+      annotationUnavailable: "Аннотации доступны в живом предпросмотре плагина.",
+      discuss: function (context) {
+        var plugin = RNAssistantPlugins.item(target.pluginId);
+        if (!plugin) throw new Error("Проект плагина недоступен.");
+        return RNAssistantPlugins.openSourceChat(null, plugin, { referencePanel: key(target), beside: true, isCurrent: context.isCurrent });
+      },
       load: async function (context) {
         var value = await send("openPlugin", { pluginId: target.pluginId, releaseId: target.releaseId });
         function close() { send("closePlugin", { instanceId: value.instanceId }).catch(function () {}); }
@@ -19,10 +26,10 @@
         var theme = new MutationObserver(appearance);
         theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent"] });
         frame.addEventListener("load", appearance); frame.src = value.entryUrl;
-        return { element: frame, frame: frame, dispose: function () { theme.disconnect(); frame.remove(); close(); } };
+        return { element: frame, frame: frame, presentation: { address: value.entryUrl }, dispose: function () { theme.disconnect(); frame.remove(); close(); } };
       },
       actions: function (root, context) {
-        var more = RNAssistantActionMenu.createTrigger("Действия с версией"); root.appendChild(more);
+        var more = RNAssistantActionMenu.createTrigger("Действия с версией"); more.classList.add("compact"); root.appendChild(more);
         var restoring = false;
         more.onclick = function () { RNAssistantActionMenu.open(more, [{ label: "Копировать адрес версии", icon: "copy", onSelect: function () {
           return copyTextResult(target.pluginId + " / " + target.releaseId).then(function () { context.status("Адрес скопирован"); }).catch(context.error);

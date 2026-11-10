@@ -124,6 +124,32 @@ restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wa
 control, terminal Run wait/dependencies, лимиты и Inspector ещё
 не реализованы; управление owner другого процесса этим tool не добавлено.
 
+## Universal Browser: компактный toolbar и Chat View — In Review, 2026-11-05
+
+Согласованы концепция и отдельный Chat View рядом. PreviewSurface использует общие
+play/code/annotation/history/discuss icons; rare plugin actions перенесены в ActionMenu.
+«Обсудить» повторно открывает exact Chat View без второго composer; plugin annotation
+target закреплён за выбранным source chat. Исправлен preserveChatOwner при возврате
+из менеджера плагинов. Уточнение 2026-11-10: одна строка Browser, раскрываемый адрес,
+сведения о версии/CAS/files под иконкой, публикация plugin и экспорт HTML через existing
+handlers. CAS, bridge и runtime не изменялись.
+
+Saved Browser, lifetime, plugin selection и HTML editor fixtures проходят: retained
+iframe/draft, exact адресат, late cleanup и narrow/125%. Live browser-views нестабилен
+ещё с baseline: pointer routing HTML annotation; последнее выполнение красное, риск открыт. [Результаты,
+изображения и открытые gates](../browser/06_PROGRESS.md). Визуальное принятие production
+открыто; самостоятельные проекты, Diff, sessions и native URL — следующие срезы.
+Builds/VSTO/Office validation не выполнялись; Windows qualification отдельно.
+
+## Universal Browser: P0 документы и план — 2026-11-04
+
+Сохранены [исходник, статический аудит и план P0–P7](../browser/06_PROGRESS.md).
+Согласованы docs-only scope и страницы во вкладках существующего Dockview;
+остальные решения Proposed. Следующий срез — общий address/modes saved HTML.
+Production-код, приоритеты стабилизации и текущие runtime contracts не менялись;
+builds/tests не запускались. Native WebView2 и Windows/Office evidence открыты.
+Полная P0 qualification и реализация P1 этим не объявляются завершёнными.
+
 ## Мультиагенты: общее продолжение выбранных участников — In Review, 2026-11-04
 
 По замечанию пользователя устранено наложение recovery portal на обычный «+» при

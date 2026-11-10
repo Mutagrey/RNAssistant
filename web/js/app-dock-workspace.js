@@ -35,15 +35,18 @@
     if (!api || !descriptor.perObject) return false;
     var chooser = api.activePanel && /^choose-\d+$/.test(api.activePanel.id) ? api.activePanel : null;
     var id = descriptor.key(target), item = panel(id);
+    var reference = options && panel(options.referencePanel);
+    var direction = options && options.beside ? (compact || host.clientWidth < 560 ? "within" : "right") : options && options.direction || "within";
     if (item && options && options.group && item.group !== options.group) item.api.moveTo({ group: options.group, position: "center" });
+    if (item && reference && options.beside && direction === "right" && item.group === reference.group)
+      item.api.moveTo({ group: reference.group, position: "right" });
     if (!item) {
       var count = api.panels.filter(function (p) { return p.params && p.params.target && p.params.target.view === target.view; }).length;
       if (count >= descriptor.maximumInstances) { notice("Открыто " + count + " просмотров. Закройте один перед открытием нового."); return false; }
-      var reference = options && panel(options.referencePanel);
       item = api.addPanel({ id: id, component: target.view, title: descriptor.titleFor(target),
         params: { target: target }, renderer: typeof descriptor.renderer === "function" ? descriptor.renderer(target) : descriptor.renderer || "always", minimumWidth: 150, minimumHeight: 120,
-        position: options && options.group ? { referenceGroup: options.group, direction: options.direction || "within" } :
-          (reference || api.activePanel) ? { referencePanel: reference || api.activePanel, direction: options && options.direction || "within" } : undefined });
+        position: options && options.group ? { referenceGroup: options.group, direction: direction } :
+          (reference || api.activePanel) ? { referencePanel: reference || api.activePanel, direction: direction } : undefined });
     }
     item.group.api.setVisible(true); item.api.setActive(); changed();
     var record = objectViews[id]; if (record && record.view.focus) record.view.focus();

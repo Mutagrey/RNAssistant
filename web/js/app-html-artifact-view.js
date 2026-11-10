@@ -24,21 +24,19 @@
     var snapshot = await RNAssistantHtmlResourceExport.fromArtifactViews(envelope.Views, context);
     await RNAssistantHtmlWorkspacePreview.ensureVendors(files);
     if (!context.isCurrent()) return null;
-    var root = node("div", "browser-html-document"), toolbar = node("div", "browser-document-toolbar");
-    var modes = node("div", "view-switch"), page = node("button", "button compact", "Страница"), code = node("button", "button compact", "Исходник");
-    modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление HTML");
-    page.type = code.type = "button"; modes.append(page, code);
-    var picker = node("select", "rna-form-control compact"); picker.setAttribute("aria-label", "Файл проекта");
+    var root = node("div", "browser-html-document");
+    var picker = node("select", "rna-form-control compact browser-document-file"); picker.setAttribute("aria-label", "Файл проекта");
     files.forEach(function (file) { picker.appendChild(new Option(file.path, file.id)); });
     picker.value = String(project.EntryPath).toLowerCase(); if (!picker.value) picker.selectedIndex = 0;
-    toolbar.append(modes, picker); root.appendChild(toolbar);
-    if (project.ExternalDependencies && project.ExternalDependencies.length)
-      root.appendChild(node("p", "browser-object-note", "Внешние зависимости: " + project.ExternalDependencies.join(", ")));
+    root.appendChild(picker);
     var frame = node("iframe"); frame.title = target.title; frame.setAttribute("sandbox", "allow-scripts"); frame.referrerPolicy = "no-referrer";
     frame.srcdoc = RNAssistantHtmlWorkspacePreview.build({ files: files, activeFileId: String(project.EntryPath).toLowerCase(),
       dataSources: (project.Data || []).map(function (d) { return { name: d.Name }; }), resourceSnapshot: snapshot, hostBridge: false });
     var source = node("div", "browser-document-source product-viewer"); root.append(frame, source);
     var positions = Object.create(null), sourceFile = null;
+    var presentation = { address: target.resourceUri, mode: "preview", supportedModes: ["preview", "source"] };
+    if (project.ExternalDependencies && project.ExternalDependencies.length) presentation.details = [
+      { label: "Внешние зависимости", status: project.ExternalDependencies.join(", "), icon: "external", disabled: true }];
     function renderSource() {
       var file = files.find(function (f) { return f.id === picker.value; }), offset = positions[file.id] || 0;
       RNAssistantViewerRegistry.mount("text", source, { text: file.content.slice(offset, offset + pageSize),
@@ -50,31 +48,39 @@
         onCopy: function (text) { return copyTextResult(text); } });
       sourceFile = file.id;
     }
-    function mode(isSource) {
+    function mode(selected) {
+      var isSource = selected === "source";
       frame.hidden = isSource; source.hidden = !isSource; picker.hidden = !isSource;
-      page.classList.toggle("active", !isSource); code.classList.toggle("active", isSource);
-      page.setAttribute("aria-pressed", String(!isSource)); code.setAttribute("aria-pressed", String(isSource));
       if (isSource && sourceFile !== picker.value) renderSource();
+      presentation.mode = selected; return presentation;
     }
-    page.onclick = function () { mode(false); }; code.onclick = function () { mode(true); }; picker.onchange = renderSource; mode(false);
-    return { element: root, frame: frame, dispose: function () { RNAssistantViewerRegistry.unmount(source); frame.remove(); root.replaceChildren(); } };
+    picker.onchange = renderSource; mode("preview");
+    return { element: root, frame: frame, presentation: presentation, selectMode: mode,
+      dispose: function () { RNAssistantViewerRegistry.unmount(source); frame.remove(); root.replaceChildren(); } };
   }
   function create(target) {
     return RNAssistantBrowserObjectView.create({
-      label: { title: target.title, path: [target.documentTitle, target.chatTitle, target.revision ? "Версия " + target.revision : "Сохранённая версия"].filter(Boolean).join(" · ") },
-      note: "Сохранённый проект · данные на момент открытия · без связи с Office. Правки и аннотации — в редакторе.",
+      label: { title: target.title, address: target.resourceUri, path: [target.documentTitle, target.chatTitle, target.revision ? "Версия " + target.revision : "Сохранённая версия"].filter(Boolean).join(" · ") },
+      storage: { kind: "managed" },
+      details: [{ label: "Просмотр снимка", status: "Исходники и данные выбранной версии", icon: "clock", disabled: true }],
+      annotationUnavailable: "Аннотации доступны в живом редакторе проекта. Здесь открыта сохранённая версия.",
       load: function (context) { return load(target, context); },
+      discuss: function () { return RNAssistantConversationPanel.open({ source: "office", sessionId: target.chatId },
+        { referencePanel: RNAssistantMaterialView.key(target), beside: true }); },
       actions: function (root, context) {
-        var more = RNAssistantActionMenu.createTrigger("Действия с материалом"); root.appendChild(more);
-        more.onclick = function () { RNAssistantActionMenu.open(more, [{ label: "Скачать оригинал", icon: "download", onSelect: function () {
+        var publication = RNAssistantActionMenu.createTrigger("Экспорт проекта"); publication.classList.add("compact"); publication.innerHTML = RNAssistantIcons.render("upload"); root.appendChild(publication);
+        publication.onclick = function () { RNAssistantActionMenu.open(publication, [{ label: "Скачать проект в файлы", status: "Архив выбранной версии с HTML, CSS, JS и данными", icon: "folder", onSelect: function () {
           return RNAssistantArtifactDownload.save(target, { send: send, fetch: window.fetch.bind(window), signal: context.signal(), isCurrent: context.isCurrent, status: context.status });
-        } }, { label: "Копировать точную ссылку", icon: "link", onSelect: function () {
+        } }]); };
+        var more = RNAssistantActionMenu.createTrigger("Действия с материалом"); more.classList.add("compact");
+        more.onclick = function () { RNAssistantActionMenu.open(more, [{ label: "Копировать точную ссылку", icon: "link", onSelect: function () {
           return copyTextResult(target.resourceUri).then(function () { context.status("Ссылка скопирована"); }).catch(context.error);
         } }].concat(RNAssistantArtifactCatalog.commands(target))); };
         if (target.head) RNAssistantArtifactVersions.append(root, target.head, { resourceUri: target.resourceUri, revision: target.revision }, function (revision) {
           return RNAssistantDockWorkspace.openTarget(Object.assign({}, target, { resourceUri: revision.resourceUri, revision: revision.revision,
             title: revision.title || target.title }), { referencePanel: RNAssistantMaterialView.key(target) });
-        }, { chatId: target.chatId, sessionRevision: target.sessionRevision, isCurrent: context.isCurrent, send: send });
+        }, { compact: true, chatId: target.chatId, sessionRevision: target.sessionRevision, isCurrent: context.isCurrent, send: send });
+        root.appendChild(more);
       }
     });
   }

@@ -5,6 +5,7 @@
     options = options || {};
     var state = options.state;
     var $ = options.node || window.$, root = options.root || document;
+    var modeButtons = Array.prototype.slice.call(root.querySelectorAll(".html-workspace-mode-button"));
     var code = options.code;
     var getCodeEditorValue = code ? function () { return code.getValue(); } : window.getCodeEditorValue;
     var setCodeEditorValue = code ? function (_, value, key) { code.setValue(value, key); } : window.setCodeEditorValue;
@@ -68,7 +69,9 @@
         return model.artifactId(item) === state.activeHtmlArtifactId;
       });
       var title = root ? artifactTitle(root) : "HTML";
-      return { title: title, path: selected && selected.type === "file" ? filePath(selected.item) : "" };
+      var file = selected && selected.type === "file" ? selected.item : null, sourceRef = file && model.prop(file, "Source", "source", null);
+      return { title: title, path: file ? filePath(file) : "", address: sourceRef && (sourceRef.uri || sourceRef.Uri) || root && model.prop(root, "ResourceUri", "resourceUri", ""),
+        details: root ? [{ label: "Рабочий проект", status: "Версия " + model.prop(root, "Revision", "revision", ""), icon: "clock", disabled: true }] : [] };
     }
 
     function renderRedoBranches(selected) {
@@ -285,8 +288,9 @@
 
     function applyHtmlWorkspaceMode() {
       var mode = state.htmlWorkspaceMode === "edit" ? "edit" : "preview";
-      Array.prototype.slice.call(root.querySelectorAll(".html-workspace-mode-button")).forEach(function (button) {
+      modeButtons.forEach(function (button) {
         button.classList.toggle("active", button.getAttribute("data-html-mode") === mode);
+        button.setAttribute("aria-pressed", String(button.getAttribute("data-html-mode") === mode));
       });
       Array.prototype.slice.call(root.querySelectorAll(".html-workspace-view")).forEach(function (view) {
         view.classList.toggle("hidden", view.getAttribute("data-html-view") !== mode);
@@ -360,17 +364,21 @@
         meta.title = binding ? dataJson(selected.item) : "";
         if (wanted.length && !sourcesReady) meta.textContent += " · " + source.message();
       }
-      var previewButton = root.querySelector('.html-workspace-mode-button[data-html-mode="preview"]');
-      var editButton = root.querySelector('.html-workspace-mode-button[data-html-mode="edit"]');
-      if (previewButton) previewButton.textContent = isPlan ? "План" : "Просмотр";
+      var previewButton = modeButtons.find(function (button) { return button.getAttribute("data-html-mode") === "preview"; });
+      var editButton = modeButtons.find(function (button) { return button.getAttribute("data-html-mode") === "edit"; });
+      if (previewButton) {
+        previewButton.innerHTML = RNAssistantIcons.render("play");
+        previewButton.title = isPlan ? "План" : "Страница"; previewButton.setAttribute("aria-label", previewButton.title);
+      }
       if (editButton) {
-        editButton.textContent = isPlan ? "Источник" : "Код";
+        editButton.innerHTML = RNAssistantIcons.render("code");
+        editButton.setAttribute("aria-label", "Исходник");
         editButton.classList.toggle("hidden", isArtifact || isCollection);
         editButton.disabled = (blocked && !isPlan) || (isPlan && artifactInlineTruncated(selected.item));
         if (isPlan && artifactInlineTruncated(selected.item)) {
           editButton.title = "Точный Markdown source ещё загружается";
         } else {
-          editButton.title = "";
+          editButton.title = "Исходник";
         }
       }
       if (isPlan && artifactInlineTruncated(selected.item)) state.htmlWorkspaceMode = "preview";

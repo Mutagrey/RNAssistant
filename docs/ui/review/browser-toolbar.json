@@ -1,0 +1,112 @@
+{
+  "date": "2026-11-05",
+  "fixture": "Production saved HTML source and frozen Demo report source at identical viewport/zoom/theme",
+  "comparison": [
+    {
+      "production": {
+        "width": 1280,
+        "zoom": 1,
+        "overflow": 0,
+        "within": true,
+        "addressHeight": 30,
+        "modeHeight": 30,
+        "font": "12px"
+      },
+      "controls": [
+        {
+          "label": "Повторить загрузку",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        },
+        {
+          "label": "Обсудить в чате рядом",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        },
+        {
+          "label": "Версии проекта · v1",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        },
+        {
+          "label": "Действия с материалом",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        }
+      ],
+      "reference": {
+        "icon": {
+          "width": 28,
+          "height": 28,
+          "font": "12px"
+        },
+        "source": {
+          "width": 73.375,
+          "height": 24,
+          "font": "12px"
+        }
+      }
+    },
+    {
+      "production": {
+        "width": 420,
+        "zoom": 1.25,
+        "overflow": 0,
+        "within": true,
+        "addressHeight": 30,
+        "modeHeight": 30,
+        "font": "12px"
+      },
+      "controls": [
+        {
+          "label": "Повторить загрузку",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        },
+        {
+          "label": "Обсудить в чате рядом",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        },
+        {
+          "label": "Версии проекта · v1",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        },
+        {
+          "label": "Действия с материалом",
+          "width": 30,
+          "height": 30,
+          "iconWidth": 16,
+          "font": "12px"
+        }
+      ],
+      "reference": {
+        "icon": {
+          "width": 25,
+          "height": 28,
+          "font": "12px"
+        },
+        "source": {
+          "width": 73.375,
+          "height": 24,
+          "font": "12px"
+        }
+      }
+    }
+  ]
+}

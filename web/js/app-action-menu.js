@@ -26,13 +26,15 @@
     closeAll(); options = options || {};
     popupTrigger = trigger; popup = document.createElement("div");
     popup.className = "rna-action-menu-popup rna-action-menu-body" + (options.className ? " " + options.className : "");
-    popup.setAttribute("role", "menu"); popup.setAttribute("aria-label", options.label || trigger.getAttribute("aria-label") || "Действия");
+    popup.setAttribute("role", options.role === "dialog" ? "dialog" : "menu"); popup.tabIndex = -1;
+    popup.setAttribute("aria-label", options.label || trigger.getAttribute("aria-label") || "Действия");
     var menu = popup;
     function button(item, key) {
-      var control = document.createElement("button"); control.type = "button";
+      var control = document.createElement(item.informational ? "div" : "button");
+      if (item.informational) control.className = "rna-action-menu-info"; else control.type = "button";
       control.dataset.menuKey = item.key || key;
       var check = typeof item.checked === "boolean";
-      control.setAttribute("role", check ? "menuitemcheckbox" : "menuitem"); control.setAttribute("aria-label", item.label); control.disabled = !!item.disabled;
+      if (!item.informational) { control.setAttribute("role", check ? "menuitemcheckbox" : "menuitem"); control.setAttribute("aria-label", item.label); control.disabled = !!item.disabled; }
       if (check) control.setAttribute("aria-checked", String(item.checked));
       control.innerHTML = (check ? icon("check") : item.icon === false ? "" : icon(item.icon || "right")) + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
       if (item.status) {
@@ -40,7 +42,7 @@
         var status = document.createElement("small"); status.textContent = item.status; control.appendChild(status);
         control.title = item.label + " · " + item.status;
       }
-      control.addEventListener("click", function (event) {
+      if (!item.informational) control.addEventListener("click", function (event) {
         // A retained action may replace its own DOM before document.click runs.
         event.stopPropagation();
         if (!check && !item.keepOpen) closePopup(true); item.onSelect();
@@ -83,7 +85,7 @@
       menu.style.top = Math.max(inset, Math.min(top, innerHeight - bounds.height - inset)) / scale + "px";
     }
     position();
-    var first = popup.querySelector("button:not(:disabled)"); if (first) first.focus();
+    var first = popup.querySelector("button:not(:disabled)"); if (first) first.focus(); else if (options.role === "dialog") popup.focus();
     return { update: function (values) { if (popup === menu) { render(values); position(); } },
       close: function () { if (popup === menu) closePopup(false); },
       isOpen: function () { return popup === menu; } };
