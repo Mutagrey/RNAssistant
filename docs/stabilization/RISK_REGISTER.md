@@ -14,6 +14,12 @@ assertion fails; public Office routing creates HTML without an explicit workspac
 Owners: protocol/context fixtures and HTML tools. These are separate from the
 retained-body change; see [evidence](../audits/storage-context-optimization.md).
 
+P3b also reproduces `context composition: selected skill exact materialization`
+failure with the pre-change `35c5bc11` skill snapshot: the fixture expects result
+role `tool`, while the v8 compiler returns `user`. Candidate and baseline fail at
+the same assertion. Owner: context composition fixture/protocol; keep this separate
+from typed skill snapshot copying. Selection, dependency and exact-dispatch cases pass.
+
 ## HTML project import — In Review, 2026-11-10
 
 Owner: Application HtmlProjectImportService / Workspace files; UI HtmlArtifactView.

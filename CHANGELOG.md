@@ -11,6 +11,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.2.1-dev
+
+- Frozen skill catalogs reuse immutable instruction text without JSON roundtrips
+  on each getter; mutable dependency/reference metadata remains isolated per request.
+
 ### 16.2.0-dev
 
 - Records the accumulated unreleased UI, Workspace/Browser and agent capabilities

@@ -3,34 +3,57 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Newtonsoft.Json;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Models
 {
     public sealed class SkillCatalogSnapshot
     {
-        private readonly string _json;
-        private readonly string _metadata;
+        private readonly SkillDefinition[] _skills;
+        private readonly ArsenalSkill[] _metadata;
         private readonly Dictionary<string, string> _revisions;
         public string Generation { get; private set; }
         public IReadOnlyList<SkillDefinition> Skills
-        { get { return Array.AsReadOnly(JsonConvert.DeserializeObject<SkillDefinition[]>(_json)); } }
-        public IReadOnlyList<RNAssistant.Core.Services.ArsenalSkill> Metadata
-        { get { return JsonConvert.DeserializeObject<RNAssistant.Core.Services.ArsenalSkill[]>(_metadata); } }
+        { get { return Array.AsReadOnly(_skills.Select(Copy).ToArray()); } }
+        public IReadOnlyList<ArsenalSkill> Metadata
+        { get { return Array.AsReadOnly(_metadata.Select(Copy).ToArray()); } }
         public string Revision(string id)
         { string revision; return id != null && _revisions.TryGetValue(id, out revision) ? revision : null; }
         public SkillCatalogSnapshot(IEnumerable<SkillDefinition> skills, string publicationRevision = null)
         {
-            var values = (skills ?? new SkillDefinition[0]).Where(item => item != null)
-                .OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
-            _json = JsonConvert.SerializeObject(values);
-            _revisions = values.ToDictionary(item => item.Id, SkillRevision.Compute, StringComparer.Ordinal);
-            _metadata = JsonConvert.SerializeObject(values.Where(item => item.Enabled).Select(item =>
-                new RNAssistant.Core.Services.ArsenalSkill { Id = item.Id, Name = item.Name, Description = item.Description, Host = item.Host,
+            _skills = (skills ?? new SkillDefinition[0]).Where(item => item != null)
+                .OrderBy(item => item.Id, StringComparer.Ordinal).Select(Copy).ToArray();
+            _revisions = _skills.ToDictionary(item => item.Id, SkillRevision.Compute, StringComparer.Ordinal);
+            _metadata = _skills.Where(item => item.Enabled).Select(item =>
+                new ArsenalSkill { Id = item.Id, Name = item.Name, Description = item.Description, Host = item.Host,
                     Revision = Revision(item.Id), Status = "available",
                     Tools = (item.Package?.RequiredTools ?? new List<SkillToolDependency>()).Select(tool => tool.Id).ToList(),
-                    References = (item.References ?? new List<SkillReferenceMetadata>()).Select(reference => reference.Path).ToList() }));
-            Generation = SkillRevision.ComputeMarkdown((publicationRevision ?? "") + "\n" + string.Join("\n", values.Select(item => Revision(item.Id))));
+                    References = (item.References ?? new List<SkillReferenceMetadata>()).Select(reference => reference.Path).ToList() }).ToArray();
+            Generation = SkillRevision.ComputeMarkdown((publicationRevision ?? "") + "\n" + string.Join("\n", _skills.Select(item => Revision(item.Id))));
         }
+
+        // Only mutable metadata is copied. Markdown strings and exact resource/
+        // payload references are immutable values shared by the frozen catalog.
+        private static SkillDefinition Copy(SkillDefinition value)
+        {
+            return new SkillDefinition { Id = value.Id, Host = value.Host, Name = value.Name, Description = value.Description,
+                Version = value.Version, BodyMarkdown = value.BodyMarkdown, Publication = value.Publication,
+                StoragePath = value.StoragePath, Enabled = value.Enabled, BuiltIn = value.BuiltIn,
+                References = value.References?.Select(item => item == null ? null : new SkillReferenceMetadata {
+                    Path = item.Path, ByteLength = item.ByteLength, Revision = item.Revision, Payload = item.Payload }).ToList(),
+                Package = value.Package == null ? null : new SkillPackageManifest { FormatVersion = value.Package.FormatVersion,
+                    PackageId = value.Package.PackageId, RequiredTools = value.Package.RequiredTools?.Select(Copy).ToList(),
+                    OptionalTools = value.Package.OptionalTools?.Select(Copy).ToList() } };
+        }
+
+        private static SkillToolDependency Copy(SkillToolDependency value)
+        { return value == null ? null : new SkillToolDependency { Id = value.Id, ContractVersion = value.ContractVersion,
+            Revision = value.Revision, Fallback = value.Fallback }; }
+
+        private static ArsenalSkill Copy(ArsenalSkill value)
+        { return new ArsenalSkill { Id = value.Id, Name = value.Name, Description = value.Description, Host = value.Host,
+            Revision = value.Revision, Status = value.Status, Reason = value.Reason,
+            Tools = value.Tools?.ToList(), References = value.References?.ToList() }; }
     }
 
     // Entries are the exact published heads, not draft bodies discovered in storage.

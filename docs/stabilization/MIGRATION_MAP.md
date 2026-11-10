@@ -53,6 +53,10 @@ from the shared compiler. Office/Workspace and dispatch manifests use the bounde
 sample/reason counts directly, without an adapter. Full-session compiler inputs,
 working-set restoration and snapshot JSON getters remain for subsequent P3 slices.
 
+P3b replaces skill-catalog JSON storage/getters with typed defensive copies;
+`SkillCatalogSnapshot` consumers in both hosts use that owner directly. No adapter
+or additional cache. `ModelContextSnapshot` message/receipt JSON getters remain open.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.

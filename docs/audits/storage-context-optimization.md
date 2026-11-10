@@ -407,3 +407,27 @@ after-state/CAS ownership.
 7. Conversation protocol, Session events, MIGRATION_MAP, PROGRESS and Harness guide
    are updated; no adapter or second store. Product `16.2.0-dev` follows the initial
    transition in the version policy, not a storage cutover or qualified release.
+
+## P3b — typed frozen skill catalog (2026-11-11)
+
+1. F11, catalog portion: `SkillCatalogSnapshot` stores typed detached definitions
+   and Arsenal metadata instead of JSON strings. Both host consumers use this owner.
+2. Getters copy mutable records/lists; immutable Markdown/resource/payload values
+   are shared. Constructor inputs and returned nested dependencies/references cannot
+   change later requests, revisions or publication generation.
+3. Removed catalog serialization and both getter deserializations. Core delta:
+   +36/-13, net +23 lines. No cache, alternate catalog or compatibility path.
+4. T02/T05 subset: frozen-copy fixture and existing selection/compaction/scope,
+   dependency/revocation and exact-dispatch checks pass on macOS/net8/C#7.3.
+   Source-linked validation follows the same isolated baseline as P3a. The old
+   selected-skill composition test fails its tool/user role expectation on both
+   candidate and pre-change `35c5bc11` snapshot; it is in RISK_REGISTER.
+5. Same 16 definitions × 12,000 characters, 24 Skills+Metadata accesses: 4,608,000
+   instruction characters read in both cases; calling-thread allocations
+   15,836,840 → 190,952 bytes; single-sample wall 12.96 → 0.66 ms. Construction/hash
+   and warm-up excluded. No I/O or CPU measurement; not a Windows latency claim.
+6. Copy work still depends on metadata count. ModelContextSnapshot JSON getters,
+   full-session runtime, working-set recovery and bounded preparation remain open
+   P3 gates. No Office qualification or overall optimization completion.
+7. Skills, MIGRATION_MAP, PROGRESS, risk register and Harness guide updated;
+   product patch `16.2.1-dev`, no temporary adapter or storage cutover.

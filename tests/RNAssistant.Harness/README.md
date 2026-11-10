@@ -20,6 +20,11 @@ to this path with `model context: compiler presentation`, the two `context conti
 cases for active/archived selection and final read retention, and the optional
 diagnostics/mandatory manifest check. This is not bounded full-session restart evidence.
 
+`storage optimization: frozen skill snapshots without JSON getters` checks nested
+copy isolation and catalog getter allocations; selected-skill/dependency/dispatch
+regressions cover the common consumers. The old composition role expectation is
+recorded separately in the storage qualification risks.
+
 
 ## Optional assignments (4b, 2026-11-10)
 

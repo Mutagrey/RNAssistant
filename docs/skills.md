@@ -472,6 +472,12 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
   does not create a selection or grant any tool access.
 - Host filtering uses the selected execution endpoint, not the containing window.
 
+`SkillCatalogSnapshot` freezes definitions and dependency/reference metadata once.
+Getters return typed detached metadata while sharing immutable Markdown, resource
+and payload values; they do not serialize/parse the complete catalog. Mutating an
+input definition, a request copy or Arsenal metadata cannot change the frozen
+revision/generation or a later request. This applies to both host consumers.
+
 
 Workspace built-ins include `skills.workspace.plugin.authoring`: it guides the source
 chat to create a path-only SVG icon from a text brief, update `plugin.json`,
