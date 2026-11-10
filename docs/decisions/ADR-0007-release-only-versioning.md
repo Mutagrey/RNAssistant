@@ -1,7 +1,10 @@
 # ADR-0007: Release-only product versioning
 
 Date: 2026-08-28
-Status: Accepted (Phase 0)
+Status: Partially superseded on 2026-11-11 by the maintainer-approved
+[completed-change policy](../operations/VERSIONING.md). The product-version freeze
+below is historical. Separate build identity, fixed assembly binding, independent
+protocol versions and explicit immutable release tags remain in force.
 
 ## Context
 

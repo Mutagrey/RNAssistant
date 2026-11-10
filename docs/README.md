@@ -140,7 +140,7 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Порядок UI-миграции, performance, rollback | [UI Migration Plan](ui/UI_MIGRATION_PLAN.md) — P0–P3, сверка исходных A–H с S1–S5, повторный аудит Shell, согласованный S1c и gates; [исходник v1.0](ui/reference/RNAssistant_UI_Architecture_and_Agent_Rules.md) сохранён как reference, не параллельный нормативный документ |
 | Исторические UI/UX источники | [Прежний UI design](ui-design.md), [Demo P0–P3](ui/UI_LAYOUT_UX.md), [Prototype Package](ui-prototype/00_START_HERE.md); не параллельные нормативные планы |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
-| Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |
+| Версии завершённых продуктовых изменений и выпуск | [Versioning](operations/VERSIONING.md) — patch/minor/major на завершённый срез; отдельные [release](operations/RELEASE_PROCESS.md) и [build evidence](operations/BUILD_EVIDENCE.md) |
 | Targeted checks | [Harness guide](../tests/RNAssistant.Harness/README.md) |
 | Сравнение моделей и безопасное переключение | [Правила разработки §9](development-rules.md#сравнение-моделей) |
 

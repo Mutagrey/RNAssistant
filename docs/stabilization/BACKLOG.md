@@ -1,5 +1,21 @@
 # RNAssistant backlog
 
+## Release script version range — 2026-11-11
+
+Owner: release tooling (`tools/Prepare-Release.ps1`). Параметр `Version` жёстко
+ограничен `16.1.0[-alpha.N|beta.N|rc.N]`; MSBuild targets уже принимают другие
+корректные prefix. После принятия [новой политики](../operations/VERSIONING.md)
+скрипт требует отдельного обновления до выпуска версии с другим prefix. Обычные
+development bumps его не вызывают и этой задачей не блокируются.
+
+Acceptance: снять fixed-prefix restriction, сохранить SemVer/numeric bounds,
+exact tag/version, clean tree, changelog, signer/evidence и запрет повторного tag;
+отклонять понижение текущего product prefix до записи файлов. Проверить preparation
+и finalization для следующего minor/patch/major в disposable repositories на машине
+с PowerShell, включая invalid version, dirty tree и existing tag. Не менять
+AssemblyVersion и не обходить Windows/Office qualification. До этого примеры
+релизного скрипта для `16.1.0` не являются предписанием откатывать product version.
+
 ## Низкая панель пустого чата — 2026-11-03
 
 Owner: Web ConversationPanel / общий `.chat-empty` в `app-chat.css`.

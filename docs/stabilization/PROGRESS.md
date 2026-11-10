@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Версии завершённых изменений — 2026-11-11
+
+Пользователь выбрал одно повышение product version на завершённый продуктовый срез:
+patch для исправлений/улучшений, minor для новых возможностей; docs/tests-only и
+промежуточные commits — без bump. Owner — автор изменения; текущая политика —
+[Versioning](../operations/VERSIONING.md). Release/tag/push и Windows qualification
+остаются отдельными действиями. Прежний запрет в AGENTS/development rules снят.
+
+Этот docs-only срез оставляет `16.1.0-alpha.1`. Следующий завершённый продуктовый срез
+учитывает накопленные возможности одним переходом на `16.2.0-dev` по canonical policy;
+задним числом версии не создаются. `Prepare-Release.ps1` пока принимает только `16.1.0`:
+это открытая [задача release tooling](BACKLOG.md#release-script-version-range--2026-11-11),
+которая не мешает обычным bumps. Release execution/Windows evidence остаётся открытым.
+
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10
 

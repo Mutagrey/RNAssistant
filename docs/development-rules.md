@@ -184,6 +184,17 @@ docs/UI projections.
 но не разрешения из исторической фазы. Release qualification не блокирует обычный
 bugfix; непроверенное Office поведение не объявляется квалифицированным.
 
+Завершённый продуктовый срез получает одно повышение версии в завершающем commit
+вместе с записью в `CHANGELOG.md` → `[Unreleased]`: исправление/улучшение существующего
+поведения — patch, новая возможность — minor, намеренная несовместимость опубликованного
+контракта — major. Docs/tests-only, промежуточные commits и рефакторинг без изменения
+поведения не повышают версию. Классификацию и bump выполняет владелец изменения;
+отдельное release approval для обычного patch/minor не нужно. Применяются
+[Versioning](operations/VERSIONING.md), включая suffix и переход от прежней заморозки.
+Номер development-версии не требует Windows qualification и не закрывает её gaps.
+Tag, публикация и release workflow остаются отдельными явно назначенными действиями;
+правило bump не даёт разрешения на автоматический commit/push.
+
 - Source-generating tools и patches проверяют итоговый owner/module после правок,
   а не только отдельные hunks. Изменённый source не должен оставлять duplicate
   top-level procedures, declarations или заменённые legacy copies, если сам язык
@@ -413,4 +424,7 @@ catalog, skills, acceptance tests и по возможности temperature/rea
 - Обновлён владеющий canonical doc; краткий progress меняется при смене общего
   статуса, приоритета или qualification evidence, а не после каждого commit.
 - Непроверенный Windows/Office/release gate явно остаётся открытым.
-- Обычный commit не меняет product version и не создаёт tag.
+- Для завершённого продуктового среза версия и Unreleased note обновлены один раз;
+  для docs/tests-only, промежуточного или behavior-preserving изменения bump не нужен.
+  Перед фактическим commit выполнен `ValidateVersionFormat` из [Versioning](operations/VERSIONING.md#ordinary-validation).
+  Обычный commit/bump не создаёт tag и не запускает release workflow.

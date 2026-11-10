@@ -2516,18 +2516,22 @@ evaluation for defaults, conditions, globs and exclusions; missing explicit file
 and an empty compilation are rejected. This check does not build, restore or
 evaluate Office/VSTO projects. Disposable fixtures preserve both project styles.
 
-Versioning changes use the existing `Program.ProjectStructureTests.cs` suite:
+Changes to versioning implementation use the existing `Program.ProjectStructureTests.cs`
+suite. A product-number bump alone needs only `ValidateVersionFormat`, plus the
+checks for its actual product behavior; docs-only work needs diff/link checks
+(and the format target before an actual commit):
 
 ```bash
 dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal
-dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "harness:"
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "versioning"
 node tests/web/settings-version.test.js
 ```
 
 The `versioning` substring selects only versioning cases. These need Git and dotnet;
 they invoke MSBuild against disposable small projects, commits and local bare remotes.
 Fixture refs never affect the working repository or its origin. Coverage includes
-unchanged product versions across ordinary builds/commits, source archives without Git
+absence of automatic build-time bumps and acceptance of intermediate commits without
+a bump (not a prohibition on completed-change bumps), source archives without Git
 (Git/GitHub commit recovery, Debug/Release, explicit/unknown metadata and release
 rejection), invalid metadata,
 release-only gates, tag uniqueness and SDK/old-style assembly attributes. No Office

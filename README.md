@@ -351,7 +351,8 @@ The add-in projects use the VSTO project flavor (`ProjectTypeGuids`) so Visual S
 Commit is not a release. The completed architecture migration is the working
 baseline; ordinary bug fixes and scoped development use `main` by default without a
 new task branch each time. Historical release baseline is `v16.0.4`; current product
-metadata is `16.1.0-dev`, identified by commit SHA. The maintainer considers the
+metadata is tracked in `Directory.Build.props`, with commit SHA identifying each build.
+The maintainer considers the
 system usable for continued development while reliability defects and Windows/Office
 qualification remain open. This working status creates no release tag and does not
 claim a signed stable/beta/RC build. See the current [status](docs/stabilization/PROGRESS.md)
@@ -365,12 +366,19 @@ The product version comes from `RNAssistantVersionPrefix` and `RNAssistantVersio
 dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal
 ```
 
-Product version changes and annotated tags belong only to explicit release
-milestones. Release checks are separate from ordinary builds; the explicit release
-workflow is [RELEASE_PROCESS.md](docs/operations/RELEASE_PROCESS.md). Never move or
-reuse a tag, and never tag an ordinary commit. Internal refactoring does not justify
-a major bump. User-visible changes go into [CHANGELOG.md](CHANGELOG.md); current
-priority or qualification changes go into `PROGRESS.md`.
+Each completed product change bumps the version once in its completing commit:
+patch for fixes/improvements to existing behavior, minor for new capabilities,
+major for an intentional incompatible published-contract change. The same commit
+adds an [Unreleased note](CHANGELOG.md). Intermediate commits, docs/tests-only work
+and behavior-preserving refactoring need no bump. Ordinary development uses `-dev`;
+the adoption step from the previous freeze is in
+[VERSIONING.md](docs/operations/VERSIONING.md#development-and-release-versions).
+
+A development bump needs no release approval or Windows qualification. Annotated
+tags, distribution and qualification belong to explicit release milestones under
+[RELEASE_PROCESS.md](docs/operations/RELEASE_PROCESS.md); the script's remaining
+`16.1.0` limit is documented there. Never move or reuse a tag, or tag an ordinary
+commit. Keep open platform evidence visible; version numbers do not close it.
 
 ## Visual Studio Debug
 

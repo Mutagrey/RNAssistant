@@ -1,17 +1,29 @@
 # Release process
 
-Only for an explicitly approved release milestone. Ordinary commits and the working
-baseline decision do not invoke this workflow or create tags. Development uses `main`
+Only for an explicitly approved release milestone. Ordinary commits, completed-change
+version bumps and the working baseline decision do not invoke this workflow or create
+tags. Development bumps follow [Versioning](VERSIONING.md). Development uses `main`
 by default; alpha, beta and RC may be prepared from the selected clean `main` commit.
 An existing integration branch may still be selected deliberately during transition.
 
 ## Milestones and qualification
 
-The allowed main sequence is `v16.1.0-alpha.1` (testable alpha),
-`v16.1.0-beta.1` (VBA/Excel slices working on Windows),
-`v16.1.0-rc.1` (all release gates passed), then `v16.1.0`.
-Stages may be skipped. Additional beta/rc numbers require a substantial fix and
-a new build for testers, not merely completion of an internal phase.
+For the selected numeric version `X.Y.Z`, the candidate sequence is
+`vX.Y.Z-alpha.1` (testable alpha), `vX.Y.Z-beta.1` (declared slices working on Windows),
+`vX.Y.Z-rc.1` (all release gates passed), then `vX.Y.Z`.
+Stages may be skipped. The release owner selects the current development prefix;
+do not downgrade it to the historical `16.1.0` target. The script still has a
+[16.1.0 implementation restriction](#current-validation-boundary).
+
+Within an explicitly opened candidate cycle, fixes for that target advance the
+prerelease number (for example beta.1 → beta.2), with a new build and evidence.
+This is separate from ordinary development patch/minor bumps. New functionality
+returns to the development workflow with an appropriate numeric bump. Promotion
+alone changes the suffix, not the numeric prefix; an internal phase completion
+does not create a candidate. Published versions/tags are immutable, and the next
+published version must increase relative to its predecessor. Assign an increasing
+build number when candidates share a numeric prefix, because ClickOnce does not
+encode the prerelease suffix.
 
 Before release, record the applicable scenario matrix and open gates from the
 [current Windows runbook](../stabilization/WINDOWS_QUALIFICATION_RUNBOOK.md),
@@ -33,7 +45,9 @@ certificate in `Cert:\CurrentUser\My`, and substantive user-visible notes under
 Choose the current `main` or existing `stabilization/16.1` branch explicitly;
 scripts never switch branches. The branch name does not confer a quality level.
 
-Example for a future qualified milestone; this is not a working-baseline step:
+Command example for the script's existing `16.1.0` contour, not a prescribed next
+product version. Update the script restriction before preparing a newer prefix;
+do not run it merely to bump a development version:
 
 ```powershell
 ./tools/Prepare-Release.ps1 `
@@ -111,6 +125,15 @@ No automatic reset, rollback, tag deletion or write retry occurs.
 Remote inspection failures fail closed, including when credentials/network are unavailable.
 
 ## Current validation boundary
+
+`tools/Prepare-Release.ps1` currently accepts only `16.1.0` with an optional
+alpha/beta/rc suffix (`ValidatePattern` on `Version`). Its branch allowlist is
+`main` / `stabilization/16.1`. The MSBuild version/release targets already accept
+other valid numeric prefixes, but the script cannot yet prepare/finalize them.
+This is a release-tooling limitation, not a restriction on changing
+`Directory.Build.props` in an ordinary product commit. The scoped follow-up and
+acceptance are in [BACKLOG](../stabilization/BACKLOG.md#release-script-version-range--2026-11-11).
+Do not lower the product version or bypass finalization gates to fit the script.
 
 The PowerShell release workflow has not been executed for the current working baseline.
 This Mac has no `pwsh`; execution on the release workstation and Office/VSTO

@@ -96,8 +96,14 @@ evidence и ADR — только когда нужны причина, точн�
   проверки до заявления о его квалификации.
 - Перед commit выполни
   `dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal`.
-  Обычный commit не меняет product version, не запускает release workflow и не
-  создаёт tag.
+- Один завершённый продуктовый срез — одно повышение product version в завершающем
+  commit и запись в `CHANGELOG.md` → `[Unreleased]`: patch для исправления/улучшения
+  существующего поведения, minor для новой возможности, major для намеренного
+  нарушения опубликованного контракта. Docs/tests-only, промежуточные commits и
+  рефакторинг без изменения поведения — без bump. Порядок, `-dev` и первый переход
+  после прежней заморозки — в `docs/operations/VERSIONING.md`.
+  Обычный bump не требует отдельного release approval или Windows qualification,
+  не запускает release workflow, не создаёт tag и не означает автоматический commit/push.
 
 ## UI: модернизация production
 

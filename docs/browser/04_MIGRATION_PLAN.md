@@ -162,5 +162,7 @@ Docs-only P0 не вводит ни adapter, ни migration entry с ложны�
 После durable P2/P4 rollback прекращает новую capability, но сохраняет читаемость
 уже записанных facts/CAS refs; возможные внешние эффекты не откатываются replay.
 Любая новая схема требует отдельного explicit version/reset решения перед кодированием
-этого среза. Обычный commit не меняет product version; перед фактическим commit
-обязателен existing ValidateVersionFormat. Commit/push в P0/P1 не выполнялись.
+этого среза. Product bump выполняется один раз на завершённый продуктовый срез по
+[Versioning](../operations/VERSIONING.md); docs-only P0 и промежуточные commits
+обходятся без bump. Перед фактическим commit обязателен existing
+ValidateVersionFormat. Commit/push в P0/P1 не выполнялись.

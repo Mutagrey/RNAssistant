@@ -2,6 +2,10 @@
 
 User-visible changes are recorded here. Internal stabilization work is tracked in
 [PROGRESS.md](docs/stabilization/PROGRESS.md). A commit is not a release.
+Completed product changes add an Unreleased note with their assigned development
+version; dated version sections belong to explicit release preparation. See
+[Versioning](docs/operations/VERSIONING.md) for bump rules and the transition from
+the previous freeze. Unreleased notes do not claim published or qualified builds.
 
 Historical baseline: `v16.0.4`. This file does not reconstruct historical release notes.
 
@@ -25,8 +29,8 @@ Alpha `16.1.0-alpha.1` is prepared in source; it is not yet a published or quali
 
 ### Changed
 
-- Development builds target `16.1.0-dev` and include commit identity; local changes
-  are marked `.dirty` without incrementing the product version.
+- Introduced the `16.1.0-dev` build identity during stabilization: commit SHA and
+  `.dirty` markers distinguish builds without automatic build-time version bumps.
 
 ### Fixed
 
