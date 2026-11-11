@@ -289,7 +289,8 @@ namespace RNAssistant.Core.Storage
             var cursor = JournalIndex.LoadCursor(db, _scope);
             var applied = cursor;
             var current = Journal.CatchUp(cursor, (record, position) => {
-                if (record.Kind == "queue.control") ApplyControl(db, record, position);
+                if (IsChatFact(record.Kind)) ApplyChatFact(db, record, position);
+                else if (record.Kind == "queue.control") ApplyControl(db, record, position);
                 else if (record.Kind == "run.checkpoint") ApplyRun(db, record, position);
                 else if (IsDeliveryFact(record.Kind)) ApplyDeliveryRecord(db, record, position);
                 else if (record.Kind == "tool.accepted") ApplyCall(db, DecodeCall(record), record.Operation, record.Fingerprint, position, contextKey);
@@ -306,7 +307,8 @@ namespace RNAssistant.Core.Storage
                 applied = position;
             }, record => {
                 IEnumerable<PayloadRef> references;
-                if (record.Kind == "queue.control")
+                if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record);
+                else if (record.Kind == "queue.control")
                 { ValidateControl(db, record.Operation, DecodeControl(record)); references = new PayloadRef[0]; }
                 else if (record.Kind == "run.checkpoint")
                 {
@@ -342,6 +344,7 @@ namespace RNAssistant.Core.Storage
 
         internal IEnumerable<PayloadRef> CanonicalReferences(JournalRecord record)
         {
+            if (IsChatFact(record.Kind)) return ChatReferences(record);
             if (record.Kind == "tool.accepted") return CallReferences(DecodeCall(record).Call);
             if (record.Kind == "run.checkpoint") { var fact = DecodeRun(record); return fact.References.Concat(new[] { fact.Body }); }
             if (record.Kind == "agent.accepted") return new[] { DecodeDelivery(record).Body };

@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Persistence
         void SetModel(ChatSession session, string model);
         void SetReasoningEnabled(ChatSession session, bool enabled);
         ConversationMessageWindow ReadMessageWindow(string chatId, int beforeIndex, int pageSize);
+        ConversationMessageWindow ReadMessageWindow(string host, string documentKey, string chatId, int beforeIndex, int pageSize);
         bool IsPersisted(ChatSession session);
         // Recovery/identity scans do not need advisory CAS file sizes. Catalogs do.
         IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true);

@@ -57,6 +57,9 @@ namespace RNAssistant.Core.Storage
             return _store.ReadMessageWindow(chatId, beforeIndex, pageSize);
         }
 
+        public ConversationMessageWindow ReadMessageWindow(string host, string documentKey, string chatId, int beforeIndex, int pageSize)
+        { return _store.ReadMessageWindow(host, documentKey, chatId, beforeIndex, pageSize); }
+
         public bool IsPersisted(ChatSession session)
         {
             return _store.IsPersisted(session);

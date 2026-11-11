@@ -10,6 +10,21 @@ namespace RNAssistant.Core.Persistence
     // exact writes and removals; kernel facts alone select tool lifecycle semantics.
     public class ConversationCommit
     {
+        public string OperationId { get; private set; } = Guid.NewGuid().ToString("N");
+        private string _journalChat;
+        internal long JournalRevision { get; private set; }
+        internal int JournalMessageCount { get; private set; }
+
+        internal void BindJournal(ChatSession session)
+        {
+            if (_journalChat != null && _journalChat != session.Id)
+                throw new InvalidOperationException("The commit belongs to another chat.");
+            if (_journalChat != null) return;
+            _journalChat = session.Id;
+            JournalRevision = session.Revision;
+            JournalMessageCount = session.Messages.Count;
+        }
+
         public IReadOnlyList<ConversationMessageWrite> Messages { get; protected set; }
         public IReadOnlyList<string> RemovedMessageIds { get; private set; }
 

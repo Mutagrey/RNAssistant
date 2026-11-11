@@ -1,0 +1,227 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using Microsoft.Data.Sqlite;
+using Newtonsoft.Json;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
+
+namespace RNAssistant.Core.Storage
+{
+    // Direct Store integration on the existing journal owner. Composition remains
+    // isolated until all Store/resource/runtime operations pass the cutover gate.
+    internal sealed partial class ConversationJournal : IConversationStore
+    {
+        private bool _textStoreRootChecked;
+        private void RequireTextRoot()
+        {
+            if (_textStoreRootChecked) return;
+            if (Directory.Exists(_paths.ChatDirectory) && Directory.EnumerateFiles(_paths.ChatDirectory, "*", SearchOption.AllDirectories).Any())
+                throw new InvalidOperationException("The new journal Store requires a separate root; legacy chat data is not imported.");
+            _textStoreRootChecked = true;
+        }
+
+        private ConversationChatReceipt ReadChat(string id)
+        {
+            RequireTextRoot();
+            return Access((db, cursor) => TextChat(db, id), CancellationToken.None);
+        }
+
+        private ConversationChatReceipt TextChat(SqliteConnection db, string id)
+        {
+            var chat = CurrentChat(db, id);
+            if (chat == null && Card(db, id) != null) throw TextStoreScope();
+            if (chat != null && (Scalar(db, "SELECT 1 FROM call_fact WHERE stream=$stream AND chat=$chat LIMIT 1", id) != null ||
+                Scalar(db, "SELECT 1 FROM run_current WHERE stream=$stream AND chat=$chat", id) != null ||
+                Scalar(db, "SELECT 1 FROM input_state WHERE stream=$stream AND recipient=$chat LIMIT 1", id) != null))
+                throw TextStoreScope();
+            return chat;
+        }
+
+        private static ConversationMetadata ChatMetadata(ConversationChatReceipt receipt)
+        {
+            var address = receipt.Fact.Card.Address;
+            return new ConversationMetadata(address.Id, receipt.Position.Sequence, address.Host, address.DocumentKey,
+                address.WorkspaceId, address.DocumentAuthorityId);
+        }
+
+        private static bool MatchesAddress(ConversationChatReceipt receipt, string host, string key)
+        { return receipt != null && receipt.Fact.Card.Address.Host == host && receipt.Fact.Card.Address.DocumentKey == key; }
+
+        ChatSession IConversationStore.CreateTransient(string host, string key, string documentTitle, string title)
+        {
+            RequireTextRoot();
+            var session = new ChatSession { Host = host, DocumentKey = key, DocumentTitle = documentTitle,
+                Title = string.IsNullOrWhiteSpace(title) ? "New chat" : title,
+                WorkspaceId = _scope.StartsWith("workspace:", StringComparison.Ordinal) ? _scope.Substring(10) : null,
+                DocumentAuthorityId = _scope.StartsWith("document:", StringComparison.Ordinal) ? _scope.Substring(9) : null };
+            ChatSessionNormalizer.Normalize(session, host, key, documentTitle);
+            return session;
+        }
+
+        void IConversationStore.Commit(ChatSession session, ConversationCommit commit)
+        {
+            RequireTextRoot();
+            try { ApplyChatReceipt(session, CommitChat(session, commit)); }
+            catch (IOException)
+            {
+                // Recover only this operation's receipt; a lost acknowledgement
+                // remains an exception. Retrying the same command cannot append twice.
+                var own = Access((db, cursor) => FindChatWrite(db, commit.OperationId), CancellationToken.None);
+                if (own?.Fact.Card.ChatId == session.Id) ApplyChatReceipt(session, own);
+                throw;
+            }
+        }
+
+        private static void ApplyChatReceipt(ChatSession session, ConversationChatReceipt receipt)
+        {
+            if (session.Revision > receipt.Position.Sequence)
+                throw new ChatConcurrencyException("An earlier receipt cannot rewind the current chat projection.");
+            session.Revision = receipt.Position.Sequence; session.UpdatedUtc = receipt.Fact.CreatedUtc;
+            session.StorageHeadHash = receipt.Position.Hash; session.StorageByteLength = receipt.Position.End;
+            session.StorageTailByteOffset = receipt.Position.Start;
+        }
+
+        ConversationMetadata IConversationStore.ReadMetadata(string id)
+        { var receipt = ReadChat(id); return receipt == null ? null : ChatMetadata(receipt); }
+
+        bool IConversationStore.IsPersisted(ChatSession session)
+        { return session != null && MatchesAddress(ReadChat(session.Id), session.Host, session.DocumentKey); }
+
+        ConversationMessageWindow IConversationStore.ReadMessageWindow(string id, int beforeIndex, int pageSize)
+        { return ReadChatWindow(id, null, null, beforeIndex, pageSize); }
+
+        ConversationMessageWindow IConversationStore.ReadMessageWindow(string host, string key, string id, int beforeIndex, int pageSize)
+        { return ReadChatWindow(id, host, key, beforeIndex, pageSize); }
+
+        private ConversationMessageWindow ReadChatWindow(string id, string host, string key, int beforeIndex, int pageSize)
+        {
+            if (pageSize < 1 || pageSize > 100 || beforeIndex < 0) throw new ArgumentOutOfRangeException(nameof(pageSize));
+            RequireTextRoot();
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                var selected = Access((db, cursor) => {
+                    var current = TextChat(db, id);
+                    if (current == null || host != null && !MatchesAddress(current, host, key)) return null;
+                    if (beforeIndex > current.Fact.MessageCount) throw new ArgumentOutOfRangeException(nameof(beforeIndex));
+                    var ids = new List<Tuple<string, string>>();
+                    using (var command = Command(db, "SELECT id,operation FROM chat_message WHERE stream=$stream AND chat=$chat AND ordinal >= $start AND ordinal < $before ORDER BY ordinal"))
+                    {
+                        command.Parameters.AddWithValue("$chat", id); command.Parameters.AddWithValue("$start", Math.Max(0, beforeIndex - pageSize));
+                        command.Parameters.AddWithValue("$before", beforeIndex);
+                        using (var reader = command.ExecuteReader()) while (reader.Read()) ids.Add(Tuple.Create(reader.GetString(0), reader.GetString(1)));
+                    }
+                    if (ids.Count != Math.Min(beforeIndex, pageSize)) throw new InvalidDataException("Message page contains missing ordinals.");
+                    var commits = ids.Select(item => item.Item2).Distinct().ToDictionary(operation => operation, operation => FindChatWrite(db, operation));
+                    var entries = ids.Select(item => {
+                        var write = commits[item.Item2];
+                        if (write?.Fact.Card.ChatId != id) throw new InvalidDataException("Foreign message locator.");
+                        return write.Fact.Messages.Single(message => message.Header.Id == item.Item1);
+                    }).ToArray();
+                    return Tuple.Create(current, entries);
+                }, CancellationToken.None);
+                if (selected == null) return null;
+                return new ConversationMessageWindow { Metadata = ChatMetadata(selected.Item1),
+                    PageMessages = selected.Item2.Select(ReadText).ToArray(), Artifacts = new ChatArtifact[0],
+                    DetachedArtifactIds = new HashSet<string>(), ApplicableTombstoneIds = new HashSet<string>(),
+                    StartIndex = Math.Max(0, beforeIndex - pageSize), TotalCount = selected.Item1.Fact.MessageCount };
+            }
+        }
+
+        ChatSession IConversationStore.Load(string id) { return LoadTextChat(id, null, null); }
+        ChatSession IConversationStore.Load(string host, string key, string id) { return LoadTextChat(id, host, key); }
+
+        private ChatSession LoadTextChat(string id, string host, string key)
+        {
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                var receipt = ReadChat(id);
+                if (receipt == null || host != null && !MatchesAddress(receipt, host, key)) return null;
+                var card = receipt.Fact.Card; var address = card.Address;
+                var session = new ChatSession { Id = id, Host = address.Host, DocumentKey = address.DocumentKey,
+                    WorkspaceId = address.WorkspaceId, DocumentAuthorityId = address.DocumentAuthorityId,
+                    Title = card.Title, DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath,
+                    CreatedUtc = card.CreatedUtc, Model = card.SelectedModel, ReasoningEnabled = card.ReasoningEnabled,
+                    Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
+                    Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)) };
+                for (var before = Math.Min(100, receipt.Fact.MessageCount); before > 0; before = Math.Min(before + 100, receipt.Fact.MessageCount))
+                {
+                    var start = session.Messages.Count;
+                    var page = ReadChatWindow(id, host, key, before, before - start);
+                    if (page?.Metadata.Revision != receipt.Position.Sequence) throw new ChatConcurrencyException("Chat changed during explicit full load.");
+                    session.Messages.AddRange(page.PageMessages);
+                    if (before == receipt.Fact.MessageCount) break;
+                }
+                ApplyChatReceipt(session, receipt); return session;
+            }
+        }
+
+        private IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null)
+        {
+            RequireTextRoot();
+            return Access((db, cursor) => {
+                var ids = new List<string>();
+                using (var command = Command(db, "SELECT chat FROM chat_card WHERE stream=$stream ORDER BY chat"))
+                using (var reader = command.ExecuteReader()) while (reader.Read()) ids.Add(reader.GetString(0));
+                return (IReadOnlyList<ChatSessionHeader>)ids.Select(id => TextChat(db, id))
+                    .Where(receipt => host == null || MatchesAddress(receipt, host, key)).Select(receipt => {
+                        var card = receipt.Fact.Card; var address = card.Address;
+                        return new ChatSessionHeader { Id = card.ChatId, Revision = receipt.Position.Sequence,
+                            Host = address.Host, DocumentKey = address.DocumentKey, WorkspaceId = address.WorkspaceId,
+                            DocumentAuthorityId = address.DocumentAuthorityId, DocumentTitle = card.DocumentTitle,
+                            DocumentPath = card.DocumentPath, Title = card.Title, Model = card.SelectedModel, Mode = card.Policy.Mode,
+                            ReasoningEnabled = card.ReasoningEnabled, CreatedUtc = card.CreatedUtc, UpdatedUtc = receipt.Fact.CreatedUtc,
+                            LastActivityUtc = new DateTime(Convert.ToInt64(Scalar(db, "SELECT last_activity_ticks FROM chat_state WHERE stream=$stream AND chat=$chat", card.ChatId)), DateTimeKind.Utc),
+                            MessageCount = receipt.Fact.MessageCount };
+                    }).OrderByDescending(header => header.UpdatedUtc).ToArray();
+            }, CancellationToken.None);
+        }
+
+        IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(bool includeStorageUsage)
+        { if (includeStorageUsage) throw TextStoreScope(); return ReadChatHeaders(); }
+        IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(string host, string key, string title) { return ReadChatHeaders(host, key); }
+        void IConversationStore.SetTitle(ChatSession session, string title) { session.Title = title; ((IConversationStore)this).Commit(session, new ConversationCommit()); }
+        void IConversationStore.SetModel(ChatSession session, string model) { session.Model = model; ((IConversationStore)this).Commit(session, new ConversationCommit()); }
+        void IConversationStore.SetReasoningEnabled(ChatSession session, bool enabled) { session.ReasoningEnabled = enabled; ((IConversationStore)this).Commit(session, new ConversationCommit()); }
+
+        void IConversationStore.SaveActiveSessionId(string host, string key, string id)
+        {
+            RequireTextRoot();
+            Access((db, cursor) => {
+                if (!MatchesAddress(TextChat(db, id), host, key)) throw new InvalidOperationException("Selection belongs to another document/workspace.");
+                var fact = new ConversationChatSelection(id);
+                var record = DeliveryRecord(Guid.NewGuid().ToString("N"), "chat.selected", fact, TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact)));
+                ValidateChatFact(db, record);
+                var position = Journal.Append(cursor, record.Operation, record.Fingerprint, record.Kind, record.Data);
+                ApplyChatFact(db, record, position); return true;
+            }, CancellationToken.None);
+        }
+
+        string IConversationStore.LoadActiveSessionId(string host, string key)
+        {
+            RequireTextRoot();
+            return Access((db, cursor) => {
+                string id;
+                using (var command = Command(db, "SELECT chat FROM chat_selection WHERE stream=$stream")) id = command.ExecuteScalar() as string;
+                return id != null && MatchesAddress(TextChat(db, id), host, key) ? id : null;
+            }, CancellationToken.None);
+        }
+
+        ChatSession IConversationStore.LoadOrCreateActive(string host, string key, string title)
+        {
+            var store = (IConversationStore)this; var id = store.LoadActiveSessionId(host, key) ?? ReadChatHeaders(host, key).FirstOrDefault()?.Id;
+            return id == null ? store.CreateTransient(host, key, title, "New chat") : store.Load(host, key, id);
+        }
+
+        void IConversationStore.CommitRun(ConversationRunCommit commit) { throw TextStoreScope(); }
+        ChatSession IConversationStore.Move(ChatSession session, string host, string key, string title) { throw TextStoreScope(); }
+        void IConversationStore.MoveDocument(string oldHost, string oldKey, string host, string key, string title, string path) { throw TextStoreScope(); }
+        bool IConversationStore.Delete(string host, string key, string id) { throw TextStoreScope(); }
+        bool IConversationStore.DeleteDocument(string host, string key) { throw TextStoreScope(); }
+        bool IConversationStore.PrepareInterruptedRunRecovery(ChatSession session, string runId) { throw TextStoreScope(); }
+    }
+}

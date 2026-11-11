@@ -57,7 +57,7 @@ namespace RNAssistant.Runtime
                             using (var runtimeLease = _runtimeUseLease?.Invoke())
                             using (AcquireSessionLease(sessionId))
                             {
-                                var current = _workspaces.LoadSession(_chats, workspace, sessionId);
+                                var current = _workspaces.LoadSession(_conversationStore, workspace, sessionId);
                                 if (!ChatTitleBuilder.CanReplaceAutoTitle(current, draft)) return;
                                 if (string.Equals(current.Title, title, StringComparison.Ordinal)) return;
                                 _chats.SetTitle(current, title);

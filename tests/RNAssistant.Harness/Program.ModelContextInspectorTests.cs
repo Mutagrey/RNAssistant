@@ -213,10 +213,10 @@ namespace RNAssistant.Harness
                 var workspaces = new WorkspaceStore(paths);
                 var workspace = workspaces.ConnectProject(System.IO.Path.Combine(paths.Root, "project"), true);
                 var other = workspaces.ConnectProject(System.IO.Path.Combine(paths.Root, "other-project"), true);
-                var session = workspaces.CreateSession(chats, workspace, "Diagnostics");
+                var session = workspaces.CreateSession(ConversationStore(chats), workspace, "Diagnostics");
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Do not hydrate for diagnostics" });
                 chats.Save(session);
-                var foreign = workspaces.CreateSession(chats, other, "Other");
+                var foreign = workspaces.CreateSession(ConversationStore(chats), other, "Other");
                 const string body = "{\"messages\":[{\"role\":\"user\",\"content\":\"Прочитай отчёт\"}]}";
                 var request = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
                     new LlmTraceRecord { RequestId = "shared-id", RunId = "run", StepId = "step" }, body,

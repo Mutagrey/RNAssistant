@@ -89,6 +89,18 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal text:` runs three focused checks of `ConversationJournal`'s direct
+`IConversationStore` integration: real Office creation/bridge page and Workspace
+Store consumers; lost acknowledgement, stale/reused receipts, rebuild and backup/
+restore with plaintext and synthetic protection; H=100/1000/10000 metadata/header/
+append counters and exact page bodies. Protocol/runtime and resource operations
+remain explicitly unsupported. This is not a full AgentKernel turn, production
+cutover or Windows/DPAPI qualification. Relevant regressions are `workspace: create
+reopen session and relocate`, `chat sessions: catalog avoids active history`,
+`storage optimization: atomic agent delivery and wait` and
+`storage optimization: run checkpoints and invocation ownership`. Build once and
+use `--no-build` for each filter. Production composition remains unchanged.
+
 `storage optimization:` selects isolated rotation/tail/protection tests, common
 retained results/context, Office/Workspace adapter parity with a scripted provider,
 cross-run file guards, two-process index repair, atomic send/spawn/run/control,

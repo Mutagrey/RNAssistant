@@ -47,6 +47,7 @@ namespace RNAssistant.Runtime
         private readonly ConversationRunOwner _activeRuns;
         private readonly ConversationInboxService _conversationInbox;
         private readonly ConversationApplicationService _conversationApplication;
+        private readonly IConversationStore _conversationStore;
         private readonly ChatStore _chats;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
@@ -110,6 +111,7 @@ namespace RNAssistant.Runtime
             _toolProfile = toolProfile ?? CallableToolProfile.Core();
             _runtimeUseLease = runtimeUseLease;
             _chats = new ChatStore(paths);
+            _conversationStore = new ChatConversationStoreAdapter(_chats);
             _conversationInbox = new ConversationInboxService(new ChatEventStoreAdapter(_chats));
             _conversationApplication = new ConversationApplicationService(_conversationInbox, _activeRuns);
             _workspaces = new WorkspaceStore(paths);
@@ -125,13 +127,13 @@ namespace RNAssistant.Runtime
 
         public ChatSession GetSession(WorkspaceDescriptor workspace, string sessionId)
         {
-            return _workspaces.LoadSession(_chats, workspace, sessionId);
+            return _workspaces.LoadSession(_conversationStore, workspace, sessionId);
         }
 
         public ConversationMessageWindow ReadMessageWindow(WorkspaceDescriptor workspace,
             string sessionId, int beforeIndex, int pageSize)
         {
-            return _workspaces.ReadMessageWindow(_chats, workspace, sessionId, beforeIndex, pageSize);
+            return _workspaces.ReadMessageWindow(_conversationStore, workspace, sessionId, beforeIndex, pageSize);
         }
 
         // Chat activation may reconcile a stopped owner; plain inspection stays read-only.
@@ -166,7 +168,7 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("Workspace and session are required.");
             using (AcquireSessionLease(sessionId))
             {
-                var session = _workspaces.LoadSession(_chats, workspace, sessionId);
+                var session = _workspaces.LoadSession(_conversationStore, workspace, sessionId);
                 if (session == null) throw new InvalidOperationException("Workspace session was not found.");
                 if (session.UsesCurrentProtocol)
                 {
@@ -185,7 +187,7 @@ namespace RNAssistant.Runtime
 
         public ChatSession CreateSession(WorkspaceDescriptor workspace, string title)
         {
-            return _workspaces.CreateSession(_chats, workspace, title);
+            return _workspaces.CreateSession(_conversationStore, workspace, title);
         }
 
         public ChatSession ForkSession(WorkspaceDescriptor workspace, string sessionId, string messageId)
@@ -194,7 +196,7 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("An exact chat and message are required.");
             using (AcquireSessionLease(sessionId))
             {
-                var source = _workspaces.LoadSession(_chats, workspace, sessionId);
+                var source = _workspaces.LoadSession(_conversationStore, workspace, sessionId);
                 if (source == null) throw new InvalidOperationException("Workspace session was not found.");
                 if (!source.UsesCurrentProtocol)
                     throw new InvalidOperationException("Create a current-format chat before branching history.");
@@ -261,7 +263,7 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("An exact chat and message are required.");
             using (AcquireSessionLease(sessionId))
             {
-                var session = _workspaces.LoadSession(_chats, workspace, sessionId);
+                var session = _workspaces.LoadSession(_conversationStore, workspace, sessionId);
                 if (session == null) throw new InvalidOperationException("Workspace session was not found.");
                 if (!session.UsesCurrentProtocol)
                     throw new InvalidOperationException("Old-format history is read-only.");
@@ -346,12 +348,12 @@ namespace RNAssistant.Runtime
 
         public ChatSessionHeader[] ListSessions(WorkspaceDescriptor workspace)
         {
-            return _workspaces.ListSessions(_chats, workspace);
+            return _workspaces.ListSessions(_conversationStore, workspace);
         }
 
         public WorkspaceConnection[] ListConnectedWorkspaces()
         {
-            return _workspaces.ListConnected(_chats);
+            return _workspaces.ListConnected(_conversationStore);
         }
 
         public ChatSession RenameSession(WorkspaceDescriptor workspace, string sessionId, string title)
@@ -359,7 +361,7 @@ namespace RNAssistant.Runtime
             using (AcquireSessionLease(sessionId))
             {
                 RequireIdleSession(workspace, sessionId);
-                return _workspaces.RenameSession(_chats, workspace, sessionId, title);
+                return _workspaces.RenameSession(_conversationStore, workspace, sessionId, title);
             }
         }
 
@@ -381,7 +383,7 @@ namespace RNAssistant.Runtime
             {
                 if (GetSession(workspace, sessionId) == null) return false;
                 RequireIdleSession(workspace, sessionId);
-                return _workspaces.DeleteSession(_chats, workspace, sessionId);
+                return _workspaces.DeleteSession(_conversationStore, workspace, sessionId);
             }
         }
 
@@ -493,15 +495,15 @@ namespace RNAssistant.Runtime
             RegisterAgentScope(workspace, settings, apiKeyProvider);
             var acceptedContract = PrepareAcceptance(request.Acceptance);
             var session = string.IsNullOrWhiteSpace(sessionId)
-                ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
-                : _workspaces.LoadSession(_chats, workspace, sessionId);
+                ? _workspaces.CreateSession(_conversationStore, workspace, "Workspace chat")
+                : _workspaces.LoadSession(_conversationStore, workspace, sessionId);
             if (session == null) throw new InvalidOperationException("Workspace session was not found.");
             using (var runReservation = ReserveRun(session.Id, wait: waitForLease,
                 cancellationToken: cancellationToken))
             {
                 // Another process may have finished after the initial lookup.
                 if (!string.IsNullOrWhiteSpace(sessionId))
-                    session = _workspaces.LoadSession(_chats, workspace, sessionId);
+                    session = _workspaces.LoadSession(_conversationStore, workspace, sessionId);
                 if (session == null) throw new InvalidOperationException("Workspace session was removed.");
                 if (queuedInput != null)
                 {
@@ -682,7 +684,7 @@ namespace RNAssistant.Runtime
             if (approve) RegisterAgentScope(workspace, settings, apiKeyProvider);
             using (var runReservation = ReserveRun(sessionId, wait: waitForLease, cancellationToken: cancellationToken))
             {
-                var session = _workspaces.LoadSession(_chats, workspace, sessionId);
+                var session = _workspaces.LoadSession(_conversationStore, workspace, sessionId);
                 if (approve) ConversationRunPolicy.ForAcceptedRun(session);
                 var run = session?.LastRun?.KernelState;
                 if (run?.Summary.Lifecycle != RunLifecycle.AwaitingConfirmation ||

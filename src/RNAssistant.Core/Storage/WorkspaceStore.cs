@@ -8,7 +8,7 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
-    // Workspace association only. ResourceAuthorityStore owns content heads and ChatStore owns sessions.
+    // Workspace association only. ResourceAuthorityStore owns content heads; IConversationStore owns sessions.
     public sealed class WorkspaceStore
     {
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
@@ -121,7 +121,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public WorkspaceConnection[] ListConnected(ChatStore chats)
+        public WorkspaceConnection[] ListConnected(IConversationStore chats)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
             WorkspaceConnection[] connections;
@@ -196,11 +196,11 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public ChatSession CreateSession(ChatStore chats, WorkspaceDescriptor workspace, string title)
+        public ChatSession CreateSession(IConversationStore chats, WorkspaceDescriptor workspace, string title)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
             ValidateDescriptor(workspace);
-            // The legacy storage partition fields are an internal routing adapter until M7.
+            // Workspace identity stays independent of Office document authority.
             var session = chats.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title);
             session.WorkspaceId = workspace.WorkspaceId;
             session.DocumentAuthorityId = null;
@@ -209,7 +209,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        public ChatSession LoadSession(ChatStore chats, WorkspaceDescriptor workspace, string sessionId)
+        public ChatSession LoadSession(IConversationStore chats, WorkspaceDescriptor workspace, string sessionId)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
             ValidateDescriptor(workspace);
@@ -219,7 +219,7 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        public ConversationMessageWindow ReadMessageWindow(ChatStore chats, WorkspaceDescriptor workspace,
+        public ConversationMessageWindow ReadMessageWindow(IConversationStore chats, WorkspaceDescriptor workspace,
             string sessionId, int beforeIndex, int pageSize)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
@@ -231,7 +231,7 @@ namespace RNAssistant.Core.Storage
             return window;
         }
 
-        public ChatSessionHeader[] ListSessions(ChatStore chats, WorkspaceDescriptor workspace)
+        public ChatSessionHeader[] ListSessions(IConversationStore chats, WorkspaceDescriptor workspace)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
             ValidateDescriptor(workspace);
@@ -239,7 +239,7 @@ namespace RNAssistant.Core.Storage
                 .Where(item => item.WorkspaceId == workspace.WorkspaceId).ToArray();
         }
 
-        public ChatSession RenameSession(ChatStore chats, WorkspaceDescriptor workspace, string sessionId, string title)
+        public ChatSession RenameSession(IConversationStore chats, WorkspaceDescriptor workspace, string sessionId, string title)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
             ValidateDescriptor(workspace);
@@ -251,7 +251,7 @@ namespace RNAssistant.Core.Storage
             return LoadSession(chats, workspace, sessionId);
         }
 
-        public bool DeleteSession(ChatStore chats, WorkspaceDescriptor workspace, string sessionId)
+        public bool DeleteSession(IConversationStore chats, WorkspaceDescriptor workspace, string sessionId)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
             ValidateDescriptor(workspace);

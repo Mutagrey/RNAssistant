@@ -1,0 +1,302 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using Microsoft.Data.Sqlite;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
+
+namespace RNAssistant.Core.Storage
+{
+    internal sealed partial class ConversationJournal
+    {
+        internal long ChatBodyReads;
+        private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.selected"; }
+
+        private static string ChatFingerprint(ConversationChatCommit fact)
+        {
+            var data = JObject.FromObject(fact); data.Remove("CreatedUtc");
+            return TextPatternEngine.Sha256(data.ToString(Formatting.None));
+        }
+
+        private static ConversationChatCommit DecodeChatCommit(JournalRecord record)
+        {
+            var fact = DeliveryData<ConversationChatCommit>(record);
+            if (record.Kind != "chat.committed" || fact == null || record.Fingerprint != ChatFingerprint(fact))
+                throw new InvalidDataException("Invalid chat commit.");
+            return fact;
+        }
+
+        private static IEnumerable<PayloadRef> ChatReferences(JournalRecord record)
+        {
+            if (record.Kind == "chat.selected") { DecodeChatSelection(record); return new PayloadRef[0]; }
+            var fact = DecodeChatCommit(record);
+            return new[] { fact.Context }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning }))
+                .Where(item => item != null);
+        }
+
+        private ConversationChatReceipt FindChatWrite(SqliteConnection db, string operation)
+        {
+            using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM chat_write WHERE stream=$stream AND operation=$operation"))
+            {
+                command.Parameters.AddWithValue("$operation", operation);
+                JournalCursor position; var record = LocatedRecord(command, out position);
+                return record == null ? null : new ConversationChatReceipt(DecodeChatCommit(record), record.Operation, position);
+            }
+        }
+
+        private ConversationChatReceipt CurrentChat(SqliteConnection db, string chat)
+        {
+            var operation = Scalar(db, "SELECT operation FROM chat_state WHERE stream=$stream AND chat=$chat", chat) as string;
+            if (operation == null) return null;
+            var receipt = FindChatWrite(db, operation);
+            if (receipt == null || receipt.Fact.Card.ChatId != chat || receipt.Fact.MessageCount !=
+                Convert.ToInt32(Scalar(db, "SELECT message_count FROM chat_state WHERE stream=$stream AND chat=$chat", chat)))
+                throw new InvalidDataException("Chat metadata disagrees with its canonical commit.");
+            return receipt;
+        }
+
+        private void ValidateChatAddress(ConversationCard card)
+        {
+            var address = card?.Address;
+            if (address == null || address.Id != card.ChatId || address.Revision != 0 ||
+                string.IsNullOrWhiteSpace(address.Host) || string.IsNullOrWhiteSpace(address.DocumentKey) ||
+                (_scope.StartsWith("workspace:", StringComparison.Ordinal)
+                    ? address.Host != "Workspace" || address.WorkspaceId != _scope.Substring(10) ||
+                        address.DocumentKey != address.WorkspaceId || address.DocumentAuthorityId != null
+                    : address.DocumentAuthorityId != _scope.Substring(9) || address.WorkspaceId != null))
+                throw new InvalidDataException("Chat address is outside this exact journal scope.");
+        }
+
+        private IEnumerable<PayloadRef> ValidateChatFact(SqliteConnection db, JournalRecord record)
+        {
+            if (OperationExists(db, record.Operation)) throw new InvalidDataException("Duplicate chat operation.");
+            if (record.Kind == "chat.selected")
+            {
+                var selected = DecodeChatSelection(record);
+                if (CurrentChat(db, selected.ChatId) == null) throw new InvalidOperationException("Selected chat is unavailable.");
+                return new PayloadRef[0];
+            }
+            var fact = DecodeChatCommit(record); ValidateChatAddress(fact.Card);
+            var current = TextChat(db, fact.Card.ChatId);
+            if (fact.ExpectedRevision != (current?.Position.Sequence ?? 0))
+                throw new ChatConcurrencyException("Chat changed before the journal commit.");
+            if (current == null && Card(db, fact.Card.ChatId) != null)
+                throw new InvalidOperationException("Chat belongs to an integration not supported by the text store yet.");
+            if (current != null && (!JToken.DeepEquals(JObject.FromObject(current.Fact.Card.Address), JObject.FromObject(fact.Card.Address)) ||
+                current.Fact.Card.CreatedUtc != fact.Card.CreatedUtc))
+                throw new InvalidOperationException("A metadata update cannot move chat ownership or replace creation identity.");
+            if (fact.MessageCount != (current?.Fact.MessageCount ?? 0) + fact.Messages.Count)
+                throw new InvalidOperationException("Chat message count does not match the append delta.");
+            foreach (var message in fact.Messages)
+                using (var command = Command(db, "SELECT 1 FROM chat_message WHERE stream=$stream AND chat=$chat AND id=$id"))
+                {
+                    command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$id", message.Header.Id);
+                    if (command.ExecuteScalar() != null) throw new InvalidOperationException("A message identity already exists; text append cannot rewrite history.");
+                }
+            return ChatReferences(record);
+        }
+
+        private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position)
+        {
+            ValidateChatFact(db, record);
+            var committed = record.Kind == "chat.committed" ? DecodeChatCommit(record) : null;
+            long lastActivity = 0;
+            if (committed != null)
+            {
+                var priorActivity = Scalar(db, "SELECT last_activity_ticks FROM chat_state WHERE stream=$stream AND chat=$chat", committed.Card.ChatId);
+                lastActivity = priorActivity == null ? committed.Card.CreatedUtc.Ticks : Convert.ToInt64(priorActivity);
+                foreach (var message in committed.Messages) lastActivity = Math.Max(lastActivity, message.Header.CreatedUtc.Ticks);
+            }
+            using (var tx = db.BeginTransaction())
+            {
+                RegisterOperation(db, tx, record.Operation, record.Kind);
+                if (record.Kind == "chat.selected")
+                {
+                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_selection VALUES($stream,$chat)", tx))
+                    { command.Parameters.AddWithValue("$chat", DecodeChatSelection(record).ChatId); command.ExecuteNonQuery(); }
+                }
+                else
+                {
+                    var fact = committed;
+                    using (var command = Command(db, "INSERT INTO chat_write VALUES($stream,$chat,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
+                    { command.Parameters.AddWithValue("$chat", fact.Card.ChatId); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery(); }
+                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_card VALUES($stream,$chat,$alias,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
+                    {
+                        command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$alias", AgentChatAddress.IdFor(fact.Card.ChatId));
+                        AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
+                    }
+                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_state VALUES($stream,$chat,$operation,$count,$activity)", tx))
+                    {
+                        command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$operation", record.Operation);
+                        command.Parameters.AddWithValue("$count", fact.MessageCount);
+                        command.Parameters.AddWithValue("$activity", lastActivity); command.ExecuteNonQuery();
+                    }
+                    var ordinal = fact.MessageCount - fact.Messages.Count;
+                    foreach (var message in fact.Messages)
+                        using (var command = Command(db, "INSERT INTO chat_message VALUES($stream,$chat,$id,$ordinal,$operation)", tx))
+                        {
+                            command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$id", message.Header.Id);
+                            command.Parameters.AddWithValue("$ordinal", ordinal++); command.Parameters.AddWithValue("$operation", record.Operation);
+                            command.ExecuteNonQuery();
+                        }
+                }
+                SaveCursor(db, position, tx); tx.Commit();
+            }
+        }
+
+        private ConversationChatReceipt CommitChat(ChatSession session, ConversationCommit commit)
+        {
+            RequireTextSession(session, commit); commit.BindJournal(session);
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                var card = new ConversationCard(session.Id, session.Title, ConversationRunPolicy.ForSession(session), session.CreatedUtc,
+                    address: new ConversationMetadata(session.Id, 0, session.Host, session.DocumentKey, session.WorkspaceId, session.DocumentAuthorityId),
+                    documentTitle: session.DocumentTitle, documentPath: session.DocumentPath, selectedModel: session.Model, reasoningEnabled: session.ReasoningEnabled);
+                ValidateChatAddress(card);
+                var messages = commit.Messages.Select(write => PublishText(write.Message)).ToArray();
+                var context = PayloadRef.FromBlob(_bodies.StoreText(JsonConvert.SerializeObject(session.Context), "application/json"));
+                var fact = new ConversationChatCommit(card, commit.JournalRevision, commit.JournalMessageCount, messages, context, DateTime.UtcNow);
+                var fingerprint = ChatFingerprint(fact);
+                foreach (var reference in new[] { context }.Concat(messages.SelectMany(item => new[] { item.Body, item.Reasoning })).Where(item => item != null))
+                    if (!_bodies.HasVerifiedReference(reference.ToBlobReference())) throw new InvalidDataException("Chat body is unavailable before acceptance.");
+                return Access((db, cursor) => {
+                    var prior = FindChatWrite(db, commit.OperationId);
+                    if (prior != null)
+                    {
+                        if (ChatFingerprint(prior.Fact) != fingerprint) throw new InvalidOperationException("Chat operation was reused with different content.");
+                        return prior;
+                    }
+                    var record = DeliveryRecord(commit.OperationId, "chat.committed", fact, fingerprint);
+                    ValidateChatFact(db, record);
+                    var position = Journal.Append(cursor, record.Operation, fingerprint, record.Kind, record.Data);
+                    try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position); }
+                    catch (Exception error) when (error is IOException || error is SqliteException) { /* canonical receipt remains accepted */ }
+                    return new ConversationChatReceipt(fact, record.Operation, position);
+                }, CancellationToken.None);
+            }
+        }
+
+        private ConversationTextEntry PublishText(ChatMessage message)
+        {
+            ConversationTextEntry.RequireText(message);
+            var header = message.CopyForContext(); header.Content = null; header.ReasoningContent = null;
+            return new ConversationTextEntry(header, PayloadRef.FromBlob(_bodies.StoreText(message.Content ?? string.Empty, "text/plain")),
+                message.ReasoningContent == null ? null : PayloadRef.FromBlob(_bodies.StoreText(message.ReasoningContent, "text/plain")));
+        }
+
+        private ChatMessage ReadText(ConversationTextEntry entry)
+        {
+            var message = entry.Header.CopyForContext();
+            message.Content = ReadChatBody(entry.Body);
+            message.ReasoningContent = entry.Reasoning == null ? null : ReadChatBody(entry.Reasoning);
+            return message;
+        }
+
+        private string ReadChatBody(PayloadRef reference)
+        {
+            Interlocked.Increment(ref ChatBodyReads);
+            return _bodies.ReadText(reference.ToBlobReference()) ?? throw new InvalidDataException("Retained chat body is unavailable.");
+        }
+
+        private static void RequireTextSession(ChatSession session, ConversationCommit commit)
+        {
+            if (session == null || commit == null || !session.UsesCurrentProtocol) throw new ArgumentException("A current chat and exact commit are required.");
+            if (commit is ConversationRunCommit || commit.RemovedMessageIds.Count != 0 || session.LastRun != null ||
+                session.ParentSessionId != null || session.ParentSessionRevision != null || session.ForkedThroughMessageId != null ||
+                session.TitleAssignedByAgent || session.PreviousDocumentKeys.Count != 0 ||
+                session.ToolCallReferenceSequence != 0 || session.EvidenceReferenceSequence != 0 ||
+                session.ActiveContextCheckpointId != null || session.ActiveHtmlArtifactId != null ||
+                session.ActiveTaskListArtifactId != null || session.ActivePlanDocumentArtifactId != null ||
+                session.AgentCreation != null || session.LastContextReceipt != null ||
+                session.Artifacts.Count != 0 || session.ArtifactLinks.Count != 0 || session.ContextCheckpoints.Count != 0 ||
+                session.ResourceCopies.Count != 0 || session.ResourceReferenceIndex.Count != 0 || session.Context.Notes.Count != 0 ||
+                session.HtmlWorkspace.Files.Count != 0 || session.HtmlWorkspace.DataSources.Count != 0 ||
+                session.HtmlWorkspace.ActiveFileId != null || session.HtmlWorkspace.History.Count != 0 || session.HtmlWorkspace.RedoBranches.Count != 0)
+                throw TextStoreScope();
+            if (session.Revision == 0 && session.Messages.Count != commit.Messages.Count) throw new InvalidOperationException("Creation omitted messages.");
+        }
+
+        private static NotSupportedException TextStoreScope()
+        { return new NotSupportedException("Journal Store integration currently supports text chat creation, append, metadata and paging. Runtime, resources and history rewrites are not connected yet."); }
+
+        private static ConversationChatSelection DecodeChatSelection(JournalRecord record)
+        {
+            var fact = DeliveryData<ConversationChatSelection>(record);
+            if (record.Kind != "chat.selected" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact)))
+                throw new InvalidDataException("Invalid chat selection.");
+            return fact;
+        }
+    }
+
+    internal sealed class ConversationTextEntry
+    {
+        public ChatMessage Header { get; private set; }
+        public PayloadRef Body { get; private set; }
+        public PayloadRef Reasoning { get; private set; }
+        [JsonConstructor] internal ConversationTextEntry(ChatMessage header, PayloadRef body, PayloadRef reasoning)
+        {
+            RequireText(header);
+            if (header.Content != null || header.ReasoningContent != null || body == null) throw new ArgumentException("Text metadata cannot contain its body.");
+            Header = header; Body = body; Reasoning = reasoning;
+        }
+        internal static void RequireText(ChatMessage message)
+        {
+            if (message == null || string.IsNullOrWhiteSpace(message.Id) || message.CreatedUtc.Kind != DateTimeKind.Utc ||
+                message.Role != "user" && message.Role != "assistant") throw new ArgumentException("An exact user/assistant text message is required.");
+            if (message.ProtocolMessage || message.RuntimeProjection || message.ResponseProtocolVersion != 0 ||
+                message.RunId != null || message.RunViewState != null || message.SyntheticResourceObservation ||
+                message.ToolName != null || message.ToolResultRole != null || message.ResultStepId != null || message.AuthorityCommitId != null ||
+                (message.ProjectedSourceMessageIds?.Count ?? 0) != 0 || (message.ProjectedEvidenceReferences?.Count ?? 0) != 0 ||
+                message.ToolCallId != null || message.Activity != null || message.AcceptedCallOrigin != null || message.AgentCommunication != null ||
+                message.ToolCallReference != null || message.EvidenceReference != null || message.ArgumentPayload != null ||
+                message.AcceptedCallPayload != null || message.ResultPayload != null || message.ResultBody != null || message.ResourceEffect != null ||
+                message.ExecutionProgress != null || message.CompletedOperation != null || message.HtmlWorkspaceCheckpoint != null ||
+                message.AttachmentAnalysis != null || message.ToolResultProtocolVersion != 0 ||
+                (message.ToolCalls?.Count ?? 0) != 0 || (message.Attachments?.Count ?? 0) != 0 ||
+                (message.ResourceRefs?.Count ?? 0) != 0 || (message.ResourceEvidence?.Count ?? 0) != 0 ||
+                (message.ResourceModelReferences?.Count ?? 0) != 0 || (message.ContextClaims?.Count ?? 0) != 0)
+                throw new NotSupportedException("Runtime/resource messages require their typed journal integration.");
+        }
+    }
+
+    internal sealed class ConversationChatCommit
+    {
+        public ConversationCard Card { get; private set; }
+        public long ExpectedRevision { get; private set; }
+        public int MessageCount { get; private set; }
+        public IReadOnlyList<ConversationTextEntry> Messages { get; private set; }
+        public PayloadRef Context { get; private set; }
+        public DateTime CreatedUtc { get; private set; }
+        [JsonConstructor] internal ConversationChatCommit(ConversationCard card, long expectedRevision, int messageCount,
+            IReadOnlyList<ConversationTextEntry> messages, PayloadRef context, DateTime createdUtc)
+        {
+            if (card == null || expectedRevision < 0 || messageCount < 0 || messages == null || messages.Count > 128 || context == null ||
+                messages.Any(item => item == null) || messages.Select(item => item.Header.Id).Distinct(StringComparer.Ordinal).Count() != messages.Count ||
+                createdUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("Invalid bounded chat commit.");
+            Card = card; ExpectedRevision = expectedRevision; MessageCount = messageCount;
+            Messages = messages; Context = context; CreatedUtc = createdUtc;
+        }
+    }
+
+    internal sealed class ConversationChatReceipt
+    {
+        internal readonly ConversationChatCommit Fact;
+        internal readonly string Operation;
+        internal readonly JournalCursor Position;
+        internal ConversationChatReceipt(ConversationChatCommit fact, string operation, JournalCursor position)
+        { Fact = fact; Operation = operation; Position = position; }
+    }
+
+    internal sealed class ConversationChatSelection
+    {
+        public string ChatId { get; private set; }
+        [JsonConstructor] internal ConversationChatSelection(string chatId)
+        { if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("Chat identity is required."); ChatId = chatId; }
+    }
+}

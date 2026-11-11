@@ -2,6 +2,19 @@
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 direct text Store slice (2026-11-11): `ConversationJournal` now implements
+`IConversationStore` itself; no wrapper over `ChatStore` is introduced. Scoped text
+create/append/preferences/selection, metadata/catalog and paging are exercised through
+Office `ChatSessionService`/bridge presentation and `WorkspaceStore`. WorkspaceStore's
+concrete `ChatStore` signatures are removed. Production Workspace composition supplies
+the already existing `ChatConversationStoreAdapter`; its owner is Core Persistence /
+Application Workspace, removal condition is the complete Store/runtime/resource port
+switch at P7, together with the old backend. This intermediate integration does not
+enable a second production writer. Protocol/runtime, resource, rewrite/move/delete,
+recovery and usage operations explicitly reject unsupported requests. The next storage
+work extends this existing journal owner instead of optimizing the old aggregate path.
+[Contract and limits](../session-events.md#direct-journal-text-store-integration--2026-11-11).
+
 Owner: Core persistence/context; Application consumes common contracts.
 [Plan](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md),
 [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md),

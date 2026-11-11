@@ -30,7 +30,7 @@ namespace RNAssistant.Harness
                 var workspaces = new WorkspaceStore(paths);
                 var workspace = workspaces.Open(System.IO.Path.Combine(paths.Root, "plans"));
                 var chats = new ChatStore(paths);
-                var session = workspaces.CreateSession(chats, workspace, "Scoped read");
+                var session = workspaces.CreateSession(ConversationStore(chats), workspace, "Scoped read");
                 var metadata = ConversationStore(chats).ReadMetadata(session.Id);
                 var planId = "plan_doc_" + new string('a', 64);
                 var artifact = new ChatArtifact { Id = ChatResourceUri.CreateSnapshotId(planId, 1),

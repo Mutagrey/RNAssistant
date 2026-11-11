@@ -46,7 +46,7 @@ namespace RNAssistant.Harness
                 AssertEqual("index.html", reopened.HtmlEntryPath, "entry configuration survives reopen");
                 AssertEqual(source.Title, reopened.Name, "project has the source title, not its private directory ID");
                 AssertEqual(source.Files.Single().Content, File.ReadAllText(Path.Combine(reopened.RootPath, "index.html")), "exact source bytes copied");
-                AssertEqual(result.WorkspaceId, store.ListConnected(chats).Single().WorkspaceId, "one existing workspace catalog entry");
+                AssertEqual(result.WorkspaceId, store.ListConnected(ConversationStore(chats)).Single().WorkspaceId, "one existing workspace catalog entry");
                 var files = new WorkspaceFileService(paths); var saved = files.CaptureFile(reopened, "index.html", 1024);
                 File.WriteAllText(Path.Combine(reopened.RootPath, "index.html"), "local edit");
                 AssertEqual("<h1>version one</h1>", files.ReadExactText(reopened, "index.html", saved.Reference).Text, "file authority retains its own exact CAS history");
@@ -107,7 +107,7 @@ namespace RNAssistant.Harness
                 AssertEqual(HtmlProjectImportStatus.Unknown, result.Status, "possible effect is not reported as created or rejected");
                 AssertEqual(1, dispatches, "write is never retried");
                 AssertTrue(File.Exists(Path.Combine(result.RootPath, "index.html")), "partial files remain available for explicit inspection");
-                AssertEqual(0, new WorkspaceStore(paths).ListConnected(new ChatStore(paths)).Length, "partial workspace stays out of the project catalog after restart");
+                AssertEqual(0, new WorkspaceStore(paths).ListConnected(ConversationStore(new ChatStore(paths))).Length, "partial workspace stays out of the project catalog after restart");
                 AssertTrue(result.Message.Contains(result.RootPath), "screen-readable recovery points to the exact folder");
                 AssertEqual(source.Files[0].Content, File.ReadAllText(Path.Combine(result.RootPath, "index.html")), "no rollback deletes or rewrites source bytes");
             });
@@ -119,7 +119,7 @@ namespace RNAssistant.Harness
                     File.WriteAllText(Path.Combine(Directory.GetDirectories(Path.Combine(paths.Root, "html-projects")).Single(), "index.html"), "external edit"); };
                 var result = new HtmlProjectImportService(paths, files).Import(package, CancellationToken.None);
                 AssertEqual(HtmlProjectImportStatus.Unknown, result.Status, "whole-project read-back detects changed bytes");
-                AssertEqual(0, new WorkspaceStore(paths).ListConnected(new ChatStore(paths)).Length, "failed read-back is not published");
+                AssertEqual(0, new WorkspaceStore(paths).ListConnected(ConversationStore(new ChatStore(paths))).Length, "failed read-back is not published");
                 AssertEqual("external edit", File.ReadAllText(Path.Combine(result.RootPath, "index.html")), "conflicting bytes are preserved");
             });
         }

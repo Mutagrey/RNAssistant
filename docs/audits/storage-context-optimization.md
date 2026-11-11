@@ -857,3 +857,51 @@ after-state/CAS ownership.
 7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. The existing
    internal carrier keeps its P2/P7 removal condition; no additional adapter.
    Performance improvement: `16.6.5-dev`, recorded in Unreleased.
+
+## P1/P2 — direct journal text Store integration (2026-11-11)
+
+1. F01/F04/P1/P2: existing `ConversationJournal` now directly implements the existing
+   `IConversationStore` port for scoped plain-text state. Append-only facts retain
+   address/card, expected revision, exact message delta and CAS references. Shared
+   derived index schema 10 adds locators, ordinals/counts, activity and selection.
+2. Office `ChatSessionService` creation and bridge page presentation, plus Workspace
+   create/load/page/catalog, consume this owner in isolated roots. Plain user/assistant
+   text and reasoning, preferences, active selection and exact identities survive
+   restart. Metadata updates preserve activity; stale writes and altered retries fail;
+   an accepted receipt cannot rewind a newer projection. Missing text CAS fails on the
+   addressed read while warm metadata remains readable. History is never rewritten.
+3. Removed `WorkspaceStore`'s concrete `ChatStore` parameter dependency across its
+   consumers. The new implementation belongs directly to ConversationJournal;
+   `ChatStore` is unchanged, with no new store, wrapper, feature flag, import or
+   fallback. Production still supplies its existing `ChatConversationStoreAdapter`.
+4. Seven checks pass on macOS/net8/C#7.3 in isolated `de343788` plus owned changes:
+   three `journal text:` checks and four targeted regressions (Workspace create/
+   relocate, catalog without history, atomic agent delivery/wait, run checkpoints).
+   Lost acknowledgement, same-command retry, rejected stale receipt, index lag,
+   rebuild, CAS closure and restore cover plaintext and synthetic encrypted storage.
+   Compilation/testing excludes concurrent protocol/browser edits; no Office/VSTO
+   validation or real Windows DPAPI check was run.
+5. Same 25-message batch size and fixed 8-message page at every H:
+
+   | H | Metadata + header records / logical bytes / allocated bytes | Append records / logical bytes / allocated bytes |
+   |---|---|---|
+   | 100 | 4 / 86,084 / 6,095,256 | 3 / 64,563 / 5,846,024 |
+   | 1,000 | 4 / 86,096 / 6,095,752 | 3 / 64,572 / 5,846,648 |
+   | 10,000 | 4 / 86,108 / 6,094,888 | 3 / 64,581 / 5,845,032 |
+
+   Metadata/header and append hydrate zero historical bodies; the page hydrates
+   exactly 8. Reads include bounded canonical frames, so metadata allocations are
+   still material, but no longer depend on H in this fixture. These are logical
+   journal counters and current-thread allocations, not physical I/O or CPU timings.
+   No old/new speedup comparison: the preceding legacy runtime-commit fixture is a
+   different operation and must not be compared numerically with this text slice.
+6. Plain text Store coverage does not close a complete model/AgentKernel turn.
+   Protocol/runtime commits, resources/attachments, rewrite/move/delete/recovery,
+   usage reporting, bridge-stable receipts and multi-scope production composition
+   remain open. Full load is intentionally explicit and proportional to H. Cutover
+   requires those consumers, verified backup, stopped old writers and Windows/Office
+   photo evidence; P4 stays deferred. Unknown/effect mechanisms are not redeveloped.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. Existing
+   adapter owner/removal gate is recorded in MIGRATION_MAP: switch the whole port
+   and remove the old backend at P7. No product bump or Unreleased behavior claim
+   for this intermediate, production-disabled implementation.

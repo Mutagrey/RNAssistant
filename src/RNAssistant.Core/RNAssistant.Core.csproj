@@ -388,6 +388,8 @@
     <Compile Include="Storage\StorageJournal.cs" />
     <Compile Include="Storage\StorageJournal.Inventory.cs" />
     <Compile Include="Storage\ConversationJournal.cs" />
+    <Compile Include="Storage\ConversationJournal.Chat.cs" />
+    <Compile Include="Storage\ConversationJournal.Store.cs" />
     <Compile Include="Storage\ConversationJournal.Delivery.cs" />
     <Compile Include="Storage\ConversationJournal.Spawn.cs" />
     <Compile Include="Storage\ConversationJournal.Run.cs" />

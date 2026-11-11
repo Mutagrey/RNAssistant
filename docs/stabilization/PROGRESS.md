@@ -87,6 +87,19 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 
 ## Оптимизация хранения/контекста — §8.3, P1/P2, P3a–f, P4a, P5/P6, 2026-11-11
 
+Текущий приоритет — прямое подключение Store/runtime/resource consumers к
+`ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
+Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
+page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
+зависит от конкретного `ChatStore`. Семь адресных checks проходят, включая реальные
+Office/Workspace consumers, потерянное подтверждение, rebuild и restore. При
+H=100/1000/10000 metadata+header читают 4 записи, append — 3, без старых тел.
+Это пока plain-text storage, не полный AgentKernel turn. Runtime/protocol, resources,
+rewrite/move/delete/recovery, usage и production composition остаются открыты.
+Старый backend удаляется при переключении целого порта; новые fallback/adapters
+не добавлены. Product version не повышается для этого промежуточного подключения.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--direct-journal-text-store-integration-2026-11-11).
+
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace
 используют общий retained result/body owner; удалены Workspace per-run observation

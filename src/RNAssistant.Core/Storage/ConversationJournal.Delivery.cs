@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
@@ -424,6 +425,7 @@ namespace RNAssistant.Core.Storage
         { return record.Data.ToObject<T>(JsonSerializer.Create(new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })); }
         private static ConversationCard DecodeCard(JournalRecord record)
         {
+            if (record.Kind == "chat.committed") return DecodeChatCommit(record).Card;
             if (record.Kind == "agent.spawned") return DecodeSpawn(record).Child;
             var fact = DeliveryData<ConversationCard>(record);
             if (record.Kind != "chat.created" || fact == null || record.Fingerprint != CardFingerprint(fact)) throw new InvalidDataException("Invalid conversation card.");
@@ -458,13 +460,22 @@ namespace RNAssistant.Core.Storage
         public ConversationRunPolicy Policy { get; private set; }
         public ModelRunMetadata Model { get; private set; }
         public DateTime CreatedUtc { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationMetadata Address { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string DocumentTitle { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string DocumentPath { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string SelectedModel { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ReasoningEnabled { get; private set; }
         [JsonConstructor]
-        internal ConversationCard(string chatId, string title, ConversationRunPolicy policy, DateTime createdUtc, ModelRunMetadata model = null)
+        internal ConversationCard(string chatId, string title, ConversationRunPolicy policy, DateTime createdUtc, ModelRunMetadata model = null,
+            ConversationMetadata address = null, string documentTitle = null, string documentPath = null,
+            string selectedModel = null, bool reasoningEnabled = false)
         {
             if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(title) || title.Length > 512 || policy == null || createdUtc.Kind != DateTimeKind.Utc)
                 throw new ArgumentException("Invalid conversation metadata.");
             ChatId = chatId; Title = title; Policy = policy; CreatedUtc = createdUtc;
             Model = model == null ? null : JsonConvert.DeserializeObject<ModelRunMetadata>(JsonConvert.SerializeObject(model));
+            Address = address; DocumentTitle = documentTitle; DocumentPath = documentPath;
+            SelectedModel = selectedModel; ReasoningEnabled = reasoningEnabled;
         }
     }
 

@@ -1,5 +1,36 @@
 # Session event stream
 
+## Direct journal text Store integration — 2026-11-11
+
+The existing `ConversationJournal` directly implements `IConversationStore` in an
+isolated, exact document/workspace root. This first slice supports plain user/assistant
+text creation and append, scalar preferences, active selection, metadata, catalog
+headers without storage usage, bounded message windows and explicit full loading.
+`chat.committed` atomically retains address/card, expected revision, append delta and
+CAS body/context references; `chat.selected` retains the active chat. The existing
+shared disposable index (schema 10) holds current locators, message ordinals/counts
+and activity. Metadata/header/append reads do not hydrate historical bodies; a page
+hydrates only its selected text/reasoning bodies. Full loading remains proportional
+to the requested history. Metadata changes preserve last activity; stale writers and
+reuse of an operation with different contents fail explicitly. Retrying the same
+in-memory command returns its accepted receipt without another append and cannot
+rewind a newer session projection. This does not yet supply a bridge retry receipt.
+
+Office `ChatSessionService`, bridge page presentation and `WorkspaceStore` exercise
+this owner directly. WorkspaceStore takes `IConversationStore`; its concrete
+ChatStore overloads are removed. Production composition still uses its existing
+`ChatConversationStoreAdapter`. No new adapter, store, flag, import or fallback is
+introduced; this slice does not alter `ChatStore` itself.
+
+Runtime/protocol messages and `CommitRun`, resources/attachments, history rewrites,
+move/delete/recovery and storage-usage reporting are explicitly unsupported in this
+isolated integration. Reading an unconnected runtime/agent chat must not return an
+apparently complete text history. Plain text Store coverage is **not** a completed
+AgentKernel conversation or a production switch. Remaining operations must move to
+the same owner before P7 removes the old backend; verified backup, stopped legacy
+writers and Windows/Office photo evidence still gate that switch. Existing journal
+closure/backup/restore includes the new facts and CAS references.
+
 ## Retained result bodies — 2026-11-10
 
 Office and Workspace terminal messages use Core `ToolResultPersistence`. A typed

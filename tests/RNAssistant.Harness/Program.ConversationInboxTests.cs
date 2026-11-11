@@ -304,7 +304,7 @@ namespace RNAssistant.Harness
             {
                 var store = new ChatStore(paths);
                 var workspace = new WorkspaceStore(paths).Open(System.IO.Path.Combine(paths.Root, "receipt-recovery"));
-                var session = new WorkspaceStore(paths).CreateSession(store, workspace, "Recovered input");
+                var session = new WorkspaceStore(paths).CreateSession(ConversationStore(store), workspace, "Recovered input");
                 var events = new ChatEventStoreAdapter(store);
                 var inbox = new ConversationInboxService(events);
                 AssertEqual(0, inbox.Snapshot(session).Items.Count, "Workspace inbox projection is already loaded");

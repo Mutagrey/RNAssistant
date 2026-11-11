@@ -41,11 +41,11 @@ namespace RNAssistant.Harness
                 AssertTrue(!opened.ReadOnly, "workspace is writable after manifest creation");
                 AssertTrue(File.Exists(Path.Combine(root, ".rnassistant", "workspace.json")), "portable manifest");
                 var chats = new ChatStore(paths);
-                var session = workspaces.CreateSession(chats, opened, "First workspace chat");
+                var session = workspaces.CreateSession(ConversationStore(chats), opened, "First workspace chat");
                 AssertEqual(opened.WorkspaceId, session.WorkspaceId, "workspace session association");
                 AssertEqual(null, session.DocumentAuthorityId, "no fake document authority");
-                AssertEqual(session.Id, workspaces.ListSessions(chats, opened).Single().Id, "listed chat");
-                AssertEqual(session.Id, workspaces.LoadSession(chats, opened, session.Id).Id, "replayed chat");
+                AssertEqual(session.Id, workspaces.ListSessions(ConversationStore(chats), opened).Single().Id, "listed chat");
+                AssertEqual(session.Id, workspaces.LoadSession(ConversationStore(chats), opened, session.Id).Id, "replayed chat");
 
                 var fileOwner = new WorkspaceFileService(paths);
                 var fileBeforeMove = fileOwner.CreateText(opened, "index.html", "moved file");
@@ -54,7 +54,7 @@ namespace RNAssistant.Harness
                 Directory.Move(root, moved);
                 var reopened = workspaces.Open(moved, false);
                 AssertEqual(opened.WorkspaceId, reopened.WorkspaceId, "relocation preserves workspace id");
-                AssertEqual(session.Id, workspaces.LoadSession(chats, reopened, session.Id).Id, "relocated chat");
+                AssertEqual(session.Id, workspaces.LoadSession(ConversationStore(chats), reopened, session.Id).Id, "relocated chat");
                 var fileAfterMove = fileOwner.ReadText(reopened, "index.html");
                 AssertEqual(fileBeforeMove.Reference.Uri, fileAfterMove.Reference.Uri, "relocation preserves file identity");
                 AssertEqual(fileBeforeMove.Reference.Revision, fileAfterMove.Reference.Revision, "relocation preserves current revision");
@@ -2006,6 +2006,9 @@ namespace RNAssistant.Harness
             public void SetTitle(ChatSession session, string value) { _inner.SetTitle(session, value); }
             public void SetModel(ChatSession session, string value) { _inner.SetModel(session, value); }
             public void SetReasoningEnabled(ChatSession session, bool value) { _inner.SetReasoningEnabled(session, value); }
+            public ConversationMessageWindow ReadMessageWindow(string host, string key, string id, int before, int count)
+            { RequireFullLoad(); return _inner.ReadMessageWindow(host, key, id, before, count); }
+
             public ConversationMessageWindow ReadMessageWindow(string id, int before, int count)
             { RequireFullLoad(); return _inner.ReadMessageWindow(id, before, count); }
             public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true)
