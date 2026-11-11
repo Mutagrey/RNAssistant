@@ -313,19 +313,18 @@ namespace RNAssistant.Office.Services
             return LoadSession(requestedSessionId, false);
         }
 
-        internal ChatSession LoadDiagnosticsSession(string requestedSessionId)
+        internal ConversationMetadata LoadDiagnosticsMetadata(string requestedSessionId)
         {
             if (string.IsNullOrWhiteSpace(requestedSessionId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
-            var stored = _conversations.ReadDiagnosticsSession(requestedSessionId);
+            var stored = _conversations.ReadMetadata(requestedSessionId);
             if (stored != null) return stored;
             // An unsaved, selected draft has no durable events yet. It must not be
             // persisted, selected again or recovered by a diagnostic read.
             var draft = _activeSession;
             if (draft != null && !_activeSessionPersisted &&
                 string.Equals(draft.Id, requestedSessionId, StringComparison.OrdinalIgnoreCase))
-                return new ChatSession { Id = draft.Id, Host = draft.Host, DocumentKey = draft.DocumentKey,
-                    WorkspaceId = draft.WorkspaceId, DocumentAuthorityId = draft.DocumentAuthorityId };
+                return ConversationMetadata.From(draft);
             throw new InvalidOperationException("Chat session was not found.");
         }
 

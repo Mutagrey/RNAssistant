@@ -88,7 +88,7 @@ namespace RNAssistant.Application.Conversations
         internal IReadOnlyList<AgentCommunicationEvent> AgentEvents(ChatSession session)
         {
             var box = Get(session);
-            lock (box.Sync) return _events.Read(box.Session, SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
+            lock (box.Sync) return _events.Read(ConversationMetadata.From(box.Session), SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
                 .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged)
                 .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).ToArray();
         }
@@ -252,7 +252,7 @@ namespace RNAssistant.Application.Conversations
                 {
                     var record = byId[input.Id];
                     var copy = Clone(input);
-                    copy.Text = _events.ReadPayload(session, record.Event) ??
+                    copy.Text = _events.ReadPayload(ConversationMetadata.From(session), record.Event) ??
                         throw new InvalidOperationException("Conversation input body is missing.");
                     return copy;
                 }).ToArray();
@@ -635,7 +635,7 @@ namespace RNAssistant.Application.Conversations
                 .Where(record => record.Event.Sequence > afterSequence).ToArray();
             foreach (var latest in records.Where(record => record.Change.Input != null)
                 .GroupBy(record => record.Change.Input.Id, StringComparer.Ordinal).Select(group => group.Last()))
-                latest.Change.Input.Text = _events.ReadPayload(session, latest.Event) ??
+                latest.Change.Input.Text = _events.ReadPayload(ConversationMetadata.From(session), latest.Event) ??
                     throw new InvalidOperationException("Conversation input body is missing.");
             // Complete all required reads before changing an existing recovery projection.
             return records;

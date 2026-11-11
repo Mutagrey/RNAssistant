@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -45,7 +46,7 @@ namespace RNAssistant.Office.Services
             Key(request.Resource);
             var exact = request.Resource.Copy();
             PromptSourceReadResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, MaximumSourceBytes, cancellation =>
+            var lease = _data.OpenDownload(ConversationMetadata.From(session), Owner, MaximumSourceBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 var read = _gateway.Read(session, new ResourceReadRequest { Reference = exact,
@@ -70,7 +71,7 @@ namespace RNAssistant.Office.Services
         internal ResourceUploadOpenResponse BeginUpload(ChatSession session, PromptMutationUploadRequest request, CancellationToken token)
         {
             if (request == null) throw Error("RESOURCE_ACCESS_DENIED", "An explicit prompt upload is required.");
-            var lease = _data.OpenUpload(session, new ResourceUploadOpenRequest { ChatId = request.ChatId,
+            var lease = _data.OpenUpload(ConversationMetadata.From(session), new ResourceUploadOpenRequest { ChatId = request.ChatId,
                 FileName = "prompt-mutation.json", ContentType = "application/json; charset=utf-8", ByteLength = request.ByteLength },
                 token, Owner, MaximumMutationBytes);
             try { token.ThrowIfCancellationRequested(); return lease; }
@@ -82,7 +83,7 @@ namespace RNAssistant.Office.Services
             if (session == null || request == null || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An addressed settings save is required.");
             if (request.UploadLeaseId == null && request.Sha256 == null) return null;
-            var batch = _data.ConsumeJsonUpload<PromptMutationBatch>(session, request.UploadLeaseId, Owner,
+            var batch = _data.ConsumeJsonUpload<PromptMutationBatch>(ConversationMetadata.From(session), request.UploadLeaseId, Owner,
                 request.Sha256, MaximumMutationBytes, 8, token);
             Validate(batch);
             token.ThrowIfCancellationRequested();

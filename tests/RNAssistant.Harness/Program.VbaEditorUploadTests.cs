@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.IO;
 using System.Linq;
@@ -56,7 +57,7 @@ namespace RNAssistant.Harness
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
                         data.CloseUpload(session.Id, request.UploadLeaseId)).ErrorCode, "attachment owner cannot close VBA upload");
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
-                        data.CompleteUpload(session, request.UploadLeaseId, new ChatResourceIngestionService(new AttachmentStore(paths), new ChatStore(paths).DocumentArtifacts))).ErrorCode,
+                        data.CompleteUpload(ConversationMetadata.From(session), request.UploadLeaseId, new ChatResourceIngestionService(new AttachmentStore(paths), new ChatStore(paths).DocumentArtifacts))).ErrorCode,
                         "attachment ingestion cannot consume a VBA upload");
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
                         editor.ReadUploadedSource(new ChatSession(), request, CancellationToken.None)).ErrorCode, "foreign chat cannot consume source");
@@ -129,7 +130,7 @@ namespace RNAssistant.Harness
                 AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() =>
                     UploadVbaSource(data, editor, session, new byte[0])).ErrorCode, "VBA shares the existing four-upload cap");
                 data.CloseTransfers(session.Id);
-                var attachment = data.OpenUpload(session, UploadRequest(session, 1));
+                var attachment = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
                 RuntimeThrows<ResourceRequestException>(() => editor.ReadUploadedSource(session, new VbaModulePayload {
                     ChatId = session.Id, ModuleName = "Module1", UploadLeaseId = attachment.LeaseId }, CancellationToken.None));
                 data.ValidateUpload(attachment.LeaseId);

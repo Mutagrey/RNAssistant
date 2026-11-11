@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -38,7 +39,7 @@ namespace RNAssistant.Harness
                 var bytes = Encoding.UTF8.GetBytes(new string('x', 21 * 1024 * 1024 + 17) + "TAIL");
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService(), (chat, owner) => chat == session.Id && owner == ResourceDataPlaneService.UploadOwner))
                 {
-                    var lease = data.OpenUpload(session, UploadRequest(session, bytes.Length));
+                    var lease = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, bytes.Length));
                     var router = new ResourceDataRouter(data);
                     var url = lease.Url + "?offset=0&count=" + lease.MaxChunkBytes;
                     var preflight = router.Handle("OPTIONS", url, CancellationToken.None);
@@ -62,8 +63,8 @@ namespace RNAssistant.Harness
                     }
                     AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length, "chunks do not publish CAS");
                     AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
-                        data.CompleteUpload(new ChatSession(), lease.LeaseId, ingestion)).ErrorCode, "another chat cannot consume this upload");
-                    var draft = data.CompleteUpload(session, lease.LeaseId, ingestion).Resource;
+                        data.CompleteUpload(ConversationMetadata.From(new ChatSession()), lease.LeaseId, ingestion)).ErrorCode, "another chat cannot consume this upload");
+                    var draft = data.CompleteUpload(ConversationMetadata.From(session), lease.LeaseId, ingestion).Resource;
                     AssertEqual((long)bytes.Length, draft.Size, "exact raw byte length survives staging");
                     AssertTrue(store.ReadBytes(draft).SequenceEqual(bytes), "no base64 or text transcoding");
                     AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length, "draft still waits for user send before CAS promotion");
@@ -77,7 +78,7 @@ namespace RNAssistant.Harness
                     AssertTrue(tail.Text.EndsWith("TAIL") && tail.TotalCharacters == bytes.Length,
                         "indexed text beyond the former 20 MiB ceiling remains addressable to its exact tail");
                     ingestion.DeleteDrafts(message);
-                    AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(session, lease.LeaseId, ingestion)).ErrorCode,
+                    AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(ConversationMetadata.From(session), lease.LeaseId, ingestion)).ErrorCode,
                         "completion cannot replay a consumed upload");
                     AssertEqual("RESOURCE_LEASE_EXPIRED", (string)UploadResponse(router.Handle("POST", url, CancellationToken.None, new MemoryStream(bytes)), 409)["code"],
                         "a consumed capability cannot accept more bytes");
@@ -95,7 +96,7 @@ namespace RNAssistant.Harness
                 var router = new ResourceDataRouter(data);
                 foreach (var maximumRead in new[] { int.MaxValue, 4093 })
                 {
-                    var lease = data.OpenUpload(session, UploadRequest(session, expected.Length));
+                    var lease = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, expected.Length));
                     for (var offset = 0; offset < expected.Length;)
                     {
                         var count = Math.Min(lease.MaxChunkBytes, expected.Length - offset);
@@ -107,7 +108,7 @@ namespace RNAssistant.Harness
                         }
                         offset += count;
                     }
-                    var actual = data.ConsumeUpload(session, lease.LeaseId, ResourceDataPlaneService.UploadOwner,
+                    var actual = data.ConsumeUpload(ConversationMetadata.From(session), lease.LeaseId, ResourceDataPlaneService.UploadOwner,
                         (bytes, fileName, contentType) => bytes.ToArray(), CancellationToken.None);
                     AssertTrue(actual.SequenceEqual(expected), "zero-offset stream reads preserve every byte across chunks");
                 }
@@ -124,14 +125,14 @@ namespace RNAssistant.Harness
                 {
                     var router = new ResourceDataRouter(data);
                     foreach (var size in new[] { 0L, AttachmentStore.MaxFileBytes + 1 })
-                        AssertEqual("RESOURCE_BATCH_TOO_LARGE", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, size))).ErrorCode,
+                        AssertEqual("RESOURCE_BATCH_TOO_LARGE", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, size))).ErrorCode,
                             "invalid total length rejected before allocation");
-                    var partial = data.OpenUpload(session, UploadRequest(session, 2));
-                    AssertEqual("RESOURCE_UPLOAD_INCOMPLETE", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(session, partial.LeaseId, ingestion)).ErrorCode,
+                    var partial = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 2));
+                    AssertEqual("RESOURCE_UPLOAD_INCOMPLETE", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(ConversationMetadata.From(session), partial.LeaseId, ingestion)).ErrorCode,
                         "partial uploads cannot become a draft");
                     foreach (var suffix in new[] { "?offset=0&offset=0", "?offset=0&count=0", "?offset=0&count=262145", "?offset=0&count=1&unknown=0" })
                     {
-                        var lease = data.OpenUpload(session, UploadRequest(session, 2));
+                        var lease = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 2));
                         using (var body = new UploadProbeStream(new byte[] { 1 }, () => { throw new Exception("invalid route read a body"); }))
                             UploadResponse(router.Handle("POST", lease.Url + suffix, CancellationToken.None, body), 400);
                         data.CloseUpload(session.Id, lease.LeaseId);
@@ -144,21 +145,21 @@ namespace RNAssistant.Harness
                     };
                     foreach (var item in cases)
                     {
-                        var lease = data.OpenUpload(session, UploadRequest(session, 2));
+                        var lease = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 2));
                         using (var body = new MemoryStream(item.Bytes))
                             AssertEqual(item.Code, (string)UploadResponse(router.Handle("POST", lease.Url + "?offset=" + item.Offset + "&count=" + item.Count,
                                 CancellationToken.None, body), 409)["code"], "bounded invalid chunk rejection");
-                        AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(session, lease.LeaseId, ingestion)).ErrorCode,
+                        AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(ConversationMetadata.From(session), lease.LeaseId, ingestion)).ErrorCode,
                             "a failed chunk cannot be completed or silently retried");
                     }
-                    var repeated = data.OpenUpload(session, UploadRequest(session, 2));
+                    var repeated = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 2));
                     data.WriteUpload(repeated.LeaseId, 0, 1, new MemoryStream(new byte[] { 65 }), CancellationToken.None);
                     AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => data.WriteUpload(repeated.LeaseId, 0, 1,
                         new MemoryStream(new byte[] { 65 }), CancellationToken.None)).ErrorCode, "duplicate chunk is not replayed");
-                    var unsupported = data.OpenUpload(session, UploadRequest(session, 2));
+                    var unsupported = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 2));
                     data.WriteUpload(unsupported.LeaseId, 0, 2, new MemoryStream(new byte[] { 77, 90 }), CancellationToken.None);
-                    RuntimeThrows<InvalidOperationException>(() => data.CompleteUpload(session, unsupported.LeaseId, ingestion));
-                    var scoped = data.OpenUpload(session, UploadRequest(session, 1));
+                    RuntimeThrows<InvalidOperationException>(() => data.CompleteUpload(ConversationMetadata.From(session), unsupported.LeaseId, ingestion));
+                    var scoped = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
                     UploadResponse(router.Handle("GET", scoped.Url + "?offset=0&count=1", CancellationToken.None), 405);
                     UploadResponse(router.Handle("POST", ResourceDataPlaneService.Origin + "/v1/" + scoped.LeaseId, CancellationToken.None), 405);
                     UploadResponse(router.Handle("POST", "https://example.com/v1/upload/" + scoped.LeaseId + "?offset=0&count=1", CancellationToken.None), 403);
@@ -176,15 +177,15 @@ namespace RNAssistant.Harness
             var ownerActive = true;
             using (var data = new ResourceDataPlaneService(new ResourceGatewayService(), (_, __) => ownerActive, () => now))
             {
-                for (var index = 0; index < 4; index++) data.OpenUpload(session, UploadRequest(session, 1));
-                AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
+                for (var index = 0; index < 4; index++) data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
+                AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1))).ErrorCode,
                     "four uploads maximum");
                 data.CloseTransfers();
-                var first = data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
-                data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
-                data.OpenUpload(session, UploadRequest(session, 10 * 1024 * 1024));
-                data.OpenUpload(session, UploadRequest(session, 1));
-                AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
+                var first = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, AttachmentStore.MaxFileBytes));
+                data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, AttachmentStore.MaxFileBytes));
+                data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 10 * 1024 * 1024));
+                data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
+                AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1))).ErrorCode,
                     "staged uploads reserve bounded buffers rather than their declared source sizes");
                 AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() => data.CloseUpload("another-chat", first.LeaseId)).ErrorCode,
                     "foreign chat cannot revoke uploads");
@@ -192,25 +193,25 @@ namespace RNAssistant.Harness
                     AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.WriteUpload(first.LeaseId, 0, 1,
                         new MemoryStream(new byte[] { 65 }), CancellationToken.None)).ErrorCode, "one operation in flight per capability");
                     data.CloseUpload(session.Id, first.LeaseId);
-                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(session, UploadRequest(session, 1))).ErrorCode,
+                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1))).ErrorCode,
                         "closing a busy lease does not release its concurrency slot");
                 }))
                     AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.WriteUpload(first.LeaseId, 0, 1, body, CancellationToken.None)).ErrorCode,
                         "owner close racing a chunk cannot acknowledge it");
-                data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
+                data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, AttachmentStore.MaxFileBytes));
                 data.CloseTransfers(session.Id);
-                var cancelled = data.OpenUpload(session, UploadRequest(session, 1));
+                var cancelled = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
                 RuntimeThrows<OperationCanceledException>(() => data.WriteUpload(cancelled.LeaseId, 0, 1, new MemoryStream(new byte[] { 65 }), new CancellationToken(true)));
                 RuntimeThrows<ResourceRequestException>(() => data.ValidateUpload(cancelled.LeaseId));
-                var expired = data.OpenUpload(session, UploadRequest(session, 1));
+                var expired = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
                 now = now.AddMinutes(11);
                 RuntimeThrows<ResourceRequestException>(() => data.ValidateUpload(expired.LeaseId));
-                var orphan = data.OpenUpload(session, UploadRequest(session, 1));
+                var orphan = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
                 ownerActive = false;
                 RuntimeThrows<ResourceRequestException>(() => data.WriteUpload(orphan.LeaseId, 0, 1, new MemoryStream(new byte[] { 65 }), CancellationToken.None));
                 ownerActive = true;
                 RuntimeThrows<ResourceRequestException>(() => data.ValidateUpload(orphan.LeaseId));
-                var disposed = data.OpenUpload(session, UploadRequest(session, 1));
+                var disposed = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
                 data.Dispose();
                 RuntimeThrows<ObjectDisposedException>(() => data.ValidateUpload(disposed.LeaseId));
             }
@@ -226,9 +227,9 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService(), (_, __) =>
                     !Directory.Exists(staging) || !Directory.GetFiles(staging, "*.meta.json").Any()))
                 {
-                    var lease = data.OpenUpload(session, UploadRequest(session, 1));
+                    var lease = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, 1));
                     data.WriteUpload(lease.LeaseId, 0, 1, new MemoryStream(new byte[] { 65 }), CancellationToken.None);
-                    AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(session, lease.LeaseId, ingestion)).ErrorCode,
+                    AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(ConversationMetadata.From(session), lease.LeaseId, ingestion)).ErrorCode,
                         "owner recheck after extraction cannot claim a cancelled draft");
                     AssertEqual(0, Directory.GetFiles(staging).Length, "late staged draft and sidecar are discarded");
                     AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length, "cancellation never publishes CAS");

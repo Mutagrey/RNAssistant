@@ -288,12 +288,12 @@ namespace RNAssistant.Core.Persistence
     public interface IEventStore
     {
         SessionEvent Append(ChatSession session, SessionEventWrite write);
-        IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode);
+        IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode);
         // Verified canonical boundaries for the current run and selected same-chat
         // aliases. The disposable locator index is never accepted as evidence.
         FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references);
-        ISessionEventReader OpenReader(ChatSession session);
-        string ReadPayload(ChatSession session, SessionEvent sessionEvent);
+        ISessionEventReader OpenReader(ConversationMetadata session);
+        string ReadPayload(ConversationMetadata session, SessionEvent sessionEvent);
     }
 
     // Transient in-memory bookmarks per consumer over the canonical stream.

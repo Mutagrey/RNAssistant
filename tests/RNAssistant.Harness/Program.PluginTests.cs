@@ -684,7 +684,7 @@ namespace RNAssistant.Harness
                         new RNAssistant.Office.Services.ResourceGatewayService(), (chat, owner) =>
                             chat == sessionId && owner == "attachment-upload:" + workspaceId))
                     {
-                        var lease = data.OpenUpload(session, UploadRequest(session, bytes.Length));
+                        var lease = data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, bytes.Length));
                         var router = new RNAssistant.Office.Services.ResourceDataRouter(data);
                         for (var offset = 0; offset < bytes.Length; offset += lease.MaxChunkBytes)
                         {
@@ -693,9 +693,9 @@ namespace RNAssistant.Harness
                                 UploadResponse(router.Handle("POST", lease.Url + "?offset=" + offset + "&count=" + count,
                                     CancellationToken.None, stream), 200);
                         }
-                        RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(new ChatSession {
-                            Id = sessionId, WorkspaceId = "other-workspace" }, lease.LeaseId, ingestion));
-                        draft = data.CompleteUpload(session, lease.LeaseId, ingestion).Resource;
+                        RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(ConversationMetadata.From(new ChatSession {
+                            Id = sessionId, WorkspaceId = "other-workspace" }), lease.LeaseId, ingestion));
+                        draft = data.CompleteUpload(ConversationMetadata.From(session), lease.LeaseId, ingestion).Resource;
                     }
                     AssertEqual(sessionId, draft.DraftChatId, "common upload stages in the addressed workspace chat");
                     AssertTrue(projectFiles.SequenceEqual(Directory.GetFiles(root, "*", SearchOption.AllDirectories)),

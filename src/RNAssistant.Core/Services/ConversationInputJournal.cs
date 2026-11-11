@@ -32,14 +32,14 @@ namespace RNAssistant.Core.Services
             long? upToSequence = null)
         {
             if (upToSequence < 0) throw new ArgumentOutOfRangeException(nameof(upToSequence));
-            var facts = _events.Read(session, SessionEventReadMode.RequireCompleteInputJournal)
+            var facts = _events.Read(ConversationMetadata.From(session), SessionEventReadMode.RequireCompleteInputJournal)
                 .Where(fact => !upToSequence.HasValue || fact.Sequence <= upToSequence.Value).ToArray();
             var records = facts.Where(fact => fact.Type == SessionEventTypes.ConversationInputChanged).Select(fact =>
                 {
                     var change = fact.Data.ToObject<ConversationInputEvent>();
                     if (change == null) throw new InvalidOperationException("Invalid conversation input event.");
                     if (includeText && change.Input != null)
-                        change.Input.Text = _events.ReadPayload(session, fact) ??
+                        change.Input.Text = _events.ReadPayload(ConversationMetadata.From(session), fact) ??
                             throw new InvalidOperationException("Conversation input body is missing.");
                     return new ConversationInputRecord(fact, change);
                 }).ToArray();

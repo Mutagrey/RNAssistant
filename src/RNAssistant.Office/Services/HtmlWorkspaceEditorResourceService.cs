@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -75,7 +76,7 @@ namespace RNAssistant.Office.Services
             if (!address.IsMember || address.MemberType != "file")
                 throw Error("RESOURCE_ACCESS_DENIED", "Only exact HTML workspace files are supported.");
             HtmlWorkspaceSourceResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, MaximumSourceBytes, cancellation =>
+            var lease = _data.OpenDownload(ConversationMetadata.From(session), Owner, MaximumSourceBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 var read = _executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = exact,
@@ -111,7 +112,7 @@ namespace RNAssistant.Office.Services
         internal ResourceUploadOpenResponse BeginUpload(ChatSession session, HtmlWorkspaceMutationUploadRequest request, CancellationToken token)
         {
             if (request == null) throw Error("RESOURCE_ACCESS_DENIED", "An addressed HTML upload is required.");
-            var lease = _data.OpenUpload(session, new ResourceUploadOpenRequest { ChatId = request.ChatId,
+            var lease = _data.OpenUpload(ConversationMetadata.From(session), new ResourceUploadOpenRequest { ChatId = request.ChatId,
                 FileName = "html-workspace-source.txt", ContentType = ContentType, ByteLength = request.ByteLength },
                 token, Owner, MaximumSourceBytes, allowEmpty: true);
             try { token.ThrowIfCancellationRequested(); return lease; }
@@ -151,7 +152,7 @@ namespace RNAssistant.Office.Services
         {
             if (session == null || request == null || string.IsNullOrWhiteSpace(session.Id) || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An addressed HTML save is required.");
-            return _data.ConsumeUpload(session, request.UploadLeaseId, Owner, (bytes, name, mime) =>
+            return _data.ConsumeUpload(ConversationMetadata.From(session), request.UploadLeaseId, Owner, (bytes, name, mime) =>
                 ResourceDataPlaneService.ReadUploadText(bytes, mime, ContentType, MaximumSourceBytes, request.Sha256), token);
         }
 

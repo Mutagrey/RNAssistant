@@ -812,11 +812,11 @@ namespace RNAssistant.Harness
                     throw new IOException("sender receipt unavailable");
                 return _inner.Append(session, write);
             }
-            public System.Collections.Generic.IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { return _inner.Read(session, mode); }
-            public ISessionEventReader OpenReader(ChatSession session) { return _inner.OpenReader(session); }
+            public System.Collections.Generic.IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode) { return _inner.Read(session, mode); }
+            public ISessionEventReader OpenReader(ConversationMetadata session) { return _inner.OpenReader(session); }
             public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, System.Collections.Generic.IReadOnlyList<string> references)
             { return _inner.ReadFinishEvidence(session, runId, references); }
-            public string ReadPayload(ChatSession session, SessionEvent fact) { return _inner.ReadPayload(session, fact); }
+            public string ReadPayload(ConversationMetadata session, SessionEvent fact) { return _inner.ReadPayload(session, fact); }
         }
         private static void AgentAcceptedWorkSurvivesReceiptFailure()
         {

@@ -372,14 +372,26 @@ with all retained JSONL bytes, not with the selected chat's visible message coun
 
 ### Chat selection ownership and performance
 
-Saved diagnostics resolve only identity, document/workspace authority and revision
-through the existing verified SQLite projection. They do not load message/artifact
-bodies, hydrate execution CAS, scan the catalog, bind the current Office document or
+Saved diagnostics resolve immutable `ConversationMetadata` (identity,
+document/workspace authority and observed revision) through `ReadMetadata` on the
+existing verified SQLite projection. It has no history, artifacts or executable
+continuation and cannot be submitted to either conversation write port. Event
+`Read`, `OpenReader` and `ReadPayload` also accept this metadata; live callers
+capture its six scalar values explicitly. No partial `ChatSession` is created for
+these reads. They do not load message/artifact bodies, hydrate execution CAS,
+scan the catalog, bind the current Office document or
 recover an interrupted run. An exact unsaved selected draft remains an empty,
 unpersisted diagnostic source. This removes the normal chat-loading path from
 trajectory, export, payload and saved Model Context reads. Cold index validation
 and full raw event scans still take the document lock and can be expensive; the
 short acquisition timeout does not bound their execution time.
+
+Download/upload leases and attachment draft staging consume the same metadata.
+Exact owner/workspace checks, byte limits, cancellation and publication at the run
+boundary are unchanged. Diagnostic lease liveness now uses this metadata route
+instead of loading the full addressed chat. Metadata is not live document authority;
+actual viewers, editor mutations and attachment linking retain their existing full
+domain context. Message-window DTOs and aggregate commit/load remain separate P1 work.
 
 Office navigation serializes selection and drains already admitted catalog and
 preference requests before a possible host switch. This prevents an old controller

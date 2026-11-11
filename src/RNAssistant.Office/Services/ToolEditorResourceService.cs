@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,7 +33,7 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(request.ToolId) || string.IsNullOrWhiteSpace(request.ExpectedRevision))
                 throw Error("RESOURCE_ACCESS_DENIED", "An exact addressed built-in documentation request is required.");
             ToolLibraryDocumentationResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, ToolLibraryDocumentationService.MaximumBytes, cancellation =>
+            var lease = _data.OpenDownload(ConversationMetadata.From(session), Owner, ToolLibraryDocumentationService.MaximumBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 // Built-in registration lookup is host-neutral; documentation never discovers live VBA.
@@ -68,7 +69,7 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(request.ToolId) || string.IsNullOrWhiteSpace(request.ExpectedRevision))
                 throw Error("RESOURCE_ACCESS_DENIED", "An exact addressed Tool Library source is required.");
             ToolSourceReadResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, MaximumMutationBytes, cancellation =>
+            var lease = _data.OpenDownload(ConversationMetadata.From(session), Owner, MaximumMutationBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 using (DocumentAccessGate.BeginOperation())
@@ -143,7 +144,7 @@ namespace RNAssistant.Office.Services
         internal ResourceUploadOpenResponse BeginUpload(ChatSession session, ToolMutationUploadRequest request, CancellationToken token)
         {
             if (request == null) throw Error("RESOURCE_ACCESS_DENIED", "An explicit tool mutation upload is required.");
-            var lease = _data.OpenUpload(session, new ResourceUploadOpenRequest { ChatId = request.ChatId,
+            var lease = _data.OpenUpload(ConversationMetadata.From(session), new ResourceUploadOpenRequest { ChatId = request.ChatId,
                 FileName = "tool-mutation.json", ContentType = "application/json; charset=utf-8", ByteLength = request.ByteLength },
                 token, Owner, MaximumMutationBytes);
             try { token.ThrowIfCancellationRequested(); return lease; }
@@ -154,7 +155,7 @@ namespace RNAssistant.Office.Services
         {
             if (request == null || session == null || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed tool mutation upload is required.");
-            var body = _data.ConsumeJsonUpload<ToolLibraryMutationBatch>(session, request.UploadLeaseId, Owner,
+            var body = _data.ConsumeJsonUpload<ToolLibraryMutationBatch>(ConversationMetadata.From(session), request.UploadLeaseId, Owner,
                 request.Sha256, MaximumMutationBytes, 16, token);
             var mutations = ValidateToolLibraryPayload(body);
             token.ThrowIfCancellationRequested();

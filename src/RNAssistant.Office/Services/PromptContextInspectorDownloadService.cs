@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Text;
 using System.Threading;
@@ -24,7 +25,7 @@ namespace RNAssistant.Office.Services
             if (capture == null) throw new ArgumentNullException(nameof(capture));
             PromptContextInspectorResponse response = null;
             var maximum = fullRaw ? RNAssistant.Core.Storage.AttachmentStore.MaxMessageBytes : MaximumBytes;
-            var lease = _data.OpenDownload(session, Owner, maximum, cancellation =>
+            var lease = _data.OpenDownload(ConversationMetadata.From(session), Owner, maximum, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 response = capture();

@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -29,7 +30,7 @@ namespace RNAssistant.Harness
                 var captures = 0;
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
-                    var download = new TrajectoryExportDownloadService(exporter, data).Open(session, () => {
+                    var download = new TrajectoryExportDownloadService(exporter, data).Open(ConversationMetadata.From(session), () => {
                         captures++; return store.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id);
                     }, new TrajectoryExportRequest(), CancellationToken.None);
                     var wire = JsonConvert.SerializeObject(download);
@@ -79,32 +80,32 @@ namespace RNAssistant.Harness
             {
                 const string owner = "export";
                 Func<CancellationToken, ResourceDownloadContent> content = token => new ResourceDownloadContent { Bytes = new byte[] { 65, 66 }, ContentType = "application/zip" };
-                data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
-                data.OpenUpload(session, UploadRequest(session, AttachmentStore.MaxFileBytes));
+                data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, AttachmentStore.MaxFileBytes));
+                data.OpenUpload(ConversationMetadata.From(session), UploadRequest(session, AttachmentStore.MaxFileBytes));
                 var captured = false;
-                data.OpenDownload(session, owner, TrajectoryExportService.MaximumBundleBytes,
+                data.OpenDownload(ConversationMetadata.From(session), owner, TrajectoryExportService.MaximumBundleBytes,
                     token => { captured = true; return content(token); });
                 AssertTrue(captured, "large staged uploads do not reserve whole-source memory or block a download");
                 data.CloseTransfers();
-                data.OpenDownload(session, owner, 2, content);
-                data.OpenDownload(session, owner, 2, content);
-                AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 2, content)).ErrorCode,
+                data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
+                data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
+                AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(ConversationMetadata.From(session), owner, 2, content)).ErrorCode,
                     "at most two download buffers can be retained");
                 data.CloseWorkspace(session.Id, owner);
-                RuntimeThrows<InvalidOperationException>(() => data.OpenDownload(session, owner, 2, token => { throw new InvalidOperationException("capture failed"); }));
-                RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 1, content));
-                RuntimeThrows<OperationCanceledException>(() => data.OpenDownload(session, owner, 2, content, new CancellationToken(true)));
-                RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 24 * 1024 * 1024, token => {
+                RuntimeThrows<InvalidOperationException>(() => data.OpenDownload(ConversationMetadata.From(session), owner, 2, token => { throw new InvalidOperationException("capture failed"); }));
+                RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(ConversationMetadata.From(session), owner, 1, content));
+                RuntimeThrows<OperationCanceledException>(() => data.OpenDownload(ConversationMetadata.From(session), owner, 2, content, new CancellationToken(true)));
+                RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(ConversationMetadata.From(session), owner, 24 * 1024 * 1024, token => {
                     data.CloseWorkspace(session.Id, owner);
-                    var other = data.OpenDownload(session, owner, 27 * 1024 * 1024, content);
-                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 2, content)).ErrorCode,
+                    var other = data.OpenDownload(ConversationMetadata.From(session), owner, 27 * 1024 * 1024, content);
+                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(ConversationMetadata.From(session), owner, 2, content)).ErrorCode,
                         "a cancelled capture keeps its concurrency slot until it exits");
                     data.Close(session.Id, owner, other.LeaseId);
                     return content(token);
                 }));
-                var largeReservation = data.OpenDownload(session, owner, AttachmentStore.MaxMessageBytes, content);
+                var largeReservation = data.OpenDownload(ConversationMetadata.From(session), owner, AttachmentStore.MaxMessageBytes, content);
                 data.Close(session.Id, owner, largeReservation.LeaseId);
-                var lease = data.OpenDownload(session, owner, 2, content);
+                var lease = data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
                 var router = new ResourceDataRouter(data);
                 foreach (var suffix in new[] { "?offset=0&offset=0", "?offset=0&count=262145", "?offset=0&count=1&extra=1" })
                     UploadResponse(router.Handle("GET", lease.Url + suffix, CancellationToken.None), 400);
@@ -116,28 +117,28 @@ namespace RNAssistant.Harness
                     AssertEqual("RESOURCE_BACKPRESSURE", RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime)).ErrorCode,
                         "a second in-flight read is rejected without producing another chunk");
                     data.Close(session.Id, owner, lease.LeaseId);
-                    var other = data.OpenDownload(session, owner, AttachmentStore.MaxMessageBytes, content);
-                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(session, owner, 2, content)).ErrorCode,
+                    var other = data.OpenDownload(ConversationMetadata.From(session), owner, AttachmentStore.MaxMessageBytes, content);
+                    AssertEqual("RESOURCE_LEASE_LIMIT", RuntimeThrows<ResourceRequestException>(() => data.OpenDownload(ConversationMetadata.From(session), owner, 2, content)).ErrorCode,
                         "close racing a read retains its occupied slot");
                     data.Close(session.Id, owner, other.LeaseId);
                 };
                 RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime));
-                lease = data.OpenDownload(session, owner, 2, content);
+                lease = data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
                 data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime);
                 AssertEqual("RESOURCE_CURSOR_INVALID", RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime)).ErrorCode,
                     "duplicate or reordered byte requests cannot be replayed");
-                lease = data.OpenDownload(session, owner, 2, content);
+                lease = data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
                 RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 3, CancellationToken.None, out mime));
-                lease = data.OpenDownload(session, owner, 2, content);
+                lease = data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
                 RuntimeThrows<OperationCanceledException>(() => data.ReadDownload(lease.LeaseId, 0, 1, new CancellationToken(true), out mime));
-                lease = data.OpenDownload(session, owner, 2, content);
+                lease = data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
                 ownerActive = false;
                 RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime));
                 ownerActive = true;
-                lease = data.OpenDownload(session, owner, 2, content);
+                lease = data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
                 now = now.AddMinutes(11);
                 RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime));
-                lease = data.OpenDownload(session, owner, 2, content);
+                lease = data.OpenDownload(ConversationMetadata.From(session), owner, 2, content);
                 data.Dispose();
                 RuntimeThrows<ObjectDisposedException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime));
             }
@@ -154,7 +155,7 @@ namespace RNAssistant.Harness
                 var session = new ChatSession();
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
-                    var opened = data.OpenDownload(session, ModelContextInspectorService.Owner,
+                    var opened = data.OpenDownload(ConversationMetadata.From(session), ModelContextInspectorService.Owner,
                         Math.Max(1, stored.ByteLength), token => new ResourceDownloadContent {
                             VerifiedStream = blobs.OpenVerifiedRead(stored, Math.Max(1, stored.ByteLength), token),
                             VerifiedPayload = PayloadRef.FromBlob(stored), ContentType = stored.ContentType
@@ -183,14 +184,14 @@ namespace RNAssistant.Harness
                         data.ReadDownload(opened.LeaseId, 0, 1, CancellationToken.None, out ignored)).ErrorCode,
                         "close revokes the streamed capability");
                     var shortStream = new MemoryStream(new byte[] { 1 });
-                    var truncated = data.OpenDownload(session, ModelContextInspectorService.Owner, 2, token =>
+                    var truncated = data.OpenDownload(ConversationMetadata.From(session), ModelContextInspectorService.Owner, 2, token =>
                         new ResourceDownloadContent { VerifiedStream = shortStream,
                             VerifiedPayload = new PayloadRef(stored.Sha256, 2, stored.ContentType), ContentType = stored.ContentType });
                     AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
                         data.ReadDownload(truncated.LeaseId, 0, 2, CancellationToken.None, out ignored)).ErrorCode,
                         "a verified-stream owner that ends early cannot report a successful download");
                     AssertTrue(!shortStream.CanRead, "failed streamed delivery closes its source handle");
-                    var drifted = data.OpenDownload(session, ModelContextInspectorService.Owner, 2, token =>
+                    var drifted = data.OpenDownload(ConversationMetadata.From(session), ModelContextInspectorService.Owner, 2, token =>
                         new ResourceDownloadContent { VerifiedStream = new MemoryStream(new byte[] { 1, 2 }),
                             VerifiedPayload = new PayloadRef(stored.Sha256, 2, stored.ContentType), ContentType = stored.ContentType });
                     AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>

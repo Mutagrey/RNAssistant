@@ -138,12 +138,12 @@ namespace RNAssistant.Harness
                 AssertTrue(refusedCollision, "one input ID cannot be accepted under another operation");
                 inbox.Submit(session, InboxInput("b", "second", InputDelivery.Queue));
                 AssertEqual(2, inbox.Snapshot(session).Items.Count, "intake idempotency");
-                var accepted = events.Read(session, SessionEventReadMode.RequireComplete).First(e => e.Type == SessionEventTypes.ConversationInputChanged);
-                AssertEqual("first", events.ReadPayload(session, accepted), "immutable text body is CAS-backed");
+                var accepted = events.Read(ConversationMetadata.From(session), SessionEventReadMode.RequireComplete).First(e => e.Type == SessionEventTypes.ConversationInputChanged);
+                AssertEqual("first", events.ReadPayload(ConversationMetadata.From(session), accepted), "immutable text body is CAS-backed");
                 AssertTrue(accepted.Data["Input"]["Text"].Type == Newtonsoft.Json.Linq.JTokenType.Null, "body is not duplicated in metadata");
                 store.AppendTrace(session, SessionEventTypes.LlmRequest,
                     new { Marker = "unrelated diagnostic" }, "diagnostic body", "text/plain", "run", "turn", "step");
-                var inputFacts = events.Read(session, SessionEventReadMode.RequireCompleteInputJournal);
+                var inputFacts = events.Read(ConversationMetadata.From(session), SessionEventReadMode.RequireCompleteInputJournal);
                 AssertTrue(inputFacts.All(fact => fact.Type == SessionEventTypes.ConversationInputChanged ||
                     fact.Type == SessionEventTypes.SessionCommit), "inbox replay retains only inputs and commits");
                 AssertEqual(2, new ConversationInputJournal(events).Read(session).Count,
@@ -376,11 +376,11 @@ namespace RNAssistant.Harness
             internal InboxFailingEvents(IEventStore inner) { Inner = inner; }
             public SessionEvent Append(ChatSession session, SessionEventWrite write)
             { if (Fail) throw new System.IO.IOException("simulated disk failure"); return Inner.Append(session, write); }
-            public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { return Inner.Read(session, mode); }
-            public ISessionEventReader OpenReader(ChatSession session) { return Inner.OpenReader(session); }
+            public IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode) { return Inner.Read(session, mode); }
+            public ISessionEventReader OpenReader(ConversationMetadata session) { return Inner.OpenReader(session); }
             public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
             { return Inner.ReadFinishEvidence(session, runId, references); }
-            public string ReadPayload(ChatSession session, SessionEvent fact)
+            public string ReadPayload(ConversationMetadata session, SessionEvent fact)
             { PayloadReads++; if (FailPayload) throw new System.IO.IOException("simulated missing input body");
                 return Inner.ReadPayload(session, fact); }
         }

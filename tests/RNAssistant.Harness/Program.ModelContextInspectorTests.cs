@@ -73,9 +73,9 @@ namespace RNAssistant.Harness
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(chats), new ChatBlobStore(paths), plane);
-                    Func<SessionEvent, ModelContextEvidenceReportDto> report = item => inspector.Query(session,
+                    Func<SessionEvent, ModelContextEvidenceReportDto> report = item => inspector.Query(ConversationMetadata.From(session),
                         new ModelContextQuery { RequestEventId = item.EventId, IncludeEvidence = true }, CancellationToken.None).EvidenceReport;
-                    AssertTrue(inspector.Query(session, new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None).EvidenceReport == null,
+                    AssertTrue(inspector.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None).EvidenceReport == null,
                         "ordinary request/resource inspection does not assemble the evidence report");
                     var original = report(first);
                     AssertEqual(0, original.Finishes.Count, "parser acceptance alone is not durable finish acceptance");
@@ -122,7 +122,7 @@ namespace RNAssistant.Harness
                         "delivered historical evidence keeps its original run");
                     AssertEqual(0, historical.Finishes.Count, "another run cannot inherit an accepted finish from the same attempt name");
                     AssertEqual(3, historical.Tools.Count, "unrelated calls from earlier runs are not added to the request report");
-                    var found = inspector.Query(session, new ModelContextQuery { Alias = "e2", IncludeEvidence = true }, CancellationToken.None);
+                    var found = inspector.Query(ConversationMetadata.From(session), new ModelContextQuery { Alias = "e2", IncludeEvidence = true }, CancellationToken.None);
                     AssertEqual("E2", found.SelectedAlias, "lookup preserves canonical reference case");
                     AssertTrue(found.EvidenceReport.Tools.Any(item => item.EvidenceAlias == "E2"), "alias lookup opens the same evidence projection");
                 }
@@ -226,10 +226,10 @@ namespace RNAssistant.Harness
                     "application/json", "run", "turn", "step");
                 var foreignEvent = chats.AppendTrace(foreign, SessionEventTypes.LlmRequest,
                     new LlmTraceRecord { RequestId = "shared-id" }, "{}", "application/json", "run", "turn", "step");
-                var loaded = ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id);
-                AssertEqual(0, loaded.Messages.Count, "workspace diagnostics use identity without hydrating chat messages");
-                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, other.WorkspaceId, session.Id));
-                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, ""));
+                var loaded = ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, session.Id);
+                AssertTrue(!((object)loaded is ChatSession), "workspace diagnostics return metadata without a writable history");
+                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, other.WorkspaceId, session.Id));
+                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, ""));
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var eventStore = new ChatEventStoreAdapter(chats);
@@ -275,10 +275,10 @@ namespace RNAssistant.Harness
                     AssertEqual(version, chats.Load(session.Id).Revision, "diagnostic reads do not change history");
                 }
                 System.IO.Directory.Delete(workspace.RootPath, true);
-                AssertEqual(session.Id, ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id).Id,
+                AssertEqual(session.Id, ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, session.Id).Id,
                     "saved exchange remains readable while the source folder is unavailable");
                 workspaces.HideProject(workspace.WorkspaceId);
-                RuntimeThrows<System.IO.InvalidDataException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id));
+                RuntimeThrows<System.IO.InvalidDataException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, session.Id));
             });
         }
 
@@ -355,7 +355,7 @@ namespace RNAssistant.Harness
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(chats),
                         new ChatBlobStore(paths), plane);
-                    var selected = inspector.Query(session, new ModelContextQuery { RequestEventId = saved.EventId },
+                    var selected = inspector.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = saved.EventId },
                         CancellationToken.None).Resources.Single().Observations.Single();
                     AssertEqual(expected, selected.EstimatedWireMessageTokens.Value,
                         "Inspector associates the whole-message estimate with the sole exact read view");
@@ -614,9 +614,9 @@ namespace RNAssistant.Harness
                             var reopenedStore = new ChatStore(FixturePaths.Value);
                             var reopenedSession = reopenedStore.Load(session.Id);
                             var reopenedInspector = new ModelContextInspectorService(new ChatEventStoreAdapter(reopenedStore), blobs, data);
-                            var request = reopenedInspector.Query(reopenedSession, new ModelContextQuery(), CancellationToken.None)
+                            var request = reopenedInspector.Query(ConversationMetadata.From(reopenedSession), new ModelContextQuery(), CancellationToken.None)
                                 .Events.First(item => item.Trace.RequestId == requestId);
-                            var opened = reopenedInspector.Open(reopenedSession, new ModelContextPayloadQuery { EventId = request.EventId },
+                            var opened = reopenedInspector.Open(ConversationMetadata.From(reopenedSession), new ModelContextPayloadQuery { EventId = request.EventId },
                                 CancellationToken.None);
                             string mime;
                             var retained = data.ReadDownload(opened.Data.LeaseId, 0, bytes.Length,
@@ -691,15 +691,15 @@ namespace RNAssistant.Harness
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var service = new ModelContextInspectorService(new ChatEventStoreAdapter(store), blobs, plane);
-                    var page = service.Query(session, new ModelContextQuery { RunId = "run", StepId = "step" }, CancellationToken.None);
+                    var page = service.Query(ConversationMetadata.From(session), new ModelContextQuery { RunId = "run", StepId = "step" }, CancellationToken.None);
                     AssertEqual(2, page.Events.Count, "scope applied before pagination");
-                    var rejected = service.Query(session, new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None);
+                    var rejected = service.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None);
                     AssertEqual(ModelContextAcceptance.Rejected, rejected.Summary.Parser, "canonical rejection");
                     AssertEqual(rejection, rejected.Summary.Reason, "exact field and reason preserved");
                     AssertEqual("tool", rejected.Events[0].Trace.Settings.ToolResultRole, "history setting is separate from response format");
                     AssertEqual(ModelContextAcceptance.NotRecorded, rejected.Summary.Runtime, "parser trace is not runtime acceptance");
                     AssertTrue(rejected.Comparison == null, "comparison is opt-in");
-                    var compared = service.Query(session, new ModelContextQuery { RequestEventId = next.EventId,
+                    var compared = service.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = next.EventId,
                         CompareRequestEventId = first.EventId }, CancellationToken.None);
                     AssertEqual(ModelContextAcceptance.Accepted, compared.Summary.Parser, "next parser attempt is accepted");
                     AssertEqual(ModelContextAcceptance.NotRecorded, compared.Summary.Runtime, "no fabricated commit from accepted parser");
@@ -709,11 +709,11 @@ namespace RNAssistant.Harness
                     AssertEqual("added", compared.Comparison.Changes.Single().Kind, "repair instruction appended");
                     AssertEqual("content", compared.Comparison.Changes.Single().Fields.Last(), "changed message fields identified");
                     AssertEqual(next.Payload.Sha256, compared.Comparison.AfterSha256, "comparison points at exact saved bytes");
-                    RuntimeThrows<InvalidOperationException>(() => service.Query(session, new ModelContextQuery {
+                    RuntimeThrows<InvalidOperationException>(() => service.Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = foreign.EventId, CompareRequestEventId = first.EventId }, CancellationToken.None));
-                    RuntimeThrows<InvalidOperationException>(() => service.Query(session, new ModelContextQuery {
+                    RuntimeThrows<InvalidOperationException>(() => service.Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = first.EventId, RunId = "other" }, CancellationToken.None));
-                    RuntimeThrows<OperationCanceledException>(() => service.Query(session, new ModelContextQuery {
+                    RuntimeThrows<OperationCanceledException>(() => service.Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = next.EventId, CompareRequestEventId = first.EventId }, new CancellationToken(true)));
                     foreach (var malformedBody in new[] {
                         "{\"messages\":[{\"role\":{},\"content\":\"x\"}]}",
@@ -722,15 +722,15 @@ namespace RNAssistant.Harness
                         var malformed = store.AppendTrace(session, SessionEventTypes.LlmRequest,
                             new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N") }, malformedBody,
                             "application/json", "run", "turn", "step");
-                        AssertTrue(!service.Query(session, new ModelContextQuery { RequestEventId = malformed.EventId,
+                        AssertTrue(!service.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = malformed.EventId,
                             CompareRequestEventId = first.EventId }, CancellationToken.None).Comparison.Available,
                             "malformed stored JSON cannot produce a successful comparison");
                     }
                     System.IO.File.Delete(blobs.PathFor(first.Payload.Sha256));
-                    var missing = service.Query(session, new ModelContextQuery { RequestEventId = next.EventId,
+                    var missing = service.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = next.EventId,
                         CompareRequestEventId = first.EventId }, CancellationToken.None);
                     AssertTrue(!missing.Comparison.Available, "missing CAS is unavailable, never equal/success");
-                    AssertTrue(service.Query(session, new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None).Summary != null,
+                    AssertTrue(service.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None).Summary != null,
                         "summary requires no CAS hydration");
                 }
             });
@@ -758,15 +758,15 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var service = new ModelContextInspectorService(new ChatEventStoreAdapter(store), blobs, data);
-                    var page = service.Query(session, new ModelContextQuery(), CancellationToken.None);
+                    var page = service.Query(ConversationMetadata.From(session), new ModelContextQuery(), CancellationToken.None);
                     AssertEqual(retry.EventId, page.Events[0].EventId, "latest prepared request first");
                     AssertEqual(2, page.Events.Count, "attempts are not collapsed");
-                    var detail = service.Query(session, new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
+                    var detail = service.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
                     AssertEqual(3, detail.Events.Count, "request, matching chunks and response only");
                     AssertEqual(response.EventId, detail.Events.Last().EventId, "exact matching response");
-                    AssertTrue(service.Query(session, new ModelContextQuery { KnownRevision = session.Revision }, CancellationToken.None).Unchanged,
+                    AssertTrue(service.Query(ConversationMetadata.From(session), new ModelContextQuery { KnownRevision = session.Revision }, CancellationToken.None).Unchanged,
                         "unchanged revision avoids re-reading the event stream");
-                    var download = service.Open(session, new ModelContextPayloadQuery { EventId = request.EventId }, CancellationToken.None);
+                    var download = service.Open(ConversationMetadata.From(session), new ModelContextPayloadQuery { EventId = request.EventId }, CancellationToken.None);
                     var bytes = new byte[download.Data.Payload.ByteLength];
                     for (var offset = 0; offset < bytes.Length;)
                     {
@@ -777,10 +777,10 @@ namespace RNAssistant.Harness
                     AssertEqual(source, Encoding.UTF8.GetString(bytes), "full payload above 512 KiB, Unicode and number spelling preserved");
                     AssertEqual(request.Payload.Sha256, download.Data.Payload.Sha256, "download retains stored byte identity");
                     data.Close(session.Id, ModelContextInspectorService.Owner, download.Data.LeaseId);
-                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, new ModelContextPayloadQuery { EventId = "foreign-event" }, CancellationToken.None));
-                    RuntimeThrows<OperationCanceledException>(() => service.Query(session, new ModelContextQuery(), new CancellationToken(true)));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), new ModelContextPayloadQuery { EventId = "foreign-event" }, CancellationToken.None));
+                    RuntimeThrows<OperationCanceledException>(() => service.Query(ConversationMetadata.From(session), new ModelContextQuery(), new CancellationToken(true)));
                     System.IO.File.Delete(blobs.PathFor(request.Payload.Sha256));
-                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, new ModelContextPayloadQuery { EventId = request.EventId }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), new ModelContextPayloadQuery { EventId = request.EventId }, CancellationToken.None));
                 }
             });
         }
@@ -831,7 +831,7 @@ namespace RNAssistant.Harness
                 {
                     Func<ModelContextInspectorService> inspector = () =>
                         new ModelContextInspectorService(new ChatEventStoreAdapter(chats), payloads, plane, authority);
-                    var original = inspector().Query(session, new ModelContextQuery { RequestEventId = q1.EventId }, CancellationToken.None);
+                    var original = inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = q1.EventId }, CancellationToken.None);
                     AssertEqual("Q1", original.Events[0].Alias, "first request alias derives from immutable order");
                     AssertEqual("R1@v1", original.Resources[0].Alias, "first exact resource revision");
                     AssertTrue(original.Operations[0].Alias == null, "trace-only call IDs cannot manufacture accepted execution aliases");
@@ -852,10 +852,10 @@ namespace RNAssistant.Harness
                     AssertTrue(original.Resources[0].RetainedViews.Single().EstimatedTextBodyTokens == null,
                         "multipart retained views do not claim a direct text-body cost");
                     AssertTrue(original.Resources[0].PayloadCheckedUtc == null, "no invented verification timestamp");
-                    Func<string, string, ModelContextResourceDto> verify = (eventId, alias) => inspector().Query(session,
+                    Func<string, string, ModelContextResourceDto> verify = (eventId, alias) => inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { RequestEventId = eventId, VerifyResourceAlias = alias }, CancellationToken.None)
                         .Resources.Single(row => row.Alias == alias);
-                    Func<string, string, string, ModelContextResourceDto> verifyView = (eventId, alias, view) => inspector().Query(session,
+                    Func<string, string, string, ModelContextResourceDto> verifyView = (eventId, alias, view) => inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { RequestEventId = eventId, VerifyResourceAlias = alias,
                             VerifyRetainedView = view }, CancellationToken.None).Resources.Single(row => row.Alias == alias);
                     var verified = verify(q1.EventId, "R1@v1");
@@ -892,12 +892,12 @@ namespace RNAssistant.Harness
                         "a missing view part cannot be reported as available");
                     System.IO.File.WriteAllBytes(partPath, partBytes);
                     RuntimeThrows<InvalidOperationException>(() => verifyView(q1.EventId, "R1@v1", "unadvertised"));
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { RequestEventId = q1.EventId, VerifyRetainedView = "text" }, CancellationToken.None));
                     RuntimeThrows<InvalidOperationException>(() => verify(q1.EventId, "R2@v1"));
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { VerifyResourceAlias = "R1@v1", KnownRevision = session.Revision }, CancellationToken.None));
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { Alias = "R1@v1", VerifyResourceAlias = "R1@v1" }, CancellationToken.None));
                     AssertEqual(ModelContextPayloadAvailability.Unknown, verify(q2.EventId, "R2@v1").PayloadAvailability,
                         "missing revision metadata is unknown, not a missing payload");
@@ -915,14 +915,14 @@ namespace RNAssistant.Harness
                     AssertEqual(ModelContextPayloadAvailability.Verified,
                         viewOnly.RetainedViews.Single().PartsAvailability.Value,
                         "retained view parts can be checked without a revision or view payload");
-                    var next = inspector().Query(session, new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None);
+                    var next = inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None);
                     AssertEqual("Q3", next.Events[0].Alias, "request aliases survive intervening requests");
                     AssertEqual("R1@v2", next.Resources[0].Alias, "revisions are numbered within their resource");
-                    AssertEqual("R2@v1", inspector().Query(session, new ModelContextQuery {
+                    AssertEqual("R2@v1", inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = q2.EventId }, CancellationToken.None).Resources[0].Alias,
                         "a second resource starts at v1");
                     var q4 = request("operation-d", "evidence-d", restored, true);
-                    var search = inspector().Query(session, new ModelContextQuery { Alias = "R1@v3" }, CancellationToken.None);
+                    var search = inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { Alias = "R1@v3" }, CancellationToken.None);
                     AssertEqual(q4.EventId, search.Events[0].EventId,
                         "restoring identical bytes creates a new exact revision alias");
                     AssertEqual(ModelContextCurrentness.Current, search.Resources[0].Currentness,
@@ -931,15 +931,15 @@ namespace RNAssistant.Harness
                     AssertEqual(first.Revision, search.Resources[0].RevisionMetadata.RestoredFrom.Revision, "explicit restore origin");
                     AssertEqual(otherRef.Uri, search.Resources[0].RevisionMetadata.Dependencies[0].Resource.Uri,
                         "dependency provenance is retained without reading dependency bytes");
-                    AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "O1" }, CancellationToken.None).Events[0].Alias,
+                    AssertEqual("Q1", inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { Alias = "O1" }, CancellationToken.None).Events[0].Alias,
                         "evidence lookup resolves the saved request");
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { Alias = "E1" }, CancellationToken.None));
-                    AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "Q1" }, CancellationToken.None).Events[0].Alias,
+                    AssertEqual("Q1", inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { Alias = "Q1" }, CancellationToken.None).Events[0].Alias,
                         "request lookup resolves itself");
-                    AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery { Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
+                    AssertEqual("R1@v1", inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
                         "older aliases stay stable after later observations");
-                    AssertEqual("Q2", inspector().Query(session, new ModelContextQuery { BeforeSequence = q3.Sequence }, CancellationToken.None)
+                    AssertEqual("Q2", inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { BeforeSequence = q3.Sequence }, CancellationToken.None)
                         .Events[0].Alias, "pagination does not renumber aliases");
                     store.RegisterView(scope, new ResourceRevisionView(first, "outline", body.Sha256, body,
                         ResourceCoverage.Whole()));
@@ -953,7 +953,7 @@ namespace RNAssistant.Harness
                                                 descriptorAtRead: new ResourceReadDescriptorSnapshot(
                                                     representations: new[] { "text", "outline" })) } } } } },
                         "{}", "application/json", "run", "turn", "advertised");
-                    var advertisedRow = inspector().Query(session, new ModelContextQuery {
+                    var advertisedRow = inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = advertised.EventId }, CancellationToken.None).Resources.Single();
                     AssertTrue(advertisedRow.RetainedViews.Select(view => view.View).OrderBy(view => view)
                         .SequenceEqual(new[] { "outline", "text" }),
@@ -970,11 +970,11 @@ namespace RNAssistant.Harness
                     store.RegisterView(scope, new ResourceRevisionView(second, "text", body.Sha256, body,
                         ResourceCoverage.Whole()));
                     AssertEqual((body.ByteLength + 3) / 4,
-                        inspector().Query(session, new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None)
+                        inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None)
                             .Resources.Single().RetainedViews.Single().EstimatedTextBodyTokens.Value,
                         "known-name metadata exposes the same direct UTF-8 body estimate");
                     Func<ModelContextQuery, ModelContextViewInventoryDto> inventory = query =>
-                        inspector().Query(session, query, CancellationToken.None).ViewInventory;
+                        inspector().Query(ConversationMetadata.From(session), query, CancellationToken.None).ViewInventory;
                     var firstPage = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
                         ViewInventoryAlias = "R1@v1" });
                     AssertEqual(25, firstPage.SnapshotCount, "inventory includes every registered coverage variant of the exact revision");
@@ -993,7 +993,7 @@ namespace RNAssistant.Harness
                     AssertTrue(!Newtonsoft.Json.JsonConvert.SerializeObject(firstPage).Contains(viewPart.Sha256),
                         "inventory does not expose part CAS addresses");
                     Func<string, string, int, int, ModelContextResponse> verifyVariant = (eventId, alias, ordinal, count) =>
-                        inspector().Query(session, new ModelContextQuery { RequestEventId = eventId,
+                        inspector().Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = eventId,
                             VerifyResourceAlias = alias, VerifyViewVariantOrdinal = ordinal,
                             VerifyViewVariantSnapshotCount = count }, CancellationToken.None);
                     var unobserved = verifyVariant(q1.EventId, "R1@v1", 1, firstPage.SnapshotCount);
@@ -1093,11 +1093,11 @@ namespace RNAssistant.Harness
                     RuntimeThrows<InvalidOperationException>(() => verifyVariant(q1.EventId, "R2@v1", 2, firstPage.SnapshotCount));
                     RuntimeThrows<InvalidOperationException>(() => verifyVariant(q1.EventId, "R1@v1", 25, firstPage.SnapshotCount));
                     RuntimeThrows<ResourceAuthorityConflictException>(() => verifyVariant(q1.EventId, "R1@v1", 2, 100));
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session, new ModelContextQuery {
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1", VerifyViewVariantOrdinal = 2 }, CancellationToken.None));
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session, new ModelContextQuery {
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1", VerifyViewVariantSnapshotCount = 25 }, CancellationToken.None));
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session, new ModelContextQuery {
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1", VerifyRetainedView = "text",
                         VerifyViewVariantOrdinal = 2, VerifyViewVariantSnapshotCount = 25 }, CancellationToken.None));
                     var foreign = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
@@ -1108,7 +1108,7 @@ namespace RNAssistant.Harness
                                         new ContextEvidenceLink { ScopeId = new ResourceAuthorityScopeId("document", "other-doc"),
                                             EvidenceId = "foreign-evidence", Resource = first, View = "text" } } } } },
                         "{}", "application/json", "run", "turn", "foreign");
-                    var foreignRow = inspector().Query(session, new ModelContextQuery {
+                    var foreignRow = inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = foreign.EventId }, CancellationToken.None).Resources[0];
                     AssertEqual("R3@v1", foreignRow.Alias, "same URI in a different authority scope gets its own alias");
                     AssertEqual(ModelContextCurrentness.Unknown, foreignRow.Currentness,
@@ -1128,13 +1128,13 @@ namespace RNAssistant.Harness
                     RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
                         RequestEventId = foreign.EventId, ViewInventoryAlias = "R3@v1" }));
                     RuntimeThrows<InvalidOperationException>(() => verifyVariant(foreign.EventId, "R3@v1", 0, 1));
-                    AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery {
+                    AssertEqual("R1@v1", inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
                         "new scope does not renumber an older alias");
                     var another = chats.Create("Word", "other-alias-chat", "Other.docx", "Other");
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(another,
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(another),
                         new ModelContextQuery { Alias = "R1@v1" }, CancellationToken.None));
-                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { Alias = "R1@v999" }, CancellationToken.None));
                     System.IO.File.WriteAllText(payloads.PathFor(body.Sha256), "damaged CAS bytes");
                     AssertEqual(ModelContextPayloadAvailability.Unavailable, verify(q1.EventId, "R1@v1").PayloadAvailability,
@@ -1145,7 +1145,7 @@ namespace RNAssistant.Harness
                     payloads.StoreText("same bytes", "text/plain");
                     AssertEqual(ModelContextPayloadAvailability.Verified, verify(q1.EventId, "R1@v1").PayloadAvailability,
                         "explicit repeat verifies repaired bytes instead of caching an old failure");
-                    AssertEqual(ModelContextPayloadAvailability.Unchecked, inspector().Query(session,
+                    AssertEqual(ModelContextPayloadAvailability.Unchecked, inspector().Query(ConversationMetadata.From(session),
                         new ModelContextQuery { RequestEventId = q1.EventId }, CancellationToken.None).Resources[0].PayloadAvailability,
                         "verification is not silently persisted as permanent availability");
                     var largePath = System.IO.Path.Combine(paths.ChatBlobDirectory, "verification-source.bin");
@@ -1154,7 +1154,7 @@ namespace RNAssistant.Harness
                     var largeRef = new ResourceRef(ResourceStateProvider.Identity(scope, "large").Uri, "large-revision");
                     store.RegisterRevision(scope, new ResourceRevisionMetadata(largeRef, largeBody.Sha256, largeBody));
                     var largeRequest = request("operation-large", "evidence-large", largeRef, true);
-                    var largeRow = inspector().Query(session, new ModelContextQuery {
+                    var largeRow = inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = largeRequest.EventId }, CancellationToken.None).Resources[0];
                     AssertEqual(ModelContextPayloadAvailability.Verified, verify(largeRequest.EventId, largeRow.Alias).PayloadAvailability,
                         "streamed verification is independent of the diagnostic download size budget");
@@ -1162,14 +1162,14 @@ namespace RNAssistant.Harness
                     var emptyRef = new ResourceRef(largeRef.Uri, "empty-revision");
                     store.RegisterRevision(scope, new ResourceRevisionMetadata(emptyRef, emptyBody.Sha256, emptyBody));
                     var emptyRequest = request("operation-empty", "evidence-empty", emptyRef, true);
-                    var emptyRow = inspector().Query(session, new ModelContextQuery {
+                    var emptyRow = inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                         RequestEventId = emptyRequest.EventId }, CancellationToken.None).Resources[0];
                     AssertEqual(ModelContextPayloadAvailability.Verified, verify(emptyRequest.EventId, emptyRow.Alias).PayloadAvailability,
                         "empty retained bytes are verifiable, not absent");
                     using (var cancelled = new CancellationTokenSource())
                     {
                         cancelled.Cancel();
-                        RuntimeThrows<OperationCanceledException>(() => inspector().Query(session, new ModelContextQuery {
+                        RuntimeThrows<OperationCanceledException>(() => inspector().Query(ConversationMetadata.From(session), new ModelContextQuery {
                             RequestEventId = q1.EventId, VerifyResourceAlias = "R1@v1" }, cancelled.Token));
                     }
                 }
@@ -1203,12 +1203,12 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var service = new ModelContextInspectorService(new ChatEventStoreAdapter(store), blobs, data);
-                    var page = service.Query(session, new ModelContextQuery(), CancellationToken.None);
+                    var page = service.Query(ConversationMetadata.From(session), new ModelContextQuery(), CancellationToken.None);
                     AssertEqual(50, page.Events.Count, "bounded attempt page");
                     AssertTrue(page.Events.All(e => e.Trace.ContextMessages == null), "list omits full provenance");
-                    var older = service.Query(session, new ModelContextQuery { BeforeSequence = page.NextBeforeSequence }, CancellationToken.None);
+                    var older = service.Query(ConversationMetadata.From(session), new ModelContextQuery { BeforeSequence = page.NextBeforeSequence }, CancellationToken.None);
                     AssertEqual(2, older.Events.Count, "older attempts retained");
-                    var detail = service.Query(session, new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
+                    var detail = service.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
                     AssertEqual(ContextPresentationKind.Summary, detail.Events[0].Trace.ContextMessages[0].Presentation, "typed provenance survives trace storage");
                     var stored = detail.Events[0].Trace.ContextMessages[0];
                     AssertEqual("operation-1", stored.ToolCallId, "operation correlation survives event storage");
@@ -1219,10 +1219,10 @@ namespace RNAssistant.Harness
                         "old saved traces never invent separate read-completeness facts");
                     AssertEqual(ContextExclusionKind.Budget, detail.Events[0].Trace.ContextMessages[1].ExclusionKind.Value,
                         "typed compiler exclusion survives saved request and inspector query");
-                    var download = service.Open(session, new ModelContextPayloadQuery { EventId = request.EventId, OriginalIndex = 0 }, CancellationToken.None);
+                    var download = service.Open(ConversationMetadata.From(session), new ModelContextPayloadQuery { EventId = request.EventId, OriginalIndex = 0 }, CancellationToken.None);
                     AssertEqual(original.Sha256, download.Data.Payload.Sha256, "original source is bound to the exact request");
                     data.Close(session.Id, ModelContextInspectorService.Owner, download.Data.LeaseId);
-                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, new ModelContextPayloadQuery { EventId = request.EventId, OriginalIndex = 1 }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), new ModelContextPayloadQuery { EventId = request.EventId, OriginalIndex = 1 }, CancellationToken.None));
                 }
             });
         }
@@ -1335,7 +1335,7 @@ namespace RNAssistant.Harness
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var saved = new ModelContextInspectorService(new ChatEventStoreAdapter(new ChatStore(paths)), blobs, plane)
-                        .Query(session, new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
+                        .Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = request.EventId }, CancellationToken.None);
                     var observation = saved.Resources.Single().Observations.Single(item => item.BodyIncludedInMessage == null);
                     AssertTrue(observation.ReadMetadata.SelectionComplete == true && observation.ReadMetadata.SourceComplete == false &&
                         observation.BodyIncludedInMessage == null, "saved trace and inspector preserve independent completeness after restart");

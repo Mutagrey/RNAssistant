@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Services;
@@ -292,7 +293,7 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
                     var reader = new SkillEditorResourceService(executor.ResourceGateway, data, catalog);
-                    for (var i = 0; i < 2; i++) data.OpenDownload(session, "other", 1, _ => new ResourceDownloadContent { Bytes = new byte[0], ContentType = "text/plain" });
+                    for (var i = 0; i < 2; i++) data.OpenDownload(ConversationMetadata.From(session), "other", 1, _ => new ResourceDownloadContent { Bytes = new byte[0], ContentType = "text/plain" });
                     RuntimeThrows<ResourceRequestException>(() => reader.Open(session, request, CancellationToken.None));
                     AssertEqual(0, captures, "shared reservation precedes catalog hydration");
                     data.CloseTransfers(session.Id);

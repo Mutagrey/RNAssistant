@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -127,7 +128,7 @@ namespace RNAssistant.Harness
                 foreach (var name in new[] { "Complete.md", "Plain.txt", "Truncated.md" })
                 {
                     var text = name == "Truncated.md" ? "# Small\nok\n# Large\n" + new string('x', 1000001) : "# Small\r\nok";
-                    var draft = ingestion.Stage(session, name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
+                    var draft = ingestion.Stage(ConversationMetadata.From(session), name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
                     var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                     session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
@@ -175,7 +176,7 @@ namespace RNAssistant.Harness
                 var text = new string('x', 145000) + "\r\n## Uploaded section\r\nuploaded-late-marker";
                 foreach (var name in new[] { "Reference.md", "Literal.txt" })
                 {
-                    var draft = ingestion.Stage(session, name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
+                    var draft = ingestion.Stage(ConversationMetadata.From(session), name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
                     var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                     session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
@@ -301,7 +302,7 @@ namespace RNAssistant.Harness
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
                 var prefixLength = ((10 * 1024 * 1024 / 32000) + 1) * 32000 - 1;
                 var text = new string('x', prefixLength) + "😀late-needle";
-                var draft = ingestion.Stage(session, "single-line.js", "text/javascript", Encoding.UTF8.GetBytes(text));
+                var draft = ingestion.Stage(ConversationMetadata.From(session), "single-line.js", "text/javascript", Encoding.UTF8.GetBytes(text));
                 var message = new ChatMessage { Role = "user", Content = "Analyze this large JavaScript file in logical parts.",
                     Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                 session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
@@ -394,7 +395,7 @@ namespace RNAssistant.Harness
                 };
                 foreach (var sample in cases)
                 {
-                    var draft = ingestion.Stage(session, sample.Name, "text/plain", Encoding.UTF8.GetBytes(sample.Body));
+                    var draft = ingestion.Stage(ConversationMetadata.From(session), sample.Name, "text/plain", Encoding.UTF8.GetBytes(sample.Body));
                     var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                     session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
@@ -568,7 +569,7 @@ namespace RNAssistant.Harness
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
                 for (var index = 0; index < 73; index++)
                 {
-                    var draft = ingestion.Stage(session, "Reference " + index + ".md", "text/markdown", Encoding.UTF8.GetBytes("# Section " + index));
+                    var draft = ingestion.Stage(ConversationMetadata.From(session), "Reference " + index + ".md", "text/markdown", Encoding.UTF8.GetBytes("# Section " + index));
                     var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                     session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
@@ -713,7 +714,7 @@ namespace RNAssistant.Harness
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), store.DocumentArtifacts);
                 foreach (var title in new[] { "Healthy.md", "Damaged.md", "Other.md" })
                 {
-                    var draft = ingestion.Stage(session, title, "text/markdown", Encoding.UTF8.GetBytes("# " + title + " body-needle"));
+                    var draft = ingestion.Stage(ConversationMetadata.From(session), title, "text/markdown", Encoding.UTF8.GetBytes("# " + title + " body-needle"));
                     var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                     session.Messages.Add(message);
                     ingestion.CommitAndLink(session, message, session.Messages.Count - 1);

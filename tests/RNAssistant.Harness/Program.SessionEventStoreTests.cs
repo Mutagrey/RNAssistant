@@ -792,7 +792,7 @@ namespace RNAssistant.Harness
                     foreach (var mode in new[] { SessionEventReadMode.Validated, SessionEventReadMode.RequireComplete })
                     {
                         var timer = System.Diagnostics.Stopwatch.StartNew();
-                        RuntimeThrows<ChatStorageLockTimeoutException>(() => eventStore.Read(chat, mode));
+                        RuntimeThrows<ChatStorageLockTimeoutException>(() => eventStore.Read(ConversationMetadata.From(chat), mode));
                         AssertTrue(timer.ElapsedMilliseconds < 3000, "diagnostic event reads use the short read timeout");
                     }
                 }
@@ -1035,7 +1035,7 @@ namespace RNAssistant.Harness
                     "an unavailable runtime body does not block recovery of another chat");
                 AssertEqual(2, reader.ListHeaders().Count, "unavailable chat remains listed");
                 RuntimeThrows<RuntimePayloadUnavailableException>(() => service.LoadAddressedSession(broken.Id));
-                AssertEqual(broken.Id, service.LoadDiagnosticsSession(broken.Id).Id,
+                AssertEqual(broken.Id, service.LoadDiagnosticsMetadata(broken.Id).Id,
                     "diagnostics remain addressable without hydrating unavailable execution bodies");
                 AssertEqual(healthy.Id, service.LoadAddressedSession(healthy.Id).Id, "healthy chat can open");
                 AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(eventPath)),
@@ -1891,10 +1891,10 @@ namespace RNAssistant.Harness
                     new SessionEventCorrelation("run-1", "turn-1", "transport-1")));
                 AssertEqual(SessionEventTypes.LlmRequest, request.Type, "adapter preserves the existing request type");
                 AssertEqual("transport-1", request.StepId, "adapter preserves correlation");
-                AssertEqual("{\"request\":true}", eventStore.ReadPayload(session, request),
+                AssertEqual("{\"request\":true}", eventStore.ReadPayload(ConversationMetadata.From(session), request),
                     "adapter preserves exact payload through existing CAS");
                 var otherSession = store.Create("Word", "typed-event-port-other", "Other.docx", "Other chat");
-                RuntimeThrows<InvalidOperationException>(() => eventStore.ReadPayload(otherSession, request));
+                RuntimeThrows<InvalidOperationException>(() => eventStore.ReadPayload(ConversationMetadata.From(otherSession), request));
 
                 var diagnostic = eventStore.Append(session, new SessionEventWrite(
                     causalDescriptor,
@@ -1905,7 +1905,7 @@ namespace RNAssistant.Harness
                     "typed diagnostic keeps its existing wire type");
                 var historical = store.AppendTrace(session, "legacy.unknown", new { Marker = "retained" },
                     null, null, "run-1", "turn-1", "step-legacy");
-                var complete = eventStore.Read(session, SessionEventReadMode.RequireComplete);
+                var complete = eventStore.Read(ConversationMetadata.From(session), SessionEventReadMode.RequireComplete);
                 AssertTrue(complete.Any(item => item.EventId == request.EventId) &&
                     complete.Any(item => item.EventId == diagnostic.EventId) &&
                     complete.Any(item => item.EventId == historical.EventId),

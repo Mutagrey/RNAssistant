@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -24,7 +25,7 @@ namespace RNAssistant.Office.Services
         internal ResourceUploadOpenResponse BeginUpload(ChatSession session, VbaEditorUploadRequest request, CancellationToken token)
         {
             if (request == null) throw Error("RESOURCE_ACCESS_DENIED", "An explicit source upload request is required.");
-            return _data.OpenUpload(session, new ResourceUploadOpenRequest { ChatId = request.ChatId,
+            return _data.OpenUpload(ConversationMetadata.From(session), new ResourceUploadOpenRequest { ChatId = request.ChatId,
                 FileName = "vba-source.txt", ContentType = "text/plain; charset=utf-8", ByteLength = request.ByteLength },
                 token, Owner, MaximumBytes, true);
         }
@@ -35,7 +36,7 @@ namespace RNAssistant.Office.Services
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed source upload is required.");
             // Consume once before mutation preparation. Uploaded data is not a VBA revision,
             // model observation or permission to write; mutation guards and publication remain with their existing owner.
-            return _data.ConsumeUpload(session, request.UploadLeaseId, Owner, (bytes, fileName, contentType) =>
+            return _data.ConsumeUpload(ConversationMetadata.From(session), request.UploadLeaseId, Owner, (bytes, fileName, contentType) =>
             {
                 var save = request as VbaModulePayload;
                 if (save != null && (save.ExpectedCodeSha256 == null || save.ExpectedCodeSha256.Length != 64 ||
@@ -56,7 +57,7 @@ namespace RNAssistant.Office.Services
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(session.DocumentAuthorityId) ||
                 string.IsNullOrWhiteSpace(moduleName)) throw Error("RESOURCE_ACCESS_DENIED", "An exact document/chat and module are required.");
             VbaEditorReadResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, MaximumBytes, cancellation =>
+            var lease = _data.OpenDownload(ConversationMetadata.From(session), Owner, MaximumBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 var identity = VbaResourceProvider.ComponentIdentity(session.DocumentAuthorityId, moduleName);

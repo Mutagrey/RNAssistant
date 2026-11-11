@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,13 +21,13 @@ namespace RNAssistant.Office.Services
         }
 
         public ChatAttachment Stage(
-            ChatSession session,
+            ConversationMetadata session,
             string fileName,
             string contentType,
             byte[] bytes,
             ResourceRef visualSelectionSource = null)
         {
-            var chatId = RequireChatId(session);
+            var chatId = RequireChatId(session?.Id);
             var resource = _attachments.Import(fileName, contentType, bytes, chatId);
             resource.VisualSelectionSource = visualSelectionSource?.Copy();
             try { _attachments.SaveDraftMetadata(resource); }
@@ -60,7 +61,7 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IEnumerable<string> resourceDraftIds)
         {
-            var drafts = _attachments.LoadDrafts(resourceDraftIds, RequireChatId(session));
+            var drafts = _attachments.LoadDrafts(resourceDraftIds, RequireChatId(session?.Id));
             foreach (var draft in drafts.Where(item => item.VisualSelectionSource != null))
             {
                 var active = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
@@ -76,15 +77,15 @@ namespace RNAssistant.Office.Services
             return drafts;
         }
 
-        public void Discard(ChatSession session, string resourceDraftId)
+        public void Discard(ConversationMetadata session, string resourceDraftId)
         {
-            _attachments.DeleteDraft(resourceDraftId, RequireChatId(session));
+            _attachments.DeleteDraft(resourceDraftId, RequireChatId(session?.Id));
         }
 
         public void CommitAndLink(ChatSession session, ChatMessage message, int messageIndex)
         {
             if (message == null) throw new ArgumentNullException("message");
-            var chatId = RequireChatId(session);
+            var chatId = RequireChatId(session?.Id);
             if (string.IsNullOrWhiteSpace(session.DocumentAuthorityId))
                 throw new InvalidOperationException("A bound document identity is required before committing originals.");
             if (session.Messages == null || messageIndex < 0 || messageIndex >= session.Messages.Count ||
@@ -123,13 +124,13 @@ namespace RNAssistant.Office.Services
             _attachments.DeleteDrafts(message);
         }
 
-        private static string RequireChatId(ChatSession session)
+        private static string RequireChatId(string chatId)
         {
-            if (session == null || string.IsNullOrWhiteSpace(session.Id))
+            if (string.IsNullOrWhiteSpace(chatId))
             {
                 throw new InvalidOperationException("A chat session is required for resource ingestion.");
             }
-            return session.Id;
+            return chatId;
         }
     }
 }

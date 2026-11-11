@@ -48,13 +48,14 @@ namespace RNAssistant.Office
         private bool ResourceOwnerIsActive(string chatId, string workspaceId)
         {
             if (Volatile.Read(ref _disposed) != 0 || string.IsNullOrWhiteSpace(chatId)) return false;
-            var diagnosticOwner = new[] { ResourceDataPlaneService.UploadOwner, ModelContextInspectorService.Owner, TrajectoryPayloadService.Owner, TrajectoryExportDownloadService.Owner }
-                .FirstOrDefault(owner => workspaceId != null && workspaceId.StartsWith(owner + ":", StringComparison.Ordinal));
+            var diagnosticOwners = new[] { ResourceDataPlaneService.UploadOwner, ModelContextInspectorService.Owner,
+                TrajectoryPayloadService.Owner, TrajectoryExportDownloadService.Owner };
+            var diagnosticOwner = diagnosticOwners.FirstOrDefault(owner => workspaceId != null && workspaceId.StartsWith(owner + ":", StringComparison.Ordinal));
             if (diagnosticOwner != null)
             {
                 try
                 {
-                    return ChatDiagnosticsScope.ReadWorkspaceSession(_paths, _chatStore,
+                    return ChatDiagnosticsScope.ReadWorkspaceMetadata(_paths, _chatStore,
                         workspaceId.Substring(diagnosticOwner.Length + 1), chatId) != null;
                 }
                 catch (Exception error) when (error is InvalidOperationException || error is ArgumentException ||
@@ -63,12 +64,10 @@ namespace RNAssistant.Office
             try
             {
                 // Lease checks never select a different chat or fall back to the active one.
-                var session = workspaceId == ResourceDataPlaneService.UploadOwner
-                    ? LoadDiagnosticsSession(chatId, null) : LoadAddressedSession(chatId);
-                return session != null && (workspaceId == "viewer" || workspaceId == ArtifactCatalogService.Owner || workspaceId == ResourceDataPlaneService.UploadOwner ||
-                    workspaceId == TrajectoryExportDownloadService.Owner ||
-                    workspaceId == TrajectoryPayloadService.Owner ||
-                    workspaceId == ModelContextInspectorService.Owner ||
+                if (diagnosticOwners.Contains(workspaceId, StringComparer.Ordinal))
+                    return LoadDiagnosticsMetadata(chatId, null) != null;
+                var session = LoadAddressedSession(chatId);
+                return session != null && (workspaceId == "viewer" || workspaceId == ArtifactCatalogService.Owner ||
                     workspaceId == PromptContextInspectorDownloadService.Owner ||
                     workspaceId == VbaEditorResourceService.Owner ||
                     workspaceId == SkillEditorResourceService.Owner ||

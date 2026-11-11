@@ -51,7 +51,7 @@ namespace RNAssistant.Office
         {
             var session = LoadArtifactViewerSession(request?.ChatId);
             ArtifactTransferContent content = null;
-            var data = _resourceData.OpenDownload(session, ArtifactCatalogService.Owner, ArtifactTransferPackage.MaximumBytes,
+            var data = _resourceData.OpenDownload(ConversationMetadata.From(session), ArtifactCatalogService.Owner, ArtifactTransferPackage.MaximumBytes,
                 cancellation => {
                     cancellation.ThrowIfCancellationRequested();
                     content = ArtifactCatalog().Export(session, request);
@@ -61,7 +61,7 @@ namespace RNAssistant.Office
         }
 
         public ResourceUploadOpenResponse BeginArtifactImport(ResourceUploadOpenRequest request, CancellationToken token)
-        { return _resourceData.OpenUpload(LoadArtifactViewerSession(request?.ChatId), request, token,
+        { return _resourceData.OpenUpload(ConversationMetadata.From(LoadArtifactViewerSession(request?.ChatId)), request, token,
             ArtifactCatalogService.Owner, ArtifactTransferPackage.MaximumBytes, allowEmpty: true); }
 
         public ResourceDataCloseResponse CloseArtifactTransfer(ResourceUploadLeaseRequest request)
@@ -75,7 +75,7 @@ namespace RNAssistant.Office
         {
             return WithReservedChatState(LoadArtifactViewerSession(request?.ChatId), session => {
                 RequireArtifactTransferRevision(session, request);
-                var artifact = _resourceData.ConsumeUpload(session, request.UploadLeaseId, ArtifactCatalogService.Owner,
+                var artifact = _resourceData.ConsumeUpload(ConversationMetadata.From(session), request.UploadLeaseId, ArtifactCatalogService.Owner,
                     (bytes, name, type) => {
                         token.ThrowIfCancellationRequested();
                         using (new ResourceMutationJournal(_paths).AcquireScope(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId))))

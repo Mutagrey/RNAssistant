@@ -686,24 +686,24 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        internal ChatSession ReadDiagnosticsSession(string chatId)
+        internal ConversationMetadata ReadMetadata(string chatId)
         {
             if (string.IsNullOrWhiteSpace(chatId)) return null;
             foreach (var path in SafeFindSessionFiles(chatId))
             {
-                var source = ReadDiagnosticsSessionAtPath(path, chatId);
+                var source = ReadMetadataAtPath(path, chatId);
                 if (source != null) return source;
             }
             return null;
         }
 
-        internal ChatSession ReadDiagnosticsSession(string host, string documentKey, string chatId)
+        internal ConversationMetadata ReadMetadata(string host, string documentKey, string chatId)
         {
             if (string.IsNullOrWhiteSpace(chatId)) return null;
-            return ReadDiagnosticsSessionAtPath(GetSessionPath(host, documentKey, chatId), chatId);
+            return ReadMetadataAtPath(GetSessionPath(host, documentKey, chatId), chatId);
         }
 
-        private ChatSession ReadDiagnosticsSessionAtPath(string path, string chatId)
+        private ConversationMetadata ReadMetadataAtPath(string path, string chatId)
         {
             using (AcquirePersistenceRead())
             using (AcquireDocumentPathLockForRead(path))
@@ -718,13 +718,9 @@ namespace RNAssistant.Core.Storage
                     // The existing verified index owns identity. Do not hydrate messages,
                     // runtime CAS, artifacts or an execution just to address a journal.
                     var root = cursor.Root;
-                    return new ChatSession
-                    {
-                        Id = cursor.SessionId, Revision = cursor.Sequence,
-                        Host = (string)root["Host"], DocumentKey = (string)root["DocumentKey"],
-                        WorkspaceId = (string)root["WorkspaceId"],
-                        DocumentAuthorityId = (string)root["DocumentAuthorityId"]
-                    };
+                    return new ConversationMetadata(cursor.SessionId, cursor.Sequence,
+                        (string)root["Host"], (string)root["DocumentKey"], (string)root["WorkspaceId"],
+                        (string)root["DocumentAuthorityId"]);
                 });
             }
         }

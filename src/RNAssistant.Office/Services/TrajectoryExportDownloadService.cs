@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -16,7 +17,7 @@ namespace RNAssistant.Office.Services
         internal TrajectoryExportDownloadService(TrajectoryExportService export, ResourceDataPlaneService data)
         { _export = export ?? throw new ArgumentNullException(nameof(export)); _data = data ?? throw new ArgumentNullException(nameof(data)); }
 
-        internal ChatTrajectoryExportResponse Open(ChatSession session, Func<IReadOnlyList<SessionEvent>> readCompleteEvents,
+        internal ChatTrajectoryExportResponse Open(ConversationMetadata session, Func<IReadOnlyList<SessionEvent>> readCompleteEvents,
             TrajectoryExportRequest request, CancellationToken token)
         {
             TrajectoryExportResult result = null;

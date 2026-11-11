@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.IO;
 using System.Linq;
@@ -90,7 +91,7 @@ namespace RNAssistant.Harness
                 {
                     var editor = new VbaEditorResourceService(executor.ResourceGateway, data);
                     for (var index = 0; index < 2; index++)
-                        data.OpenDownload(session, "other", 1, _ => new ResourceDownloadContent { Bytes = new byte[] { 1 }, ContentType = "text/plain" });
+                        data.OpenDownload(ConversationMetadata.From(session), "other", 1, _ => new ResourceDownloadContent { Bytes = new byte[] { 1 }, ContentType = "text/plain" });
                     var reads = adapter.CountVbaCalls(FakeVbaOperation.ReadModule);
                     RuntimeThrows<ResourceRequestException>(() => editor.Open(session, "Module1", CancellationToken.None));
                     AssertEqual(reads, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "shared capacity is reserved before live capture");

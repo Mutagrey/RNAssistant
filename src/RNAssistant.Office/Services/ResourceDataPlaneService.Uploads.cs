@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -20,7 +21,7 @@ namespace RNAssistant.Office.Services
         internal const int MaximumUploadChunkBytes = 256 * 1024;
         private readonly Dictionary<string, Upload> _uploads = new Dictionary<string, Upload>(StringComparer.Ordinal);
 
-        internal ResourceUploadOpenResponse OpenUpload(ChatSession session, ResourceUploadOpenRequest request,
+        internal ResourceUploadOpenResponse OpenUpload(ConversationMetadata session, ResourceUploadOpenRequest request,
             CancellationToken cancellationToken = default(CancellationToken), string owner = UploadOwner,
             long maximumBytes = AttachmentStore.MaxFileBytes, bool allowEmpty = false)
         {
@@ -93,7 +94,7 @@ namespace RNAssistant.Office.Services
             finally { ExitUpload(upload); }
         }
 
-        internal ChatResourceDraftResponse CompleteUpload(ChatSession session, string leaseId,
+        internal ChatResourceDraftResponse CompleteUpload(ConversationMetadata session, string leaseId,
             ChatResourceIngestionService ingestion, CancellationToken token = default(CancellationToken))
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || ingestion == null)
@@ -114,7 +115,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal T ConsumeJsonUpload<T>(ChatSession session, string leaseId, string owner,
+        internal T ConsumeJsonUpload<T>(ConversationMetadata session, string leaseId, string owner,
             string sha256, int maximumBytes, int maximumDepth, CancellationToken token)
         {
             return ConsumeUpload(session, leaseId, owner, (bytes, name, mime) =>
@@ -140,7 +141,7 @@ namespace RNAssistant.Office.Services
             catch (DecoderFallbackException) { throw Error("RESOURCE_UPLOAD_INVALID", "The uploaded text is not valid UTF-8."); }
         }
 
-        internal T ConsumeUpload<T>(ChatSession session, string leaseId, string owner,
+        internal T ConsumeUpload<T>(ConversationMetadata session, string leaseId, string owner,
             Func<byte[], string, string, T> consume, CancellationToken token)
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(owner) || consume == null)

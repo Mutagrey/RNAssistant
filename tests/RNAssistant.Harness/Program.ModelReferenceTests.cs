@@ -103,7 +103,7 @@ namespace RNAssistant.Harness
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(store), new ChatBlobStore(paths), plane);
-                    var detail = inspector.Query(reopened, new ModelContextQuery { Alias = "e2" }, CancellationToken.None);
+                    var detail = inspector.Query(ConversationMetadata.From(reopened), new ModelContextQuery { Alias = "e2" }, CancellationToken.None);
                     AssertEqual("E2", detail.SelectedAlias, "Inspector lookup displays canonical evidence case");
                     AssertEqual("E2", detail.EligibleEvidence.Single().Alias, "a folded assistant receipt can deliver eligible evidence");
                 }
@@ -436,11 +436,11 @@ namespace RNAssistant.Harness
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(store), new ChatBlobStore(paths), plane);
-                    var rows = inspector.Query(session, new ModelContextQuery { RequestEventId = trace.EventId }, CancellationToken.None).Resources;
+                    var rows = inspector.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = trace.EventId }, CancellationToken.None).Resources;
                     AssertTrue(rows.Select(row => row.Alias).OrderBy(alias => alias, StringComparer.Ordinal)
                         .SequenceEqual(new[] { "R1@v1", "R1@v2", "R1@v3" }),
                         "One registry assigns all observed revisions; Inspector never allocates or merges aliases");
-                    AssertEqual("canonical-revision-one", inspector.Query(session,
+                    AssertEqual("canonical-revision-one", inspector.Query(ConversationMetadata.From(session),
                         new ModelContextQuery { Alias = "r1@V1" }, CancellationToken.None).Resources
                         .Single(row => row.Alias == "R1@v1").Resource.Revision,
                         "model resource lookup cannot resolve to the trace-only revision");
@@ -457,7 +457,7 @@ namespace RNAssistant.Harness
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(store), new ChatBlobStore(paths), plane);
-                    var rows = inspector.Query(old, new ModelContextQuery { RequestEventId = oldRequest.EventId }, CancellationToken.None).Resources;
+                    var rows = inspector.Query(ConversationMetadata.From(old), new ModelContextQuery { RequestEventId = oldRequest.EventId }, CancellationToken.None).Resources;
                     AssertTrue(rows.Count == 2 && rows.All(row => row.Alias == null),
                         "unbound historical revisions remain separate and visible without invented labels");
                 }
@@ -493,7 +493,7 @@ namespace RNAssistant.Harness
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(store), new ChatBlobStore(paths), plane);
-                    AssertEqual("T1", inspector.Query(session, new ModelContextQuery { RequestEventId = trace.EventId },
+                    AssertEqual("T1", inspector.Query(ConversationMetadata.From(session), new ModelContextQuery { RequestEventId = trace.EventId },
                         CancellationToken.None).Operations.Single().Alias, "Inspector shares the persisted execution alias");
                 }
                 var stale = new ChatStore(paths).Load(session.Id);

@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1001,14 +1002,14 @@ namespace RNAssistant.Harness
                             AssertTrue(entered.Wait(TimeSpan.FromSeconds(10)), "capture entered");
                             data.CloseWorkspace(session.Id, "viewer");
                             var produced = false;
-                            var independent = data.OpenDownload(session, "export", 40L * 1024 * 1024,
+                            var independent = data.OpenDownload(ConversationMetadata.From(session), "export", 40L * 1024 * 1024,
                                 token => { produced = true; return new ResourceDownloadContent { Bytes = new byte[1], ContentType = "application/octet-stream" }; });
                             AssertTrue(produced, "a busy capture reserves its chunk without blocking an independent bounded transfer");
                             data.Close(session.Id, "export", independent.LeaseId);
                         }
                         finally { finish.Set(); }
                         pending.GetAwaiter().GetResult();
-                        var download = data.OpenDownload(session, "export", 40L * 1024 * 1024,
+                        var download = data.OpenDownload(ConversationMetadata.From(session), "export", 40L * 1024 * 1024,
                             token => new ResourceDownloadContent { Bytes = new byte[1], ContentType = "application/octet-stream" });
                         data.Close(session.Id, "export", download.LeaseId);
                     }

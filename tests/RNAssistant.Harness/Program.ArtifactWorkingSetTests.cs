@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
@@ -44,7 +45,7 @@ namespace RNAssistant.Harness
                 b.DocumentAuthorityId = a.DocumentAuthorityId;
                 links.Change(b, LinkRequest(b, exact.Uri, false), chats.Save);
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
-                var draft = ingestion.Stage(a, "Healthy original.md", "text/markdown", Encoding.UTF8.GetBytes("# Healthy original"));
+                var draft = ingestion.Stage(ConversationMetadata.From(a), "Healthy original.md", "text/markdown", Encoding.UTF8.GetBytes("# Healthy original"));
                 var message = new ChatMessage { Role = "user", Content = "Healthy original", Attachments = ingestion.LoadDrafts(a, new[] { draft.Id }).ToList() };
                 a.Messages.Add(message);
                 ingestion.CommitAndLink(a, message, a.Messages.Count - 1);
@@ -343,7 +344,7 @@ namespace RNAssistant.Harness
                 var a = NewSession(FakeOfficeAdapter.ForHost("Excel"));
                 a.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
-                var draft = ingestion.Stage(a, "Shared specification.md", "text/markdown", Encoding.UTF8.GetBytes("# Shared original"));
+                var draft = ingestion.Stage(ConversationMetadata.From(a), "Shared specification.md", "text/markdown", Encoding.UTF8.GetBytes("# Shared original"));
                 var message = new ChatMessage { Role = "user", Content = "Read", Attachments = ingestion.LoadDrafts(a, new[] { draft.Id }).ToList() };
                 a.Messages.Add(message);
                 ingestion.CommitAndLink(a, message, 0);
@@ -370,7 +371,7 @@ namespace RNAssistant.Harness
                 for (var index = 0; index < 50; index++)
                 {
                     var title = index == 1 ? "A checklist.md" : index == 25 ? "Z summary.md" : "Shared specification.md";
-                    var duplicate = ingestion.Stage(a, title, "text/markdown", Encoding.UTF8.GetBytes("# Shared original"));
+                    var duplicate = ingestion.Stage(ConversationMetadata.From(a), title, "text/markdown", Encoding.UTF8.GetBytes("# Shared original"));
                     var nextMessage = new ChatMessage { Role = "user", Content = "Another original",
                         Attachments = ingestion.LoadDrafts(a, new[] { duplicate.Id }).ToList() };
                     a.Messages.Add(nextMessage);

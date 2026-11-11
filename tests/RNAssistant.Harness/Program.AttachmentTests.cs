@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using System;
@@ -295,7 +296,7 @@ namespace RNAssistant.Harness
                 session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), new ChatStore(paths).DocumentArtifacts);
                 var staged = ingestion.Stage(
-                    session,
+                    ConversationMetadata.From(session),
                     "notes.txt",
                     "text/plain",
                     System.Text.Encoding.UTF8.GetBytes("durable resource body"));
@@ -346,7 +347,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter); session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), chats.DocumentArtifacts);
                 Func<ChatSession, string, string, ChatMessage> upload = (chat, name, text) => {
-                    var draft = ingestion.Stage(chat, name, "text/javascript", System.Text.Encoding.UTF8.GetBytes(text));
+                    var draft = ingestion.Stage(ConversationMetadata.From(chat), name, "text/javascript", System.Text.Encoding.UTF8.GetBytes(text));
                     var message = new ChatMessage { Role = "user", Content = "Analyze the attached file.",
                         Attachments = ingestion.LoadDrafts(chat, new[] { draft.Id }).ToList() };
                     chat.Messages.Add(message); ingestion.CommitAndLink(chat, message, chat.Messages.Count - 1);
@@ -482,7 +483,7 @@ namespace RNAssistant.Harness
                 source.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
                 var attachments = new AttachmentStore(paths);
                 var ingestion = new ChatResourceIngestionService(attachments, chats.DocumentArtifacts);
-                var draft = ingestion.Stage(source, "specification.md", "text/markdown",
+                var draft = ingestion.Stage(ConversationMetadata.From(source), "specification.md", "text/markdown",
                     System.Text.Encoding.UTF8.GetBytes("# Specification\nshared original needle"));
                 var message = new ChatMessage { Role = "user", Content = "Read the specification",
                     Attachments = ingestion.LoadDrafts(source, new[] { draft.Id }).ToList() };

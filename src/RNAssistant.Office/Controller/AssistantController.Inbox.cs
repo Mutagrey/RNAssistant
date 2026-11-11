@@ -93,7 +93,7 @@ namespace RNAssistant.Office
                     RNAssistant.Core.Llm.ModelContextBudget.InputBudgetTokens(settings), settings));
             if (note == null || string.IsNullOrWhiteSpace(note.Text)) throw new InvalidOperationException("Нет доступного выделения.");
             var text = "Снимок выделения документа на момент прикрепления.\n" + note.Title + "\n" + note.Reference + "\n\n" + note.Text;
-            return new ChatResourceDraftResponse { Resource = _chatResourceIngestion.Stage(session, "Выделение.txt",
+            return new ChatResourceDraftResponse { Resource = _chatResourceIngestion.Stage(ConversationMetadata.From(session), "Выделение.txt",
                 "text/plain", System.Text.Encoding.UTF8.GetBytes(text)) };
         }
 

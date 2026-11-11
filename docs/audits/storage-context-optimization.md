@@ -674,3 +674,35 @@ after-state/CAS ownership.
    stopped old writers and short Windows/Office photo evidence; the new generation
    starts new history, retaining the old data separately. The prior internal legacy
    state carrier still ends with the aggregate-backend switch; no new adapter.
+
+## P1 — typed read metadata and transfer scopes (2026-11-11)
+
+1. F04, read-contract subset / P1.4: existing conversation/event ports now use
+   immutable `ConversationMetadata` for identity, scope and observed revision.
+   The DTO lives in the existing contract file; no new owner or storage is added.
+2. Office/Workspace diagnostics and transfer/draft consumers no longer receive
+   a partial writable `ChatSession`. Event reads/readers/payload access accept the
+   same six scalars. Diagnostic lease liveness uses metadata instead of loading
+   full addressed history. Live editor authority and publication remain unchanged.
+3. Removed `ReadDiagnosticsSession`, partial-session construction and the aggregate
+   signatures of `IEventStore.Read/OpenReader/ReadPayload`. All production consumers
+   and existing fixtures switched directly; no compatibility overload or facade.
+   Production C# +129/−100, net +29; no new compile item required.
+4. Fourteen targeted checks pass on macOS/net8/C#7.3, source-linked working tree
+   based on `7555ac0d`: Office diagnostic scope, Workspace scope, exact leased
+   export, two payload cases, bounded upload/cancelled completion, actual Office
+   batch/restart and Workspace turn/restart, Inbox recovery and four event-feed
+   cases. No new test framework or P0/index/restore requalification. Controller
+   callsites were reviewed separately; this is not Windows/Office qualification.
+5. Read-port aggregate parameters 3 → 0; diagnostic result contains six scalars
+   and no messages/artifacts/run continuation. The existing scope fixture still
+   forbids full loads/catalog reads and preserves exact history bytes and selection;
+   the Workspace fixture retains foreign-scope refusal. No new allocation, CPU or
+   I/O timing benchmark was needed, and no end-to-end speedup is claimed.
+6. `ConversationMessageWindow.Session`, ordinary commit/load, remaining run/detail
+   DTOs, resource integration and journal cutover remain open. Full raw-event scans
+   and cold index work retain their existing cost. Actual controller transfer/
+   lease delivery still needs the Windows/Office photo gate before qualification.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. No adapter,
+   store, import, dual-write or fallback added. P4 remains deferred and the existing
+   backup/stop-writers/Windows gates still precede the new-history switch.

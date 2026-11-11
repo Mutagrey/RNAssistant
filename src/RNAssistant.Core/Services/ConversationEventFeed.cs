@@ -35,7 +35,7 @@ namespace RNAssistant.Core.Services
                 if (through != null) result.Reason = Decode(session.Id, through, out until);
                 if (result.ResyncRequired) return result;
                 var scope = session.Host + ":" + session.DocumentKey + ":" + session.Id;
-                if (_scope != scope) { _reader = _events.OpenReader(session); _scope = scope; }
+                if (_scope != scope) { _reader = _events.OpenReader(ConversationMetadata.From(session)); _scope = scope; }
                 var page = _reader.Read(from, until, limit, cancellationToken);
                 result.Reason = page.Reason;
                 if (result.ResyncRequired) return result;

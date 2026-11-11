@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
@@ -32,7 +33,7 @@ namespace RNAssistant.Office.Services
                 request.Path == null || request.Path.Length != 0 && !SkillStore.TryNormalizeReferencePath(request.Path, out path))
                 throw Error("RESOURCE_ACCESS_DENIED", "An exact addressed Skill Library source is required.");
             SkillSourceReadResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, SkillStore.MaximumSkillReferenceBytes, cancellation =>
+            var lease = _data.OpenDownload(ConversationMetadata.From(session), Owner, SkillStore.MaximumSkillReferenceBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 var matches = _skills.GetVisibleSkills().Where(item => item.Id == request.SkillId).Take(2).ToArray();
@@ -74,7 +75,7 @@ namespace RNAssistant.Office.Services
         internal ResourceUploadOpenResponse BeginUpload(ChatSession session, SkillMutationUploadRequest request, CancellationToken token)
         {
             if (request == null) throw Error("RESOURCE_ACCESS_DENIED", "An explicit skill mutation upload is required.");
-            var lease = _data.OpenUpload(session, new ResourceUploadOpenRequest { ChatId = request.ChatId,
+            var lease = _data.OpenUpload(ConversationMetadata.From(session), new ResourceUploadOpenRequest { ChatId = request.ChatId,
                 FileName = "skill-mutation.json", ContentType = "application/json; charset=utf-8", ByteLength = request.ByteLength },
                 token, Owner, MaximumMutationBytes);
             try { token.ThrowIfCancellationRequested(); return lease; }
@@ -99,7 +100,7 @@ namespace RNAssistant.Office.Services
         {
             if (request == null || session == null || request.ChatId != session.Id)
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed skill mutation upload is required.");
-            return _data.ConsumeJsonUpload<T>(session, request.UploadLeaseId, Owner,
+            return _data.ConsumeJsonUpload<T>(ConversationMetadata.From(session), request.UploadLeaseId, Owner,
                 request.Sha256, MaximumMutationBytes, 16, token);
         }
 

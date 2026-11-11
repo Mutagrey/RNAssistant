@@ -9,8 +9,7 @@ namespace RNAssistant.Core.Persistence
         ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title);
         ChatSession Load(string host, string documentKey, string sessionId);
         ChatSession Load(string sessionId);
-        // Identity/revision only for read-only diagnostics; never commit this partial session.
-        ChatSession ReadDiagnosticsSession(string sessionId);
+        ConversationMetadata ReadMetadata(string sessionId);
         void Commit(ChatSession session, ConversationCommit commit);
         void CommitRun(ConversationRunCommit commit);
         void SetTitle(ChatSession session, string title);
@@ -38,6 +37,31 @@ namespace RNAssistant.Core.Persistence
         // reports whether the retained stream contained an open tool execution.
         // Projection repair and the final conversation save remain application policy.
         bool PrepareInterruptedRunRecovery(ChatSession session, string runId);
+    }
+
+    // A read address and observed revision, not a partial writable session or
+    // authority to execute a run. No history, artifacts or continuation is retained.
+    public sealed class ConversationMetadata
+    {
+        public string Id { get; private set; }
+        public long Revision { get; private set; }
+        public string Host { get; private set; }
+        public string DocumentKey { get; private set; }
+        public string WorkspaceId { get; private set; }
+        public string DocumentAuthorityId { get; private set; }
+
+        public ConversationMetadata(string id, long revision, string host, string documentKey,
+            string workspaceId = null, string documentAuthorityId = null)
+        {
+            Id = id; Revision = revision; Host = host; DocumentKey = documentKey;
+            WorkspaceId = workspaceId; DocumentAuthorityId = documentAuthorityId;
+        }
+
+        public static ConversationMetadata From(ChatSession session)
+        {
+            return session == null ? null : new ConversationMetadata(session.Id, session.Revision,
+                session.Host, session.DocumentKey, session.WorkspaceId, session.DocumentAuthorityId);
+        }
     }
 
     public sealed class ConversationMessageWindow

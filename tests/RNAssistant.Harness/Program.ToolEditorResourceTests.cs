@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -82,7 +83,7 @@ namespace RNAssistant.Harness
                 {
                     var editor = new ToolEditorResourceService(executor.ResourceGateway, data, new ToolCatalogService(adapter, executor));
                     var request = ToolDocumentationRequest(session, tool);
-                    for (var index = 0; index < 2; index++) data.OpenDownload(session, "other", 1,
+                    for (var index = 0; index < 2; index++) data.OpenDownload(ConversationMetadata.From(session), "other", 1,
                         _ => new ResourceDownloadContent { Bytes = new byte[] { 1 }, ContentType = "text/plain" });
                     RuntimeThrows<ResourceRequestException>(() => editor.OpenDocumentation(session, request, CancellationToken.None));
                     RuntimeThrows<OperationCanceledException>(() => editor.OpenDocumentation(session, request, new CancellationToken(true)));
@@ -184,7 +185,7 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
                     var editor = new ToolEditorResourceService(executor.ResourceGateway, data, catalog); var request = ToolSourceRequest(session, tool);
-                    for (var index = 0; index < 2; index++) data.OpenDownload(session, "other", 1, _ => new ResourceDownloadContent { Bytes = new byte[] { 1 }, ContentType = "text/plain" });
+                    for (var index = 0; index < 2; index++) data.OpenDownload(ConversationMetadata.From(session), "other", 1, _ => new ResourceDownloadContent { Bytes = new byte[] { 1 }, ContentType = "text/plain" });
                     var reads = adapter.CountVbaCalls(FakeVbaOperation.ReadModule);
                     RuntimeThrows<ResourceRequestException>(() => editor.Open(session, request, CancellationToken.None));
                     RuntimeThrows<OperationCanceledException>(() => editor.Open(session, request, new CancellationToken(true)));

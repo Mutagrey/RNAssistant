@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -93,7 +94,7 @@ namespace RNAssistant.Harness
                 AssertTrue(independent.Success, "second MD with the same title coexists");
                 AssertEqual(2, WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Count(item => item.Kind == ChatArtifactKinds.Markdown), "independent MD resources remain distinct");
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), store.DocumentArtifacts);
-                var original = ingestion.Stage(b, "uploaded.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# Immutable original"));
+                var original = ingestion.Stage(ConversationMetadata.From(b), "uploaded.md", "text/markdown", System.Text.Encoding.UTF8.GetBytes("# Immutable original"));
                 var originalMessage = new ChatMessage { Role = "user", Content = "Original", Attachments = ingestion.LoadDrafts(b, new[] { original.Id }).ToList() };
                 b.Messages.Add(originalMessage); ingestion.CommitAndLink(b, originalMessage, 0);
                 var originalTarget = executor.ResourceGateway.Find(b, "uploaded.md", "document").Items.Single().Target;

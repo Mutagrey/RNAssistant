@@ -130,6 +130,15 @@ Production C# — net −34 строки; без новых stores/registries/fa
 без общего projection и сохранены в [backlog](BACKLOG.md#host-neutral-harness-baseline-failures--2026-10-13);
 это не полный текущий HEAD и не Windows/Office qualification.
 
+P1 read metadata: диагностика Office/Workspace, event reads, upload/download leases
+и staging вложений используют immutable `ConversationMetadata` вместо частичного
+`ChatSession`. Такой результат нельзя передать на запись. Проверка жизни diagnostic
+lease также идёт через metadata, без полной загрузки чата. 14 адресных host-neutral
+checks проходят, включая реальные run consumers обоих hosts, restart/Inbox и
+отмену upload. Production C# — net +29 строк; без новых owners/stores/adapters.
+Message windows, обычные commit/load и подключение нового journal остаются открытыми;
+controller delivery на Windows/Office этим не квалифицирована.
+
 Маршрут до переключения сужен по [уточнению пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md#84-порядок-небольших-срезов):
 реальные consumers и короткие сквозные проверки каждого среза; финально — чат,
 mutation, unknown, restart, lost acknowledgement, rebuild и restore. До cutover

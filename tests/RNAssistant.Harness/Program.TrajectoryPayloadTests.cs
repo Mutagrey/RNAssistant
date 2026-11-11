@@ -65,7 +65,7 @@ namespace RNAssistant.Harness
                             "application/json", "run-preview", "turn-preview", "step-preview");
                         lastEventId = source.EventId;
                         var blobCount = Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length;
-                        var preview = service.Open(session, source.EventId, CancellationToken.None);
+                        var preview = service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None);
                         AssertEqual(source.Payload.Sha256, preview.Sha256, "source identity is the exact validated event payload");
                         AssertTrue(JObject.FromObject(preview)["text"] == null, "bridge contains no payload text");
                         AssertEqual(text.Length > TrajectoryPayloadService.MaximumCharacters, preview.TextTruncated, "explicit preview extent");
@@ -97,7 +97,7 @@ namespace RNAssistant.Harness
                         data.Close(session.Id, TrajectoryPayloadService.Owner, preview.Data.LeaseId);
                     }
                     File.AppendAllText(SessionEventFile(paths, session), "{incomplete");
-                    RuntimeThrows<ChatConcurrencyException>(() => service.Open(session, lastEventId, CancellationToken.None));
+                    RuntimeThrows<ChatConcurrencyException>(() => service.Open(ConversationMetadata.From(session), lastEventId, CancellationToken.None));
                 }
             });
         }
@@ -113,37 +113,37 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var service = new TrajectoryPayloadService(events, blobs, data);
-                    var empty = service.Open(session, source.EventId, CancellationToken.None);
+                    var empty = service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None);
                     AssertEqual(0L, empty.Data.Payload.ByteLength, "empty source gets an exact empty download");
                     AssertTrue(!empty.TextTruncated, "empty is a full payload, not absent evidence");
                     AssertEqual(SessionEventReadMode.RequireComplete, events.Mode, "preview cannot accept an incomplete journal prefix");
                     data.Close(session.Id, TrajectoryPayloadService.Owner, empty.Data.LeaseId);
                     for (var index = 0; index < 2; index++)
-                        data.OpenDownload(session, "other-download", 1, _ => new ResourceDownloadContent {
+                        data.OpenDownload(ConversationMetadata.From(session), "other-download", 1, _ => new ResourceDownloadContent {
                             Bytes = new byte[] { 1 }, ContentType = "application/octet-stream" });
                     var reads = events.Reads;
-                    RuntimeThrows<ResourceRequestException>(() => service.Open(session, source.EventId, CancellationToken.None));
+                    RuntimeThrows<ResourceRequestException>(() => service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None));
                     AssertEqual(reads, events.Reads, "shared reservation happens before journal/CAS reads");
                     data.CloseTransfers();
-                    RuntimeThrows<OperationCanceledException>(() => service.Open(session, source.EventId, new CancellationToken(true)));
+                    RuntimeThrows<OperationCanceledException>(() => service.Open(ConversationMetadata.From(session), source.EventId, new CancellationToken(true)));
                     AssertEqual(reads, events.Reads, "cancelled capture does not touch the source");
-                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, "missing", CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), "missing", CancellationToken.None));
                     source.SessionId = "foreign";
-                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, source.EventId, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None));
                     source.SessionId = session.Id;
                     events.Items = new[] { source, source };
-                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, source.EventId, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None));
                     events.Items = new[] { source };
                     source.Payload.ByteLength = TrajectoryPayloadService.MaximumSourceBytes + 1;
-                    AssertContains(RuntimeThrows<InvalidOperationException>(() => service.Open(session, source.EventId, CancellationToken.None)).Message,
+                    AssertContains(RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None)).Message,
                         "RESOURCE_BATCH_TOO_LARGE", "oversized verification source fails explicitly before CAS reading");
                     source.Payload = blobs.StoreBytes(new byte[] { 255 }, "text/plain");
-                    RuntimeThrows<DecoderFallbackException>(() => service.Open(session, source.EventId, CancellationToken.None));
+                    RuntimeThrows<DecoderFallbackException>(() => service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None));
                     source.Payload = blobs.StoreText("valid", "text/plain");
                     File.WriteAllText(blobs.PathFor(source.Payload.Sha256), "wrong");
-                    RuntimeThrows<InvalidOperationException>(() => service.Open(session, source.EventId, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None));
                     source.Payload = blobs.StoreText("still usable", "text/plain");
-                    var final = service.Open(session, source.EventId, CancellationToken.None);
+                    var final = service.Open(ConversationMetadata.From(session), source.EventId, CancellationToken.None);
                     data.Close(session.Id, TrajectoryPayloadService.Owner, final.Data.LeaseId);
                 }
             });
@@ -154,9 +154,9 @@ namespace RNAssistant.Harness
             internal IReadOnlyList<SessionEvent> Items;
             internal SessionEventReadMode Mode;
             internal int Reads;
-            public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { Reads++; Mode = mode; return Items; }
-            public ISessionEventReader OpenReader(ChatSession session) { throw new NotSupportedException(); }
-            public string ReadPayload(ChatSession session, SessionEvent item) { throw new Exception("Whole payload reads are forbidden in this contour."); }
+            public IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode) { Reads++; Mode = mode; return Items; }
+            public ISessionEventReader OpenReader(ConversationMetadata session) { throw new NotSupportedException(); }
+            public string ReadPayload(ConversationMetadata session, SessionEvent item) { throw new Exception("Whole payload reads are forbidden in this contour."); }
             public SessionEvent Append(ChatSession session, SessionEventWrite write) { throw new NotSupportedException(); }
             public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
             { throw new NotSupportedException(); }

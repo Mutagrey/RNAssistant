@@ -104,6 +104,15 @@ append; existing request compilation owns call/result pairing. Office request
 evidence and tool/media presentation stay with their owners, and result persistence
 continues through `ToolResultPersistence`. No adapter or extra facade was added.
 
+P1 read metadata: `ReadDiagnosticsSession` and its partial `ChatSession` result are
+removed. Existing conversation/event ports use immutable `ConversationMetadata`
+for identity-only reads, event readers and payload access. Office/Workspace
+diagnostics, download/upload leases and draft staging consume that DTO; live callers
+capture six scalars without history. Diagnostic lease checks no longer load the full
+chat. No adapter or new owner/store; exact scopes and existing publication guards
+remain. Message windows, full load/ordinary commit and new-journal consumer integration
+are still open; this DTO alone does not make the backend bounded.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.

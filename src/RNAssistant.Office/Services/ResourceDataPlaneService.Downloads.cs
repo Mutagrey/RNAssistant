@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -31,7 +32,7 @@ namespace RNAssistant.Office.Services
         private long TransferBytes { get { return (long)_uploads.Count * MaximumUploadChunkBytes + _downloads.Values.Sum(item => item.ReservedBytes) +
             _openings.Sum(item => item.ReservedBytes) + _access.Values.Sum(item => item.ReservedBytes); } }
 
-        internal ResourceDownloadOpenResponse OpenDownload(ChatSession session, string workspaceId, long maximumBytes,
+        internal ResourceDownloadOpenResponse OpenDownload(ConversationMetadata session, string workspaceId, long maximumBytes,
             Func<CancellationToken, ResourceDownloadContent> capture, CancellationToken token = default(CancellationToken))
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(workspaceId) || capture == null ||

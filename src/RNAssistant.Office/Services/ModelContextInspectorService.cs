@@ -26,7 +26,7 @@ namespace RNAssistant.Office.Services
             ResourceAuthorityService authority = null)
         { _events = events; _payloads = payloads; _data = data; _authority = authority; }
 
-        internal ModelContextResponse Query(ChatSession session, ModelContextQuery query, CancellationToken token)
+        internal ModelContextResponse Query(ConversationMetadata session, ModelContextQuery query, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             ChatDiagnosticsScope.Require(session, query.ChatId, query.WorkspaceId);
@@ -133,7 +133,7 @@ namespace RNAssistant.Office.Services
             return response;
         }
 
-        internal ModelContextPayloadResponse Open(ChatSession session, ModelContextPayloadQuery query, CancellationToken token)
+        internal ModelContextPayloadResponse Open(ConversationMetadata session, ModelContextPayloadQuery query, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             ChatDiagnosticsScope.Require(session, query.ChatId, query.WorkspaceId);
@@ -204,7 +204,7 @@ namespace RNAssistant.Office.Services
             return values.Values.ToArray();
         }
 
-        private IReadOnlyList<ModelContextResourceDto> DescribeResources(ChatSession session, LlmTraceRecord trace,
+        private IReadOnlyList<ModelContextResourceDto> DescribeResources(ConversationMetadata session, LlmTraceRecord trace,
             AliasIndex aliases, string requestEventId)
         {
             var rows = new Dictionary<string, ModelContextResourceDto>(StringComparer.Ordinal);
@@ -238,7 +238,7 @@ namespace RNAssistant.Office.Services
             return rows.Values.OrderBy(row => row.Alias, StringComparer.Ordinal).ToArray();
         }
 
-        private void DescribeAuthority(ChatSession session, ModelContextResourceDto row)
+        private void DescribeAuthority(ConversationMetadata session, ModelContextResourceDto row)
         {
             var scope = row.Scope;
             if (_authority == null || scope == null ||

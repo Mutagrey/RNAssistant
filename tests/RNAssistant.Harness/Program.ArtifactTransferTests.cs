@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -202,7 +203,7 @@ namespace RNAssistant.Harness
                 };
                 foreach (var fixture in cases)
                 {
-                    var draft = ingestion.Stage(source, fixture.Key, fixture.Key.EndsWith(".txt") ? "text/plain" : "application/octet-stream", fixture.Value);
+                    var draft = ingestion.Stage(ConversationMetadata.From(source), fixture.Key, fixture.Key.EndsWith(".txt") ? "text/plain" : "application/octet-stream", fixture.Value);
                     var message = new ChatMessage { Role = "user", Content = "Original", Attachments = ingestion.LoadDrafts(source, new[] { draft.Id }).ToList() };
                     source.Messages.Add(message); ingestion.CommitAndLink(source, message, source.Messages.Count - 1);
                     var original = chats.DocumentArtifacts.Read(source, message.ResourceRefs.Single());

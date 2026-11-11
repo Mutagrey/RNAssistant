@@ -44,7 +44,7 @@ namespace RNAssistant.Core.Storage
                 correlation == null ? null : correlation.StepId);
         }
 
-        public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode)
+        public IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (mode == SessionEventReadMode.RequireComplete)
@@ -58,7 +58,7 @@ namespace RNAssistant.Core.Storage
             return _store.ReadEvents(session.Host, session.DocumentKey, session.Id);
         }
 
-        public ISessionEventReader OpenReader(ChatSession session)
+        public ISessionEventReader OpenReader(ConversationMetadata session)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             return _store.OpenEventReader(session.Host, session.DocumentKey, session.Id);
@@ -67,7 +67,7 @@ namespace RNAssistant.Core.Storage
         public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
         { return _store.ReadFinishEvidence(session, runId, references); }
 
-        public string ReadPayload(ChatSession session, SessionEvent sessionEvent)
+        public string ReadPayload(ConversationMetadata session, SessionEvent sessionEvent)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (sessionEvent == null) throw new ArgumentNullException(nameof(sessionEvent));

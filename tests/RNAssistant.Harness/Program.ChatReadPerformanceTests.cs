@@ -32,16 +32,15 @@ namespace RNAssistant.Harness
                     { ForbidFullLoads = true, ForbidHeaderReads = true };
                 var service = new ChatSessionService(adapter, guarded);
                 var draft = service.CreateChat("Unsaved");
-                var scope = service.LoadDiagnosticsSession(saved.Id);
+                var scope = service.LoadDiagnosticsMetadata(saved.Id);
                 AssertEqual(saved.Id, scope.Id, "diagnostics retain the addressed chat");
                 AssertEqual(saved.Revision, scope.Revision, "scope carries the durable revision");
                 AssertEqual(saved.DocumentAuthorityId, scope.DocumentAuthorityId, "scope preserves resource authority");
-                AssertEqual(0, scope.Messages.Count, "diagnostic scope does not hydrate the transcript");
-                AssertTrue(scope.LastRun == null, "diagnostic scope does not restore an executable continuation");
+                AssertTrue(!((object)scope is ChatSession), "read metadata cannot be submitted as a writable session");
                 AssertEqual(draft.Id, service.ActiveTransientSessionId, "diagnostics do not change selection");
-                AssertEqual(draft.Id, service.LoadDiagnosticsSession(draft.Id).Id, "unsaved chat keeps its exact empty scope");
+                AssertEqual(draft.Id, service.LoadDiagnosticsMetadata(draft.Id).Id, "unsaved chat keeps its exact empty scope");
                 AssertTrue(!store.IsPersisted(draft), "empty diagnostic read does not persist the draft");
-                RuntimeThrows<InvalidOperationException>(() => service.LoadDiagnosticsSession("absent"));
+                RuntimeThrows<InvalidOperationException>(() => service.LoadDiagnosticsMetadata("absent"));
                 AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(SessionEventFile(paths, saved))),
                     "viewing diagnostics does not recover or write the unfinished run");
             });

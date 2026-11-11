@@ -248,7 +248,7 @@ namespace RNAssistant.Harness
                                     message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok &&
                                     (message.Content ?? "").Contains(assignment ? "ResolutionsReady" : "RepliesReady")))
                                 {
-                                    var sent = new ChatEventStoreAdapter(store).Read(parent, SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
+                                    var sent = new ChatEventStoreAdapter(store).Read(ConversationMetadata.From(parent), SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
                                         .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged)
                                         .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).Single(item => item.State == AgentDeliveryState.Prepared);
                                     response = ModelProtocolWire.WriteAcceptedCall("Wait for the exact response", null, new ConversationToolCall {

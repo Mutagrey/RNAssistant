@@ -27,7 +27,7 @@ namespace RNAssistant.Office.Services
             _data = data ?? throw new ArgumentNullException(nameof(data));
         }
 
-        internal ChatEventPayloadResponse Open(ChatSession session, string eventId, CancellationToken token)
+        internal ChatEventPayloadResponse Open(ConversationMetadata session, string eventId, CancellationToken token)
         {
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(eventId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat and event are required.");

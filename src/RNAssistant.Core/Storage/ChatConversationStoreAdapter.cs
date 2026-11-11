@@ -34,9 +34,9 @@ namespace RNAssistant.Core.Storage
             return _store.Load(sessionId);
         }
 
-        public ChatSession ReadDiagnosticsSession(string sessionId)
+        public ConversationMetadata ReadMetadata(string sessionId)
         {
-            return _store.ReadDiagnosticsSession(sessionId);
+            return _store.ReadMetadata(sessionId);
         }
 
         public void Commit(ChatSession session, ConversationCommit commit)

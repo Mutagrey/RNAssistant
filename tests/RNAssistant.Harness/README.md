@@ -531,13 +531,18 @@ times; it has no machine-dependent time gate. Actual Office host-switch delivery
 and Windows timings remain separate qualification.
 
 `chat sessions: diagnostics do not hydrate or recover history` forbids catalog/full
-loads and verifies read-only identity/revision, unchanged history/selection and an
+loads and verifies typed immutable metadata, unchanged history/selection and an
 unsaved draft. `storage: busy chat stays visible` checks the short validated/complete
 event-read timeout and named holder diagnostics. `storage: CAS missing runtime body`
 keeps diagnostics addressable without execution hydration. `model context: workspace
 exchange and scope` checks the same identity-only workspace route; `bridge: typed
 trajectory query` checks `chat_storage_busy` instead of generic failure/empty success.
 These do not qualify the real Office controller or Windows lock durations.
+For metadata/lease changes also select exact leased export, trajectory payload,
+bounded upload and cancelled completion; `event feed:` covers its four reader
+cases. Pair with actual Office batch/restart, Workspace accepted-turn history and
+`inbox: recovery reconciles Office and Workspace receipts`. The DTO change does not
+require rebuilding or requalifying the new JSONL/index/restore mechanisms.
 `chat sessions: selection loads and binds once` verifies one session load and one
 active-pointer write, including explicit navigation during deferred Save As
 migration. Both ordinary selection and host initialization use this service owner.

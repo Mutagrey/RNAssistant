@@ -114,7 +114,7 @@ namespace RNAssistant.Harness
         {
             private readonly SessionEvent _fact;
             public EventFeedPageStore(SessionEvent fact) { _fact = fact; }
-            public ISessionEventReader OpenReader(ChatSession session) { return this; }
+            public ISessionEventReader OpenReader(ConversationMetadata session) { return this; }
             public SessionEventSlice Read(SessionEventPosition after, SessionEventPosition through, int limit,
                 CancellationToken cancellationToken)
             {
@@ -122,8 +122,8 @@ namespace RNAssistant.Harness
                 return new SessionEventSlice { Events = new[] { _fact }, HighWater = position, Next = position };
             }
             public SessionEvent Append(ChatSession session, SessionEventWrite write) { throw new NotSupportedException(); }
-            public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { throw new NotSupportedException(); }
-            public string ReadPayload(ChatSession session, SessionEvent sessionEvent) { throw new NotSupportedException(); }
+            public IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode) { throw new NotSupportedException(); }
+            public string ReadPayload(ConversationMetadata session, SessionEvent sessionEvent) { throw new NotSupportedException(); }
             public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
             { throw new NotSupportedException(); }
         }

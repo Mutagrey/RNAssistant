@@ -19,12 +19,12 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        private ChatSession LoadDiagnosticsSession(string chatId, string workspaceId)
+        private ConversationMetadata LoadDiagnosticsMetadata(string chatId, string workspaceId)
         {
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
-            var session = workspaceId == null ? _chatSessions.LoadDiagnosticsSession(chatId) :
-                ChatDiagnosticsScope.ReadWorkspaceSession(_paths, _chatStore, workspaceId, chatId);
+            var session = workspaceId == null ? _chatSessions.LoadDiagnosticsMetadata(chatId) :
+                ChatDiagnosticsScope.ReadWorkspaceMetadata(_paths, _chatStore, workspaceId, chatId);
             ChatDiagnosticsScope.Require(session, chatId, workspaceId);
             return session;
         }
@@ -32,7 +32,7 @@ namespace RNAssistant.Office
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
             request = request ?? new ChatTrajectoryRequest();
-            var session = LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
+            var session = LoadDiagnosticsMetadata(request.ChatId, request.WorkspaceId);
             var events = _eventStore.Read(session, SessionEventReadMode.Validated);
             if (!string.IsNullOrWhiteSpace(request.View) && !TrajectoryViews.IsSupported(request.View))
             {
@@ -80,9 +80,9 @@ namespace RNAssistant.Office
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for export.");
-            var session = LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
+            var session = LoadDiagnosticsMetadata(request.ChatId, request.WorkspaceId);
             var selection = request.ToExportRequest();
-            var source = new ChatSession { Id = session.Id, WorkspaceId = session.WorkspaceId, Host = session.Host, DocumentKey = session.DocumentKey };
+            var source = session;
             // Reservation precedes complete stream validation and ZIP construction; no UI/COM
             // work runs in the producer, and the captured stream never changes during delivery.
             return Task.Run(() => new TrajectoryExportDownloadService(_trajectoryExportService, _resourceData).Open(
@@ -93,8 +93,8 @@ namespace RNAssistant.Office
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId) || string.IsNullOrWhiteSpace(request.EventId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat and event are required.");
-            var session = LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
-            var source = new ChatSession { Id = session.Id, WorkspaceId = session.WorkspaceId, Host = session.Host, DocumentKey = session.DocumentKey };
+            var session = LoadDiagnosticsMetadata(request.ChatId, request.WorkspaceId);
+            var source = session;
             return Task.Run(() => new TrajectoryPayloadService(_eventStore, _toolExecutor.Payloads, _resourceData)
                 .Open(source, request.EventId, token), token);
         }

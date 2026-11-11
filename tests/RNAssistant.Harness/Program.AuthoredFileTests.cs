@@ -1,3 +1,4 @@
+using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -100,7 +101,7 @@ namespace RNAssistant.Harness
                 var uploadedText = source + new string('x', 33000);
                 var bytes = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(uploadedText)).ToArray();
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(FixturePaths.Value), store.DocumentArtifacts);
-                var draft = ingestion.Stage(session, "copy.htm", "text/html", bytes);
+                var draft = ingestion.Stage(ConversationMetadata.From(session), "copy.htm", "text/html", bytes);
                 var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                 session.Messages.Add(message);
                 ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
@@ -184,7 +185,7 @@ namespace RNAssistant.Harness
                 {
                     var codec = codecs[i];
                     var name = "original" + i + ".txt";
-                    var draft = ingestion.Stage(session, name, "text/plain", codec.GetPreamble().Concat(codec.GetBytes(source)).ToArray());
+                    var draft = ingestion.Stage(ConversationMetadata.From(session), name, "text/plain", codec.GetPreamble().Concat(codec.GetBytes(source)).ToArray());
                     var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                     session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                     var originalTarget = executor.ResourceGateway.Find(session, name, "document").Items.Single().Target;
@@ -256,7 +257,7 @@ namespace RNAssistant.Harness
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(FixturePaths.Value), store.DocumentArtifacts);
                 var source = "const a = 1;\n" + new string('x', 10 * 1024 * 1024) + "\nconst unique = slow(slow(value));\n";
                 var originalBytes = Encoding.UTF8.GetBytes(source);
-                var draft = ingestion.Stage(session, "large.js", "text/plain", originalBytes);
+                var draft = ingestion.Stage(ConversationMetadata.From(session), "large.js", "text/plain", originalBytes);
                 var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
                 session.Messages.Add(message);
                 ingestion.CommitAndLink(session, message, 0);
@@ -365,7 +366,7 @@ namespace RNAssistant.Harness
                     "verified large-file version survives chat restart");
 
                 var markdown = "# Large\n" + new string('m', 300000);
-                var mdDraft = ingestion.Stage(session, "large.md", "text/markdown", Encoding.UTF8.GetBytes(markdown));
+                var mdDraft = ingestion.Stage(ConversationMetadata.From(session), "large.md", "text/markdown", Encoding.UTF8.GetBytes(markdown));
                 var mdMessage = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { mdDraft.Id }).ToList() };
                 session.Messages.Add(mdMessage); ingestion.CommitAndLink(session, mdMessage, session.Messages.Count - 1);
                 var mdTarget = executor.ResourceGateway.Find(session, "large.md", "document").Items.Single().Target;
@@ -383,7 +384,7 @@ namespace RNAssistant.Harness
                     "Library downloads complete Markdown beyond the inline save limit");
 
                 var utf16 = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("first\r\nslow(value)\r\n")).ToArray();
-                var codeDraft = ingestion.Stage(session, "unicode.cs", "text/plain", utf16);
+                var codeDraft = ingestion.Stage(ConversationMetadata.From(session), "unicode.cs", "text/plain", utf16);
                 var codeMessage = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { codeDraft.Id }).ToList() };
                 session.Messages.Add(codeMessage); ingestion.CommitAndLink(session, codeMessage, session.Messages.Count - 1);
                 var codeTarget = executor.ResourceGateway.Find(session, "unicode.cs", "document").Items.Single().Target;
