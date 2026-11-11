@@ -1307,6 +1307,8 @@ namespace RNAssistant.Harness
                 Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
                 Test("external browser: navigation and bounds admission", ExternalBrowserAdmission),
                 Test("external browser: typed bridge trust", ExternalBrowserBridgeTrust),
+                Test("external browser: semantic Gateway delivery", ExternalBrowserSemanticGateway),
+                Test("external browser: read ownership and stale guards", ExternalBrowserReadGuards),
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
                 Test("bridge: long tool keeps controls responsive", BridgeLongToolKeepsControlsResponsive),
                 Test("bridge: agent run keeps controls responsive", BridgeAgentRunKeepsControlsResponsive),

@@ -8,6 +8,8 @@ External view использует PreviewSurface, address/navigation, compact c
 при 125%. Над menu/drag нативная страница временно скрывается, её состояние сохраняется.
 Shell 1280/100% и 420/125% просмотрена с synthetic native; реальные HWND overlays и
 визуальное принятие открыты. [Проверка](../browser/05_TEST_MATRIX.md#p5a).
+P6a добавляет read binding без изменения presentation/tokens/controls; existing
+External Browser fixture сохраняет narrow/125% coverage. Нового визуального слоя нет.
 
 ## Native window — In Review, 2026-11-11
 

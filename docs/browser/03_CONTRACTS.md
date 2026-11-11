@@ -5,7 +5,7 @@ Web и native host — consumers. Это минимальные границы �
 существующего runtime API. P1 presentation contract в конце реализован в Web,
 статус In Review; P2a import и P2b HTML resolver реализованы ниже.
 Автоматический lifetime вкладки Approved 2026-11-11; новые session APIs и P3–P6
-остаются Proposed. P2c не добавляет UI/bridge управления detached sessions.
+остаются Proposed за исключением реализованного ниже P6a read path. P2c не добавляет UI/bridge управления detached sessions.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
@@ -43,6 +43,35 @@ Web отклоняет несовпадение chat/document/exact source до 
 lease закрывается и при отказе. Unknown kind не выбирает иной renderer.
 Live редактор использует descriptor вместе с dirty/read-only/pending guards;
 state Ready подтверждает разрешённый source, а не возможность записи или успех Run.
+
+<a id="p6a-semantic-read"></a>
+## P6a: реализованное чтение external page — In Review, 2026-11-11
+
+Open P5a получает chatId из выбранного разговора; последующие navigation/layout
+не меняют владельца. `IExternalBrowserReadSource` даёт только runtime binding
+chat/session/document generation и bounded semantic content. Binding не хранится
+в Dock layout и не становится аргументом модели. При controller rebind старый
+read source отключается; новый подключается после native reset.
+
+Office: `core.find {scope:"browser"}` → `core.read {target:"Browser page: external"}`.
+Bound Workspace добавляет existing `type:"office"`; без Office binding Browser
+provider в workspace route пока недоступен. Discovery читает metadata, не DOM.
+Exact document guard действует до/после capture, без удержания Office gate во время
+WebView2 await. Provider проверяет owner/session/navigation generation повторно;
+close/reopen/navigation/host replacement/cancel дают отказ без принятия позднего body.
+
+Capture — fixed script в isolated world верхнего документа. До 160 nodes, 160 UTF-16
+символов на name, 16 000 суммарных символов names и 3000 посещённых nodes; scanning
+budget 100 ms, native read timeout 3 s. Text values controls, URL/title, private/hidden
+regions, frames и shadow DOM исключены; доступны role/name, disabled/checked и text.
+SourceComplete=false: это ограниченный semantic view, не full DOM. Повторное чтение
+обновляет capture, а не продолжает DOM pagination. Scripts/evaluate, screenshots и
+actions модели не предоставляются. Semantic labels/text остаются недоверенными данными.
+
+Existing ResourceAuthority/CAS сохраняют exact body; новая observation обновляет
+observed head той же page identity. Revision включает navigation generation и hash
+body. Это evidence чтения, не доказательство актуального DOM для будущего действия;
+P6b добавит exact element preparation/recheck/verify. Второго journal/store нет.
 
 ## Runtime entities и capability negotiation
 

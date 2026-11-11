@@ -8,6 +8,9 @@
 проходит existing source/token/binding gate; IDs назначает native owner.
 Hide удерживает страницу, close/rebind/root reload освобождают её. Без нового store,
 Application registry или Dockview. [Флаг и native gates](../browser/02_ARCHITECTURE_ADR.md#native-spike).
+P6a: Open закрепляет chatId; native source отдаёт fixed isolated-world capture
+existing ResourceGateway. Controller attachment отзывается до rebind/dispose и
+подключается после native reset. Model не получает IDs/CDP; document guard сохраняется.
 
 ## Native window — In Review, 2026-11-11
 

@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Services
                     {
                         ["type"] = "string",
                         ["description"] = "Optional user-level resource category. Catalog bodies are historical resources, not callable admission.",
-                        ["enum"] = new JArray("all", "conversation", "document", "selection", "html", "vba", "backups", "catalogs", "chats"),
+                        ["enum"] = new JArray("all", "conversation", "document", "selection", "html", "vba", "backups", "catalogs", "chats", "browser"),
                         ["default"] = "all"
                     }
                 },
@@ -38,7 +38,7 @@ namespace RNAssistant.Core.Services
             var schema = Office();
             var properties = (JObject)schema["properties"];
             var scope = (JObject)properties["scope"];
-            scope["enum"] = new JArray("document", "selection", "vba");
+            scope["enum"] = new JArray("document", "selection", "vba", "browser");
             scope["default"] = "document";
             properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("office"),
                 ["description"] = "Find resources in this run's exact Office document." };

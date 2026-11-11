@@ -21,6 +21,9 @@ namespace RNAssistant.Office
 
     public sealed partial class AssistantController
     {
+        internal void SetExternalBrowserReadSource(Contracts.IExternalBrowserReadSource source)
+        { if (_toolExecutor != null) _toolExecutor.ExternalBrowserReadSource = source; }
+
         internal WorkspaceOfficeRunTarget CaptureWorkspaceOfficeTarget()
         { return new WorkspaceOfficeCapabilityService(_adapter, _toolExecutor, _paths).CaptureCurrentTarget(); }
 

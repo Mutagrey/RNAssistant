@@ -36,7 +36,8 @@
     if (!available || !active || session || opening || closed) return;
     opening = true; var version = generation;
     surface.waiting({ title: "Внешний браузер" }, "Запуск WebView2…");
-    var request = send("externalBrowserCommand", { action: "Open" }); openingRequest = request.requestId;
+    var chat = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+    var request = send("externalBrowserCommand", { action: "Open", chatId: chat && chat.target.sessionId || state.activeChatId || null }); openingRequest = request.requestId;
     try {
       var result = await request;
       if (version !== generation) {

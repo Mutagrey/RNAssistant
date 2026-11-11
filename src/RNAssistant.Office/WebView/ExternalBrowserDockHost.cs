@@ -10,7 +10,7 @@ using RNAssistant.Office.Services;
 namespace RNAssistant.Office.WebView
 {
     // The replaceable placement owner. No browser policy, navigation history or durable store.
-    internal sealed class ExternalBrowserDockHost : IExternalBrowserHost, IDisposable
+    internal sealed class ExternalBrowserDockHost : IExternalBrowserHost, IExternalBrowserReadSource, IDisposable
     {
         private readonly Control _parent;
         private readonly WebView2 _shell;
@@ -21,6 +21,41 @@ namespace RNAssistant.Office.WebView
         private bool _disposed;
         private string _placement = "hidden";
         private long _layoutRevision;
+        private volatile ExternalBrowserReadTarget _readTarget;
+
+        public ExternalBrowserReadTarget TargetFor(string chatId)
+        { var target = _readTarget; return target != null && target.ChatId == chatId ? target : null; }
+
+        public async Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!_parent.InvokeRequired) throw ExternalBrowserResourceProvider.Error("Browser reads must be dispatched asynchronously off the UI thread.", "browser_dispatch_invalid");
+            if (_disposed || !target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The browser binding is no longer current.", "browser_document_stale");
+            var completion = new TaskCompletionSource<ExternalBrowserSemanticContent>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _parent.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    if (completion.Task.IsCompleted) return;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (_disposed || !target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The browser binding is no longer current.", "browser_document_stale");
+                    var value = await _page.ReadAsync(target);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The page changed during capture.", "browser_document_stale");
+                    completion.TrySetResult(value);
+                }
+                catch (OperationCanceledException) { completion.TrySetCanceled(); }
+                catch (RNAssistant.Core.Models.ResourceRequestException error) { completion.TrySetException(error); }
+                catch (Exception) { completion.TrySetException(ExternalBrowserResourceProvider.Error("The native semantic capture failed.", "browser_capture_failed")); }
+            }));
+            if (await Task.WhenAny(completion.Task, Task.Delay(3000, cancellationToken)).ConfigureAwait(false) != completion.Task)
+            {
+                completion.TrySetCanceled();
+                cancellationToken.ThrowIfCancellationRequested();
+                throw ExternalBrowserResourceProvider.Error("Browser capture timed out; no observation was accepted.", "browser_read_timeout");
+            }
+            return await completion.Task.ConfigureAwait(false);
+        }
 
         public ExternalBrowserDockHost(Control parent, WebView2 shell, string assets, Action<ExternalBrowserStateDto> publish)
         {
@@ -53,7 +88,8 @@ namespace RNAssistant.Office.WebView
             {
                 if (_page != null) throw new InvalidOperationException("Пилот поддерживает одну Browser-вкладку.");
                 if (!_initializing.IsCompleted) throw new InvalidOperationException("Предыдущий WebView2 ещё завершает запуск. Повторите открытие через несколько секунд.");
-                var page = new ExternalBrowserPage(_assets);
+                if (request.ChatId != null && request.ChatId.Length > 256) throw new InvalidOperationException("Некорректный владелец Browser-вкладки.");
+                var page = new ExternalBrowserPage(_assets, request.ChatId);
                 _page = page; page.Control.Bounds = new Rectangle(0, 0, 1, 1);
                 _parent.Controls.Add(page.Control); page.Control.BringToFront();
                 page.Changed += Publish;
@@ -104,11 +140,11 @@ namespace RNAssistant.Office.WebView
             var value = _page.Snapshot(_placement + " · DPI " + _parent.DeviceDpi + " · controls 1 · focus " + _page.Control.ContainsFocus);
             value.LayoutRevision = _layoutRevision; return value;
         }
-        private void Publish() { if (_page != null && !_disposed) _publish(Snapshot()); }
+        private void Publish() { _readTarget = _page?.ReadTarget; if (_page != null && !_disposed) _publish(Snapshot()); }
 
         public void Reset()
         {
-            var page = _page; _page = null; _placement = "hidden";
+            var page = _page; _page = null; _readTarget = null; _placement = "hidden";
             if (page == null) return;
             page.Changed -= Publish; page.Dispose();
             _publish(page.Snapshot("controls 0; scope closed"));

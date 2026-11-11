@@ -13,6 +13,15 @@ Neither test builds or qualifies WinForms/Office; [Windows gate](../../docs/brow
 
 ## Find a test
 
+P6a semantic read: `external browser:` runs four checks (admission, bridge,
+Gateway/CAS/model delivery, ownership/stale/bounds/cancellation). Pair with
+`workspace: Office target stays pinned` for the delegated read and pre-capture
+document conflict. Build once; the second filter uses `--no-build`.
+`tests/web/external-browser-read.test.js` checks the embedded capture script in an
+isolated Chrome world, privacy omissions and bounds; `external-browser.test.js`
+also checks owner binding only at Open. No Office/VSTO build is required here;
+[native delivery is still open](../../docs/browser/05_TEST_MATRIX.md#p6a).
+
 Use the registrations in `Program.cs` to choose a filter before running anything.
 Locate the matching fixture, then read its relevant section below.
 

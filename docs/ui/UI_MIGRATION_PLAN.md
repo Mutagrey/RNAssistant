@@ -9,6 +9,9 @@ WPF/Composition и отдельное окно заранее не вводят�
 Host-neutral admission и synthetic Shell lifecycle проходят. Windows compilation,
 HWND focus/DPI/overlays/process exit и визуальное принятие — Open.
 [Запуск, 4 действия ревью и ограничения](../browser/05_TEST_MATRIX.md#p5a).
+P6a реализован / In Review: bounded semantic read той же страницы через existing
+Gateway, с chat/document ownership и CAS evidence. Пять Harness checks и два Chrome
+fixtures проходят; Windows/controller delivery открыт. [Scope/evidence](../browser/05_TEST_MATRIX.md#p6a).
 
 ## Native window — In Review, 2026-11-11
 
@@ -268,6 +271,9 @@ P3b реализован / In Review: restore получает свежий head
 [Проверки и ревью](../browser/05_TEST_MATRIX.md#результаты-p3b--2026-11-11).
 Остаток P3 — presentation plugin source/release и сверка нужных capabilities у
 существующих consumers, без общего descriptor ради самого плана.
+Принятый порядок от 2026-11-11: P5a → минимальный P6 workflow, затем P4 diff и
+persistent annotations отдельными срезами. Existing history/restore/visual selection
+сохраняются; [очередь и зависимости](../browser/04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
 [Scope и порядок](../browser/04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
 Preview standalone source, перенос зависимостей, настоящий diff и external native browser остаются в плане. Концепция
 Approved; визуальное принятие production и Windows/Office evidence остаются Open.

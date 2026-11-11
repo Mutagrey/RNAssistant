@@ -41,7 +41,12 @@ namespace RNAssistant.Office.WebView
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
-        public IExternalBrowserHost ExternalBrowser { get; set; }
+        private IExternalBrowserHost _externalBrowser;
+        public IExternalBrowserHost ExternalBrowser
+        {
+            get { return _externalBrowser; }
+            set { _externalBrowser = value; _controller.SetExternalBrowserReadSource(value as IExternalBrowserReadSource); }
+        }
 
         public bool HostSwitchPending
         {
@@ -67,6 +72,7 @@ namespace RNAssistant.Office.WebView
                 _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
                 _controller.ResourceAuthorityChanged -= ReportResourceChanged;
                 _agentCommunication.Unregister("office");
+                _controller.SetExternalBrowserReadSource(null);
                 _controller = controller;
                 ConfigureAgentCommunication();
                 _controller.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
@@ -1098,6 +1104,7 @@ namespace RNAssistant.Office.WebView
 
         public void Dispose()
         {
+            ExternalBrowser = null;
             WindowHost = null;
             _agentCommunication.Clear();
             lock (_hostSwitchSync)

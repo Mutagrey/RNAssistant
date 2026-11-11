@@ -779,6 +779,10 @@ namespace RNAssistant.Office.Services
                     yield return new ResourceIntentPlan(provider, ContextResourceProvider.DataKind, "conversation");
                     yield return new ResourceIntentPlan(provider, ContextResourceProvider.ObservationKind, "document");
                 }
+                else if (provider is ExternalBrowserResourceProvider)
+                {
+                    yield return new ResourceIntentPlan(provider, ExternalBrowserResourceProvider.Kind, "browser");
+                }
                 else
                 {
                     yield return new ResourceIntentPlan(provider, null, "conversation");
@@ -1098,6 +1102,7 @@ namespace RNAssistant.Office.Services
                 case "html":
                 case "backups":
                 case "catalogs":
+                case "browser":
                     return value;
                 default:
                     throw new ResourceRequestException(
@@ -1119,6 +1124,7 @@ namespace RNAssistant.Office.Services
             var type = separator < 0 ? string.Empty : target.Substring(0, separator);
             switch (type)
             {
+                case "Browser page": return "browser";
                 case "document": return "document";
                 case "Excel range": return "document";
                 case "Excel table": return "document";
@@ -1161,6 +1167,7 @@ namespace RNAssistant.Office.Services
                 descriptor.Metadata.ContainsKey("authoredFile")) return "file";
             switch (kind)
             {
+                case ExternalBrowserResourceProvider.Kind: return "Browser page";
                 case RNAssistant.Core.Storage.DocumentArtifactStore.SharedContextKind: return "shared context";
                 case ContextResourceProvider.DataKind: return "context data";
                 case ContextResourceProvider.ObservationKind: return "Office observation";
@@ -1212,6 +1219,7 @@ namespace RNAssistant.Office.Services
             string scope;
             if (descriptor.Metadata != null && descriptor.Metadata.TryGetValue("scope", out scope) && scope == "document") return scope;
             if (descriptor.Provider == "catalog") return "catalogs";
+            if (descriptor.Provider == "browser") return "browser";
             if (type == "Excel search scope") return "document";
             if (type == "Excel table") return "document";
             if (type == "Excel name") return "document";

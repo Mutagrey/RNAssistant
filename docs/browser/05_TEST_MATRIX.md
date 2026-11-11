@@ -6,6 +6,29 @@
 Выбор проверок — по
 [Harness guide](../../tests/RNAssistant.Harness/README.md).
 
+<a id="p6a"></a>
+## P6a: semantic read — 2026-11-11
+
+На macOS проходят четыре Harness checks `external browser:`: прежние admission/bridge
+и новые Gateway delivery/ownership guards. Actual ToolRuntime → Gateway проверяет
+semantic discovery/read, один capture на чтение, отсутствие runtime handles в model
+projection, existing CAS body и смену observed revision после изменения content.
+Отдельно проходит `workspace: Office target stays pinned`: bound Workspace читает
+свою страницу, смена документа отклоняется до capture. Host/controller остаётся fake.
+
+Chrome `external-browser-read.test.js` выполняет production capture script через CDP
+isolated world: role/name/state, private input/textarea/select/contenteditable/regions,
+hidden/iframe/shadow/URL omissions, неподмена DOM APIs кодом страницы, fresh DOM,
+ограничение большого документа и отсутствие действий. Existing `external-browser`
+fixture проверяет chatId только при Open, прежние navigation/layout/narrow/cleanup.
+
+Windows compile/WebView2/controller attachment ещё Open. При первом запуске P5a:
+1) из чата открыть внешний Browser; 2) попросить прочитать страницу; 3) изменить её
+и прочитать снова; 4) проверить другой чат и close/navigation во время capture.
+Нужны фото видимого результата/ошибки, без передачи logs/files. Пока нет standalone
+Workspace provider, model actions, element bindings, screenshots или P4 lifecycle.
+Нового visual layout нет; P5a visual acceptance и native evidence сохраняют свой gate.
+
 <a id="p5a"></a>
 ## P5a: экспериментальный WinForms child — 2026-11-11
 

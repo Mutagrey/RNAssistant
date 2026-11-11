@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.5.0-dev
+
+- The opt-in External Browser pilot exposes a chat-bound, bounded semantic page
+  read through existing `core.find/read`, including the bound Workspace Office route.
+  Observations omit text field values/private regions and use the existing CAS;
+  navigation, document changes and close invalidate pending captures. Agent actions
+  and standalone Workspace access are separate; native Windows delivery remains open.
+
 ### 16.4.0-dev
 
 - Opt-in External Browser pilot embeds one unprivileged WinForms WebView2 page in

@@ -280,7 +280,8 @@ namespace RNAssistant.Office.Services
                 var provider = ResourceUri.Parse(exact.Uri).Provider;
                 // Already-materialized state/context/catalog resources are activated
                 // by their publication owners, never as a side effect of a read.
-                if (provider != "state" && provider != "context" && scope.Kind != "catalog" && (head == null || RNAssistant.Core.Services.ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId) &&
+                if (provider != "state" && provider != "context" && scope.Kind != "catalog" && (head == null ||
+                    (provider == "browser" || RNAssistant.Core.Services.ChatResourceUri.TryGetCurrentArtifactId(session, exact, out artifactId)) &&
                     (head.Revision == null || head.Revision.Revision != exact.Revision)))
                     publication = ResourceAuthorityCommit.Create(scope, snapshot.Generation, null,
                     new[] { new ResourceHeadChange(identity, head, ResourceHeadState.Known(exact, snapshot.Generation + 1)) },

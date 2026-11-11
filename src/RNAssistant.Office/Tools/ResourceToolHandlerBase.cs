@@ -27,6 +27,16 @@ namespace RNAssistant.Office.Tools
 
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
         {
+            object target;
+            // Native capture awaits WebView2 on its UI thread; neither reads nor target searches
+            // may block that thread. Provider routing/retention still use the existing Gateway.
+            if (context.Arguments.TryGetValue("target", out target) && (target as string)?.Trim() == ExternalBrowserResourceProvider.Target)
+                return Task.Run(() => ExecuteBound(context, cancellationToken), cancellationToken);
+            return ExecuteBound(context, cancellationToken);
+        }
+
+        private Task<ToolHandlerResult> ExecuteBound(ToolHandlerContext context, CancellationToken cancellationToken)
+        {
             cancellationToken.ThrowIfCancellationRequested();
             if (Session == null)
                 return OfficeToolFailure.Rejected(

@@ -1,8 +1,20 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets + P2c lifecycle checks + P3a source failure + P3b restore freshness.
+Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot и P6a semantic read.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
+
+## P6a: semantic read — In Review, 2026-11-11
+
+Реализован read-only consumer одной страницы P5a: `core.find/read` через existing
+Gateway, с chat ownership, exact document guard и navigation generation. Native
+capture — isolated world, bounded semantic data без текстовых значений controls и
+private regions; sourceComplete=false. Existing CAS/authority сохраняют evidence;
+новых session stores/API управления сессиями нет. Bound Workspace использует
+`type=office`; standalone Workspace без Office binding пока не подключён.
+Пять адресных Harness checks и два Chrome fixtures проходят. Capture/controller
+delivery и compilation на Windows остаются Open. [Контракт](03_CONTRACTS.md#p6a-semantic-read),
+[evidence](05_TEST_MATRIX.md#p6a). Product `16.5.0-dev`; код и локальные проверки завершены.
 
 ## P5a: WinForms в Dockview — In Review, 2026-11-11
 
@@ -27,7 +39,8 @@ P3a закоммичен `8d337666` (`16.3.2-dev`). В следующем сре
 конфликт после чтения не повторяется автоматически. Instance и iframe сохранены.
 Existing `browser-saved-views` red → green, включая 1280/100% и 420/125%; новых API
 или stores нет. [Evidence/ревью](05_TEST_MATRIX.md#результаты-p3b--2026-11-11).
-Код и локальная проверка завершены; visual acceptance и Windows/WebView2 evidence открыты.
+Закоммичен `13a4a5b8` (`16.3.3-dev`); прежние релевантные browser passes переиспользованы,
+pre-commit version check прошёл. Visual acceptance и Windows/WebView2 evidence открыты.
 
 ## P3a: ошибка исходников без подмены release — In Review, 2026-11-11
 
@@ -262,8 +275,10 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Далее остаток P3: source/release presentation и сверка существующих capabilities;
-новый descriptor добавлять только при конкретном consumer/расхождении.
-Instance owner, grants, публикация и данные остаются у прежних owners.
-[План](04_MIGRATION_PLAN.md#развитие-после-p1). Отдельный session слой не нужен заранее.
-Визуальное ревью P1/P2a/P2b, pointer routing и Windows evidence — отдельные открытые gates.
+Далее P6b: один локальный workflow read → fill/click → verify у existing native owner
+через ToolRuntime, с exact element binding, recheck и unknown effect без retry.
+Отдельный P3c с общим descriptor без consumer не нужен; P4 diff и persistent annotations
+идут после первого рабочего P6 workflow. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
+Native Windows evidence P5a, визуальное принятие внутренних views и известный
+focus/pointer gap остаются отдельными открытыми задачами, а не поводом повторять
+все проверки при каждом срезе. Instance/grant/publication owners сохраняются.

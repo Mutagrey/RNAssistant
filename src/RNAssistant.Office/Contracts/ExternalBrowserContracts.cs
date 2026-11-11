@@ -27,6 +27,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("action", Required = Required.Always)] public ExternalBrowserAction Action { get; set; }
         [JsonProperty("sessionId")] public string SessionId { get; set; }
         [JsonProperty("url")] public string Url { get; set; }
+        [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("bounds")] public ExternalBrowserBoundsDto Bounds { get; set; }
     }
 
@@ -54,5 +55,38 @@ namespace RNAssistant.Office.Contracts
     public interface IExternalBrowserHost
     {
         Task<ExternalBrowserStateDto> ExecuteAsync(ExternalBrowserCommandPayload request, CancellationToken cancellationToken);
+    }
+
+    // Runtime-only binding. Never a model argument or a persisted Dock route.
+    public sealed class ExternalBrowserReadTarget
+    {
+        public string ChatId { get; }
+        public string SessionId { get; }
+        public long DocumentGeneration { get; }
+        public ExternalBrowserReadTarget(string chatId, string sessionId, long documentGeneration)
+        { ChatId = chatId; SessionId = sessionId; DocumentGeneration = documentGeneration; }
+        public bool Matches(ExternalBrowserReadTarget other)
+        { return other != null && ChatId == other.ChatId && SessionId == other.SessionId && DocumentGeneration == other.DocumentGeneration; }
+    }
+
+    public sealed class ExternalBrowserSemanticNode
+    {
+        [JsonProperty("role")] public string Role { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("disabled")] public bool Disabled { get; set; }
+        [JsonProperty("checked")] public bool? Checked { get; set; }
+    }
+
+    public sealed class ExternalBrowserSemanticContent
+    {
+        [JsonProperty("nodes")] public ExternalBrowserSemanticNode[] Nodes { get; set; }
+        [JsonProperty("truncated")] public bool Truncated { get; set; }
+        [JsonProperty("visited")] public int Visited { get; set; }
+    }
+
+    public interface IExternalBrowserReadSource
+    {
+        ExternalBrowserReadTarget TargetFor(string chatId);
+        Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken);
     }
 }

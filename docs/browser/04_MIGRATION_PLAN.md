@@ -1,8 +1,9 @@
 # Universal Browser: план реализации
 
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
-P2c automatic lifecycle — **проверен host-neutral**; P3a source failure — **In Review**;
-остаток P3–P7 **Planned / Proposed**.
+P2c automatic lifecycle — **проверен host-neutral**; P3a/P3b plugin fixes — **In Review**;
+P5a native pilot и P6a semantic reads — **реализованы / In Review**;
+P4 и остальная часть P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
 [исходник](00_SOURCE_SPEC.md), [аудит](01_AUDIT.md), [ADR](02_ARCHITECTURE_ADR.md),
@@ -28,6 +29,57 @@ Native spike подготовлен P0 и может выполняться не
 зависит от native evidence. Внутренние UI-срезы не ждут Windows. Не начинать одновременно миграцию
 всех viewers. Каждый этап заканчивается обновлением canonical docs, фактическим
 evidence и ровно одним следующим шагом в [Progress](06_PROGRESS.md).
+
+## Порядок оставшейся работы — 2026-11-11
+
+**Approved:** пользователь продолжил P6a после оценки очереди и переноса P4.
+Приоритет — первый рабочий сценарий агента в браузере. Это изменение
+очереди, не исключение возможностей из общей цели и не новые постоянные ограничения.
+
+| Срез | Достаточный результат | Порядок / зависимость |
+|---|---|---|
+| P1–P3 baseline | Существующие HTML/plugin views, импорт, check/publish/restore и automatic lifetime; P3b — `13a4a5b8`. Остаются visual acceptance и известный focus/pointer gap | Не начинать новый P3c ради общего DTO; plugin capability projection расширять вместе с конкретным consumer |
+| P5a ручной Browser | Уже подготовленный пилот одной внешней страницы; исправления по реальному Windows HWND/DPI/focus/cleanup evidence | Проверить на первом доступном Windows-запуске; независимо от P4. До evidence не расширять embedding на все viewers |
+| P6a чтение | Один external target из P5a → bounded semantic observation через existing Resource Gateway; exact runtime binding, document generation и исключение sensitive values | Реализован / In Review; host-neutral Gateway и Chrome capture проверены, WebView2/controller delivery на Windows открыт |
+| P6b действие | Одна локальная fixture: открыть → прочитать → заполнить → нажать → проверить. Existing ToolRuntime/policy/evidence; stale/ambiguous target и unknown effect без replay | После P6a; проверка эффекта и конфликта с пользователем входят сразу, не откладываются в P7 |
+| P4a сравнение | Bounded code/source diff выбранной пары через владельцев HTML/plugin versions; явно отличать code revision от данных preview | После первого рабочего P6b либо раньше при конкретной потребности сравнивать перед apply/restore |
+| P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отдельно после P4a или по потребности вести замечания между открытиями; не условие P5/P6a–b |
+| Остальные P5/P6 capabilities | Дополнительные targets/страницы, persistent profiles, разрешённые popup/download, screenshots, shared sessions | Самостоятельные продуктовые срезы после базового workflow; screenshot включается только с privacy gate. Не создавать весь перечень API заранее |
+| P7 qualification | Совместная проверка поддержанных сценариев, Windows/Office, security/performance/cleanup и release evidence | Локальные проверки сопровождают срезы; широкий итоговый прогон — на интеграционной точке/кандидате, а не после каждой правки |
+
+Перенос P4 не отменяет existing history/restore и отправку visual selection в чат.
+P6 actions используют observations/effect verification, а не annotation status или
+Browser Diff. Screenshot/annotate/compare не нужны первому P6a–b и не изображаются
+поддержанными. Для будущего P4 сохраняются exact source/revision, различие code/data
+и существующие evidence owners; новый annotation service/store заранее не создаётся.
+
+Один срез — один пользовательский результат у существующего owner, с минимальной
+проверкой его риска. Предыдущий pass переиспользуется, пока релевантный код, tests,
+dependencies и environment не изменились; новый baseline нужен для конкретного
+сравнения/дефекта. Не повторять общий Browser-suite ради очередного commit; известный
+focus/pointer gap разбирать отдельным адресным сценарием. Docs-only — diff/links,
+pre-commit version check сохраняется. Это применение [действующих правил](../development-rules.md),
+без новых обязательных review, отчётов или общих build/test gates.
+Windows evidence и независимые domain fixes можно вести параллельно; изменения
+одного Shell/native owner выгоднее делать последовательно, без повторного аудита
+одних и тех же файлов в нескольких задачах.
+
+## P6a: чтение одной external page — In Review, 2026-11-11
+
+Owner: Office ResourceGateway/ResourceAuthority и существующий native page owner.
+`core.find scope=browser` и `core.read` используют semantic target одной страницы,
+закреплённой за chat при Open. Bound Workspace использует прежний `type=office`
+маршрут; Workspace без Office binding этим срезом не подключён. До/после capture
+проверяется exact document guard; во время ожидания WebView2 Office gate не держится.
+Close/rebind/navigation и cancellation не позволяют принять поздний снимок.
+
+Фиксированный script выполняется в isolated world: bounded role/name/state/text,
+без текстовых значений controls, URL/title, private regions, frames и shadow DOM.
+Existing Gateway публикует capture в CAS/authority; model не получает runtime IDs.
+Навигационное поколение не является revision изменяемого DOM: новое чтение получает
+новый content hash, а element binding/action verification остаются P6b.
+Новых Browser session stores, UI controls или model-facing CDP/evaluate нет.
+[Контракт](03_CONTRACTS.md#p6a-semantic-read), [проверки](05_TEST_MATRIX.md#p6a).
 
 ## P1: конкретный production slice
 

@@ -22,6 +22,7 @@ namespace RNAssistant.Office.Tools
 {
     public sealed class OfficeToolExecutor
     {
+        public IExternalBrowserReadSource ExternalBrowserReadSource { get; set; }
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly IReadOnlyList<ToolCatalogEntry> _adapterTools;
         private readonly VbaToolExecutor _vbaExecutor;
@@ -116,7 +117,7 @@ namespace RNAssistant.Office.Tools
                 readAttachmentText,
                 BeginLiveOfficeRead,
                 _resourceAuthority, _catalogPublication, readAttachmentBytes,
-                () => AgentJavaScriptEnabled);
+                () => AgentJavaScriptEnabled, () => ExternalBrowserReadSource);
             _markdownDocuments = new MarkdownDocumentService(_resourceGateway, new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads));
             _authoredFiles = new AuthoredFileService(_resourceGateway,
                 new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads), Payloads);

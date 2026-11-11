@@ -45,6 +45,7 @@ const {withPreviewPage} = require('./preview-session');
       await page.locator('#workspaceLayout').click(); await page.getByRole('menuitem', {name: action, exact: true}).click();
     }
     assert.equal(await page.evaluate(() => externalProbe.calls.filter(c => c.action === 'Open').length), 1, 'layout restore retains native identity');
+    assert.equal(await page.evaluate(() => externalProbe.calls.find(c => c.action === 'Open').chatId), 'preview-chat', 'page pins the originating chat once when opened');
     const address = root.getByRole('textbox', {name: 'Адрес материала'});
     await address.fill('https://example.org/'); await address.press('Enter');
     await page.waitForFunction(() => externalProbe.calls.some(c => c.action === 'Navigate' && c.url === 'https://example.org/'));
@@ -57,6 +58,7 @@ const {withPreviewPage} = require('./preview-session');
     await page.evaluate(() => RNAssistantDockWorkspace.show('external-browser'));
     await page.waitForFunction(() => externalProbe.calls.filter(c => c.action === 'Layout').at(-1).bounds.visible);
     assert.equal(await page.evaluate(() => externalProbe.live.sessionId), initial, 'hide/show retains native page');
+    assert.ok(await page.evaluate(() => externalProbe.calls.filter(c => c.action !== 'Open').every(c => c.chatId === undefined)), 'navigation/layout cannot transfer chat ownership');
     await root.locator('.browser-object-content').press('Enter');
     assert.ok(await page.evaluate(() => externalProbe.calls.some(c => c.action === 'Focus')), 'keyboard entry routes to native focus');
     if (process.env.BROWSER_P5_SCREENSHOT) await page.screenshot({path: process.env.BROWSER_P5_SCREENSHOT + '-wide.png'});

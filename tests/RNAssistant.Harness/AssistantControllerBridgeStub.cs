@@ -13,6 +13,8 @@ namespace RNAssistant.Office
 {
     public sealed class AssistantController
     {
+        internal IExternalBrowserReadSource BrowserReadSource { get; private set; }
+        internal void SetExternalBrowserReadSource(IExternalBrowserReadSource source) { BrowserReadSource = source; }
         internal RNAssistant.Core.Storage.AppDataPaths StoragePaths { get; }
         internal IReadOnlyList<RNAssistant.Application.Conversations.ConversationActiveSnapshot> ActiveChatRuns()
         { return new RNAssistant.Application.Conversations.ConversationActiveSnapshot[0]; }

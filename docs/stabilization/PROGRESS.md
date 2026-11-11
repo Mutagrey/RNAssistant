@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## External Browser P6a — In Review, 2026-11-11
+
+Одна страница P5a доступна через `core.find/read` в исходном чате и bound Workspace.
+Gateway сохраняет bounded isolated-world observation в existing CAS; chat ownership,
+document guard и navigation generation защищают capture. Model actions/element
+binding и standalone Workspace без Office target пока отсутствуют. Пять адресных
+Harness checks и два Chrome fixtures проходят; Windows compile/WebView2/controller
+delivery открыты. [Контракт](../browser/03_CONTRACTS.md#p6a-semantic-read),
+[evidence](../browser/05_TEST_MATRIX.md#p6a). Далее P6b; P4 перенесён после первого workflow.
+
 ## External Browser P5a — In Review, 2026-11-11
 
 Добавлен opt-in WinForms WebView2 в existing Dockview: одна внешняя страница,

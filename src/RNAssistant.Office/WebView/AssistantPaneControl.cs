@@ -95,6 +95,7 @@ namespace RNAssistant.Office.WebView
                 if (rebound)
                 {
                     if (_externalBrowser != null) await _externalBrowser.ResetAsync().ConfigureAwait(true);
+                    _bridge.ExternalBrowser = _externalBrowser;
                     return;
                 }
                 await Task.Delay(25).ConfigureAwait(false);

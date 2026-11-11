@@ -1018,6 +1018,14 @@ batch is not a complete source. Core contracts live in `Resource*Models.cs` and
 
 ## Providers
 
+P6a (2026-11-11): `ExternalBrowserResourceProvider` добавляет одну chat-owned page
+в Office Gateway (`scope=browser`), также через bound Workspace `type=office`.
+Metadata discovery не читает DOM; semantic read получает bounded native capture,
+проверяет exact document/session/generation и публикует observed head/body через
+existing authority/CAS. `sourceComplete=false`; page text недоверен, form text values
+не выдаются. Navigation generation не заменяет DOM/element recheck для действий.
+[Контракт и ограничения](browser/03_CONTRACTS.md#p6a-semantic-read).
+
 Core `ResourceProviderRouter<TProvider>` owns canonical provider registration, selection
 and URI routing for Office and CLI. It is a router, not the common find/read contract.
 `ResourceGatewayService` owns Office-specific

@@ -87,8 +87,20 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolResultStatus.Ok, live.Result.Status,
                         "workspace can read the pinned Office document");
 
+                    var browserSource = new HarnessBrowserReadSource { Target = new RNAssistant.Office.Contracts.ExternalBrowserReadTarget(session.Id, "workspace-page", 1) };
+                    executor.ExternalBrowserReadSource = browserSource;
+                    var browserCall = new ToolCall("workspace-browser-read", "core.read", "{}");
+                    var browserExecution = new ToolExecutionContext(browserCall,
+                        new ToolPolicySnapshot(browserCall.Name, "test", ResourceReadToolHandler.Policy),
+                        "run-one", "run-one", "step", DateTime.UtcNow, false, 1);
+                    Func<ToolHandlerResult> readBrowser = () => initial.ResourceRead.ExecuteAsync(new ToolHandlerContext(browserExecution,
+                        new Dictionary<string, object> { ["target"] = ExternalBrowserResourceProvider.Target, ["representation"] = "text" }), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolResultStatus.Ok, readBrowser().Result.Status, "bound Workspace read uses its own browser source through the same Gateway");
+
                     adapter.DocumentKeyValue = "another-document";
                     adapter.RuntimeDocumentKeyValue = "another-runtime";
+                    AssertEqual(ToolResultStatus.Error, readBrowser().Result.Status, "a pinned Workspace run cannot read a replacement document's browser");
+                    AssertEqual(1, browserSource.Captures, "document conflict is refused before native capture");
                     var changed = office.ForTarget(target, session, new AppSettings(), "run-one");
                     AssertTrue(!changed.Available, "switching documents does not retarget the run");
                     AssertTrue(initial.Tools.Select(item => item.Entry.Id).OrderBy(id => id).SequenceEqual(

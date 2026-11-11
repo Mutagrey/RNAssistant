@@ -8,6 +8,9 @@ Host с `RNA_BROWSER_PILOT=1` добавляет во вкладку выбор�
 Hide/move/split/restore сохраняют page; close/reopen создают новую. Popup/download
 и permissions отклоняются явно. Без native capability пункта нет; восстановленная
 вкладка показывает недоступность. [Ревью](../browser/05_TEST_MATRIX.md#p5a).
+P6a: страница принадлежит разговору, из которого открыта. Hide/move/navigation не
+переназначают владельца; close/reopen создаёт новую привязку. Прочитать страницу можно
+из исходного document chat или bound Workspace; [ограничения](../browser/03_CONTRACTS.md#p6a-semantic-read).
 
 ## Native window — In Review, 2026-11-11
 
