@@ -40,7 +40,7 @@ text creation and append, scalar preferences, active selection, metadata, catalo
 headers without storage usage, bounded message windows and explicit full loading.
 `chat.committed` atomically retains address/card, expected revision, append delta and
 CAS body/context references; `chat.selected` retains the active chat. The existing
-shared disposable index (schema 11) holds current locators, message ordinals/counts
+shared disposable index (schema 12) holds current locators, message ordinals/counts
 and activity. Metadata/header/append reads do not hydrate historical bodies; a page
 hydrates only its selected text/reasoning bodies. Full loading remains proportional
 to the requested history. Metadata changes preserve last activity; stale writers and

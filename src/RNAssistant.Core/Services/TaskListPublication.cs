@@ -56,14 +56,14 @@ namespace RNAssistant.Core.Services
         }
 
         public static ResourceAuthorityCommit Publish(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
-            ResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record, ResourceMutationReadBack captured)
+            IResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record, ResourceMutationReadBack captured)
         {
             if (attempt.Operation != TaskListToolCatalog.SetToolId || attempt.ScopeId.Kind != "conversation" ||
                 attempt.State != MutationAttemptState.DispatchMayHaveOccurred ||
                 attempt.IntendedImpacts.Count != 1 || attempt.Target.Uri != ResourceUri.Create("state", "conversation", attempt.ScopeId.Id, "task-list"))
                 throw new InvalidOperationException("An exact prepared task-list mutation is required.");
             var snapshot = authority.Capture(attempt.ScopeId);
-            var published = snapshot.Commits.FirstOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
+            var published = snapshot.FindMutationCommit(attempt.AttemptId);
             if (published != null) { journal.Resolve(attempt.AttemptId, published.CommitId); return published; }
             var before = snapshot.GetHead(attempt.Target);
             if (before?.Revision?.Revision != attempt.ExpectedRevision)

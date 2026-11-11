@@ -16,8 +16,6 @@ namespace RNAssistant.Core.Storage
     public sealed class ResourceAuthorityStore : IResourceAuthorityStore, IResourceRevisionStore
     {
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
-        private static readonly object ObserversSync = new object();
-        private static readonly List<WeakReference<ResourceAuthorityStore>> Observers = new List<WeakReference<ResourceAuthorityStore>>();
         private readonly string _directory;
         private readonly object _sync = new object();
         private readonly Dictionary<string, ScopeProjection> _scopes =
@@ -30,19 +28,12 @@ namespace RNAssistant.Core.Storage
             if (paths == null) throw new ArgumentNullException(nameof(paths));
             _directory = paths.ResourceAuthorityDirectory;
             StorageFileSystem.EnsureRegularDirectory(_directory);
-            lock (ObserversSync)
-            {
-                Observers.RemoveAll(item => { ResourceAuthorityStore target; return !item.TryGetTarget(out target); });
-                Observers.Add(new WeakReference<ResourceAuthorityStore>(this));
-            }
+            ResourceJournal.RegisterObserver(_directory, this);
         }
 
         public void ResetAfterRuntimeDataClear()
         {
-            ResourceAuthorityStore[] stores;
-            lock (ObserversSync)
-                stores = Observers.Select(item => { ResourceAuthorityStore target; return item.TryGetTarget(out target) ? target : null; })
-                    .Where(item => item != null && item._directory == _directory).ToArray();
+            var stores = ResourceJournal.AuthorityObservers(_directory).OfType<ResourceAuthorityStore>();
             foreach (var store in stores)
                 lock (store._sync) store._scopes.Clear();
         }
@@ -150,20 +141,18 @@ namespace RNAssistant.Core.Storage
             }
             if (published)
             {
-                ResourceAuthorityStore[] stores;
-                lock (ObserversSync)
-                    stores = Observers.Select(item => { ResourceAuthorityStore target; return item.TryGetTarget(out target) ? target : null; })
-                        .Where(item => item != null && item._directory == _directory).ToArray();
-                foreach (var store in stores)
-                {
-                    var handler = store.Changed;
-                    if (handler == null) continue;
-                    foreach (EventHandler<ResourceAuthorityChangedEventArgs> observer in handler.GetInvocationList())
-                        try { observer(store, new ResourceAuthorityChangedEventArgs(commit)); }
-                        catch { /* Advisory notifications cannot undo or obscure a durable commit. */ }
-                }
+                ResourceJournal.NotifyAuthority(_directory, commit);
             }
             return new AuthorityCommitResult(true, false, snapshot);
+        }
+
+        internal void NotifyChanged(ResourceAuthorityCommit commit)
+        {
+            var handler = Changed;
+            if (handler == null) return;
+            foreach (EventHandler<ResourceAuthorityChangedEventArgs> observer in handler.GetInvocationList())
+                try { observer(this, new ResourceAuthorityChangedEventArgs(commit)); }
+                catch { /* Advisory notification follows the durable commit. */ }
         }
 
         public void RegisterRevision(ResourceAuthorityScopeId scope, ResourceRevisionMetadata revision)

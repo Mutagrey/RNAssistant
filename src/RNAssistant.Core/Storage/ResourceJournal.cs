@@ -10,9 +10,9 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
-    // Isolated single-resource publication slice. Logical scopes share this one
-    // stream/index; effect execution and per-resource leases stay with domain owners.
-    internal sealed class ResourceJournal
+    // Logical scopes and the existing resource ports share one canonical stream
+    // and index. Execution and resource leases stay with their domain owners.
+    internal sealed partial class ResourceJournal
     {
         private readonly AppDataPaths _paths;
         private readonly StorageProtector _protector;
@@ -23,7 +23,10 @@ namespace RNAssistant.Core.Storage
         internal ResourceJournal(AppDataPaths paths, StorageProtector protector = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths)); _protector = protector ?? StorageProtector.None;
+            if (Directory.Exists(paths.ResourceAuthorityDirectory) && Directory.EnumerateFiles(paths.ResourceAuthorityDirectory, "*.jsonl").Any())
+                throw new InvalidOperationException("Resource journal requires a new root; legacy resources must remain separately preserved.");
             _bodies = new ChatBlobStore(paths, () => _protector);
+            RegisterObserver(paths.ResourceAuthorityDirectory, this);
             Journal = new StorageJournal(Path.Combine(paths.Root, "resource-stream"), "resources", _protector);
         }
 
@@ -68,11 +71,11 @@ namespace RNAssistant.Core.Storage
         { return Access((db, cursor) => Head(db, scope, identity), token); }
 
         internal ResourceRevisionMetadata Revision(ResourceAuthorityScopeId scope, ResourceRef reference, CancellationToken token = default(CancellationToken))
-        { return Access((db, cursor) => FindRevision(db, scope, reference)?.Fact.Publication.Revision, token); }
+        { return Access((db, cursor) => RevisionOf(FindRevision(db, scope, reference)?.Fact), token); }
 
         internal ResourceRevisionView View(ResourceAuthorityScopeId scope, ResourceRef reference, string view, ResourceCoverage coverage,
             CancellationToken token = default(CancellationToken))
-        { return Access((db, cursor) => FindView(db, scope, reference, view, coverage)?.Fact.Publication.View, token); }
+        { return Access((db, cursor) => ViewOf(FindView(db, scope, reference, view, coverage)?.Fact), token); }
 
         internal ResourceJournalReceipt ReadReceipt(ResourceJournalReceipt receipt)
         {
@@ -106,6 +109,7 @@ namespace RNAssistant.Core.Storage
                     if (prior != null)
                     {
                         if (prior.Fingerprint != fingerprint) throw new InvalidOperationException("Resource operation identity was reused with different content.");
+                        prior.Duplicate = true;
                         return prior;
                     }
                     PrepareTransition(db, fact);
@@ -120,11 +124,13 @@ namespace RNAssistant.Core.Storage
 
         private void PrepareTransition(SqliteConnection db, ResourceJournalFact fact)
         {
+            if (PrepareStoreTransition(db, fact)) return;
             if (fact.Kind == "resource.prepared")
             {
-                if (FindAttempt(db, fact.Scope, fact.Attempt.AttemptId) != null) throw new InvalidOperationException("Resource attempt is already prepared.");
+                if (AttemptScope(db, fact.Attempt.AttemptId) != null) throw new InvalidOperationException("Resource attempt is already prepared.");
                 var head = Head(db, fact.Scope, fact.Attempt.Target);
-                if (head?.Revision?.Revision != fact.Attempt.ExpectedRevision || head != null && head.Knowledge != HeadKnowledge.Known)
+                if (fact.Attempt.ExpectedRevision != null && head?.Revision?.Revision != fact.Attempt.ExpectedRevision ||
+                    head != null && head.Knowledge == HeadKnowledge.Unknown)
                     throw new ResourceAuthorityConflictException("Prepared resource revision changed.");
                 fact.PreparedHead = head;
                 return;
@@ -139,16 +145,17 @@ namespace RNAssistant.Core.Storage
                 fact.Attempt = attempt.Transition(MutationAttemptState.DispatchMayHaveOccurred); return;
             }
             var publication = fact.Publication;
+            if (AuthorityOperation(db, fact.Scope, publication.CommitId) != null) throw new ResourceAuthorityConflictException("Duplicate resource commit id.");
             if (attemptId != null && (attempt?.State != MutationAttemptState.DispatchMayHaveOccurred ||
                 !attempt.Target.Equals(publication.Target))) throw new InvalidOperationException("Publication has no exact possibly-dispatched attempt.");
             var current = Head(db, fact.Scope, publication.Target);
             if (attempt == null && !SameHead(current, publication.ExpectedHead))
                 throw new ResourceAuthorityConflictException("Resource publication expected head changed.");
             var revision = publication.Revision == null ? null : FindRevision(db, fact.Scope, publication.Revision.Reference);
-            if (revision != null && !JToken.DeepEquals(JObject.FromObject(revision.Fact.Publication.Revision), JObject.FromObject(publication.Revision)))
+            if (revision != null && !JToken.DeepEquals(JObject.FromObject(RevisionOf(revision.Fact)), JObject.FromObject(publication.Revision)))
                 throw new ResourceAuthorityConflictException("Exact resource revision metadata is immutable.");
             var view = publication.View == null ? null : FindView(db, fact.Scope, publication.View.Reference, publication.View.View, publication.View.Coverage);
-            if (view != null && !JToken.DeepEquals(JObject.FromObject(view.Fact.Publication.View), JObject.FromObject(publication.View)))
+            if (view != null && !JToken.DeepEquals(JObject.FromObject(ViewOf(view.Fact)), JObject.FromObject(publication.View)))
                 throw new ResourceAuthorityConflictException("Exact resource view metadata is immutable.");
             var generation = Generation(db, fact.Scope) + 1;
             // A late outcome is historical evidence. It must not replace a newer
@@ -170,7 +177,11 @@ namespace RNAssistant.Core.Storage
             {
                 command.Parameters.AddWithValue("$attempt", attempt);
                 var operation = command.ExecuteScalar() as string;
-                return operation == null ? null : Find(db, scope, operation);
+                if (operation == null) return null;
+                var receipt = Find(db, scope, operation);
+                if (receipt?.Fact.Attempt?.AttemptId != attempt || !receipt.Fact.Attempt.ScopeId.Equals(scope))
+                    throw new InvalidDataException("Mutation attempt locator mismatch.");
+                return receipt;
             }
         }
 
@@ -182,8 +193,8 @@ namespace RNAssistant.Core.Storage
                 command.Parameters.AddWithValue("$uri", reference.Uri); command.Parameters.AddWithValue("$revision", reference.Revision);
                 var operation = command.ExecuteScalar() as string;
                 var result = operation == null ? null : Find(db, scope, operation);
-                if (result != null && (result.Fact.Publication?.Revision?.Reference.Uri != reference.Uri ||
-                    result.Fact.Publication.Revision.Reference.Revision != reference.Revision)) throw new InvalidDataException("Revision locator mismatch.");
+                if (result != null && (RevisionOf(result.Fact)?.Reference.Uri != reference.Uri ||
+                    RevisionOf(result.Fact).Reference.Revision != reference.Revision)) throw new InvalidDataException("Revision locator mismatch.");
                 return result;
             }
         }
@@ -197,7 +208,7 @@ namespace RNAssistant.Core.Storage
                 command.Parameters.AddWithValue("$view", view); command.Parameters.AddWithValue("$coverage", JsonConvert.SerializeObject(coverage));
                 var operation = command.ExecuteScalar() as string;
                 var result = operation == null ? null : Find(db, scope, operation);
-                var retained = result?.Fact.Publication?.View;
+                var retained = ViewOf(result?.Fact);
                 if (result != null && (retained == null || retained.Reference.Uri != reference.Uri || retained.Reference.Revision != reference.Revision ||
                     retained.View != view || !JToken.DeepEquals(JObject.FromObject(retained.Coverage), JObject.FromObject(coverage))))
                     throw new InvalidDataException("Resource view locator mismatch.");
@@ -213,13 +224,13 @@ namespace RNAssistant.Core.Storage
                 var operation = command.ExecuteScalar() as string;
                 if (operation == null) return null;
                 var receipt = Find(db, scope, operation);
-                if (receipt?.Fact.Head?.Identity.Equals(identity) != true || !receipt.Fact.AdvancesHead)
+                if (HeadOf(receipt?.Fact, identity.Uri) == null)
                     throw new InvalidDataException("Resource head locator is inconsistent.");
-                return receipt.Fact.Head;
+                return HeadOf(receipt.Fact, identity.Uri);
             }
         }
 
-        private long Generation(SqliteConnection db, ResourceAuthorityScopeId scope)
+        private static long Generation(SqliteConnection db, ResourceAuthorityScopeId scope)
         {
             using (var command = Command(db, "SELECT generation FROM resource_scope WHERE scope=$scope", scope))
             { var value = command.ExecuteScalar(); return value == null ? 0 : Convert.ToInt64(value); }
@@ -255,33 +266,7 @@ namespace RNAssistant.Core.Storage
                     command.Parameters.AddWithValue("$operation", operation); command.Parameters.AddWithValue("$fingerprint", fingerprint);
                     JournalIndex.AddPosition(command, position); command.ExecuteNonQuery();
                 }
-                if (fact.Attempt != null)
-                    using (var command = Command(db, "INSERT INTO resource_attempt VALUES($scope,$attempt,$operation) ON CONFLICT(scope,attempt) DO UPDATE SET operation=$operation", fact.Scope, tx))
-                    {
-                        command.Parameters.AddWithValue("$attempt", fact.Attempt.AttemptId); command.Parameters.AddWithValue("$operation", operation); command.ExecuteNonQuery();
-                    }
-                if (fact.Kind == "resource.published")
-                {
-                    using (var command = Command(db, "INSERT INTO resource_scope VALUES($scope,$generation) ON CONFLICT(scope) DO UPDATE SET generation=$generation", fact.Scope, tx))
-                    { command.Parameters.AddWithValue("$generation", fact.Generation); command.ExecuteNonQuery(); }
-                    if (fact.AdvancesHead)
-                        using (var command = Command(db, "INSERT INTO resource_head VALUES($scope,$uri,$operation) ON CONFLICT(scope,uri) DO UPDATE SET operation=$operation", fact.Scope, tx))
-                        { command.Parameters.AddWithValue("$uri", fact.Head.Identity.Uri); command.Parameters.AddWithValue("$operation", operation); command.ExecuteNonQuery(); }
-                    if (fact.Publication.Revision != null)
-                        using (var command = Command(db, "INSERT OR IGNORE INTO resource_revision VALUES($scope,$uri,$revision,$operation)", fact.Scope, tx))
-                        {
-                            command.Parameters.AddWithValue("$uri", fact.Publication.Target.Uri); command.Parameters.AddWithValue("$revision", fact.Publication.Revision.Reference.Revision);
-                            command.Parameters.AddWithValue("$operation", operation); command.ExecuteNonQuery();
-                        }
-                    if (fact.Publication.View != null)
-                        using (var command = Command(db, "INSERT OR IGNORE INTO resource_view VALUES($scope,$uri,$revision,$view,$coverage,$operation)", fact.Scope, tx))
-                        {
-                            var view = fact.Publication.View;
-                            command.Parameters.AddWithValue("$uri", view.Reference.Uri); command.Parameters.AddWithValue("$revision", view.Reference.Revision);
-                            command.Parameters.AddWithValue("$view", view.View); command.Parameters.AddWithValue("$coverage", JsonConvert.SerializeObject(view.Coverage));
-                            command.Parameters.AddWithValue("$operation", operation); command.ExecuteNonQuery();
-                        }
-                }
+                ApplyStoreRows(db, tx, operation, fact, position);
                 JournalIndex.SaveCursor(db, "resources", position, tx); tx.Commit();
             }
         }
@@ -356,6 +341,7 @@ namespace RNAssistant.Core.Storage
 
         private static void ValidateShape(ResourceJournalFact fact)
         {
+            if (ValidateStoreShape(fact)) return;
             if (fact?.Scope == null || fact.Kind != "resource.prepared" && fact.Kind != "resource.dispatch" && fact.Kind != "resource.published")
                 throw new InvalidDataException("Unknown resource fact.");
             if (fact.Kind == "resource.prepared" && (fact.Attempt?.State != MutationAttemptState.Prepared || !fact.Attempt.ScopeId.Equals(fact.Scope)) ||
@@ -369,6 +355,7 @@ namespace RNAssistant.Core.Storage
 
         private static string Fingerprint(ResourceJournalFact fact)
         {
+            if (IsStoreFact(fact)) return StoreFingerprint(fact);
             object value = fact.Kind == "resource.prepared" ? (object)fact.Attempt : fact.Kind == "resource.published" ? (object)fact.Publication :
                 new { fact.Scope, fact.AttemptId };
             return RNAssistant.Core.Tools.TextPatternEngine.Sha256(fact.Kind + "\n" + JsonConvert.SerializeObject(value));
@@ -377,8 +364,8 @@ namespace RNAssistant.Core.Storage
         { return References(Decode(record)); }
 
         private static IEnumerable<PayloadRef> References(ResourceJournalFact fact)
-        { return new[] { fact.Attempt?.Payload, fact.Publication?.Revision?.Payload, fact.Publication?.View?.Payload }
-            .Concat(fact.Publication?.View?.Parts ?? new PayloadRef[0]).Where(reference => reference != null).GroupBy(ReferenceKey).Select(group => group.First()); }
+        { return new[] { fact.Attempt?.Payload, RevisionOf(fact)?.Payload, ViewOf(fact)?.Payload }
+            .Concat(ViewOf(fact)?.Parts ?? new PayloadRef[0]).Where(reference => reference != null).GroupBy(ReferenceKey).Select(group => group.First()); }
         private void Verify(PayloadRef reference)
         { if (!_bodies.HasVerifiedReference(reference.ToBlobReference())) throw new InvalidDataException("Resource body is unavailable before acceptance."); }
         private static string ReferenceKey(PayloadRef reference) { return reference.Sha256 + ":" + reference.ByteLength + ":" + reference.ProtectionKeyId; }
@@ -401,6 +388,12 @@ namespace RNAssistant.Core.Storage
         public bool AdvancesHead { get; set; }
         public ResourceHeadState Head { get; set; }
         public ResourceHeadState PreparedHead { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceAuthorityCommit Authority { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceRevisionMetadata Revision { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceRevisionView View { get; set; }
     }
 
     internal sealed class ResourcePublication
@@ -439,6 +432,7 @@ namespace RNAssistant.Core.Storage
         internal readonly ResourceJournalFact Fact;
         internal readonly JournalCursor Position;
         internal bool ProjectionAvailable;
+        internal bool Duplicate;
         internal ResourceJournalReceipt(string root, string operation, string fingerprint, ResourceJournalFact fact, JournalCursor position, bool projectionAvailable)
         { Root = root; Operation = operation; Fingerprint = fingerprint; Fact = fact; Position = position; ProjectionAvailable = projectionAvailable; }
     }

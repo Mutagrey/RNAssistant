@@ -401,6 +401,8 @@
     <Compile Include="Storage\JournalIndex.Maintenance.cs" />
     <Compile Include="Storage\JournalIndexAdmission.cs" />
     <Compile Include="Storage\ResourceJournal.cs" />
+    <Compile Include="Storage\ResourceJournal.Store.cs" />
+    <Compile Include="Storage\ResourceJournal.Queries.cs" />
     <Compile Include="Storage\ResourceOutcomeLink.cs" />
     <Compile Include="Models\RetainedToolResultBody.cs" />
     <Compile Include="Services\ToolResultPersistence.cs" />

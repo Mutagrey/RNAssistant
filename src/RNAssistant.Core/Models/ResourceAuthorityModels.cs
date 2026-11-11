@@ -221,12 +221,14 @@ namespace RNAssistant.Core.Models
     public sealed class ResourceAuthoritySnapshot
     {
         private readonly IReadOnlyDictionary<string, ResourceHeadState> _heads;
+        private readonly Lazy<IReadOnlyList<ResourceAuthorityCommit>> _commits;
+        private readonly Func<string, ResourceAuthorityCommit> _mutationCommit;
         public ResourceAuthorityScopeId ScopeId { get; private set; }
         public long Generation { get; private set; }
         public string HighWaterCommitId { get; private set; }
         public long EffectHighWaterMark { get; private set; }
         public IReadOnlyDictionary<string, ResourceHeadState> Heads { get { return _heads; } }
-        public IReadOnlyList<ResourceAuthorityCommit> Commits { get; private set; }
+        public IReadOnlyList<ResourceAuthorityCommit> Commits { get { return _commits.Value; } }
 
         public ResourceAuthoritySnapshot(ResourceAuthorityScopeId scopeId, long generation,
             string highWaterCommitId, long effectHighWaterMark,
@@ -237,12 +239,29 @@ namespace RNAssistant.Core.Models
             Generation = generation;
             HighWaterCommitId = highWaterCommitId;
             EffectHighWaterMark = effectHighWaterMark;
-            Commits = Array.AsReadOnly((commits ?? new ResourceAuthorityCommit[0]).ToArray());
+            var history = Array.AsReadOnly((commits ?? new ResourceAuthorityCommit[0]).ToArray());
+            _commits = new Lazy<IReadOnlyList<ResourceAuthorityCommit>>(() => history);
+            _mutationCommit = attempt => history.LastOrDefault(item => item.MutationAttemptId == attempt);
             var values = (heads ?? new ResourceHeadState[0]).ToDictionary(
                 item => item.Identity.Uri,
                 item => item.AtGeneration(item.AuthorityGeneration),
                 StringComparer.Ordinal);
             _heads = new ReadOnlyDictionary<string, ResourceHeadState>(values);
+        }
+
+        internal ResourceAuthoritySnapshot(ResourceAuthorityScopeId scopeId, long generation,
+            string highWaterCommitId, long effectHighWaterMark, IEnumerable<ResourceHeadState> heads,
+            Func<IReadOnlyList<ResourceAuthorityCommit>> history, Func<string, ResourceAuthorityCommit> mutationCommit)
+            : this(scopeId, generation, highWaterCommitId, effectHighWaterMark, heads)
+        {
+            _commits = new Lazy<IReadOnlyList<ResourceAuthorityCommit>>(history);
+            _mutationCommit = mutationCommit;
+        }
+
+        public ResourceAuthorityCommit FindMutationCommit(string attemptId)
+        {
+            if (string.IsNullOrWhiteSpace(attemptId)) throw new ArgumentException("An exact mutation attempt is required.");
+            return _mutationCommit(attemptId);
         }
 
         public ResourceHeadState GetHead(ResourceIdentity identity)
@@ -353,6 +372,19 @@ namespace RNAssistant.Core.Models
         ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view);
         ResourceRevisionViewPage ReadViews(ResourceAuthorityScopeId scope, ResourceRef reference,
             int offset, int limit, int? snapshotCount = null);
+    }
+
+    public interface IResourceMutationJournal
+    {
+        MutationAttempt Prepare(ResourceAuthorityScopeId scope, string operation, ResourceIdentity target,
+            string expectedRevision = null, PayloadRef payload = null, string semanticHash = null,
+            IEnumerable<ResourceImpact> intendedImpacts = null);
+        MutationAttempt MarkDispatchMayHaveOccurred(string attemptId);
+        MutationAttempt Resolve(string attemptId, string authorityCommitId);
+        MutationAttempt AbandonBeforeDispatch(string attemptId);
+        IReadOnlyList<MutationAttempt> Unresolved();
+        IDisposable AcquireScope(ResourceAuthorityScopeId scope, bool waitForOwner = false,
+            System.Threading.CancellationToken token = default(System.Threading.CancellationToken));
     }
 
     [JsonConverter(typeof(StringEnumConverter))]

@@ -76,7 +76,7 @@ namespace RNAssistant.Core.Services
         }
 
         public static ResourceAuthorityCommit Publish(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
-            ResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record,
+            IResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record,
             IReadOnlyList<ResourceMutationReadBack> readBack = null)
         {
             if (!PlanDocumentToolCatalog.Owns(attempt.Operation) || attempt.State != MutationAttemptState.DispatchMayHaveOccurred)
@@ -89,7 +89,7 @@ namespace RNAssistant.Core.Services
                 attempt.IntendedImpacts.Count != 1 || !attempt.IntendedImpacts[0].Identity.Equals(attempt.Target))
                 throw new InvalidOperationException("An exact Plan target in its owning authority is required.");
             var snapshot = authority.Capture(attempt.ScopeId);
-            var prior = snapshot.Commits.FirstOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
+            var prior = snapshot.FindMutationCommit(attempt.AttemptId);
             if (prior != null) { journal.Resolve(attempt.AttemptId, prior.CommitId); return prior; }
             if (snapshot.GetHead(attempt.Target)?.Revision?.Revision != attempt.ExpectedRevision)
                 throw new InvalidOperationException("The prepared Plan head changed before publication; reconcile without replay.");

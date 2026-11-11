@@ -1873,6 +1873,35 @@ replacement or an invented empty body.
 
 ## Context and storage
 
+### Direct journal resource ports — 2026-11-11
+
+In isolated new roots, `ResourceJournal` directly implements the existing authority
+and revision ports plus the extracted `IResourceMutationJournal` contract. Real
+`WorkspaceFileService` and Office `ResourceMutationAuthorityObserver` use those
+ports without a storage adapter. Revisions/views/parts remain immutable CAS roots;
+prepared and possible-dispatch facts precede invocation. An authority frame publishes
+all affected heads, effect and attempt resolution atomically. `Resolve` checks that
+receipt; it cannot manufacture a terminal outcome. Unknown retains its evidence,
+blocks unsafe writes to its target, and never replays on restart or explicit inspection.
+
+Current heads and exact revision/view pages use the shared disposable index (schema
+12). Snapshot history loads only on explicit `Commits` access, pinned to generation
+and canonical hash; mutation recovery uses `FindMutationCommit(attemptId)`. Capturing
+heads is still proportional to the number of current heads. The existing advisory
+observer list moved to the journal owner; no second notification registry was added.
+
+Checked host-neutral: actual file create/replace/delete/restore/move, interrupted
+dispatch, independent file access, multi-head Office publication, unknown recovery,
+lost acknowledgement, index rebuild and resource-journal/CAS restore. Full kernel
+tool call/result linkage, other semantic owners and production composition remain
+open. Default composition still uses the old resource backend; the new owner refuses
+legacy resource JSONL rather than importing it. Root cutover and real Office evidence
+remain separate. Backup of resource journals is not a full application backup: live
+workspace identities/locators, move intents and other owners need the P6/P7 integration
+check before enabling restore. [Slice report](audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
+
+### Current production composition
+
 `ResourceAuthorityStore` is the shared append-only head/effect/revision/view
 authority, scoped to document, conversation or catalog. One scoped commit atomically
 publishes all affected heads, one effect and generation. Cross-window catch-up reads

@@ -97,8 +97,9 @@ namespace RNAssistant.Core.Storage
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly AppDataPaths _paths;
         private readonly ChatBlobStore _blobs;
-        private readonly ResourceAuthorityStore _authority;
-        private readonly ResourceMutationJournal _journal;
+        private readonly IResourceAuthorityStore _authority;
+        private readonly IResourceRevisionStore _revisions;
+        private readonly IResourceMutationJournal _journal;
         internal Action<string> FaultPoint { get; set; }
 
         private sealed class FileLocator
@@ -124,7 +125,18 @@ namespace RNAssistant.Core.Storage
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _blobs = new ChatBlobStore(paths);
             _authority = new ResourceAuthorityStore(paths);
+            _revisions = (IResourceRevisionStore)_authority;
             _journal = new ResourceMutationJournal(paths);
+        }
+
+        internal WorkspaceFileService(AppDataPaths paths, IResourceAuthorityStore authority,
+            IResourceRevisionStore revisions, IResourceMutationJournal journal)
+        {
+            _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            _blobs = new ChatBlobStore(paths);
+            _authority = authority ?? throw new ArgumentNullException(nameof(authority));
+            _revisions = revisions ?? throw new ArgumentNullException(nameof(revisions));
+            _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         }
 
         public WorkspaceDirectoryPage ListPage(WorkspaceDescriptor workspace, string relativeDirectory = "",
@@ -305,7 +317,7 @@ namespace RNAssistant.Core.Storage
             {
                 RequireExactPath(workspace, relativePath, exact);
                 var raw = PublishedEvidence(exact, ResourceRepresentations.Raw);
-                if (_authority.GetView(raw.ScopeId, exact, ResourceRepresentations.Text) != null)
+                if (_revisions.GetView(raw.ScopeId, exact, ResourceRepresentations.Text) != null)
                     throw new WorkspaceFileException("snapshot_unavailable",
                         "The published text view must be read without substituting a raw view.");
                 pinned = new WorkspaceFileSnapshot(relativePath, raw);
@@ -333,7 +345,7 @@ namespace RNAssistant.Core.Storage
             var coverage = complete ? ResourceCoverage.Whole() :
                 new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: window.Start, end: window.End);
             if (complete)
-                _authority.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
+                _revisions.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
                     ResourceRepresentations.Text, snapshot.ContentSha256, payload, coverage));
             return new WorkspaceFileObservation { RelativePath = relativePath, Text = text,
                 Reference = snapshot.Reference, Offset = window.Start, TotalCharacters = window.TotalCharacters,
@@ -395,7 +407,7 @@ namespace RNAssistant.Core.Storage
                     var state = _authority.Capture(scope);
                     var previous = state.GetHead(Identity(id));
                     var retained = previous?.Knowledge == HeadKnowledge.Known
-                        ? _authority.GetRevision(scope, previous.Revision) : null;
+                        ? _revisions.GetRevision(scope, previous.Revision) : null;
                     ResourceRef exact;
                     if (retained?.ContentSha256 == hash)
                     {
@@ -403,7 +415,7 @@ namespace RNAssistant.Core.Storage
                         // historical body. Validate its retained content first.
                         using (OpenRetainedStream(retained.Payload, maximumBytes, token, progress)) { }
                         exact = previous.Revision.Copy();
-                        _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
+                        _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
                             hash, retained.Payload, ResourceCoverage.Whole()));
                     }
                     else
@@ -412,8 +424,8 @@ namespace RNAssistant.Core.Storage
                             "application/octet-stream", token, progress));
                         token.ThrowIfCancellationRequested();
                         exact = NewRevision(id);
-                        _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
-                        _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
+                        _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
+                        _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
                             hash, payload, ResourceCoverage.Whole()));
                         token.ThrowIfCancellationRequested();
                         _authority.Publish(ResourceAuthorityCommit.Create(scope, state.Generation, null,
@@ -450,7 +462,7 @@ namespace RNAssistant.Core.Storage
             if (raw.ContentSha256 != snapshot.ContentSha256)
                 throw new WorkspaceFileException("snapshot_unavailable", "Exact structured source changed.");
             var payload = PayloadRef.FromBlob(_blobs.StoreText(body, "application/json; charset=utf-8"));
-            _authority.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
+            _revisions.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
                 ResourceRepresentations.Tree, snapshot.ContentSha256, payload, coverage));
             return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
                 snapshot.Reference, ResourceRepresentations.Tree, coverage, false, raw.AuthorityGeneration, payload,
@@ -474,7 +486,7 @@ namespace RNAssistant.Core.Storage
                 pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                 ":" + coverage.Start.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) +
                 ":" + coverage.End.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            _authority.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
+            _revisions.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
                 key, snapshot.ContentSha256, payload, coverage));
             return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
                 snapshot.Reference, ResourceRepresentations.Text, coverage, false, raw.AuthorityGeneration,
@@ -497,7 +509,7 @@ namespace RNAssistant.Core.Storage
             var key = PdfAttachmentTextExtractor.RangeViewProfile + ":" +
                 coverage.Start.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +
                 coverage.End.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            _authority.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
+            _revisions.RegisterView(raw.ScopeId, new ResourceRevisionView(snapshot.Reference,
                 key, snapshot.ContentSha256, payload, coverage));
             return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
                 snapshot.Reference, ResourceRepresentations.Text, coverage, false, raw.AuthorityGeneration,
@@ -542,7 +554,7 @@ namespace RNAssistant.Core.Storage
                 var exact = Observe(scope, id, bytes, raw);
                 var snapshot = _authority.Capture(scope);
                 var viewName = raw ? ResourceRepresentations.Raw : ResourceRepresentations.Text;
-                var view = _authority.GetView(scope, exact, viewName);
+                var view = _revisions.GetView(scope, exact, viewName);
                 if (view?.Payload == null || snapshot.GetHead(Identity(id))?.Revision?.Revision != exact.Revision)
                     throw new WorkspaceFileException("snapshot_unavailable", "Exact observed file view is unavailable.");
                 return new WorkspaceFileObservation
@@ -628,7 +640,7 @@ namespace RNAssistant.Core.Storage
             if (!exact.IsExact || address.Provider != "file" || address.Segments.Count != 1)
                 throw new WorkspaceFileException("invalid_resource_ref", "An exact file revision is required.");
             var scope = Scope(address.Segments[0]);
-            var view = _authority.GetView(scope, exact, ResourceRepresentations.Text) != null
+            var view = _revisions.GetView(scope, exact, ResourceRepresentations.Text) != null
                 ? ResourceRepresentations.Text : ResourceRepresentations.Raw;
             var evidence = PublishedEvidence(exact, view);
             if (evidence.Payload.ByteLength > maximumCharacters * 4L)
@@ -652,8 +664,8 @@ namespace RNAssistant.Core.Storage
                 change.After.Knowledge == HeadKnowledge.Known &&
                 change.After.Revision.Revision == exact.Revision)))
                 throw new WorkspaceFileException("snapshot_unavailable", "Exact file revision was not published.");
-            var revision = _authority.GetRevision(scope, exact);
-            var view = _authority.GetView(scope, exact, viewName);
+            var revision = _revisions.GetRevision(scope, exact);
+            var view = _revisions.GetView(scope, exact, viewName);
             if (view?.Payload == null || view.Coverage?.Kind != ResourceCoverageKinds.Whole ||
                 view.ContentSha256 != view.Payload.Sha256 || revision?.ContentSha256 != view.ContentSha256)
                 throw new WorkspaceFileException("snapshot_unavailable", "Exact whole-file view is unavailable.");
@@ -719,7 +731,7 @@ namespace RNAssistant.Core.Storage
                 var head = snapshot.GetHead(Identity(id));
                 if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expectedSource.Revision)
                     throw new WorkspaceFileException("target_conflict", "Source authority changed since the accepted read.");
-                var revision = _authority.GetRevision(scope, expectedSource);
+                var revision = _revisions.GetRevision(scope, expectedSource);
                 if (revision?.Payload == null)
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained move preimage is unavailable.");
                 if (streamed) VerifyLargePatchSource(source, revision);
@@ -766,9 +778,9 @@ namespace RNAssistant.Core.Storage
                     RelocateLocator(source, target, id);
                     FaultPoint?.Invoke("after-locator");
                     var exact = NewRevision(id);
-                    _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash,
+                    _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash,
                         revision.Payload, expectedSource));
-                    _authority.RegisterView(scope, new ResourceRevisionView(exact,
+                    _revisions.RegisterView(scope, new ResourceRevisionView(exact,
                         streamed ? ResourceRepresentations.Raw : ResourceRepresentations.Text, hash,
                         revision.Payload, ResourceCoverage.Whole()));
                     var current = _authority.Capture(scope);
@@ -882,7 +894,7 @@ namespace RNAssistant.Core.Storage
                 var head = snapshot.GetHead(Identity(id));
                 if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expected.Revision)
                     throw new WorkspaceFileException("target_conflict", "File authority changed since the accepted read.");
-                var revision = _authority.GetRevision(scope, expected);
+                var revision = _revisions.GetRevision(scope, expected);
                 if (revision?.Payload == null)
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained delete preimage is unavailable.");
                 if (streamed) VerifyLargePatchSource(path, revision);
@@ -980,7 +992,7 @@ namespace RNAssistant.Core.Storage
                 var previous = change.Before.Revision;
                 if (expectedDeleted != null && (expectedDeleted.Uri != previous.Uri || expectedDeleted.Revision != previous.Revision))
                     throw new WorkspaceFileException("target_conflict", "The selected deletion changed after preparation.");
-                var retained = _authority.GetRevision(scope, previous);
+                var retained = _revisions.GetRevision(scope, previous);
                 if (retained?.Payload == null || !_blobs.HasVerifiedReference(retained.Payload.ToBlobReference()))
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained deleted text is unavailable.");
                 var trashPath = Path.Combine(TrashDirectory(workspace, id, false), deletion.MutationAttemptId + ".utf8");
@@ -1027,7 +1039,7 @@ namespace RNAssistant.Core.Storage
                 var head = _authority.Capture(scope).GetHead(Identity(id));
                 if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != expected.Revision)
                     throw new WorkspaceFileException("target_conflict", "File authority changed since the accepted read.");
-                if (_authority.GetRevision(scope, expected)?.ContentSha256 != Hash(before))
+                if (_revisions.GetRevision(scope, expected)?.ContentSha256 != Hash(before))
                 {
                     Observe(scope, id, before);
                     throw new WorkspaceFileException("target_conflict", "File changed outside RNAssistant since the accepted read.");
@@ -1086,7 +1098,7 @@ namespace RNAssistant.Core.Storage
                     throw new WorkspaceFileException("recovery_ambiguous", "Multiple dispatched attempts require manual inspection.");
                 var attempt = dispatched[0];
                 var snapshot = _authority.Capture(scope);
-                var published = snapshot.Commits.LastOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
+                var published = snapshot.FindMutationCommit(attempt.AttemptId);
                 if (attempt.Operation == "files.move")
                     return ReconcileMove(workspace, scope, id, attempt, snapshot, published);
                 if (published != null)
@@ -1124,10 +1136,10 @@ namespace RNAssistant.Core.Storage
                     else { var bytes = ReadBounded(path); text = Decode(bytes); body = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8")); }
                     var hash = body.Sha256;
                     var exact = before?.Knowledge == HeadKnowledge.Known &&
-                        _authority.GetRevision(scope, before.Revision)?.ContentSha256 == hash ? before.Revision.Copy() : NewRevision(id);
+                        _revisions.GetRevision(scope, before.Revision)?.ContentSha256 == hash ? before.Revision.Copy() : NewRevision(id);
                     if (before?.Revision?.Revision != exact.Revision)
-                        _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, body, before?.Revision));
-                    _authority.RegisterView(scope, new ResourceRevisionView(exact, attempt.Operation == "files.mkdir" ? ResourceRepresentations.Metadata : raw ? ResourceRepresentations.Raw : "text", hash, body, ResourceCoverage.Whole()));
+                        _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, body, before?.Revision));
+                    _revisions.RegisterView(scope, new ResourceRevisionView(exact, attempt.Operation == "files.mkdir" ? ResourceRepresentations.Metadata : raw ? ResourceRepresentations.Raw : "text", hash, body, ResourceCoverage.Whole()));
                     after = ResourceHeadState.Known(exact, snapshot.Generation + 1, "reconciled-unknown-effect");
                     observed = new WorkspaceFileObservation
                     { RelativePath = relativePath, Text = text, Reference = exact, ContentSha256 = hash };
@@ -1194,9 +1206,9 @@ namespace RNAssistant.Core.Storage
                 if (streamed) VerifyLargePatchReadBack(target, attempt.Payload);
                 RelocateLocator(source, target, id);
                 var exact = NewRevision(id);
-                _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, intent.ExpectedSha256,
+                _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, intent.ExpectedSha256,
                     attempt.Payload, previous.Revision));
-                _authority.RegisterView(scope, new ResourceRevisionView(exact,
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact,
                     streamed ? ResourceRepresentations.Raw : ResourceRepresentations.Text, intent.ExpectedSha256,
                     attempt.Payload, ResourceCoverage.Whole()));
                 after = ResourceHeadState.Known(exact, snapshot.Generation + 1, "reconciled-unknown-move");
@@ -1232,8 +1244,8 @@ namespace RNAssistant.Core.Storage
                         if (HashUtf8File(source, out checkedLength) != hash || checkedLength != length)
                             throw new WorkspaceFileException("recovery_ambiguous", "Move source changed during reconciliation.");
                     }
-                    _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous.Revision));
-                    _authority.RegisterView(scope, new ResourceRevisionView(exact,
+                    _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous.Revision));
+                    _revisions.RegisterView(scope, new ResourceRevisionView(exact,
                         streamed ? ResourceRepresentations.Raw : ResourceRepresentations.Text, hash,
                         payload, ResourceCoverage.Whole()));
                 }
@@ -1299,11 +1311,11 @@ namespace RNAssistant.Core.Storage
                 if (Hash(afterBytes) != payload.Sha256)
                     throw new WorkspaceFileException("read_back_mismatch", "Written file did not match the intended bytes.");
                 var exact = NewRevision(id);
-                _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256,
+                _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256,
                     payload, before ?? (expectedHead?.Knowledge == HeadKnowledge.Unavailable ? restoredFrom : null), restoredFrom,
                     dependencies: copySource == null ? null : new[] {
                         new ResourceDependency(copySource, "text", ResourceCoverage.Whole(), "immutable-snapshot") }));
-                _authority.RegisterView(scope, new ResourceRevisionView(exact, "text", payload.Sha256,
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, "text", payload.Sha256,
                     payload, ResourceCoverage.Whole()));
                 var snapshot = _authority.Capture(scope);
                 var head = snapshot.GetHead(Identity(id));
@@ -1349,20 +1361,20 @@ namespace RNAssistant.Core.Storage
             var snapshot = _authority.Capture(scope);
             var previous = snapshot.GetHead(Identity(id));
             if (previous?.Knowledge == HeadKnowledge.Known &&
-                _authority.GetRevision(scope, previous.Revision)?.ContentSha256 == hash)
+                _revisions.GetRevision(scope, previous.Revision)?.ContentSha256 == hash)
             {
                 // Materialize an additional exact view of the same bytes; never advance
                 // authority or regenerate a missing historical body from live content.
-                var retained = _authority.GetRevision(scope, previous.Revision).Payload;
-                _authority.RegisterView(scope, new ResourceRevisionView(previous.Revision, viewName,
+                var retained = _revisions.GetRevision(scope, previous.Revision).Payload;
+                _revisions.RegisterView(scope, new ResourceRevisionView(previous.Revision, viewName,
                     hash, retained, ResourceCoverage.Whole()));
                 if (raw) RegisterUtf8View(scope, previous.Revision, retained, bytes);
                 return previous.Revision.Copy();
             }
             var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, raw ? "application/octet-stream" : "text/plain; charset=utf-8"));
             var exact = NewRevision(id);
-            _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
-            _authority.RegisterView(scope, new ResourceRevisionView(exact, viewName, hash, payload, ResourceCoverage.Whole()));
+            _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
+            _revisions.RegisterView(scope, new ResourceRevisionView(exact, viewName, hash, payload, ResourceCoverage.Whole()));
             if (raw) RegisterUtf8View(scope, exact, payload, bytes);
             _authority.Publish(ResourceAuthorityCommit.Create(scope, snapshot.Generation, null,
                 new[] { new ResourceHeadChange(Identity(id), previous,
@@ -1375,7 +1387,7 @@ namespace RNAssistant.Core.Storage
         {
             try { Decode(bytes); }
             catch (WorkspaceFileException) { return; }
-            _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Text,
+            _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Text,
                 payload.Sha256, payload, ResourceCoverage.Whole()));
         }
 

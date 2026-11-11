@@ -9,7 +9,7 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
-    public sealed class ResourceMutationJournal
+    public sealed class ResourceMutationJournal : IResourceMutationJournal
     {
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private readonly string _path;

@@ -29,6 +29,25 @@ explicitly blocked. Next: mutation/resource integration, remaining Store and Inb
 control/recovery operations, then production switch and old backend removal.
 
 Owner: Core persistence/context; Application consumes common contracts.
+
+P1/P2 direct resource ports (2026-11-11): `ResourceJournal` now implements authority,
+revision and mutation ports itself. `WorkspaceFileService` accepts those owners;
+Office mutation observer and Plan/task publication accept the extracted mutation
+contract. Concrete backend dependencies were removed from these semantic consumers.
+The pre-existing notification list moved to ResourceJournal; the retiring backend
+uses that same list until deletion. No new store, adapter, registry or dual writer.
+Snapshots retain lazily loaded history pinned to exact canonical generation/hash;
+mutation receipts are addressed by attempt instead of scanning the whole history.
+Real file lifecycle and Office observer checks pass, including unknown and recovery.
+
+Production constructors still select the old backend. Owner: Core ResourceJournal /
+Office resource authority / Workspace file owner. Removal gate: connect accepted
+tool call/result correlation and remaining resource consumers, then replace root
+composition and remove `ResourceAuthorityStore`/`ResourceMutationJournal` together.
+Full backup/restore must preserve workspace identity locators and pending move intent
+as well as journals/CAS/keys; clean resource-root restore alone does not close that
+gate. [Contract](../resource-fabric.md#direct-journal-resource-ports--2026-11-11).
+
 [Plan](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md),
 [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md),
 [P0 evidence](../audits/storage-context-optimization.md).

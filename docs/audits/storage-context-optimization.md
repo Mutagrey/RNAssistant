@@ -957,3 +957,49 @@ after-state/CAS ownership.
 7. Session events, MIGRATION_MAP, PROGRESS, Harness guide and baseline Backlog updated.
    Existing production Store/events adapters retain the same P7 removal gate. This
    is an intermediate, production-disabled integration with no product version bump.
+
+## P1/P2 — direct resource ports (2026-11-11)
+
+1. F07 integration: existing `ResourceJournal` directly implements authority,
+   revision and mutation ports. Revision/view registration, multi-head commits and
+   abandoned attempts extend its existing stream/reducer and shared index (schema
+   12). Bodies and view parts use existing CAS. No second durable owner is introduced.
+2. Actual Workspace file create/replace/delete/explicit restore/move and Office
+   mutation observer use these ports in isolated new roots. Prepared/dispatch remain
+   durable before invocation. One authority frame publishes heads/effect and resolves
+   the attempt; `Resolve` verifies the exact terminal receipt. Unknown cannot repeat
+   after restart, does not stop an independent file operation, and remains Unknown
+   after explicit current-state inspection. Office module/project heads publish
+   atomically; interrupted Office observation becomes Unknown without execution.
+3. Removed concrete resource-backend dependencies from Workspace file owner and
+   Office mutation observer/Plan/task publication. Extracted the mutation contract;
+   moved the pre-existing advisory observer list, without duplicating it. Mutation
+   receipt lookup replaces whole-history enumeration. Snapshot history is lazy and
+   pinned to canonical generation/hash; current heads remain a complete scope
+   projection. Production C# +643/−137, net +506. No ChatStore changes, new adapter,
+   history import, dual-write or hidden fallback; legacy resource roots are rejected.
+4. Ten targeted checks pass in isolated `38959ae6` plus this slice, macOS/net8/C#7.3:
+   three `journal resources:` cases; native publication/late-outcome and canonical
+   closure/backup regressions; existing authority replay, explicit reset, file
+   delete/restore; two no-tool runtime checks. Faults cover lost acknowledgement,
+   missing CAS, substituted attempt locator, index lag, rebuild and clean resource
+   restore. Native late proof remains addressable without rewriting the old Unknown
+   or rolling back a newer head. No Office/VSTO validation or Windows qualification.
+5. Same one-head fixture, H authority commits: capture current metadata plus exact
+   attempt receipt reads **5 records / 5,780 bytes at H=100**, **5 / 5,792 at H=1,000**.
+   It does not hydrate old effects or CAS bodies. Immutable registration retries
+   append zero bytes. Before this slice the new journal did not implement these
+   consumer ports; no old/new latency speedup is claimed. CPU, allocations, physical
+   I/O and Windows timings were not measured. Explicit full history still costs H;
+   current-head snapshots cost the number of heads, while pages remain bounded.
+6. Still open: accepted tool-call/result correlation with these resource-port
+   outcomes, remaining semantic resource owners/composition, other Store/Inbox/
+   control operations and P3 integration. Whole-application backup/restore must also
+   retain workspace identity locators and pending move intents; resource-journal/CAS
+   restore alone does not qualify it. Production switch requires verified complete
+   backup, stopped old writers and Windows/Office photo evidence. P4 stays deferred.
+7. Resource Fabric, Session events, MIGRATION_MAP, PROGRESS and Harness guide updated.
+   Default constructors retain the old resource backend until complete resource/
+   runtime composition switches at P7, when `ResourceAuthorityStore` and
+   `ResourceMutationJournal` are removed together. No new compatibility adapter.
+   This intermediate integration has no product version bump or release claim.

@@ -21,7 +21,7 @@ namespace RNAssistant.Core.Storage
             if (expected?.IsExact != true) return false;
             var address = ResourceUri.Parse(expected.Uri);
             return address.Provider == "file" && address.Segments.Count == 1 &&
-                _authority.GetRevision(Scope(address.Segments[0]), expected)?.Payload?.ByteLength > MaximumTextBytes;
+                _revisions.GetRevision(Scope(address.Segments[0]), expected)?.Payload?.ByteLength > MaximumTextBytes;
         }
 
         private bool RequiresStreamedFile(string path, ResourceRef expected)
@@ -76,7 +76,7 @@ namespace RNAssistant.Core.Storage
         {
             var source = AcceptedStreamedTextSource(workspace, sourceRelativePath, expectedSource);
             var sourcePath = ResolvePath(workspace, sourceRelativePath, false, true);
-            var sourceRevision = _authority.GetRevision(source.Evidence.ScopeId, source.Reference);
+            var sourceRevision = _revisions.GetRevision(source.Evidence.ScopeId, source.Reference);
             var stagedPath = Path.Combine(Path.GetTempPath(), "rna-copy-" + Guid.NewGuid().ToString("N") + ".tmp");
             try
             {
@@ -138,9 +138,9 @@ namespace RNAssistant.Core.Storage
                 FaultPoint?.Invoke("after-dispatch");
                 VerifyLargePatchReadBack(path, retained.Payload);
                 var exact = NewRevision(id);
-                _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash,
+                _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash,
                     retained.Payload, previous, previous));
-                _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
                     hash, retained.Payload, ResourceCoverage.Whole()));
                 var snapshot = _authority.Capture(scope);
                 var head = snapshot.GetHead(Identity(id));
@@ -280,7 +280,7 @@ namespace RNAssistant.Core.Storage
                     using (var previous = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                     {
                         long length;
-                        if (previous.Length > maximumBytes || ChatBlobStore.HashFile(previous, out length, token, null) != _authority.GetRevision(scope, expected).ContentSha256)
+                        if (previous.Length > maximumBytes || ChatBlobStore.HashFile(previous, out length, token, null) != _revisions.GetRevision(scope, expected).ContentSha256)
                             throw new WorkspaceFileException("target_conflict", "File changed outside RNAssistant.");
                     }
                 }
@@ -293,7 +293,7 @@ namespace RNAssistant.Core.Storage
                         textSource ? "text/plain; charset=utf-8" : "application/octet-stream", token, null));
                 }
                 if (textSource && expected != null &&
-                    payload.Sha256 == _authority.GetRevision(scope, expected).ContentSha256)
+                    payload.Sha256 == _revisions.GetRevision(scope, expected).ContentSha256)
                     return new WorkspaceFileSnapshot(relativePath,
                         PublishedEvidence(expected, ResourceRepresentations.Raw));
                 var operation = copySource != null ? "files.copy" :
@@ -315,7 +315,7 @@ namespace RNAssistant.Core.Storage
                         using (var previous = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                         {
                             long length;
-                            if (ChatBlobStore.HashFile(previous, out length, token, null) != _authority.GetRevision(scope, expected).ContentSha256)
+                            if (ChatBlobStore.HashFile(previous, out length, token, null) != _revisions.GetRevision(scope, expected).ContentSha256)
                                 throw new WorkspaceFileException("target_conflict", "File changed immediately before dispatch.");
                         }
                     preDispatchCheck?.Invoke();
@@ -329,11 +329,11 @@ namespace RNAssistant.Core.Storage
                             throw new WorkspaceFileException("read_back_mismatch", "Published bytes do not match staging.");
                     }
                     var exact = NewRevision(id);
-                    _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256,
+                    _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256,
                         payload, expected, dependencies: copySource == null ? null : new[] {
                             new ResourceDependency(copySource, ResourceRepresentations.Raw,
                                 ResourceCoverage.Whole(), "immutable-snapshot") }));
-                    _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw, payload.Sha256, payload, ResourceCoverage.Whole()));
+                    _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw, payload.Sha256, payload, ResourceCoverage.Whole()));
                     var frozen = _authority.Capture(scope); var head = frozen.GetHead(Identity(id));
                     if (head?.Revision?.Revision != expected?.Revision) throw new WorkspaceFileException("authority_conflict", "File authority changed before publication.");
                     var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), effectOperation ?? attempt.Operation, ResourceEffectOutcome.VerifiedChanged,
@@ -379,8 +379,8 @@ namespace RNAssistant.Core.Storage
                     ResolvePath(workspace, relativePath, false);
                     if (!Directory.Exists(path)) throw new IOException("Directory read-back failed.");
                     var exact = NewRevision(id); var frozen = _authority.Capture(scope); var before = frozen.GetHead(Identity(id));
-                    _authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload, before?.Revision));
-                    _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Metadata, payload.Sha256, payload, ResourceCoverage.Whole()));
+                    _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload, before?.Revision));
+                    _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Metadata, payload.Sha256, payload, ResourceCoverage.Whole()));
                     var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "files.mkdir", ResourceEffectOutcome.VerifiedChanged,
                         new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact, before: before?.Revision, after: exact, changeKind: "directory-create") }, "Directory read-back");
                     var commit = ResourceAuthorityCommit.Create(scope, frozen.Generation, effect,

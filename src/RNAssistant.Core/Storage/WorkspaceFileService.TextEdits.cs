@@ -101,9 +101,9 @@ namespace RNAssistant.Core.Storage
                 if (saved.ByteLength <= MaximumTextBytes)
                 {
                     // Evidence is read from the verified immutable preimage, never from a newer live file.
-                    var revision = _authority.GetRevision(saved.Evidence.ScopeId, saved.Reference);
+                    var revision = _revisions.GetRevision(saved.Evidence.ScopeId, saved.Reference);
                     var text = _blobs.ReadText(revision.Payload.ToBlobReference());
-                    _authority.RegisterView(saved.Evidence.ScopeId, new ResourceRevisionView(saved.Reference,
+                    _revisions.RegisterView(saved.Evidence.ScopeId, new ResourceRevisionView(saved.Reference,
                         ResourceRepresentations.Text, saved.ContentSha256, revision.Payload, ResourceCoverage.Whole()));
                     return new WorkspaceFileObservation { RelativePath = path, Text = text, Reference = saved.Reference,
                         ContentSha256 = saved.ContentSha256, SourceByteLength = saved.ByteLength, AuthorityCommit = saved.AuthorityCommit,

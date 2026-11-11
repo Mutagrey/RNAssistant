@@ -100,6 +100,18 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal resources:` runs three direct-port checks: actual Workspace file lifecycle
+(create/replace/delete/restore/move), uncertain dispatch and independent file access;
+Office mutation observer multi-head publication and unknown recovery; immutable
+registrations, exact receipts, lost acknowledgement, pinned history/view inventory,
+index rebuild and clean resource-journal/CAS restore. H=100/1000 probes count bounded
+head capture plus attempt lookup. Relevant existing regressions: `storage optimization:
+resource publication and late outcome`, `storage optimization: canonical closure and
+backup restore`, `resource cutover: atomic authority and replay`, `resource cutover:
+explicit reset invalidates cached journals`, `workspace files: recoverable delete and
+explicit restore`, and `journal runtime:`. Full tool turns, production composition,
+workspace locator/move-intent backup and Windows/Office qualification remain open.
+
 `journal runtime:` runs two focused checks: real Office run service and Workspace
 ports through AgentKernel and scripted HTTP (reflection/finish, restart/next turn,
 mandatory manifests, no legacy chat writes), plus atomic checkpoint/answer lost-ack,

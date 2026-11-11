@@ -118,13 +118,20 @@ run service и Workspace runtime ports: reflection → finish, restart и вто
 к локальному HTTP-провайдеру. Ответ и checkpoint фиксируются одним frame; manifest
 и context receipt сохраняются в CAS. Девять адресных checks проходят. При
 H=100/1000/10000 kernel append читает 5 записей и не гидратирует старые тела.
-Resources/mutations, rewrite/move/delete/recovery, usage, Inbox/control/feed и
+Следующий ресурсный срез подключил реальные Workspace file owner и Office mutation
+observer к портам `ResourceJournal`: подготовка/dispatch, атомарные heads+effect+resolve,
+unknown и явная проверка без replay. Десять адресных checks проходят, включая файловые
+delete/restore/move, lost ack, rebuild и resource/CAS restore. При H=100/1000 capture
+текущего head + поиск mutation receipt читают 5 записей; history загружается отдельно.
+Tool-call/result linkage, остальные resource owners, rewrite/move/delete/recovery, usage, Inbox/control/feed и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
+Полный restore также должен сохранить Workspace identity locators и move intents.
 Старый backend удаляется при переключении целого порта; новые fallback/adapters
 не добавлены. Product version не повышается для этого промежуточного подключения.
 [Отчёт §12](../audits/storage-context-optimization.md#p1p2--direct-journal-text-store-integration-2026-11-11).
 [Runtime-срез](../audits/storage-context-optimization.md#p1p2--atomic-no-tool-runtime-integration-2026-11-11).
+[Resource-срез](../audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace

@@ -14,11 +14,11 @@ namespace RNAssistant.Office.Services
     {
         private readonly IResourceAuthorityStore _authority;
         private readonly IResourceRevisionStore _revisions;
-        private readonly ResourceMutationJournal _mutations;
+        private readonly IResourceMutationJournal _mutations;
         private readonly ChatBlobStore _payloads;
 
         internal ResourceAuthorityService(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
-            ResourceMutationJournal mutations = null, ChatBlobStore payloads = null)
+            IResourceMutationJournal mutations = null, ChatBlobStore payloads = null)
         {
             _authority = authority ?? throw new ArgumentNullException(nameof(authority));
             _revisions = revisions ?? throw new ArgumentNullException(nameof(revisions));
@@ -440,7 +440,7 @@ namespace RNAssistant.Office.Services
     internal sealed class ResourceMutationAuthorityObserver : IToolMutationObserver
     {
         private readonly ResourceAuthorityService _authority;
-        private readonly ResourceMutationJournal _journal;
+        private readonly IResourceMutationJournal _journal;
         private readonly ChatSession _session;
         private readonly ChatBlobStore _payloads;
         private readonly Action<ChatSession> _persistResources;
@@ -452,7 +452,7 @@ namespace RNAssistant.Office.Services
         private readonly Dictionary<string, string> _documentOperationKeys = new Dictionary<string, string>(StringComparer.Ordinal);
 
         internal ResourceMutationAuthorityObserver(ResourceAuthorityService authority,
-            ResourceMutationJournal journal, ChatSession session, ChatBlobStore payloads,
+            IResourceMutationJournal journal, ChatSession session, ChatBlobStore payloads,
             Action<ChatSession> persistResources = null,
             Func<ResourceIdentity, ResourceMutationReadBack> captureCatalog = null)
         {
@@ -627,7 +627,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static ResourceAuthorityCommit PublishAttempt(ResourceAuthorityService authority,
-            ResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record,
+            IResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record,
             IReadOnlyList<ResourceMutationReadBack> capturedReadBack = null)
         {
             if (PlanDocumentToolCatalog.Owns(attempt.Operation))
@@ -635,7 +635,7 @@ namespace RNAssistant.Office.Services
             if (TaskListToolCatalog.Owns(attempt.Operation))
                 return TaskListPublication.Publish(authority.Store, authority.Revisions, journal, attempt, record,
                     capturedReadBack?.SingleOrDefault(item => item.Identity.Equals(attempt.Target)));
-            var prior = authority.Store.Capture(attempt.ScopeId).Commits.FirstOrDefault(item => item.MutationAttemptId == attempt.AttemptId);
+            var prior = authority.Store.Capture(attempt.ScopeId).FindMutationCommit(attempt.AttemptId);
             if (prior != null) { journal.Resolve(attempt.AttemptId, prior.CommitId); return prior; }
             var snapshot = authority.Store.Capture(attempt.ScopeId);
             if (ResourceMutationDomains.IsDocumentArtifactOperation(attempt.Operation) &&
@@ -736,7 +736,7 @@ namespace RNAssistant.Office.Services
 
         public void ReleaseUnresolved(string attemptId) { Release(attemptId); }
 
-        internal static void ReconcileInterrupted(ResourceAuthorityService authority, ResourceMutationJournal journal)
+        internal static void ReconcileInterrupted(ResourceAuthorityService authority, IResourceMutationJournal journal)
         {
             foreach (var pending in journal.Unresolved())
             {

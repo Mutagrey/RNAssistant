@@ -93,6 +93,7 @@ namespace RNAssistant.Harness
                 var lateReceipt = resources.Publish("late-known", new ResourcePublication(scope, target, secondHead, late, view(late), lateEffect, lateBinding.AttemptId, "ac-late"));
                 AssertTrue(!lateReceipt.Fact.AdvancesHead, "late result cannot overwrite a newer head");
                 AssertEqual("r4", resources.Head(scope, target).Revision.Revision, "newer current source survives delayed completion");
+                AssertEqual("ac-late", resources.Capture(scope).FindMutationCommit(lateBinding.AttemptId).CommitId, "resource port addresses the latest native outcome without losing the earlier unknown");
                 restarted.LinkResourceOutcome("chat", "cancelled-run", "late", lateReceipt);
                 var linkBytes = restarted.Journal.WrittenBytes;
                 restarted.LinkResourceOutcome("chat", "cancelled-run", "late", lateReceipt);
