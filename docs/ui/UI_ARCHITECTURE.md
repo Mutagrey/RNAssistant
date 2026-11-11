@@ -129,6 +129,10 @@ HtmlWorkspaceView используют результат перед приме�
 hide/move/split/restore удерживают renderer; close Browser-вкладки освобождает его,
 reopen загружает страницу заново. Run и сохранённые данные принадлежат прежним owners.
 
+P3a (2026-11-11): PluginView.ready не открывает active release после failed source
+check. Existing Browser/PreviewSurface показывает ошибку; explicit active command,
+candidate watcher, instance/grant owners сохранены. Нового слоя/bridge API нет.
+
 «Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
 тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.
 Нет второго composer, chat store или вложенного chat UI. HTML использует свой chatId;

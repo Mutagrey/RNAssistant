@@ -138,6 +138,9 @@ Source-only не создаёт iframe. Read-only live оставляет previe
 и отдельного «Завершить сессию» нет; native window Dismiss остаётся скрытием окна.
 Dirty source editor сохраняет свой guard. Import добавляет source workspace,
 закрытие Browser не отменяет import/Run и не удаляет сохранённые данные.
+P3a (2026-11-11): первое открытие plugin source с failed check показывает ошибку без
+подмены опубликованной страницей. Reload проверяет исходники снова; «Открыть активную
+версию» остаётся явной командой. Уже открытый preview при failed refresh сохраняется.
 [Широкий вид](review/browser-address-wide.png),
 [420 px / 125%](review/browser-address-narrow.png); [процедура ревью](../browser/05_TEST_MATRIX.md#toolbar-review).
 

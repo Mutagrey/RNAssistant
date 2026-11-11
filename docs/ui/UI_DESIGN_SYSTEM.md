@@ -119,6 +119,10 @@ Lifecycle Approved 2026-11-11: обычный × Browser-вкладки заве
 не вводим. Hide/move сохраняют view; dirty source guard остаётся прежним.
 P2c не меняет геометрию/tokens и проверяет lifecycle существующих компонентов.
 
+P3a использует прежний PreviewSurface error/status без новых controls/CSS: при первом
+failed source check нет iframe и сообщения о якобы открытой странице.
+[1280 px](review/browser-p3a-error-1280.png), [420 px / 125%](review/browser-p3a-error-420.png).
+
 [Замеры](review/browser-toolbar.json) сравнивают production и frozen Demo при одинаковых
 viewport/zoom/theme. Production controls используют общий compact token 30 CSS px,
 SVG 16 px; source text 12 px. Сохранённое содержимое проверено при 1280/100% и

@@ -2096,6 +2096,15 @@ is closed even when the synthetic transport ignores abort. Live dirty guards rem
 All four passed sequentially without production changes or a C# build.
 [Evidence and limits](../../docs/browser/05_TEST_MATRIX.md#результаты-p2c--2026-11-11).
 
+## Plugin source failure (P3a, 2026-11-11)
+
+`node tests/web/plugin-source-failure.test.js` covers initial failed check
+without published-release fallback, no retry for unchanged source, watcher recovery,
+retained previous preview, explicit retry/active release and narrow/125% geometry.
+`RNA_PLUGIN_FAILURE_SCREENSHOTS=/tmp/plugin-failure` saves review PNGs. Pair with
+`plugin-view-selection.test.js` for independent instances/annotations/late close.
+Both pass; the broader `browser-views` focus assertion remains an open gap.
+
 ## Browser target resolution (P2b, 2026-11-11)
 
 `browser target:` covers exact source/kind/scope, head drift without selection,

@@ -256,6 +256,15 @@ restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wa
 control, terminal Run wait/dependencies, лимиты и Inspector ещё
 не реализованы; управление owner другого процесса этим tool не добавлено.
 
+## Universal Browser P3a: failed source check — In Review, 2026-11-11
+
+PluginView при первом failed source check больше не открывает active release
+автоматически. Остаётся ошибка без iframe; prior preview при failed refresh,
+source watcher и explicit retry/release сохранены. Focused red → green и independent
+plugin views проходят; общий browser fixture остановился на focus assertion до
+нового сценария. [Evidence/ревью](../browser/05_TEST_MATRIX.md#результаты-p3a--2026-11-11).
+Остаток P3 и Windows/WebView2/visual acceptance открыты. Новый runtime/bridge/UI не введён.
+
 ## Universal Browser P2b: target/capabilities — In Review, 2026-11-11
 
 Application resolver различает saved snapshot, raw HTML source и live editor по

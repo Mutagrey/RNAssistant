@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.3.2-dev
+
+- A failed plugin source check on first opening now leaves a visible error instead
+  of automatically opening the active published release. Source watching, manual
+  retry and the existing preview after a failed refresh are preserved.
+
 ### 16.3.1-dev
 
 - Context recovery preserves runtime unknown outcomes even when an opaque tool

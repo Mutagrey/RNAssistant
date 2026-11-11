@@ -1,8 +1,18 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets + P2c lifecycle checks.
+Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets + P2c lifecycle checks + P3a source failure.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — будущий native adapter. P1, P2a и P2b реализованы, **In Review**.
+
+## P3a: ошибка исходников без подмены release — In Review, 2026-11-11
+
+Первое открытие plugin workbench после failed source check больше не подставляет
+active release. Ошибка остаётся видимой без iframe; прежний рабочий preview при
+failed refresh сохраняется. Watcher, manual retry и явная команда active release
+проверены. Исправлена существующая ветка PluginView; новых services/DTO/UI нет.
+Focused red → green и независимые plugin views прошли; общий browser fixture
+остановился на прежней focus assertion до нового сценария. [Evidence/ревью](05_TEST_MATRIX.md#результаты-p3a--2026-11-11).
+Остаток P3, визуальное принятие и Windows/WebView2 evidence открыты.
 
 ## P2c: автоматический lifetime — проверен host-neutral, 2026-11-11
 
@@ -227,8 +237,8 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Следующий срез P3 — сверить existing plugin source/candidate/release views с общими
-Browser controls и target/capability контрактом; выбрать конкретное расхождение до
-кодирования. Instance owner, grants, публикация и данные остаются у прежних owners.
+Далее остаток P3: plugin target/capability projection и source/release presentation;
+нужный consumer/расхождение определить в существующих DTO/views до кодирования.
+Instance owner, grants, публикация и данные остаются у прежних owners.
 [План](04_MIGRATION_PLAN.md#развитие-после-p1). Отдельный session слой не нужен заранее.
 Визуальное ревью P1/P2a/P2b, pointer routing и Windows evidence — отдельные открытые gates.

@@ -1,7 +1,8 @@
 # Universal Browser: план реализации
 
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
-P2c automatic lifecycle — **проверен host-neutral**; P3–P7 **Planned / Proposed**.
+P2c automatic lifecycle — **проверен host-neutral**; P3a source failure — **In Review**;
+остаток P3–P7 **Planned / Proposed**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
 [исходник](00_SOURCE_SPEC.md), [аудит](01_AUDIT.md), [ADR](02_ARCHITECTURE_ADR.md),
@@ -171,10 +172,22 @@ production-правок, не обнаружено. [Evidence и границы]
 Независимая фоновая browser session возможна позднее только с явным сценарием,
 owner и правилами завершения в P5/P6. Она не является условием текущего P2c/P3.
 
-Следующий срез — P3: сначала сверить existing plugin source/candidate/release views
-с target/capability контрактом и общими controls, затем выбрать конкретный пробел.
-Существующий instance owner, grants, check/publish/restore и source/data storage
-сохраняются. Заранее вводить новый session слой или переписывать plugin runtime не нужно.
+## P3a: ошибка исходников без подмены release — In Review, 2026-11-11
+
+Сверка показала: source/candidate/release уже используют общий Browser и текущие
+instance owners. Воспроизведён конкретный gap: при первом failed check workbench
+автоматически открывал active release. `PluginView.ready` теперь выбирает source
+preview и ранее явно выбранную публикацию разными ветками; ошибка source оставляет
+сообщение без iframe. Existing screen при failed refresh сохраняется. Watcher,
+ручной retry, явное открытие active release и публикация остаются у прежних owners.
+Новых DTO, service/registry, bridge commands или UI controls нет.
+
+Focused regression red → green и `plugin-view-selection` прошли; общий `browser-views`
+остановился до нового сценария на focus assertion и не засчитан как pass.
+[Evidence и ревью](05_TEST_MATRIX.md#результаты-p3a--2026-11-11).
+Остаток P3 — plugin target/capability projection и source/release presentation:
+сначала определить нужный consumer/расхождение в существующих DTO/views, без
+предварительного нового session слоя. Native renderer/agent automation отдельно.
 
 ## Развитие после P1
 

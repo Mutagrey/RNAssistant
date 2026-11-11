@@ -209,9 +209,9 @@
         if(current!==epoch)return false;
         sourceStamp=source;delete publishedSourceStamps[id];status('');return true;
       }catch(error){if(current===epoch){candidate=null;candidateStamp=null;sourceStamp=source;
-          var message='Предпросмотр не обновлён: '+error.message;
+          var message=(view?'Предпросмотр не обновлён: ':'Предпросмотр недоступен: ')+error.message;
           status('');
-          previewSurface.fail({title:selected.name,path:'Новый предпросмотр недоступен'},message+' Открытый экран не подтверждает текущие исходники.');}return false;}
+          previewSurface.fail({title:selected.name,path:'Новый предпросмотр недоступен'},message+(view?' Открытый экран не подтверждает текущие исходники.':''));}return false;}
     })();
     previewTask=task;
     try{return await task;}finally{if(previewTask===task)previewTask=null;previewBusy=false;controls();}
@@ -321,8 +321,8 @@
         try{sourceStamp=(await send('getPluginSourceState',{pluginId:selected.pluginId})).stamp;}catch(error){status(error.message,true);}
         if(current!==epoch||!previewOpen||disposed)return;
         if(publishedSourceStamps[selected.pluginId]!==sourceStamp)await checkAndPreview(sourceStamp);
+        else if(!view&&selected.enabled)await showView(false);
         if(current!==epoch||!previewOpen||disposed)return;
-        if(!view&&selected.enabled)await showView(false);
         if(current===epoch&&previewOpen&&!disposed)startSourceWatch();
       })();
       try{await startup;}catch(error){if(!disposed&&current===epoch)previewSurface.fail({title:target.title},error.detail||error.message);}

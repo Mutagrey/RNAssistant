@@ -44,6 +44,25 @@ bounded source, поздний transfer cleanup, exact chat/document/URI и plug
 descriptor, вместо проверки пользовательского поведения. C#/VSTO tests для P1 не нужны.
 При изменении только docs эти команды не выполнять.
 
+## Результаты P3a — 2026-11-11
+
+`plugin-source-failure.test.js` на прежнем production-коде воспроизвёл один
+`openPlugin` после failed initial check вместо нуля. После исправления прошли
+initial error без iframe/подмены release, отсутствие retry для неизменных исходников,
+watch recovery, retained previous frame при failed refresh, manual retry и явное
+открытие active release. При 1280/100% и 420/125% overflow отсутствует.
+`plugin-view-selection.test.js` прошёл retained frames, rail, move/restore,
+scoped annotation и late close. Использован existing mock, без native/Office/build.
+
+Общий `browser-views` до production-правки остановился на focus assertion
+`Workbench.contains(document.activeElement)` до нового сценария; pass не заявлен,
+причина не установлена. [Открытый риск](../stabilization/RISK_REGISTER.md#browser-annotation-pointer-routing--open-2026-11-05).
+Для ревью: 1) открыть enabled plugin с ошибкой исходников; 2) проверить сообщение
+без опубликованной страницы; 3) исправить исходники / нажать Reload; 4) явно открыть
+active release. [1280 px](../ui/review/browser-p3a-error-1280.png),
+[420 px / 125%](../ui/review/browser-p3a-error-420.png) — synthetic failure, existing
+error component. Visual acceptance и Windows/WebView2 evidence остаются Open.
+
 ## Результаты P2c — 2026-11-11
 
 Production baseline `a7254360`; код приложения не менялся. Последовательно прошли:

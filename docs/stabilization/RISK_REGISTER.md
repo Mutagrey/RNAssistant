@@ -156,6 +156,12 @@ Owner: Artifact Library / saved HTML provider. Windows controller delivery ос�
 
 ## Browser annotation pointer routing — Open, 2026-11-05
 
+Дополнение 2026-11-11, P3a: общий `browser-views` до production-правки остановился
+на `Workbench.contains(document.activeElement)` после Enter у Browser anchor,
+до нового source-failure сценария. Причина focus failure не установлена; этот прогон
+не засчитан как pass. Отдельные source-failure и plugin-view-selection прошли;
+устойчивость общей focus/pointer проверки остаётся открытой.
+
 `browser-views.test.js` нестабилен уже до toolbar-правок: timeout при выборе элемента
 или сохранении HTML-аннотации. Диагностический повтор поймал pointerdown/up/click
 в iframe HTML по координатам видимой кнопки «Готово»; parent handler и

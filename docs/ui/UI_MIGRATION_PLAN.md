@@ -248,7 +248,11 @@ close вкладки освобождает её, reopen загружает за
 четыре browser fixtures проходят; добавлены только saved/editor close/reopen и
 late-body assertions. Production-код/UI не менялись; dirty guards и existing portal
 сохранены. [Evidence](../browser/05_TEST_MATRIX.md#результаты-p2c--2026-11-11).
-Далее P3 — сверка existing plugin views и выбор конкретного расхождения до реализации.
+P3a реализован / In Review: failed initial plugin source check не открывает active
+release; existing error, watcher, explicit retry/release и retained previous frame
+сохранены. Исправлена ветка PluginView, без новых компонентов/контрактов.
+[Проверки и ревью](../browser/05_TEST_MATRIX.md#результаты-p3a--2026-11-11).
+Остаток P3 — target/capability projection и presentation plugin source/release.
 [Scope и порядок](../browser/04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
 Preview standalone source, перенос зависимостей, настоящий diff и external native browser остаются в плане. Концепция
 Approved; визуальное принятие production и Windows/Office evidence остаются Open.
