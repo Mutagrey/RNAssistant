@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Browser P6e navigation — In Review, 2026-11-11
+
+`16.10.0-dev`: `browser.navigate` использует existing owned page, delivered read,
+ToolRuntime confirmation/evidence и native allowlist на каждом redirect/read-back.
+Manual takeover/unknown не допускают replay; timeout не снимает redirect guard.
+9 host-neutral cases проверены в изолированной копии `de343788` + P6e: текущий общий
+Workspace refactor ещё не компилировался. 2 Chrome fixtures (navigation и прежние
+local actions) проходят; Windows compilation/WebView2 delivery открыты.
+[Evidence](../browser/05_TEST_MATRIX.md#p6e). Далее P6f external-site fill/click;
+доработка diff и P4b отложены пользователем.
+
 ## Browser P4a baseline и смена приоритета — 2026-11-11
 
 `16.9.0-dev`: сравнение saved HTML/plugin source pair реализовано без нового store;

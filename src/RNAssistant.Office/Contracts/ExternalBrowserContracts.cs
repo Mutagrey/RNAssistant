@@ -101,6 +101,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("value")] public string Value { get; set; }
         [JsonProperty("expectedText")] public string ExpectedText { get; set; }
+        [JsonProperty("url")] public string Url { get; set; }
     }
 
     [JsonConverter(typeof(StringEnumConverter))]
@@ -110,6 +111,15 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("effect", Required = Required.Always)] public ExternalBrowserEffect Effect { get; set; }
         [JsonProperty("code", Required = Required.Always)] public string Code { get; set; }
+        // Native evidence only: navigation intentionally advances the document binding.
+        [JsonIgnore] public ExternalBrowserReadTarget NavigationTarget { get; set; }
+    }
+
+    internal sealed class ExternalBrowserNavigationDispatch
+    {
+        [JsonProperty("started")] public bool Started { get; set; }
+        [JsonProperty("unchanged")] public bool Unchanged { get; set; }
+        [JsonProperty("code")] public string Code { get; set; }
     }
 
     public interface IExternalBrowserActionSource : IExternalBrowserReadSource
@@ -117,7 +127,7 @@ namespace RNAssistant.Office.Contracts
         Task PrepareAsync(ExternalBrowserReadTarget target, string observationRevision, string preparationId,
             ExternalBrowserActionRequest request, CancellationToken cancellationToken);
         Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
-            Action beforeDispatch, CancellationToken cancellationToken);
+            Action beforeDispatch, CancellationToken cancellationToken, bool navigation = false);
         void BlockActions(ExternalBrowserReadTarget target);
         // Best effort after terminal publication; must not throw or change execution state.
         void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect);

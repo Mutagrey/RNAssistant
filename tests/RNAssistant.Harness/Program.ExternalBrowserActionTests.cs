@@ -36,12 +36,14 @@ namespace RNAssistant.Harness
                 return Task.CompletedTask;
             }
             public Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
-                Action beforeDispatch, CancellationToken token)
+                Action beforeDispatch, CancellationToken token, bool navigation = false)
             {
                 token.ThrowIfCancellationRequested();
                 AssertTrue(target.Matches(Target) && preparationId == _prepared, "exact native preparation reaches dispatch");
                 BeforeDispatch?.Invoke(); beforeDispatch(); Dispatches++; AfterDispatch?.Invoke();
-                return Task.FromResult(new ExternalBrowserActionResult { Effect = Effect, Code = "browser_verified" });
+                if (navigation && Effect == ExternalBrowserEffect.VerifiedChange)
+                    Target = new ExternalBrowserReadTarget(target.ChatId, target.SessionId, target.DocumentGeneration + 1);
+                return Task.FromResult(new ExternalBrowserActionResult { Effect = Effect, Code = "browser_verified", NavigationTarget = navigation ? Target : null });
             }
         }
 
@@ -94,10 +96,14 @@ namespace RNAssistant.Harness
                 AssertTrue(filled.AuthorityCommitId != null, "existing authority publishes the terminal");
                 AssertEqual(0, journal.Unresolved().Count, "terminal closes the attempt");
                 source.BeforeDispatch = null; source.AfterDispatch = null;
+                read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
+                var navigated = execute(ExternalBrowserToolHandler.Navigate, new { target = args.target, url = "https://example.com/" }, read.ResourceEvidence);
+                AssertEqual(ToolExecutionOutcome.Ok, navigated.Outcome, "verified navigation accepts the next generation of the same owned page");
+                AssertEqual(2L, source.Target.DocumentGeneration, "navigation intentionally advances the document generation");
                 execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
                 AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Fill, args, read.ResourceEvidence).Outcome,
                     "older delivered read cannot replace the current exact native observation");
-                AssertEqual(1, source.Dispatches, "stale observation causes no additional effect");
+                AssertEqual(2, source.Dispatches, "stale observation causes no additional effect");
                 read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
                 source.AfterDispatch = () => { throw new TimeoutException("Simulated channel loss after dispatch."); };
                 var unknown = execute(ExternalBrowserToolHandler.Click, new { target = args.target, name = "Save", expectedText = "Saved" }, read.ResourceEvidence);

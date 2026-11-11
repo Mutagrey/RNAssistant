@@ -1,8 +1,16 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot, P6a/P6b read/local actions, P6c visualization и P6d user control/access.
-Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
-Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
+Дата: 2026-11-11. Scope: P0–P3 baseline, P4a source diff baseline, P5a native pilot,
+P6a/P6b read/local actions, P6c visualization, P6d user control/access и P6e navigation.
+
+## P6e: agent navigation — In Review
+
+В existing странице добавлен `browser.navigate` с delivered read, initial/redirect/final
+site access и новым runtime document binding после загрузки. Trusted input останавливает
+agent dispatch; timeout/unknown не replay и не освобождают поздние redirect. 9 Harness
+cases в отдельной копии `de343788` + P6e и 2 Chrome fixtures проходят; [evidence](05_TEST_MATRIX.md#p6e).
+Windows compilation/delivery Open. Следующий срез — P6f external fill/click с новым
+admission/read-back; пока они доступны только на packaged probe.
 
 ## P4a: baseline завершён; дальнейшая доработка отложена
 
@@ -327,11 +335,13 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c) и [P6d](05_TEST_MATRIX.md#p6d). Следующий независимый срез —
-P6e: переходы агента на разрешённые сайты; P4a baseline завершён, доработка отложена.
+На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c), [P6d](05_TEST_MATRIX.md#p6d) и
+[P4a baseline](05_TEST_MATRIX.md#p4a); P6e navigation реализован, [Windows evidence открыт](05_TEST_MATRIX.md#p6e).
+Следующий срез — P6f: ограниченные fill/click разрешённых обычных сайтов с проверкой
+наблюдения/элемента, ручного управления и результата. Простое снятие probe-only запрета недостаточно.
 Первый P6b local workflow реализован; general external actions остаются отдельным scope.
-Отдельный P3c с общим descriptor без consumer не нужен; доработка diff и persistent annotations
-отложена пользователем. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
+Отдельный P3c с общим descriptor без consumer не нужен; доработка diff и persistent
+annotations отложены пользователем. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
 Native Windows evidence P5a, визуальное принятие внутренних views и известный
 focus/pointer gap остаются отдельными открытыми задачами, а не поводом повторять
 все проверки при каждом срезе. Instance/grant/publication owners сохраняются.

@@ -24,9 +24,9 @@ namespace RNAssistant.Office.Tools
     // Semantic admission and existing runtime evidence; native Page owns element bindings/effects.
     internal sealed class ExternalBrowserToolHandler : IPreparableToolHandler, IManagedMutationToolHandler
     {
-        internal const string Fill = "browser.fill", Click = "browser.click";
-        internal static bool Owns(string id) { return id == Fill || id == Click; }
-        internal static ToolBinding BindingFor(string id) { return new ToolBinding(id + ".probe.v1"); }
+        internal const string Fill = "browser.fill", Click = "browser.click", Navigate = "browser.navigate";
+        internal static bool Owns(string id) { return id == Fill || id == Click || id == Navigate; }
+        internal static ToolBinding BindingFor(string id) { return new ToolBinding(id + (id == Navigate ? ".v1" : ".probe.v1")); }
         private readonly ChatSession _session;
         private readonly Func<IExternalBrowserReadSource> _source;
         private readonly Func<ChatSession, IDisposable> _documentAccess;
@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Tools
 
         internal static IEnumerable<ToolCatalogEntry> Catalog()
         {
-            foreach (var id in new[] { Fill, Click })
+            foreach (var id in new[] { Fill, Click, Navigate })
             {
                 var properties = new Dictionary<string, object> {
                     ["target"] = new { type = "string", description = "The browser page read in this conversation.", @enum = new[] { ExternalBrowserResourceProvider.Target } },
@@ -46,9 +46,15 @@ namespace RNAssistant.Office.Tools
                 var value = id == Fill ? "value" : "expectedText";
                 properties[value] = new { type = "string", description = id == Fill ? "Replacement textbox value; read-back compares it internally." :
                     "Exact new semantic text expected after the click; it must be absent before dispatch.", minLength = id == Fill ? 0 : 1, maxLength = id == Fill ? 1024 : 160 };
+                if (id == Navigate) {
+                    properties.Remove("name"); properties.Remove(value);
+                    properties["url"] = new { type = "string", description = "Absolute HTTP(S) destination allowed in Sites available to the agent; redirects are checked too.", minLength = 1, maxLength = 8192 };
+                }
                 var schema = JsonConvert.SerializeObject(new { type = "object", properties,
-                    required = new[] { "target", "name", value }, additionalProperties = false });
+                    required = id == Navigate ? new[] { "target", "url" } : new[] { "target", "name", value }, additionalProperties = false });
                 var descriptor = new ToolDescriptor(id,
+                    id == Navigate ? "Navigate the existing Browser page owned by this conversation to an allowed HTTP(S) address. Requires a fresh delivered core.read first. " +
+                    "Verifies loading and final site access; read the new page before further actions. Manual control blocks navigation; unknown effects must not be retried. Does not open a new tab." :
                     "Local browser probe only. Requires a fresh core.read of the page delivered to this conversation before each action. " +
                     (id == Fill ? "Fill one visible textbox with the exact observed name; verify its value internally. " :
                     "Click one visible button with the exact observed name; expectedText must newly appear as a unique semantic entry. ") +
@@ -68,7 +74,7 @@ namespace RNAssistant.Office.Tools
                     token.ThrowIfCancellationRequested();
                     var source = _source?.Invoke() as IExternalBrowserActionSource;
                     var target = source?.TargetFor(_session?.Id);
-                    if (target == null) throw Error("Open the local browser probe from this chat first.", "browser_page_unavailable");
+                    if (target == null) throw Error("Open the Browser page from this chat first.", "browser_page_unavailable");
                     var accepted = _session.Messages.SingleOrDefault(message => message.Role == "assistant" &&
                         message.ToolCallId == context.Execution.Call.Id && message.RunId == context.Execution.RunId &&
                         message.AcceptedCallOrigin?.StepId == context.Execution.StepId);
@@ -83,13 +89,14 @@ namespace RNAssistant.Office.Tools
                     var prepared = new ExternalBrowserPrepared { Target = target, Observation = observation,
                         PreparationId = Guid.NewGuid().ToString("N") };
                     source.PrepareAsync(target, observation.Revision, prepared.PreparationId,
-                        new ExternalBrowserActionRequest { Action = context.Execution.Call.Name == Fill ? "fill" : "click",
+                        new ExternalBrowserActionRequest { Action = context.Execution.Call.Name == Navigate ? "navigate" : context.Execution.Call.Name == Fill ? "fill" : "click",
                             Name = ToolArgumentReader.String(context.Arguments, "name", ""),
                             Value = ToolArgumentReader.String(context.Arguments, "value", null),
-                            ExpectedText = ToolArgumentReader.String(context.Arguments, "expectedText", null) }, token).GetAwaiter().GetResult();
+                            ExpectedText = ToolArgumentReader.String(context.Arguments, "expectedText", null),
+                            Url = ToolArgumentReader.String(context.Arguments, "url", null) }, token).GetAwaiter().GetResult();
                     if (source != _source() || !target.Matches(source.TargetFor(_session.Id))) throw Error("The browser owner changed.", "browser_document_stale");
                     using (DocumentAccessGate.BeginOperation()) using (_documentAccess(_session)) { }
-                    return new ToolPreparationResult(RuntimeResult.Ok("Local browser action prepared; its exact element will be checked again before dispatch."), JsonConvert.SerializeObject(prepared));
+                    return new ToolPreparationResult(RuntimeResult.Ok("Browser action prepared; its exact target and user control will be checked again before dispatch."), JsonConvert.SerializeObject(prepared));
                 }
                 catch (ResourceRequestException error)
                 {
@@ -119,13 +126,19 @@ namespace RNAssistant.Office.Tools
                     prepared = JsonConvert.DeserializeObject<ExternalBrowserPrepared>(context.PreparedStateJson);
                     if (prepared?.Target == null || source == null || prepared.Target.ChatId != _session.Id ||
                         !prepared.Target.Matches(source.TargetFor(_session.Id))) throw Error("The prepared browser owner changed.", "browser_document_stale");
-                    var native = source.ActAsync(prepared.Target, prepared.PreparationId, context.MarkDispatchPossible, token).GetAwaiter().GetResult();
+                    var navigation = context.Execution.Call.Name == Navigate;
+                    var native = source.ActAsync(prepared.Target, prepared.PreparationId, context.MarkDispatchPossible, token, navigation).GetAwaiter().GetResult();
                     visualEffect = native.Effect;
-                    if (source != _source() || !prepared.Target.Matches(source.TargetFor(_session.Id))) throw Error("The browser owner changed after dispatch.", "browser_effect_unknown");
+                    if (navigation && native.Effect == ExternalBrowserEffect.VerifiedChange &&
+                        (native.NavigationTarget == null || native.NavigationTarget.DocumentGeneration <= prepared.Target.DocumentGeneration))
+                        throw Error("Navigation has no fresh document evidence.", "browser_effect_unknown");
+                    var after = navigation && native.NavigationTarget != null ? native.NavigationTarget : prepared.Target;
+                    if (source != _source() || after.ChatId != prepared.Target.ChatId || after.SessionId != prepared.Target.SessionId ||
+                        !after.Matches(source.TargetFor(_session.Id))) throw Error("The browser owner changed after dispatch.", "browser_effect_unknown");
                     using (_documentAccess(_session)) { } // User/host changes outside our gate must also fail closed.
                     var verified = native.Effect == ExternalBrowserEffect.VerifiedChange || native.Effect == ExternalBrowserEffect.VerifiedNoChange;
                     var data = Code(ExternalBrowserPolicy.SafeActionCode(native.Code));
-                    var result = verified ? RuntimeResult.Ok("The local browser action passed its read-back check. Read the page again before another action.", data)
+                    var result = verified ? RuntimeResult.Ok("The browser action passed its read-back check. Read the page again before another action.", data)
                         : native.Effect == ExternalBrowserEffect.Rejected ? RuntimeResult.Error(native.Code == "browser_user_control"
                             ? "The user controls this page. Wait for explicit Resume agent; do not retry browser actions."
                             : "The element changed or is not actionable. Read the page again; no effect occurred.", data)

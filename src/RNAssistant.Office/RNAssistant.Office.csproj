@@ -389,6 +389,7 @@
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="Contracts\ExternalBrowserContracts.cs" />
     <Compile Include="Services\ExternalBrowserPolicy.cs" />
+    <Compile Include="Services\ExternalBrowserNavigation.cs" />
     <Compile Include="Services\ExternalBrowserResourceProvider.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.cs" />
     <Compile Include="WebView\ExternalBrowserPage.cs" />

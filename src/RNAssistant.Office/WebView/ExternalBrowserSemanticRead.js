@@ -2,7 +2,7 @@
   "use strict";
   // This object exists only in the isolated world; page script cannot obtain its bindings.
   if (globalThis.__rnaBrowser) return globalThis.__rnaBrowser.read();
-  var observation = null, prepared = null, blocked = false;
+  var observation = null, prepared = null, blocked = false, navigating = false;
   function visual(method) {
     // Decoration cannot confer authority or change a verified operation's outcome.
     try {
@@ -144,6 +144,26 @@
     },
     hideAction: function () { visual('hide'); return true; },
     completeAction: function (id, effect) { visual('finish', id, effect); return true; },
+    navigate: function (id, url) {
+      var attempted = false;
+      try {
+        if (control().manual) fail('browser_user_control');
+        if (blocked) fail('browser_effect_unknown');
+        if (!observation || observation.used || observation.observationId !== id || observation.interaction !== control().epoch)
+          fail('browser_observation_stale');
+        var target = new URL(url);
+        if (!/^https?:$/.test(target.protocol) || target.username || target.password) fail('browser_action_invalid');
+        observation.used = true; prepared = null;
+        if (target.href === location.href) return { started: false, unchanged: true, code: 'browser_verified' };
+        blocked = true; navigating = true; attempted = true;
+        location.assign(target.href);
+        return { started: true };
+      } catch (error) { return { started: attempted, code: error.message }; }
+    },
+    completeNavigation: function () {
+      if (!navigating) return false;
+      navigating = false; blocked = false; observation = null; prepared = null; return true;
+    },
     act: function (id) {
       var plan = prepared; prepared = null;
       function result(effect, code) { return { effect: effect, code: code }; }

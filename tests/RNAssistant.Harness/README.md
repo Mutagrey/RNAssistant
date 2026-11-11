@@ -29,6 +29,12 @@ for the actual local probe and isolated-world element/user/read-back guards. The
 fixture remains relevant because each read now has a distinct runtime observation identity.
 WinForms queue timeout/controller delivery still requires Windows; [scope](../../docs/browser/05_TEST_MATRIX.md#p6b).
 
+P6e adds navigation to the existing action runtime and a ninth `external browser:`
+case for redirect/terminal correlation, permission revocation and unknown/takeover.
+Pair with `tests/web/external-browser-navigation.test.js` and the existing action
+fixture. Native NavigationId/queue/timeout delivery still needs Windows; see
+[P6e evidence](../../docs/browser/05_TEST_MATRIX.md#p6e).
+
 P4a source comparison: filter `source comparison:` (3 cases) plus
 `tests/web/browser-source-diff.test.js`. Saved-view lifecycle regression uses
 `tests/web/browser-saved-views.test.js`. No Office/VSTO build on macOS; no full suite

@@ -1,5 +1,29 @@
 # Universal Browser: матрица проверок
 
+<a id="p6e"></a>
+## P6e external navigation — 2026-11-11
+
+- `external browser:` — 9/9 в изолированной копии `de343788` + P6e; общая рабочая
+  копия имела чужие незавершённые Workspace constructor changes. Owner/session,
+  fresh delivered read, confirmation, before-dispatch journal и new generation
+  проверяются existing runtime fixture. Новый navigation case: same-ID redirects,
+  overlap/late completion, deny/revoke/takeover, late redirect после unknown,
+  IDN/punycode, fragment/source change и failed load. Последний case повторён после
+  final IDN/late redirect assertions — 1/1; прочие tests не менялись.
+- `tests/web/external-browser-navigation.test.js` — настоящий Chrome isolated world:
+  navigation/read, fragment + next read, no-op, used/stale observation, bad URI,
+  main-world isolation и trusted-input block. `external-browser-action.test.js` —
+  прежний local fill/click/cursor/control coverage проходит.
+- **Open Windows:** compile; user confirmation then revoke/takeover; delayed/overlapping
+  NavigationStarting/Completed; разрешённый/запрещённый redirect; loading timeout и
+  поздний redirect; fragment; close/new owner во время loading; subsequent core.read.
+  Только фото экрана. Chrome и host-neutral fixtures не квалифицируют native delivery.
+
+Ручной сценарий: включить existing Browser pilot → открыть страницу из чата →
+разрешить нужный сайт в Settings → агент читает probe, выполняет navigate и читает
+новую страницу. При ручном вводе продолжение только явное; неизвестный эффект не
+повторять, mutations требуют закрыть/открыть Browser. External fill/click — следующий срез.
+
 <a id="p4a"></a>
 ## P4a source comparison baseline — 2026-11-11
 

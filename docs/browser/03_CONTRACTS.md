@@ -5,10 +5,37 @@ Web и native host — consumers. Это минимальные границы �
 существующего runtime API. P1 presentation contract в конце реализован в Web,
 статус In Review; P2a import и P2b HTML resolver реализованы ниже.
 Автоматический lifetime вкладки Approved 2026-11-11; новые session APIs и P3–P6
-остаются Proposed за исключением реализованных ниже P6a read, P6b local actions и P6c presentation. P2c не добавляет UI/bridge управления detached sessions.
+остаются Proposed за исключением реализованных ниже P4a baseline, P6a read,
+P6b local actions, P6c presentation, P6d control/access и P6e navigation.
+P2c не добавляет UI/bridge управления detached sessions.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
+
+## P6e: navigation tool — In Review, 2026-11-11
+
+`browser.navigate {target:"Browser page: external", url:"https://…"}` переходит в
+существующей странице своего chat/session. Новый tab/session не создаётся. Требуется
+свежий whole `core.read`, реально доставленный этому conversation. Existing
+ToolRuntime/policy/confirmation и prepared/dispatch/terminal evidence сохраняются;
+mutation admission перепроверяет document binding и manual latch перед dispatch.
+
+Fixed isolated script проверяет trusted-input epoch и однократно запускает navigation;
+модель не получает JS/selector/native IDs. Native `ExternalBrowserNavigation` связывает
+initial URL, NavigationId/redirects и final loaded URL/new document generation. Каждый
+HTTP(S) redirect и итоговый адрес проверяются по текущему BrowserAgentAllowedSites.
+Same-document fragment имеет отдельный SourceChanged read-back; IDN нормализуется
+до Chromium punycode. Тот же адрес даёт verified no-change, не принудительный reload.
+
+Terminal VerifiedChange требует успешной загрузки/isolated initialization и новой
+generation той же session; runtime сверяет binding перед terminal. Timeout (12 s
+loading / 15 s native envelope), ошибка, смена владельца, takeover или revoke после
+dispatch — unknown, без replay. Redirect gate сохраняется после unknown до явной
+ручной навигации/close. Ручной Browser не ограничивается agent allowlist. После
+успеха нужна новая observation; click/fill пока остаются local-probe-only (P6b).
+
+Порядок и корреляция событий сверены с [WebView2 navigation events](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/navigation-events);
+реальная Windows compilation/delivery остаётся Open. [Проверки](05_TEST_MATRIX.md#p6e).
 
 ## P4a: сравнение сохранённых исходников — baseline / In Review, 2026-11-11
 
@@ -206,7 +233,7 @@ scheme/host/port, включая повторную проверку каждо�
 по-прежнему допускаются только на локальной probe-странице.
 
 Отдельный `BrowserAgentAllowedSites` — «Сайты, доступные агенту». Пустой список
-отказывает model-facing чтению внешних страниц; bundled probe остаётся доступной.
+отказывает model-facing чтению и agent navigation внешних страниц; bundled probe остаётся доступной.
 `ExternalBrowserPolicy` проверяет actual URL перед capture и перед выдачей результата,
 а также перед prepare/dispatch. Отзыв действует для последующих обращений, включая
 in-flight capture; уже доставленный модели контекст назад не изымается. Redirect или

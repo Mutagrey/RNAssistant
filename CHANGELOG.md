@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.10.0-dev
+
+- The agent can navigate its existing Browser page to an allowed HTTP(S) address
+  after reading it. Redirects and final loading are checked; manual takeover,
+  revoked access and uncertain effects prevent automatic continuation/replay.
+  Native Windows delivery remains unqualified; external-site click/fill is a separate next slice.
+
 ### 16.9.0-dev
 
 - Saved HTML and published plugin versions offer bounded source comparison using

@@ -1315,6 +1315,7 @@ namespace RNAssistant.Harness
                 Test("bridge: tool completion log omits result body", BridgeToolCompletionLogOmitsResultBody),
                 Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
                 Test("external browser: navigation and bounds admission", ExternalBrowserAdmission),
+                Test("external browser: navigation redirects and terminal evidence", ExternalBrowserNavigationEvidence),
                 Test("external browser: site patterns and settings admission", ExternalBrowserSiteAccess),
                 Test("external browser: typed bridge trust", ExternalBrowserBridgeTrust),
                 Test("external browser: semantic Gateway delivery", ExternalBrowserSemanticGateway),

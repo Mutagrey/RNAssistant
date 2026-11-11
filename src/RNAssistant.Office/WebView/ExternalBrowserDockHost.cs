@@ -38,8 +38,9 @@ namespace RNAssistant.Office.WebView
         { await InvokeSemanticAsync(target, (page, dispatch) => page.PrepareAsync(target, revision, preparationId, request), token).ConfigureAwait(false); }
 
         public Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
-            Action beforeDispatch, CancellationToken token)
-        { return InvokeSemanticAsync(target, (page, dispatch) => page.ActAsync(target, preparationId, dispatch), token, beforeDispatch); }
+            Action beforeDispatch, CancellationToken token, bool navigation = false)
+        { return InvokeSemanticAsync(target, (page, dispatch) => page.ActAsync(target, preparationId, dispatch), token, beforeDispatch,
+            navigation ? 15000 : 3000, navigation ? new Func<ExternalBrowserActionResult, ExternalBrowserReadTarget>(result => result.NavigationTarget) : null); }
 
         public void BlockActions(ExternalBrowserReadTarget target)
         { var page = _page; if (page?.SessionId == target?.SessionId) page?.BlockActions(); }
@@ -52,7 +53,8 @@ namespace RNAssistant.Office.WebView
         }
 
         private async Task<T> InvokeSemanticAsync<T>(ExternalBrowserReadTarget target,
-            Func<ExternalBrowserPage, Action, Task<T>> operation, CancellationToken token, Action beforeDispatch = null)
+            Func<ExternalBrowserPage, Action, Task<T>> operation, CancellationToken token, Action beforeDispatch = null,
+            int timeoutMs = 3000, Func<T, ExternalBrowserReadTarget> resultTarget = null)
         {
             token.ThrowIfCancellationRequested();
             if (!_parent.InvokeRequired) throw ExternalBrowserResourceProvider.Error("Browser operations require a background caller.", "browser_dispatch_invalid");
@@ -80,7 +82,9 @@ namespace RNAssistant.Office.WebView
                         if (_disposed || !target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The browser binding is no longer current.", "browser_document_stale");
                         page = _page;
                         var value = await operation(page, dispatch);
-                        if (!target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The page changed during the operation.", "browser_document_stale");
+                        var after = resultTarget?.Invoke(value) ?? target;
+                        if (after.ChatId != target.ChatId || after.SessionId != target.SessionId || !after.Matches(_readTarget))
+                            throw ExternalBrowserResourceProvider.Error("The page changed during the operation.", "browser_document_stale");
                         completion.TrySetResult(value);
                     }
                     catch (Exception error)
@@ -94,7 +98,7 @@ namespace RNAssistant.Office.WebView
                 }));
             }
             catch { gate.Release(); throw; }
-            if (await Task.WhenAny(completion.Task, Task.Delay(3000, token)).ConfigureAwait(false) != completion.Task)
+            if (await Task.WhenAny(completion.Task, Task.Delay(timeoutMs, token)).ConfigureAwait(false) != completion.Task)
             {
                 // Queued work cannot dispatch later. In-flight work retains the gate until it ends.
                 bool abandoned;

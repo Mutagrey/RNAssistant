@@ -27,6 +27,11 @@ P6a: Open закрепляет chatId; native source отдаёт fixed isolated
 existing ResourceGateway. Controller attachment отзывается до rebind/dispose и
 подключается после native reset. Model не получает IDs/CDP; document guard сохраняется.
 
+P6e adds `browser.navigate` through the existing tool/native owners. UI keeps its
+current address/loading/manual controls; navigation advances runtime document binding,
+never Dock placement/session ownership. Redirect and completion guards belong to
+ExternalBrowserNavigation/Page, not Web presentation. [Contract](../browser/03_CONTRACTS.md).
+
 ### Browser manual control / access — In Review, 2026-11-11
 
 P6d хранит manual latch у `ExternalBrowserPage`; isolated script закрывает mutations

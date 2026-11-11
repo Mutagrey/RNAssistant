@@ -3,8 +3,10 @@
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
 P2c automatic lifecycle — **проверен host-neutral**; P3a/P3b plugin fixes — **In Review**;
 P5a native pilot, P6a/P6b read/local actions, P6c visualization и P6d control/access — **реализованы / In Review**;
-P4a — **baseline / In Review**; доработка diff и P4b отложены пользователем.
-Далее P6 external automation; остальные P5–P7 capabilities — Planned.
+P4a bounded source diff — **baseline / In Review**, дальнейшая доработка и P4b
+**отложены пользователем 2026-11-11**. P6e external navigation — **реализован / In Review**;
+следующий приоритет — P6f bounded external-site actions;
+остальные capabilities P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
 [исходник](00_SOURCE_SPEC.md), [аудит](01_AUDIT.md), [ADR](02_ARCHITECTURE_ADR.md),
@@ -47,6 +49,8 @@ evidence и ровно одним следующим шагом в [Progress](06
 | P6d ручное управление / доступ | Persistent manual latch, exact run pause/resume, список сайтов агента с масками; ручная навигация свободна | Реализован / In Review по уточнению пользователя после P6c; native Windows evidence открыт |
 | P4a сравнение | Базовый bounded source diff двух saved HTML/plugin versions реализован; preview data исключены | Доработка отложена по запросу пользователя; не приоритет и не блокер P6 |
 | P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отложено пользователем вместе с доработкой diff; вернуться по конкретной потребности |
+| P6e external navigation | Агент открывает разрешённый HTTP(S) адрес в существующей external session и читает новую страницу; exact owner/generation/manual control/access guards | Реализован / In Review; redirects/terminal tested host-neutral, Windows delivery Open |
+| P6f external actions | Fill/click на разрешённых обычных страницах с fresh semantic target, manual control и явным read-back/unknown | Следующий независимый срез; не снимать probe-only guard без замены admission/verification и focused fixture |
 | Остальные P5/P6 capabilities | Дополнительные targets/страницы, persistent profiles, разрешённые popup/download, screenshots, shared sessions | Самостоятельные продуктовые срезы после базового workflow; screenshot включается только с privacy gate. Не создавать весь перечень API заранее |
 | P7 qualification | Совместная проверка поддержанных сценариев, Windows/Office, security/performance/cleanup и release evidence | Локальные проверки сопровождают срезы; широкий итоговый прогон — на интеграционной точке/кандидате, а не после каждой правки |
 
@@ -66,6 +70,20 @@ pre-commit version check сохраняется. Это применение [д
 Windows evidence и независимые domain fixes можно вести параллельно; изменения
 одного Shell/native owner выгоднее делать последовательно, без повторного аудита
 одних и тех же файлов в нескольких задачах.
+
+## P6e: external navigation — In Review, 2026-11-11
+
+`browser.navigate` добавлен в existing ExternalBrowserToolHandler: same owned page,
+delivered read, bounded navigation, current allowlist на initial/redirect/final URL,
+exact NavigationId/new generation и terminal evidence. Same-document fragment поддержан.
+Fixed isolated dispatch сохраняет trusted input guard. Unknown не replay и не снимает
+проверку поздних redirect; explicit manual navigation остаётся свободной.
+
+Проверены 9 host-neutral cases на `de343788` + P6e в изолированной копии из-за
+параллельного незавершённого Workspace refactor; последний redirect/IDN case повторён
+после уточнения. 2 Chrome fixtures проходят. [Evidence](05_TEST_MATRIX.md#p6e).
+Native Windows compilation/delivery Open. P6f продолжит external fill/click;
+новые tabs, profiles, screenshots, popup/download в этот срез не входят.
 
 ## P4a: базовый source diff — In Review, дальнейшая доработка отложена
 
@@ -95,7 +113,7 @@ native control — Office Browser; run pause — existing Inbox/endpoint, UI —
 Нового scheduler/store/registry нет. General external fill/click не включаются.
 
 [Контракт](03_CONTRACTS.md#p6d-user-control), [проверки и визуальное ревью](05_TEST_MATRIX.md#p6d).
-Базовый P4a завершён, доработка отложена; расширение действий на обычные сайты требует отдельного среза
+Базовый P4a завершён, дальнейшая доработка отложена; расширение действий на обычные сайты требует отдельного среза
 с action/effect contract, iframe/input и Windows evidence.
 
 ## P6a: чтение одной external page — In Review, 2026-11-11
@@ -124,7 +142,7 @@ prepared/dispatch/terminal и read-back входят в срез. После unk
 site submits, screenshots, multipage и нового журнала. Office и bound Workspace
 используют один handler; нативная Windows-проверка остаётся отдельным evidence.
 [Контракт](03_CONTRACTS.md#p6b-local-actions), [проверки](05_TEST_MATRIX.md#p6b).
-P6c реализован ниже; доработка P4a/P4b отложена. Далее P6 external automation.
+P6c реализован ниже; текущая очередь после P6e — P6f external actions. Доработка P4a отложена.
 
 <a id="p6c-action-visualization"></a>
 ## P6c: видимые действия агента — In Review, 2026-11-11
