@@ -5,7 +5,7 @@ Web и native host — consumers. Это минимальные границы �
 существующего runtime API. P1 presentation contract в конце реализован в Web,
 статус In Review; P2a import и P2b HTML resolver реализованы ниже.
 Автоматический lifetime вкладки Approved 2026-11-11; новые session APIs и P3–P6
-остаются Proposed за исключением реализованных ниже P6a read и P6b local action paths. P2c не добавляет UI/bridge управления detached sessions.
+остаются Proposed за исключением реализованных ниже P6a read, P6b local actions и P6c presentation. P2c не добавляет UI/bridge управления detached sessions.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
@@ -116,25 +116,51 @@ Fill использует native DOM value setter и input/change events; read-b
 Автоматического retry/replay нет. Успех потребляет observation, следующий action
 требует нового чтения. Приёмка native WebView2/controller на Windows остаётся открытой.
 
+Граница текущей защиты от ручного ввода: trusted pointerdown/keydown/input/change
+делают observation и подготовленное действие stale. Новое `core.read` принимает
+текущее состояние и снова допускает preparation. Постоянного ручного режима,
+автоматической паузы run и кнопки возврата управления пока нет. Native gate
+сериализует короткие операции, но не является очередью команд на время работы
+пользователя. Уже отправленный эффект нельзя отменить задним числом.
+
 <a id="p6c-action-visualization"></a>
-## P6c: визуализация действий — Planned, 2026-11-11
+## P6c: визуализация действий — In Review, 2026-11-11
 
-Это presentation поверх P6b, пока не реализованный. Источник состояния — фактические
-preparation/dispatch/verification у runtime. Target и текущую геометрию определяет
-existing native page owner; модель не управляет курсором или анимацией и не назначает
-успех. Краткая подсветка/метка предшествует действию; после визуальной паузы сохраняется
-повторный exact element/user check. Завершение анимации не доказывает эффект:
-«Проверено» разрешено только после read-back, unknown остаётся unknown без retry.
+Presentation поверх P6b: `app-browser-action-view.js/css` и общие product tokens
+встроены в Office assembly и устанавливаются в isolated world, в closed shadow root
+отдельного inert/aria-hidden элемента. Нет Shell overlay над HWND, нового bridge,
+model API, execution queue или store. Scope остаётся local probe.
 
-Декорация временная: без второй очереди действий, journal/store или model API.
-Она не перехватывает пользовательский ввод, не раскрывает значения полей и не попадает
-в semantic capture. Hide/close/navigation/смена binding убирают устаревшую отметку;
-возврат к view не проигрывает действия заново. Lifecycle Run остаётся прежним.
-Способ размещения выбирается в существующем native Browser renderer с учётом HWND;
-Shell overlay нельзя считать проверенным поверх WebView2 без native evidence.
-Визуализация не меняет DOM fill/click P6b и не означает поддержку произвольных сайтов.
-Внешний вид и motion — [Design System](../ui/UI_DESIGN_SYSTEM.md#browser-action-visualization),
-очередь — [план](04_MIGRATION_PLAN.md#p6c-action-visualization).
+После confirmation native page получает actual element через P6b check и показывает
+указатель/outline/метку. Timings определены view; native ожидание ограничено 300 ms
+(обычно 220 ms, reduced motion/hidden — 0). После ожидания сохраняются document и
+exact element/user rechecks. Декорация не даёт authority и не подменяет DOM input.
+
+Renderer завершает read-back, но сам не показывает успех. Existing ToolRuntime
+публикует terminal, затем `IExternalBrowserActionSource.PresentResult` best-effort
+передаёт effect в ту же native view. Exception/потеря канала после dispatch отображается
+как Unknown, если страница ещё доступна; failure UI не меняет terminal. Result закреплён
+за exact page/document/preparation; late reply другого action или скрытой view игнорируется.
+
+Нет значений полей в метках, перехвата pointer/focus или данных декорации в semantic
+capture. Через idle курсор удаляется из DOM; trusted input, scroll/resize, native hide,
+close/navigation убирают его без replay. Нет фонового polling/непрерывного animation loop.
+Motion и light palette — [Design System](../ui/UI_DESIGN_SYSTEM.md#browser-action-visualization),
+[проверки/ограничения](05_TEST_MATRIX.md#p6c). Windows WebView2 delivery остаётся Open.
+
+Скрытие указателя при ручном вводе — только presentation; оно не ставит run на паузу.
+
+## Сетевой доступ: текущие границы
+
+Настройка «HTTP-доступ HTML-превью» (`HtmlNetworkAllowedOrigins`) принадлежит
+`HtmlNetworkService`: разрешает HTTP-запросы preview bridge к точным
+scheme/host/port, включая повторную проверку каждого redirect. Маски пока не
+поддерживаются. Это не список разрешённых сайтов external Browser и не разрешение
+на действия агента. Внешний Browser вручную открывает HTTP(S); P6b fill/click
+по-прежнему допускаются только на локальной probe-странице.
+
+Политика доступа агента к сайтам, запрет ручной навигации и фильтрация всех сетевых
+ресурсов страницы — разные scope; существующий HTML-список не расширяет их неявно.
 
 ## Runtime entities и capability negotiation
 

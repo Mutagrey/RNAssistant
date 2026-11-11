@@ -2,7 +2,7 @@
 
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
 P2c automatic lifecycle — **проверен host-neutral**; P3a/P3b plugin fixes — **In Review**;
-P5a native pilot и P6a/P6b semantic read/local actions — **реализованы / In Review**;
+P5a native pilot, P6a/P6b read/local actions и P6c visualization — **реализованы / In Review**;
 P4 и остальная часть P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
@@ -42,7 +42,7 @@ evidence и ровно одним следующим шагом в [Progress](06
 | P5a ручной Browser | Уже подготовленный пилот одной внешней страницы; исправления по реальному Windows HWND/DPI/focus/cleanup evidence | Проверить на первом доступном Windows-запуске; независимо от P4. До evidence не расширять embedding на все viewers |
 | P6a чтение | Один external target из P5a → bounded semantic observation через existing Resource Gateway; exact runtime binding, document generation и исключение sensitive values | Реализован / In Review; host-neutral Gateway и Chrome capture проверены, WebView2/controller delivery на Windows открыт |
 | P6b действие | Одна локальная fixture: открыть → прочитать → заполнить → нажать → проверить. Existing ToolRuntime/policy/evidence; stale/ambiguous target и unknown effect без replay | Реализован / In Review; Office и bound Workspace, host-neutral/Chrome evidence; Windows qualification открыта |
-| P6c визуализация действий | Подсветка exact цели, короткая метка действия и результат по runtime evidence; рисованный курсор — опциональное дополнение | Planned по запросу пользователя 2026-11-11; после P6b, перед P4a. Не расширяет поддержку сайтов и способы ввода |
+| P6c визуализация действий | Анимированный указатель, target highlight, runtime result, idle/input cleanup | Реализован / In Review; после P6b, перед P4a. Windows и визуальное принятие открыты |
 | P4a сравнение | Bounded code/source diff выбранной пары через владельцев HTML/plugin versions; явно отличать code revision от данных preview | После P6c либо раньше при конкретной потребности сравнивать перед apply/restore |
 | P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отдельно после P4a или по потребности вести замечания между открытиями; не условие P5/P6a–b |
 | Остальные P5/P6 capabilities | Дополнительные targets/страницы, persistent profiles, разрешённые popup/download, screenshots, shared sessions | Самостоятельные продуктовые срезы после базового workflow; screenshot включается только с privacy gate. Не создавать весь перечень API заранее |
@@ -64,6 +64,30 @@ pre-commit version check сохраняется. Это применение [д
 Windows evidence и независимые domain fixes можно вести параллельно; изменения
 одного Shell/native owner выгоднее делать последовательно, без повторного аудита
 одних и тех же файлов в нескольких задачах.
+
+## Уточнения после P6c — Proposed, 2026-11-11
+
+Проверка по вопросу пользователя выявила границу P6b: ручной ввод инвалидирует
+прежнее observation, но новое чтение снова разрешает действие. P6c скрывает только
+декорацию; отдельного takeover/resume пока нет.
+
+- Предложение P6d: ручной режим у existing native page owner. Реальный клик/ввод
+  пользователя блокирует новые mutations и инвалидирует preparation; простое
+  движение мыши только скрывает курсор. Возврат управления явный, с новым чтением
+  и preparation. Старые команды не накапливаются и не replay; начавшийся эффект
+  завершается read-back либо Unknown. Для ожидания использовать существующий
+  run pause/resume, без второй очереди и без повторных model calls во время паузы.
+  Этот срез нужен до допуска действий на обычных внешних сайтах; реализация и
+  окончательное поведение UI ещё не согласованы.
+- Настройка `HtmlNetworkAllowedOrigins` относится к HTTP bridge HTML-превью;
+  название уточнено. Назначение нового списка для external Browser уточняется:
+  доступ агента, ручная навигация или полный сетевой фильтр не взаимозаменяемы.
+  Для масок предлагаются явный HTTP(S) scheme и `*.example.com` с проверкой границы
+  домена, без произвольного `*example.com`. Grants для HTML не дают Browser authority.
+  До выбора scope matcher и новая Browser policy не реализуются.
+
+Это предложения по новому вопросу пользователя, не отметка о завершённых
+возможностях и не автоматический запуск всего оставшегося P5/P6.
 
 ## P6a: чтение одной external page — In Review, 2026-11-11
 
@@ -91,30 +115,23 @@ prepared/dispatch/terminal и read-back входят в срез. После unk
 site submits, screenshots, multipage и нового журнала. Office и bound Workspace
 используют один handler; нативная Windows-проверка остаётся отдельным evidence.
 [Контракт](03_CONTRACTS.md#p6b-local-actions), [проверки](05_TEST_MATRIX.md#p6b).
-Следующий срез — P6c: видимые действия агента; затем P4a source diff.
+P6c реализован ниже; после визуального ревью следующий независимый срез — P4a source diff.
 
 <a id="p6c-action-visualization"></a>
-## P6c: видимые действия агента — Planned, 2026-11-11
+## P6c: видимые действия агента — In Review, 2026-11-11
 
-Пользователь попросил отдельный этап после обсуждения визуальной части P6b.
-Owner: existing native Browser page / presentation; ToolRuntime остаётся владельцем
-dispatch/effect. Первый вариант: кратко подсветить actual target, показать
-«Заполняю»/«Нажимаю», затем подтверждённый результат, ошибку или unknown.
-Рисованный курсор внутри Browser — опциональное дополнение обычного визуального ревью;
-системная мышь не перемещается. Отдельный animation framework/store не нужен.
+Owner: existing native Browser / `app-browser-action-view`; ToolRuntime остаётся
+владельцем effect. Реализован запрошенный пользователем указатель с движением,
+outline, click pulse, runtime result и исчезновением при idle/ручном вводе.
+Декорация живёт внутри native page, не перехватывает ввод и не попадает в capture.
+Нет нового execution path, animation framework/store или движения системной мыши.
 
-Короткая анимация ориентировочно 150–250 ms; точный вид и motion принадлежат
-[Design System](../ui/UI_DESIGN_SYSTEM.md#browser-action-visualization).
-Нет обязательных длинных пауз и посимвольного набора. Ожидания определяются готовностью
-страницы и verification; после визуальной паузы цель проверяется повторно.
-Начать с existing local workflow, сохраняя P6b admission/confirmation/read-back.
-Поддержка произвольных сайтов и изменение способа ввода — отдельные срезы.
-
-Готовность: действия видны в активной Browser view, статус соответствует фактическому
-эффекту, декорация не мешает вводу/capture и не переживает смену цели. Обычное визуальное
-ревью среза и адресные [проверки](05_TEST_MATRIX.md#p6c); native WebView2 evidence отдельно.
-Этап только запланирован, код и визуальное принятие отсутствуют.
-[Контракт](03_CONTRACTS.md#p6c-action-visualization).
+Короткое движение с повторной проверкой actual target после паузы, reduced motion
+без ожидания. Точные timings/вид — [Design System](../ui/UI_DESIGN_SYSTEM.md#browser-action-visualization).
+Scope остаётся existing local workflow; general websites/input не добавлены.
+Семь Harness checks и два Chrome fixtures проходят, wide/narrow screenshots просмотрены.
+Визуальное принятие и Windows native delivery остаются Open.
+[Контракт](03_CONTRACTS.md#p6c-action-visualization), [запуск/ревью](05_TEST_MATRIX.md#p6c).
 
 ## P1: конкретный production slice
 

@@ -29,6 +29,12 @@ for the actual local probe and isolated-world element/user/read-back guards. The
 fixture remains relevant because each read now has a distinct runtime observation identity.
 WinForms queue timeout/controller delivery still requires Windows; [scope](../../docs/browser/05_TEST_MATRIX.md#p6b).
 
+P6c reuses those seven checks and verifies that presentation follows terminal publication,
+including Unknown after channel loss. The action fixture also checks the actual cursor
+motion, idle removal, manual input/late results, capture/focus isolation, narrow/125%
+and reduced motion. `BROWSER_ACTION_REVIEW` saves page screenshots;
+[review steps and native gaps](../../docs/browser/05_TEST_MATRIX.md#p6c).
+
 Use the registrations in `Program.cs` to choose a filter before running anything.
 Locate the matching fixture, then read its relevant section below.
 

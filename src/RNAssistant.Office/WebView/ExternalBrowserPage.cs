@@ -24,8 +24,12 @@ namespace RNAssistant.Office.WebView
         private long _documentGeneration;
         private bool _documentReady;
         private readonly string _chatId;
-        private static readonly string SemanticScript = LoadSemanticScript();
+        private static readonly string SemanticScript = LoadAsset("ExternalBrowserSemanticRead.js");
+        private static readonly string VisualScript = LoadAsset("ExternalBrowserActionView.js") +
+            ";globalThis.__rnaBrowserVisual=globalThis.__rnaBrowserVisual||RNAssistantBrowserActionView.create(" +
+            JsonConvert.SerializeObject(LoadAsset("ProductTokens.css").Replace(":root", ":host") + LoadAsset("ExternalBrowserActionView.css")) + ");true";
         private int _semanticContext;
+        private int _visualContext;
         private string _observationRevision, _observationId, _preparationId;
         private ExternalBrowserReadTarget _observationTarget;
         private bool _actionUnknown;
@@ -43,16 +47,17 @@ namespace RNAssistant.Office.WebView
             _assets = assets; _chatId = chatId;
             Control = new WebView2 { Visible = false, TabStop = true };
             Control.Enter += FocusChanged; Control.Leave += FocusChanged;
+            Control.VisibleChanged += VisibilityChanged;
         }
 
         public ExternalBrowserReadTarget ReadTarget
         { get { return !_disposed && _documentReady && _status == ExternalBrowserStatus.Ready && !string.IsNullOrEmpty(_chatId)
             ? new ExternalBrowserReadTarget(_chatId, SessionId, _documentGeneration) : null; } }
 
-        private static string LoadSemanticScript()
+        private static string LoadAsset(string name)
         {
-            using (var stream = typeof(ExternalBrowserPage).Assembly.GetManifestResourceStream("RNAssistant.Office.ExternalBrowserSemanticRead.js"))
-            using (var reader = new StreamReader(stream ?? throw new InvalidOperationException("Browser capture script is unavailable.")))
+            using (var stream = typeof(ExternalBrowserPage).Assembly.GetManifestResourceStream("RNAssistant.Office." + name))
+            using (var reader = new StreamReader(stream ?? throw new InvalidOperationException("Browser asset is unavailable: " + name)))
                 return reader.ReadToEnd();
         }
 
@@ -127,6 +132,15 @@ namespace RNAssistant.Office.WebView
             CheckAction(target);
             if (preparationId != _preparationId || preparationId == null)
                 throw ExternalBrowserResourceProvider.Error("The prepared browser action is stale. Read the page again.", "browser_preparation_stale");
+            if (_visualContext != _semanticContext)
+            {
+                await Evaluate<bool>(VisualScript);
+                _visualContext = _semanticContext;
+            }
+            var animationMs = await Evaluate<int>("globalThis.__rnaBrowser.showAction(" + JsonConvert.SerializeObject(preparationId) + "," +
+                (Control.Visible ? "true" : "false") + ")");
+            if (animationMs > 0) await Task.Delay(Math.Min(animationMs, 300));
+            CheckAction(target); // The animation grants no authority; act() also rechecks the exact element/user epoch.
             beforeDispatch();
             _actionUnknown = true; _preparationId = null;
             var result = await Evaluate<ExternalBrowserActionResult>("globalThis.__rnaBrowser.act(" + JsonConvert.SerializeObject(preparationId) + ")");
@@ -135,6 +149,22 @@ namespace RNAssistant.Office.WebView
                 throw ExternalBrowserResourceProvider.Error("The renderer returned no valid effect evidence.", "browser_effect_unknown");
             _actionUnknown = result.Effect == ExternalBrowserEffect.Unknown;
             return result;
+        }
+
+        internal async void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect)
+        {
+            if (_disposed || !target.Matches(ReadTarget) || _visualContext != _semanticContext) return;
+            try { await Evaluate<bool>("globalThis.__rnaBrowser.completeAction(" + JsonConvert.SerializeObject(preparationId) + "," +
+                JsonConvert.SerializeObject(effect.ToString()) + ")"); }
+            catch (Exception error) { Diagnostics.RuntimeLog.Error("Browser action presentation was unavailable.", error); }
+        }
+
+        private void VisibilityChanged(object sender, EventArgs e) { if (!Control.Visible) HideAction(); }
+        private async void HideAction()
+        {
+            if (_disposed || _visualContext <= 0 || _visualContext != _semanticContext) return;
+            try { await Evaluate<bool>("globalThis.__rnaBrowser.hideAction()"); }
+            catch (Exception) { /* Navigation/disposal already destroys the old presentation. */ }
         }
 
         public async Task InitializeAsync()
@@ -213,6 +243,7 @@ namespace RNAssistant.Office.WebView
         }
         private void NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
+            HideAction();
             if (_disposed || _status == ExternalBrowserStatus.Failed) { e.Cancel = true; return; }
             _navigationId = e.NavigationId; _navigationRefused = false;
             try { ExternalBrowserPolicy.NavigationUrl(e.Uri); _message = "Загрузка…"; _documentReady = false; _documentGeneration++; }
@@ -228,7 +259,7 @@ namespace RNAssistant.Office.WebView
             _message = e.IsSuccess ? "Экспериментальный браузер · Windows-проверка открыта" : "Ошибка загрузки: " + e.WebErrorStatus;
             Publish();
         }
-        private void SourceChanged(object sender, CoreWebView2SourceChangedEventArgs e) { _url = Control.CoreWebView2.Source; _documentGeneration++; Publish(); }
+        private void SourceChanged(object sender, CoreWebView2SourceChangedEventArgs e) { HideAction(); _url = Control.CoreWebView2.Source; _documentGeneration++; Publish(); }
         private void HistoryChanged(object sender, object e)
         { _canGoBack = Control.CoreWebView2.CanGoBack; _canGoForward = Control.CoreWebView2.CanGoForward; Publish(); }
         private void TitleChanged(object sender, object e)
@@ -266,6 +297,7 @@ namespace RNAssistant.Office.WebView
             _disposed = true; _documentReady = false; _documentGeneration++; _status = ExternalBrowserStatus.Closed; _revision++;
             Changed = null;
             Control.Enter -= FocusChanged; Control.Leave -= FocusChanged;
+            Control.VisibleChanged -= VisibilityChanged;
             try
             {
                 var core = Control.CoreWebView2;

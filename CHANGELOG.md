@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.6.4-dev
+
+- Local Browser actions show an animated agent pointer, target highlight and a
+  status tied to the published runtime result. The pointer fades after 2.5 seconds
+  of inactivity and clears on manual interaction or hide; reduced motion is supported.
+  Page input and semantic reads remain unaffected. Windows/WebView2 validation is open.
+- Clarified that HTML preview HTTP permissions do not restrict external Browser navigation.
+
 ### 16.6.3-dev
 
 - History pages no longer construct a temporary chat aggregate or load the active

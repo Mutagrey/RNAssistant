@@ -366,7 +366,7 @@
       try { origin = new URL(payload.url).origin; } catch (ignore) {}
       var deniedOrigin = String(message).match(/not allowed:\s*(https?:\/\/[^\s]+)/i);
       if (deniedOrigin) origin = deniedOrigin[1].replace(/[.,;]+$/, "");
-      if (origin && /not allowed|не разреш/i.test(message) && window.confirm("HTML workspace запрашивает доступ к сети:\n" + origin + "\n\nРазрешить этот origin?")) {
+      if (origin && /not allowed|не разреш/i.test(message) && window.confirm("HTML-превью запрашивает HTTP-доступ:\n" + origin + "\n\nРазрешить HTTP-запросы к этому адресу?")) {
         send("allowHtmlNetworkOrigin", { origin: origin }).then(function () {
           var list = state.settings.HtmlNetworkAllowedOrigins || state.settings.htmlNetworkAllowedOrigins || [];
           if (list.indexOf(origin) < 0) list.push(origin);

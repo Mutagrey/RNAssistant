@@ -20,9 +20,11 @@ namespace RNAssistant.Harness
         {
             internal int Dispatches, Preparations;
             internal Action BeforeDispatch, AfterDispatch;
+            internal Action<ExternalBrowserEffect> OnPresent;
             internal ExternalBrowserEffect Effect = ExternalBrowserEffect.VerifiedChange;
             internal bool Blocked;
             public void BlockActions(ExternalBrowserReadTarget target) { Blocked = true; }
+            public void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect) { OnPresent?.Invoke(effect); }
             private string _prepared;
             public Task PrepareAsync(ExternalBrowserReadTarget target, string revision, string preparationId,
                 ExternalBrowserActionRequest request, CancellationToken token)
@@ -56,6 +58,11 @@ namespace RNAssistant.Harness
                     new AppSettings(), ChatModes.Agent, false,
                     (context, prepared) => { pendingPreparation = prepared; return "pending"; });
                 var journal = new ResourceMutationJournal(FixturePaths.Value);
+                ExternalBrowserEffect? presented = null;
+                source.OnPresent = effect => {
+                    AssertEqual(0, journal.Unresolved().Count, "presentation follows the published terminal");
+                    presented = effect;
+                };
                 var sequence = 0;
                 Func<string, object, IReadOnlyList<ResourceEvidence>, ToolExecutionRecord> execute = (name, arguments, evidence) => {
                     var step = "step-" + (++sequence);
@@ -83,6 +90,7 @@ namespace RNAssistant.Harness
                 var filled = execute(ExternalBrowserToolHandler.Fill, args, read.ResourceEvidence);
                 AssertEqual(ToolExecutionOutcome.Ok, filled.Outcome, filled.Message);
                 AssertEqual(ToolEffectEvidence.VerifiedChange, filled.Evidence.Effect, "verified native effect reaches runtime");
+                AssertEqual(ExternalBrowserEffect.VerifiedChange, presented.Value, "only published success reaches presentation");
                 AssertTrue(filled.AuthorityCommitId != null, "existing authority publishes the terminal");
                 AssertEqual(0, journal.Unresolved().Count, "terminal closes the attempt");
                 source.BeforeDispatch = null; source.AfterDispatch = null;
@@ -96,6 +104,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Unknown, unknown.Outcome, "transport loss after dispatch is never no-effect or success");
                 AssertEqual(ToolEffectEvidence.Unknown, unknown.Evidence.Effect, "unknown effect is retained");
                 AssertTrue(source.Blocked, "lost terminal evidence blocks further native mutations");
+                AssertEqual(ExternalBrowserEffect.Unknown, presented.Value, "channel loss never paints success");
                 AssertEqual(0, journal.Unresolved().Count, "unknown is a terminal fact, not a replay request");
                 var attempts = source.Dispatches;
                 read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);

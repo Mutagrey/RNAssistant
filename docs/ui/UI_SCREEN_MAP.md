@@ -32,14 +32,17 @@ P6a: страница принадлежит разговору, из котор
 переназначают владельца; close/reopen создаёт новую привязку. Прочитать страницу можно
 из исходного document chat или bound Workspace; [ограничения](../browser/03_CONTRACTS.md#p6a-semantic-read).
 
-### Видимые действия Browser — Planned, 2026-11-11
+### Видимые действия Browser — In Review, 2026-11-11
 
-P6c остаётся в текущей Browser view: подсветка цели → «Заполняю»/«Нажимаю» →
-проверенный результат либо ошибка/неопределённость. Отдельный экран не создаётся;
-policy confirmation использует прежний UI. Рисованный курсор внутри Browser опционален.
-Hide/close/navigation убирают устаревшую декорацию, повторное открытие не проигрывает
-действия. Сейчас P6b показывает изменения самой страницы без этого визуального слоя.
-[Очередь и scope](../browser/04_MIGRATION_PLAN.md#p6c-action-visualization).
+P6c остаётся в текущей Browser view: указатель движется к actual target, подсвечивает
+его и показывает «Заполняю»/«Нажимаю». Click имеет короткий pulse; затем «Проверяю»
+и только по принятому runtime результату — «Проверено», «Действие не выполнено» либо
+«Результат неизвестен». Policy confirmation использует прежний UI.
+
+После 2,5 s без действий курсор/подсветка/метка плавно исчезают. Ручной ввод/движение
+мыши внутри страницы, scroll/resize, hide/close/navigation убирают декорацию сразу;
+возврат к view и late result не проигрывают её заново. Системная мышь и focus остаются
+у пользователя; read сам не показывает курсор. [Scope и ревью](../browser/05_TEST_MATRIX.md#p6c).
 
 ## Native window — In Review, 2026-11-11
 
@@ -668,6 +671,10 @@ conversation singleton; параметризованные chat IDs ниже —
 | Reader запроса: Состав/Ответ/Изменения | [model-context](../../web/js/app-model-context.js), model-context-details / model-context-contents | singleton `request`, exact owner/run/event внутри reader, центр или справа | metadata-first, lazy bodies, unavailable/truncated, bounded retained views |
 | Лаборатория моделей | [model-diagnostics](../../web/js/app-model-diagnostics.js) | diagnostics:lab | selected scenario, running/cancel requested/finished/failed, redacted evidence |
 | Приложение: health/performance и журнал | [diagnostics](../../web/js/app-diagnostics.js), [logs](../../web/js/app-logs.js) | diagnostics:application | connected/unavailable, timings, log filters/copy/clear; не второй task runtime |
+
+В «Подключение → Дополнительные параметры» список называется «HTTP-доступ
+HTML-превью»: точные адреса HTTP bridge, не ограничение сайтов external Browser.
+Подсказка явно указывает назначение и отсутствие поддержки масок в текущем коде.
 
 «Файлы» в текущем продукте распределены между project/plugin navigation,
 контекстом, материалами и Data Templates. Универсального самостоятельного Files

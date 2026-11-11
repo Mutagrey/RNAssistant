@@ -9,6 +9,16 @@ layout; общие row menus/icons и выделение исправлены п
 проходят; визуальное принятие и Windows/WebView2 evidence открыты. Runtime/storage
 не меняются. [Ревью и проверки](../ui/UI_MIGRATION_PLAN.md#рабочая-область-единая-навигация--in-review-2026-11-11).
 
+## External Browser P6c — In Review, 2026-11-11
+
+Анимированный указатель/outline и статус размещены в native page через общий
+presentation component. После 2,5 s idle декорация исчезает; manual input/hide/resize
+убирают её сразу. «Проверено» показывается после ToolRuntime terminal, Unknown остаётся
+Unknown. 7 Harness checks и два Chrome fixtures проходят; wide/narrow/125% просмотрены.
+Windows/WebView2 qualification и визуальное принятие открыты. Scope — local P6b;
+нового execution path/store нет. Product `16.6.4-dev`.
+[Контракт](../browser/03_CONTRACTS.md#p6c-action-visualization), [ревью/evidence](../browser/05_TEST_MATRIX.md#p6c).
+
 ## External Browser P6b — In Review, 2026-11-11
 
 Первый local workflow fill/click/verify использует exact delivered semantic observation,
@@ -18,7 +28,7 @@ handler; user/element conflicts отказывают без эффекта, unkn
 проверяют actual script. Windows compile/WebView2/controller delivery открыты; general
 external actions не поддержаны. По запросу пользователя далее запланирован
 [P6c: визуализация действий](../browser/04_MIGRATION_PLAN.md#p6c-action-visualization),
-затем P4a source diff; P4b annotations отдельно. P6c пока не реализован.
+затем P4a source diff; P4b annotations отдельно. P6c реализован; актуальный статус выше.
 [Контракт](../browser/03_CONTRACTS.md#p6b-local-actions), [evidence](../browser/05_TEST_MATRIX.md#p6b).
 
 ## External Browser P6a — In Review, 2026-11-11

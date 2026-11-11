@@ -3,6 +3,13 @@
   // This object exists only in the isolated world; page script cannot obtain its bindings.
   if (globalThis.__rnaBrowser) return globalThis.__rnaBrowser.read();
   var observation = null, prepared = null, interaction = 0, blocked = false;
+  function visual(method) {
+    // Decoration cannot confer authority or change a verified operation's outcome.
+    try {
+      var view = globalThis.__rnaBrowserVisual;
+      return view && view[method].apply(view, Array.prototype.slice.call(arguments, 1));
+    } catch (error) { return false; }
+  }
   ['pointerdown', 'keydown', 'input', 'change'].forEach(function (type) {
     document.addEventListener(type, function (event) { if (event.isTrusted) interaction++; }, true);
   });
@@ -127,16 +134,27 @@
         return { effect: 'VerifiedNoChange', code: 'browser_prepared' };
       } catch (error) { prepared = null; return { effect: 'Rejected', code: error.message }; }
     },
+    showAction: function (id, visible) {
+      try {
+        if (!prepared || prepared.id !== id) fail('browser_preparation_stale');
+        var element = check(prepared.request);
+        return visual('show', id, element, prepared.request.action, visible) || 0;
+      } catch (error) { visual('hide'); return 0; }
+    },
+    hideAction: function () { visual('hide'); return true; },
+    completeAction: function (id, effect) { visual('finish', id, effect); return true; },
     act: function (id) {
       var plan = prepared; prepared = null;
+      function result(effect, code) { return { effect: effect, code: code }; }
       try {
         if (!plan || plan.id !== id) fail('browser_preparation_stale');
         var element = check(plan.request);
         if (element !== plan.element || plan.request.action === 'fill' && element.value !== plan.before) fail('browser_element_stale');
-      } catch (error) { return { effect: 'Rejected', code: error.message }; }
+      } catch (error) { return result('Rejected', error.message); }
       observation.used = true;
       if (plan.request.action === 'fill' && element.value === plan.request.value)
-        return { effect: 'VerifiedNoChange', code: 'browser_verified' };
+        return result('VerifiedNoChange', 'browser_verified');
+      visual('dispatch', id, element, plan.request.action);
       blocked = true; // Any interruption from here leaves effects unknown and mutations disabled.
       try {
         if (plan.request.action === 'fill') {
@@ -152,8 +170,8 @@
             fail('browser_verification_failed');
         }
         blocked = false;
-        return { effect: 'VerifiedChange', code: 'browser_verified' };
-      } catch (error) { return { effect: 'Unknown', code: 'browser_verification_failed' }; }
+        return result('VerifiedChange', 'browser_verified');
+      } catch (error) { return result('Unknown', 'browser_verification_failed'); }
     }
   };
   Object.defineProperty(globalThis, '__rnaBrowser', { value: api });

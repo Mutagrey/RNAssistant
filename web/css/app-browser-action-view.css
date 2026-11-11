@@ -1,0 +1,24 @@
+/* Native Browser decoration. Shared product tokens are scoped to the closed shadow host. */
+.action-view { --action-color: var(--accent); --action-move: 220ms; --action-idle: 2500ms; --action-fade: 180ms; --action-pulse: 360ms;
+  opacity: 0; transition: opacity var(--action-fade) ease; pointer-events: none; }
+.action-view.is-visible { opacity: 1; }
+.action-view[data-state="verified"] { --action-color: var(--success); }
+.action-view[data-state="unknown"], .action-view[data-state="rejected"] { --action-color: var(--warning); }
+.action-view *, .action-view *::before, .action-view *::after { box-sizing: border-box; pointer-events: none; }
+.action-target { position: absolute; border: 2px solid var(--action-color); border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--action-color) 12%, transparent); }
+.action-pointer { position: absolute; left: 0; top: 0; width: 28px; height: 32px;
+  transition: transform var(--action-move) cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 2px 3px #0003); }
+.action-pointer svg { display: block; width: 28px; height: 32px; overflow: visible; }
+.action-pointer path { fill: var(--action-color); stroke: var(--surface); stroke-width: 2.4; stroke-linejoin: round; }
+.action-pulse { position: absolute; left: -9px; top: -9px; width: 24px; height: 24px; border-radius: 50%;
+  background: color-mix(in srgb, var(--action-color) 24%, transparent); border: 1px solid var(--action-color); opacity: 0; }
+.action-label { position: absolute; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2);
+  max-width: calc(100% - 16px); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font: 500 12px/1.5 var(--font);
+  white-space: nowrap; }
+.action-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.action-dot { flex: none; width: 6px; height: 6px; background: var(--action-color); border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .action-view, .action-pointer { transition: none; }
+}

@@ -44,14 +44,14 @@ P6a реализован / In Review: bounded semantic read той же стра
 Gateway, с chat/document ownership и CAS evidence. Пять Harness checks и два Chrome
 fixtures проходят; Windows/controller delivery открыт. [Scope/evidence](../browser/05_TEST_MATRIX.md#p6a).
 
-### Browser P6c: визуализация действий — Planned, 2026-11-11
+### Browser P6c: визуализация действий — In Review, 2026-11-11
 
-Отдельный запрошенный пользователем срез после local workflow P6b, перед Browser P4a:
-подсветка цели, метка действия, подтверждённый результат; рисованный курсор опционален.
-Owner — existing native Browser/presentation, без нового execution path. Код пока
-не реализован; обычное визуальное ревью и Windows WebView2 evidence остаются открытыми.
-Подробный scope/порядок — [Browser plan](../browser/04_MIGRATION_PLAN.md#p6c-action-visualization),
-motion — [Design System](UI_DESIGN_SYSTEM.md#browser-action-visualization).
+Запрошенный после P6b анимированный указатель, target highlight и runtime result
+реализованы у existing native Browser/presentation. Указатель скрывается при idle
+и ручном вводе. Нового execution path или Shell нет; P4a идёт следующим независимым
+срезом после ревью. Обычное визуальное принятие и Windows WebView2 evidence открыты.
+[Scope/проверки и 4 действия ревью](../browser/05_TEST_MATRIX.md#p6c),
+[внешний вид/motion](UI_DESIGN_SYSTEM.md#browser-action-visualization).
 Общий S2 и миграция остальных views этим запросом не запускаются.
 
 ## Native window — In Review, 2026-11-11

@@ -435,6 +435,15 @@
     <EmbeddedResource Include="WebView\ExternalBrowserSemanticRead.js">
       <LogicalName>RNAssistant.Office.ExternalBrowserSemanticRead.js</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="..\..\web\js\app-browser-action-view.js">
+      <LogicalName>RNAssistant.Office.ExternalBrowserActionView.js</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\web\css\app-browser-action-view.css">
+      <LogicalName>RNAssistant.Office.ExternalBrowserActionView.css</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\web\css\app-product-tokens.css">
+      <LogicalName>RNAssistant.Office.ProductTokens.css</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="..\..\packages\Microsoft.Web.WebView2.1.0.2903.40\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\..\packages\Microsoft.Web.WebView2.1.0.2903.40\build\Microsoft.Web.WebView2.targets')" />
   <Import Project="..\RNAssistant.Application\RNAssistant.Application.projitems" />

@@ -116,5 +116,7 @@ namespace RNAssistant.Office.Contracts
         Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
             Action beforeDispatch, CancellationToken cancellationToken);
         void BlockActions(ExternalBrowserReadTarget target);
+        // Best effort after terminal publication; must not throw or change execution state.
+        void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect);
     }
 }

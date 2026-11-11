@@ -27,16 +27,24 @@ P6a добавляет read binding без изменения presentation/token
 External Browser fixture сохраняет narrow/125% coverage. Нового визуального слоя нет.
 
 <a id="browser-action-visualization"></a>
-### Визуализация действий Browser — Planned, 2026-11-11
+### Визуализация действий Browser — In Review, 2026-11-11
 
-Первый P6c: компактная подсветка actual target, короткая метка действия и результат
-из runtime; общие color/type/spacing tokens. Для успеха нужен текстовый статус,
-а не только цвет. Короткая анимация ориентировочно 150–250 ms; точный вид выбирается
-в обычном визуальном ревью среза. При reduced motion достаточно статической отметки.
-Рисованный курсор — опциональное дополнение внутри Browser, без движения системной мыши.
-Обязательных длинных пауз, посимвольного набора и отдельного animation framework нет.
-Motion не перехватывает ввод и не определяет успешность действия; ожидания готовности
-страницы/read-back принадлежат runtime. [Контракт](../browser/03_CONTRACTS.md#p6c-action-visualization).
+P6c использует небольшой зелёный SVG-курсор с контрастной обводкой/тенью, outline
+actual target и компактную текстовую метку. Геометрия и motion принадлежат
+`app-browser-action-view.css/js`; palette/type/spacing берутся из общих product tokens
+(базовая light palette), встроенных в closed shadow root native page.
+
+Движение к цели — 220 ms с ease-out, click pulse — 360 ms. После 2500 ms без действий
+декорация исчезает за 180 ms и удаляется из DOM; новое действие начинает новый показ.
+Trusted pointer/input/keyboard, scroll/resize, hide/navigation убирают её сразу.
+Системный курсор не перемещается. Reduced motion: статическая отметка, без pulse,
+движения и ожидания анимации. Timings определены один раз в component CSS.
+
+«Заполняю»/«Нажимаю» сменяется на «Проверяю»; «Проверено» появляется только после
+runtime terminal publication. Rejected/Unknown имеют текстовые статусы и warning
+цвет. Метка ограничена viewport, не содержит значений полей, не забирает pointer/focus
+и не включается в semantic capture. [Контракт](../browser/03_CONTRACTS.md#p6c-action-visualization).
+[1280/100%](review/browser-action-wide.png), [420/125%](review/browser-action-narrow.png).
 
 ## Native window — In Review, 2026-11-11
 

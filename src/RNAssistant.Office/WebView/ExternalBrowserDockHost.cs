@@ -42,6 +42,13 @@ namespace RNAssistant.Office.WebView
         public void BlockActions(ExternalBrowserReadTarget target)
         { var page = _page; if (page?.SessionId == target?.SessionId) page?.BlockActions(); }
 
+        public void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect)
+        {
+            if (_disposed || _parent.IsDisposed || target == null) return;
+            try { _parent.BeginInvoke(new Action(() => _page?.PresentResult(target, preparationId, effect))); }
+            catch (Exception error) { Diagnostics.RuntimeLog.Error("Browser presentation was unavailable after the terminal.", error); }
+        }
+
         private async Task<T> InvokeSemanticAsync<T>(ExternalBrowserReadTarget target,
             Func<ExternalBrowserPage, Action, Task<T>> operation, CancellationToken token, Action beforeDispatch = null)
         {

@@ -112,6 +112,7 @@ namespace RNAssistant.Office.Tools
             {
                 ToolHandlerResult completed;
                 ExternalBrowserPrepared prepared = null;
+                var visualEffect = ExternalBrowserEffect.Rejected;
                 var source = _source?.Invoke() as IExternalBrowserActionSource;
                 try
                 {
@@ -119,6 +120,7 @@ namespace RNAssistant.Office.Tools
                     if (prepared?.Target == null || source == null || prepared.Target.ChatId != _session.Id ||
                         !prepared.Target.Matches(source.TargetFor(_session.Id))) throw Error("The prepared browser owner changed.", "browser_document_stale");
                     var native = source.ActAsync(prepared.Target, prepared.PreparationId, context.MarkDispatchPossible, token).GetAwaiter().GetResult();
+                    visualEffect = native.Effect;
                     if (source != _source() || !prepared.Target.Matches(source.TargetFor(_session.Id))) throw Error("The browser owner changed after dispatch.", "browser_effect_unknown");
                     using (_documentAccess(_session)) { } // User/host changes outside our gate must also fail closed.
                     var verified = native.Effect == ExternalBrowserEffect.VerifiedChange || native.Effect == ExternalBrowserEffect.VerifiedNoChange;
@@ -133,9 +135,24 @@ namespace RNAssistant.Office.Tools
                 catch (Exception error)
                 {
                     if (context.MayHaveDispatched) source?.BlockActions(prepared?.Target);
-                    context.CompleteFailure(error); throw;
+                    try { context.CompleteFailure(error); }
+                    finally { source?.PresentResult(prepared?.Target, prepared?.PreparationId,
+                        context.MayHaveDispatched ? ExternalBrowserEffect.Unknown : ExternalBrowserEffect.Rejected); }
+                    throw;
                 }
-                return context.Complete(completed);
+                // A renderer read-back alone must not paint success before runtime accepts its terminal.
+                try
+                {
+                    var terminal = context.Complete(completed);
+                    source.PresentResult(prepared.Target, prepared.PreparationId, visualEffect);
+                    return terminal;
+                }
+                catch
+                {
+                    source.BlockActions(prepared.Target);
+                    source.PresentResult(prepared.Target, prepared.PreparationId, ExternalBrowserEffect.Unknown);
+                    throw;
+                }
             }
         }
 

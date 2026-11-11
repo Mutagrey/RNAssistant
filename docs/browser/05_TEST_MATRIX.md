@@ -7,16 +7,35 @@
 [Harness guide](../../tests/RNAssistant.Harness/README.md).
 
 <a id="p6c"></a>
-## P6c: визуализация действий — Planned, evidence отсутствует
+## P6c: визуализация действий — In Review, 2026-11-11
 
-При реализации расширить релевантный existing Browser fixture: подсветка exact цели
-и fill/click/result; отказ после изменения цели/ввода во время визуальной паузы;
-unknown без ложной отметки успеха; cleanup на hide/close/navigation без replay.
-Проверить, что декорация не перехватывает pointer/focus и не попадает в semantic read.
-В обычном визуальном ревью сравнить wide/narrow/zoom и reduced motion; короткая
-анимация не должна требовать длинных пауз или посимвольного ввода.
-Реальное размещение на WebView2/HWND, DPI и focus требуют отдельного Windows evidence.
-Этот docs-only этап проверяется diff/links, без build/harness и повторения P6b suites.
+Existing `external browser:` — 7 Harness checks проходят на текущем tree после
+интеграции соседних commits. P6c добавляет assertions: presentation следует после
+terminal publication, потеря канала отображает Unknown. Повторные широкие suites
+не запускались; Office/VSTO/WinForms этим Harness не компилируются.
+
+Два Chrome fixtures проходят. `external-browser-read` сохраняет privacy/bounds;
+`external-browser-action` проверяет actual embedded script и общий view: движение
+к actual target, click/result, отсутствие преждевременного успеха, idle fade/removal,
+manual input во время анимации, late terminal, hidden/resize cleanup, focus/pointer
+и отсутствие декорации в semantic read. Reduced motion не добавляет motion/wait.
+
+`BROWSER_ACTION_REVIEW=docs/ui/review/browser-action` сохраняет screenshots при запуске
+`tests/web/external-browser-action.test.js` с обычными `NODE_PATH`/`BROWSER_EXECUTABLE`.
+[Baseline без декорации](../ui/review/browser-action-baseline.png),
+[1280/100%](../ui/review/browser-action-wide.png),
+[420 physical px / 125%, 336 CSS px](../ui/review/browser-action-narrow.png) просмотрены.
+Это native page content в Chrome, не screenshot настоящего Office/WebView2 HWND.
+
+Ревью на Windows с `RNA_BROWSER_PILOT=1`:
+1. Открыть локальную Browser page из чата; дать read → fill → fresh read → click
+   с expected text (как в P6b), подтвердить по policy. Указатель движется к цели,
+   pulse только у click, «Проверено» — после принятого результата.
+2. После действия подождать 3 s: курсор/метка исчезают. Повторное действие показывает их заново.
+3. Во время движения начать ручной ввод; декорация исчезает, stale action не выполняется.
+4. Hide/restore, resize/zoom и close/reopen: нет устаревшей декорации или replay.
+Native HWND/DPI/visibility/CDP timing и визуальное принятие пользователем остаются Open.
+Только фото экрана при необходимости; logs/files не запрашиваются.
 
 <a id="p6b"></a>
 ## P6b: local fill/click/verify — 2026-11-11

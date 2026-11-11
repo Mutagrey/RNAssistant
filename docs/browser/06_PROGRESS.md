@@ -1,16 +1,21 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot и P6a/P6b semantic read/local actions.
+Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot, P6a/P6b read/local actions и P6c visualization.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
 
-## P6c: видимые действия агента — Planned, 2026-11-11
+## P6c: видимые действия агента — In Review, 2026-11-11
 
-По запросу пользователя добавлен отдельный этап после P6b и перед P4a: подсветка цели,
-метка fill/click и результат по read-back. Рисованный курсор опционален; длинных
-обязательных пауз и посимвольного набора нет. Код/анимации пока не реализованы,
-визуальное принятие и native evidence открыты. [Scope](04_MIGRATION_PLAN.md#p6c-action-visualization),
-[контракт](03_CONTRACTS.md#p6c-action-visualization), [проверки](05_TEST_MATRIX.md#p6c).
+Реализован запрошенный анимированный указатель: движение к actual target, outline,
+click pulse, статус по runtime terminal и исчезновение через 2,5 s без действий.
+Ручной ввод/мышь, scroll/resize, native hide/navigation убирают декорацию сразу.
+Один общий view в closed shadow root native page, existing product tokens;
+model API, отдельный store, системная мышь и способ DOM fill/click не меняются.
+
+7 Harness checks и два Chrome fixtures проходят. Просмотрены actual page content
+wide и narrow/125% screenshots; visual acceptance и Windows/WebView2 delivery открыты.
+[Scope](04_MIGRATION_PLAN.md#p6c-action-visualization), [контракт](03_CONTRACTS.md#p6c-action-visualization),
+[запуск/4 действия ревью](05_TEST_MATRIX.md#p6c). Product `16.6.4-dev`, фиксируется по запросу пользователя.
 
 ## P6b: local actions — In Review, 2026-11-11
 
@@ -25,7 +30,7 @@ Browser-срезом: рабочий tree одновременно меняет�
 проверяют production isolated-world script. Windows compile/WebView2/controller
 qualification остаётся Open; P6 не объявлен поддержкой произвольных сайтов.
 [Контракт](03_CONTRACTS.md#p6b-local-actions), [evidence](05_TEST_MATRIX.md#p6b).
-Product `16.6.0-dev`; P6b подготовлен к следующему commit.
+Product `16.6.0-dev`; P6b закоммичен `fa9e0176`.
 
 ## P6a: semantic read — In Review, 2026-11-11
 
@@ -298,8 +303,8 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Далее [P6c: визуализация действий](04_MIGRATION_PLAN.md#p6c-action-visualization),
-затем P4a: bounded source diff выбранной пары existing HTML/plugin versions.
+На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c). Следующий независимый срез —
+P4a: bounded source diff выбранной пары existing HTML/plugin versions.
 Первый P6b local workflow реализован; general external actions остаются отдельным scope.
 Отдельный P3c с общим descriptor без consumer не нужен; P4 diff и persistent annotations
 идут после первого рабочего P6 workflow. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
