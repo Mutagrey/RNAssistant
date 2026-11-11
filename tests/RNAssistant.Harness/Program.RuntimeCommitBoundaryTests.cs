@@ -80,7 +80,10 @@ namespace RNAssistant.Harness
                 var commit = new ConversationRunCommit(state, RuntimeBoundaryFact(state), new ChatMessage[0],
                     updated: new[] { update }, expectedMessageCount: historyIds.Length);
                 AssertEqual(0, commit.CreateStateProjection().Messages.Count, "command never captures caller history");
+                var materialized = store.MaterializedMessageCount;
                 commit.Persist(new ChatConversationStoreAdapter(store).CommitRun, state);
+                AssertEqual(1L, store.MaterializedMessageCount - materialized,
+                    "the backend reads only the explicitly edited historical row");
                 AssertEqual(0, state.Messages.Count, "receipt does not hydrate caller history");
                 AssertEqual(state.Revision, commit.Position.Sequence, "receipt identifies the durable cursor");
                 var loaded = new ChatStore(paths).Load(session.Id);
@@ -124,6 +127,18 @@ namespace RNAssistant.Harness
                 new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
                     response: new AgentResponse(ConversationResponse.ExecuteAction, "Read", "Read", new[] { context.Call })),
                     new[] { accepted }).Persist(store.CommitRun, session);
+                // A damaged related-call locator must rebuild before assigning TC/E
+                // references, without losing the accepted call or rereading all bodies.
+                using (var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + SessionEventFile(paths, session) + ".projection.sqlite;Pooling=False"))
+                {
+                    connection.Open();
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = "UPDATE finish_facts SET payload=CAST('{}' AS BLOB)";
+                        command.ExecuteNonQuery();
+                    }
+                }
+                store = new ChatStore(paths);
                 var record = KernelRecord(context);
                 var activity = new ChatMessage { Role = "assistant", RunId = "run", RuntimeProjection = true,
                     Activity = new ChatActivity { Kind = "tool", ToolCallId = context.Call.Id, ToolId = context.Call.Name,
@@ -135,6 +150,8 @@ namespace RNAssistant.Harness
                 session.Messages.AddRange(new[] { activity, result, media });
                 new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary, execution: record),
                     new[] { activity, result, media }, activity).Persist(store.CommitRun, session);
+                AssertEqual(1L, store.SqliteProjectionFullBuildCount, "damaged call lookup triggers one verified index rebuild");
+                AssertEqual(1L, store.MaterializedMessageCount, "only the related accepted-call row is materialized for a terminal append");
                 var loaded = new ChatStore(paths).Load(session.Id);
                 AssertTrue(session.Messages.Select(item => item.Id).SequenceEqual(loaded.Messages.Select(item => item.Id)),
                     "new activity/result/media preserve presentation order independently of lifecycle operation order");
@@ -189,6 +206,8 @@ namespace RNAssistant.Harness
                 Console.WriteLine("RUNTIME_COMMIT_STORE " + JsonConvert.SerializeObject(new { history = count,
                     oldVisits, visits = store.MaterializedMessageCount - visits, oldAllocatedBytes = oldBytes,
                     allocatedBytes, oldMs, elapsedMs }));
+                AssertEqual(0L, store.MaterializedMessageCount - visits,
+                    "a runtime checkpoint reads no archived messages at any history size");
                 AssertEqual(count, new ChatStore(paths).Load(session.Id).Messages.Count, "unchanged archive is preserved by both commit paths");
             });
         }

@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.6.5-dev
+
+- Runtime checkpoints and result commits read only addressed messages and related
+  call/evidence rows instead of materializing the whole chat history. Context selection,
+  message ordering, index repair and lost-acknowledgement recovery are preserved.
+
 ### 16.6.4-dev
 
 - Local Browser actions show an animated agent pointer, target highlight and a

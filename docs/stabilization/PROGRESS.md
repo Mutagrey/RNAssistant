@@ -215,6 +215,16 @@ Workspace paging, bounds, runtime CAS isolation, index repair, removal/restart �
 Полный обход artifact/context metadata,
 остальные Store-операции и journal cutover открыты; Windows evidence не закрыто.
 
+P1 indexed runtime writes: `CommitRun` больше не материализует архив сообщений;
+из existing index читаются точные записи delta и связанные call/evidence rows.
+Сохранены revision/count guards, checkpoint selection, порядок и own-append recovery;
+повреждённый call locator перестраивается из source. Восемь адресных checks проходят
+на изолированной базе `7d87163e` + срез, включая реальные Office/Workspace consumers.
+Для checkpoint при H=100/1000/10000: materialized messages H → 0; на H=10000 выделения
+aggregate/runtime — 180,84/95,12 МБ. Metadata/header и artifact processing ещё растут
+с историей; обычные commits, полный load и journal cutover остаются открытыми.
+Версия `16.6.5-dev`; Windows/Office qualification не выполнялась.
+
 Маршрут до переключения сужен по [уточнению пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md#84-порядок-небольших-срезов):
 реальные consumers и короткие сквозные проверки каждого среза; финально — чат,
 mutation, unknown, restart, lost acknowledgement, rebuild и restore. До cutover

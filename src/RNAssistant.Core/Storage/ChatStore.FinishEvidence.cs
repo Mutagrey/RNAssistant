@@ -43,6 +43,33 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private IReadOnlyList<FinishFactLocator> ReadFinishFactLocators(SqliteConnection connection,
+            SqliteTransaction transaction, string sessionId, StorageProtector protector, string condition, object[] values)
+        {
+            var result = new List<FinishFactLocator>();
+            using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText = "SELECT call_id,kind,run_id,reference,payload FROM finish_facts WHERE " + condition;
+                for (var i = 0; i < values.Length; i++) command.Parameters.AddWithValue("$p" + i, values[i]);
+                using (var reader = command.ExecuteReader())
+                while (reader.Read())
+                {
+                    var id = reader.GetString(0); var kind = reader.GetString(1);
+                    FinishFactLocator locator;
+                    try { locator = JsonConvert.DeserializeObject<FinishFactLocator>(OpenProjection(sessionId,
+                        "finish/" + id + "/" + kind, (byte[])reader[4], protector)); }
+                    catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw new ProjectionDataException(ex); }
+                    if (locator == null || string.IsNullOrWhiteSpace(locator.MessageId) ||
+                        locator.CallId != id || locator.Kind != kind || locator.RunId != reader.GetString(2) ||
+                        locator.Reference != (reader.IsDBNull(3) ? null : reader.GetString(3)))
+                        throw new ProjectionDataException(new JsonException("Finish locator binding disagrees with its index."));
+                    result.Add(locator);
+                }
+            }
+            return result;
+        }
+
         internal FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
         {
             if (session == null || !session.UsesCurrentProtocol || string.IsNullOrEmpty(runId) || references == null)
@@ -58,24 +85,8 @@ namespace RNAssistant.Core.Storage
                     var locators = new Dictionary<string, FinishFactLocator>(StringComparer.Ordinal);
                     var protector = Protection();
                     Action<string, object[]> select = (condition, values) => {
-                        using (var command = connection.CreateCommand())
-                        {
-                            command.CommandText = "SELECT call_id,kind,run_id,reference,payload FROM finish_facts WHERE " + condition;
-                            for (var i = 0; i < values.Length; i++) command.Parameters.AddWithValue("$p" + i, values[i]);
-                            using (var reader = command.ExecuteReader())
-                            while (reader.Read())
-                            {
-                                var id = reader.GetString(0); var kind = reader.GetString(1);
-                                FinishFactLocator locator;
-                                try { locator = JsonConvert.DeserializeObject<FinishFactLocator>(OpenProjection(session.Id,
-                                    "finish/" + id + "/" + kind, (byte[])reader[4], protector)); }
-                                catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw new ProjectionDataException(ex); }
-                                if (locator == null || locator.CallId != id || locator.Kind != kind || locator.RunId != reader.GetString(2) ||
-                                    locator.Reference != (reader.IsDBNull(3) ? null : reader.GetString(3)))
-                                    throw new ProjectionDataException(new JsonException("Finish locator binding disagrees with its index."));
-                                locators[id + "\n" + kind] = locator;
-                            }
-                        }
+                        foreach (var locator in ReadFinishFactLocators(connection, null, session.Id, protector, condition, values))
+                            locators[locator.CallId + "\n" + locator.Kind] = locator;
                     };
                     Action<string, IEnumerable<string>> selectKeys = (column, keys) => {
                         var values = keys.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();

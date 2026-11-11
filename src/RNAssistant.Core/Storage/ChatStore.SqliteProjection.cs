@@ -926,6 +926,74 @@ namespace RNAssistant.Core.Storage
             });
         }
 
+        // The runtime command names its writes. Existing finish locators supply
+        // related call/evidence rows; no unrelated message body enters the write basis.
+        private ChatSession ReadRuntimeCommitBasis(string path, ConversationRunCommit commit, string checkpointSourceId,
+            out JObject basis, out long messageCount, out bool checkpointSourceExists)
+        {
+            JObject selected = null;
+            long count = 0;
+            var sourceExists = false;
+            var session = ReadSqliteProjection(path, connection =>
+            {
+                var cursor = EnsureSqliteProjection(connection, path);
+                if (cursor == null) return null;
+                if (cursor.SessionId != commit.SessionId || cursor.Sequence != commit.ExpectedRevision)
+                    throw new ChatConcurrencyException("Chat changed before the runtime commit.");
+                using (var transaction = connection.BeginTransaction(true))
+                {
+                    if (!SqliteCursorMatches(connection, transaction, cursor))
+                        throw new ChatConcurrencyException("Chat index changed before the runtime commit.");
+                    count = cursor.MessageCount;
+                    var protector = Protection();
+                    sourceExists = !string.IsNullOrWhiteSpace(checkpointSourceId) &&
+                        (commit.Messages.Any(write => string.Equals(write.Message.Id, checkpointSourceId, StringComparison.OrdinalIgnoreCase)) ||
+                        Scalar(connection, transaction, "SELECT 1 FROM messages WHERE item_id=$p0", checkpointSourceId) != null);
+                    var ids = new HashSet<string>(commit.Messages.Select(write => write.Message.Id), StringComparer.OrdinalIgnoreCase);
+                    var calls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var call in commit.Messages.Select(write => write.Message.ToolCallId ?? write.Message.Activity?.ToolCallId)
+                        .Where(id => !string.IsNullOrEmpty(id)).Distinct(StringComparer.Ordinal))
+                        foreach (var locator in ReadFinishFactLocators(connection, transaction, cursor.SessionId,
+                            protector, "call_id=$p0", new object[] { call }))
+                        {
+                            string otherCall;
+                            if (calls.TryGetValue(locator.MessageId, out otherCall) && otherCall != call)
+                                throw new ProjectionDataException(new JsonException("Runtime call locators share a message identity."));
+                            ids.Add(locator.MessageId);
+                            calls[locator.MessageId] = call;
+                        }
+                    var messages = new JArray();
+                    foreach (var id in ids)
+                    {
+                        using (var command = connection.CreateCommand())
+                        {
+                            command.Transaction = transaction;
+                            command.CommandText = "SELECT item_id,payload FROM messages WHERE item_id=$p0";
+                            command.Parameters.AddWithValue("$p0", id);
+                            using (var reader = command.ExecuteReader())
+                            if (reader.Read())
+                            {
+                                var value = ReadSqliteItem(cursor.SessionId, "messages", reader.GetString(0), reader[1], protector);
+                                string call;
+                                if (calls.TryGetValue(id, out call) && call != ((string)value["ToolCallId"] ?? (string)value["Activity"]?["ToolCallId"]))
+                                    throw new ProjectionDataException(new JsonException("Runtime call locator disagrees with its message row."));
+                                messages.Add(value);
+                            }
+                        }
+                    }
+                    selected = (JObject)cursor.Root.DeepClone();
+                    selected["Messages"] = messages;
+                    selected["Artifacts"] = ReadSqliteList(connection, transaction, "artifacts", cursor.SessionId, protector: protector);
+                }
+                // Never cache this internal subset as a complete session projection.
+                return ProjectSqliteSession(path, selected, cursor, false, false);
+            });
+            basis = selected;
+            messageCount = count;
+            checkpointSourceExists = sourceExists;
+            return session;
+        }
+
         private ChatSession ProjectSqliteSession(string path, JObject root, SqliteCursor cursor,
             bool hydrateActiveArtifacts, bool rebuildDerivedProjections)
         {

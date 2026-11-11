@@ -819,3 +819,41 @@ after-state/CAS ownership.
 7. Session events, Resource Fabric, MIGRATION_MAP, PROGRESS and Harness guide updated.
    The internal page-aggregate removal gate is closed; no new transitional path.
    Performance improvement: `16.6.3-dev`, with its Unreleased note.
+
+## P1 — indexed runtime write basis (2026-11-11)
+
+1. F04 / P1: existing `ChatStore` now selects only addressed message rows and related
+   calls/evidence for `CommitRun`. Finish locator decoding is shared with canonical
+   finish admission; the existing normalizer accepts storage-verified checkpoint
+   source membership without loading the source body.
+2. Real Office/Workspace consumers keep exact revision/count guards, TC/E allocation,
+   context selection, chronological activity/result/media ordering and own-append
+   recovery. A malformed related-call locator rebuilds before the terminal append.
+3. Removed runtime full-history loading/merging, archive-wide new-tail reorder and
+   full projection-cache insertion. The selected internal basis is never advertised
+   or cached as a complete session. No new store, registry, facade or production file.
+   Production C# +140/−42, net +98 across four files; tests +19 lines.
+4. Eight final checks pass on macOS/net8/C#7.3, isolated `7d87163e` plus owned changes:
+   five runtime-boundary checks, actual Office native read batch, Workspace accepted
+   history across turns, and durable TC/E/finish admission. The existing checkpoint
+   regression caught incomplete-history normalization and passes with indexed source
+   membership. Damaged-locator rebuild, restart, stale writes and before-write/
+   after-flush failures preserve history and acknowledgement semantics.
+5. Same state-only fixture, aggregate commit versus runtime command:
+
+   | History H | Materialized messages | Allocated bytes | Elapsed ms |
+   |---|---|---|---|
+   | 100 | 100 → 0 | 2,083,104 → 1,314,312 | 13.85 → 17.05 |
+   | 1,000 | 1,000 → 0 | 18,291,288 → 9,805,808 | 73.12 → 32.20 |
+   | 10,000 | 10,000 → 0 | 180,841,680 → 95,116,736 | 745.66 → 269.07 |
+
+   One addressed edit materializes one row; terminal append after index repair reads
+   one related accepted-call row. Logical body materialization is measured; physical
+   I/O and CPU time are not. Timings are single observations during concurrent checks,
+   not a gate. Metadata/header work still scales with H; no constant-cost append claim.
+6. Ordinary aggregate commits/full loads, metadata/header/artifact costs and new-journal
+   consumers remain open. Backup, stopped writers and Windows/Office photo evidence
+   still gate cutover; no platform qualification or P4 expansion was performed.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. The existing
+   internal carrier keeps its P2/P7 removal condition; no additional adapter.
+   Performance improvement: `16.6.5-dev`, recorded in Unreleased.

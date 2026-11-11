@@ -9,6 +9,12 @@ namespace RNAssistant.Core.Services
     {
         public static void Normalize(ChatSession session, string host, string documentKey, string documentTitle)
         {
+            Normalize(session, host, documentKey, documentTitle, null);
+        }
+
+        internal static void Normalize(ChatSession session, string host, string documentKey, string documentTitle,
+            bool? activeCheckpointSourceExists)
+        {
             if (session == null) return;
 
             // Preserve the persisted execution contract; normalization is not migration.
@@ -33,7 +39,7 @@ namespace RNAssistant.Core.Services
             NormalizeWorkspace(session);
             NormalizeCheckpoints(session);
             NormalizeArtifacts(session);
-            NormalizeActiveReferences(session);
+            NormalizeActiveReferences(session, activeCheckpointSourceExists);
         }
 
         public static void RecordDocumentKeyMigration(
@@ -150,12 +156,14 @@ namespace RNAssistant.Core.Services
                 .ToList();
         }
 
-        private static void NormalizeActiveReferences(ChatSession session)
+        private static void NormalizeActiveReferences(ChatSession session, bool? activeCheckpointSourceExists)
         {
-            var messageIds = new HashSet<string>(session.Messages.Select(item => item.Id), StringComparer.OrdinalIgnoreCase);
             var activeCheckpoint = session.ContextCheckpoints.FirstOrDefault(item =>
                 string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase));
-            if (activeCheckpoint == null || !messageIds.Contains(activeCheckpoint.ThroughMessageId))
+            // Runtime storage supplies exact index membership when its write basis
+            // contains only addressed rows; full sessions validate their own history.
+            if (activeCheckpoint == null || !(activeCheckpointSourceExists ?? session.Messages.Any(item =>
+                string.Equals(item.Id, activeCheckpoint.ThroughMessageId, StringComparison.OrdinalIgnoreCase))))
             {
                 session.ActiveContextCheckpointId = null;
             }

@@ -977,7 +977,15 @@ namespace RNAssistant.Core.Storage
             if (commit is ConversationRunCommit && !exists)
                 throw new ChatConcurrencyException("Persist the conversation before appending runtime facts.");
             EventLogReadResult log = null;
-            var stored = exists ? ReadProjectedSession(path, false, false, out log) : null;
+            var runtimeCommit = commit as ConversationRunCommit;
+            JObject runtimeBasis = null;
+            long storedMessageCount = 0;
+            bool checkpointSourceExists = false;
+            var stored = runtimeCommit != null
+                ? ReadRuntimeCommitBasis(path, runtimeCommit, session.ContextCheckpoints?.FirstOrDefault(item =>
+                    string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase))?.ThroughMessageId,
+                    out runtimeBasis, out storedMessageCount, out checkpointSourceExists)
+                : exists ? ReadProjectedSession(path, false, false, out log) : null;
             var readMs = timer.ElapsedMilliseconds - externalizeMs;
             var storedRevision = stored == null ? 0 : stored.Revision;
             if (exists && stored == null)
@@ -995,12 +1003,10 @@ namespace RNAssistant.Core.Storage
                 throw new ChatConcurrencyException("Chat storage changed while this session was open. Reload the chat before saving again.");
             }
 
-            var runtimeOrderChanged = false;
-            var runtimeCommit = commit as ConversationRunCommit;
             if (runtimeCommit != null)
             {
-                // Only this legacy backend still needs the complete projection.
-                // The command names exact writes, never a caller-owned archive.
+                // Merge only the selected write/call rows. Total-count admission
+                // uses the verified index cursor, never a reconstructed archive.
                 session.Messages = new List<ChatMessage>(stored.Messages);
                 var positions = session.Messages.Select((message, index) => new { message.Id, Index = index })
                     .ToDictionary(item => item.Id, item => item.Index, StringComparer.OrdinalIgnoreCase);
@@ -1011,17 +1017,11 @@ namespace RNAssistant.Core.Storage
                     if (positions.TryGetValue(write.Message.Id, out index)) session.Messages[index] = write.Message;
                     else { positions.Add(write.Message.Id, session.Messages.Count); session.Messages.Add(write.Message); }
                 }
-                if (session.Messages.Count != ((ConversationRunCommit)commit).ExpectedMessageCount)
+                if (storedMessageCount + session.Messages.Count - firstNew != runtimeCommit.ExpectedMessageCount)
                     throw new InvalidOperationException("A runtime commit omitted message writes or removals.");
-                var order = runtimeCommit.AppendedOrder.Select((id, index) => new { Id = id, Index = index })
-                    .ToDictionary(item => item.Id, item => item.Index, StringComparer.OrdinalIgnoreCase);
-                var tail = session.Messages.GetRange(firstNew, session.Messages.Count - firstNew);
-                var ordered = tail.OrderBy(message => order.ContainsKey(message.Id) ? order[message.Id] : int.MaxValue).ToArray();
-                runtimeOrderChanged = !tail.SequenceEqual(ordered);
-                if (runtimeOrderChanged)
-                    for (var index = 0; index < ordered.Length; index++) session.Messages[firstNew + index] = ordered[index];
-                NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
-                if (session.Messages.Count != runtimeCommit.ExpectedMessageCount)
+                var selectedCount = session.Messages.Count;
+                ChatSessionNormalizer.Normalize(session, session.Host, session.DocumentKey, session.DocumentTitle, checkpointSourceExists);
+                if (session.Messages.Count != selectedCount)
                     throw new InvalidOperationException("The runtime delta contains an invalid message.");
                 EnsureUniqueArtifactIdentities(session);
                 EnsureChartArtifacts(session, commit.Messages.Select(write => write.Message));
@@ -1038,10 +1038,10 @@ namespace RNAssistant.Core.Storage
             {
                 var pending = new List<PendingSessionEvent>();
                 ProjectionCacheEntry cachedBefore;
-                var projectedBefore = exists && TryGetProjectionCache(path, out cachedBefore) &&
+                var projectedBefore = runtimeBasis ?? (exists && TryGetProjectionCache(path, out cachedBefore) &&
                     cachedBefore.Sequence == storedRevision &&
                     string.Equals(cachedBefore.HeadHash, stored.StorageHeadHash, StringComparison.OrdinalIgnoreCase)
-                    ? cachedBefore.Root : exists ? ToProjectionToken(stored) : null;
+                    ? cachedBefore.Root : exists ? ToProjectionToken(stored) : null);
                 var projectedAfter = ToProjectionToken(session, !exists);
                 var projectionMs = timer.ElapsedMilliseconds - externalizeMs - readMs;
                 if (!exists)
@@ -1059,7 +1059,17 @@ namespace RNAssistant.Core.Storage
                         var previousMessages = ((JArray)projectedBefore["Messages"]).OfType<JObject>()
                             .ToDictionary(message => (string)message["Id"], StringComparer.OrdinalIgnoreCase);
                         var writes = new List<SessionOperation>();
-                        foreach (var write in commit.Messages)
+                        IEnumerable<ConversationMessageWrite> orderedWrites = commit.Messages;
+                        if (runtimeCommit != null)
+                        {
+                            var order = runtimeCommit.AppendedOrder.Select((id, index) => new { Id = id, Index = index })
+                                .ToDictionary(item => item.Id, item => item.Index, StringComparer.OrdinalIgnoreCase);
+                            // Existing rows keep their ordinal. New rows append in
+                            // the caller's chronological order without a full-history reorder.
+                            orderedWrites = orderedWrites.OrderBy(write => previousMessages.ContainsKey(write.Message.Id) ? -1 :
+                                order.ContainsKey(write.Message.Id) ? order[write.Message.Id] : int.MaxValue);
+                        }
+                        foreach (var write in orderedWrites)
                         {
                             var value = JObject.FromObject(write.Message, JsonSerializer.Create(ProjectionJsonSettings));
                             JObject previousMessage;
@@ -1079,7 +1089,7 @@ namespace RNAssistant.Core.Storage
                             projectedAfter["Artifacts"] as JArray);
                         ApplyOperations(projectedAfter, writes, replay);
                         replay.Materialize(projectedAfter);
-                        if (runtimeCommit == null || runtimeOrderChanged)
+                        if (runtimeCommit == null)
                         {
                             var actualIds = ((JArray)projectedAfter["Messages"]).Select(item => (string)item["Id"]).ToArray();
                             var requestedIds = session.Messages.Select(message => message.Id).ToArray();
@@ -1128,7 +1138,8 @@ namespace RNAssistant.Core.Storage
                 session.StorageTailByteOffset = tail.StorageByteOffset;
                 CaptureStorageState(session, path);
                 projectedAfter["Revision"] = tail.Sequence;
-                StoreProjectionCache(path, projectedAfter, session);
+                if (runtimeCommit == null) StoreProjectionCache(path, projectedAfter, session);
+                else RemoveProjectionCache(path);
                 DocumentArtifacts.ProjectRemovals(session);
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);

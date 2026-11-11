@@ -1455,6 +1455,14 @@ replay, protocol-context and causal-trace fixtures select the actual authoring/V
 skill before mutation. Startup recovery records a typed execution boundary;
 UI activity labels cannot manufacture one.
 
+`storage: runtime boundary` also checks indexed write-basis selection: checkpoints
+materialize zero message rows at H=100/1000/10000; an edit reads one addressed row,
+and a terminal append repairs a damaged call locator and reads its accepted call.
+Selection, ordering, exact counts/revision and own-append recovery remain guarded.
+Pair with actual Office native read batches, Workspace accepted-call history and
+`model refs: durable allocation and finish admission`. The store-cost fixture reports
+aggregate/runtime allocations separately; metadata/header work is still history-sized.
+
 `excel write: explicit target required before dispatch` checks missing/null/blank
 sheet/address across runtime, prompt and strict schemas and the direct adapter.
 `excel write: worksheet names and quoted references` checks literal worksheet names,

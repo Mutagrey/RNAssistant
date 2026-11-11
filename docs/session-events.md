@@ -458,16 +458,20 @@ Completion/cancellation still commits terminal state, preserves exact revision C
 and flushes the append-only events before UI publication. `ChatStore` omits a
 `MessageUpdated` operation only when its serialized value equals the stored value.
 Input, accepted-call, execution and result fact kinds are never suppressed by this
-comparison. Replay uses the previous message array as an immutable input and copies
-it once into the new root, avoiding the preceding full-array clone. This does not
-remove the stored-session materialization, serialization of requested updates,
-derived artifact rebuilds, or detached active-run snapshots; those remain separate
-costs, not permission to weaken persistence or publication ownership.
+comparison. Runtime writes now read only addressed message rows and related call/
+evidence rows through existing finish locators. Exact revision and indexed total
+count guard the write; active checkpoint source membership is checked by ID without
+loading its body. Locators with invalid bindings trigger the existing index repair.
+New rows append in chronological delta order without a whole-history reorder.
+The internal selected write basis is never cached as a complete session. Ordinary
+history rewrites still use the full aggregate. Metadata/header processing, requested
+update serialization and derived artifact rebuilds remain separate costs; none
+permits weakening persistence or publication ownership.
 The storage regression checks assert exact event equivalence, no trace reads on
 indexed input replay, header-to-session reuse, foreign-append catch-up, index damage
 recovery and incomplete-stream refusal independently of UI markup. The opt-in
 300-message/large-trace profile separates catalog, selected-session and inbox cost.
-Full runtime session materialization and initial cold validation still scale with
+Explicit full session loads and initial cold validation still scale with
 retained data; these checks do not claim constant-time cold opening or Windows
 Office/WebView2 qualification.
 Paged artifact presentation checks retained source-message IDs separately, so a

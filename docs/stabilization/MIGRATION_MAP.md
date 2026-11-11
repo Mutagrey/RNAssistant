@@ -91,10 +91,12 @@ and explicit delta. Removed the aggregate `CommitRun(session, command)` overload
 Office whole-history ID capture. The existing Core persistence owner temporarily
 uses `ChatSession.CopyForRunCommit` / `CreateStateProjection` internally to feed the
 legacy backend; this carrier has no messages and cannot enter generic `Commit` as a
-runtime command. Storage still reads its canonical aggregate once. Removal condition:
-switch these consumers to the new journal reducer at P2/P7 and delete this internal
-conversion together with the old aggregate runtime path. No second store, fallback
-or dual-write. Ordinary commit/read DTOs remain open.
+runtime command. Runtime storage now reads only addressed/related rows using the
+existing message index and finish locators. Full-history read/merge/reorder and
+complete-root cache insertion are removed from this path. Checkpoint source membership
+uses an ID lookup. The internal carrier and metadata/header/artifact processing remain
+until these consumers move to the new journal reducer at P2/P7. No second store,
+fallback or dual-write. Ordinary aggregate commits and full loads remain open.
 
 P1 common fact projection: the existing `ConversationRunProjection` moved from
 Office to Core Services; Office/Workspace and saved-wait cancellation consume it.
