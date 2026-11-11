@@ -11,6 +11,18 @@ Shell 1280/100% и 420/125% просмотрена с synthetic native; реал
 P6a добавляет read binding без изменения presentation/tokens/controls; existing
 External Browser fixture сохраняет narrow/125% coverage. Нового визуального слоя нет.
 
+<a id="browser-action-visualization"></a>
+### Визуализация действий Browser — Planned, 2026-11-11
+
+Первый P6c: компактная подсветка actual target, короткая метка действия и результат
+из runtime; общие color/type/spacing tokens. Для успеха нужен текстовый статус,
+а не только цвет. Короткая анимация ориентировочно 150–250 ms; точный вид выбирается
+в обычном визуальном ревью среза. При reduced motion достаточно статической отметки.
+Рисованный курсор — опциональное дополнение внутри Browser, без движения системной мыши.
+Обязательных длинных пауз, посимвольного набора и отдельного animation framework нет.
+Motion не перехватывает ввод и не определяет успешность действия; ожидания готовности
+страницы/read-back принадлежат runtime. [Контракт](../browser/03_CONTRACTS.md#p6c-action-visualization).
+
 ## Native window — In Review, 2026-11-11
 
 Используется существующий `workspace-topbar`, без нового бренда и второго header.

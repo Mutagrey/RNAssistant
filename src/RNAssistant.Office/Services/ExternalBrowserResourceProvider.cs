@@ -83,12 +83,25 @@ namespace RNAssistant.Office.Services
             var text = Format(content);
             string hash;
             using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(text))).Replace("-", "").ToLowerInvariant();
-            var revision = target.DocumentGeneration + "-" + hash;
+            var revision = Revision(target, content.ObservationId, hash);
             if (request.Reference.IsExact && request.Reference.Revision != revision)
                 throw Error("This browser observation is no longer current. Read the page again.", "RESOURCE_REVISION_CHANGED");
             return new ResourceReadSelection { Result = new ResourceReadResult { Resource = Describe(target, revision),
                 Representation = "text", Text = text, ContentSha256 = hash, Complete = true, SourceComplete = false,
                 TotalCharacters = text.Length, RawContentIncluded = true } };
+        }
+
+        internal static string Revision(ExternalBrowserReadTarget target, string observationId, string hash)
+        {
+            Guid id;
+            if (!Guid.TryParseExact(observationId, "N", out id)) throw Error("The browser observation has no exact binding.", "browser_capture_invalid");
+            return target.DocumentGeneration + "-" + observationId + "-" + hash;
+        }
+
+        internal static string Revision(ExternalBrowserReadTarget target, ExternalBrowserSemanticContent content)
+        {
+            using (var sha = SHA256.Create()) return Revision(target, content.ObservationId,
+                BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(Format(content)))).Replace("-", "").ToLowerInvariant());
         }
 
         private static string Format(ExternalBrowserSemanticContent content)

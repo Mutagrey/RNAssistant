@@ -6,6 +6,47 @@
 Выбор проверок — по
 [Harness guide](../../tests/RNAssistant.Harness/README.md).
 
+<a id="p6c"></a>
+## P6c: визуализация действий — Planned, evidence отсутствует
+
+При реализации расширить релевантный existing Browser fixture: подсветка exact цели
+и fill/click/result; отказ после изменения цели/ввода во время визуальной паузы;
+unknown без ложной отметки успеха; cleanup на hide/close/navigation без replay.
+Проверить, что декорация не перехватывает pointer/focus и не попадает в semantic read.
+В обычном визуальном ревью сравнить wide/narrow/zoom и reduced motion; короткая
+анимация не должна требовать длинных пауз или посимвольного ввода.
+Реальное размещение на WebView2/HWND, DPI и focus требуют отдельного Windows evidence.
+Этот docs-only этап проверяется diff/links, без build/harness и повторения P6b suites.
+
+<a id="p6b"></a>
+## P6b: local fill/click/verify — 2026-11-11
+
+Семь checks `external browser:` проходят: четыре P5a/P6a и три P6b — accepted-call
+observation admission, durable prepared до dispatch и terminal/unknown после него,
+confirmation с отказом при смене owner, общий handler в bound Workspace. Недоставленное
+и устаревшее чтение не допускают action; смена Office document не получает эффект.
+Проверено в temporary snapshot `478edb71` + Browser files: параллельный storage
+рефакторинг в shared tree на момент запуска имел несовместимые API. Его код не менялся
+для этой проверки; результат не объявляет интеграцию всех незавершённых изменений.
+
+`tests/web/external-browser-action.test.js` выполняет actual packaged probe и production
+fixed script в Chrome isolated world: fill/read-back → fresh read → click/read-back,
+no-change, одноразовая preparation, trusted input до/после prepare, программная смена
+значения, replacement same-name element, ambiguity, disabled/overlay, unrelated DOM,
+уже существующий verification text, mismatch → unknown без replay и запрет external
+origin. `external-browser-read.test.js` также проходит после изменения capture identity;
+поле value не появляется в observation. Новых UI controls/геометрии нет.
+
+Windows compile/WebView2/controller/confirmation delivery, native queue timeout и
+реальные user/close/navigation races остаются Open: Harness не компилирует WinForms,
+Chrome не квалифицирует WebView2. При доступном Windows запуске с `RNA_BROWSER_PILOT=1`:
+1. Из чата открыть External Browser на локальной проверочной странице.
+2. Попросить прочитать её, заполнить «Ввод и Tab», прочитать заново и нажать
+   «Нажатия: 0» с ожидаемым текстом «Нажатия: 1»; подтвердить действия по policy.
+3. Повторить с ручным вводом между preparation и confirmation: ожидается отказ.
+4. Проверить close/reopen при pending confirmation и bound Workspace.
+Достаточны фото результатов/видимых ошибок; logs/files не запрашиваются.
+
 <a id="p6a"></a>
 ## P6a: semantic read — 2026-11-11
 
@@ -26,7 +67,7 @@ Windows compile/WebView2/controller attachment ещё Open. При первом 
 1) из чата открыть внешний Browser; 2) попросить прочитать страницу; 3) изменить её
 и прочитать снова; 4) проверить другой чат и close/navigation во время capture.
 Нужны фото видимого результата/ошибки, без передачи logs/files. Пока нет standalone
-Workspace provider, model actions, element bindings, screenshots или P4 lifecycle.
+Workspace provider, general external actions, screenshots или P4 lifecycle; local P6b описан выше.
 Нового visual layout нет; P5a visual acceptance и native evidence сохраняют свой gate.
 
 <a id="p5a"></a>

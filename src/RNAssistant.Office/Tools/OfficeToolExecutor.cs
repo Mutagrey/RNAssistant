@@ -168,6 +168,7 @@ namespace RNAssistant.Office.Tools
                 ToolAuthoringCatalog.GetTools(_toolAuthoringService, false));
             RegisterControllerTools(controllerTools,
                 ResourceToolCatalog.GetControllerTools());
+            RegisterControllerTools(controllerTools, ExternalBrowserToolHandler.Catalog());
             RegisterControllerTools(controllerTools, new[] {
                 ControllerToolCatalogEntry.CreateReadProjection(JsToolHandler.Descriptor,
                     JsToolHandler.Policy, JsToolHandler.Binding, "JavaScript computation") });
@@ -200,6 +201,7 @@ namespace RNAssistant.Office.Tools
             {
                 if (!enabled && string.Equals(tool.Id, JsToolHandler.RunId, StringComparison.Ordinal)) continue;
                 if (!agentCommunicationEnabled && AgentCommunicationToolCatalog.Owns(tool.Id)) continue;
+                if (ExternalBrowserToolHandler.Owns(tool.Id) && !(ExternalBrowserReadSource is IExternalBrowserActionSource)) continue;
                 yield return ConfigureControllerTool(tool, enabled);
             }
         }
@@ -255,7 +257,8 @@ namespace RNAssistant.Office.Tools
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads,
                         saved => _persistResourceFacts?.Invoke(saved, new ConversationCommit()),
-                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission, AgentCommunication, AgentInbox);
+                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission, AgentCommunication, AgentInbox,
+                        () => ExternalBrowserReadSource, BeginLiveOfficeRead);
         }
 
         // Explicit UI resource commands share the mutation journal/commit owner.

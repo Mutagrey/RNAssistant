@@ -12,6 +12,13 @@ P6a: Open закрепляет chatId; native source отдаёт fixed isolated
 existing ResourceGateway. Controller attachment отзывается до rebind/dispose и
 подключается после native reset. Model не получает IDs/CDP; document guard сохраняется.
 
+### Browser action visualization — Planned, 2026-11-11
+
+P6c добавляет presentation у existing native Browser owner: runtime определяет exact
+target/геометрию и эффект, view показывает временную декорацию. Она не становится
+authority, очередью исполнения или store. Native placement и исключение декорации
+из semantic capture входят в [контракт P6c](../browser/03_CONTRACTS.md#p6c-action-visualization).
+
 ## Native window — In Review, 2026-11-11
 
 NativeHostCli теперь только экспортный ABI/reflection loader. Один

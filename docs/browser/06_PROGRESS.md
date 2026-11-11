@@ -1,8 +1,31 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot и P6a semantic read.
+Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot и P6a/P6b semantic read/local actions.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
+
+## P6c: видимые действия агента — Planned, 2026-11-11
+
+По запросу пользователя добавлен отдельный этап после P6b и перед P4a: подсветка цели,
+метка fill/click и результат по read-back. Рисованный курсор опционален; длинных
+обязательных пауз и посимвольного набора нет. Код/анимации пока не реализованы,
+визуальное принятие и native evidence открыты. [Scope](04_MIGRATION_PLAN.md#p6c-action-visualization),
+[контракт](03_CONTRACTS.md#p6c-action-visualization), [проверки](05_TEST_MATRIX.md#p6c).
+
+## P6b: local actions — In Review, 2026-11-11
+
+Готов первый local workflow read → fill → read → click → verify: два semantic tools,
+exact delivered observation, одноразовая native preparation, повторные element/user
+checks и read-back. Existing ToolRuntime/policy и mutation journal сохраняют эффект;
+unknown не повторяется и блокирует дальнейшие mutations страницы до manual reopen.
+Office/bound Workspace используют один handler, UI и второй session store не добавлены.
+
+Семь focused Harness checks проходят на изолированной копии baseline `478edb71` с
+Browser-срезом: рабочий tree одновременно меняется в storage/UI. Два Chrome fixtures
+проверяют production isolated-world script. Windows compile/WebView2/controller
+qualification остаётся Open; P6 не объявлен поддержкой произвольных сайтов.
+[Контракт](03_CONTRACTS.md#p6b-local-actions), [evidence](05_TEST_MATRIX.md#p6b).
+Product `16.6.0-dev`; P6b подготовлен к следующему commit.
 
 ## P6a: semantic read — In Review, 2026-11-11
 
@@ -275,8 +298,9 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Далее P6b: один локальный workflow read → fill/click → verify у existing native owner
-через ToolRuntime, с exact element binding, recheck и unknown effect без retry.
+Далее [P6c: визуализация действий](04_MIGRATION_PLAN.md#p6c-action-visualization),
+затем P4a: bounded source diff выбранной пары existing HTML/plugin versions.
+Первый P6b local workflow реализован; general external actions остаются отдельным scope.
 Отдельный P3c с общим descriptor без consumer не нужен; P4 diff и persistent annotations
 идут после первого рабочего P6 workflow. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
 Native Windows evidence P5a, визуальное принятие внутренних views и известный

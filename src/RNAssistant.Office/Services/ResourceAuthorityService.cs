@@ -472,11 +472,15 @@ namespace RNAssistant.Office.Services
             if (route != null) { arguments = route.RoutingArguments; preparedStateJson = route.OwnerState; }
             var scope = ResourceMutationDomains.Scope(_authority, _session, operation);
             var expected = StringArgument(arguments, "expectedRevision");
+            var browser = RNAssistant.Office.Tools.ExternalBrowserToolHandler.Owns(operation)
+                ? JsonConvert.DeserializeObject<RNAssistant.Office.Tools.ExternalBrowserPrepared>(preparedStateJson) : null;
+            if (browser != null) expected = browser.Observation.Revision;
             var lease = _journal.AcquireScope(scope, ResourceMutationDomains.IsDocumentArtifactOperation(operation));
             try
             {
                 var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
-                var impacts = RNAssistant.Core.Tools.PlanDocumentToolCatalog.Owns(operation)
+                var impacts = browser != null ? new[] { new ResourceImpact(browser.Observation.Identity, ResourceImpactRelation.Exact) }
+                    : RNAssistant.Core.Tools.PlanDocumentToolCatalog.Owns(operation)
                     ? PreparePlan(context, arguments, operation, route == null ? null : PlanResourcePrepared.Read(preparedStateJson).Command)
                     : RNAssistant.Office.Tools.MarkdownDocumentToolCatalog.Owns(operation)
                         ? MarkdownDocumentService.PreparePublication(_session, context, preparedStateJson,
@@ -569,7 +573,8 @@ namespace RNAssistant.Office.Services
                     if (_captureCatalog == null) throw new InvalidOperationException("Catalog publication requires its typed read-back owner.");
                     readBack.AddRange(attempt.IntendedImpacts.Select(impact => _captureCatalog(impact.Identity)));
                 }
-                if (attempt.ScopeId.Kind == "conversation" && record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
+                if (attempt.ScopeId.Kind == "conversation" && !RNAssistant.Office.Tools.ExternalBrowserToolHandler.Owns(attempt.Operation) &&
+                    record.Evidence?.Effect == ToolEffectEvidence.VerifiedChange)
                 {
                     readBack.AddRange(CaptureConversationReadBack(attempt));
                     if (_persistResources != null) _persistResources(_session);

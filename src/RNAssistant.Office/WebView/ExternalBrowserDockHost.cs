@@ -10,7 +10,7 @@ using RNAssistant.Office.Services;
 namespace RNAssistant.Office.WebView
 {
     // The replaceable placement owner. No browser policy, navigation history or durable store.
-    internal sealed class ExternalBrowserDockHost : IExternalBrowserHost, IExternalBrowserReadSource, IDisposable
+    internal sealed class ExternalBrowserDockHost : IExternalBrowserHost, IExternalBrowserActionSource, IDisposable
     {
         private readonly Control _parent;
         private readonly WebView2 _shell;
@@ -26,33 +26,79 @@ namespace RNAssistant.Office.WebView
         public ExternalBrowserReadTarget TargetFor(string chatId)
         { var target = _readTarget; return target != null && target.ChatId == chatId ? target : null; }
 
-        public async Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken)
+        // One short native operation at a time. No gate is held across model/confirmation waits.
+        private SemaphoreSlim _semanticGate = new SemaphoreSlim(1, 1);
+        public Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken token)
+        { return InvokeSemanticAsync(target, (page, dispatch) => page.ReadAsync(target), token); }
+
+        public async Task PrepareAsync(ExternalBrowserReadTarget target, string revision, string preparationId,
+            ExternalBrowserActionRequest request, CancellationToken token)
+        { await InvokeSemanticAsync(target, (page, dispatch) => page.PrepareAsync(target, revision, preparationId, request), token).ConfigureAwait(false); }
+
+        public Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
+            Action beforeDispatch, CancellationToken token)
+        { return InvokeSemanticAsync(target, (page, dispatch) => page.ActAsync(target, preparationId, dispatch), token, beforeDispatch); }
+
+        public void BlockActions(ExternalBrowserReadTarget target)
+        { var page = _page; if (page?.SessionId == target?.SessionId) page?.BlockActions(); }
+
+        private async Task<T> InvokeSemanticAsync<T>(ExternalBrowserReadTarget target,
+            Func<ExternalBrowserPage, Action, Task<T>> operation, CancellationToken token, Action beforeDispatch = null)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!_parent.InvokeRequired) throw ExternalBrowserResourceProvider.Error("Browser reads must be dispatched asynchronously off the UI thread.", "browser_dispatch_invalid");
-            if (_disposed || !target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The browser binding is no longer current.", "browser_document_stale");
-            var completion = new TaskCompletionSource<ExternalBrowserSemanticContent>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _parent.BeginInvoke(new Action(async () =>
-            {
-                try
+            token.ThrowIfCancellationRequested();
+            if (!_parent.InvokeRequired) throw ExternalBrowserResourceProvider.Error("Browser operations require a background caller.", "browser_dispatch_invalid");
+            var gate = _semanticGate;
+            if (!await gate.WaitAsync(3000, token).ConfigureAwait(false))
+                throw ExternalBrowserResourceProvider.Error("A browser operation is still pending.", "browser_operation_busy");
+            var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var dispatchSync = new object(); bool dispatched = false; ExternalBrowserPage page = null;
+            Action dispatch = () => {
+                lock (dispatchSync)
                 {
-                    if (completion.Task.IsCompleted) return;
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (_disposed || !target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The browser binding is no longer current.", "browser_document_stale");
-                    var value = await _page.ReadAsync(target);
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (!target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The page changed during capture.", "browser_document_stale");
-                    completion.TrySetResult(value);
+                    if (completion.Task.IsCompleted) throw new OperationCanceledException();
+                    token.ThrowIfCancellationRequested();
+                    beforeDispatch(); dispatched = true;
                 }
-                catch (OperationCanceledException) { completion.TrySetCanceled(); }
-                catch (RNAssistant.Core.Models.ResourceRequestException error) { completion.TrySetException(error); }
-                catch (Exception) { completion.TrySetException(ExternalBrowserResourceProvider.Error("The native semantic capture failed.", "browser_capture_failed")); }
-            }));
-            if (await Task.WhenAny(completion.Task, Task.Delay(3000, cancellationToken)).ConfigureAwait(false) != completion.Task)
+            };
+            try
             {
-                completion.TrySetCanceled();
-                cancellationToken.ThrowIfCancellationRequested();
-                throw ExternalBrowserResourceProvider.Error("Browser capture timed out; no observation was accepted.", "browser_read_timeout");
+                _parent.BeginInvoke(new Action(async () =>
+                {
+                    try
+                    {
+                        if (completion.Task.IsCompleted) return;
+                        token.ThrowIfCancellationRequested();
+                        if (_disposed || !target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The browser binding is no longer current.", "browser_document_stale");
+                        page = _page;
+                        var value = await operation(page, dispatch);
+                        if (!target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The page changed during the operation.", "browser_document_stale");
+                        completion.TrySetResult(value);
+                    }
+                    catch (Exception error)
+                    {
+                        if (dispatched) page?.BlockActions();
+                        if (error is OperationCanceledException) completion.TrySetCanceled();
+                        else completion.TrySetException(error is RNAssistant.Core.Models.ResourceRequestException ? error :
+                            ExternalBrowserResourceProvider.Error("The native browser operation failed.", "browser_operation_failed"));
+                    }
+                    finally { gate.Release(); }
+                }));
+            }
+            catch { gate.Release(); throw; }
+            if (await Task.WhenAny(completion.Task, Task.Delay(3000, token)).ConfigureAwait(false) != completion.Task)
+            {
+                // Queued work cannot dispatch later. In-flight work retains the gate until it ends.
+                bool abandoned;
+                lock (dispatchSync)
+                {
+                    abandoned = completion.TrySetCanceled();
+                    if (abandoned && dispatched) page.BlockActions();
+                }
+                if (abandoned)
+                {
+                    token.ThrowIfCancellationRequested();
+                    throw ExternalBrowserResourceProvider.Error("The browser operation timed out. A dispatched effect may be unknown.", "browser_operation_timeout");
+                }
             }
             return await completion.Task.ConfigureAwait(false);
         }
@@ -90,6 +136,7 @@ namespace RNAssistant.Office.WebView
                 if (!_initializing.IsCompleted) throw new InvalidOperationException("Предыдущий WebView2 ещё завершает запуск. Повторите открытие через несколько секунд.");
                 if (request.ChatId != null && request.ChatId.Length > 256) throw new InvalidOperationException("Некорректный владелец Browser-вкладки.");
                 var page = new ExternalBrowserPage(_assets, request.ChatId);
+                _semanticGate = new SemaphoreSlim(1, 1);
                 _page = page; page.Control.Bounds = new Rectangle(0, 0, 1, 1);
                 _parent.Controls.Add(page.Control); page.Control.BringToFront();
                 page.Changed += Publish;

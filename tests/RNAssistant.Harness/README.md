@@ -22,6 +22,13 @@ isolated Chrome world, privacy omissions and bounds; `external-browser.test.js`
 also checks owner binding only at Open. No Office/VSTO build is required here;
 [native delivery is still open](../../docs/browser/05_TEST_MATRIX.md#p6a).
 
+P6b adds three checks to `external browser:` (seven total): delivered-read admission,
+prepared/dispatch/terminal evidence, unknown outcome, pending confirmation owner guard,
+and the shared bound Workspace handler. Pair with `tests/web/external-browser-action.test.js`
+for the actual local probe and isolated-world element/user/read-back guards. The capture
+fixture remains relevant because each read now has a distinct runtime observation identity.
+WinForms queue timeout/controller delivery still requires Windows; [scope](../../docs/browser/05_TEST_MATRIX.md#p6b).
+
 Use the registrations in `Program.cs` to choose a filter before running anything.
 Locate the matching fixture, then read its relevant section below.
 
@@ -546,6 +553,14 @@ hydration, canonical bytes, off-page tombstones, selected heads/lineage, protoco
 visibility and workspace isolation. The existing corrupt-row, damaged-metadata and
 catalog/page document-boundary checks cover the changed read result through repair
 and locking. No new-journal or Office qualification is implied.
+
+Resource read-scope changes use `workspace Plan: scoped reads preserve publication barrier`
+and `document Plan: shared publication and competing writers` through real consumers.
+Pair with document-original restart/GC, unavailable-resource discovery, document
+removal/restart, shared HTML metadata pages and the tombstone page check. These
+exercise existing publication/ownership/body guards; no new store or read model.
+The old shared Markdown lifecycle fixture still calls removed `markdown.save`;
+its independently reproduced failure is recorded in Backlog.
 
 `chat sessions: diagnostics do not hydrate or recover history` forbids catalog/full
 loads and verifies typed immutable metadata, unchanged history/selection and an

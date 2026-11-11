@@ -12,6 +12,15 @@ P6a: страница принадлежит разговору, из котор
 переназначают владельца; close/reopen создаёт новую привязку. Прочитать страницу можно
 из исходного document chat или bound Workspace; [ограничения](../browser/03_CONTRACTS.md#p6a-semantic-read).
 
+### Видимые действия Browser — Planned, 2026-11-11
+
+P6c остаётся в текущей Browser view: подсветка цели → «Заполняю»/«Нажимаю» →
+проверенный результат либо ошибка/неопределённость. Отдельный экран не создаётся;
+policy confirmation использует прежний UI. Рисованный курсор внутри Browser опционален.
+Hide/close/navigation убирают устаревшую декорацию, повторное открытие не проигрывает
+действия. Сейчас P6b показывает изменения самой страницы без этого визуального слоя.
+[Очередь и scope](../browser/04_MIGRATION_PLAN.md#p6c-action-visualization).
+
 ## Native window — In Review, 2026-11-11
 
 Первый native pilot — launcher Excel → NativeHostCli. Верхний header содержит

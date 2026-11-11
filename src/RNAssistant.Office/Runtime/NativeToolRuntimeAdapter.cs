@@ -76,7 +76,8 @@ namespace RNAssistant.Office.Runtime
             ConversationRunPolicy runPolicy = null, Func<ToolExecutionContext, string> dispatchGuard = null,
             AuthoredFileService authoredFiles = null, SkillSelectionAdmission skillAdmission = null,
             RNAssistant.Application.Conversations.AgentCommunicationService agentCommunication = null,
-            RNAssistant.Application.Conversations.ConversationInboxService agentInbox = null)
+            RNAssistant.Application.Conversations.ConversationInboxService agentInbox = null,
+            Func<IExternalBrowserReadSource> externalBrowser = null, Func<ChatSession, IDisposable> browserDocumentAccess = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
@@ -105,6 +106,11 @@ namespace RNAssistant.Office.Runtime
                 {
                     binding = SkillLoadToolHandler.Binding;
                     handler = new SkillLoadToolHandler(session, () => new SkillCatalogSnapshot(skillCatalog), () => snapshot, settings, skillAdmission);
+                }
+                else if (ExternalBrowserToolHandler.Owns(registration.Descriptor.Id))
+                {
+                    binding = ExternalBrowserToolHandler.BindingFor(registration.Descriptor.Id);
+                    handler = new ExternalBrowserToolHandler(session, externalBrowser, browserDocumentAccess);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.FindToolId, StringComparison.Ordinal))
                 {
@@ -362,7 +368,7 @@ namespace RNAssistant.Office.Runtime
                 OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId) ||
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal) ||
-                MarkdownDocumentToolCatalog.Owns(toolId) || AuthoredFileToolCatalog.Owns(toolId) ||
+                MarkdownDocumentToolCatalog.Owns(toolId) || AuthoredFileToolCatalog.Owns(toolId) || ExternalBrowserToolHandler.Owns(toolId) ||
                 TaskListToolCatalog.Owns(toolId) || AgentCommunicationToolCatalog.Owns(toolId) || toolId == ChatRenameToolHandler.ToolId ||
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
                 CapabilityToolCatalog.Owns(toolId) ||

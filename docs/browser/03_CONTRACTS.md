@@ -5,7 +5,7 @@ Web и native host — consumers. Это минимальные границы �
 существующего runtime API. P1 presentation contract в конце реализован в Web,
 статус In Review; P2a import и P2b HTML resolver реализованы ниже.
 Автоматический lifetime вкладки Approved 2026-11-11; новые session APIs и P3–P6
-остаются Proposed за исключением реализованного ниже P6a read path. P2c не добавляет UI/bridge управления detached sessions.
+остаются Proposed за исключением реализованных ниже P6a read и P6b local action paths. P2c не добавляет UI/bridge управления detached sessions.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
@@ -65,13 +65,76 @@ Capture — fixed script в isolated world верхнего документа. 
 budget 100 ms, native read timeout 3 s. Text values controls, URL/title, private/hidden
 regions, frames и shadow DOM исключены; доступны role/name, disabled/checked и text.
 SourceComplete=false: это ограниченный semantic view, не full DOM. Повторное чтение
-обновляет capture, а не продолжает DOM pagination. Scripts/evaluate, screenshots и
-actions модели не предоставляются. Semantic labels/text остаются недоверенными данными.
+обновляет capture, а не продолжает DOM pagination. Model scripts/evaluate и screenshots
+не предоставляются; P6b actions ограничены локальной probe-страницей. Semantic labels/text остаются недоверенными данными.
 
 Existing ResourceAuthority/CAS сохраняют exact body; новая observation обновляет
-observed head той же page identity. Revision включает navigation generation и hash
-body. Это evidence чтения, не доказательство актуального DOM для будущего действия;
-P6b добавит exact element preparation/recheck/verify. Второго journal/store нет.
+observed head той же page identity. Revision включает navigation generation, уникальную
+capture identity и hash body: одинаковый текст не подменяет exact DOM binding.
+Это evidence чтения, не доказательство актуального DOM для будущего действия.
+Второго journal/store нет.
+
+<a id="p6b-local-actions"></a>
+## P6b: действия на локальной probe-странице — In Review, 2026-11-11
+
+Одна manually opened P5a page: `core.read` → `browser.fill` → новое `core.read` →
+`browser.click` → `core.read`. Модель передаёт `target: "Browser page: external"`,
+точный observed `name` и `value` для textbox либо `expectedText` для button.
+Инструменты доступны при подключённом native pilot в Office и bound Workspace;
+standalone Workspace и произвольные external websites не поддержаны. Host и fixed
+isolated-world code допускают mutations только на `https://rna-browser-probe.invalid/index.html`.
+
+Admission использует evidence accepted call исходного разговора: модель должна
+получить весь bounded semantic view. Omitted/partial body не даёт права действовать;
+`sourceComplete=false` сохраняется, поскольку observation не является полным DOM.
+Read сохраняет bounded references на actual elements внутри isolated world; новое
+чтение заменяет их и отменяет старую preparation. Runtime pins capture/document,
+semantic role/name и одноразовую preparation identity; opaque IDs модели не видны.
+
+Prepare и dispatch повторно проверяют exact element identity, единственность,
+visibility/hit testing, disabled/read-only/private state и trusted user interaction.
+Unrelated DOM changes допустимы; замена одноимённого элемента — stale. После prepare
+программная смена значения textbox также отклоняется. Между чтением и действием
+пользовательский ввод требует нового чтения. Нет автоматического scroll/focus.
+
+Existing ToolRuntime выполняет policy confirmation, durable prepared/dispatch и
+terminal через ResourceMutationJournal/ResourceAuthority. Во время model/user wait
+gates свободны; native operation сериализуется на странице, а dispatch/read-back/
+publication удерживают exact Office document gate на worker. Закрытие/навигация/
+смена владельца не могут перенаправить подготовленное действие.
+
+Fill использует native DOM value setter и input/change events; read-back сравнивает
+значение внутри renderer, не возвращая его модели. Click использует DOM `click()`;
+`expectedText` должен отсутствовать до нажатия и появиться ровно в одном entry после.
+Это проверка локального синхронного результата, не доверенный физический ввод и не
+доказательство server-side операции. Неуникальный/неполный capture не допускает action.
+
+Возможный эффект без read-back, cancellation/timeout после dispatch — `Unknown`.
+Поздний queued callback не выполняет действие после timeout; in-flight operation
+сохраняет native gate до завершения. Unknown блокирует дальнейшие mutations этой
+страницы, включая после нового чтения; доступны inspect и ручное close/reopen.
+Автоматического retry/replay нет. Успех потребляет observation, следующий action
+требует нового чтения. Приёмка native WebView2/controller на Windows остаётся открытой.
+
+<a id="p6c-action-visualization"></a>
+## P6c: визуализация действий — Planned, 2026-11-11
+
+Это presentation поверх P6b, пока не реализованный. Источник состояния — фактические
+preparation/dispatch/verification у runtime. Target и текущую геометрию определяет
+existing native page owner; модель не управляет курсором или анимацией и не назначает
+успех. Краткая подсветка/метка предшествует действию; после визуальной паузы сохраняется
+повторный exact element/user check. Завершение анимации не доказывает эффект:
+«Проверено» разрешено только после read-back, unknown остаётся unknown без retry.
+
+Декорация временная: без второй очереди действий, journal/store или model API.
+Она не перехватывает пользовательский ввод, не раскрывает значения полей и не попадает
+в semantic capture. Hide/close/navigation/смена binding убирают устаревшую отметку;
+возврат к view не проигрывает действия заново. Lifecycle Run остаётся прежним.
+Способ размещения выбирается в существующем native Browser renderer с учётом HWND;
+Shell overlay нельзя считать проверенным поверх WebView2 без native evidence.
+Визуализация не меняет DOM fill/click P6b и не означает поддержку произвольных сайтов.
+Внешний вид и motion — [Design System](../ui/UI_DESIGN_SYSTEM.md#browser-action-visualization),
+очередь — [план](04_MIGRATION_PLAN.md#p6c-action-visualization).
 
 ## Runtime entities и capability negotiation
 

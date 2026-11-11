@@ -17,12 +17,13 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private sealed class HarnessBrowserReadSource : IExternalBrowserReadSource
+        private class HarnessBrowserReadSource : IExternalBrowserReadSource
         {
             internal ExternalBrowserReadTarget Target;
             internal int Captures, ReadThread;
             internal Action DuringRead;
             internal ExternalBrowserSemanticContent Content = new ExternalBrowserSemanticContent {
+                ObservationId = Guid.NewGuid().ToString("N"),
                 Nodes = new[] { new ExternalBrowserSemanticNode { Role = "heading", Name = "Local form" },
                     new ExternalBrowserSemanticNode { Role = "button", Name = "Save", Disabled = true } }, Visited = 4 };
             public ExternalBrowserReadTarget TargetFor(string chatId) { return Target?.ChatId == chatId ? Target : null; }
@@ -30,7 +31,7 @@ namespace RNAssistant.Harness
             {
                 cancellationToken.ThrowIfCancellationRequested(); Captures++; ReadThread = Thread.CurrentThread.ManagedThreadId;
                 AssertTrue(target.Matches(Target), "capture uses the exact runtime binding");
-                DuringRead?.Invoke(); return Task.FromResult(Content);
+                DuringRead?.Invoke(); Content.ObservationId = Guid.NewGuid().ToString("N"); return Task.FromResult(Content);
             }
         }
 
@@ -71,7 +72,7 @@ namespace RNAssistant.Harness
                 AssertEqual(2, source.Captures, "fresh read reaches the source");
                 AssertTrue(head.Revision.Revision != executor.ResourceAuthority.Store.GetHead(scope, identity).Revision.Revision, "changed content changes retained revision");
                 var other = NewSession(adapter); other.Id = "other-chat";
-                AssertEqual(0, executor.ResourceGateway.Find(other, "browser", null).Items.Count, "another chat cannot discover the page");
+                AssertEqual(0, executor.ResourceGateway.Find(other, null, "browser").Items.Count, "another chat cannot discover the page");
             });
         }
 

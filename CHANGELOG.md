@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.6.0-dev
+
+- The opt-in External Browser pilot can fill a textbox and click a button on its
+  packaged local probe through the same Office/bound Workspace runtime. Actions
+  require a delivered semantic read, recheck the exact element and user edits,
+  and verify the result. Unknown effects block further actions until manual reopen.
+  External website actions and Windows/WebView2 qualification remain open.
+
 ### 16.5.1-dev
 
 - Older Office/Workspace chat pages remain readable when an unfinished operation's

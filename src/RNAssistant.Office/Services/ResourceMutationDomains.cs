@@ -31,6 +31,7 @@ namespace RNAssistant.Office.Services
 
         internal static ResourceAuthorityScopeId Scope(ResourceAuthorityService authority, ChatSession session, string operation)
         {
+            if (ExternalBrowserToolHandler.Owns(operation)) return authority.Scope(session, false);
             if (IsDocumentArtifactOperation(operation)) return authority.Scope(session, true);
             if (LocalHtmlAssetMutationDomain.OwnsOperation(operation))
                 return new ResourceAuthorityScopeId("catalog", "local");

@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## External Browser P6b — In Review, 2026-11-11
+
+Первый local workflow fill/click/verify использует exact delivered semantic observation,
+existing ToolRuntime/policy и mutation journal. Office и bound Workspace имеют один
+handler; user/element conflicts отказывают без эффекта, unknown запрещает повтор.
+Семь focused checks проходят в isolated baseline + Browser slice и два Chrome fixtures
+проверяют actual script. Windows compile/WebView2/controller delivery открыты; general
+external actions не поддержаны. По запросу пользователя далее запланирован
+[P6c: визуализация действий](../browser/04_MIGRATION_PLAN.md#p6c-action-visualization),
+затем P4a source diff; P4b annotations отдельно. P6c пока не реализован.
+[Контракт](../browser/03_CONTRACTS.md#p6b-local-actions), [evidence](../browser/05_TEST_MATRIX.md#p6b).
+
 ## External Browser P6a — In Review, 2026-11-11
 
 Одна страница P5a доступна через `core.find/read` в исходном чате и bound Workspace.

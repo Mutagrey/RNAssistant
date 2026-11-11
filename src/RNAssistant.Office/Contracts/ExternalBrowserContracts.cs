@@ -79,6 +79,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ExternalBrowserSemanticContent
     {
+        [JsonProperty("observationId")] public string ObservationId { get; set; }
         [JsonProperty("nodes")] public ExternalBrowserSemanticNode[] Nodes { get; set; }
         [JsonProperty("truncated")] public bool Truncated { get; set; }
         [JsonProperty("visited")] public int Visited { get; set; }
@@ -88,5 +89,32 @@ namespace RNAssistant.Office.Contracts
     {
         ExternalBrowserReadTarget TargetFor(string chatId);
         Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken);
+    }
+
+    // P6b is deliberately restricted to the packaged local probe. No model JS/selectors.
+    public sealed class ExternalBrowserActionRequest
+    {
+        [JsonProperty("action")] public string Action { get; set; }
+        [JsonProperty("name")] public string Name { get; set; }
+        [JsonProperty("value")] public string Value { get; set; }
+        [JsonProperty("expectedText")] public string ExpectedText { get; set; }
+    }
+
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum ExternalBrowserEffect { Rejected, VerifiedNoChange, VerifiedChange, Unknown }
+
+    public sealed class ExternalBrowserActionResult
+    {
+        [JsonProperty("effect", Required = Required.Always)] public ExternalBrowserEffect Effect { get; set; }
+        [JsonProperty("code", Required = Required.Always)] public string Code { get; set; }
+    }
+
+    public interface IExternalBrowserActionSource : IExternalBrowserReadSource
+    {
+        Task PrepareAsync(ExternalBrowserReadTarget target, string observationRevision, string preparationId,
+            ExternalBrowserActionRequest request, CancellationToken cancellationToken);
+        Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
+            Action beforeDispatch, CancellationToken cancellationToken);
+        void BlockActions(ExternalBrowserReadTarget target);
     }
 }

@@ -2,7 +2,7 @@
 
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
 P2c automatic lifecycle — **проверен host-neutral**; P3a/P3b plugin fixes — **In Review**;
-P5a native pilot и P6a semantic reads — **реализованы / In Review**;
+P5a native pilot и P6a/P6b semantic read/local actions — **реализованы / In Review**;
 P4 и остальная часть P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
@@ -41,8 +41,9 @@ evidence и ровно одним следующим шагом в [Progress](06
 | P1–P3 baseline | Существующие HTML/plugin views, импорт, check/publish/restore и automatic lifetime; P3b — `13a4a5b8`. Остаются visual acceptance и известный focus/pointer gap | Не начинать новый P3c ради общего DTO; plugin capability projection расширять вместе с конкретным consumer |
 | P5a ручной Browser | Уже подготовленный пилот одной внешней страницы; исправления по реальному Windows HWND/DPI/focus/cleanup evidence | Проверить на первом доступном Windows-запуске; независимо от P4. До evidence не расширять embedding на все viewers |
 | P6a чтение | Один external target из P5a → bounded semantic observation через existing Resource Gateway; exact runtime binding, document generation и исключение sensitive values | Реализован / In Review; host-neutral Gateway и Chrome capture проверены, WebView2/controller delivery на Windows открыт |
-| P6b действие | Одна локальная fixture: открыть → прочитать → заполнить → нажать → проверить. Existing ToolRuntime/policy/evidence; stale/ambiguous target и unknown effect без replay | После P6a; проверка эффекта и конфликта с пользователем входят сразу, не откладываются в P7 |
-| P4a сравнение | Bounded code/source diff выбранной пары через владельцев HTML/plugin versions; явно отличать code revision от данных preview | После первого рабочего P6b либо раньше при конкретной потребности сравнивать перед apply/restore |
+| P6b действие | Одна локальная fixture: открыть → прочитать → заполнить → нажать → проверить. Existing ToolRuntime/policy/evidence; stale/ambiguous target и unknown effect без replay | Реализован / In Review; Office и bound Workspace, host-neutral/Chrome evidence; Windows qualification открыта |
+| P6c визуализация действий | Подсветка exact цели, короткая метка действия и результат по runtime evidence; рисованный курсор — опциональное дополнение | Planned по запросу пользователя 2026-11-11; после P6b, перед P4a. Не расширяет поддержку сайтов и способы ввода |
+| P4a сравнение | Bounded code/source diff выбранной пары через владельцев HTML/plugin versions; явно отличать code revision от данных preview | После P6c либо раньше при конкретной потребности сравнивать перед apply/restore |
 | P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отдельно после P4a или по потребности вести замечания между открытиями; не условие P5/P6a–b |
 | Остальные P5/P6 capabilities | Дополнительные targets/страницы, persistent profiles, разрешённые popup/download, screenshots, shared sessions | Самостоятельные продуктовые срезы после базового workflow; screenshot включается только с privacy gate. Не создавать весь перечень API заранее |
 | P7 qualification | Совместная проверка поддержанных сценариев, Windows/Office, security/performance/cleanup и release evidence | Локальные проверки сопровождают срезы; широкий итоговый прогон — на интеграционной точке/кандидате, а не после каждой правки |
@@ -77,9 +78,43 @@ Close/rebind/navigation и cancellation не позволяют принять �
 без текстовых значений controls, URL/title, private regions, frames и shadow DOM.
 Existing Gateway публикует capture в CAS/authority; model не получает runtime IDs.
 Навигационное поколение не является revision изменяемого DOM: новое чтение получает
-новый content hash, а element binding/action verification остаются P6b.
+новые capture identity/content hash; element binding/action verification реализованы в P6b.
 Новых Browser session stores, UI controls или model-facing CDP/evaluate нет.
 [Контракт](03_CONTRACTS.md#p6a-semantic-read), [проверки](05_TEST_MATRIX.md#p6a).
+
+## P6b: первый local workflow — In Review, 2026-11-11
+
+Два действия `browser.fill/click` используют existing ToolRuntime и owner страницы.
+Полностью доставленное semantic observation, exact element/user guards, confirmation,
+prepared/dispatch/terminal и read-back входят в срез. После unknown mutations страницы
+заблокированы до ручного close/reopen. Только bundled probe, без arbitrary JS, реальных
+site submits, screenshots, multipage и нового журнала. Office и bound Workspace
+используют один handler; нативная Windows-проверка остаётся отдельным evidence.
+[Контракт](03_CONTRACTS.md#p6b-local-actions), [проверки](05_TEST_MATRIX.md#p6b).
+Следующий срез — P6c: видимые действия агента; затем P4a source diff.
+
+<a id="p6c-action-visualization"></a>
+## P6c: видимые действия агента — Planned, 2026-11-11
+
+Пользователь попросил отдельный этап после обсуждения визуальной части P6b.
+Owner: existing native Browser page / presentation; ToolRuntime остаётся владельцем
+dispatch/effect. Первый вариант: кратко подсветить actual target, показать
+«Заполняю»/«Нажимаю», затем подтверждённый результат, ошибку или unknown.
+Рисованный курсор внутри Browser — опциональное дополнение обычного визуального ревью;
+системная мышь не перемещается. Отдельный animation framework/store не нужен.
+
+Короткая анимация ориентировочно 150–250 ms; точный вид и motion принадлежат
+[Design System](../ui/UI_DESIGN_SYSTEM.md#browser-action-visualization).
+Нет обязательных длинных пауз и посимвольного набора. Ожидания определяются готовностью
+страницы и verification; после визуальной паузы цель проверяется повторно.
+Начать с existing local workflow, сохраняя P6b admission/confirmation/read-back.
+Поддержка произвольных сайтов и изменение способа ввода — отдельные срезы.
+
+Готовность: действия видны в активной Browser view, статус соответствует фактическому
+эффекту, декорация не мешает вводу/capture и не переживает смену цели. Обычное визуальное
+ревью среза и адресные [проверки](05_TEST_MATRIX.md#p6c); native WebView2 evidence отдельно.
+Этап только запланирован, код и визуальное принятие отсутствуют.
+[Контракт](03_CONTRACTS.md#p6c-action-visualization).
 
 ## P1: конкретный production slice
 

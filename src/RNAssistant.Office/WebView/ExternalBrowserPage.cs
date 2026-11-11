@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Microsoft.Web.WebView2.Core;
@@ -24,6 +25,12 @@ namespace RNAssistant.Office.WebView
         private bool _documentReady;
         private readonly string _chatId;
         private static readonly string SemanticScript = LoadSemanticScript();
+        private int _semanticContext;
+        private string _observationRevision, _observationId, _preparationId;
+        private ExternalBrowserReadTarget _observationTarget;
+        private bool _actionUnknown;
+        private int _abandonedAction;
+        internal void BlockActions() { Interlocked.Exchange(ref _abandonedAction, 1); }
         private string _runtime = "—";
         private string _url = ExternalBrowserPolicy.ProbeUrl, _title = "Внешняя страница", _message = "Запуск WebView2…";
         private ExternalBrowserStatus _status = ExternalBrowserStatus.Starting;
@@ -53,12 +60,20 @@ namespace RNAssistant.Office.WebView
         private sealed class FrameTree { [JsonProperty("frame")] public Frame Frame { get; set; } }
         private sealed class Frame { [JsonProperty("id")] public string Id { get; set; } }
         private sealed class WorldResponse { [JsonProperty("executionContextId")] public int ContextId { get; set; } }
-        private sealed class CaptureResponse
+        private sealed class CaptureResponse<T>
         {
-            [JsonProperty("result")] public CaptureValue Result { get; set; }
+            [JsonProperty("result")] public CaptureValue<T> Result { get; set; }
             [JsonProperty("exceptionDetails")] public object Exception { get; set; }
         }
-        private sealed class CaptureValue { [JsonProperty("value")] public ExternalBrowserSemanticContent Value { get; set; } }
+        private sealed class CaptureValue<T> { [JsonProperty("value")] public T Value { get; set; } }
+        private async Task<T> Evaluate<T>(string expression)
+        {
+            var capture = await Protocol<CaptureResponse<T>>("Runtime.evaluate", new { expression,
+                contextId = _semanticContext, returnByValue = true, silent = true, timeout = 1000 });
+            if (capture?.Result == null || capture.Exception != null)
+                throw ExternalBrowserResourceProvider.Error("The bounded browser operation failed.", "browser_operation_failed");
+            return capture.Result.Value;
+        }
         private async Task<T> Protocol<T>(string method, object arguments)
         {
             var wire = await Control.CoreWebView2.CallDevToolsProtocolMethodAsync(method, JsonConvert.SerializeObject(arguments));
@@ -72,12 +87,54 @@ namespace RNAssistant.Office.WebView
             if (string.IsNullOrEmpty(tree?.Tree?.Frame?.Id)) throw ExternalBrowserResourceProvider.Error("The top document is unavailable.", "browser_page_unavailable");
             var world = await Protocol<WorldResponse>("Page.createIsolatedWorld", new { frameId = tree.Tree.Frame.Id, worldName = "rna-semantic-read" });
             if (world == null || world.ContextId <= 0) throw ExternalBrowserResourceProvider.Error("The isolated capture context is unavailable.", "browser_page_unavailable");
-            var capture = await Protocol<CaptureResponse>("Runtime.evaluate", new { expression = SemanticScript,
-                contextId = world.ContextId, returnByValue = true, silent = true, timeout = 1000 });
+            _semanticContext = world.ContextId;
+            var content = await Evaluate<ExternalBrowserSemanticContent>(SemanticScript);
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("Browser document changed during capture.", "browser_document_stale");
-            if (capture?.Result?.Value == null || capture.Exception != null)
+            if (content == null)
                 throw ExternalBrowserResourceProvider.Error("The bounded semantic capture failed.", "browser_capture_failed");
-            return capture.Result.Value;
+            _observationRevision = ExternalBrowserResourceProvider.Revision(target, content);
+            _observationTarget = target;
+            _observationId = content.ObservationId; _preparationId = null;
+            return content;
+        }
+
+        private void CheckAction(ExternalBrowserReadTarget target)
+        {
+            if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("The browser document changed. Read it again.", "browser_document_stale");
+            if (!target.Matches(_observationTarget)) throw ExternalBrowserResourceProvider.Error("The observation belongs to an earlier document. Read it again.", "browser_observation_stale");
+            if (_url != ExternalBrowserPolicy.ProbeUrl || Control.Source?.AbsoluteUri != ExternalBrowserPolicy.ProbeUrl)
+                throw ExternalBrowserResourceProvider.Error("P6b actions are available only on the packaged local probe.", "browser_probe_only");
+            if (_actionUnknown || Volatile.Read(ref _abandonedAction) != 0) throw ExternalBrowserResourceProvider.Error("A previous effect is unknown. Inspect the page; mutations require closing and reopening it manually.", "browser_effect_unknown");
+        }
+
+        public async Task<bool> PrepareAsync(ExternalBrowserReadTarget target, string observationRevision,
+            string preparationId, ExternalBrowserActionRequest request)
+        {
+            CheckAction(target);
+            if (observationRevision != _observationRevision || _semanticContext <= 0)
+                throw ExternalBrowserResourceProvider.Error("Read the current page before acting.", "browser_observation_stale");
+            var result = await Evaluate<ExternalBrowserActionResult>("globalThis.__rnaBrowser.prepare(" +
+                JsonConvert.SerializeObject(_observationId) + "," + JsonConvert.SerializeObject(preparationId) + "," + JsonConvert.SerializeObject(request) + ")");
+            CheckAction(target);
+            if (result?.Effect != ExternalBrowserEffect.VerifiedNoChange || result.Code != "browser_prepared")
+                throw ExternalBrowserResourceProvider.Error("The exact page element could not be prepared. Read the page again.", ExternalBrowserPolicy.SafeActionCode(result?.Code));
+            _preparationId = preparationId;
+            return true;
+        }
+
+        public async Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId, Action beforeDispatch)
+        {
+            CheckAction(target);
+            if (preparationId != _preparationId || preparationId == null)
+                throw ExternalBrowserResourceProvider.Error("The prepared browser action is stale. Read the page again.", "browser_preparation_stale");
+            beforeDispatch();
+            _actionUnknown = true; _preparationId = null;
+            var result = await Evaluate<ExternalBrowserActionResult>("globalThis.__rnaBrowser.act(" + JsonConvert.SerializeObject(preparationId) + ")");
+            if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("The page changed after dispatch; its effect is unknown.", "browser_effect_unknown");
+            if (result == null || !Enum.IsDefined(typeof(ExternalBrowserEffect), result.Effect))
+                throw ExternalBrowserResourceProvider.Error("The renderer returned no valid effect evidence.", "browser_effect_unknown");
+            _actionUnknown = result.Effect == ExternalBrowserEffect.Unknown;
+            return result;
         }
 
         public async Task InitializeAsync()

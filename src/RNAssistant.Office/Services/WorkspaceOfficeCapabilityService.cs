@@ -59,7 +59,8 @@ namespace RNAssistant.Office.Services
             // Preserve the accepted catalog across a host switch so pending
             // confirmation can finish with a definite no-effect refusal.
             var tools = OfficeToolCatalog.ForHost(target.Host)
-                .Where(item => item.Id != "excel.chat.chart.create").ToArray();
+                .Where(item => item.Id != "excel.chat.chart.create")
+                .Concat(_executor.GetControllerTools().Where(item => ExternalBrowserToolHandler.Owns(item.Id))).ToArray();
             var result = new WorkspaceOfficeCapabilitySet { Target = target, Available = available,
                 Tools = new WorkspaceToolContribution[0], ModelProjection = ModelToolResultProjection.Instance };
             if (!string.Equals(_adapter.HostName, target.Host, StringComparison.OrdinalIgnoreCase))
