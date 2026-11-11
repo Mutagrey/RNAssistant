@@ -90,6 +90,13 @@ ArtifactCatalogService в скрытый managed workspace, проверяет f
 Created может открыть его через existing ProjectChats, без автоматического чата/Run.
 Unknown не повторяется. File authority/CAS остаются у WorkspaceFileService/WorkspaceStore.
 
+P2b (2026-11-11): stateless Application BrowserTargetResolver выдаёт typed target и
+capabilities из verified metadata тех же owners в существующих responses. Общая Web
+проверка сравнивает chat/document/exact source; HtmlArtifactView, MaterialView и live
+HtmlWorkspaceView используют результат перед применением. Нет второго registry/store
+или дополнительного запроса. Raw HTML inert; read-only live сохраняет доступный source.
+Новый descriptor не заменяет mutation guards или session owner, который остаётся P2c.
+
 «Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
 тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.
 Нет второго composer, chat store или вложенного chat UI. HTML использует свой chatId;

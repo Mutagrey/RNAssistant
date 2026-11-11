@@ -64,6 +64,12 @@
       try {
         var result = await request;
         if (!current(version)) { closeLate(result); throw new Error("Чтение отменено."); }
+        if (command === "readArtifactViewerPage" && readers.isHtmlFileArtifact(artifactFor(target))) {
+          try {
+            var resolved = RNAssistantBrowserTarget.accept(result.browserTarget, target, "HtmlResource");
+            if (!resolved.capabilities.source) throw new Error("Исходник HTML недоступен.");
+          } catch (error) { closeLate(result); throw error; }
+        }
         return result;
       } finally { requests.delete(request.requestId); }
     }

@@ -71,6 +71,7 @@
       menu = RNAssistantActionMenu.open(trigger, entries());
       if (!loaded) load();
     };
+    return trigger;
   }
   window.RNAssistantArtifactVersions = { append: append };
 }());

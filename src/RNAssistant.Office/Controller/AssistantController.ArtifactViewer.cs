@@ -57,7 +57,7 @@ namespace RNAssistant.Office
                     content = ArtifactCatalog().Export(session, request);
                     return new ResourceDownloadContent { Bytes = content.Bytes, ContentType = content.ContentType };
                 }, token);
-            return new ArtifactTransferDownload { FileName = content.FileName, ContentType = content.ContentType, Kind = content.Kind, Data = data };
+            return new ArtifactTransferDownload { FileName = content.FileName, ContentType = content.ContentType, Kind = content.Kind, Data = data, BrowserTarget = content.BrowserTarget };
         }
 
         public ResourceUploadOpenResponse BeginArtifactImport(ResourceUploadOpenRequest request, CancellationToken token)

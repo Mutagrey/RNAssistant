@@ -47,7 +47,10 @@ const {chromium}=require('playwright');
       send=function(command,payload){savedTest.calls.push({command,payload});
         if(command==='listArtifactCatalog')return Promise.resolve({chatId:state.activeChatId,sessionRevision:1,documentId:'preview-document',items:savedTest.items,documents:[]});
         if(command==='exportArtifact'&&payload.resourceUri.includes('/saved-')){
-          const value={contentType:'application/json',fileName:'project.rna',data:{synthetic:true,leaseId:'saved-'+(++savedTest.nextLease),payload:{byteLength:savedTest.large?17*1024*1024:savedTest.bytes.length}}};
+          const browserTarget={kind:'HtmlArtifact',state:'Ready',chatId:payload.chatId,documentId:payload.documentId,resourceUri:payload.resourceUri,artifactId:'saved',revision:1,capabilities:{preview:true,source:true,edit:false,versions:true,restore:false,exportProject:true,createProject:true,annotations:false}};
+          if(savedTest.badTarget)browserTarget[savedTest.badTarget]='foreign';
+          if(savedTest.sourceOnly)Object.assign(browserTarget.capabilities,{preview:false,versions:false,createProject:false,exportProject:false});
+          const value={browserTarget,contentType:'application/json',fileName:'project.rna',data:{synthetic:true,leaseId:'saved-'+(++savedTest.nextLease),payload:{byteLength:savedTest.large?17*1024*1024:savedTest.bytes.length}}};
           if(savedTest.delayExport)return new Promise(resolve=>{savedTest.lateLease=value.data.leaseId;savedTest.releaseExport=()=>resolve(value);});return Promise.resolve(value);
         }
         if(command==='closeArtifactTransfer')return Promise.resolve({});
@@ -201,6 +204,23 @@ const {chromium}=require('playwright');
       await page.evaluate(()=>{state.activeChatId='another-chat';state.chatNavigationVersion++;});
       await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await page.frameLocator(htmlSelector('A')).getByRole('heading',{name:'Точная версия'}).waitFor();
       assert.deepEqual(await page.evaluate(()=>{const p=savedTest.calls.filter(c=>c.command==='exportArtifact').at(-1).payload;return [p.chatId,p.documentId];}),['preview-chat','preview-document']);
+      for(const field of ['documentId','resourceUri']){
+        const readsBefore=await page.evaluate(()=>savedTest.reads);
+        await page.evaluate(field=>{savedTest.badTarget=field;},field);
+        await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();
+        await a.getByRole('alert').filter({hasText:'Цель Browser не подтверждена'}).waitFor();
+        assert.equal(await a.locator('iframe').count(),0,'foreign target never creates a renderer');
+        assert.equal(await page.evaluate(()=>savedTest.reads),readsBefore,'mismatch is rejected before body download');
+        await page.waitForFunction(()=>savedTest.calls.filter(c=>c.command==='closeArtifactTransfer').at(-1).payload.leaseId==='saved-'+savedTest.nextLease);
+      }
+      await page.evaluate(()=>{savedTest.badTarget=null;savedTest.sourceOnly=true;});
+      await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();
+      await a.getByRole('combobox',{name:'Файл проекта'}).waitFor();
+      assert.equal(await a.locator('iframe').count(),0,'source-only capability never executes the stored page');
+      assert.equal(await a.getByRole('button',{name:'Страница',exact:true}).count(),0,'unsupported mode is hidden');
+      assert.equal(await a.getByRole('button',{name:'Сохранение проекта',exact:true}).count(),0,'unsupported project operations are hidden');
+      if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-source-only.png'});
+      await page.evaluate(()=>{savedTest.sourceOnly=false;});
       await page.evaluate(()=>{savedTest.large=true;});await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await a.getByRole('alert').filter({hasText:'16 МиБ'}).waitFor();
       assert.equal(await address.count(),1,'failed reload keeps the addressed location');assert.equal(await address.inputValue(),exactAddress);
       assert.equal(await a.getByRole('group',{name:'Представление HTML',exact:true}).count(),0);

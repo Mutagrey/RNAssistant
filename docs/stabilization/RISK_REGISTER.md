@@ -20,6 +20,20 @@ role `tool`, while the v8 compiler returns `user`. Candidate and baseline fail a
 the same assertion. Owner: context composition fixture/protocol; keep this separate
 from typed skill snapshot copying. Selection, dependency and exact-dispatch cases pass.
 
+## Browser P2b — 2026-11-11
+
+Owner: Application BrowserTargetResolver / HTML-resource readers. P2b descriptors
+не являются authority или session lease; operations сохраняют собственные guards.
+Sessions, plugin grants и managed source preview ещё не реализованы. Windows controller
+delivery, пользовательское визуальное принятие и известный iframe pointer routing Open.
+
+Соседний `html import: inert preview and exact provenance` падает на счётчике
+`truncated, oversized and unretained sources fail before body hydration`: expected 2,
+got 3. Повтор с исходными ArtifactViewerService и fixture из `f918a56f` даёт тот же
+сбой; новые descriptor assertions до него проходят. Owner: uploaded HTML intake/fixture.
+Не засчитывать весь тест как pass; исправлять admission/read accounting отдельно.
+[Проверки P2b](../browser/05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
+
 ## HTML project import — In Review, 2026-11-10
 
 Owner: Application HtmlProjectImportService / Workspace files; UI HtmlArtifactView.

@@ -191,7 +191,15 @@ checks, `html-project-import` и `browser-saved-views` прошли. Стары�
 проект → вернуться и открыть ту же копию; отдельно проверить отказ на SDK/data пакете.
 [Скриншоты/проверки](../browser/05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
 
-Далее P2b resolver/capabilities, P2c sessions; preview standalone source, перенос
+P2b (2026-11-11) реализован / In Review: Application target/capabilities приходят
+в прежних responses; saved/source/live consumers проверяют exact owner перед
+применением. Снимок не становится editable; source-only не исполняется; read-only
+live сохраняет preview. Старый native HTML classifier удалён в пользу общего owner.
+Пять isolated C# checks и три browser fixtures проходят; отдельный raw fixture
+сбой воспроизводится без P2b. Baseline geometry/read counts и текущие lifetime
+сохранены. [Ревью/проверки](../browser/05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
+
+Далее P2c sessions; preview standalone source, перенос
 зависимостей, настоящий diff и external native browser остаются в плане. Концепция
 Approved; визуальное принятие production и Windows/Office evidence остаются Open.
 

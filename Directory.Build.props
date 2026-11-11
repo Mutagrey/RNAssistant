@@ -2,7 +2,7 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <!-- Single source of truth for the RNAssistant product version. -->
-    <RNAssistantVersionPrefix>16.2.4</RNAssistantVersionPrefix>
+    <RNAssistantVersionPrefix>16.2.5</RNAssistantVersionPrefix>
     <RNAssistantVersionSuffix>dev</RNAssistantVersionSuffix>
     <!-- Preserve baseline assembly binding until Windows/VSTO qualification. -->
     <RNAssistantAssemblyVersion>16.0.4.0</RNAssistantAssemblyVersion>

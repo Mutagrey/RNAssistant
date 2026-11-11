@@ -17,7 +17,7 @@ const {chromium}=require('playwright');
       RNAssistantResourceDownload.read=(data,options)=>data.importFixture?Promise.resolve(bytes):read(data,options);
       send=(command,payload)=>{
         projectTest.calls.push({command,payload});
-        if(command==='exportArtifact'&&payload.resourceUri.includes('/project-import-'))return Promise.resolve({data:{importFixture:true,leaseId:payload.resourceUri}});
+        if(command==='exportArtifact'&&payload.resourceUri.includes('/project-import-'))return Promise.resolve({browserTarget:{kind:'HtmlArtifact',state:'Ready',chatId:payload.chatId,documentId:payload.documentId,resourceUri:payload.resourceUri,artifactId:'import',revision:1,capabilities:{preview:true,source:true,edit:false,versions:true,restore:false,exportProject:true,createProject:true,annotations:false}},data:{importFixture:true,leaseId:payload.resourceUri}});
         if(command==='closeArtifactTransfer')return Promise.resolve({closed:true});
         if(command==='getSavedHtmlHistory')return Promise.resolve({items:[],hasMore:false,totalCount:1});
         if(command==='createHtmlProjectFromArtifact')return new Promise(resolve=>{projectTest.pending[payload.resourceUri]=resolve;});

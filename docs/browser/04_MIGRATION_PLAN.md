@@ -1,7 +1,7 @@
 # Universal Browser: план реализации
 
-Статус: P0 documentation подготовлен; P1 и P2a **реализованы / In Review**;
-P2b/P2c–P7 **Planned / Proposed**. Дата: 2026-11-10. Пользователь продолжил работу после
+Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
+P2c–P7 **Planned / Proposed**. Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
 [исходник](00_SOURCE_SPEC.md), [аудит](01_AUDIT.md), [ADR](02_ARCHITECTURE_ADR.md),
 [контракты](03_CONTRACTS.md). Общая очередь UI остаётся в
@@ -14,7 +14,7 @@ docs-only P0; реализованы описанные ниже срезы. О�
 |---|---|---|
 | P0 Audit/ADR | Web/Application: реальная source/authority map, reuse/remove, contracts, Windows spike protocol | Docs-only diff/links/source integrity; native и runtime evidence остаются открыты |
 | P1 HTML Artifact | Web: address/modes в общем PreviewSurface, один saved HTML consumer | Сохранены current features/limits; browser baseline + визуальное ревью; локальный mode toolbar удалён |
-| P2 Targets/Sessions | P2a: import в самостоятельный workspace реализован; далее Application/Core + Web resolver/session owner и detach/close | Import bounds/read-back/no-replay; затем dirty/stale/exact scope/close checks, без замены editor data model |
+| P2 Targets/Sessions | P2a import и P2b HTML target/capabilities реализованы; далее session owner и detach/close | Import bounds/read-back/no-replay, exact scope/late/dirty checks; session lifetime ещё открыт |
 | P3 Plugin | Plugin Application + Web: source/candidate/release adapters, общий navigation/modes UI | Grants/revoke/check/publish/restore неизменны; удалены переведённые provider UI controls, instance ownership остаётся |
 | P4 Versions/Annotations | Domain owners + Web: bounded diff, version semantics, events-backed annotations и anchors | Branch/active pointer, unresolved/verified resolution, view-close retention; нет BrowserRevisionStore/Annotation DB |
 | P5 External WebView2 | Native adapter + Application: renderer по результату spike, profiles/navigation/popup/download policy | Windows embedding matrix либо явный управляемый separate-window fallback; привилегированный Shell control не используется |
@@ -114,12 +114,32 @@ CAS-only source store. Owner — Application Workspace + существующи�
    новый browser flow и saved Browser fixture проходят. Старый transfer roundtrip падает
    также на чистом baseline при следующем HTML-tool вызове; риск записан отдельно.
 
-P2b — typed target resolver и capabilities существующих consumers. P2c — runtime
+P2b реализован ниже. P2c — runtime
 session owner, detach/reattach и отдельное закрытие session с UI для повторного открытия.
 До P2c закрытие вкладки сохраняет прежний lifetime; новый ID не записывается в Dock layout.
 Pointer-routing/Windows evidence остаются открытыми и не блокируют domain-срез P2a.
-Import и managed source backing реализованы. Перенос зависимостей, browser resolver,
+Import и managed source backing реализованы. Перенос зависимостей, standalone preview,
 sessions, Windows/controller delivery и пользовательское визуальное принятие открыты.
+
+## P2b: HTML resolver и capabilities — In Review, 2026-11-11
+
+Scope: existing saved HTML, raw HTML source и live HTML editor. Stateless Application
+resolver использует проверенные metadata прежних owners; различает kind/availability
+и сверяет exact source/scope. Descriptor передаётся существующими responses без
+добавочного запроса и без чтения тела для определения возможностей.
+
+Web использует подтверждённые modes/actions. Foreign document/revision response
+отклоняется до скачивания saved body; source-only не создаёт iframe. Read-only live
+сохраняет preview и блокирует edit/restore/annotations. Не заменены редакторы,
+data/revision owners, bindings, caches или operation guards. Классификация raw HTML
+в native reader переключена на общего Application owner, прежняя копия удалена.
+
+Пять focused host-neutral checks и три browser fixtures проходят. Baseline/final:
+saved reads 2 при пяти выборах, source 32K, controls 30 px, overflow 0 на 1280/100%
+и 420/125%; retained draft/frame и late cleanup сохранены. Отдельный raw import
+fixture падает также без P2b: [evidence](05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
+UI/Windows acceptance остаются открытыми. Далее ровно P2c: session owner, detach /
+reattach и явное закрытие session; plugin/semantic tools/native URL не входят в P2b.
 
 ## Развитие после P1
 

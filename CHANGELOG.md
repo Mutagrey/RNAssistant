@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.2.5-dev
+
+- Saved HTML, raw HTML and the live editor use verified source capabilities.
+  Foreign target responses cannot replace the preview; read-only sources remain
+  viewable while editing and annotations are disabled.
+
 ### 16.2.4-dev
 
 - Model context preparation reuses exact read-body metadata and hashes within each

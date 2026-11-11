@@ -112,7 +112,7 @@
 
     function recoveryBlocked() {
       var current = recovery();
-      return current.status === "degraded" && !current.canMutate;
+      return current.status === "degraded" && !current.canMutate || !!state.browserTarget && !state.browserTarget.capabilities.edit;
     }
 
     function fileId(file) {

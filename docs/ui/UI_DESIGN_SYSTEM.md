@@ -84,6 +84,11 @@ P2a (2026-11-10) добавляет строку «Создать проект �
 создание недоступным с читаемым пояснением. [Ревью 1280 px](review/browser-project-import-wide.png),
 [420 px / 125%](review/browser-project-import-narrow.png). Принятие пользователем открыто.
 
+P2b (2026-11-11) использует прежние hidden/disabled/error состояния согласно runtime
+capabilities. Геометрия/CSS не менялись: baseline/final controls 30 px, source 12 px,
+overflow 0 на 1280/100% и 420/125%. [Замеры](review/browser-p2b.json),
+[source-only](review/browser-p2b-source-only.png), [read-only live](review/browser-p2b-live-readonly.png).
+
 [Замеры](review/browser-toolbar.json) сравнивают production и frozen Demo при одинаковых
 viewport/zoom/theme. Production controls используют общий compact token 30 CSS px,
 SVG 16 px; source text 12 px. Сохранённое содержимое проверено при 1280/100% и

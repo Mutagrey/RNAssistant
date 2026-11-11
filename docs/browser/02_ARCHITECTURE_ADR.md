@@ -1,6 +1,6 @@
 # Universal Browser: архитектурное решение
 
-Дата: 2026-11-10. Общая архитектура — **Proposed**; P1 и P2a реализованы / In Review.
+Дата: 2026-11-11. Общая архитектура — **Proposed**; P1, P2a и P2b реализованы / In Review.
 Согласованы документы + план и страницы во вкладках существующего Dockview.
 Native renderer остаётся отдельным решением по evidence. Контекст — [аудит](01_AUDIT.md).
 
@@ -77,6 +77,22 @@ Existing document HTML остаётся у DocumentArtifactStore: это copy, �
 Предел — 100 файлов и 16 МиБ UTF-8. Распознаваемые SDK/vendor references отклоняются;
 vendor activations берутся из того же embedded `web/vendor-manifest.json`, что и UI.
 Проверка исполнения произвольного JS и перенос зависимостей не входят в P2a.
+
+## P2b: resolver существующих HTML targets — In Review, 2026-11-11
+
+Application `BrowserTargetResolver` получает проверенные metadata от прежнего owner:
+ArtifactCatalogService, ArtifactViewerService или HTML owner после RefreshSelected.
+Он проверяет exact URI/scope/kind и различает HtmlArtifact, HtmlResource и HtmlWorkspace.
+Текущий снимок не получает право редактирования от совпадения с head; raw HTML остаётся
+inert source. Live recovery сохраняет доступное чтение, запрещая edit/restore/annotations.
+Нет выбора первого кандидата при неоднозначности или отсутствующем selected source.
+
+Typed descriptor передаётся в существующих preview/page/workspace responses: нового
+bridge запроса, I/O, session store или registry нет. Web сверяет адресата и источник,
+пересекает capabilities с поддержанными controls; несоответствие не создаёт iframe.
+Capabilities описывают доступные команды, не выдают authority и не гарантируют успех:
+каждая операция повторяет прежние guards/preflight. Semantic tool binding — P6;
+plugin grants — P3, session lifetime — P2c, managed source preview ещё впереди.
 
 ## Lifetime, authority и восстановление
 

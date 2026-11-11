@@ -92,6 +92,10 @@ HTML использует свой exact chatId. Закрытие Browser не �
 не отменяет Run; аннотации остаются черновиками до отправки пользователем.
 
 Diff скрыт без capability; back/forward видны, но выключены без navigation provider.
+P2b (2026-11-11): modes/actions подтверждает typed runtime target. До успешного чтения
+saved target проектные действия скрыты; ошибка привязки показывает явный отказ.
+Source-only не создаёт iframe. Read-only live оставляет preview, но отключает редактор
+и аннотации; чужой ответ не заменяет прежнее содержимое. Raw HTML остаётся текстом.
 Версии показывает только provider с историей. Произвольные URL, browser sessions
 ещё в плане. Import добавляет source workspace, без нового session lifetime.
 [Широкий вид](review/browser-address-wide.png),

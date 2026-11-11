@@ -1,8 +1,22 @@
 # Universal Browser: статус
 
-Дата: 2026-11-10. Scope: P0/P1 + Browser controls/freshness + P2a source import.
+Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
-Office/WebView — будущий native adapter. P1 и P2a реализованы, **In Review**.
+Office/WebView — будущий native adapter. P1, P2a и P2b реализованы, **In Review**.
+
+## P2b: цели и возможности HTML — In Review, 2026-11-11
+
+Общий Application resolver проверяет exact source/scope/kind по metadata существующих
+owners. Typed descriptor приходит в прежних preview/page/workspace responses, без
+отдельного запроса, store или дополнительной гидрации. Saved snapshot остаётся
+неизменяемым, raw HTML — inert source; доступное live чтение сохраняется при запрете записи.
+UI проверяет адресата до применения и использует подтверждённые capabilities;
+неподдержанный preview не создаёт iframe, поздний/чужой ответ не заменяет источник.
+
+Пять focused host-neutral checks и три browser fixtures прошли. Старый raw import
+fixture падает также без P2b, вынесен в риск. [Evidence и ревью](05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
+Визуальное принятие и Windows/controller delivery открыты. Model semantic bindings,
+plugin grants, managed source preview и runtime session lifetime этим срезом не заявлены.
 
 ## P2a: самостоятельный проект из снимка — In Review, 2026-11-10
 
@@ -198,7 +212,7 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Следующий implementation slice — P2b: typed target resolver и capabilities existing
-HTML/resource consumers; после него P2c session owner и detach/reattach. Import P2a
-остаётся In Review. [План](04_MIGRATION_PLAN.md#p2a-импорт-самостоятельного-проекта--in-review-2026-11-10).
-Визуальное ревью P1/P2a, pointer routing и Windows evidence — отдельные открытые gates.
+Следующий implementation slice — P2c: runtime session owner, detach/reattach и явное
+закрытие session. До него close вкладки сохраняет прежний lifetime.
+[План](04_MIGRATION_PLAN.md#p2b-html-resolver-и-capabilities--in-review-2026-11-11).
+Визуальное ревью P1/P2a/P2b, pointer routing и Windows evidence — отдельные открытые gates.

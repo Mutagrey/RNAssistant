@@ -1043,7 +1043,10 @@
       var viewerComplete = viewerEnd === fullViewerText.length;
       viewerBatches[viewerId] = { resource: reference, view: "text", text: viewerText,
         offset: viewerOffset, nextOffset: viewerEnd, done: viewerComplete };
-      return { resourceUri: viewed.resourceUri, viewerKind: viewed.id === "pdf" ? "pdf" : viewed.kind === "markdown" || viewed.kind === "plan_document" ? "markdown" : "text", title: viewed.title,
+      var browserTarget = window.RNAssistantArtifactViewers.isHtmlFileArtifact({kind:viewed.kind,mimeType:viewed.contentType,title:viewed.title}) ? {
+        kind:'HtmlResource',state:'Ready',chatId:payload.chatId,documentId:payload.documentId || 'preview-document',resourceUri:viewed.resourceUri,artifactId:viewed.id,revision:1,
+        capabilities:{preview:false,source:true,edit:false,versions:false,restore:false,exportProject:false,createProject:false,annotations:false}} : null;
+      return { browserTarget:browserTarget, resourceUri: viewed.resourceUri, viewerKind: viewed.id === "pdf" ? "pdf" : viewed.kind === "markdown" || viewed.kind === "plan_document" ? "markdown" : "text", title: viewed.title,
         mimeType: viewed.contentType, contentSha256: await hash(fullViewerText),
         data: { leaseId: viewerId, url: "https://rnassistant.local-resource/v1/" + viewerId,
           descriptor: { reference: reference }, view: "text",

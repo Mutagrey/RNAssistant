@@ -33,6 +33,7 @@ const {chromium}=require('playwright');
       state.htmlWorkspace={revisionArtifactId:'html-r1',activeFileId:'file1',files:[file],dataSources:[],history:[],redoHistory:[],redoBranches:[],recovery:{status:'empty',canMutate:true,candidates:[]}};
       state.htmlWorkspaceSelection={type:'file',id:'file1'};state.htmlWorkspaceMode='preview';
       browserTest.workspace={activeChatId:'preview-chat',sessionRevision:1,activeHtmlArtifactId:'html-r1',artifacts:state.artifacts,workspace:state.htmlWorkspace};
+      browserTest.workspace.browserTarget={kind:'HtmlWorkspace',state:'Ready',chatId:'preview-chat',documentId:'preview-document',resourceUri:'rna://chat/preview-document/artifact/html-r1/revision/1',artifactId:'html-r1',revision:1,capabilities:{preview:true,source:true,edit:true,versions:true,restore:true,exportProject:true,createProject:false,annotations:true}};
       RNAssistantHtmlWorkspaceSurface.openCurrent();
       document.querySelector('[data-html-node="htmlWorkspacePreviewFrame"]').addEventListener('load',()=>browserTest.loads++);
     });

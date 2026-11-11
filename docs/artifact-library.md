@@ -172,6 +172,20 @@ reports the exact folder for inspection, without deletion or automatic replay.
 The Browser action uses existing project navigation; late completion does not navigate.
 [Focused checks, screenshots and open delivery gates](browser/05_TEST_MATRIX.md#результаты-p2a--2026-11-10).
 
+## Browser target resolution — In Review, 2026-11-11
+
+Application `BrowserTargetResolver` projects verified owner metadata into typed
+HtmlArtifact / HtmlResource / HtmlWorkspace descriptors. Exact URI and scope must
+match; an ambiguous or missing live selection never chooses another artifact.
+Existing export, raw source page and HTML editor responses carry the descriptor.
+It adds no request, body read, registry, revision store or authority token.
+
+Saved HTML remains immutable even at the current head. Raw HTML remains bounded
+inert text, with no preview/edit/import capability inferred from MIME or title.
+Live recovery can keep the retained source readable while edit/restore/annotations
+are disabled. UI validates the addressed target before applying a response;
+operation owners still recheck their own guards. [Contract and gaps](browser/03_CONTRACTS.md#p2b-реализованное-описание-цели--in-review-2026-11-11).
+
 ## Document artifact removal — 2026-10-13
 
 Owner: `DocumentArtifactStore`; application coordination: `ArtifactWorkingSetService`.

@@ -186,6 +186,8 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class HtmlWorkspaceResponse
     {
+        [JsonProperty("browserTarget")] public RNAssistant.Application.Contracts.BrowserTargetDescriptor BrowserTarget { get; set; }
+
         [JsonProperty("sessionRevision")]
         public long SessionRevision { get; set; }
 

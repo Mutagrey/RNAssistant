@@ -138,14 +138,15 @@
   }
   var visualInspector = RNAssistantVisualInspector.createHost({ frame: $("htmlWorkspacePreviewFrame"),
     button: $("inspectHtmlWorkspaceButton"), status: $("htmlWorkspaceInspectStatus"),
-    enabled: function () { var panel = chatPanel(); return active && !sourceConflict && !state.htmlWorkspaceDirty &&
+    enabled: function () { var panel = chatPanel(); return active && state.browserTarget && state.browserTarget.capabilities.annotations && !sourceConflict && !state.htmlWorkspaceDirty &&
       !state.chatDetailPending && !state.chatDetailError && !(panel && panel.snapshot().chatReadOnly); },
     onSelectionChanged: function (selected, reason) { if (visualAnnotations) visualAnnotations.onSelection(selected ? visualInspector.selectionRecord() : null, reason); },
     onLocations: function (locations) { if (visualAnnotations) visualAnnotations.onLocations(locations); },
     onReveal: function (result) { if (visualAnnotations) visualAnnotations.onReveal(result); }
   });
   async function stageVisualSelection(record, comment, number, replacing) {
-    if (stagingVisualSelection || ingestionQueue[target.chatId] || disposed || sourceConflict || state.htmlWorkspaceDirty) return null;
+    if (stagingVisualSelection || ingestionQueue[target.chatId] || disposed || sourceConflict || state.htmlWorkspaceDirty ||
+        !state.browserTarget || !state.browserTarget.capabilities.annotations) return null;
     var source = annotationSource(), panel = chatPanel();
     if (!record || !source || source.revision < 1 || panel && panel.snapshot().chatReadOnly ||
         RNAssistantConversationInput.isPending("office", { chatId: target.chatId })) throw new Error("Чат занят или источник недоступен.");
@@ -408,6 +409,9 @@
     response = response || {};
     var responseChatId = response.activeChatId || response.ActiveChatId;
     if (responseChatId !== target.chatId) return false;
+    var browserTarget = RNAssistantBrowserTarget.accept(response.browserTarget, {
+      chatId: target.chatId, documentId: target.documentId, artifactId: response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || ""
+    }, "HtmlWorkspace");
     var revision = window.RNAssistantRunViewState.sessionRevision(response);
     if (!window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, responseChatId, revision)) return false;
     if (response.artifacts !== undefined || response.Artifacts !== undefined) {
@@ -423,6 +427,8 @@
       { status: "ok", passed: true, errorCount: 0, warningCount: 0, issues: [] };
     state.htmlWorkspace = response.workspace || response.Workspace || { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
     var panel = chatPanel(); if (panel) acceptChatAuthority(panel.snapshot());
+    state.browserTarget = browserTarget;
+    if (!browserTarget.capabilities.annotations) { visualInspector.deactivate(); visualAnnotations.collapseEditor(); }
     state.htmlWorkspaceDirty = false; sourceConflict = false; state.chatDetailError = ""; loaded = true;
     renderHtmlWorkspace();
     return true;
@@ -576,7 +582,7 @@
   function renderHtmlWorkspace() {
     if (disposed || !active) return;
     if (loaded && !loading && sourceGeneration !== checkedSourceGeneration && !workspaceActions.isBusy()) ready(true);
-    workspace(); ensureSelection(); renderFiles();
+    workspace(); ensureSelection(); renderFiles(); visualInspector.refresh();
     renderHtmlWorkspaceEditor(); applyHtmlWorkspaceMode(); updateHtmlWorkspaceStatus(); previewSurface.refresh(); syncBrowser();
     if (sourceConflict) log("HTML изменился в чате. Правки сохранены в этой вкладке; обновите исходники перед записью.", "error");
   }

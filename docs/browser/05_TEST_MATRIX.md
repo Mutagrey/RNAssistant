@@ -1,6 +1,6 @@
 # Universal Browser: матрица проверок
 
-Дата: 2026-11-10. Owner: владелец изменяемого среза; Windows — Office/WebView owner.
+Дата: 2026-11-11. Owner: владелец изменяемого среза; Windows — Office/WebView owner.
 В P0 был только статический просмотр fixtures. В P1 три browser fixtures выполнены
 на baseline и final; результаты ниже. Наличие теста не означает qualification.
 Выбор проверок — по
@@ -12,7 +12,7 @@
 | Browser portal lifetime | [browser-lifetime](../../tests/web/browser-lifetime.test.js): одинаковый iframe, пять Dock restores, сохранённый input/load count | Только новые случаи при изменении placement; тест не доказывает native HWND | P1/P2 |
 | Live HTML/plugin Browser | [browser-views](../../tests/web/browser-views.test.js): scoped annotation, frame lifetime и actions | Регрессия общего toolbar после P1; затем detach/reattach и session-close | P1/P2/P3 |
 | Source/editor | [html-editor-views](../../tests/web/html-editor-views.test.js), [html-workspace-source](../../tests/web/html-workspace-source.test.js), [html-workspace-write](../../tests/web/html-workspace-write.test.js) | Session ownership, dirty buffers при закрытии, stale source и поздний write ack | P2 |
-| Typed application contracts | Existing Harness HTML/resource/bridge checks | Resolver ambiguity, permission intersection, exact scope, close/reopen generation; fake renderer | P2 |
+| Typed application contracts | `browser target:` + existing HTML/resource checks; saved/editor browser fixtures | Exact kind/scope, head drift, ambiguous/missing selected source, read-only capabilities, rejected response/lease cleanup | P2b host-neutral passed; sessions/Windows Open |
 | Project import/backing | `HTML project import:` (3 checks), typed artifact bridge, [html-project-import](../../tests/web/html-project-import.test.js) | Exact source/head drift, safe paths/bounds, unsupported refs before write, fault/read-back/no-replay, reopen, late UI and unchanged source | P2a host-neutral passed; Windows/visual Open |
 | Plugin isolation | [plugins](../../tests/web/plugins.test.js), [plugin-view-selection](../../tests/web/plugin-view-selection.test.js), saved-release fixture; Harness plugin tests | Wrong frame/origin/session, release vs candidate, revoke during action, чужие grants | P3 + Windows |
 | HTML versions/authority | Existing `shared HTML:` Harness family, publication/resource tests | Branch/active pointer, view vs restore, exact compare pair; plugin restore не меняет source | P4 |
@@ -42,6 +42,30 @@ bounded source, поздний transfer cleanup, exact chat/document/URI и plug
 Дополнить только assertions нового общего UI. Не заводить тест, повторяющий устройство
 descriptor, вместо проверки пользовательского поведения. C#/VSTO tests для P1 не нужны.
 При изменении только docs эти команды не выполнять.
+
+## Результаты P2b — 2026-11-11
+
+Baseline `f918a56f`; saved Browser и HTML editor fixtures прошли до изменения.
+После него прошли `browser-saved-views`, `html-editor-views`, `html-project-import`.
+Saved checks добавляют foreign document/URI до body download с lease cleanup;
+source-only не создаёт iframe и скрывает неподдержанные действия. Editor проверяет
+read-only preview/annotation denial и отказ чужому document response без замены source.
+[Замеры](../ui/review/browser-p2b.json), [source-only](../ui/review/browser-p2b-source-only.png),
+[read-only live](../ui/review/browser-p2b-live-readonly.png).
+
+Пять host-neutral checks: `browser target:`, `html editor: exact source` и три
+`HTML project import:`. Изолированная net8 сборка — `f918a56f` + только P2b;
+параллельный window Compile конфликт в основном checkout исключён. Нет Office/VSTO.
+`html import: inert preview and exact provenance` проходит новые descriptor/source-only
+assertions, затем падает на старом счётчике `before body hydration`: expected 2, got 3.
+Тот же сбой воспроизведён с исходными reader/fixture из `f918a56f`; тест не засчитан
+как pass. [Отдельный риск](../stabilization/RISK_REGISTER.md#browser-p2b--2026-11-11).
+Pointer routing над iframe, пользовательское визуальное принятие и Windows/controller
+delivery открыты. Preview source-only screenshot — capability fixture, не новый режим
+настройки пользователя; размеры общих controls не менялись.
+
+Ревью: saved HTML → source/preview → reload; затем live HTML → source и обратно;
+проверить сохранённый ввод и открыть тот же снимок после смены активного чата.
 
 ## Результаты P2a — 2026-11-10
 

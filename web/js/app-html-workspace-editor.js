@@ -432,6 +432,11 @@
       }
       detail.replaceChildren();
       if (!options.previewVisible || !options.previewVisible() || state.htmlWorkspaceDirty) return;
+      if (state.browserTarget && !state.browserTarget.capabilities.preview) {
+        clearPreview(frame); frame.classList.add("hidden");
+        if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), "Просмотр HTML недоступен для текущего источника.");
+        return;
+      }
       frame.classList.remove("hidden");
       var workspaceFiles = files();
       if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {

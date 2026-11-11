@@ -236,6 +236,17 @@ restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wa
 control, terminal Run wait/dependencies, лимиты и Inspector ещё
 не реализованы; управление owner другого процесса этим tool не добавлено.
 
+## Universal Browser P2b: target/capabilities — In Review, 2026-11-11
+
+Application resolver различает saved snapshot, raw HTML source и live editor по
+verified metadata; exact scope/URI проверяются до применения response. Используются
+прежние responses без нового roundtrip/store. UI не исполняет source-only и сохраняет
+доступный read-only preview; операции повторяют прежние owner guards.
+Пять isolated host-neutral checks и три browser fixtures прошли; baseline/final
+read counts, iframe/drafts и geometry сохранены. Старый raw import counter failure
+воспроизводится без P2b и вынесен в риск. [Evidence](../browser/05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
+Далее P2c session owner. Visual acceptance и Windows/controller qualification открыты.
+
 ## Universal Browser P2a: копия исходников — In Review, 2026-11-10
 
 Saved HTML → «Создать проект из снимка» создаёт самостоятельный managed workspace

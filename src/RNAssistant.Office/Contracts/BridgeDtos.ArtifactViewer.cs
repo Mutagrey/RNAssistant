@@ -22,6 +22,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ArtifactViewerPageDto
     {
+        [JsonProperty("browserTarget", NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Application.Contracts.BrowserTargetDescriptor BrowserTarget { get; set; }
         [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("viewerKind")] public string ViewerKind { get; set; }
         [JsonProperty("title")] public string Title { get; set; }

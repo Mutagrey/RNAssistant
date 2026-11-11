@@ -40,6 +40,7 @@ const path = require("node:path");
       state.htmlWorkspaceMode = "preview";
       window.annotationCalls = [];
       const workspace = { activeChatId: "preview-chat", sessionRevision: 1, activeHtmlArtifactId: "html-r1", artifacts: state.artifacts, workspace: state.htmlWorkspace };
+      workspace.browserTarget={kind:'HtmlWorkspace',state:'Ready',chatId:'preview-chat',documentId:'preview-document',resourceUri:'rna://chat/preview-document/artifact/html-r1/revision/1',artifactId:'html-r1',revision:1,capabilities:{preview:true,source:true,edit:true,versions:true,restore:true,exportProject:true,createProject:false,annotations:true}};
       const originalSend = window.send;
       window.send = function (type, payload) {
         if (type === "getHtmlWorkspace") return Promise.resolve(workspace);

@@ -333,6 +333,7 @@ namespace RNAssistant.Office
                 new List<HtmlWorkspacePreflightIssueDto>();
             return new HtmlWorkspaceResponse
             {
+                BrowserTarget = RNAssistant.Application.BrowserTargetResolver.Live(session),
                 SessionRevision = session == null ? 0 : session.Revision,
                 ActiveChatId = session.Id,
                 ActiveHtmlArtifactId = session == null ? string.Empty : session.ActiveHtmlArtifactId,

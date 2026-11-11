@@ -175,7 +175,7 @@ namespace RNAssistant.Office.Services
             var descriptor = _gateway.Resolve(session, resourceUri).Resource;
             var viewerKind = ViewerKind(descriptor, artifact);
             ChatAttachment exactTextAttachment = null;
-            if (IsHtmlFileSource(artifact) && DocumentArtifactStore.FileEncoding(artifact) == null)
+            if (RNAssistant.Application.BrowserTargetResolver.IsHtmlResource(artifact) && DocumentArtifactStore.FileEncoding(artifact) == null)
             {
                 exactTextAttachment = ChatArtifactResourceProvider.FindExactAttachment(session, artifact);
                 if (exactTextAttachment == null || !string.Equals(exactTextAttachment.Kind, "text", StringComparison.OrdinalIgnoreCase) ||
@@ -241,6 +241,8 @@ namespace RNAssistant.Office.Services
             return new ArtifactViewerPageDto
             {
                 ResourceUri = resourceUri,
+                BrowserTarget = RNAssistant.Application.BrowserTargetResolver.IsHtmlResource(artifact)
+                    ? RNAssistant.Application.BrowserTargetResolver.Saved(session, artifact, resourceUri) : null,
                 ViewerKind = viewerKind,
                 Title = descriptor.Title ?? artifact.Title ?? string.Empty,
                 MimeType = descriptor.MimeType ?? artifact.MimeType ?? "text/plain",
@@ -264,7 +266,7 @@ namespace RNAssistant.Office.Services
         {
             // HTML files are inert source, whether uploaded or authored, even when
             // their title resembles Markdown. Executable workspace previews remain separate.
-            if (IsHtmlFileSource(artifact)) return ArtifactViewerKinds.Text;
+            if (RNAssistant.Application.BrowserTargetResolver.IsHtmlResource(artifact)) return ArtifactViewerKinds.Text;
             var mimeType = NormalizeMimeType(descriptor == null ? null : descriptor.MimeType);
             var kind = artifact == null ? string.Empty : (artifact.Kind ?? string.Empty).Trim().ToLowerInvariant();
             var extension = Path.GetExtension(descriptor == null ? null : descriptor.Title ?? string.Empty) ?? string.Empty;
@@ -297,16 +299,6 @@ namespace RNAssistant.Office.Services
                 return ArtifactViewerKinds.Text;
             }
             throw new InvalidOperationException("Artifact has no admitted text/source viewer representation.");
-        }
-
-        private static bool IsHtmlFileSource(ChatArtifact artifact)
-        {
-            if (artifact == null || (!string.Equals(artifact.Kind, ChatArtifactKinds.Attachment, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(artifact.Kind, ChatArtifactKinds.File, StringComparison.OrdinalIgnoreCase))) return false;
-            var extension = Path.GetExtension(artifact.Title ?? string.Empty);
-            return NormalizeMimeType(artifact.MimeType) == "text/html" ||
-                string.Equals(extension, ".html", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(extension, ".htm", StringComparison.OrdinalIgnoreCase);
         }
 
         internal static string NormalizeMimeType(string value)

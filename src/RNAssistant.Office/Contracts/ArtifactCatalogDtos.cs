@@ -72,6 +72,7 @@ namespace RNAssistant.Office.Contracts
     }
     public sealed class ArtifactTransferDownload
     {
+        [JsonProperty("browserTarget", NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Application.Contracts.BrowserTargetDescriptor BrowserTarget { get; set; }
         [JsonProperty("fileName")] public string FileName { get; set; }
         [JsonProperty("contentType")] public string ContentType { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }

@@ -2053,6 +2053,20 @@ pass is reusable only when its relevant sources/tests, dependencies, build setti
 and environment are unchanged. Explicit phase/release gates and the pre-commit
 version check still apply.
 
+## Browser target resolution (P2b, 2026-11-11)
+
+`browser target:` covers exact source/kind/scope, head drift without selection,
+ambiguous/missing live targets and read-only capabilities through the actual catalog.
+Pair it with `html editor: exact source` and `HTML project import:` (5 checks total).
+The isolated baseline + P2b passes; controller/Office delivery remains unqualified.
+`html import: inert preview` reaches the new typed raw-source assertions but fails
+later on read accounting, also with the original f918a56f reader/fixture.
+
+Sequential `browser-saved-views.test.js`, `html-editor-views.test.js` and
+`html-project-import.test.js` preserve bounds/caches/dirty/lifetime and test foreign
+descriptors, source-only without iframe, read-only editor/annotations and lease cleanup.
+[Evidence and visual review](../../docs/browser/05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
+
 ## Saved HTML to managed workspace (P2a, 2026-11-10)
 
 `HTML project import:` covers exact CAS source after head drift, independent workspace

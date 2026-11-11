@@ -3,7 +3,8 @@
 Статус: **Proposed**, 2026-11-04. Owner: Core contracts / Application services;
 Web и native host — consumers. Это минимальные границы будущих P2–P6, не объявление
 существующего runtime API. P1 presentation contract в конце реализован в Web,
-статус In Review; P2a import реализован ниже. Resolver/sessions и P3–P6 остаются Proposed.
+статус In Review; P2a import и P2b HTML resolver реализованы ниже.
+Sessions и P3–P6 остаются Proposed.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
@@ -22,6 +23,25 @@ enum `status: Created | Rejected | Unknown`, backing, workspaceId/name/rootPath/
 Закрытие Browser не отменяет начатый import. Поздний результат не открывает другую
 вкладку; retained view предлагает открыть уже созданный workspace. При `Unknown`
 повторное создание блокируется в этой view; пользователь проверяет каталог/точную папку.
+
+## P2b: реализованное описание цели — In Review, 2026-11-11
+
+`BrowserTargetDescriptor` в Application Contracts: enum `kind` = HtmlArtifact /
+HtmlResource / HtmlWorkspace; enum `state` = Ready / Empty / Unavailable;
+chatId/documentId, exact resourceUri, artifactId/revision и typed capabilities
+preview/source/edit/versions/restore/exportProject/createProject/annotations.
+Document ID пуст только у источника с chat ownership; URI всё равно сверяется точно.
+Empty editor не выдумывает snapshot; отсутствующий selected source — Unavailable.
+
+Поле `browserTarget` добавлено в ArtifactTransferDownload (saved HTML),
+ArtifactViewerPageDto (raw HTML после проверки source evidence) и HtmlWorkspaceResponse.
+Другие formats этим resolver не обслуживаются. Existing routes/reads/leases сохранены;
+свойство не приходит из UI и не является admission token. Флаги отражают команды,
+а их payload, revisions, permissions и возможные зависимости проверяет domain owner.
+Web отклоняет несовпадение chat/document/exact source до применения ответа; export
+lease закрывается и при отказе. Unknown kind не выбирает иной renderer.
+Live редактор использует descriptor вместе с dirty/read-only/pending guards;
+state Ready подтверждает разрешённый source, а не возможность записи или успех Run.
 
 ## Runtime entities и capability negotiation
 

@@ -23,6 +23,7 @@ const { chromium } = require('playwright');
         const version = htmlTest.versions[id] || 1, artifact = id + '-r' + version, uri = 'rna://chat/' + id + '/html/file1';
         const content = htmlTest.contents[id] || '<main><h1>' + id + '</h1><input value="initial"></main>';
         return { activeChatId: id, sessionRevision: version, activeHtmlArtifactId: artifact,
+          browserTarget: {kind:'HtmlWorkspace',state:'Ready',chatId:id,documentId:htmlTest.wrongDocument?'foreign':'html-document',resourceUri:'rna://chat/'+id+'/artifact/'+artifact+'/revision/'+version,artifactId:artifact,revision:version,capabilities:{preview:true,source:true,edit:!htmlTest.readOnly,versions:true,restore:!htmlTest.readOnly,exportProject:true,createProject:false,annotations:!htmlTest.readOnly}},
           artifacts: [{ Id: artifact, Kind: 'html_workspace', Title: id, Revision: version }], workspace: {
             revisionArtifactId: artifact, activeFileId: 'file1', files: [{ id: 'file1', path: 'index.html', kind: 'html', content,
               source: { uri, revision: 'r' + version }, sourceReadKey: uri + '@r' + version, sha256: 'a'.repeat(64), byteLength: content.length, characters: content.length }],
@@ -135,6 +136,18 @@ const { chromium } = require('playwright');
     await page.evaluate(() => { RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key({ chatId: 'late' })); htmlTest.release(); });
     await page.waitForFunction(() => !editorView('late'));
     assert.equal(await root('late').count(), 0);
+    await page.setViewportSize({width:1280,height:900});
+    await page.evaluate(async()=>{document.body.style.zoom='';document.documentElement.dataset.theme='light';
+      htmlTest.readOnly=true;RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'edit'});await editorView('html-a').ready(true);});
+    assert.equal(await root('html-a').locator('.CodeMirror').evaluate(node=>node.CodeMirror.getOption('readOnly')),true,'revoked edit capability makes the existing editor read-only');
+    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'preview'}));
+    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
+    const liveSurface=page.locator('[data-html-node="htmlWorkspacePreview"]').filter({has:page.locator('[data-html-node="htmlWorkspacePreviewFrame"][data-chat-id="html-a"]')});
+    assert.equal(await liveSurface.locator('[data-html-node="inspectHtmlWorkspaceButton"]').isDisabled(),true,'read-only target cannot start annotations');
+    if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-live-readonly.png'});
+    assert.equal(await page.evaluate(async()=>{htmlTest.wrongDocument=true;htmlTest.contents['html-a']='<h1>FOREIGN</h1>';return editorView('html-a').ready(true);}),false,'foreign response is rejected');
+    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
+    assert.equal(await a.getByRole('heading',{name:'FOREIGN',exact:true}).count(),0,'foreign source never replaces the retained preview');
     assert.deepEqual(errors, []);
     console.log('HTML editor views: buffers, scoped annotation, reload/current publication, hidden and concurrent refresh, dirty guards, restore, narrow/zoom and late close OK');
   } finally { if (browser) await browser.close(); server.kill(); }

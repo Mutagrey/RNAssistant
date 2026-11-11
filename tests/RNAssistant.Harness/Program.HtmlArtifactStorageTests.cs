@@ -77,6 +77,10 @@ namespace RNAssistant.Harness
                     var preview = viewer.ReadPage(session, sourceUri, null, plane);
                     AssertEqual(sourceUri, preview.ResourceUri, "preview retains the exact source URI");
                     AssertEqual("text", preview.ViewerKind, "uploaded HTML is inert text, never rendered HTML or Markdown");
+                    AssertEqual(RNAssistant.Application.Contracts.BrowserTargetKind.HtmlResource, preview.BrowserTarget.Kind, "raw HTML resolves to source-only target");
+                    AssertTrue(preview.BrowserTarget.Capabilities.Source && !preview.BrowserTarget.Capabilities.Preview &&
+                        !preview.BrowserTarget.Capabilities.Edit && !preview.BrowserTarget.Capabilities.CreateProject, "raw source does not acquire project authority");
+                    AssertEqual("HtmlResource", (string)JObject.FromObject(preview)["browserTarget"]["kind"], "typed browser target wire");
                     AssertEqual(attachment.ExtractedTextSha256, preview.ContentSha256, "preview pins the extracted text, not binary hash");
                     AssertTrue(preview.ContentSha256 != sourceHash, "UTF-8 BOM distinguishes original and text payloads");
                     AssertTrue(JObject.FromObject(preview)["text"] == null, "preview bridge has no text body");

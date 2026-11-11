@@ -951,6 +951,7 @@ namespace RNAssistant.Harness
                 Test("artifacts: historical attachments stay reference-only", HistoricalAttachmentsStayReferenceOnly),
                 Test("artifact recovery: missing metadata and unknown head", ArtifactWorkingSetMetadataRecovery),
                 Test("artifact transfer: project roundtrip and independence", ArtifactTransferRoundtrip),
+                Test("browser target: exact kind scope and capabilities", BrowserTargetsRequireExactOwnerAndKind),
                 Test("HTML project import: exact source and independent workspace", HtmlProjectImportExactAndIndependent),
                 Test("HTML project import: preflight paths dependencies and bounds", HtmlProjectImportValidatesBeforeWrites),
                 Test("HTML project import: unknown effect read-back and no replay", HtmlProjectImportUnknownIsNotPublishedOrReplayed),

@@ -160,10 +160,12 @@ namespace RNAssistant.Office.Services
             if (!CanTransfer(artifact) && !request.Preview) throw new InvalidOperationException("Перенос этого типа пока не поддерживается.");
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {
+                var browserTarget = RNAssistant.Application.BrowserTargetResolver.Saved(source, artifact, reference.Uri);
                 artifact = _artifacts.Read(source, reference);
                 var project = CaptureProject(source, artifact);
                 project.Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 };
                 return new ArtifactTransferContent { Kind = "html_workspace", FileName = SafeName(artifact.Title + ".rna-html.zip"),
+                    BrowserTarget = browserTarget,
                     ContentType = request.Preview ? "application/json" : "application/zip", Bytes = request.Preview ? Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(Preview(project))) : project.Export() };
             }
             var bytes = _artifacts.ExportBytes(source, reference);
@@ -326,6 +328,7 @@ namespace RNAssistant.Office.Services
     }
     internal sealed class ArtifactTransferContent
     {
+        internal RNAssistant.Application.Contracts.BrowserTargetDescriptor BrowserTarget;
         internal string FileName, ContentType, Kind;
         internal byte[] Bytes;
         internal ArtifactTransferOrigin Origin;
