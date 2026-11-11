@@ -47,10 +47,10 @@ namespace RNAssistant.Core.Storage
             throw new InvalidOperationException("A bound document or workspace identity is required for Plan access.");
         }
 
-        private static ChatArtifact PlanSnapshot(ChatSession session, string id, int revision)
+        private static ChatArtifact PlanSnapshot(ResourceAuthorityScopeId scope, string id, int revision)
         {
             var artifact = new ChatArtifact { Id = id, Revision = revision, Kind = ChatArtifactKinds.PlanDocument };
-            AssignOwner(artifact, PlanScope(session));
+            AssignOwner(artifact, scope);
             return artifact;
         }
 
@@ -83,13 +83,18 @@ namespace RNAssistant.Core.Storage
 
         public static ResourceRef PlanSelectionReference(ChatSession session, string artifactId)
         {
+            return PlanSelectionReference(ConversationMetadata.From(session), artifactId);
+        }
+
+        public static ResourceRef PlanSelectionReference(ConversationMetadata metadata, string artifactId)
+        {
             var marker = (artifactId ?? string.Empty).LastIndexOf("_r", StringComparison.Ordinal);
             var end = (artifactId ?? string.Empty).LastIndexOf('_');
             int revision;
             if (marker < 0 || end <= marker + 2 || !int.TryParse(artifactId.Substring(marker + 2, end - marker - 2), out revision))
                 throw new InvalidDataException("The selected Plan identity is invalid.");
             ParsePlanSnapshotId(artifactId, revision);
-            return ChatResourceUri.CreateArtifactRevision(session, PlanSnapshot(session, artifactId, revision));
+            return ChatResourceUri.CreateArtifactRevision(metadata.Id, PlanSnapshot(PlanScope(metadata), artifactId, revision));
         }
 
         public static ResourceIdentity PlanIdentity(ChatSession session, string planId)
@@ -198,7 +203,7 @@ namespace RNAssistant.Core.Storage
                     break;
                 }
                 if (string.IsNullOrEmpty(item.ParentArtifactId)) throw new InvalidDataException("Missing Plan parent.");
-                var parent = PlanSnapshot(session, item.ParentArtifactId, item.Revision - 1);
+                var parent = PlanSnapshot(PlanScope(session), item.ParentArtifactId, item.Revision - 1);
                 item = ReadPlan(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, parent), includeBodies);
             }
             return result.OrderBy(value => value.Revision).ToArray();

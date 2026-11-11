@@ -14,8 +14,13 @@ namespace RNAssistant.Core.Services
     {
         public static void Validate(ChatSession session)
         {
-            var links = session.ArtifactLinks ?? new List<ChatArtifactLink>();
-            if (links.Any(link => link?.Identity == null || !DocumentArtifactStore.Owns(session, link.Reference)) ||
+            Validate(ConversationMetadata.From(session), session.ArtifactLinks);
+        }
+
+        public static void Validate(ConversationMetadata metadata, IEnumerable<ChatArtifactLink> artifactLinks)
+        {
+            var links = artifactLinks ?? Enumerable.Empty<ChatArtifactLink>();
+            if (links.Any(link => link?.Identity == null || !DocumentArtifactStore.Owns(metadata, link.Reference)) ||
                 links.GroupBy(link => link.Identity).Any(group => group.Count() != 1))
                 throw new InvalidDataException("The chat artifact links are invalid or ambiguous.");
         }
@@ -77,10 +82,21 @@ namespace RNAssistant.Core.Services
 
         public static bool IsDetached(ChatSession session, ChatArtifact artifact)
         {
+            return IsDetached(session?.Id, session?.DocumentAuthorityId, session?.WorkspaceId, session?.ArtifactLinks, artifact);
+        }
+
+        public static bool IsDetached(ConversationMetadata metadata, IEnumerable<ChatArtifactLink> links, ChatArtifact artifact)
+        {
+            return IsDetached(metadata?.Id, metadata?.DocumentAuthorityId, metadata?.WorkspaceId, links, artifact);
+        }
+
+        private static bool IsDetached(string chatId, string documentAuthorityId, string workspaceId,
+            IEnumerable<ChatArtifactLink> links, ChatArtifact artifact)
+        {
             if (artifact?.RemovedFromDocument == true) return true;
             if (artifact == null || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) && string.IsNullOrWhiteSpace(artifact.WorkspaceId)) return false;
-            var identity = Identity(session, artifact);
-            return (session.ArtifactLinks ?? new List<ChatArtifactLink>()).Any(link => link.Detached && identity.Equals(link.Identity));
+            var identity = Identity(chatId, documentAuthorityId, workspaceId, artifact);
+            return (links ?? Enumerable.Empty<ChatArtifactLink>()).Any(link => link.Detached && identity.Equals(link.Identity));
         }
 
         public static bool IsDetachedReference(ChatSession session, ResourceRef reference)

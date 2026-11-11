@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.6.3-dev
+
+- History pages no longer construct a temporary chat aggregate or load the active
+  HTML workspace body. Office/Workspace retain the same message contents, resource
+  cards, selected versions and tombstone handling; damaged indices still rebuild.
+
 ### 16.6.1-dev
 
 - Office documents and projects share one workspace tree, search and full add menu.

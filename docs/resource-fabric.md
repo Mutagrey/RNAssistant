@@ -988,6 +988,11 @@ publication barriers, revision/body matching, removal and unavailable-record beh
 remain with this owner. Office/Workspace callers capture the existing six scalar
 values; neither history nor run state enters these reads. Identity helpers share
 their validation with live callers. This metadata does not grant mutation authority.
+Message pages and full loads share scoped resource metadata/removal projection.
+Pages retain selected heads, detached membership, exact cards and source-existence
+tombstones without constructing a conversation aggregate. They hydrate chart and
+compaction presentation, but leave HTML workspace/body recovery to full editor loads.
+Artifact metadata/history enumeration remains; this is not resource pagination.
 New Plan snapshots and per-Plan logical heads are also document-owned (2026-09-08).
 The existing mutation observer prepares the selected exact base and publishes
 snapshot/head read-backs together; chat persistence follows publication and keeps

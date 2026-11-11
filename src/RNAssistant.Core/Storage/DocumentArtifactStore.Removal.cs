@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using RNAssistant.Core.Models;
@@ -64,19 +65,27 @@ namespace RNAssistant.Core.Storage
 
         public void ProjectRemovals(ChatSession session)
         {
-            if (session?.Artifacts == null || string.IsNullOrEmpty(session.DocumentAuthorityId)) return;
-            var metadata = ConversationMetadata.From(session);
-            foreach (var artifact in session.Artifacts.Where(item => IsRemoved(metadata, item)))
+            if (session == null) return;
+            var removed = ProjectRemovals(ConversationMetadata.From(session), session.Artifacts);
+            if (removed.Contains(session.ActiveHtmlArtifactId))
+            {
+                session.ActiveHtmlArtifactId = null;
+                session.HtmlWorkspace = new HtmlWorkspace();
+                session.HtmlWorkspaceRecovery = new HtmlWorkspaceRecoveryState();
+            }
+            if (removed.Contains(session.ActivePlanDocumentArtifactId)) session.ActivePlanDocumentArtifactId = null;
+        }
+
+        public ISet<string> ProjectRemovals(ConversationMetadata metadata, IEnumerable<ChatArtifact> artifacts)
+        {
+            var removed = new HashSet<string>(StringComparer.Ordinal);
+            if (artifacts == null || string.IsNullOrEmpty(metadata?.DocumentAuthorityId)) return removed;
+            foreach (var artifact in artifacts.Where(item => IsRemoved(metadata, item)))
             {
                 artifact.RemovedFromDocument = true;
-                if (artifact.Id == session.ActiveHtmlArtifactId)
-                {
-                    session.ActiveHtmlArtifactId = null;
-                    session.HtmlWorkspace = new HtmlWorkspace();
-                    session.HtmlWorkspaceRecovery = new HtmlWorkspaceRecoveryState();
-                }
-                if (artifact.Id == session.ActivePlanDocumentArtifactId) session.ActivePlanDocumentArtifactId = null;
+                removed.Add(artifact.Id);
             }
+            return removed;
         }
     }
 }

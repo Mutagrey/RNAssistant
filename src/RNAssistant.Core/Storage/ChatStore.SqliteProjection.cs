@@ -759,62 +759,80 @@ namespace RNAssistant.Core.Storage
                     var cursor = EnsureSqliteProjection(connection, path);
                     if (cursor == null || !string.Equals(cursor.SessionId, chatId, StringComparison.OrdinalIgnoreCase))
                         return null;
-                    JObject root;
-                    int total;
-                    int start;
-                    List<string> retainedSourceIds;
-                    using (var transaction = connection.BeginTransaction(true))
+                    try
                     {
-                        if (!SqliteCursorMatches(connection, transaction, cursor)) continue;
-                        total = Convert.ToInt32(Scalar(connection, transaction, "SELECT COUNT(*) FROM messages"));
-                        if (beforeIndex < 0 || beforeIndex > total)
-                            throw new ArgumentOutOfRangeException(nameof(beforeIndex));
-                        start = Math.Max(0, beforeIndex - pageSize);
-                        // A page cannot resume a run. Leave its checkpoint in the
-                        // canonical projection without copying or hydrating its CAS.
-                        root = new JObject(cursor.Root.Properties().Where(property => property.Name != "LastRun")
-                            .Select(property => new JProperty(property.Name, property.Value.DeepClone())));
-                        root["Messages"] = ReadSqliteMessageWindow(connection, transaction,
-                            cursor.SessionId, start, beforeIndex - start);
-                        root["Artifacts"] = ReadSqliteList(connection, transaction, "artifacts", cursor.SessionId);
-                        var pageIds = new HashSet<string>(((JArray)root["Messages"]).OfType<JObject>()
-                            .Select(value => (string)value["Id"]).Where(id => !string.IsNullOrWhiteSpace(id)),
+                        ConversationMessageWindow page;
+                        List<ChatArtifact> artifacts;
+                        List<ChatArtifactLink> links;
+                        HashSet<string> sourceIds;
+                        using (var transaction = connection.BeginTransaction(true))
+                        {
+                            if (!SqliteCursorMatches(connection, transaction, cursor)) continue;
+                            var total = Convert.ToInt32(Scalar(connection, transaction, "SELECT COUNT(*) FROM messages"));
+                            if (beforeIndex < 0 || beforeIndex > total)
+                                throw new ArgumentOutOfRangeException(nameof(beforeIndex));
+                            var start = Math.Max(0, beforeIndex - pageSize);
+                            var messages = ReadSqliteMessageWindow(connection, transaction,
+                                cursor.SessionId, start, beforeIndex - start);
+                            var artifactRows = ReadSqliteList(connection, transaction, "artifacts", cursor.SessionId);
+                            try
+                            {
+                                // A history page needs neither the aggregate nor its execution,
+                                // settings or HTML workspace. Read only its presentation inputs.
+                                var root = cursor.Root;
+                                artifacts = artifactRows.ToObject<List<ChatArtifact>>();
+                                links = root["ArtifactLinks"]?.ToObject<List<ChatArtifactLink>>();
+                                page = new ConversationMessageWindow
+                                {
+                                    Metadata = new ConversationMetadata(cursor.SessionId, cursor.Sequence,
+                                        (string)root["Host"], (string)root["DocumentKey"], (string)root["WorkspaceId"],
+                                        (string)root["DocumentAuthorityId"]),
+                                    PageMessages = messages.ToObject<List<ChatMessage>>(),
+                                    Artifacts = artifacts,
+                                    ActiveHtmlArtifactId = (string)root["ActiveHtmlArtifactId"],
+                                    ActivePlanDocumentArtifactId = (string)root["ActivePlanDocumentArtifactId"],
+                                    ActiveTaskListArtifactId = (string)root["ActiveTaskListArtifactId"],
+                                    StartIndex = start,
+                                    TotalCount = total
+                                };
+                            }
+                            catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw new ProjectionDataException(ex); }
+                            sourceIds = new HashSet<string>(page.PageMessages.Where(message => message != null)
+                                .Select(message => message.Id).Where(id => !string.IsNullOrWhiteSpace(id)),
+                                StringComparer.OrdinalIgnoreCase);
+                            // Retain existence evidence for off-page tombstones, never fake messages.
+                            foreach (var id in artifacts.Where(item => item != null).Select(item => item.SourceMessageId)
+                                .Where(id => !string.IsNullOrWhiteSpace(id) && !sourceIds.Contains(id))
+                                .Distinct(StringComparer.OrdinalIgnoreCase))
+                                if (Scalar(connection, transaction,
+                                    "SELECT 1 FROM messages WHERE item_id=$p0 COLLATE NOCASE", id) != null)
+                                    sourceIds.Add(id);
+                        }
+                        Interlocked.Add(ref _materializedMessageCount, page.PageMessages.Count);
+                        ArtifactWorkingSet.Validate(page.Metadata, links);
+                        ProjectResourceMetadata(page.Metadata, page.PageMessages, artifacts, links,
+                            page.ActiveHtmlArtifactId, page.ActivePlanDocumentArtifactId);
+                        var removed = DocumentArtifacts.ProjectRemovals(page.Metadata, artifacts);
+                        if (removed.Contains(page.ActiveHtmlArtifactId)) page.ActiveHtmlArtifactId = null;
+                        if (removed.Contains(page.ActivePlanDocumentArtifactId)) page.ActivePlanDocumentArtifactId = null;
+                        RebuildContextCheckpointProjection(page.Metadata, page.PageMessages, artifacts);
+                        RebuildChartActivityProjection(page.Metadata, page.PageMessages, artifacts);
+                        var uniqueArtifacts = UniqueArtifacts(artifacts);
+                        page.DetachedArtifactIds = new HashSet<string>(uniqueArtifacts
+                            .Where(item => ArtifactWorkingSet.IsDetached(page.Metadata, links, item)).Select(item => item.Id),
                             StringComparer.OrdinalIgnoreCase);
-                        retainedSourceIds = ((JArray)root["Artifacts"]).OfType<JObject>()
-                            .Select(value => (string)value["SourceMessageId"])
-                            .Where(id => !string.IsNullOrWhiteSpace(id) && !pageIds.Contains(id))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .Where(id => Scalar(connection, transaction,
-                                "SELECT 1 FROM messages WHERE item_id=$p0 COLLATE NOCASE", id) != null)
-                            .ToList();
+                        page.ApplicableTombstoneIds = new HashSet<string>(uniqueArtifacts
+                            .Where(item => PlanDocumentService.IsApplicableTombstone(page.Metadata, sourceIds, item)).Select(item => item.Id),
+                            StringComparer.OrdinalIgnoreCase);
+                        return page;
                     }
-                    var session = ProjectSqliteSession(path, root, cursor, false, true);
-                    var pageMessages = session.Messages.ToArray();
-                    // Artifact tombstones are applicable only while their source message
-                    // exists. Keep ID-only context for presentation without reading bodies.
-                    foreach (var id in retainedSourceIds)
-                        session.Messages.Add(new ChatMessage { Id = id });
-                    var artifacts = (session.Artifacts ?? new List<ChatArtifact>()).ToArray();
-                    var uniqueArtifacts = artifacts.Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
-                        .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-                        .Where(group => group.Count() == 1).Select(group => group.Single()).ToArray();
-                    return new ConversationMessageWindow
+                    catch (Exception ex) when (IsInvalidProjectionValue(ex) && !(ex is ArgumentOutOfRangeException))
                     {
-                        Metadata = ConversationMetadata.From(session),
-                        PageMessages = pageMessages,
-                        Artifacts = artifacts,
-                        DetachedArtifactIds = new HashSet<string>(uniqueArtifacts
-                            .Where(item => ArtifactWorkingSet.IsDetached(session, item)).Select(item => item.Id),
-                            StringComparer.OrdinalIgnoreCase),
-                        ApplicableTombstoneIds = new HashSet<string>(uniqueArtifacts
-                            .Where(item => PlanDocumentService.IsApplicableTombstone(session, item)).Select(item => item.Id),
-                            StringComparer.OrdinalIgnoreCase),
-                        ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
-                        ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId,
-                        ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
-                        StartIndex = start,
-                        TotalCount = total
-                    };
+                        // Repair malformed typed index data once; domain failures cannot
+                        // be repaired by replaying the same source again.
+                        if (ex is ProjectionDataException && !cursor.SourceVerified) throw;
+                        throw ProjectionUnavailable(path, ex);
+                    }
                 }
                 throw new ChatConcurrencyException("Chat index changed while the message page was being read.");
             });

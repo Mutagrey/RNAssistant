@@ -791,3 +791,31 @@ after-state/CAS ownership.
 7. Resource Fabric, Session events, MIGRATION_MAP, PROGRESS, Harness guide and
    Backlog updated. Existing resource-projection owner/removal gate retained;
    no new adapter/import/dual-write/fallback. P4 remains deferred.
+
+## P1 — direct message-page projection (2026-11-11)
+
+1. F04 / P1 read projection: Core `ChatStore` now materializes the existing message
+   window directly. Resource metadata/removal, working-set/tombstone guards and
+   chart/context presentation remain with existing owners, shared with full loads.
+2. Office/Workspace page consumers retain exact messages/cards, selected versions,
+   detached membership and off-page tombstone evidence. Pages no longer reconstruct
+   the editor's HTML workspace. Execution CAS remains outside the history read.
+3. Removed the page → `ProjectSqliteSession` aggregate path, metadata-root clone and
+   synthetic `ChatMessage` objects. No new store, facade, adapter or production file.
+   Production C# +200/−124, net +76 across eight files.
+4. Nine focused checks pass on macOS/net8/C#7.3, isolated `d95c6206` plus this slice:
+   enriched Office message/card parity; Workspace paging; indexed bounds; unavailable
+   runtime CAS; corrupt row and typed scope repair; document removal/restart; full
+   HTML navigation; compaction reconstruction. One host-neutral compilation, no
+   Office/VSTO validation. The damaged-root fixture now corrupts consumed `Host`.
+5. Same 190-message/80-row fixture: materialized messages 80 → 80; temporary aggregate
+   1 → 0; copied metadata roots 1 → 0; HTML workspace body hydration 1 → 0 (64 KB
+   HTML input). Chart/compaction content and wire cards equal the full projection;
+   canonical bytes unchanged. Artifact enumeration/source-ID lookups are unchanged.
+   CPU/allocation bytes and timings were not benchmarked; no whole-read speedup claim.
+6. Artifact/history enumeration, specialized Plan/text operations, ordinary Store
+   writes and new-journal consumers remain open. Cutover still requires verified
+   backup, stopped old writers and Windows/Office photo evidence. P4 remains deferred.
+7. Session events, Resource Fabric, MIGRATION_MAP, PROGRESS and Harness guide updated.
+   The internal page-aggregate removal gate is closed; no new transitional path.
+   Performance improvement: `16.6.3-dev`, with its Unreleased note.

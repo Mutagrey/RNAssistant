@@ -195,6 +195,16 @@ Production C# — net +97 строк; версия не меняется: вну
 Aggregate page projection, специализированные Plan/text API и подключение journal
 остаются открытыми; host-neutral evidence не заменяет Windows/Office qualification.
 
+P1 direct page projection: внутренний временный `ChatSession` удалён. Страница
+читает typed scope/rows напрямую и использует общие resource/context/chart owners;
+не копирует root, не создаёт фиктивные сообщения и не восстанавливает HTML workspace.
+Девять адресных checks проходят на `d95c6206` + срез: Office message/card parity,
+Workspace paging, bounds, runtime CAS isolation, index repair, removal/restart и
+полные HTML/context projections. На fixture 190/80 сообщений HTML-тело 64 КБ остаётся
+холодным; ответы и canonical bytes сохранены. Версия `16.6.3-dev`.
+Полный обход artifact/context metadata,
+остальные Store-операции и journal cutover открыты; Windows evidence не закрыто.
+
 Маршрут до переключения сужен по [уточнению пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md#84-порядок-небольших-срезов):
 реальные consumers и короткие сквозные проверки каждого среза; финально — чат,
 mutation, unknown, restart, lost acknowledgement, rebuild и restore. До cutover

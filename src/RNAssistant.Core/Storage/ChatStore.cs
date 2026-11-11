@@ -670,7 +670,7 @@ namespace RNAssistant.Core.Storage
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId)) return false;
             var artifact = FindArtifact(session, artifactId);
-            return HydrateArtifact(session, artifact);
+            return HydrateArtifact(ConversationMetadata.From(session), artifact);
         }
 
         public void LoadArtifactBodies(ChatSession session, IEnumerable<string> artifactIds)
@@ -1132,7 +1132,7 @@ namespace RNAssistant.Core.Storage
                 DocumentArtifacts.ProjectRemovals(session);
                 RebuildHtmlWorkspaceProjection(session);
                 RebuildContextCheckpointProjection(session);
-                RebuildChartActivityProjection(session);
+                RebuildChartActivityProjection(ConversationMetadata.From(session), session.Messages, session.Artifacts);
                 LogPerformance("save", timer.ElapsedMilliseconds,
                     "externalize=" + externalizeMs + "ms, read=" + readMs + "ms, projection=" + projectionMs +
                     "ms, diff=" + diffMs + "ms, append=" + appendMs +

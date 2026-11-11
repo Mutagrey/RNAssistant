@@ -399,16 +399,20 @@ and Workspace consume this contract directly. Existing resource owners resolve
 detached membership, applicable tombstones and selected heads. Off-page source
 existence is retained as tombstone IDs, without sending synthetic messages to the
 consumer. Exact resource cards, raw message indexes and workspace scope are unchanged.
-The page excludes `LastRun` before cloning its projection root, so neither the
-checkpoint nor its opaque execution CAS bodies are hydrated for history display.
+The page reads its scalar scope, selections, links and requested rows directly;
+it neither clones the metadata root nor constructs a temporary `ChatSession`.
+`LastRun` and its opaque execution CAS bodies are not hydrated for history display.
 Missing/corrupt execution evidence does not hide older messages. The canonical run
 is unchanged; full session loading still requires its exact body and fails explicitly
-when unavailable. The legacy backend still uses a temporary session for resource
-projection and enumerates artifact metadata. That internal dependency must be removed
-with resource-owner/journal integration. Generic `DocumentArtifactStore` reads now
-accept the same immutable metadata; resource materialization reuses a captured scope
-across its reads. Local HTML/context/chart projection and specialized Plan/text
-operations still use the aggregate and are not claimed to be bounded by this change.
+when unavailable. Full loads and pages share existing scoped resource, removal,
+context-message and chart projections. Off-page source existence is an ID set;
+no synthetic messages are created. Pages skip HTML workspace/body/history recovery,
+which belongs to the editor and is absent from the page contract. Visible chart and
+compaction messages still hydrate their artifact bodies. Typed page inputs retain
+the existing one-rebuild repair boundary for a damaged disposable index.
+Artifact metadata and compaction history are still enumerated; their cost is not
+bounded by page size. Specialized Plan/text APIs, ordinary Store operations and
+new-journal integration remain separate work.
 
 Office navigation serializes selection and drains already admitted catalog and
 preference requests before a possible host switch. This prevents an old controller

@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
@@ -330,15 +331,27 @@ namespace RNAssistant.Core.Services
 
         public static bool IsApplicableTombstone(ChatSession session, ChatArtifact artifact)
         {
-            if (!IsTombstone(artifact)) return false;
-            if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) return artifact.DocumentAuthorityId == session?.DocumentAuthorityId;
-            if (!string.IsNullOrWhiteSpace(artifact.WorkspaceId)) return artifact.WorkspaceId == session?.WorkspaceId;
-            if (string.IsNullOrWhiteSpace(artifact.SourceMessageId)) return true;
-            return (session == null ? new List<ChatMessage>() : session.Messages ?? new List<ChatMessage>()).Any(message =>
+            return TombstoneScope(session?.DocumentAuthorityId, session?.WorkspaceId, artifact) ??
+                (session == null ? new List<ChatMessage>() : session.Messages ?? new List<ChatMessage>()).Any(message =>
                 message != null && string.Equals(
                     message.Id,
                     artifact.SourceMessageId,
                     StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static bool IsApplicableTombstone(ConversationMetadata metadata, ISet<string> sourceMessageIds, ChatArtifact artifact)
+        {
+            return TombstoneScope(metadata?.DocumentAuthorityId, metadata?.WorkspaceId, artifact) ??
+                sourceMessageIds.Contains(artifact.SourceMessageId);
+        }
+
+        // A chat-local tombstone additionally needs evidence that its source still exists.
+        private static bool? TombstoneScope(string documentAuthorityId, string workspaceId, ChatArtifact artifact)
+        {
+            if (!IsTombstone(artifact)) return false;
+            if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) return artifact.DocumentAuthorityId == documentAuthorityId;
+            if (!string.IsNullOrWhiteSpace(artifact.WorkspaceId)) return artifact.WorkspaceId == workspaceId;
+            return string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? (bool?)true : null;
         }
 
         public static bool IsRemovedReference(ChatSession session, ResourceRef reference)

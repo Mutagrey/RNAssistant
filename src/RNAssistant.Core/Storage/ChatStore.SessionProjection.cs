@@ -146,31 +146,10 @@ namespace RNAssistant.Core.Storage
             session.StorageTailByteOffset = tailByteOffset;
             session.StorageByteLength = byteLength;
             session.StorageLastWriteUtcTicks = lastWriteUtcTicks;
-            var metadata = rebuildDerivedProjections ? ConversationMetadata.From(session) : null;
-            if (rebuildDerivedProjections && (!string.IsNullOrWhiteSpace(session.DocumentAuthorityId) || !string.IsNullOrWhiteSpace(session.WorkspaceId)))
-            {
-                var references = (session.Messages ?? new List<ChatMessage>()).Where(message => message != null)
-                    .SelectMany(message => message.ResourceRefs ?? new List<ResourceRef>())
-                    .Concat((session.ArtifactLinks ?? new List<ChatArtifactLink>()).Where(link => !link.Detached).Select(link => link.Reference))
-                    .Where(reference => DocumentArtifactStore.Owns(session, reference))
-                    .Select(ChatResourceUri.ArtifactSnapshot)
-                    .GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First());
-                foreach (var reference in references)
-                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(metadata, reference));
-                if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId) &&
-                    !session.Artifacts.Any(item => item.Id == session.ActivePlanDocumentArtifactId))
-                {
-                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(metadata, DocumentArtifactStore.PlanSelectionReference(session, session.ActivePlanDocumentArtifactId)));
-                }
-            }
-            if (rebuildDerivedProjections && !string.IsNullOrEmpty(session.DocumentAuthorityId))
-            {
-                var logicalIds = session.Artifacts.Select(item => MarkdownDocumentIdentity.LogicalId(item.Id))
-                    .Concat(new[] { HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId) }).Where(id => id != null).Distinct().ToArray();
-                foreach (var logicalId in logicalIds)
-                    foreach (var artifact in DocumentArtifacts.SnapshotHistory(metadata, logicalId))
-                        if (!session.Artifacts.Any(item => item.Id == artifact.Id)) session.Artifacts.Add(artifact);
-            }
+            var metadata = ConversationMetadata.From(session);
+            if (rebuildDerivedProjections)
+                ProjectResourceMetadata(metadata, session.Messages, session.Artifacts, session.ArtifactLinks,
+                    session.ActiveHtmlArtifactId, session.ActivePlanDocumentArtifactId);
             var documentMs = timer.ElapsedMilliseconds - sessionMs;
             long htmlMs = 0, contextMs = 0, chartMs = 0;
             if (rebuildDerivedProjections)
@@ -180,14 +159,14 @@ namespace RNAssistant.Core.Storage
                 htmlMs = timer.ElapsedMilliseconds - sessionMs - documentMs;
                 RebuildContextCheckpointProjection(session);
                 contextMs = timer.ElapsedMilliseconds - sessionMs - documentMs - htmlMs;
-                RebuildChartActivityProjection(session);
+                RebuildChartActivityProjection(metadata, session.Messages, session.Artifacts);
                 chartMs = timer.ElapsedMilliseconds - sessionMs - documentMs - htmlMs - contextMs;
             }
             if (hydrateActiveArtifacts)
             {
                 foreach (var artifact in (session.Artifacts ?? new List<ChatArtifact>()).Where(ShouldHydrateForActiveSession))
                 {
-                    HydrateArtifact(session, artifact);
+                    HydrateArtifact(metadata, artifact);
                 }
             }
             LogPerformance("sessionMaterialize", timer.ElapsedMilliseconds,
@@ -196,6 +175,37 @@ namespace RNAssistant.Core.Storage
                 "ms, chart=" + chartMs + "ms, activeBodies=" +
                 (timer.ElapsedMilliseconds - sessionMs - documentMs - htmlMs - contextMs - chartMs) + "ms");
             return session;
+        }
+
+        // Both full loads and bounded pages use the same resource-owner projection.
+        private void ProjectResourceMetadata(ConversationMetadata metadata, IEnumerable<ChatMessage> messages,
+            List<ChatArtifact> artifacts, IEnumerable<ChatArtifactLink> links,
+            string activeHtmlArtifactId, string activePlanArtifactId)
+        {
+            if (!string.IsNullOrWhiteSpace(metadata.DocumentAuthorityId) || !string.IsNullOrWhiteSpace(metadata.WorkspaceId))
+            {
+                var references = (messages ?? new List<ChatMessage>()).Where(message => message != null)
+                    .SelectMany(message => message.ResourceRefs ?? new List<ResourceRef>())
+                    .Concat((links ?? new List<ChatArtifactLink>()).Where(link => !link.Detached).Select(link => link.Reference))
+                    .Where(reference => DocumentArtifactStore.Owns(metadata, reference))
+                    .Select(ChatResourceUri.ArtifactSnapshot)
+                    .GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First());
+                foreach (var reference in references)
+                    artifacts.Add(DocumentArtifacts.InspectMetadata(metadata, reference));
+                if (!string.IsNullOrWhiteSpace(activePlanArtifactId) &&
+                    !artifacts.Any(item => item.Id == activePlanArtifactId))
+                {
+                    artifacts.Add(DocumentArtifacts.InspectMetadata(metadata, DocumentArtifactStore.PlanSelectionReference(metadata, activePlanArtifactId)));
+                }
+            }
+            if (!string.IsNullOrEmpty(metadata.DocumentAuthorityId))
+            {
+                var logicalIds = artifacts.Select(item => MarkdownDocumentIdentity.LogicalId(item.Id))
+                    .Concat(new[] { HtmlWorkspaceIdentity.LogicalId(activeHtmlArtifactId) }).Where(id => id != null).Distinct().ToArray();
+                foreach (var logicalId in logicalIds)
+                    foreach (var artifact in DocumentArtifacts.SnapshotHistory(metadata, logicalId))
+                        if (!artifacts.Any(item => item.Id == artifact.Id)) artifacts.Add(artifact);
+            }
         }
 
         private static List<SessionOperation> BuildStateOperations(JObject before, JObject after)

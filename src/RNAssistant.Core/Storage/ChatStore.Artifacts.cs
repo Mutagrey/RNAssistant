@@ -94,19 +94,19 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private void RebuildChartActivityProjection(ChatSession session)
+        private void RebuildChartActivityProjection(ConversationMetadata metadata,
+            IEnumerable<ChatMessage> messages, IEnumerable<ChatArtifact> artifacts)
         {
-            if (session == null) return;
-            foreach (var message in session.Messages ?? new List<ChatMessage>())
+            foreach (var message in messages ?? Enumerable.Empty<ChatMessage>())
             {
                 if (message == null || message.Activity == null) continue;
                 var referencedIds = new HashSet<string>(
-                    ChatResourceUri.CurrentArtifactIds(session, message.ResourceRefs),
+                    ChatResourceUri.CurrentArtifactIds(metadata.Id, metadata.DocumentAuthorityId, artifacts, message.ResourceRefs),
                     StringComparer.OrdinalIgnoreCase);
-                var artifact = (session.Artifacts ?? new List<ChatArtifact>()).LastOrDefault(item => item != null &&
+                var artifact = (artifacts ?? Enumerable.Empty<ChatArtifact>()).LastOrDefault(item => item != null &&
                     referencedIds.Contains(item.Id) &&
                     string.Equals(item.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase));
-                if (artifact == null || !HydrateArtifact(session, artifact)) continue;
+                if (artifact == null || !HydrateArtifact(metadata, artifact)) continue;
                 message.Activity.DataJson = artifact.InlineText;
             }
         }
@@ -151,7 +151,7 @@ namespace RNAssistant.Core.Storage
                     false);
                 return;
             }
-            if (!HydrateArtifact(session, active))
+            if (!HydrateArtifact(ConversationMetadata.From(session), active))
             {
                 session.HtmlWorkspace = new HtmlWorkspace();
                 session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
@@ -206,13 +206,22 @@ namespace RNAssistant.Core.Storage
         private void RebuildContextCheckpointProjection(ChatSession session)
         {
             if (session == null) return;
+            var checkpoints = RebuildContextCheckpointProjection(ConversationMetadata.From(session), session.Messages, session.Artifacts);
+            session.ContextCheckpoints = checkpoints;
+            if (!checkpoints.Any(item => string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase)))
+                session.ActiveContextCheckpointId = null;
+        }
+
+        private List<ContextCheckpoint> RebuildContextCheckpointProjection(ConversationMetadata metadata,
+            IEnumerable<ChatMessage> messages, IEnumerable<ChatArtifact> artifacts)
+        {
             var checkpoints = new List<ContextCheckpoint>();
-            foreach (var artifact in UniqueArtifacts(session)
+            foreach (var artifact in UniqueArtifacts(artifacts)
                 .Where(item => item != null &&
                     string.Equals(item.Kind, ChatArtifactKinds.Compaction, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.CreatedUtc))
             {
-                if (!HydrateArtifact(session, artifact)) continue;
+                if (!HydrateArtifact(metadata, artifact)) continue;
                 try
                 {
                     var checkpoint = JsonConvert.DeserializeObject<ContextCheckpoint>(artifact.InlineText);
@@ -220,7 +229,7 @@ namespace RNAssistant.Core.Storage
                     checkpoint.Id = artifact.Id;
                     checkpoint.CreatedUtc = artifact.CreatedUtc;
                     checkpoints.Add(checkpoint);
-                    var sourceMessage = (session.Messages ?? new List<ChatMessage>()).FirstOrDefault(item =>
+                    var sourceMessage = (messages ?? Enumerable.Empty<ChatMessage>()).FirstOrDefault(item =>
                         item != null && string.Equals(item.Id, artifact.SourceMessageId, StringComparison.OrdinalIgnoreCase));
                     if (sourceMessage != null && sourceMessage.Activity != null &&
                         string.Equals(sourceMessage.Activity.Kind, "compaction", StringComparison.OrdinalIgnoreCase))
@@ -234,11 +243,7 @@ namespace RNAssistant.Core.Storage
                 {
                 }
             }
-            session.ContextCheckpoints = checkpoints;
-            if (!checkpoints.Any(item => string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase)))
-            {
-                session.ActiveContextCheckpointId = null;
-            }
+            return checkpoints;
         }
 
         private static bool HasArtifactOwner(ChatArtifact artifact)
@@ -247,7 +252,7 @@ namespace RNAssistant.Core.Storage
                 !string.IsNullOrWhiteSpace(artifact.WorkspaceId);
         }
 
-        private bool HydrateArtifact(ChatSession session, ChatArtifact artifact)
+        private bool HydrateArtifact(ConversationMetadata metadata, ChatArtifact artifact)
         {
             // Originals retain raw bytes here; their extracted text is a separate
             // resource view, even when the MIME contains "text" or "xml".
@@ -258,8 +263,8 @@ namespace RNAssistant.Core.Storage
             {
                 try
                 {
-                    artifact.InlineText = DocumentArtifacts.Read(ConversationMetadata.From(session),
-                        ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText;
+                    artifact.InlineText = DocumentArtifacts.Read(metadata,
+                        ChatResourceUri.CreateArtifactRevision(metadata.Id, artifact)).InlineText;
                 }
                 catch (System.IO.InvalidDataException) { return false; }
                 catch (System.IO.IOException) { return false; }
@@ -312,9 +317,9 @@ namespace RNAssistant.Core.Storage
                 string.Equals(artifact.Kind, ChatArtifactKinds.ToolResult, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static List<ChatArtifact> UniqueArtifacts(ChatSession session)
+        private static List<ChatArtifact> UniqueArtifacts(IEnumerable<ChatArtifact> artifacts)
         {
-            return (session == null ? new List<ChatArtifact>() : session.Artifacts ?? new List<ChatArtifact>())
+            return (artifacts ?? Enumerable.Empty<ChatArtifact>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() == 1)

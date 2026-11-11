@@ -116,13 +116,13 @@ are still open; this DTO alone does not make the backend bounded.
 P1 message windows: removed `ConversationMessageWindow.Session`; Office/Workspace
 now consume metadata, page messages and resolved artifact presentation data. Shared
 URI/card/library helpers take explicit read inputs, preserving the same implementation
-for full live sessions. No new adapter, store or resource owner. The existing temporary
-`ChatStore.ReadMessageWindowAtPath` → `ProjectSqliteSession` aggregate remains inside
-the backend only. Owner: Core Storage/resource projection; removal gate: scoped
-resource materialization during new-journal consumer integration. No fallback or
-aggregate reconstruction was added to the callers.
-Page reads now exclude `LastRun` before copying the projection root, removing their
-execution-CAS hydration dependency. Full load/recovery keeps its exact-body check;
+for full live sessions. No new adapter, store or resource owner. The temporary
+`ChatStore.ReadMessageWindowAtPath` → `ProjectSqliteSession` path is now removed:
+Core Storage reads typed page inputs directly and shares scoped resource/context/chart
+projection with full loads. This internal adapter removal gate is closed. Root copying,
+synthetic source messages and unused HTML workspace recovery are removed from pages.
+Page reads exclude `LastRun`, removing their execution-CAS hydration dependency.
+Full load/recovery keeps its exact-body check;
 unavailable evidence is not reset, substituted or retried by a history read.
 
 P1 resource read scopes: `DocumentArtifactStore.Read/List/InspectMetadata/InspectMetadataList/
@@ -130,8 +130,8 @@ SnapshotHistory/IsRemoved` no longer accept `ChatSession`. Office/Workspace and 
 projection consumers pass existing `ConversationMetadata` directly; internal Plan/record
 readers use that scope too. Pure identity helpers share scalar validation with live
 callers. No read compatibility overload, new owner/store or session reconstruction.
-Specialized Plan/text operations and the temporary page/resource projection remain
-under the previous removal gate; ordinary Store operations and journal cutover are open.
+Specialized Plan/text operations, artifact/history enumeration, ordinary Store
+operations and journal cutover remain open; no page aggregate adapter remains.
 
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 

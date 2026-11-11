@@ -1117,11 +1117,42 @@ namespace RNAssistant.Harness
                 chat.Artifacts.AddRange(new[] { selected, branch });
                 chat.ActiveTaskListArtifactId = selected.Id;
                 chat.Messages[189].ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(chat, branch));
+                HtmlWorkspaceToolService.UpsertFile(chat, "index.html", "html", new string('h', 64000), true);
+                var htmlId = chat.ActiveHtmlArtifactId;
+                chat.Messages[187].ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(chat,
+                    chat.Artifacts.Single(item => item.Id == htmlId)));
+                chat.Messages[188].Activity = new ChatActivity { Kind = "chart", Status = "completed",
+                    DataJson = "{\"type\":\"rnassistant.chart\",\"title\":\"Page chart\"}" };
+                var checkpoint = new ContextCheckpoint { ThroughMessageId = chat.Messages[0].Id,
+                    SummaryMarkdown = "page compaction summary", SourceMessageCount = 1 };
+                var compaction = new ChatArtifact { Id = checkpoint.Id, Kind = ChatArtifactKinds.Compaction,
+                    SourceMessageId = chat.Messages[186].Id, MimeType = "application/json",
+                    InlineText = JsonConvert.SerializeObject(checkpoint), MetadataJson = "{\"sourceMessageCount\":1}" };
+                chat.Artifacts.Add(compaction);
+                chat.Messages[186].Content = checkpoint.SummaryMarkdown;
+                chat.Messages[186].Activity = new ChatActivity { Kind = "compaction", Status = "completed",
+                    ResultMessage = checkpoint.SummaryMarkdown, DataJson = compaction.MetadataJson };
+                chat.Messages[186].ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(chat, compaction));
                 store.Save(chat);
+                var canonical = File.ReadAllBytes(SessionEventFile(paths, chat));
 
                 var reader = new ChatStore(paths);
                 var full = reader.Load(chat.Id);
+                var materialized = reader.MaterializedMessageCount;
                 var page = reader.ReadMessageWindow(chat.Id, 190, 80);
+                AssertEqual(80L, reader.MaterializedMessageCount - materialized,
+                    "page materialization never adds synthetic source messages");
+                AssertTrue(full.Artifacts.Single(item => item.Id == htmlId).InlineText.Length > 64000,
+                    "full editor projection needs the HTML workspace body");
+                AssertTrue(page.Artifacts.Single(item => item.Id == htmlId).InlineText == null,
+                    "history cards do not hydrate the unused HTML workspace body");
+                AssertEqual("page compaction summary", page.PageMessages.Single(item => item.Id == compaction.SourceMessageId).Content,
+                    "the visible compaction summary still comes from its CAS artifact");
+                AssertTrue(page.PageMessages.Single(item => item.Id == chat.Messages[188].Id).Activity.DataJson.Contains("Page chart"),
+                    "the visible chart still comes from its CAS artifact");
+                AssertEqual(JsonConvert.SerializeObject(ChatCloneService.CloneMessagesForBridge(full, full.Messages.Skip(110))),
+                    JsonConvert.SerializeObject(ChatCloneService.CloneMessagesForBridge(page.Metadata, page.Artifacts, page.PageMessages)),
+                    "real Office message projection retains chart, compaction and resource descriptors");
                 var expected = ArtifactLibraryProjectionService.ProjectMessagePage(full,
                     ChatCloneService.CloneMessagesForBridge(full, full.Messages.Skip(110)));
                 var actual = ArtifactLibraryProjectionService.ProjectMessagePage(page,
@@ -1138,6 +1169,8 @@ namespace RNAssistant.Harness
                     "page retains the selected head even when a newer branch is visible");
                 AssertEqual(JsonConvert.SerializeObject(expected.Artifacts), JsonConvert.SerializeObject(actual.Artifacts),
                     "page resource cards preserve exact revision, lineage and ownership");
+                AssertTrue(File.ReadAllBytes(SessionEventFile(paths, chat)).SequenceEqual(canonical),
+                    "direct page projection never changes canonical history");
             });
         }
 
@@ -1255,7 +1288,7 @@ namespace RNAssistant.Harness
                 var path = SessionEventFile(paths, chat);
                 var events = File.ReadAllBytes(path);
                 var invalidRoot = new JObject { ["Id"] = chat.Id, ["FormatVersion"] = chat.FormatVersion,
-                    ["CreatedUtc"] = new JArray() }.ToString(Formatting.None);
+                    ["Host"] = new JArray() }.ToString(Formatting.None);
                 foreach (var sql in new[] {
                     "UPDATE projection SET root='wrong sqlite storage class'",
                     "UPDATE projection SET root=CAST('{\"FormatVersion\":[]}' AS BLOB)",

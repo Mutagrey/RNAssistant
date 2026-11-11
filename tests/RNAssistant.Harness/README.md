@@ -553,6 +553,11 @@ hydration, canonical bytes, off-page tombstones, selected heads/lineage, protoco
 visibility and workspace isolation. The existing corrupt-row, damaged-metadata and
 catalog/page document-boundary checks cover the changed read result through repair
 and locking. No new-journal or Office qualification is implied.
+The tombstone fixture also compares actual Office message/card projections for chart,
+compaction and a 64 KB HTML workspace: the page preserves wire presentation while
+leaving HTML bodies cold. Pair with HTML navigation and compaction reconstruction
+checks for the shared full-load helpers. Damaged-root coverage targets `Host`, which
+pages consume, rather than unrelated aggregate metadata.
 
 Resource read-scope changes use `workspace Plan: scoped reads preserve publication barrier`
 and `document Plan: shared publication and competing writers` through real consumers.
