@@ -23,7 +23,7 @@ const review = process.env.BROWSER_ACTION_REVIEW;
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: control, worldName: 'rna-semantic-read' });
     let contextId, observed, serial = 0;
     async function evaluate(expression) {
-      const result = await cdp.send('Runtime.evaluate', { expression, contextId, returnByValue: true, silent: true, timeout: 1000 });
+      const result = await cdp.send('Runtime.evaluate', { expression, contextId, returnByValue: true, awaitPromise: true, silent: true, timeout: 2000 });
       assert.ok(!result.exceptionDetails, JSON.stringify(result.exceptionDetails)); return result.result.value;
     }
     async function read() { observed = await evaluate(script); return observed; }
@@ -187,7 +187,8 @@ const review = process.env.BROWSER_ACTION_REVIEW;
     }
     await page.setViewportSize({ width: 500, height: 700 });
     await page.waitForTimeout(50); assert.equal(await inspect('action-pointer'), null, 'resize clears obsolete coordinates');
-    await reset('https://example.test/'); await refused('browser_probe_only');
+    await reset('https://example.test/'); plan = await prepare(fill);
+    assert.equal((await act(plan)).effect, 'VerifiedChange', 'same semantic guards work on an external HTTP(S) document; native owns site admission');
     console.log('PASS external Browser actions: local fill/click/read-back, exact element and user guards, single-use preparation, unknown without replay, animated/idle cursor, runtime status, narrow/reduced motion');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

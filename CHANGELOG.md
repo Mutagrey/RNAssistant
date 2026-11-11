@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.11.0-dev
+
+- Browser agents can fill ordinary text controls, verify in-page button clicks on
+  allowed sites, and navigate by an observed link name. Link destinations stay bound
+  to the observed element; stale targets, manual takeover and unknown effects cannot
+  silently replay. Async click verification is bounded; native Windows delivery is open.
+
 ### 16.10.0-dev
 
 - The agent can navigate its existing Browser page to an allowed HTTP(S) address

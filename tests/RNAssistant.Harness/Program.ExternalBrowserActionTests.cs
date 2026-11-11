@@ -26,10 +26,12 @@ namespace RNAssistant.Harness
             public void BlockActions(ExternalBrowserReadTarget target) { Blocked = true; }
             public void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect) { OnPresent?.Invoke(effect); }
             private string _prepared;
+            internal ExternalBrowserActionRequest LastRequest;
             public Task PrepareAsync(ExternalBrowserReadTarget target, string revision, string preparationId,
                 ExternalBrowserActionRequest request, CancellationToken token)
             {
                 token.ThrowIfCancellationRequested(); Preparations++;
+                LastRequest = request;
                 if (!target.Matches(Target) || revision != ExternalBrowserResourceProvider.Revision(Target, Content))
                     throw ExternalBrowserResourceProvider.Error("Read the page again.", "browser_observation_stale");
                 _prepared = preparationId;
@@ -100,10 +102,17 @@ namespace RNAssistant.Harness
                 var navigated = execute(ExternalBrowserToolHandler.Navigate, new { target = args.target, url = "https://example.com/" }, read.ResourceEvidence);
                 AssertEqual(ToolExecutionOutcome.Ok, navigated.Outcome, "verified navigation accepts the next generation of the same owned page");
                 AssertEqual(2L, source.Target.DocumentGeneration, "navigation intentionally advances the document generation");
+                read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
+                AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Navigate,
+                    new { target = args.target, url = "https://example.com/", linkName = "Help" }, read.ResourceEvidence).Outcome,
+                    "an explicit URL and observed link cannot compete for authority");
+                var followed = execute(ExternalBrowserToolHandler.Navigate, new { target = args.target, linkName = "Help" }, read.ResourceEvidence);
+                AssertEqual(ToolExecutionOutcome.Ok, followed.Outcome, "semantic link uses the existing navigation runtime");
+                AssertTrue(source.LastRequest.Url == null && source.LastRequest.Name == "Help", "model supplies a name, never an inferred hidden href");
                 execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
                 AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Fill, args, read.ResourceEvidence).Outcome,
                     "older delivered read cannot replace the current exact native observation");
-                AssertEqual(2, source.Dispatches, "stale observation causes no additional effect");
+                AssertEqual(3, source.Dispatches, "stale observation causes no additional effect");
                 read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
                 source.AfterDispatch = () => { throw new TimeoutException("Simulated channel loss after dispatch."); };
                 var unknown = execute(ExternalBrowserToolHandler.Click, new { target = args.target, name = "Save", expectedText = "Saved" }, read.ResourceEvidence);

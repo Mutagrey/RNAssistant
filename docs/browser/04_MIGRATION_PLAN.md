@@ -5,7 +5,8 @@ P2c automatic lifecycle — **проверен host-neutral**; P3a/P3b plugin fi
 P5a native pilot, P6a/P6b read/local actions, P6c visualization и P6d control/access — **реализованы / In Review**;
 P4a bounded source diff — **baseline / In Review**, дальнейшая доработка и P4b
 **отложены пользователем 2026-11-11**. P6e external navigation — **реализован / In Review**;
-следующий приоритет — P6f bounded external-site actions;
+P6f bounded external-site actions — **реализован / In Review**;
+следующий приоритет — P6g research observations/result delivery;
 остальные capabilities P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
@@ -50,8 +51,10 @@ evidence и ровно одним следующим шагом в [Progress](06
 | P4a сравнение | Базовый bounded source diff двух saved HTML/plugin versions реализован; preview data исключены | Доработка отложена по запросу пользователя; не приоритет и не блокер P6 |
 | P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отложено пользователем вместе с доработкой diff; вернуться по конкретной потребности |
 | P6e external navigation | Агент открывает разрешённый HTTP(S) адрес в существующей external session и читает новую страницу; exact owner/generation/manual control/access guards | Реализован / In Review; redirects/terminal tested host-neutral, Windows delivery Open |
-| P6f external actions | Fill/click на разрешённых обычных страницах с fresh semantic target, manual control и явным read-back/unknown | Следующий независимый срез; не снимать probe-only guard без замены admission/verification и focused fixture |
-| Остальные P5/P6 capabilities | Дополнительные targets/страницы, persistent profiles, разрешённые popup/download, screenshots, shared sessions | Самостоятельные продуктовые срезы после базового workflow; screenshot включается только с privacy gate. Не создавать весь перечень API заранее |
+| P6f external actions | Fill/in-page click и navigate по linkName на разрешённых страницах; fresh exact observation, pointer/control guards, async read-back | Реализован / In Review; 9 Harness + 3 Chrome fixtures. Native Windows delivery Open |
+| P6g research observations | Retained immutable facts нескольких страниц с источником/временем; bounded richer read и доставка через existing context/CAS. Исторические факты не дают fresh action authority | Следующий приоритет по проверке результатов web research; текущий mutable read может выпадать из контекста после перехода. Сначала один сценарий A → B → сравнение источников, без нового store |
+| P6h image snapshots | Безопасный screenshot external page с redaction/completeness, existing CAS/media и фактической image delivery модели | После P6g либо по отдельному image-first workflow; PNG dev web.verify не заменяет эту capability |
+| Остальные P5/P6 capabilities | Model open/focus/close; select/scroll/key/wait по нужному workflow; затем дополнительные targets/frames, persistent profiles, разрешённые popup/download/shared sessions | Отдельные продуктовые срезы. Базовый Browser ещё открывается вручную; generic internet search и arbitrary JS не реализованы. Не создавать весь перечень API заранее |
 | P7 qualification | Совместная проверка поддержанных сценариев, Windows/Office, security/performance/cleanup и release evidence | Локальные проверки сопровождают срезы; широкий итоговый прогон — на интеграционной точке/кандидате, а не после каждой правки |
 
 Перенос P4 не отменяет existing history/restore и отправку visual selection в чат.
@@ -71,6 +74,21 @@ Windows evidence и независимые domain fixes можно вести п
 одного Shell/native owner выгоднее делать последовательно, без повторного аудита
 одних и тех же файлов в нескольких задачах.
 
+## P6f: bounded external actions — In Review, 2026-11-11
+
+Existing fill/click работают на разрешённых HTTP(S) страницах; click подтверждается
+новым единственным semantic text до 1 s. Truncated/ambiguous/sensitive/changed targets
+отклоняются; takeover/timeout после эффекта — unknown без replay. `browser.navigate`
+добавляет альтернативный `linkName`: runtime фиксирует href observed HTML anchor,
+повторно проверяет элемент/адрес перед переходом и использует P6e redirect/load owner.
+Href не появляется в модели, target=_blank следует в текущей вкладке, download/JS
+links отклоняются. Probe-only ветка удалена; v2 bindings и existing cursor сохранены.
+
+9 Harness и 3 Chrome fixtures проходят в общей рабочей копии; Windows delivery Open.
+[Evidence](05_TEST_MATRIX.md#p6f). Проверка вопроса пользователя про image snapshots и
+web results показала отдельный research/context gap: [что получает модель](03_CONTRACTS.md#model-results).
+Очередь P6g/P6h уточнена как план, не как готовые tools; P4a/P4b не возвращаются в приоритет.
+
 ## P6e: external navigation — In Review, 2026-11-11
 
 `browser.navigate` добавлен в existing ExternalBrowserToolHandler: same owned page,
@@ -82,7 +100,7 @@ Fixed isolated dispatch сохраняет trusted input guard. Unknown не rep
 Проверены 9 host-neutral cases на `de343788` + P6e в изолированной копии из-за
 параллельного незавершённого Workspace refactor; последний redirect/IDN case повторён
 после уточнения. 2 Chrome fixtures проходят. [Evidence](05_TEST_MATRIX.md#p6e).
-Native Windows compilation/delivery Open. P6f продолжит external fill/click;
+Native Windows compilation/delivery Open. P6f выше добавил bounded external fill/click;
 новые tabs, profiles, screenshots, popup/download в этот срез не входят.
 
 ## P4a: базовый source diff — In Review, дальнейшая доработка отложена

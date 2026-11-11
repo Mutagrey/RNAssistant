@@ -32,6 +32,10 @@ current address/loading/manual controls; navigation advances runtime document bi
 never Dock placement/session ownership. Redirect and completion guards belong to
 ExternalBrowserNavigation/Page, not Web presentation. [Contract](../browser/03_CONTRACTS.md).
 
+P6f retains that UI/lifetime: the existing cursor highlights an observed link before
+same-tab navigation; external fill/click use the same presentation and manual latch.
+Link href/admission and async verification remain native/isolated-runtime concerns.
+
 ### Browser manual control / access — In Review, 2026-11-11
 
 P6d хранит manual latch у `ExternalBrowserPage`; isolated script закрывает mutations

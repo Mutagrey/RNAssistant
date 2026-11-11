@@ -1,5 +1,26 @@
 # Universal Browser: матрица проверок
 
+<a id="p6f"></a>
+## P6f external actions — 2026-11-11
+
+- `external browser:` — 9/9 в общей рабочей копии: existing authority/confirmation/
+  CAS/policy/terminal fixtures; URL и linkName взаимоисключающи, semantic link сохраняет
+  same-owner navigation binding и не требует href от модели.
+- `external-browser-sites.test.js` — Chrome isolated world: внешние fill/async click,
+  takeover во время ожидания, timeout/unknown без replay, link href до/после preparation,
+  ambiguous/JS/download/incomplete targets, private values/href не выходят в observation;
+  переход target=_blank в одной вкладке. Сетевая политика остаётся native owner.
+- Existing `external-browser-action.test.js` и `external-browser-read.test.js` проходят:
+  local probe/cursor, hit-test/identity/manual guards, privacy и bounds сохранены.
+- **Open Windows:** compile и native site admission до/после подтверждения, revoke
+  во время dispatch/read-back, link cursor/переход/redirect, form/navigation side effects,
+  delayed completion и Manual/Resume/close. Только фото, без запросов логов/дампов.
+
+Сценарий: открыть Browser из чата → разрешить тестовый сайт → core.read → fill → новый
+core.read → in-page click с expectedText → новый core.read → navigate по linkName →
+core.read новой страницы. Screenshot/image delivery и retained multi-page research
+не объявляются проверенными этим сценарием; это P6g/P6h.
+
 <a id="p6e"></a>
 ## P6e external navigation — 2026-11-11
 

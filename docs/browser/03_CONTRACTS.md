@@ -6,11 +6,35 @@ Web и native host — consumers. Это минимальные границы �
 статус In Review; P2a import и P2b HTML resolver реализованы ниже.
 Автоматический lifetime вкладки Approved 2026-11-11; новые session APIs и P3–P6
 остаются Proposed за исключением реализованных ниже P4a baseline, P6a read,
-P6b local actions, P6c presentation, P6d control/access и P6e navigation.
+P6b local actions, P6c presentation, P6d control/access, P6e navigation и P6f external actions.
 P2c не добавляет UI/bridge управления detached sessions.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
+
+## P6f: external actions и переход по ссылке — In Review, 2026-11-11
+
+`browser.fill` и `browser.click` используют те же semantic target/name и fresh delivered
+whole read на сайтах из BrowserAgentAllowedSites. Native проверяет доступ до prepare,
+dispatch и после read-back. Fill поддерживает обычные text/search/email/url/tel inputs
+и textarea; sensitive/read-only/private поля не становятся доступными. In-page button
+click ожидает единственное новое `expectedText` до 1 s; это проверка наблюдаемого DOM,
+не доказательство сохранения бизнес-данных. Async effect, сменивший документ, отсутствие
+read-back или user takeover после dispatch — unknown, без replay. Частичная capture,
+двойственное имя, заменённый/закрытый элемент или отсутствующий hit target дают отказ.
+
+`browser.navigate` теперь принимает ровно одно из `url` / `linkName`. Для linkName
+runtime фиксирует HTML anchor и его href из observation; href не передаётся модели.
+Перед действием сверяются тот же элемент, href, имя, доступность и trusted-input epoch.
+Переход использует existing navigation owner и текущую вкладку, включая target=_blank;
+download/javascript/mailto и нестандартные JS-only links не поддержаны. На ссылке
+показывается existing cursor. URL/redirect/loading проверяются как в P6e. У всех трёх
+handlers новые v2 bindings; старый probe-only path удалён.
+
+Agent navigation guard также действует на автоматическую навигацию из обработчиков
+fill/click и остаётся до явной ручной навигации. Subresource/XHR network этим списком
+не фильтруется. Model open/focus/close, select/scroll/key/wait и screenshots этот срез
+не добавляет. [Проверки](05_TEST_MATRIX.md#p6f); native Windows delivery Open.
 
 ## P6e: navigation tool — In Review, 2026-11-11
 
@@ -32,7 +56,7 @@ generation той же session; runtime сверяет binding перед termin
 loading / 15 s native envelope), ошибка, смена владельца, takeover или revoke после
 dispatch — unknown, без replay. Redirect gate сохраняется после unknown до явной
 ручной навигации/close. Ручной Browser не ограничивается agent allowlist. После
-успеха нужна новая observation; click/fill пока остаются local-probe-only (P6b).
+успеха нужна новая observation; ограниченный external fill/click добавлен P6f выше.
 
 Порядок и корреляция событий сверены с [WebView2 navigation events](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/navigation-events);
 реальная Windows compilation/delivery остаётся Open. [Проверки](05_TEST_MATRIX.md#p6e).
@@ -113,7 +137,8 @@ budget 100 ms, native read timeout 3 s. Text values controls, URL/title, private
 regions, frames и shadow DOM исключены; доступны role/name, disabled/checked и text.
 SourceComplete=false: это ограниченный semantic view, не full DOM. Повторное чтение
 обновляет capture, а не продолжает DOM pagination. Model scripts/evaluate и screenshots
-не предоставляются; P6b actions ограничены локальной probe-страницей. Semantic labels/text остаются недоверенными данными.
+не предоставляются. P6f расширяет прежние probe-only actions на разрешённые страницы;
+semantic labels/text остаются недоверенными данными.
 
 Existing ResourceAuthority/CAS сохраняют exact body; новая observation обновляет
 observed head той же page identity. Revision включает navigation generation, уникальную
@@ -123,6 +148,9 @@ capture identity и hash body: одинаковый текст не подмен
 
 <a id="p6b-local-actions"></a>
 ## P6b: действия на локальной probe-странице — In Review, 2026-11-11
+
+Ниже первоначальный scope P6b; restriction на probe заменён P6f выше. Остальные
+exact observation/control/effect guards сохраняются.
 
 Одна manually opened P5a page: `core.read` → `browser.fill` → новое `core.read` →
 `browser.click` → `core.read`. Модель передаёт `target: "Browser page: external"`,
@@ -312,20 +340,70 @@ Shared session задаётся явно, без фиксированных agen
 уточнения; нет выбора «активной вкладки» или первого совпадения за модель.
 
 <a id="model-api"></a>
+<a id="model-results"></a>
+## Что получает модель: текущий путь и research gap — 2026-11-11
+
+Внешний Browser должен быть уже открыт пользователем из нужного чата. Пример
+реального последовательного маршрута (каждый read доставляется модели до действия):
+
+```text
+core.find {scope:"browser"}
+core.read {target:"Browser page: external"}
+  text: "heading: …\nlink: Подробнее\nbutton: Найти…"
+browser.navigate {target:"Browser page: external", linkName:"Подробнее"}
+  result: подтверждённый переход / отказ / unknown; не текст новой страницы
+core.read {target:"Browser page: external"}
+  text: новое bounded semantic наблюдение; sourceComplete:false
+```
+
+ExternalBrowserResourceProvider → Resource Gateway/ToolRuntime → existing typed tool
+result/чат → ModelContextCompiler → следующий model request. Текст попадает в `text`
+model projection, точный body и ResourceEvidence сохраняются в existing CAS/authority;
+внутренние URI/IDs остаются runtime-only. Это проверяет
+`ExternalBrowserSemanticGateway`: model text совпадает с сохранённым CAS body.
+Eligible E citations используют текущий общий protocol, не отдельные browser IDs.
+
+Модель сейчас получает role/name, disabled/checked и ограниченные text excerpts.
+Href, page URL/title, input values, full DOM, iframe/shadow DOM и image bytes в этой
+projection отсутствуют. `core.find/search` здесь ищут browser resource, не весь интернет.
+Переход не выполняет скрытый дополнительный model call или автоматическую доставку DOM.
+
+**Research gap (P6g):** Browser descriptor — Mutable/observed, одна текущая page identity.
+Последующие read/mutation меняют её evidence; ModelContextCompiler.Mark убирает body
+устаревшего read, сохраняя факт вызова. Наличие старого body в CAS не гарантирует его
+доступность модели для исследования нескольких страниц. Нужен consumer retained
+immutable observations через existing resources/context, с источником/временем и
+bounded чтением; отделить исследовательские факты от fresh authority для действий.
+Новый Browser store/journal для этого не вводится. Это план, не реализованная capability.
+
+**Image/web snapshots:** P6a semantic snapshot внешней страницы уже есть. CLI
+`web.verify` сохраняет исходники локального web-проекта, viewport PNG и CDP trace
+через WorkspaceWebSnapshotStore; это dev verification, не захват произвольного сайта.
+PNG/trace доступны typed application/CLI diagnostic path; bytes/refs не входят в model
+tool result. `core.read` image/raw capability модели также не выдаёт.
+[Существующий контракт](../resource-fabric.md#retained-browser-diagnostics).
+Для external Browser ещё не реализованы `browser.screenshot`, privacy/redaction и
+bounded image delivery модели. Они составляют P6h; повторно создавать CAS/media store
+не нужно.
+
+<a id="model-api"></a>
 ## Model API и observations
 
 Исходный перечень browser tools — capabilities, а не требование создать каждый ID.
 Публичные schemas должны соответствовать текущему semantic contract:
 
-| Capability исходника | Model-facing маршрут | Внутреннее выполнение |
+| Capability исходника | Фактический статус | Model-facing маршрут / owner |
 |---|---|---|
-| list / inspect / snapshot / versions / annotations | `core.find/read/search` с semantic target | Browser resource provider получает bounded observation/metadata, runtime pins cursor/document/element refs |
-| open / focus / navigate / close | Будущее семейство `browser.*` действий, закрытые schemas по действию | Application owner; close завершает страницу и её bindings, отдельного session-close UI по умолчанию нет |
-| click / fill / select / scroll / keypress / wait | Семантический page target + role/name/context цели, содержимое/условие | Runtime resolve → exact binding → admission → recheck → dispatch → verify |
-| screenshot | `browser.screenshot` с semantic target | Безопасный capture в existing CAS/media pipeline, не base64/полный DOM в Tool Result |
-| annotate | `browser.annotate` с semantic target/comment | Existing selection intake + общий annotation lifecycle |
-| compare | Сравнение выбранных предметных версий через owner; результат читается как resource | Existing bounded diff, exact pair закреплена runtime |
-| checkout / restore / apply / publish | Existing owner tools/commands; новые aliases без необходимости не добавлять | Отдельные domain operations, не универсальная запись по browser URL |
+| list / inspect / semantic snapshot | P6a реализован, bounded top document | `core.find/read/search`; runtime pins observation, не full DOM |
+| navigate / follow link | P6e/P6f реализованы | `browser.navigate` с url либо linkName, существующая owned page |
+| fill / in-page button click | P6f реализован с ограничениями выше | `browser.fill/click`; fresh read, native site policy и bounded verification |
+| open / focus / close | Сейчас ручной UI; model commands Planned | Application/Dock/native lifetime; не отдельный session-close UI |
+| select / scroll / keypress / wait | Planned, по конкретным workflows | Semantic actions; reuse admission/effect owners, не список API заранее |
+| screenshot / image observation | P6h Planned для external Browser | Privacy capture → existing CAS/media → model delivery; без inline base64 в Tool Result |
+| retained research observations | P6g Planned | Existing Resource Gateway/CAS/context; источник, историческая читаемость, bounds |
+| annotate / persistent annotations | Existing visual selection; P4b отложен | Общий annotation owner, не Browser Annotation DB |
+| compare | P4a UI baseline; model compare Planned, доработка отложена | Existing saved HTML/plugin owners, не новый browser version store |
+| checkout / restore / apply / publish | Existing domain commands | Owner tools; не универсальная запись по browser URL |
 
 BrowserSessionId, observationId, document revision, CSS/backend node IDs, UUID,
 ResourceRef, rna URI, cursor и confirmation token остаются runtime-only. Модель не

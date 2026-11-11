@@ -1,7 +1,21 @@
 # Universal Browser: статус
 
 Дата: 2026-11-11. Scope: P0–P3 baseline, P4a source diff baseline, P5a native pilot,
-P6a/P6b read/local actions, P6c visualization, P6d user control/access и P6e navigation.
+P6a/P6b read/local actions, P6c visualization, P6d user control/access, P6e navigation и P6f external actions.
+
+## P6f: external actions и link navigation — In Review
+
+`browser.fill/click` работают на разрешённых страницах с bounded verification;
+`browser.navigate` принимает url либо observed linkName. Exact href остаётся runtime-only,
+проверяется повторно, затем используются existing site/redirect/load guards. Cursor и
+manual takeover сохранены. 9 Harness + 3 Chrome fixtures проходят; [evidence](05_TEST_MATRIX.md#p6f).
+Windows compilation/delivery Open. Предыдущие срезы закоммичены отдельно:
+P4a `95b40bc5`, P6e `38959ae6`; текущий product `16.11.0-dev`, не release.
+
+По вопросу пользователя сверены [model results и image snapshots](03_CONTRACTS.md#model-results):
+сейчас есть bounded semantic view и отдельные dev web.verify PNG/trace; external image
+delivery модели нет. Старое mutable Browser observation может выпасть из context.
+Следующий P6g — retained research results/источники, затем P6h safe screenshots.
 
 ## P6e: agent navigation — In Review
 
@@ -9,8 +23,8 @@ P6a/P6b read/local actions, P6c visualization, P6d user control/access и P6e na
 site access и новым runtime document binding после загрузки. Trusted input останавливает
 agent dispatch; timeout/unknown не replay и не освобождают поздние redirect. 9 Harness
 cases в отдельной копии `de343788` + P6e и 2 Chrome fixtures проходят; [evidence](05_TEST_MATRIX.md#p6e).
-Windows compilation/delivery Open. Следующий срез — P6f external fill/click с новым
-admission/read-back; пока они доступны только на packaged probe.
+Windows compilation/delivery Open. Bounded external fill/click и semantic links
+добавлены последующим P6f выше; ограничения полного research API сохраняются.
 
 ## P4a: baseline завершён; дальнейшая доработка отложена
 
@@ -337,8 +351,10 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c), [P6d](05_TEST_MATRIX.md#p6d) и
 [P4a baseline](05_TEST_MATRIX.md#p4a); P6e navigation реализован, [Windows evidence открыт](05_TEST_MATRIX.md#p6e).
-Следующий срез — P6f: ограниченные fill/click разрешённых обычных сайтов с проверкой
-наблюдения/элемента, ручного управления и результата. Простое снятие probe-only запрета недостаточно.
+P6f реализован; следующий срез — P6g: исследование A → B → сравнение retained фактов
+с источниками, без смешения с fresh action authority и без нового Browser store.
+P6h — screenshots/privacy/image delivery. Select/scroll/key/wait и model open/focus/close
+остаются отдельными сценариями, не завершённым универсальным API.
 Первый P6b local workflow реализован; general external actions остаются отдельным scope.
 Отдельный P3c с общим descriptor без consumer не нужен; доработка diff и persistent
 annotations отложены пользователем. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).

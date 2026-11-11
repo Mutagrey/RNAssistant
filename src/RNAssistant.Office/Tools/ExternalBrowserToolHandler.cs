@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -26,7 +27,7 @@ namespace RNAssistant.Office.Tools
     {
         internal const string Fill = "browser.fill", Click = "browser.click", Navigate = "browser.navigate";
         internal static bool Owns(string id) { return id == Fill || id == Click || id == Navigate; }
-        internal static ToolBinding BindingFor(string id) { return new ToolBinding(id + (id == Navigate ? ".v1" : ".probe.v1")); }
+        internal static ToolBinding BindingFor(string id) { return new ToolBinding(id + ".v2"); }
         private readonly ChatSession _session;
         private readonly Func<IExternalBrowserReadSource> _source;
         private readonly Func<ChatSession, IDisposable> _documentAccess;
@@ -49,16 +50,22 @@ namespace RNAssistant.Office.Tools
                 if (id == Navigate) {
                     properties.Remove("name"); properties.Remove(value);
                     properties["url"] = new { type = "string", description = "Absolute HTTP(S) destination allowed in Sites available to the agent; redirects are checked too.", minLength = 1, maxLength = 8192 };
+                    properties["linkName"] = new { type = "string", description = "Exact observed name of one visible HTML link. Follow its bound href in this tab. Provide either url or linkName, never both.", minLength = 1, maxLength = 160 };
                 }
                 var schema = JsonConvert.SerializeObject(new { type = "object", properties,
-                    required = id == Navigate ? new[] { "target", "url" } : new[] { "target", "name", value }, additionalProperties = false });
+                    required = id == Navigate ? new[] { "target" } : new[] { "target", "name", value }, additionalProperties = false });
+                if (id == Navigate) {
+                    var shape = JObject.Parse(schema);
+                    shape["anyOf"] = new JArray(new JObject { ["required"] = new JArray("url") }, new JObject { ["required"] = new JArray("linkName") });
+                    schema = shape.ToString(Formatting.None);
+                }
                 var descriptor = new ToolDescriptor(id,
-                    id == Navigate ? "Navigate the existing Browser page owned by this conversation to an allowed HTTP(S) address. Requires a fresh delivered core.read first. " +
+                    id == Navigate ? "Navigate the existing Browser page to an allowed HTTP(S) url, or follow one observed link by linkName in the same tab. Supply exactly one of url/linkName. Requires a fresh delivered core.read first. " +
                     "Verifies loading and final site access; read the new page before further actions. Manual control blocks navigation; unknown effects must not be retried. Does not open a new tab." :
-                    "Local browser probe only. Requires a fresh core.read of the page delivered to this conversation before each action. " +
+                    "On sites allowed for the agent, requires a fresh core.read delivered to this conversation before each action. " +
                     (id == Fill ? "Fill one visible textbox with the exact observed name; verify its value internally. " :
-                    "Click one visible button with the exact observed name; expectedText must newly appear as a unique semantic entry. ") +
-                    "Rejects stale, ambiguous, disabled or user-edited targets. Unknown effects must not be retried; inspect the page. External websites are unsupported.", schema);
+                    "Click one visible in-page button; expectedText must newly appear as a unique semantic entry within one second. For links use browser.navigate with linkName. ") +
+                    "Rejects stale, ambiguous, disabled, sensitive, user-edited or incompletely observed targets. A changed document or missing read-back is unknown and must not be retried.", schema);
                 yield return ControllerToolCatalogEntry.CreateTypedProjection(descriptor,
                     new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1),
                     BindingFor(id), scope: "session", mutatesLocalState: true);
@@ -88,12 +95,17 @@ namespace RNAssistant.Office.Tools
                     using (DocumentAccessGate.BeginOperation()) using (_documentAccess(_session)) { }
                     var prepared = new ExternalBrowserPrepared { Target = target, Observation = observation,
                         PreparationId = Guid.NewGuid().ToString("N") };
+                    var navigate = context.Execution.Call.Name == Navigate;
+                    var url = ToolArgumentReader.String(context.Arguments, "url", null);
+                    var link = ToolArgumentReader.String(context.Arguments, "linkName", null);
+                    if (navigate && ((url == null) == (link == null)))
+                        throw Error("Provide exactly one of url or linkName.", "browser_action_invalid");
                     source.PrepareAsync(target, observation.Revision, prepared.PreparationId,
                         new ExternalBrowserActionRequest { Action = context.Execution.Call.Name == Navigate ? "navigate" : context.Execution.Call.Name == Fill ? "fill" : "click",
-                            Name = ToolArgumentReader.String(context.Arguments, "name", ""),
+                            Name = navigate ? link : ToolArgumentReader.String(context.Arguments, "name", ""),
                             Value = ToolArgumentReader.String(context.Arguments, "value", null),
                             ExpectedText = ToolArgumentReader.String(context.Arguments, "expectedText", null),
-                            Url = ToolArgumentReader.String(context.Arguments, "url", null) }, token).GetAwaiter().GetResult();
+                            Url = url }, token).GetAwaiter().GetResult();
                     if (source != _source() || !target.Matches(source.TargetFor(_session.Id))) throw Error("The browser owner changed.", "browser_document_stale");
                     using (DocumentAccessGate.BeginOperation()) using (_documentAccess(_session)) { }
                     return new ToolPreparationResult(RuntimeResult.Ok("Browser action prepared; its exact target and user control will be checked again before dispatch."), JsonConvert.SerializeObject(prepared));

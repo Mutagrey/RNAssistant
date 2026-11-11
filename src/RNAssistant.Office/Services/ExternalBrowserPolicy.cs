@@ -15,7 +15,7 @@ namespace RNAssistant.Office.Services
             switch (code)
             {
                 case "browser_user_control": case "browser_site_denied": case "browser_navigation_changed":
-                case "browser_probe_only": case "browser_effect_unknown": case "browser_observation_stale":
+                case "browser_effect_unknown": case "browser_observation_stale":
                 case "browser_action_invalid": case "browser_observation_incomplete": case "browser_element_ambiguous":
                 case "browser_element_stale": case "browser_element_not_interactable": case "browser_verification_already_present":
                 case "browser_preparation_stale": case "browser_verification_failed": case "browser_verified": return code;

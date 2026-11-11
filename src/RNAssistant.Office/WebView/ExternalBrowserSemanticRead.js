@@ -13,7 +13,7 @@
   function control() { return globalThis.__rnaBrowserControl ? globalThis.__rnaBrowserControl.snapshot() : { manual: true, epoch: 0 }; }
   function capture() {
   // Never deliver input values, URLs, HTML or page script state.
-  var nodes = [], elements = [], visited = 0, characters = 0, truncated = false, deadline = performance.now() + 100;
+  var nodes = [], elements = [], destinations = [], visited = 0, characters = 0, truncated = false, deadline = performance.now() + 100;
   var privateSelector = 'script,style,template,noscript,iframe,object,embed,canvas,svg,[hidden],[aria-hidden="true"],[inert],[data-private],[data-sensitive],[contenteditable]:not([contenteditable="false"]),input[type="hidden"],input[type="password"]';
   var stop = {};
   function budget() { if (visited >= 3000 || performance.now() > deadline) { truncated = true; throw stop; } visited++; }
@@ -52,7 +52,11 @@
       else if (checked === "true" || checked === "false") entry.checked = checked === "true";
       else if (typeof element.checked === "boolean") entry.checked = element.checked;
     }
-    nodes.push(entry); elements.push(element); characters += value.length;
+    nodes.push(entry); elements.push(element);
+    var rawHref = role === 'link' && element.tagName === 'A' ? element.getAttribute('href') : null;
+    var href = rawHref != null && rawHref.length <= 8192 ? element.href : null;
+    destinations.push(href && href.length <= 8192 ? href : null);
+    characters += value.length;
   }
   function role(element) {
     var explicit = element.getAttribute("role");
@@ -68,7 +72,7 @@
   }
   try {
     var root = document.body;
-    if (!root || hidden(root)) return { nodes: nodes, elements: elements, visited: visited, truncated: false };
+    if (!root || hidden(root)) return { nodes: nodes, elements: elements, destinations: destinations, visited: visited, truncated: false };
     var represented = new WeakSet(), walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
         budget();
@@ -86,7 +90,7 @@
       }
     }
   } catch (error) { if (error !== stop) throw error; }
-  return { nodes: nodes, elements: elements, visited: visited, truncated: truncated };
+  return { nodes: nodes, elements: elements, destinations: destinations, visited: visited, truncated: truncated };
   }
   function fail(code) { throw new Error(code); }
   function matches(view, role, name) {
@@ -96,11 +100,11 @@
     }, []);
   }
   function check(request) {
-    if (location.href !== 'https://rna-browser-probe.invalid/index.html' || window.top !== window) fail('browser_probe_only');
+    if (window.top !== window || !/^https?:$/.test(location.protocol)) fail('browser_action_invalid');
     if (blocked) fail('browser_effect_unknown');
     if (control().manual) fail('browser_user_control');
     if (!observation || observation.used || observation.interaction !== control().epoch) fail('browser_observation_stale');
-    var role = request.action === 'fill' ? 'textbox' : request.action === 'click' ? 'button' : null;
+    var role = request.action === 'fill' ? 'textbox' : request.action === 'click' ? 'button' : request.action === 'follow' ? 'link' : null;
     if (!role || !request.name || request.name.length > 160 ||
         role === 'textbox' && (typeof request.value !== 'string' || request.value.length > 1024) ||
         role === 'button' && (!request.expectedText || request.expectedText.length > 160)) fail('browser_action_invalid');
@@ -109,6 +113,12 @@
     if (previous.length !== 1 || found.length !== 1) fail('browser_element_ambiguous');
     var element = current.elements[found[0]];
     if (!element || element !== observation.elements[previous[0]] || !element.isConnected) fail('browser_element_stale');
+    if (role === 'link') {
+      if (element.tagName !== 'A' || !current.destinations[found[0]] || element.hasAttribute('download')) fail('browser_element_not_interactable');
+      if (current.destinations[found[0]] !== observation.destinations[previous[0]]) fail('browser_element_stale');
+      var destination = new URL(element.href);
+      if (!/^https?:$/.test(destination.protocol) || destination.username || destination.password) fail('browser_action_invalid');
+    }
     if (current.nodes[found[0]].disabled || role === 'textbox' && (element.readOnly ||
         element.tagName !== 'TEXTAREA' && !(element.tagName === 'INPUT' && /^(text|search|email|url|tel)$/.test(element.type)))) fail('browser_element_not_interactable');
     var rect = element.getBoundingClientRect(), x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
@@ -135,15 +145,30 @@
         return { effect: 'VerifiedNoChange', code: 'browser_prepared' };
       } catch (error) { prepared = null; return { effect: 'Rejected', code: error.message }; }
     },
+    prepareLink: function (id, preparationId, name) {
+      var result = api.prepare(id, preparationId, { action: 'follow', name: name });
+      if (result.effect !== 'VerifiedNoChange') return { prepared: false, code: result.code };
+      prepared.url = prepared.element.href;
+      return { prepared: true, url: prepared.url };
+    },
     showAction: function (id, visible) {
       try {
         if (!prepared || prepared.id !== id) fail('browser_preparation_stale');
         var element = check(prepared.request);
-        return visual('show', id, element, prepared.request.action, visible) || 0;
+        return visual('show', id, element, prepared.request.action === 'follow' ? 'click' : prepared.request.action, visible) || 0;
       } catch (error) { visual('hide'); return 0; }
     },
     hideAction: function () { visual('hide'); return true; },
     completeAction: function (id, effect) { visual('finish', id, effect); return true; },
+    follow: function (id, approvedUrl) {
+      try {
+        if (!prepared || prepared.id !== id || prepared.request.action !== 'follow') fail('browser_preparation_stale');
+        var element = check(prepared.request);
+        if (element !== prepared.element || element.href !== prepared.url || element.href !== approvedUrl) fail('browser_element_stale');
+        visual('dispatch', id, element, 'click');
+        return api.navigate(observation.observationId, approvedUrl);
+      } catch (error) { return { started: false, code: error.message }; }
+    },
     navigate: function (id, url) {
       var attempted = false;
       try {
@@ -164,7 +189,7 @@
       if (!navigating) return false;
       navigating = false; blocked = false; observation = null; prepared = null; return true;
     },
-    act: function (id) {
+    act: async function (id) {
       var plan = prepared; prepared = null;
       function result(effect, code) { return { effect: effect, code: code }; }
       try {
@@ -177,6 +202,7 @@
       if (plan.request.action === 'fill' && element.value === plan.request.value)
         return result('VerifiedNoChange', 'browser_verified');
       visual('dispatch', id, element, plan.request.action);
+      var interaction = control().epoch;
       blocked = true; // Any interruption from here leaves effects unknown and mutations disabled.
       try {
         if (plan.request.action === 'fill') {
@@ -184,13 +210,20 @@
           Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, plan.request.value);
           element.dispatchEvent(new Event('input', { bubbles: true }));
           element.dispatchEvent(new Event('change', { bubbles: true }));
+          await Promise.resolve();
           if (!element.isConnected || element.value !== plan.request.value) fail('browser_verification_failed');
         } else {
           element.click();
-          var after = capture();
-          if (after.truncated || after.nodes.filter(function (node) { return node.name === plan.request.expectedText; }).length !== 1)
-            fail('browser_verification_failed');
+          var deadline = performance.now() + 1000;
+          while (true) {
+            if (control().manual || control().epoch !== interaction) fail('browser_user_control');
+            var after = capture();
+            if (!after.truncated && after.nodes.filter(function (node) { return node.name === plan.request.expectedText; }).length === 1) break;
+            if (performance.now() >= deadline) fail('browser_verification_failed');
+            await new Promise(function (resolve) { setTimeout(resolve, 50); });
+          }
         }
+        if (control().manual || control().epoch !== interaction) fail('browser_user_control');
         blocked = false;
         return result('VerifiedChange', 'browser_verified');
       } catch (error) { return result('Unknown', 'browser_verification_failed'); }

@@ -94,7 +94,7 @@ namespace RNAssistant.Office.Contracts
         Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken);
     }
 
-    // P6b is deliberately restricted to the packaged local probe. No model JS/selectors.
+    // Semantic actions use the native site policy and exact observations; no model JS/selectors.
     public sealed class ExternalBrowserActionRequest
     {
         [JsonProperty("action")] public string Action { get; set; }
@@ -119,6 +119,13 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("started")] public bool Started { get; set; }
         [JsonProperty("unchanged")] public bool Unchanged { get; set; }
+        [JsonProperty("code")] public string Code { get; set; }
+    }
+
+    internal sealed class ExternalBrowserLinkPreparation
+    {
+        [JsonProperty("prepared")] public bool Prepared { get; set; }
+        [JsonProperty("url")] public string Url { get; set; }
         [JsonProperty("code")] public string Code { get; set; }
     }
 

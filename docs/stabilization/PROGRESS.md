@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Browser P6f external actions / research gap — In Review, 2026-11-11
+
+`16.11.0-dev`: allowed-site fill/in-page click и navigate по observed linkName;
+href bound runtime-only, async read-back до 1 s, текущие site/manual/unknown guards.
+Probe-only path удалён, новые v2 bindings. 9 Harness + 3 Chrome fixtures проходят в
+общей копии; Windows compilation/delivery Open. [Evidence](../browser/05_TEST_MATRIX.md#p6f).
+P4a/P6e закоммичены `95b40bc5`/`38959ae6`; дальнейший diff/P4b отложен.
+По вопросу пользователя уточнён реальный [путь результатов модели](../browser/03_CONTRACTS.md#model-results):
+P6g должен сохранить multi-page research facts/источники через existing CAS/context;
+P6h добавит safe external screenshots/image delivery. Dev web.verify PNG/trace уже
+есть, но не являются image observation внешней страницы для модели.
+
 ## Browser P6e navigation — In Review, 2026-11-11
 
 `16.10.0-dev`: `browser.navigate` использует existing owned page, delivered read,
