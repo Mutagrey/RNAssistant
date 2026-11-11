@@ -45,6 +45,32 @@ mixed old/new roots; restored history is byte-identical and SQLite is rebuilt.
 See [CAS maintenance](cas-maintenance.md#new-generation-journal-closure-and-backup--2026-11-10).
 No production journal writer is switched by this maintenance integration.
 
+## Indexed context requirements — 2026-11-11
+
+The isolated `ConversationJournal.Context` reducer derives recent eligible receipts,
+source-body locators, unresolved recovery and unknown effects in the same disposable
+SQLite index (schema 9). Append, suffix catch-up and rebuild use one reducer; no new
+canonical event, membership journal or dual-write is introduced. Every unknown stays
+addressable independently of prompt budgets; presence queries and bounded pages
+avoid loading/counting the complete backlog. Exact call signatures reuse the kernel
+tracker's canonical JSON signature. Externalized arguments needed during repair are
+read outside append/SQL locks, with one transient prepared signature at a time.
+
+Successful later facts resolve typed recovery only for the same stream/chat and
+matching target, view, coverage or changed dependency revision. Earlier/failed reads
+and other chats cannot resolve it. Such recovery never clears an unknown effect or
+its replay guard; late resource-proof adjudication remains an explicit integration
+step. Resolved dependency rows are removed with the derived requirement. Whole and
+partial/revision-specific body locators coexist. Compiler selection and final actual
+delivery remain the sole source of model observation authority.
+
+`RestoreContext` replaces the isolated recent-only `OpenContext` helper. It reads the
+checked boundary plus selected metadata, returning a compact requirement notice and
+runtime-only addressed-detail/guard queries. The old production aggregate store and
+archive `ContextWorkingSet.Restore` remain active until P7 switches their consumers.
+Missing/older indexes use streaming repair; valid indexes do not replay history on
+normal context restart. Canonical JSONL and user history are not changed by repair.
+
 ## Named chat groups — 2026-11-05
 
 ChatStore.Groups reuses ResourceAuthorityStore append-only commits and immutable CAS:

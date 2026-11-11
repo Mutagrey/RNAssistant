@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.3.1-dev
+
+- Context recovery preserves runtime unknown outcomes even when an opaque tool
+  returns `ok`. The isolated new journal selects bounded context from its index,
+  with compact unresolved-operation notices and addressed detail/replay-guard
+  queries instead of a record-count limit. Production storage cutover is separate.
+
 ### 16.3.0-dev
 
 - NativeHostCli gains integrated window controls, Compact/Companion modes, pin and

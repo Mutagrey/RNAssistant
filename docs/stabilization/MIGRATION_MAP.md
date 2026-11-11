@@ -75,6 +75,16 @@ the repeated parsing/hash helpers are removed. The existing history reader owns
 header validation. Omission/replacement discards derived metadata; no parsed tree,
 body cache, store or adapter is added. Archive scans and indexed restart remain open.
 
+P3f adds `ConversationJournal.Context` to that existing isolated index: bounded
+working-set candidates, persistent unknown/recovery membership, compact presence
+notice, keyset details and exact-call replay-guard lookup. The recent-only
+`OpenContext` entry point is removed and its isolated consumers use indexed recovery
+or explicit historical queries. No count-based chat stop, production adapter or new
+registry. Production archive restore remains until P7 connects shared semantic detail
+reads and action guards together with context selection; the summary alone cannot
+replace those guards. Externalized signature reconstruction stays outside append/SQL
+locks. Unknown runtime outcomes behind wire `ok` are retained by production restore.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.

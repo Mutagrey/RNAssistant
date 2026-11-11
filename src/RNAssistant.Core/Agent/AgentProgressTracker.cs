@@ -203,7 +203,7 @@ namespace RNAssistant.Core.Agent
             }
         }
 
-        private static string Signature(ToolCall call)
+        internal static string Signature(ToolCall call)
         { return call.Name + "\n" + ToolPackSnapshot.JsonFingerprint(call.ArgumentsJson); }
 
     }

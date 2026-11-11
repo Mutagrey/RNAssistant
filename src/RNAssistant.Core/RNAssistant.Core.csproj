@@ -389,6 +389,7 @@
     <Compile Include="Storage\ConversationJournal.Delivery.cs" />
     <Compile Include="Storage\ConversationJournal.Spawn.cs" />
     <Compile Include="Storage\ConversationJournal.Run.cs" />
+    <Compile Include="Storage\ConversationJournal.Context.cs" />
     <Compile Include="Storage\ConversationJournal.Control.cs" />
     <Compile Include="Storage\JournalIndex.cs" />
     <Compile Include="Storage\JournalIndex.Maintenance.cs" />

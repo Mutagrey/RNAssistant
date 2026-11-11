@@ -530,3 +530,57 @@ after-state/CAS ownership.
    remain open. This result is not a bounded-restart claim.
 7. Conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide updated.
    No temporary adapter; new journal/root integration is still separate.
+
+
+## P3f — indexed context and addressed unresolved operations (2026-11-11)
+
+1. F10 (indexed-selection subset) and P3.10: Core `ConversationJournal.Context` owns working
+   candidates and unresolved requirements in the existing disposable index. Shared
+   compiler owns the bounded notice; `AgentProgressTracker` still owns repeat policy.
+2. Ready-index restart selects recent metadata, source refs and optional receipts;
+   unknown/recovery presence produces a fixed-size notice. There is no refusal based
+   on the number of unresolved records. Every unknown remains addressable through
+   keyset pages and exact operation lookup. An indexed canonical argument signature
+   finds the original unknown call across runs for the existing action-level guard,
+   without collecting all unknowns into RAM/prompt. Actual mandatory token overflow
+   still refuses preparation, without changing history. Production archive restore
+   now also retains opaque runtime `Unknown` behind wire `ok` without E/effect metadata.
+3. Removed the isolated recent-only `OpenContext` entry point and switched both
+   consumers. The same append/suffix/rebuild reducer derives source membership and
+   unresolved recovery; no membership journal, separate registry or body copy.
+   Resolved dependency rows cascade/clear; externalized call signatures are prepared
+   outside append/SQL locks. Production `Restore(session.Messages)` remains until P7.
+4. Eleven focused checks pass on macOS/net8/C#7.3: three indexed-context cases and
+   eight regressions (retained results, shared-index/process repair, late outcome,
+   run checkpoints, backup/restore, archive working set, two opaque-action policies).
+   Fixtures cover 141 unknowns without chat refusal, all 142 after an index fault,
+   canonical signature/property order/new call ID, externalized call rebuild, scope
+   isolation, real token overflow, and 42 recovery combinations against typed policy,
+   including earlier/failed reads and whole/partial evidence. Retained whole/partial
+   bodies preserve actual delivery and match the archive-built request. Validation
+   uses isolated e8d719b6 + owned changes through P3f; concurrent Browser/window work
+   is excluded. This is not a current-HEAD or Windows/Office qualification.
+5. Same two retained source observations and one recent call/result, growing only
+   irrelevant successful history; fixture writes and final compiler checks excluded:
+
+   | History pairs H | Archive visits | Archive allocated bytes | Indexed records / bytes read | Indexed allocated bytes | Archive / indexed wall ms | Indexed CPU ms |
+   |---:|---:|---:|---:|---:|---:|---:|
+   | 100 | 204 | 732,728 | 7 / 14,765 | 1,266,304 | 1.57 / 6.48 | 7.06 |
+   | 1,000 | 2,004 | 6,944,344 | 7 / 14,784 | 1,167,144 | 6.72 / 3.30 | 3.33 |
+   | 10,000 | 20,004 | 69,191,472 | 7 / 14,802 | 1,167,264 | 64.92 / 4.21 | 4.71 |
+
+   Indexed selection visits zero history messages and hydrates no CAS body. The
+   archive comparator starts with history already in RAM; its storage-load cost is
+   excluded. Logical record bytes vary slightly with identifier lengths. Timing is
+   one local sample, not a latency guarantee; old-path CPU, physical I/O and Windows
+   performance are unmeasured. Summary/guard/detail queries remain bounded even when
+   the unknown backlog exceeds the former proposed 128-record threshold.
+6. P3/P7 are not complete: production aggregate consumers, shared semantic detail
+   reads, indexed action-guard wiring, full kernel recovery and late-proof resolution
+   remain integration gates. Switching only prompt selection is unsafe; the summary
+   cannot replace runtime guards. Existing exact-signature policy does not authorize
+   other mutations or expand live preconditions/delivery evidence. Windows/Office,
+   DPAPI and production backup/GC qualification remain open independently.
+7. Updated Conversation protocol, Session events, plan P3.10 (user clarification),
+   MIGRATION_MAP, PROGRESS and Harness guide. No adapter or dual-write added; isolated
+   owners remain until the coordinated P7 consumer switch deletes old archive paths.

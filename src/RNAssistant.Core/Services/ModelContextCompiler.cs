@@ -661,6 +661,12 @@ namespace RNAssistant.Core.Services
                     Reason = "Identical source bytes and coverage are included in the later result. Reuse that body." });
                 receipt.Deduplicated++;
             }
+            var requirements = workingSet?.Requirements;
+            if (requirements != null && (requirements.UnknownEffects || requirements.RecoveryRequired))
+                atoms.Add(Atom("context-requirements", new ChatMessage { Role = "user", ProtocolMessage = true,
+                    Content = "CONTEXT_REQUIREMENTS:\n" + JsonConvert.SerializeObject(new {
+                        unknownEffects = requirements.UnknownEffects, recoveryRequired = requirements.RecoveryRequired,
+                        instruction = "Unresolved operations remain in the runtime registry. Inspect the specific operation before attempting it; missing details do not prove success or permit repeating an uncertain effect. Unrelated work may continue." }) }, true));
             ContextAtom workingSetNotice = null;
             Action updateWorkingSetNotice = () => {
                 if (workingSetNotice != null) workingSetNotice.Messages[0].Content = "WORKING_SET:\n" +
@@ -890,7 +896,7 @@ namespace RNAssistant.Core.Services
             return atom;
         }
 
-        private static bool ExposesBody(ChatMessage message)
+        internal static bool ExposesBody(ChatMessage message)
         {
             if (message == null || message.ExcludeFromModelContext) return false;
             if (message.SyntheticResourceObservation) return true;

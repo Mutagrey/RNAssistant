@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Services
         internal readonly List<Candidate> Bodies = new List<Candidate>();
         internal int Budget;
         internal int VisitedMessages;
+        internal ContextRequirementSummary Requirements;
 
         public static ContextWorkingSet Restore(ChatSession session, IReadOnlyList<ChatMessage> active,
             int budget, IReadOnlyList<ChatMessage> archive = null)
@@ -45,11 +46,11 @@ namespace RNAssistant.Core.Services
                 if (!message.ExcludeFromModelContext && (message.ResourceEvidence?.Count ?? 0) > 0)
                     result.Bodies.Add(new Candidate(call, message, false));
                 ToolResultWireReadResult wire; string error;
-                if (!ToolResultHistoryReader.TryRead(message, out wire, out error) ||
-                    message.ResourceEffect == null && wire.Result.Status == ToolResultStatus.Ok && message != latestTerminal &&
+                if (!ToolResultHistoryReader.TryRead(message, out wire, out error)) continue;
+                var unknown = RequiresUnknownRetention(message, wire.Result.Status);
+                if (!unknown && message.ResourceEffect == null && wire.Result.Status == ToolResultStatus.Ok && message != latestTerminal &&
                         message.EvidenceReference == null) continue;
-                var mandatory = message == latestTerminal || wire.Result.Status == ToolResultStatus.Unknown ||
-                    message.ResourceEffect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch;
+                var mandatory = message == latestTerminal || unknown;
                 var recovery = message.ExecutionProgress?.Recovery;
                 if (message.RunId == runId && recovery != null && recovery.RetryPolicy != ToolRetryPolicy.None &&
                     message.ExecutionProgress.Outcome == ToolExecutionOutcome.Error &&
@@ -64,6 +65,12 @@ namespace RNAssistant.Core.Services
             return result;
         }
 
+        internal static bool RequiresUnknownRetention(ChatMessage result, ToolResultStatus status)
+        {
+            return status == ToolResultStatus.Unknown || result.ExecutionProgress?.Outcome == ToolExecutionOutcome.Unknown ||
+                result.ResourceEffect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch;
+        }
+
         internal sealed class Candidate
         {
             internal readonly ChatMessage Call;
@@ -72,5 +79,14 @@ namespace RNAssistant.Core.Services
             internal Candidate(ChatMessage call, ChatMessage source, bool required)
             { Call = call; Source = source; Required = required; }
         }
+    }
+
+    // Presence, not an inventory: the index retains every unresolved operation.
+    // This notice conveys no execution/evidence authority.
+    internal sealed class ContextRequirementSummary
+    {
+        internal readonly bool UnknownEffects, RecoveryRequired;
+        internal ContextRequirementSummary(bool unknownEffects, bool recoveryRequired)
+        { UnknownEffects = unknownEffects; RecoveryRequired = recoveryRequired; }
     }
 }

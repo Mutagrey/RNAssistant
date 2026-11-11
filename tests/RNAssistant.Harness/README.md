@@ -94,6 +94,18 @@ bounded working-set/VBA coverage, compiler presentation, exact read cost and the
 scripted host-parity/retained-guard check. Metadata reuse ends with the compilation.
 
 
+`storage optimization: indexed context` covers a backlog above 128 unknown outcomes,
+compact prompt/technical budget, addressed details and exact-call replay guards,
+scope isolation, lost index acknowledgement and rebuild with externalized arguments.
+Recovery reduction is compared with typed contracts, including earlier/failed reads,
+partial/whole coverage and changed dependency revisions. Restart compares the actual
+retained-source request to archive selection at H=100/1000; set
+`RNA_INDEXED_CONTEXT_COST=1` to include H=10000 (durable fixture setup is slow).
+The ready-index measurement excludes fixture writes and repair. Pair schema changes
+with retained-result, shared-index/process repair, run-checkpoint, late-outcome and
+canonical backup/restore cases. These are isolated storage checks, not a production
+cutover or Office qualification.
+
 ## Optional assignments (4b, 2026-11-10)
 
 `agent assignments:` checks explicit result correlation (including failed/declined),

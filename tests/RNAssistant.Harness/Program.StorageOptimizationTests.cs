@@ -224,7 +224,8 @@ namespace RNAssistant.Harness
                     new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(reference, 1) }) }),
                     "pack", new SkillCatalogSnapshot(null), null, 100);
                 var compiler = new ModelContextCompiler(payloads, projection: RNAssistant.Office.Services.ModelToolResultProjection.Instance);
-                var context = new ConversationJournal(paths, "workspace:retained").OpenContext("chat1", first.Position.Sequence + 1, 1);
+                var restarted = new ConversationJournal(paths, "workspace:retained");
+                var context = new[] { restarted.AcceptedCall("chat1", "old-run", "call1").Call, restarted.ReadWindow("chat1", first.Position.Sequence + 1, 1)[0].Fact.Result };
                 AssertEqual(accepted.Content, context[0].Content, "restart uses the original accepted arguments, not a manufactured call");
                 var compiled = compiler.Compile(authority, new ChatMessage[0], context,
                     null, new ToolCatalogEntry[0], new AppSettings(), 20000);
@@ -553,7 +554,7 @@ namespace RNAssistant.Harness
                 var appendReads = journal.Journal.ReadRecords - reads;
                 AssertTrue(appendReads <= 3, "same exact command reads only boundary/accepted call independently of archive length");
                 var restarted = new ConversationJournal(candidatePaths, "workspace:cost");
-                var context = restarted.OpenContext(session.Id, long.MaxValue, 10);
+                var context = restarted.RestoreContext(session.Id, last.RunId, 10, 0).Recent;
                 AssertEqual(20, context.Count, "restart loads fixed active set, not complete history");
                 AssertTrue(restarted.Journal.ReadRecords <= 21, "bounded startup locators plus one boundary");
                 Console.WriteLine("STORAGE_COMPARE " + JsonConvert.SerializeObject(new { historyPairs = history, activeMessages = context.Count,

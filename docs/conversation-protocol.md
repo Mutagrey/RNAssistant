@@ -974,6 +974,26 @@ plain `resume` still inspects/reconciles without calling the model.
 
 ## Conversation context
 
+The isolated journal generation now selects a bounded recent window and retained
+source candidates through its shared index. Unresolved effects/recoveries remain
+addressable there regardless of prompt membership. The compiler carries a fixed-size
+`CONTEXT_REQUIREMENTS` notice, not an inventory of every unknown operation. A long
+history or a large unresolved count alone must not stop the chat. Only a request
+whose actual mandatory content cannot fit its technical budget is refused; history
+is preserved. An unsafe action must be checked against its exact runtime guard.
+The notice, a receipt or an absent detail never proves successful execution or
+supplies source authority. Runtime unknown also remains mandatory in the existing
+production archive path when the tool's wire status is `ok` (opaque actions).
+
+`ConversationJournal.FindContextReplayGuard` looks up the same canonical argument
+signature used by `AgentProgressTracker`, across runs within the exact stream/chat.
+It returns the original terminal for existing policy checks, including explicit
+opaque-action confirmation; it is not dispatch permission. Addressed metadata and
+keyset requirement pages do not hydrate CAS bodies. Shared semantic `core.find/read`
+delivery of those details and production guard/context wiring remain P7 integration
+work. Production still uses the archive recovery described below; no model API,
+second registry or storage writer was enabled by this isolated slice.
+
 `ConversationModelSession` is the Office owner for one start/confirmation invocation's
 accepted model messages, request options/cache, callable evidence and temporary
 media. It composes through `ConversationPromptComposer`, rematerializes the latest

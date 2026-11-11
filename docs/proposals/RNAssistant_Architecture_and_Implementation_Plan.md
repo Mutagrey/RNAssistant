@@ -707,7 +707,7 @@ Continuation по закреплённому immutable snapshot продолжа
 
 9. Удалить history-wide CaptureContextAuthority. Исторический immutable snapshot не требует live hash/статуса Current для повторной доставки; renderer показывает его revision/status. Explicit core.read и mutation проверяют нужный живой target; актуальная publication активных skills/tools не подменяется историческим snapshot.
 
-10. Compaction работает с выбранным окном и сохраняет constraints/anchors. Unknown effects остаются в адресном registry независимо от prompt. Свести инструкции tools/model с этими semantics: не заставлять повторять read из-за нового run/пустого cache и не объявлять post-proposal hydration прежней доставкой.
+10. Compaction работает с выбранным окном и сохраняет constraints/anchors. Unknown effects остаются в адресном registry независимо от prompt. По уточнению пользователя: в prompt передаётся компактная сводка, подробности читаются адресно; количество записей само по себе не блокирует чат. Guard блокирует конкретное небезопасное действие; остановка подготовки допустима при превышении реального технического бюджета обязательными сведениями, без удаления истории. Свести инструкции tools/model с этими semantics: не заставлять повторять read из-за нового run/пустого cache и не объявлять post-proposal hydration прежней доставкой.
 
 **Удалить:** Restore(session.Messages), hot reconstruction typed facts из ToolResultHistoryReader/HistoricalContextProjector, full receipt, full progress snapshots и архивный preflight.
 

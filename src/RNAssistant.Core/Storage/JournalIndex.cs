@@ -57,21 +57,25 @@ namespace RNAssistant.Core.Storage
                 db.Open();
                 using (var command = db.CreateCommand())
                 {
+                    command.CommandText = "PRAGMA foreign_keys=ON"; command.ExecuteNonQuery();
                     command.CommandText = "PRAGMA user_version";
                     var version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version != 0 && version != 8) throw new IndexVersionMismatch();
-                    if (version == 8) return db;
+                    if (version != 0 && version != 9) throw new IndexVersionMismatch();
+                    if (version == 9) return db;
                     using (var transaction = db.BeginTransaction())
                     {
                     command.Transaction = transaction;
                     command.CommandText = "PRAGMA user_version";
                     version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version == 8) { transaction.Commit(); return db; }
+                    if (version == 9) { transaction.Commit(); return db; }
                     if (version != 0) throw new IndexVersionMismatch();
                     command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1";
                     if (command.ExecuteScalar() != null) throw new IndexVersionMismatch();
-                    command.CommandText = "PRAGMA busy_timeout=10000; CREATE TABLE IF NOT EXISTS stream_cursor(stream TEXT PRIMARY KEY,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER); CREATE TABLE IF NOT EXISTS result_fact(stream TEXT,chat TEXT,operation TEXT,fingerprint TEXT,sequence INTEGER,ordinal INTEGER,segment INTEGER,start_offset INTEGER,end_offset INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation),UNIQUE(stream,chat,ordinal)); CREATE INDEX IF NOT EXISTS result_page ON result_fact(stream,chat,sequence); CREATE TABLE IF NOT EXISTS chat_sequence(stream TEXT,chat TEXT,next_e INTEGER,next_t INTEGER,PRIMARY KEY(stream,chat))";
-                    command.CommandText += "; CREATE TABLE IF NOT EXISTS call_fact(stream TEXT,chat TEXT,run TEXT,call TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,terminal TEXT,PRIMARY KEY(stream,chat,run,call),UNIQUE(stream,operation))";
+                    command.CommandText = "PRAGMA busy_timeout=10000; CREATE TABLE IF NOT EXISTS stream_cursor(stream TEXT PRIMARY KEY,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER); CREATE TABLE IF NOT EXISTS result_fact(stream TEXT,chat TEXT,operation TEXT,fingerprint TEXT,sequence INTEGER,ordinal INTEGER,segment INTEGER,start_offset INTEGER,end_offset INTEGER,hash TEXT,first_sequence INTEGER,run TEXT,context_optional INTEGER,PRIMARY KEY(stream,operation),UNIQUE(stream,chat,ordinal)); CREATE INDEX result_run_page ON result_fact(stream,chat,run,sequence); CREATE INDEX result_optional_page ON result_fact(stream,chat,sequence) WHERE context_optional=1; CREATE INDEX IF NOT EXISTS result_page ON result_fact(stream,chat,sequence); CREATE TABLE IF NOT EXISTS chat_sequence(stream TEXT,chat TEXT,next_e INTEGER,next_t INTEGER,PRIMARY KEY(stream,chat))";
+                    command.CommandText += "; CREATE TABLE IF NOT EXISTS call_fact(stream TEXT,chat TEXT,run TEXT,call TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,terminal TEXT,signature TEXT,PRIMARY KEY(stream,chat,run,call),UNIQUE(stream,operation))";
+                    command.CommandText += "; CREATE TABLE context_required(stream TEXT,chat TEXT,operation TEXT,run TEXT,sequence INTEGER,unknown_effect INTEGER,retry INTEGER,uri TEXT,view TEXT,read_scope INTEGER,signature TEXT,repeat_guard INTEGER,PRIMARY KEY(stream,operation)); CREATE INDEX context_unknown ON context_required(stream,chat,sequence) WHERE unknown_effect=1; CREATE INDEX context_repeat_guard ON context_required(stream,chat,signature,sequence) WHERE repeat_guard=1; CREATE INDEX context_recovery_run ON context_required(stream,chat,run,sequence) WHERE retry<>0; CREATE INDEX context_recovery_target ON context_required(stream,chat,uri,retry)";
+                    command.CommandText += "; CREATE TABLE context_dependency(stream TEXT,chat TEXT,operation TEXT,uri TEXT,revision TEXT,PRIMARY KEY(stream,operation,uri),FOREIGN KEY(stream,operation) REFERENCES context_required(stream,operation) ON DELETE CASCADE); CREATE INDEX context_dependency_target ON context_dependency(stream,chat,uri,revision); CREATE TRIGGER context_recovery_cleared AFTER UPDATE OF retry ON context_required WHEN NEW.retry=0 BEGIN DELETE FROM context_dependency WHERE stream=NEW.stream AND operation=NEW.operation; END";
+                    command.CommandText += "; CREATE TABLE context_body(stream TEXT,chat TEXT,body_key TEXT,operation TEXT,sequence INTEGER,PRIMARY KEY(stream,chat,body_key)); CREATE INDEX context_body_recent ON context_body(stream,chat,sequence DESC,operation)";
                     command.CommandText += "; CREATE TABLE conversation_operation(stream TEXT,operation TEXT,kind TEXT,PRIMARY KEY(stream,operation))";
                     command.CommandText += "; CREATE TABLE resource_link(stream TEXT,chat TEXT,run TEXT,call TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation)); CREATE INDEX resource_link_current ON resource_link(stream,chat,run,call,sequence)";
                     command.CommandText += "; CREATE TABLE resource_fact(scope TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER UNIQUE,hash TEXT,first_sequence INTEGER,PRIMARY KEY(scope,operation)); CREATE TABLE resource_scope(scope TEXT PRIMARY KEY,generation INTEGER); CREATE TABLE resource_head(scope TEXT,uri TEXT,operation TEXT,PRIMARY KEY(scope,uri)); CREATE TABLE resource_attempt(scope TEXT,attempt TEXT,operation TEXT,PRIMARY KEY(scope,attempt)); CREATE TABLE resource_revision(scope TEXT,uri TEXT,revision TEXT,operation TEXT,PRIMARY KEY(scope,uri,revision)); CREATE TABLE resource_view(scope TEXT,uri TEXT,revision TEXT,view TEXT,coverage TEXT,operation TEXT,PRIMARY KEY(scope,uri,revision,view,coverage))";
@@ -84,7 +88,7 @@ namespace RNAssistant.Core.Storage
                     command.CommandText += "; CREATE TABLE run_fact(stream TEXT,operation TEXT,chat TEXT,run TEXT,revision INTEGER,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation)); CREATE TABLE run_current(stream TEXT,chat TEXT,operation TEXT,PRIMARY KEY(stream,chat)); CREATE TABLE run_identity(stream TEXT,chat TEXT,run TEXT,PRIMARY KEY(stream,chat,run))";
                     command.CommandText += "; CREATE TABLE control_fact(stream TEXT,operation TEXT,chat TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation)); CREATE TABLE control_current(stream TEXT,chat TEXT,operation TEXT,PRIMARY KEY(stream,chat))";
                     command.ExecuteNonQuery();
-                    command.CommandText = "PRAGMA user_version=8"; command.ExecuteNonQuery();
+                    command.CommandText = "PRAGMA user_version=9"; command.ExecuteNonQuery();
                     transaction.Commit();
                     }
                 }
