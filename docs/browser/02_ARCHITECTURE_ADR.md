@@ -3,8 +3,13 @@
 Дата: 2026-11-11. Общая архитектура — **Proposed**; P1, P2a и P2b реализованы / In Review.
 Согласованы документы + план и страницы во вкладках существующего Dockview.
 Native renderer остаётся отдельным решением по evidence. Контекст — [аудит](01_AUDIT.md).
+Автоматический lifecycle Browser-вкладки **Approved 2026-11-11**; решение ниже
+заменяет прежнее предложение сохранять страницу после закрытия вкладки.
 
 ## Владельцы и границы
+
+Схема ниже — целевой native/agent контур P5/P6. Для текущего saved HTML новый
+BrowserSessionService/registry не требуется: renderer принадлежит существующей view.
 
 ```text
 DockWorkspace → Browser View / PreviewSurface → target presentation adapter
@@ -92,20 +97,38 @@ bridge запроса, I/O, session store или registry нет. Web сверя
 пересекает capabilities с поддержанными controls; несоответствие не создаёт iframe.
 Capabilities описывают доступные команды, не выдают authority и не гарантируют успех:
 каждая операция повторяет прежние guards/preflight. Semantic tool binding — P6;
-plugin grants — P3, session lifetime — P2c, managed source preview ещё впереди.
+plugin grants — P3, проверка автоматического lifetime — P2c, managed source preview ещё впереди.
 
 ## Lifetime, authority и восстановление
 
-В P1 сохраняется нынешний lifetime provider: close освобождает iframe. Отделение
-живой session вводится P2 с явными UI-командами, а не скрытым изменением P1.
+Решение пользователя от 2026-11-11: обычная Browser-страница живёт, пока открыта её
+вкладка. Switch/hide/move/split/layout restore сохраняют тот же renderer и ввод.
+Закрытие Browser-вкладки освобождает renderer, readers/leases и её временные bindings;
+повторное открытие загружает target заново. Несохранённый ввод внутри preview не
+восстанавливается. Сохранённые исходники, данные и durable annotations/evidence
+остаются у domain owner. Source editor сохраняет существующий dirty/`canClose` guard.
 
-В P2 hide/move/split закрывают только presentation/читателей view. Close Dock tab
-отсоединяет view; session доступна через список sessions и может быть открыта снова.
-«Закрыть сессию» освобождает renderer/leases и инвалидирует её bindings; «Остановить
-запуск» остаётся отдельной командой существующего runtime. Dirty editor использует
-свой `canClose`; закрытие session не обходит несохранённые изменения.
+Список sessions, отдельная команда «Завершить сессию» и лимит живых страниц с уже
+закрытыми вкладками не вводятся. Существующие bounds открытых material views остаются.
+Native window Dismiss/скрытие панели не равны закрытию Browser-вкладки. Закрытие UI
+не отменяет Run; будущий browser tool получает явный closed/stale target вместо
+автоматического переоткрытия страницы или повторения действия.
 
-Sessions private для исходного conversation по умолчанию. Явно shared session
+Альтернатива с detached sessions отложена до отдельного согласованного сценария
+фоновой browser automation/shared ownership. Для текущего HTML preview она добавляет
+невидимые ресурсы и второе пользовательское управление lifetime без необходимой задачи.
+Техническое отделение renderer от Dock placement сохраняется; независимый lifetime
+после закрытия вкладки из него не следует. P2c проверяет текущих owners, не вводит
+заранее Application registry и новые bridge commands.
+
+При проверке скрытия учитывать: CSS-hidden iframe сам по себе не получает новое
+visibility state; нельзя обещать остановку его JavaScript только от скрытия view
+([Page Visibility API](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API)).
+Сохранение пользовательских данных и освобождение runtime resources — разные задачи;
+на `unload` как единственный cleanup/save hook не полагаться
+([Page Lifecycle](https://developer.chrome.com/docs/web-platform/page-lifecycle-api)).
+
+В будущем native/agent контуре sessions private для исходного conversation по умолчанию. Явно shared session
 допускает только участников того же разрешённого document/workspace scope; каждый
 вызов проверяется снова. Model wait/confirmation не удерживают session или Office
 gate. Mutations сериализуются; human input инвалидирует конфликтующий prepared plan.

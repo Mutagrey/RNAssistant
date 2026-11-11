@@ -265,7 +265,11 @@ verified metadata; exact scope/URI проверяются до применен�
 Пять isolated host-neutral checks и три browser fixtures прошли; baseline/final
 read counts, iframe/drafts и geometry сохранены. Старый raw import counter failure
 воспроизводится без P2b и вынесен в риск. [Evidence](../browser/05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
-Далее P2c session owner. Visual acceptance и Windows/controller qualification открыты.
+P2b закоммичен `36a44073`. Решением пользователя 2026-11-11 P2c изменён на проверку
+automatic lifecycle existing views: hide/move сохраняют страницу, close освобождает,
+reopen загружает заново. Незавершённый код detached sessions удалён; список/отдельное
+завершение и новый registry не вводятся. [Следующий scope](../browser/04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
+Visual acceptance и Windows/controller qualification открыты.
 
 ## Universal Browser P2a: копия исходников — In Review, 2026-11-10
 

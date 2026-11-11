@@ -242,8 +242,13 @@ live сохраняет preview. Старый native HTML classifier удалё�
 сбой воспроизводится без P2b. Baseline geometry/read counts и текущие lifetime
 сохранены. [Ревью/проверки](../browser/05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
 
-Далее P2c sessions; preview standalone source, перенос
-зависимостей, настоящий diff и external native browser остаются в плане. Концепция
+P2c уточнён пользователем 2026-11-11: automatic lifecycle, без списка sessions,
+отдельного завершения и нового registry. Hide/move/split/restore сохраняют страницу;
+close вкладки освобождает её, reopen загружает заново. Следующий шаг — existing
+saved HTML coverage и готовая страница close/reopen/late cleanup; затем live dirty
+guards. Исправления только по подтверждённым gaps у текущих owners.
+[Scope и порядок](../browser/04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
+Preview standalone source, перенос зависимостей, настоящий diff и external native browser остаются в плане. Концепция
 Approved; визуальное принятие production и Windows/Office evidence остаются Open.
 
 ## Durable wait: existing Inbox control — In Review, 2026-11-04

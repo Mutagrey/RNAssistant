@@ -121,6 +121,9 @@ run/tool facts — kernel/trajectory. Новые observations должны ра�
   [контракт](03_CONTRACTS.md#model-api).
 - **UB-3:** persistent annotation status/reanchoring, sessions без views и safe
   screenshot redaction ещё не реализованы. Наличие draft/selection их не доказывает.
+  Уточнение 2026-11-11: sessions после закрытия Browser-вкладки исключены из P2c
+  решением пользователя; это отложенный сценарий native/agent automation, а не gap
+  текущего preview. Annotation/redaction остаются открытыми.
 - **UB-4:** saved HTML код pinned, но dynamic-head данные получены на открытие/reload;
   future compare должен различать code revision и observation data, иначе diff вводит в заблуждение.
 - **UB-5:** raw HTML пока inert, plugin source и release имеют разные authority.

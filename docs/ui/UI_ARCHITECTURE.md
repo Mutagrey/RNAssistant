@@ -124,7 +124,10 @@ capabilities из verified metadata тех же owners в существующи
 проверка сравнивает chat/document/exact source; HtmlArtifactView, MaterialView и live
 HtmlWorkspaceView используют результат перед применением. Нет второго registry/store
 или дополнительного запроса. Raw HTML inert; read-only live сохраняет доступный source.
-Новый descriptor не заменяет mutation guards или session owner, который остаётся P2c.
+Новый descriptor не заменяет mutation guards. P2c после решения от 2026-11-11
+проверяет existing lifecycle owners, без нового session registry/bridge API:
+hide/move/split/restore удерживают renderer; close Browser-вкладки освобождает его,
+reopen загружает страницу заново. Run и сохранённые данные принадлежат прежним owners.
 
 «Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
 тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.

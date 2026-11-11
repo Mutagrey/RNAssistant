@@ -114,6 +114,11 @@ capabilities. Геометрия/CSS не менялись: baseline/final contr
 overflow 0 на 1280/100% и 420/125%. [Замеры](review/browser-p2b.json),
 [source-only](review/browser-p2b-source-only.png), [read-only live](review/browser-p2b-live-readonly.png).
 
+Lifecycle Approved 2026-11-11: обычный × Browser-вкладки завершает страницу.
+Новых session controls, списка сессий и дополнительного статуса закрытой живой страницы
+не вводим. Hide/move сохраняют view; dirty source guard остаётся прежним.
+P2c не меняет геометрию/tokens и проверяет lifecycle существующих компонентов.
+
 [Замеры](review/browser-toolbar.json) сравнивают production и frozen Demo при одинаковых
 viewport/zoom/theme. Production controls используют общий compact token 30 CSS px,
 SVG 16 px; source text 12 px. Сохранённое содержимое проверено при 1280/100% и

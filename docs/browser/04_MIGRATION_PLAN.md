@@ -1,7 +1,8 @@
 # Universal Browser: план реализации
 
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
-P2c–P7 **Planned / Proposed**. Дата: 2026-11-11. Пользователь продолжил работу после
+P2c automatic lifecycle — scope **Approved**, проверка **Planned**; P3–P7 **Planned / Proposed**.
+Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
 [исходник](00_SOURCE_SPEC.md), [аудит](01_AUDIT.md), [ADR](02_ARCHITECTURE_ADR.md),
 [контракты](03_CONTRACTS.md). Общая очередь UI остаётся в
@@ -14,7 +15,7 @@ docs-only P0; реализованы описанные ниже срезы. О�
 |---|---|---|
 | P0 Audit/ADR | Web/Application: реальная source/authority map, reuse/remove, contracts, Windows spike protocol | Docs-only diff/links/source integrity; native и runtime evidence остаются открыты |
 | P1 HTML Artifact | Web: address/modes в общем PreviewSurface, один saved HTML consumer | Сохранены current features/limits; browser baseline + визуальное ревью; локальный mode toolbar удалён |
-| P2 Targets/Sessions | P2a import и P2b HTML target/capabilities реализованы; далее session owner и detach/close | Import bounds/read-back/no-replay, exact scope/late/dirty checks; session lifetime ещё открыт |
+| P2 Targets/Lifecycle | P2a import и P2b HTML target/capabilities реализованы; P2c проверяет automatic lifetime existing views | Hide/move сохраняют страницу; close освобождает ресурсы; reopen загружает заново; dirty/late/Run guards сохранены |
 | P3 Plugin | Plugin Application + Web: source/candidate/release adapters, общий navigation/modes UI | Grants/revoke/check/publish/restore неизменны; удалены переведённые provider UI controls, instance ownership остаётся |
 | P4 Versions/Annotations | Domain owners + Web: bounded diff, version semantics, events-backed annotations и anchors | Branch/active pointer, unresolved/verified resolution, view-close retention; нет BrowserRevisionStore/Annotation DB |
 | P5 External WebView2 | Native adapter + Application: renderer по результату spike, profiles/navigation/popup/download policy | Windows embedding matrix либо явный управляемый separate-window fallback; привилегированный Shell control не используется |
@@ -67,7 +68,7 @@ grants или HTML editor. Новых script files/loader/registry не треб
   копирование ссылки, export и сообщения ошибок работают через прежних owners.
 - Input в preview, выбранный файл/source page и mode переживают switch/hide/move/split/
   layout restore; close освобождает provider и поздние leases. Это существующий P1
-  view lifetime, ещё не обещание detached BrowserSession P2.
+  view lifetime, подтверждённый решением пользователя от 2026-11-11.
 - Нет второго iframe/второго mode switch и полной копии source в DOM. Сохраняются
   лимиты 16 MiB preview transfer, 100 project files, 32 000 source chars/page,
   existing snapshot/download bounds и максимум шесть material views.
@@ -114,12 +115,12 @@ CAS-only source store. Owner — Application Workspace + существующи�
    новый browser flow и saved Browser fixture проходят. Старый transfer roundtrip падает
    также на чистом baseline при следующем HTML-tool вызове; риск записан отдельно.
 
-P2b реализован ниже. P2c — runtime
-session owner, detach/reattach и отдельное закрытие session с UI для повторного открытия.
-До P2c закрытие вкладки сохраняет прежний lifetime; новый ID не записывается в Dock layout.
+P2b реализован ниже. P2c проверяет автоматический lifetime существующих views:
+закрытие вкладки завершает страницу; detached sessions и новый UI не вводятся.
+Runtime ID не записывается в Dock layout.
 Pointer-routing/Windows evidence остаются открытыми и не блокируют domain-срез P2a.
 Import и managed source backing реализованы. Перенос зависимостей, standalone preview,
-sessions, Windows/controller delivery и пользовательское визуальное принятие открыты.
+native/agent session APIs, Windows/controller delivery и пользовательское визуальное принятие открыты.
 
 ## P2b: HTML resolver и capabilities — In Review, 2026-11-11
 
@@ -138,13 +139,37 @@ data/revision owners, bindings, caches или operation guards. Классифи
 saved reads 2 при пяти выборах, source 32K, controls 30 px, overflow 0 на 1280/100%
 и 420/125%; retained draft/frame и late cleanup сохранены. Отдельный raw import
 fixture падает также без P2b: [evidence](05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
-UI/Windows acceptance остаются открытыми. Далее ровно P2c: session owner, detach /
-reattach и явное закрытие session; plugin/semantic tools/native URL не входят в P2b.
+UI/Windows acceptance остаются открытыми. Далее P2c: проверка automatic lifecycle;
+plugin/semantic tools/native URL не входят в P2b.
+
+## P2c: автоматический lifecycle — scope Approved, 2026-11-11
+
+Owner: Web BrowserObjectView/BrowserViewer, DockWorkspace placement и существующие
+domain owners. Решение пользователя заменяет прежний план detach/reattach, списка
+сессий и отдельного завершения. Начатый незавершённый код этого варианта удалён;
+P2b (`36a44073`) сохранён. Нового registry, bridge API или UI для sessions нет.
+
+1. Сначала saved HTML: сверить existing coverage и проверить готовую страницу при
+   switch/hide/move/split/restore, затем close → удаление iframe → reopen с новой
+   загрузкой и исходным вводом. Добавлять только отсутствующие assertions.
+2. Проверить поздний export/read reply после close: lease закрывается, страница не
+   воскресает. При scope switch ответ не попадает в другую view; закрытие не отменяет
+   импорт или Run. Ограничения открытых material views сохраняются.
+3. Затем сверить live HTML dirty/`canClose` и provider cleanup с существующими checks;
+   plugin lifetime сверять с его instance owner в P3, не переносить его в новый store.
+4. Исправлять только воспроизводимые gaps у текущего владельца. Если поведение уже
+   покрыто, достаточно evidence/docs; не вводить сервис ради формального выполнения P2c.
+5. Пользовательские данные/история/annotations принадлежат прежним domain owners;
+   DOM/формы после close/restart не replay. Windows/WebView2 evidence отдельно.
+
+Независимая фоновая browser session возможна позднее только с явным сценарием,
+owner и правилами завершения в P5/P6. Она не является условием текущего P2c/P3.
 
 ## Развитие после P1
 
-P2 добавляет новые typed browser records/commands в existing Core/Contracts и
-Application BrowserSessionService, runtime resource binding — через Resource Gateway.
+P2 использует typed target/import contracts и existing lifecycle owners.
+Новые session records/commands понадобятся по scope native/agent P5/P6;
+runtime resource binding остаётся у Resource Gateway.
 Web target adapters делегируют HtmlWorkspaceView/Source/Editor и MaterialView; raw HTML
 остаётся inert до явного preview. Exact route keys/rna ссылки сохраняются. Runtime
 session identity нельзя сериализовать в Dock layout как восстановленную живую страницу.

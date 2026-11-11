@@ -132,8 +132,12 @@ P2b (2026-11-11): modes/actions подтверждает typed runtime target. �
 saved target проектные действия скрыты; ошибка привязки показывает явный отказ.
 Source-only не создаёт iframe. Read-only live оставляет preview, но отключает редактор
 и аннотации; чужой ответ не заменяет прежнее содержимое. Raw HTML остаётся текстом.
-Версии показывает только provider с историей. Произвольные URL, browser sessions
-ещё в плане. Import добавляет source workspace, без нового session lifetime.
+Версии показывает только provider с историей. Произвольные URL ещё в плане.
+Решение 2026-11-11: Browser-вкладка сохраняет страницу/ввод при скрытии и переносе;
+× вкладки освобождает страницу, повторное открытие загружает её заново. Списка sessions
+и отдельного «Завершить сессию» нет; native window Dismiss остаётся скрытием окна.
+Dirty source editor сохраняет свой guard. Import добавляет source workspace,
+закрытие Browser не отменяет import/Run и не удаляет сохранённые данные.
 [Широкий вид](review/browser-address-wide.png),
 [420 px / 125%](review/browser-address-narrow.png); [процедура ревью](../browser/05_TEST_MATRIX.md#toolbar-review).
 

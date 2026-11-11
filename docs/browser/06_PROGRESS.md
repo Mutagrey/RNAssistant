@@ -4,6 +4,18 @@
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — будущий native adapter. P1, P2a и P2b реализованы, **In Review**.
 
+## P2c: пересмотр lifetime — Approved, 2026-11-11
+
+Пользователь утвердил автоматическое управление: switch/hide/move/split сохраняют
+страницу и ввод; close вкладки освобождает renderer/leases; reopen загружает target
+заново. Отдельные список sessions/команда завершения и лимит закрытых живых страниц
+не нужны. Run, сохранённые данные и dirty source guards остаются у прежних owners.
+Начатый незавершённый код detached sessions удалён; P2b закоммичен `36a44073`.
+План/контракты и canonical UI docs приведены к [решению](02_ARCHITECTURE_ADR.md#lifetime-authority-и-восстановление).
+P2c теперь проверяет existing lifecycle и устраняет только подтверждённые gaps;
+новая Application session инфраструктура не является deliverable этого среза.
+Полная P2c qualification не заявлена; visual/Windows evidence остаётся открытым.
+
 ## P2b: цели и возможности HTML — In Review, 2026-11-11
 
 Общий Application resolver проверяет exact source/scope/kind по metadata существующих
@@ -212,7 +224,7 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Следующий implementation slice — P2c: runtime session owner, detach/reattach и явное
-закрытие session. До него close вкладки сохраняет прежний lifetime.
-[План](04_MIGRATION_PLAN.md#p2b-html-resolver-и-capabilities--in-review-2026-11-11).
+Следующий шаг P2c — сверить coverage saved HTML и проверить close готовой страницы /
+reopen, отсутствие утечек и позднего resurrection, сохранив hide/move/restore и ввод.
+[План](04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
 Визуальное ревью P1/P2a/P2b, pointer routing и Windows evidence — отдельные открытые gates.

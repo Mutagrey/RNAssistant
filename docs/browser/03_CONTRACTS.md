@@ -4,7 +4,8 @@
 Web и native host — consumers. Это минимальные границы будущих P2–P6, не объявление
 существующего runtime API. P1 presentation contract в конце реализован в Web,
 статус In Review; P2a import и P2b HTML resolver реализованы ниже.
-Sessions и P3–P6 остаются Proposed.
+Автоматический lifetime вкладки Approved 2026-11-11; новые session APIs и P3–P6
+остаются Proposed. P2c не добавляет UI/bridge управления detached sessions.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
@@ -48,7 +49,7 @@ state Ready подтверждает разрешённый source, а не во
 | Тип | Минимальное содержание | Единственный owner |
 |---|---|---|
 | `BrowserTarget` | Закрытый kind: external_web/html_resource/html_workspace/html_artifact/plugin_source/plugin_release; exact identity, authority scope, revision policy | Application resolver делегирует domain owner |
-| `BrowserSession` | Runtime session ID, bound document/workspace + conversation, private/shared access, target, generation, renderer/profile, navigation state, capabilities, lifecycle | Application BrowserSessionService |
+| `BrowserSession` | Будущий native/agent runtime: bound scope, target, generation, renderer/profile, capabilities; обычный lifetime заканчивается с вкладкой | Application owner P5/P6; новый registry в P2c не вводится |
 | `BrowserObservation` | Session/document generation, observed URL/title, bounded semantic nodes, runtime element bindings, snapshot/CAS ref, completeness/bounds, redaction metadata | Renderer capture + Resource Gateway |
 | `BrowserOperation` | Runtime operation ID, actor/run/step, prepared exact target/element, preconditions, policy admission, dispatch fact, verification/result/effect | Application + existing ToolRuntime/evidence |
 | `BrowserAnnotation` | Exact target/revision/document, existing selection body ref, comment/author, semantic/source/visual anchors, state и verification ref | Application annotation service + existing events/CAS |
@@ -84,8 +85,11 @@ navigation, interaction, screenshot, annotations, versions/restore/apply/publish
 
 1. Open разрешает target, фиксирует owner scope и доступ, затем создаёт renderer.
    Ошибка открытия не публикует готовую session и освобождает частичные ресурсы.
-2. Attach/activate/deactivate/detach управляют view. В P2 detach сохраняет session;
-   explicit close session освобождает renderer и bindings. Close view не отменяет Run.
+2. Activate/deactivate и временный DOM detach при Dock move/split/restore сохраняют
+   страницу и ввод. Закрытие вкладки освобождает renderer/leases/bindings; повторное
+   открытие создаёт новую страницу. Отдельных detach/close-session UI commands нет.
+   Dirty source editor использует existing `canClose`. Закрытие view не отменяет Run;
+   future operation на закрытом target получает явный отказ без auto-reopen/retry.
 3. Навигация в новый document меняет generation и инвалидирует element bindings.
    DOM mutation сама по себе не инвалидирует всё: перед действием проверяются exact
    document, frame, единственность цели, состояние и interactability.
@@ -113,7 +117,7 @@ Shared session задаётся явно, без фиксированных agen
 | Capability исходника | Model-facing маршрут | Внутреннее выполнение |
 |---|---|---|
 | list / inspect / snapshot / versions / annotations | `core.find/read/search` с semantic target | Browser resource provider получает bounded observation/metadata, runtime pins cursor/document/element refs |
-| open / focus / navigate / close | Семейство `browser.*` действий, закрытые schemas по действию | Application session owner; close различает view и session в UI, tool close закрывает session |
+| open / focus / navigate / close | Будущее семейство `browser.*` действий, закрытые schemas по действию | Application owner; close завершает страницу и её bindings, отдельного session-close UI по умолчанию нет |
 | click / fill / select / scroll / keypress / wait | Семантический page target + role/name/context цели, содержимое/условие | Runtime resolve → exact binding → admission → recheck → dispatch → verify |
 | screenshot | `browser.screenshot` с semantic target | Безопасный capture в existing CAS/media pipeline, не base64/полный DOM в Tool Result |
 | annotate | `browser.annotate` с semantic target/comment | Existing selection intake + общий annotation lifecycle |
