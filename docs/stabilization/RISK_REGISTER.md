@@ -52,11 +52,10 @@ tool contract. [Evidence P2a](../browser/05_TEST_MATRIX.md#результаты-
 
 ## Standalone codec runner — 2026-11-05
 
-Owner: Core ModelProtocol tests. `RNAssistant.ProtocolTests/Program.cs` вызывает
-`ModelProtocolWire.FormatRepairContent` без обязательного `rejectedContent` (CS7036).
-Обнаружено при проверке send batches; отдельный runner не квалифицирован и здесь
-не ремонтируется. Schema/parser/runtime проверяются соответствующими cases основного
-host-neutral Harness. Windows/Office evidence остаётся отдельным.
+Closed host-neutral — 2026-11-11. Owner: Core ModelProtocol tests. Исправлены вызов
+`FormatRepairContent` и ожидания optional message / singleton normalization.
+Codec/export и независимый JSON Schema validator проходят. Kernel, no-replay и
+доставка по-прежнему проверяются в Harness; Windows/Office evidence остаётся отдельным.
 
 ## Группы чатов — 2026-11-05
 

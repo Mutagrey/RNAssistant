@@ -30,6 +30,12 @@ dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.cs
 
 Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
+Workspace receipt/reconnect, run/approval lifetime and recovery Web tests share
+[`preview-session.js`](../web/preview-session.js): `withPreviewPage` owns the preview
+server, browser and cleanup. Callbacks retain scenario setup/assertions; `chatNode`
+addresses the single visible Chat View. Split-view tests need explicit target scopes.
+`RNAssistantMockBridge.emit` delivers native fixture envelopes without source rewriting.
+
 ## Storage/context optimization — 2026-11-10
 
 `storage optimization:` selects isolated rotation/tail/protection tests, common
@@ -112,8 +118,8 @@ unknown delivery without replay, ordinary/mixed mutation refusal and cancelled t
 Use the host-neutral Harness; no Office/VSTO validation is required on this host.
 These six cases plus `conversation v8: batches` and `tool pack: core and atomic`
 pass locally (eight total); this does not qualify Windows/Office or a real provider.
-The standalone ProtocolTests runner has a stale FormatRepairContent call (see Risk
-Register); it is not evidence for this slice.
+The standalone [codec/schema runner](../RNAssistant.ProtocolTests/README.md) checks
+wire shapes; runtime send/batch evidence belongs to the Harness cases above.
 
 ## Named chat groups (4a.1, 2026-11-05)
 

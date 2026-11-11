@@ -356,11 +356,5 @@ namespace RNAssistant.Application.Conversations
         private static AgentDeliveryReceipt Receipt(AgentConversationEndpoint target, string text, string messageId, bool assignment)
         { return new AgentDeliveryReceipt { Status = "queued", AgentId = target.Address.AgentId, MessageId = messageId, Title = target.Address.Title, Text = text, Assignment = assignment }; }
 
-        private static void RequireAddress(AgentConversationEndpoint target, string source, string workspaceId)
-        {
-            if (source != null && (target.Address.Source != source || target.Address.WorkspaceId != workspaceId))
-                throw new ArgumentException("Чат не принадлежит указанной области.");
-        }
-
     }
 }

@@ -363,8 +363,8 @@ orchestration; оба окружения переключаются в одно�
 старые per-environment lock acquisition, worker tracking и input-consume loops
 удалены. Office `ChatRunRegistry` удалён: live handle, exact cancellation и
 резервация запуска принадлежат `ConversationRunOwner` в Application у обоих
-потребителей. Временный Office session snapshot хранится там через Office
-clone adapter; общая UI-проекция остаётся открытой. Workspace named pipe
+потребителей. Owner хранит только live metadata; session snapshot и Office clone
+adapter удалены в P3d. Общая UI-проекция остаётся открытой. Workspace named pipe
 доставляет Stop этому owner, а прежний локальный run token из pipe удалён.
 Короткая глобальная Office coordination тоже
 принадлежит Application; Workspace использует только точную резервацию.

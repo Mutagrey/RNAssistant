@@ -22,9 +22,8 @@ def main(directory):
         value = json.loads(case["raw"])
         errors = list(validator.iter_errors({"response": value}))
         valid = not errors
-        assert valid == (case["schema_valid"] or case["name"] == "duplicate evidence"), (case["name"], [error.message for error in errors])
+        assert valid == case["schema_valid"], (case["name"], [error.message for error in errors])
         if valid != case["parser_valid"]:
-            assert case["name"] in ("omitted optional logical form", "duplicate evidence") or case["error_code"] == "contradictory_outcome", case["name"]
             projections += 1
         checked += 1
     no_tools = json.loads((root / "schema-no-tools.json").read_text())

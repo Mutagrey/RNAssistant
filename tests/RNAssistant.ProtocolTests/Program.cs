@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.ModelProtocol;
@@ -56,8 +57,9 @@ internal static class Program
             foreach (var name in new[] { "action", "reason", "message" })
             {
                 var code = name == "action" ? "invalid_action" : "missing_" + name;
-                Case(action + " missing " + name, Remove(valid, name), code);
-                Case(action + " null " + name, Change(valid, name, JValue.CreateNull()), code);
+                var optional = name == "message" && action != "finish";
+                Case(action + " missing " + name, Remove(valid, name), optional ? null : code);
+                Case(action + " null " + name, Change(valid, name, JValue.CreateNull()), optional ? null : code, schemaValid: false);
                 Case(action + " wrong type " + name, Change(valid, name, new JObject()), code);
             }
             foreach (var field in new[] { "tool_calls", "decision", "results", "outcome", "id", "final", "status", "criterion_ref" })
@@ -76,8 +78,10 @@ internal static class Program
             Case("bad decision " + value.Type, Change(Envelope("reflection"), "decision", value), "missing_decision");
         Case("missing decision", Remove(Envelope("reflection"), "decision"), "missing_decision");
         Case("missing results", Remove(Envelope("finish"), "results"), "missing_finish_results");
-        foreach (var value in new JToken[] { JValue.CreateNull(), new JObject(), new JValue("[]") })
+        foreach (var value in new JToken[] { JValue.CreateNull(), new JValue("[]") })
             Case("bad results " + value.Type, Change(Envelope("finish"), "results", value), "missing_finish_results");
+        Case("empty singleton result", Change(Envelope("finish"), "results", new JObject()), "invalid_finish_results");
+        Case("singleton result normalized", Change(Finish(Claim("satisfied")), "results", Claim("satisfied")), schemaValid: false);
         foreach (var assessment in new[] { "satisfied", "partially_satisfied", "unverified", "not_satisfied" })
         {
             Case("claim " + assessment, Finish(Claim(assessment)));
@@ -96,10 +100,11 @@ internal static class Program
             Case("bad claim " + bad.Type, Finish(bad), "invalid_finish_results");
         Case("legacy summary forbidden", Finish(Change(Claim("satisfied"), "summary", "Old result")), "invalid_finish_results");
         Case("empty criterion", Finish(Change(Claim("satisfied"), "criterion", " \t")), "invalid_finish_results");
-        foreach (var bad in new JToken[] { new JValue("call-1"), new JArray(" "), new JArray(1), new JArray(JValue.CreateNull()) })
+        Case("singleton evidence normalized", Finish(Change(Claim("satisfied"), "evidence", "call-1")), schemaValid: false);
+        foreach (var bad in new JToken[] { new JArray(" "), new JArray(1), new JArray(JValue.CreateNull()) })
             Case("bad evidence " + bad.ToString(Formatting.None), Finish(Change(Claim("satisfied"), "evidence", bad)), "invalid_finish_results");
-        Case("duplicate evidence case", Finish(Change(Claim("satisfied"), "evidence", new JArray("E1", "e1"))), "duplicate_evidence");
-        Case("duplicate evidence", Finish(Change(Claim("satisfied"), "evidence", new JArray("call-1", "call-1"))), "duplicate_evidence");
+        Case("duplicate evidence case", Finish(Change(Claim("satisfied"), "evidence", new JArray("E1", "e1"))), "duplicate_evidence", schemaValid: true);
+        Case("duplicate evidence", Finish(Change(Claim("satisfied"), "evidence", new JArray("call-1", "call-1"))), "duplicate_evidence", schemaValid: true);
         foreach (var bad in new JToken[] { new JValue("ok"), new JValue("Satisfied"), new JValue(0) })
             Case("bad assessment " + bad, Finish(Change(Claim("satisfied"), "assessment", bad)), "invalid_assessment");
     }
@@ -143,8 +148,10 @@ internal static class Program
     {
         var execute = Envelope("execute");
         Case("missing calls", Remove(execute, "tool_calls"), "empty_execute_calls");
-        foreach (var value in new JToken[] { new JArray(), JValue.CreateNull(), new JObject(), new JValue("[]") })
+        foreach (var value in new JToken[] { new JArray(), JValue.CreateNull(), new JValue("[]") })
             Case("empty calls " + value.Type, Change(execute, "tool_calls", value), "empty_execute_calls");
+        Case("empty singleton call", Change(execute, "tool_calls", new JObject()), "invalid_tool_call");
+        Case("singleton call normalized", Change(execute, "tool_calls", Call("probe.read")), schemaValid: false);
         foreach (var count in new[] { 2, 32, 33 })
             Case(count + " reads", Change(execute, "tool_calls", new JArray(Enumerable.Range(0, count).Select(i => Call("probe.read")))), count > 32 ? "too_many_calls" : null);
         Case("single mutation", Change(execute, "tool_calls", new JArray(Call("probe.write"))));
@@ -245,12 +252,23 @@ internal static class Program
         foreach (ConversationResponseError kind in Enum.GetValues(typeof(ConversationResponseError)))
         {
             if (kind == ConversationResponseError.None) continue;
-            var content = ModelProtocolWire.FormatRepairContent(kind, new string('x', 2000), 2, 3);
-            var root = JObject.Parse(content.Substring("FORMAT_REPAIR:\n".Length));
+            var rejected = new string('x', ModelProtocolWire.MaximumFormatRepairResponseBytes + 1);
+            var content = ModelProtocolWire.FormatRepairContent(kind,
+                new string('"', ModelProtocolWire.MaximumFormatRepairErrorBytes), 2, 3,
+                rejected, "json_schema", true);
+            var root = JObject.Parse(content);
+            Check((string)root["type"] == "format_repair" && !(bool)root["dispatched"], "repair is unexecuted diagnostic data");
             Check((string)root["code"] == ConversationResponseParseResult.Code(kind), "repair exact code " + kind);
-            Check(((string)root["error"]).Length == 1024 + "...[truncated]".Length, "bounded repair error");
+            Check((bool)root["error_truncated"] && Encoding.UTF8.GetByteCount(JsonConvert.ToString((string)root["error"]))
+                <= ModelProtocolWire.MaximumFormatRepairErrorBytes, "repair error bounds include JSON escaping");
+            var quote = (JObject)root["rejected_response"];
+            Check((string)quote["response_format"] == "json_schema" && (bool)quote["native_tool_calls_observed"],
+                "repair preserves rejected transport metadata");
+            Check((bool)quote["content_truncated"] && rejected.StartsWith((string)quote["content"], StringComparison.Ordinal) &&
+                Encoding.UTF8.GetByteCount(JsonConvert.ToString((string)quote["content"])) <= ModelProtocolWire.MaximumFormatRepairResponseBytes,
+                "repair marks a bounded rejected prefix");
             Check((int)root["attempt"] == 2 && (int)root["max_attempts"] == 3, "repair preserves budget information");
-            Check(((string)root["instruction"]).Contains(ModelProtocolWire.ActionGuidance), "repair uses canonical guidance");
+            Check(((string)root["instruction"]).Contains(ModelProtocolWire.RepairResponseGuidance(false, true)), "repair uses canonical guidance");
             Check(!content.Contains("conversation-response-v7") && !content.Contains("action=done"), "no old wire instructions");
         }
     }

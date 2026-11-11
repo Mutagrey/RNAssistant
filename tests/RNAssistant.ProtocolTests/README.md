@@ -19,8 +19,10 @@ not an unsupported provider keyword. JSON lexical/depth failures are checked by 
 parser; duplicate keys must not be flattened by the Python validator. The existing
 optional-argument transport projection is explicit: strict schema requires nullable
 optional fields, while the same local parser also permits their omission under
-`json_object`; accepted nulls are removed before runtime. Closed action/result
-shapes, required arguments and batch constraints have no mode-specific exceptions.
+`json_object`; accepted nulls are removed before runtime. Both modes share local
+singleton-list / optional-null narration normalization; exported schemas retain
+canonical arrays and non-null narration. Fixtures declare parser/schema validity
+separately, including local evidence uniqueness and outcome consistency.
 
 Synthetic endpoint probes (local Ollama only; no tool is dispatched):
 
@@ -40,7 +42,7 @@ These are format observations, not exhaustive decoder compliance or task quality
 The standalone runner does **not** compile ModelProtocolClient's full frozen
 compiler/request loop, kernel, adapters or history reader. Repair content and
 its typed error codes are checked here; frozen-context/retry/fallback integration
-and no-replay remain required in the integrated Harness after phases 2–4.
+and no-replay remain required in the integrated Harness.
 Use Harness filter `v8 recovery:` for integrated strict/fallback, reflection depth,
 output-limit correction and Office/workspace live-to-durable presentation. These
 host-neutral checks do not qualify a real provider or Windows/Office/WebView2.

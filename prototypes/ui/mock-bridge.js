@@ -275,6 +275,7 @@
     return projectChatState({ workspaceId: entry.workspaceId, sessionId: entry.chats[0].Id });
   }
   function emit(response) { listeners.forEach(function (listener) { listener({ data: response }); }); }
+  window.RNAssistantMockBridge = { emit: emit };
   function emitChatState(chatId) {
     emit({ type: "chatState", scope: "full", payload: chatState(chatId) });
   }
