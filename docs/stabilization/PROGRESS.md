@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Единое дерево рабочей области — In Review, 2026-11-11
+
+Office и проекты сведены в одну navigation panel с общим поиском и полным меню
+добавления под «+». Удалены scope pickers, нижние launcher, ручной refresh и второй
+layout; общие row menus/icons и выделение исправлены по фото. По запросу «Коммит»
+срез фиксируется как `16.6.1-dev`. Scoped browser checks
+проходят; визуальное принятие и Windows/WebView2 evidence открыты. Runtime/storage
+не меняются. [Ревью и проверки](../ui/UI_MIGRATION_PLAN.md#рабочая-область-единая-навигация--in-review-2026-11-11).
+
 ## External Browser P6b — In Review, 2026-11-11
 
 Первый local workflow fill/click/verify использует exact delivered semantic observation,

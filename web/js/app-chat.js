@@ -34,7 +34,6 @@ async function createOfficeHostChat(host) {
   renderChatSessions();
   try {
     var result = await navigateChat("createOfficeHostChat", { host: host });
-    state.officeHostLaunchOpen = false;
     log("Чат создан: " + host + (result.documentTitle ? " — " + result.documentTitle : "") + ".");
   } catch (error) {
     // The bridge keeps the exception message in `error`; its generic detail is
@@ -63,8 +62,5 @@ function saveChatMode(mode) { return chatComposer().setPreference("mode", mode |
 
 function bindChatActions() {
   if (typeof bindModelContextActions === "function") bindModelContextActions();
-  $("newChatButton").addEventListener("click", createChat);
-  $("chatSearchInput").addEventListener("input", function () {
-    state.chatSearch = $("chatSearchInput").value || ""; renderChatSessionList(state.chats || []);
-  });
+
 }

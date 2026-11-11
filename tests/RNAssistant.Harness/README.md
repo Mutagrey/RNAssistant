@@ -729,7 +729,10 @@ close. `chat-inbox-observer` checks compact remote receipts, phase/terminal read
 stalled sibling reads, hide/reactivate and late history after close. Obsolete
 singleton polling/paging assertions were replaced; `chat-history-paging`,
 `chat-inbox`, `multi-chat-requests` retain pure bounds/receipt/address tests.
-`chat-tree-layout` covers retained selection, launcher focus, keyboard and badges.
+`chat-tree-layout` covers the unified Office/project NavigationPane, full add menu,
+shared search/selection, retained views/DOM, split/close/reopen/restore, creation
+routing, menu icons and 420 px / 125% themes. `office-host-chat-layout` uses the
+shared add menu for queued host creation, progress/errors and explicit retry.
 `shared-navigation-tree` passes in the isolated chat commit. A separate Library
 deactivation pageerror found in the concurrent editor migration is tracked by
 that owner in RISK_REGISTER. No Office/VSTO validation is implied.

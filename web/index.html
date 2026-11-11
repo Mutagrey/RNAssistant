@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=plugin-materials-20261103">
-  <link rel="stylesheet" href="css/app-chat.css?v=chat-welcome-20261103">
+  <link rel="stylesheet" href="css/app-chat.css?v=unified-workspace-20261111">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1-visuals-20261025-4">
   <link rel="stylesheet" href="css/app-composer.css?v=chat-views-20261103">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
@@ -53,11 +53,11 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=group-dialog-20261107">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=agent-recovery-20261104">
-  <link rel="stylesheet" href="css/app-product-components.css?v=group-dialog-20261107">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=unified-workspace-20261111">
+  <link rel="stylesheet" href="css/app-product-components.css?v=unified-workspace-20261111">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-materials.css?v=plugin-materials-20261103-html-editors-20261103-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=plugin-materials-20261103-html-editors-20261103-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=unified-workspace-20261111">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1-live-annotation-20261103">
   <link rel="stylesheet" href="css/app-diagnostics.css?v=diagnostics-source-20261103">
@@ -102,17 +102,15 @@
     <main class="content">
       <section class="panel active" id="tab-chat">
         <div class="chat-workspace split-layout" id="chatLayout" data-navigation>
-          <aside class="chat-sidebar global-nav" aria-label="Документы и чаты">
-            <div class="chat-sidebar-head product-search-heading">
-              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="chatScopeSwitcher"><summary aria-label="Раздел рабочей области"><span id="chatScopeIcon" aria-hidden="true"></span><span>Документы Office</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
-              <div class="chat-tree-toolbar tree-toolbar">
-                <button type="button" class="product-nav-search-toggle icon-btn" id="toggleChatSearchButton" data-nav-search-toggle="chatSearchInput" title="Поиск по чатам" aria-label="Поиск по чатам" aria-expanded="false" aria-controls="chatSearchInput"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-                <input id="chatSearchInput" class="product-nav-search-input" type="search" placeholder="Найти…" aria-label="Поиск по чатам" autocomplete="off" hidden>
-                <button type="button" class="icon-btn" id="newChatButton" title="Новый чат" aria-label="Новый чат"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-              </div>
-            </div>
-            <div class="chat-office-launch-mount" id="chatOfficeLaunchMount"></div>
-            <div class="chat-session-list" id="chatSessionList" aria-label="Все документы и чаты"></div>
+          <aside class="chat-sidebar global-nav" aria-label="Рабочая область">
+            <div id="workspaceNavigationHeading"><input id="chatSearchInput" type="search" placeholder="Найти…" aria-label="Поиск документов, проектов и чатов" autocomplete="off" hidden></div>
+            <button type="button" class="icon-btn" id="newChatButton" title="Добавить" aria-label="Добавить" aria-haspopup="menu" aria-expanded="false" hidden><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+            <form class="project-workspace-connection" id="projectChatConnection" hidden>
+              <label>Добавить проект<input id="projectChatConnectionPath" class="rna-form-control" type="text" placeholder="Полный путь к папке" autocomplete="off" required></label>
+              <label class="checkline"><input id="projectChatConnectionCreate" type="checkbox"> Создать новую папку</label>
+              <div><button type="button" class="button compact secondary" id="projectChatConnectionCancel">Отмена</button><button type="submit" class="button compact" id="projectChatConnectionSubmit">Добавить</button></div>
+            </form>
+            <div class="chat-session-list" id="chatSessionList" aria-label="Рабочая область"></div>
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева документов и чатов"></div>
           <div class="chat-main" id="chatDropZone">
@@ -143,6 +141,8 @@
         </div>
         <div class="chat-run-notice" id="chatRunNotice" role="status" hidden></div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
+        <div class="workspace-chat-control" id="workspaceChatControl" hidden><div class="workspace-chat-pending" id="workspaceChatPending"></div><button type="button" id="workspaceChatApprove">Разрешить</button><button type="button" id="workspaceChatReject">Отклонить</button></div>
+        <div class="workspace-chat-questions" id="workspaceChatQuestions" hidden></div>
         <form class="composer" id="chatForm" data-owner="office">
           <div class="composer-reply-prompt" id="composerReplyPrompt" hidden>
             <div class="composer-reply-copy" role="status" aria-live="polite">
@@ -279,24 +279,6 @@
 
           </aside>
         </div>
-        <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-navigation hidden>
-          <aside class="chat-sidebar global-nav" aria-label="Проекты и чаты">
-            <div class="chat-sidebar-head product-search-heading">
-              <details class="panel-switcher chat-scope-switcher product-nav-heading" id="projectScopeSwitcher"><summary aria-label="Раздел рабочей области"><span data-project-scope-icon aria-hidden="true"></span><span>Проекты</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
-              <div class="chat-tree-toolbar"><button type="button" class="product-nav-search-toggle icon-btn" id="projectChatSearchToggle" data-nav-search-toggle="projectChatSearch" title="Поиск проектов и чатов" aria-label="Поиск проектов и чатов" aria-expanded="false" aria-controls="projectChatSearch"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="product-nav-search-input" type="search" id="projectChatSearch" placeholder="Найти…" aria-label="Найти проект или чат" autocomplete="off" hidden><button type="button" class="icon-btn" id="projectChatRefresh" title="Обновить проекты" aria-label="Обновить проекты"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button><button type="button" class="icon-btn" id="projectChatNew" title="Новый чат проекта" aria-label="Новый чат проекта"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
-            </div>
-            <div class="project-workspace-controls"><details id="projectChatWorkspaceMenu" class="product-create-menu"><summary class="chat-office-launch-heading" aria-label="Новый проект"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Новый проект</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" id="projectChatConnect"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Подключить папку</button><button type="button" id="projectChatCreate"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg>Создать проект</button></div></details></div>
-            <form class="project-workspace-connection" id="projectChatConnection" hidden><label><span id="projectChatConnectionTitle">Подключить папку</span><input id="projectChatConnectionPath" type="text" placeholder="Полный путь к папке" autocomplete="off" required></label><div><button type="button" id="projectChatConnectionCancel">Отмена</button><button type="submit" id="projectChatConnectionSubmit">Подключить</button></div></form>
-            <div class="project-chat-tree" id="projectChatTree" aria-label="Чаты проекта"></div>
-          </aside>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева проектов"></div>
-          <div class="chat-main project-chat-main workspace-chat-view" id="workspaceChatView">
-            <div class="chatbar workspace-chat-head"><div class="chat-title-block" id="projectChatTitleBlock"><span id="projectChatContext">Проект не выбран</span><strong id="projectChatTitle">Чат проекта</strong></div></div>
-            <div class="workspace-chat-notice" id="workspaceChatNotice" role="status" aria-live="polite"></div>
-            <div class="chat-scroll-region" id="workspaceChatTranscriptMount"></div>
-            <div class="workspace-chat-control" id="workspaceChatControl" hidden><div class="workspace-chat-pending" id="workspaceChatPending"></div><button type="button" id="workspaceChatApprove">Разрешить</button><button type="button" id="workspaceChatReject">Отклонить</button></div>
-            <div class="workspace-chat-questions" id="workspaceChatQuestions" hidden></div>
-          </div>
           <template id="pluginWorkbenchTemplate">
           <aside class="plugin-workbench" data-plugin-node="Workbench" aria-label="Предпросмотр плагина" hidden>
             <p class="plugin-status" data-plugin-node="WorkbenchStatus" role="status"></p>
@@ -310,7 +292,6 @@
             <div class="plugin-preview preview-side-panel" data-plugin-node="PreviewMount" hidden><div class="plugin-preview-frame-host" data-plugin-node="PreviewFrameHost"></div></div>
           </aside>
           </template>
-        </div>
       </section>
 
       <div class="hidden" id="libraryToolEditorSource">
@@ -1089,18 +1070,19 @@
   <script src="js/app-editor-tabs.js?v=diagnostics-20261101"></script>
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
   <script src="js/app-core.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
-  <script src="js/app-icons.js?v=diagnostics-icon-20261103"></script>
+  <script src="js/app-icons.js?v=unified-workspace-20261111"></script>
   <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-rail-popovers.js"></script>
-  <script src="js/app-navigation-tree.js?v=journal-loading-20261103-chat-audit-20261103"></script>
+  <script src="js/app-navigation-tree.js?v=unified-workspace-20261111"></script>
   <script src="js/app-conversation-state.js?v=chat-continuity-20261103"></script>
   <script src="js/app-conversation-view.js?v=chat-welcome-20261103"></script>
   <script src="js/app-conversation-observer.js?v=addressed-poll-20261027-1-observe-s2b4"></script>
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=20261029-first-group-1"></script>
-  <script src="js/app-action-menu.js?v=agent-recovery-20261104"></script>
+  <script src="js/app-action-menu.js?v=unified-workspace-20261111"></script>
   <script src="js/app-dialog.js?v=group-dialog-20261107"></script>
+  <script src="js/app-workspace-navigation.js?v=unified-tree-20261111"></script>
   <script src="js/app-navigation-pane.js?v=navigation-20261102-html-editors-20261103-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
@@ -1136,8 +1118,8 @@
   <script src="js/app-model-render.js?v=chat-views-20261103"></script>
   <script src="js/app-models.js?v=chat-views-20261103"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-groups.js?v=group-dialog-20261107"></script>
-  <script src="js/app-chat-state.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
+  <script src="js/app-chat-groups.js?v=unified-workspace-20261111"></script>
+  <script src="js/app-chat-state.js?v=unified-workspace-20261111"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1184,29 +1166,29 @@
   <script src="js/app-messages.js?v=chat-welcome-20261103-html-editors-20261103-1"></script>
   <script src="js/app-reasoning.js?v=chat-continuity-20261103"></script>
   <script src="js/app-attachments.js?v=chat-views-20261103-html-editors-20261103-1"></script>
-  <script src="js/app-chat-session.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
-  <script src="js/app-chat-composer.js?v=chat-views-20261103-chat-audit-20261103"></script>
+  <script src="js/app-chat-session.js?v=unified-workspace-20261111"></script>
+  <script src="js/app-chat-composer.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-inbox.js?v=chat-views-20261103"></script>
   <script src="js/app-chat-run.js?v=request-causes-20261103"></script>
-  <script src="js/app-chat.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
+  <script src="js/app-chat.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-edit.js?v=chat-views-20261103"></script>
   <script src="js/app-workspace-chat.js?v=chat-views-20261103-chat-audit-20261103"></script>
   <script src="js/app-office-chat-view.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
   <script src="js/app-agent-recovery.js?v=agent-recovery-20261104"></script>
   <script src="js/app-agent-communication.js?v=agent-recovery-menu-20261104"></script>
-  <script src="js/app-conversation-panel.js?v=chat-tab-bounds-20261104"></script>
+  <script src="js/app-conversation-panel.js?v=unified-workspace-20261111"></script>
   <script src="js/app-plugin-view.js?v=html-editors-20261103-1"></script>
   <script src="js/app-plugins.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
-  <script src="js/app-project-chats.js?v=group-dialog-20261107"></script>
+  <script src="js/app-project-chats.js?v=unified-workspace-20261111"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
   <script src="js/app-browser-object-view.js?v=browser-saved-20261102"></script>
   <script src="js/app-html-artifact-view.js?v=plugin-materials-20261103"></script>
   <script src="js/app-plugin-release-view.js?v=plugin-materials-20261103"></script>
   <script src="js/app-material-view.js?v=plugin-materials-20261103-chat-audit-20261103"></script>
-  <script src="js/app-dock-workspace.js?v=chat-tab-bounds-20261104"></script>
+  <script src="js/app-dock-workspace.js?v=unified-workspace-20261111"></script>
   <script src="js/app-external-browser.js?v=browser-p5a-20261111"></script>
   <script src="js/app-active-runs.js?v=chat-parity-20261103"></script>
-  <script src="js/app.js?v=chat-views-20261103-html-editors-20261103-1"></script>
+  <script src="js/app.js?v=unified-workspace-20261111"></script>
 </body>
 </html>

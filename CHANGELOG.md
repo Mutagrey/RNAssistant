@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.6.1-dev
+
+- Office documents and projects share one workspace tree, search and full add menu.
+  Chat and parent menus use consistent icons; project folders follow the theme accent.
+  Regular-weight headings and a stable action slot prevent labels from being covered.
+  Duplicate scope/creation controls and manual project refresh were removed.
+  Windows/Office/WebView2 qualification remains open.
+
 ### 16.6.0-dev
 
 - The opt-in External Browser pilot can fill a textbox and click a button on its

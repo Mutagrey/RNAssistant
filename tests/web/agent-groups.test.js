@@ -121,8 +121,8 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   await action(groupKey);await page.keyboard.press('Escape');
   assert.equal(await page.locator('.rna-action-menu-popup').count(),0,'Escape returns from the existing shared action menu');
   const documentKey=await row(groupKey).evaluate(node=>node.parentElement.dataset.parentKey);
-  const createButton=()=>row(documentKey).getByRole('button',{name:'Новая группа чатов…',exact:true});
-  async function createDialog(){await row(documentKey).hover();await createButton().click();return opened('Новая группа чатов');}
+  const createButton=()=>row(documentKey).locator('[data-tree-action]');
+  async function createDialog(){await menu(documentKey,'Новая группа чатов…');return opened('Новая группа чатов');}
   let before=await calls(),dialog=await createDialog();
   assert.equal(await focused(dialog.getByRole('textbox',{name:'Название группы',exact:true})),true,'create focuses the name input');
   await closeDialog(dialog);
@@ -241,8 +241,8 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   before=await calls();dialog=await createDialog();await nameInput().fill('Не отправлять после перехода');
   await page.evaluate(()=>RNAssistantProjectChats.setScope('projects'));
   await dialog.waitFor({state:'hidden'});assert.equal(await calls(),before);
-  const projectCreate=()=>row('project:preview-data-workspace').getByRole('button',{name:'Новая группа чатов…',exact:true});
-  await row('project:preview-data-workspace').hover();await projectCreate().click();dialog=await opened('Новая группа чатов');
+  const projectCreate=()=>menu('project:preview-data-workspace','Новая группа чатов…');
+  await projectCreate();dialog=await opened('Новая группа чатов');
   await nameInput().fill('Не отправлять в Office');
   await page.evaluate(()=>RNAssistantProjectChats.setScope('office'));
   await dialog.waitFor({state:'hidden'});assert.equal(await calls(),before,'switching either way never submits a stale form');
@@ -261,7 +261,7 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   await paint();
   assert.equal(await page.getByRole('dialog').count(),0);
   assert.equal(await page.evaluate(()=>document.activeElement===groupLaterFocus),true,'late Office error cannot steal Workspace focus');
-  assert.equal(await page.locator('#projectChatTree').getByText('Группы недоступны',{exact:true}).count(),0,'late Office error cannot poison Workspace catalog');
+  assert.equal(await page.locator('[data-tree-key="workspace-section:projects"]').getByText('Группы недоступны',{exact:true}).count(),0,'late Office error cannot poison Workspace catalog');
   assert.equal(await calls(),before+1);
   await page.evaluate(()=>RNAssistantProjectChats.setScope('office'));await refreshGroups();
 
@@ -327,10 +327,10 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   assert.equal(await calls(),unknownCalls,'uncertain mutation never retries during render');
   await page.evaluate(async()=>applyChatCatalogState(await send('listChats',{})));
   await page.getByText('Группы недоступны',{exact:true}).waitFor({state:'detached'});
-  await page.locator('#chatScopeSwitcher > summary').click();await page.locator('#chatScopeSwitcher [data-workspace-scope="projects"]').click();
+  await page.evaluate(()=>RNAssistantProjectChats.setScope('projects'));
   const projectChild='project-chat:preview-data-workspace:preview-project-clean:group:cg_chess';
   await row(projectChild).waitFor();
-  await row('project:preview-data-workspace').hover();await projectCreate().click();dialog=await opened('Новая группа чатов');
+  await projectCreate();dialog=await opened('Новая группа чатов');
   await nameInput().fill('Группа проекта');await nameInput().press('Enter');await dialog.waitFor({state:'hidden'});
   assert.deepEqual(await page.evaluate(()=>({action:groupCalls.at(-1).payload.action,workspaceId:groupCalls.at(-1).payload.workspaceId,
    sessionId:groupCalls.at(-1).payload.sessionId})),{action:'Create',workspaceId:'preview-data-workspace',sessionId:'preview-project-review'},'Workspace dialog addresses the exact existing scope');

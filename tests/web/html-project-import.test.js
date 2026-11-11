@@ -63,7 +63,7 @@ const {chromium}=require('playwright');
     assert.equal(await surface('A').getByRole('button',{name:'Сохранение проекта',includeHidden:true}).isDisabled(),true,'pending cannot dispatch a second import');
     assert.deepEqual((await calls()).map(c=>c.payload),[{chatId:'preview-chat',documentId:'preview-document',resourceUri:'rna://chat/preview-chat/artifact/project-import-A/revision/1',backing:'Managed'}]);
     await page.evaluate(()=>projectTest.finish('A','Created'));
-    await page.waitForFunction(()=>RNAssistantProjectChats.scope()==='projects'&&RNAssistantProjectChats.workspaceId()==='ws_imported_A');
+    await page.waitForFunction(()=>RNAssistantProjectChats.workspaceId()==='ws_imported_A');
     await open('A');await action('A','Сохранение проекта');
     assert.equal(await page.getByRole('menuitem',{name:'Создать проект из снимка',exact:true}).count(),0,'created workspace is reused');
     await page.getByRole('menuitem',{name:'Открыть созданный проект',exact:true}).click();

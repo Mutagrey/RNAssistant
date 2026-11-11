@@ -127,15 +127,12 @@ async function attachOutlookMailbox(key, chatIdValue, createNew) {
 
 async function createChat() {
   if (state.chatNavigationPending) return;
-  setControlBusy("newChatButton", true);
   try {
     await navigateChat("createChat", { title: "Новый чат" });
     clearSendError();
     log("Чат создан.");
   } catch (error) {
     log(error.detail || error.message, "error");
-  } finally {
-    setControlBusy("newChatButton", false);
   }
 }
 
@@ -574,6 +571,7 @@ async function initialize() {
   state.initializePromise = (async function () {
     try {
       var init = await navigateChat("init");
+      if (window.RNAssistantProjectChats) RNAssistantProjectChats.show();
       try { await window.RNAssistantChatDrafts.hydrate(); }
       catch (error) {
         window.RNAssistantChatDrafts.hydrationFailed(error);

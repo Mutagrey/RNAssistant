@@ -93,7 +93,7 @@
       items.forEach(function (node, index) {
         var parent = isParent(node);
         var isSelected = node.key === record.selectedKey;
-        var item = element("li", "navigation-tree-item" + (node.className ? " " + node.className : ""));
+        var item = element("li", "navigation-tree-item" + (node.alignChildLabels ? " align-child-labels" : "") + (node.className ? " " + node.className : ""));
         item.id = prefix + "-" + encodeURIComponent(node.key);
         item.dataset.treeKey = node.key;
         item.dataset.parentKey = parentKey || "";
@@ -160,7 +160,7 @@
           appendTrailing(status);
         }
         if (node.actions && node.actions.length) {
-          var actions = element("span", "tree-actions");
+          var actions = element("span", "tree-actions" + (node.actions.length === 1 && node.actions[0].menu ? " has-menu" : ""));
           node.actions.forEach(function (action, actionIndex) {
             if (action.hidden) return;
             var button = element("button", "tree-action" + (action.danger ? " is-danger" : ""));
@@ -170,6 +170,7 @@
             button.title = action.title;
             button.setAttribute("aria-label", action.title);
             button.dataset.treeAction = String(actionIndex);
+            if (action.menu) { button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-expanded", "false"); }
             button.innerHTML = action.iconHtml || "";
             actions.appendChild(button);
           });

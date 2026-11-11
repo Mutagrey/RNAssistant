@@ -1,5 +1,20 @@
 # Архитектура UI RNAssistant
 
+## Единое дерево рабочей области — In Review, 2026-11-11
+
+`app-workspace-navigation` соединяет presentation nodes Office и проектов в одном
+NavigationPane/NavigationTree: поиск, selection, scroll и keyboard traversal общие.
+Каталоги, guards и команды остаются у app-chat-state/app-project-chats. Проекты
+загружаются после handshake, при возврате в раздел/окно и после своих изменений;
+пассивный refresh не открывает чат и не меняет выбранный target.
+
+Один `chatLayout` содержит общий Dockview независимо от источника чата. Старые
+project layout, scope pickers, отдельные launcher/search/refresh удалены. Общие
+approval/questions входят прямо в шаблон ConversationPanel; промежуточный
+Workspace DOM-source удалён. Source routing остаётся у прежних adapters; runtime,
+Bridge и storage не меняются. Это объединение навигации, не заявление полной parity
+всех возможностей Office/Workspace/plugin.
+
 ## External Browser P5a — In Review, 2026-11-11
 
 Одна experimental external-browser view использует existing Dockview/PreviewSurface.

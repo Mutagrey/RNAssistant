@@ -42,7 +42,10 @@
   function dismissDialog() {
     if (dialog) { var previous = dialog; dialog = null; previous.view.close(false); }
   }
-  function navigationScope() { return window.RNAssistantProjectChats ? RNAssistantProjectChats.scope() : "office"; }
+  function navigationScope() {
+    var panel = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+    return panel ? JSON.stringify(panel.target) : "";
+  }
   function focusResolver(button) {
     var item = button && button.closest("[data-tree-key]"), root = item && item.closest('[role="tree"]');
     var mount = root && root.parentElement, keys = [], action = button && button.dataset.treeAction;
@@ -69,7 +72,7 @@
           if (visible(row)) return row;
         }
       }
-      return Array.from(document.querySelectorAll(".chat-scope-switcher > summary, #productMobileMenuButton")).find(visible);
+      return Array.from(document.querySelectorAll("#newChatButton, #productMobileMenuButton")).find(visible);
     };
   }
   function editGroup(scope, action, group, button) {
@@ -99,7 +102,7 @@
     });
   }
   function menuAction(label, items) {
-    return { title: label, iconHtml: RNAssistantNavigationTree.icon("more"), onClick: function (node, button) {
+    return { title: label, menu: true, iconHtml: RNAssistantNavigationTree.icon("more"), onClick: function (node, button) {
       RNAssistantActionMenu.open(button, items(node, button), { label: label });
     } };
   }
@@ -134,12 +137,16 @@
         node.actions = [menuAction("Действия чата «" + node.title + "»", function (target, button) {
           var items = oldActions.filter(function (action) { return !action.hidden; }).map(function (action) {
             return { label: group && action.danger ? "Удалить чат везде" : action.title,
-              disabled: action.disabled, icon: false, onSelect: function () { action.onClick(target, button); } };
+              disabled: action.disabled, danger: action.danger, iconHtml: action.iconHtml,
+              onSelect: function () { action.onClick(target, button); } };
           });
+          var destructive = items.filter(function (item) { return item.danger; });
+          items = items.filter(function (item) { return !item.danger; });
           items.push({ separator: true }, { label: "Группы чата…", icon: "group", disabled: disabled(scope),
             onSelect: function () { membershipMenu(scope, id, button); } });
           if (group) items.push({ label: "Убрать из группы", icon: "close", disabled: disabled(scope),
             onSelect: function () { change(scope, "Remove", group, { members: [id] }); } });
+          if (destructive.length) items = items.concat([{ separator: true }], destructive);
           if (view.error) items.push({ label: view.error, disabled: true, icon: false });
           return items;
         })];

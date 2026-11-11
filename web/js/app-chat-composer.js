@@ -325,7 +325,6 @@ function renderComposerInputState(hasContent, node) {
 function renderSendControls() {
   var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
   if (component) component.controls();
-  if ($("newChatButton")) $("newChatButton").disabled = !!(state.chatNavigationPending || state.bridgeUnavailable);
 }
 function updateComposerInputState() { renderSendControls(); }
 

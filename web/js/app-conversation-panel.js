@@ -12,10 +12,6 @@
   function prepare() {
     if (template) return;
     template = document.getElementById("chatDropZone").cloneNode(true);
-    var controls = document.getElementById("workspaceChatControl").cloneNode(true);
-    var questions = document.getElementById("workspaceChatQuestions").cloneNode(true);
-    template.insertBefore(controls, template.querySelector("form"));
-    template.insertBefore(questions, template.querySelector("form"));
   }
   function create(target) {
     prepare();
@@ -71,8 +67,10 @@
       },
       focus: function () {
         if (disposed || selected === component) return;
+        RNAssistantChatGroups.dismissDialog();
         selected = component;
         if (adapter.focus) adapter.focus();
+        RNAssistantWorkspaceNavigation.select(address, true);
         renderControls();
         if (window.RNAssistantChatInspector) { RNAssistantChatInspector.mount(address.source === "office" ? "office" : "project"); RNAssistantChatInspector.render(); }
       },

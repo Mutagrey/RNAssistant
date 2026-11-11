@@ -16,7 +16,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const css = [...read("index.html").matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)]
       .map(match => read(match[1])).join("\n");
     await page.setContent(`<style>${css}</style><div class="chat-workspace" style="height:100vh">
-      <aside class="chat-sidebar"><div id="chatSessionList" class="chat-session-list"></div></aside>
+      <aside class="chat-sidebar global-nav"><div id="workspaceNavigationHeading"><input id="chatSearchInput" aria-label="Поиск" hidden></div><button id="newChatButton" aria-label="Добавить">+</button><div id="chatSessionList" class="chat-session-list"></div></aside>
       <div class="splitter"></div><div class="chat-main"></div></div>`);
     await page.evaluate(() => {
       window.state = { host: "Excel", activeChatId: "excel-chat", officeHostChatAvailable: true,
@@ -26,6 +26,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.confirmDiscardHtmlWorkspaceChanges = () => true;
       window.log = () => {};
       window.calls = [];
+      window.RNAssistantConversationPanel = { selected: () => null };
+      window.RNAssistantProjectChats = { isCatalogBusy: () => false };
+      window.RNAssistantChatGroups = { dismissDialog: () => {} };
       state.chatNavigationPromise = new Promise(resolve => { window.completeNavigation = () => {
         state.chatNavigationPending--; resolve();
       }; });
@@ -35,18 +38,18 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         return new Promise((resolve, reject) => { window.succeed = resolve; window.fail = reject; });
       };
     });
-    for (const script of ["app-chat-state.js", "app-chat-session.js", "app-chat.js"])
+    for (const script of ["app-icons.js", "app-action-menu.js", "app-navigation-tree.js", "app-navigation-pane.js", "app-workspace-navigation.js", "app-chat-state.js", "app-chat-session.js", "app-chat.js"])
       await page.addScriptTag({ content: read("js/" + script) });
     await page.evaluate(() => {
       window.renderChatSessions = () => {
-        const list = document.getElementById("chatSessionList");
-        list.replaceChildren(); renderOfficeHostLaunchRows(list, "");
+        RNAssistantWorkspaceNavigation.update("office", [], {emptyText:"Нет чатов"});
+        RNAssistantWorkspaceNavigation.notice("office", state.officeHostChatPending ? "Создаю документ " + state.officeHostChatTarget : state.officeHostChatError, null, !!state.officeHostChatError);
       };
       window.applyInitState = init => { Object.assign(state, init); };
       renderChatSessions();
     });
-    await page.getByText("Новый документ Office").click();
-    const powerPoint = page.getByRole("button", { name: /PowerPoint/ });
+    await page.locator("#newChatButton").click();
+    const powerPoint = page.getByRole("menuitem", { name: "PowerPoint", exact: true });
     await powerPoint.click();
     await page.getByRole("status").waitFor();
     assert.match(await page.getByRole("status").innerText(), /PowerPoint/);
@@ -66,6 +69,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           "long errors wrap inside the actual sidebar in " + theme);
       }
     }
+    await page.locator("#newChatButton").click();
     await powerPoint.click();
     await page.waitForFunction(() => calls.length === 2);
     await page.evaluate(() => succeed({ host: "PowerPoint", chatId: "ppt-chat", init: {

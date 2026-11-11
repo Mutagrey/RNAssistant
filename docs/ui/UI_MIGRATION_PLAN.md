@@ -1,5 +1,36 @@
 # План модернизации production UI
 
+## Рабочая область: единая навигация — In Review, 2026-11-11
+
+Scope: запрос пользователя по двум фото и уточнение полного меню под «+» рядом
+с поиском. Owner — Web navigation/общие NavigationTree, ActionMenu, Icons.
+Одна панель/поиск/прокрутка для Office и проектов, общее добавление и строковые меню;
+сняты bold, overlay действий, ручной refresh и дубли layout/launcher.
+Baseline: исходные фото и успешный `agent-groups`; прежняя строка 32 px / weight 500.
+Новая строка остаётся 32 px (сверена с Demo при 1280×900), weight 400.
+[Дерево](review/unified-workspace-tree.png), [полное меню «+»](review/unified-workspace-add.png),
+[узкий dark/125%](review/unified-workspace-narrow.png) — synthetic preview.
+
+Проверки: `chat-tree-layout` — production preview, обе секции, поиск, единый выбор,
+retained DOM/views, split/close/reopen/restore, точные create commands, темы и
+420 px / 125%; `agent-groups` — memberships, keyboard/dialogs, stale generations и
+cleanup; `shared-navigation-tree` — общий компонент и остальные consumers;
+`chat-navigation-lifetime` — поздние reads/selection, закрытие и смена Dockview focus;
+`office-host-chat` и `office-host-chat-layout` — очереди, progress/error, явный retry.
+Build/VSTO/Office validation не запускаются. Windows/WebView2 и визуальное принятие
+пользователем остаются открыты. По запросу пользователя «Коммит» технически
+завершённый срез фиксируется с patch bump `16.6.1-dev`; это не release/Windows
+qualification и не автоматическое принятие оставшихся UI-срезов.
+
+Ревью: открыть `/preview/web/?scenario=ready` через `python3 prototypes/serve_ui.py`:
+1. Раскрыть обе секции и перейти Office → проект → Office.
+2. Открыть «+»: новый чат, проект и четыре Office actions находятся в одном меню.
+3. Сравнить «…» у чатов/родителей, попробовать общий поиск и Escape.
+4. Сузить окно и проверить выбранную строку/меню при 125%.
+
+Откат — только Web diff этого среза, без миграции/удаления данных; старого dual UI
+не сохраняется. Общая миграция всех views и Office qualification не закрыты.
+
 ## External Browser P5a — In Review, 2026-11-11
 
 Пользователь выбрал сразу WinForms WebView2 в целевом Dockview; отдельное окно —

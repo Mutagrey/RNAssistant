@@ -82,7 +82,7 @@
   function placeHost() {
     if (!host) return;
     var source = views[sectionView(section)], target = source && source.layout && source.layout();
-    target = target || document.getElementById(owner === "office" ? "chatLayout" : "projectChatLayout");
+    target = target || document.getElementById("chatLayout");
     if (hostCompact) target = document.querySelector(".shell > .content");
     if (host.parentElement !== target) target.appendChild(host);
   }
@@ -470,7 +470,6 @@
     parking = element("div"); parking.id = "workspaceViewParking"; parking.hidden = true;
     document.querySelector(".shell").appendChild(parking);
     document.getElementById("chatDropZone").remove();
-    document.getElementById("workspaceChatView").remove();
     roots.inspector = document.getElementById("chatInspector"); roots.inspector.hidden = false;
     roots.settings = document.getElementById("settingsView");
     roots.request = document.getElementById("modelContextDialog"); roots.request.classList.remove("hidden");

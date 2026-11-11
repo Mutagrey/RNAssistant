@@ -126,7 +126,6 @@ function renderChatSessions(options) {
   if (!$("chatSessionList")) return;
   renderChatSessionList(sortedChatSessions(state.chats));
 
-  $("newChatButton").disabled = !!state.bridgeUnavailable;
   if (window.RNAssistantDockWorkspace) RNAssistantDockWorkspace.updateContext();
   if (options && options.navigationOnly) return;
   if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.each(function (component) { component.controls(); });
@@ -761,7 +760,7 @@ function chatSessionListKey(chats) {
   // Only navigation presentation belongs in this key: never messages or tokens.
   return JSON.stringify([state.bridgeUnavailable, state.chatSearch, state.host,
     state.officeHostChatAvailable, state.officeHostChatPending, state.officeHostChatTarget,
-    state.officeHostChatError, state.officeHostLaunchOpen, officeHostChatUnavailableReason(),
+    state.officeHostChatError, officeHostChatUnavailableReason(),
     !chats.length && [state.chatDetailPending, state.chatDetailError],
     state.documents, state.collapsedChatDocuments, RNAssistantChatGroups.version(),
     chats.map(function (chat) {
@@ -781,46 +780,16 @@ function renderChatSessionList(chats) {
     return;
   }
   var renderKey = chatSessionListKey(chats);
-  var retainedTree = list.querySelector(".chat-navigation-tree");
-  var launchMount = $("chatOfficeLaunchMount") || list;
-  var officeWasFocused = document.activeElement && launchMount.contains(document.activeElement) &&
-    !!document.activeElement.closest(".chat-office-launch-list");
-  if (list.chatRenderKey === renderKey && retainedTree) {
-    if (list.dataset.selectedChatId === (state.activeChatId || "")) return false;
-    if (RNAssistantNavigationTree.setSelected(retainedTree, state.activeChatId ? "chat:" + state.activeChatId : null,
-        { focus: list.contains(document.activeElement) || officeWasFocused })) {
-      list.dataset.selectedChatId = state.activeChatId || "";
-      list.chatRenderKey = chatSessionListKey(chats);
-      return false;
-    }
+  var navigation = window.RNAssistantWorkspaceNavigation;
+  navigation.notice("office", state.officeHostChatPending ? "Создаю документ " + state.officeHostChatTarget + "…" :
+    state.officeHostChatError || "", null, !!state.officeHostChatError);
+  if (list.chatRenderKey === renderKey) {
+    navigation.select({ source: "office", sessionId: state.activeChatId }, false);
+    return false;
   }
-
-  var focused = document.activeElement && document.activeElement.closest("[data-tree-key]");
-  var focusKey = focused && list.contains(focused) ? focused.dataset.treeKey : "";
-  var previousTree = list.querySelector(".chat-navigation-tree");
-  if (previousTree) window.RNAssistantNavigationTree.unmount(previousTree, "chat");
-  var previousScroll = list.scrollTop;
   var selectionChanged = list.dataset.selectedChatId !== (state.activeChatId || "");
   list.dataset.selectedChatId = state.activeChatId || "";
-  list.innerHTML = "";
   var query = (state.chatSearch || "").trim().toLowerCase();
-  if (launchMount !== list) launchMount.innerHTML = "";
-  renderOfficeHostLaunchRows(launchMount);
-  if (officeWasFocused && !selectionChanged) {
-    var launchHeading = launchMount.querySelector(".chat-office-launch-heading");
-    if (launchHeading) launchHeading.focus();
-  }
-  if (!chats.length && !(state.documents || []).length) {
-    list.classList.add("is-empty");
-    var empty = document.createElement("div");
-    empty.className = "tree-empty";
-    empty.textContent = state.bridgeUnavailable ? "Панель недоступна." :
-      state.chatDetailPending ? "Загрузка чатов…" : state.chatDetailError || "Чатов пока нет.";
-    list.appendChild(empty);
-    return;
-  }
-  list.classList.remove("is-empty");
-
   var documents = {};
   chats.forEach(function (chat) {
     if (query && [chatTitle(chat), chatDocumentTitle(chat), chatHost(chat)].join(" ").toLowerCase().indexOf(query) < 0 &&
@@ -841,6 +810,7 @@ function renderChatSessionList(chats) {
     var host = item.host || item.Host || state.host || "";
     var documentKey = item.documentKey || item.DocumentKey || "";
     var key = host + "|" + documentKey;
+    if (query && !documents[key] && [item.title || item.Title || "", host].join(" ").toLowerCase().indexOf(query) < 0) return;
     if (!documents[key]) {
       documents[key] = {
         key: key,
@@ -893,8 +863,6 @@ function renderChatSessionList(chats) {
     });
   }
 
-  var tree = document.createElement("div");
-  tree.className = "chat-navigation-tree";
   var nodes = Object.keys(documents).sort(function (left, right) {
     var a = documents[left];
     var b = documents[right];
@@ -906,75 +874,16 @@ function renderChatSessionList(chats) {
     }
     return a.title.localeCompare(b.title);
   }).map(function (key) { return chatDocumentTreeNode(documents[key], query); });
-  list.appendChild(tree);
-  window.RNAssistantNavigationTree.render(tree, nodes, {
-    label: "Документы и чаты", positionKey: "chat",
-    focusKey: (focusKey || officeWasFocused) && selectionChanged && state.activeChatId &&
-      (!focusKey || focusKey.indexOf("chat:" + state.activeChatId) !== 0) ? "chat:" + state.activeChatId : focusKey,
+  navigation.update("office", nodes, {
+    emptyText: state.bridgeUnavailable ? "Панель недоступна." : state.chatDetailPending ? "Загрузка чатов…" :
+      state.chatDetailError || (query ? "Ничего не найдено" : "Документов пока нет"),
     onToggle: function (node, expanded) { if (node.chatGroupBranch) RNAssistantChatGroups.toggle(node, expanded);
       else state.collapsedChatDocuments[node.documentKey] = !expanded; },
     onSelect: function (node) { RNAssistantChatGroups.select(node); if (node.chatId && !state.bridgeUnavailable) selectChat(node.chatId); }
   });
-  list.scrollTop = previousScroll;
   // Document expansion is initialized during rendering; retain its final state.
   list.chatRenderKey = chatSessionListKey(chats);
   return true;
-}
-
-function renderOfficeHostLaunchRows(list) {
-  var hosts = ["Excel", "Word", "PowerPoint", "Outlook"];
-  var group = document.createElement("details");
-  group.className = "chat-office-launch-list";
-  group.open = !!state.officeHostLaunchOpen;
-  group.addEventListener("toggle", function () {
-    if (group.isConnected) state.officeHostLaunchOpen = group.open;
-  });
-  group.addEventListener("keydown", function (event) {
-    if (event.key !== "Escape" || !group.open) return;
-    event.preventDefault();
-    group.open = false;
-    state.officeHostLaunchOpen = false;
-    heading.focus();
-  });
-  var heading = document.createElement("summary");
-  heading.className = "chat-office-launch-heading";
-  heading.innerHTML = window.RNAssistantIcons.render("plus") +
-    "<span>Новый документ Office</span>" +
-    window.RNAssistantIcons.render("down");
-  group.appendChild(heading);
-
-  var unavailable = officeHostChatUnavailableReason();
-  var statusText = state.officeHostChatError || unavailable;
-  var status = null;
-  if (statusText) {
-    status = document.createElement("div");
-    status.className = "chat-office-launch-status" + (state.officeHostChatError ? " is-error" : "");
-    status.setAttribute("role", state.officeHostChatError ? "alert" : "status");
-    status.textContent = statusText;
-  }
-
-  var menu = document.createElement("div");
-  menu.className = "chat-office-launch-menu";
-  hosts.forEach(function (host) {
-    var button = document.createElement("button");
-    button.type = "button";
-    button.className = "chat-office-launch-row" + documentHostClass(host);
-    button.disabled = !!unavailable;
-    button.title = unavailable || "Создать чат в " + host;
-    button.setAttribute("aria-busy", String(!!state.officeHostChatPending && state.officeHostChatTarget === host));
-    button.innerHTML = "<span class=\"chat-document-icon\">" + documentHostIcon(host) + "</span>" +
-      "<span class=\"chat-office-launch-name\"></span>" +
-      "<span class=\"chat-office-launch-action\">Новый чат</span>";
-    button.querySelector(".chat-office-launch-name").textContent = host;
-    button.addEventListener("click", function () {
-      state.officeHostLaunchOpen = true;
-      createOfficeHostChat(host);
-    });
-    menu.appendChild(button);
-  });
-  group.appendChild(menu);
-  list.appendChild(group);
-  if (status) list.appendChild(status);
 }
 
 function chatDocumentTreeNode(documentItem, query) {
@@ -988,25 +897,25 @@ function chatDocumentTreeNode(documentItem, query) {
     key: "chat:empty:" + documentItem.key, kind: "leaf", title: "Нет чатов", disabled: true
   });
   return {
-    key: "document:" + documentItem.key, kind: "parent", title: documentItem.title,
+    key: "document:" + documentItem.key, kind: "parent", title: documentItem.title, alignChildLabels: true,
     documentKey: documentItem.key, expanded: !collapsed, iconHtml: documentHostIcon(documentItem.host),
     ariaLabel: documentItem.title + " · " + status,
     tooltip: [documentItem.title, documentItem.path, status].filter(Boolean).join(" · "),
     className: documentHostClass(documentItem.host).trim(),
     children: children,
-    actions: [
+    actions: RNAssistantActionMenu.treeActions("Действия документа «" + documentItem.title + "»", [
       RNAssistantChatGroups.createAction(groupScope),
-      { title: "Новый чат для документа", iconHtml: tree.icon("plus"), onClick: function () { createDocumentChat(documentItem); } },
+      { title: "Новый чат", iconHtml: tree.icon("plus"), onClick: function () { createDocumentChat(documentItem); } },
       { title: documentItem.open ? "Активировать документ" : "Открыть документ", iconHtml: tree.icon("open"),
         hidden: !documentItem.open && !documentItem.path,
         onClick: function () {
           if (documentItem.open) activateDocument(documentItem.documentKey);
           else if (documentItem.chats.length) openActiveDocument(chatId(documentItem.chats[0]));
         } },
-      { title: "Удалить документ и все чаты", iconHtml: tree.icon("trash"),
+      { title: "Удалить историю документа", iconHtml: tree.icon("trash"),
         hidden: !documentItem.chats.length, danger: true,
         onClick: function () { deleteDocument(documentItem.host, documentItem.documentKey, documentItem.title); } }
-    ]
+    ])
   };
 }
 
@@ -1045,7 +954,7 @@ function chatTreeNode(chat) {
     status: deleting ? "running" : activity.presence.status,
     statusLabel: deleting ? "Удаление чата…" : activity.label,
     actions: [
-      { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("chart"),
+      { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("diagnostics"),
         onClick: function () { window.openRunJournal({ owner: "office", chatId: id, label: chatTitle(chat),
           document: chatDocumentTitle(chat), runId: activity.run && activity.run.runId }); } },
       { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"), disabled: deleting,

@@ -63,17 +63,10 @@ function switchTab(name, options) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  var chatScopeIcon = document.getElementById("chatScopeIcon");
-  if (chatScopeIcon) chatScopeIcon.innerHTML = window.RNAssistantNavigationTree.icon("office");
   document.querySelector(".content").addEventListener("click", function (event) {
     var creationMenu = event.target.closest(".product-create-menu");
     if (creationMenu && event.target.closest("button")) {
       creationMenu.removeAttribute("open");
-    }
-    var officeMenu = document.querySelector(".chat-office-launch-list[open]");
-    if (officeMenu && !event.target.closest(".chat-office-launch-list") && !officeMenu.contains(event.target)) {
-      officeMenu.open = false;
-      state.officeHostLaunchOpen = false;
     }
   });
   ["focusin", "focusout", "selectionchange", "mouseup", "keyup"].forEach(function (name) {

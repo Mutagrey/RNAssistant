@@ -1,149 +1,131 @@
-"use strict";
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const { chromium } = require("playwright");
-const root = path.resolve(__dirname, "../../web");
-const read = file => fs.readFileSync(path.join(root, file), "utf8");
-
+'use strict';
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { chromium } = require('playwright');
+const root = path.resolve(__dirname, '../..');
 (async () => {
-  const browser = await chromium.launch({ headless: true,
-    ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+  const server = spawn('python3', ['-B', 'prototypes/serve_ui.py', '--port', '0'], { cwd: root });
+  server.stderr.resume(); let browser;
   try {
-    const page = await browser.newPage({ viewport: { width: 740, height: 600 } });
-    const errors = [];
-    page.on("pageerror", error => errors.push(error.message));
-    await page.setContent('<div class="chat-workspace" style="height:600px"><aside class="chat-sidebar">' +
-      '<div id="chatOfficeLaunchMount"></div>' +
-      '<div id="chatSessionList" class="chat-session-list"></div></aside><div class="splitter"></div><main class="chat-main"></main></div>');
-    for (const file of ["app.css", "app-chat.css", "app-theme.css", "app-product-tokens.css", "app-product-components.css"])
-      await page.addStyleTag({ content: read("css/" + file) });
+    const url = await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.stdout.on('data', b => { const m = /RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(b)); if (m) resolve(m[1]); });
+    });
+    browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+    page.setDefaultTimeout(8000); const errors = [];
+    page.on('pageerror', error => errors.push(error.stack || error.message));
+    await page.goto(url + 'preview/web/?scenario=ready');
+    await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
+    const tree = page.locator('#chatSessionList');
+    const row = key => tree.locator('[data-tree-key=' + JSON.stringify(key) + '] > .navigation-tree-row');
+    const office = 'chat:preview-chat', project = 'project-chat:preview-data-workspace:preview-project-review';
+    await row(project).waitFor();
+    assert.equal(await page.locator('#tab-chat .global-nav').count(), 1);
+    assert.equal(await tree.getAttribute('role'), 'tree');
+    assert.equal(await page.locator('#projectChatLayout, .chat-scope-switcher, #projectChatRefresh, .chat-office-launch-list').count(), 0);
+    assert.equal(await page.locator('#chatDockHost').evaluate(n => n.parentElement.id), 'chatLayout');
+    const doc = (await row(office).evaluate(n => n.parentElement.dataset.parentKey));
+    for (const key of [doc, 'project:preview-data-workspace']) {
+      assert.equal(await row(key).evaluate(n => getComputedStyle(n).fontWeight), '400');
+      assert.equal(await row(key).locator('[data-tree-action]').count(), 1, 'one compact parent menu');
+    }
+    const folder = row('project:preview-data-workspace').locator('.project-folder-icon');
+    const accent = async () => page.evaluate(() => { const n=document.createElement('span'); n.style.color='var(--accent)'; document.body.append(n); const color=getComputedStyle(n).color; n.remove(); return color; });
+    assert.equal(await folder.evaluate(n => getComputedStyle(n).color), await accent());
+    const geometry = key => row(key).evaluate(n => {
+      const label=n.querySelector('.navigation-tree-label').getBoundingClientRect(), actions=n.querySelector('.tree-actions').getBoundingClientRect();
+      return { height:n.getBoundingClientRect().height, width:label.width, overlap:label.right>actions.left+1 };
+    });
+    const idle = await geometry(office); await row(office).hover();
+    assert.deepEqual(await geometry(office), idle); assert.equal(idle.overlap, false, 'selection/actions do not paint over the label');
+    assert.equal(idle.height, 32, 'preserved Demo row geometry');
+    const demo = await browser.newPage({ viewport: { width: 1280, height: 900 } }); await demo.goto(url);
+    assert.equal(await demo.locator('.nav-row').first().evaluate(n => getComputedStyle(n).minHeight), '32px'); await demo.close();
+    await page.evaluate(() => { window.treeHost = document.getElementById('chatDockHost'); window.officePanel = RNAssistantConversationPanel.selected(); });
+    await row(project).locator('.navigation-tree-label').click();
+    await page.waitForFunction(() => RNAssistantConversationPanel.selected().target.sessionId === 'preview-project-review');
+    assert.equal(await tree.locator('.navigation-tree-row.selected').count(), 1);
+    assert.equal(await row(project).evaluate(n => n.classList.contains('selected')), true);
+    assert.equal(await page.evaluate(() => treeHost === document.getElementById('chatDockHost') && treeHost.parentElement.id === 'chatLayout'), true);
+    await row(office).locator('.navigation-tree-label').click();
+    assert.equal(await page.evaluate(() => officePanel === RNAssistantConversationPanel.selected()), true, 'same retained Office view');
     await page.evaluate(() => {
-      window.$ = id => document.getElementById(id);
-      window.RNAssistantRunViewState = { fromChatSummary: chat => chat.RunViewState || null };
-      window.officeHostChatUnavailableReason = () => "";
-      window.state = {
-        host: "Excel", activeChatId: "first", chats: [
-          { id: "first", title: "Обзор", host: "Excel", documentKey: "one", documentTitle: "Отчёт.xlsx", isCurrentDocument: true },
-          { id: "second", title: "Детали", host: "Excel", documentKey: "one", documentTitle: "Отчёт.xlsx", isCurrentDocument: true },
-          { id: "third", title: "Бюджет", host: "Word", documentKey: "two", documentTitle: "Бюджет.docx" }
-        ], documents: [], collapsedChatDocuments: {}, initializedChatDocuments: {},
-        chatRuns: {}, activeSends: {}, officeHostChatAvailable: true
-      };
-      window.selectedChats = [];
-      window.selectChat = id => {
-        selectedChats.push(id);
-        state.activeChatId = id;
-        renderChatSessionList(state.chats);
-      };
-      window.createOfficeHostChat = () => {};
-      window.createDocumentChat = () => {};
-      window.activateDocument = () => {};
-      window.openActiveDocument = () => {};
-      window.deleteDocument = () => {};
-      window.renameChat = () => {};
-      window.deleteChat = () => {};
+      const target={source:'workspace',workspaceId:'preview-data-workspace',sessionId:'preview-project-review'};
+      window.projectPanel=RNAssistantConversationPanel.find(target);
+      RNAssistantConversationPanel.open(target,{referencePanel:RNAssistantConversationPanel.key(officePanel.target),beside:true});
     });
-    for (const file of ["app-icons.js", "app-utils.js", "app-navigation-tree.js", "app-conversation-state.js", "app-chat-state.js"])
-      await page.addScriptTag({ content: read("js/" + file) });
-    await page.evaluate(() => renderChatSessionList(state.chats));
-
-    const launcher = page.locator("#chatOfficeLaunchMount .chat-office-launch-list");
-    await launcher.locator("summary").click();
-    assert.equal(await launcher.locator(".chat-office-launch-row:visible").count(), 4);
-    await page.keyboard.press("Escape");
-    assert.equal(await launcher.getAttribute("open"), null);
-    assert.equal(await page.evaluate(() => document.activeElement.className), "chat-office-launch-heading");
-
-    const tree = page.getByRole("tree", { name: "Документы и чаты" });
-    const current = tree.getByRole("treeitem", { name: "Обзор" });
-    const closedDocument = tree.getByRole("treeitem", { name: /Бюджет.docx/ });
-    const geometry = await page.evaluate(() => {
-      const parent = document.querySelector('#chatSessionList .navigation-tree-item[aria-expanded="true"]');
-      const row = parent.querySelector(':scope > .navigation-tree-row');
-      const children = parent.querySelector(':scope > .navigation-tree-list');
-      const child = children.querySelector(':scope > .navigation-tree-item > .navigation-tree-row');
-      return { parentLabel: row.querySelector('.navigation-tree-label').getBoundingClientRect().left,
-        childLabel: child.querySelector('.navigation-tree-label').getBoundingClientRect().left,
-        border: getComputedStyle(children).borderLeftWidth, padding: getComputedStyle(children).paddingLeft,
-        height: child.getBoundingClientRect().height, overflow: children.scrollWidth > children.clientWidth + 1 };
-    });
-    assert.ok(Math.abs(geometry.parentLabel-geometry.childLabel)<=2,'chat and document labels align without wasted indent');
-    assert.deepEqual([geometry.border,geometry.padding,geometry.height,geometry.overflow],['0px','0px',32,false],
-      'chat tree has no guide line, extra inset or horizontal overflow');
-    assert.equal(await tree.getByRole("treeitem").count(), 4, "closed document hides its chat");
-    assert.equal(await current.getAttribute("tabindex"), "0");
-    await current.focus();
-    await page.keyboard.press("ArrowDown");
-    assert.equal(await page.evaluate(() => document.activeElement.dataset.treeKey), "chat:second");
-    await page.keyboard.press("ArrowDown");
-    assert.match(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), /Бюджет.docx/);
-    await page.keyboard.press("ArrowRight");
-    assert.equal(await closedDocument.getAttribute("aria-expanded"), "true");
-    await page.keyboard.press("ArrowRight");
-    assert.equal(await page.evaluate(() => document.activeElement.dataset.treeKey), "chat:third");
-    await page.keyboard.press("ArrowLeft");
-    assert.match(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), /Бюджет.docx/);
-
-    const toggle = closedDocument.locator(":scope > .navigation-tree-row > .navigation-tree-expander");
-    await toggle.focus();
-    await page.keyboard.press("Enter");
-    assert.equal(await closedDocument.getAttribute("aria-expanded"), "false", "button Enter toggles once");
-    await page.evaluate(() => { state.activeChatId = "third"; renderChatSessionList(state.chats); });
-    assert.equal(await closedDocument.getAttribute("aria-expanded"), "true", "new selection is revealed");
-    assert.equal(await tree.getByRole("treeitem", { name: "Бюджет", exact: true }).getAttribute("aria-current"), "page");
-
-    await tree.getByRole("treeitem", { name: "Бюджет", exact: true }).locator(".navigation-tree-label").focus();
-    await page.keyboard.press("Enter");
-    assert.deepEqual(await page.evaluate(() => selectedChats), ["third"], "button Enter selects once");
-    await tree.getByRole("treeitem", { name: "Бюджет", exact: true }).focus();
-    await page.keyboard.press("Shift+F10");
-    assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Диагностика чата",
-      "Shift+F10 focuses the first available row action");
-    await launcher.locator("summary").click();
-    await launcher.getByRole("button", { name: /Word/ }).focus();
-    await page.evaluate(() => { state.activeChatId = "first"; renderChatSessionList(state.chats); });
-    await page.waitForFunction(() => document.activeElement.dataset.treeKey === "chat:first");
-    assert.equal(await page.evaluate(() => document.activeElement.dataset.treeKey), "chat:first",
-      "a created chat takes focus after menu replacement");
-    await page.evaluate(() => { state.chats[0].jsonlByteLength = 6_000_000; renderChatSessionList(state.chats); });
-    assert.equal(await current.locator(".navigation-tree-label").getAttribute("title"), "Обзор",
-      "normal chat hover does not expose technical storage details");
-    const selectedRow = current.locator(":scope > .navigation-tree-row");
-    const selectedColor = await selectedRow.evaluate(node => getComputedStyle(node).backgroundColor);
-    await selectedRow.hover();
-    assert.equal(await selectedRow.evaluate(node => getComputedStyle(node).backgroundColor), selectedColor,
-      "hover keeps the selected row fill");
-    await page.evaluate(() => { state.chats[0].casMissingBlobCount = 1; renderChatSessionList(state.chats); });
-    assert.match(await current.locator(".navigation-tree-badge").getAttribute("title"), /Отсутствуют CAS blobs/,
-      "storage issues remain available on the warning badge");
-    assert.equal(await current.evaluate(node => {
-      const row=node.querySelector(':scope > .navigation-tree-row');
-      return row.querySelector('.tree-actions').getBoundingClientRect().right <=
-        row.querySelector('.navigation-tree-badge').getBoundingClientRect().left+1;
-    }),true,'overlay actions leave the warning badge visible');
-    await page.evaluate(() => {
-      state.chats[0].RunViewState = { lifecycle: "running" };
-      state.chatNavigationTargetId = "first"; state.chatNavigationPending = true;
-      renderChatSessionList(state.chats);
-    });
-    assert.equal(await current.locator(".tree-status").getAttribute("aria-label"), "Состояние запуска не подтверждено",
-      "history loading and a saved running checkpoint do not claim live execution");
-    assert.equal(await current.locator(".tree-run").count(), 0);
-    await page.evaluate(() => {
-      state.chatInboxes = { first: { running: true } };
-      renderChatSessionList(state.chats);
-    });
-    assert.equal(await current.locator(".tree-status").getAttribute("aria-label"), "Запрос выполняется",
-      "only the live inbox owner enables the running indicator");
-    await page.evaluate(() => {
-      delete state.chats[0].RunViewState; delete state.chatInboxes.first;
-      renderChatSessionList(state.chats);
-    });
-    assert.equal(await current.locator(".tree-status").count(), 0,
-      "navigation loading alone does not show an agent run");
-    if (process.env.CHAT_TREE_SCREENSHOT) await page.screenshot({ path: process.env.CHAT_TREE_SCREENSHOT });
+    assert.equal(await page.evaluate(()=>officePanel.element.closest('.dv-groupview')!==projectPanel.element.closest('.dv-groupview')),true,'split keeps both sources in one Dockview');
+    assert.equal(await page.evaluate(()=>treeHost===document.getElementById('chatDockHost')),true);
+    await page.evaluate(()=>RNAssistantDockWorkspace.close(RNAssistantConversationPanel.key(projectPanel.target)));
+    await page.waitForFunction(()=>!RNAssistantConversationPanel.find(projectPanel.target));
+    await row(project).locator('.navigation-tree-label').click();
+    await page.waitForFunction(()=>RNAssistantConversationPanel.selected().target.sessionId==='preview-project-review');
+    await row(office).locator('.navigation-tree-label').click();
+    await page.evaluate(() => { renderChatSessions({navigationOnly:true}); RNAssistantProjectChats.refreshTree(); window.retainedRow=document.querySelector('[data-tree-key="chat:preview-chat"]'); });
+    await page.evaluate(() => { for(let i=0;i<30;i++){renderChatSessions({navigationOnly:true});RNAssistantProjectChats.refreshTree();} });
+    assert.equal(await page.evaluate(() => retainedRow === document.querySelector('[data-tree-key="chat:preview-chat"]')), true, 'passive paints retain navigation DOM');
+    const menu = page.getByRole('menu');
+    async function chatMenu(key) { await row(key).hover(); await row(key).locator('[data-tree-action]').click(); }
+    await chatMenu(office);
+    const officeActions = await menu.getByRole('menuitem').allTextContents();
+    assert.equal(await menu.getByRole('menuitem').count(), await menu.locator('button > svg').count(), 'every chat action has a shared icon');
+    assert.equal(await menu.locator('button.is-danger').count(), 1);
+    await page.keyboard.press('Escape');
+    assert.equal(await row(office).locator('[data-tree-action]').evaluate(n => n === document.activeElement), true);
+    await chatMenu(project);
+    assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), officeActions, 'Office/project menus have identical labels and order');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Поиск документов, проектов и чатов', exact: true }).click();
+    await page.locator('#chatSearchInput').fill('Проверка источников');
+    await row('project-chat:preview-data-workspace:preview-project-clean').waitFor();
+    assert.equal(await row(office).count(), 0, 'one search filters both sources');
+    assert.equal(await tree.locator('[data-tree-key^="document:"]').count(),0,'unmatched live documents are also filtered');
+    await page.keyboard.press('Escape'); await row(office).waitFor();
+    await row('workspace-section:office').locator('[data-tree-toggle]').click();
+    await row('workspace-section:office').locator('[data-tree-toggle]').focus();
+    await tree.locator('[data-tree-key="workspace-section:office"]').focus(); await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.treeKey), 'workspace-section:projects', 'one keyboard tree crosses sections');
+    await row('workspace-section:office').locator('[data-tree-toggle]').click();
+    await page.evaluate(() => { state.officeHostChatAvailable=true; window.creationCalls=[]; const original=send;
+      window.send=function(type,payload,progress){if(['createChat','createOfficeHostChat','connectProjectWorkspace','createProjectWorkspace','createProjectChat'].includes(type))creationCalls.push({type,payload});return original(type,payload,progress);}; });
+    const add = page.locator('#newChatButton');
+    if(process.env.CHAT_TREE_SCREENSHOT) await page.screenshot({path:process.env.CHAT_TREE_SCREENSHOT.replace(/\.png$/, '-wide.png')});
+    await add.click();
+    if(process.env.CHAT_TREE_SCREENSHOT) await page.screenshot({path:process.env.CHAT_TREE_SCREENSHOT.replace(/\.png$/, '-menu.png')});
+    assert.deepEqual(await menu.getByRole('menuitem').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('aria-label'))), ['Новый чат','Добавить проект…','Excel','Word','PowerPoint','Outlook']);
+    await menu.getByRole('menuitem',{name:'Новый чат',exact:true}).click();
+    await page.waitForFunction(()=>creationCalls.some(x=>x.type==='createChat'));
+    await page.waitForFunction(()=>!state.chatNavigationPending);
+    await add.click(); await menu.getByRole('menuitem',{name:'Добавить проект…',exact:true}).click();
+    await page.locator('#projectChatConnectionPath').fill('/tmp/unified-existing'); await page.locator('#projectChatConnectionSubmit').click();
+    await page.waitForFunction(()=>creationCalls.some(x=>x.type==='connectProjectWorkspace'));
+    await page.locator('#projectChatConnection').waitFor({state:'hidden'});
+    await add.click(); await menu.getByRole('menuitem',{name:'Добавить проект…',exact:true}).click();
+    await page.locator('#projectChatConnectionPath').fill('/tmp/unified-new'); await page.locator('#projectChatConnectionCreate').check();
+    await page.locator('#projectChatConnectionSubmit').click(); await page.locator('#projectChatConnection').waitFor({state:'hidden'});
+    assert.equal(await page.evaluate(()=>creationCalls.filter(x=>x.type==='createProjectWorkspace').length), 1);
+    await row(project).locator('.navigation-tree-label').click();
+    await add.click(); await menu.getByRole('menuitem',{name:'Новый чат',exact:true}).click();
+    await page.waitForFunction(()=>creationCalls.some(x=>x.type==='createProjectChat'));
+    assert.equal(await page.evaluate(()=>creationCalls.find(x=>x.type==='createProjectChat').payload.workspaceId), 'preview-data-workspace');
+    await page.waitForFunction(()=>!RNAssistantProjectChats.isCatalogBusy());
+    for (const theme of ['light','dark']) {
+      await page.evaluate(theme=>{applyUiTheme({UiTheme:theme},false);RNAssistantAccents.apply('blue',false);},theme);
+      assert.equal(await folder.evaluate(n=>getComputedStyle(n).color),await accent());
+      await page.setViewportSize({width:420,height:800});
+      await page.evaluate(()=>{document.documentElement.style.zoom='1.25';RNAssistantShellLayout.refresh();});
+      if(!await add.isVisible()) await page.locator('#productMobileMenuButton').click();
+      await add.click();
+      assert.equal(await menu.evaluate(n=>{const b=n.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth+1&&b.top>=0&&b.bottom<=innerHeight+1&&n.scrollWidth<=n.clientWidth+1;}),true,'menu fits narrow/zoom '+theme);
+      if(process.env.CHAT_TREE_SCREENSHOT) await page.screenshot({path:process.env.CHAT_TREE_SCREENSHOT.replace(/\.png$/, '-'+theme+'.png')});
+      await page.keyboard.press('Escape');
+    }
+    await page.evaluate(()=>{document.documentElement.style.zoom='1';});
+    await page.setViewportSize({width:1280,height:900});
+    assert.equal(await page.locator('#chatDockHost').evaluate(n=>n.parentElement.id),'chatLayout','wide restore retains the shared placement');
     assert.deepEqual(errors, []);
-    console.log("PASS chat tree browser: visible selection, roving keyboard focus and single actions");
-  } finally { await browser.close(); }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+    console.log('PASS unified workspace tree: single layout/search/selection, retained views/DOM, matching chat menus, creation routing, keyboard, theme icons, 420px/125%');
+  } finally { if(browser) await browser.close(); server.kill(); }
+})().catch(error => { console.error(error); process.exitCode=1; });

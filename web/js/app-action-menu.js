@@ -34,9 +34,10 @@
       if (item.informational) control.className = "rna-action-menu-info"; else control.type = "button";
       control.dataset.menuKey = item.key || key;
       var check = typeof item.checked === "boolean";
+      if (item.danger) control.classList.add("is-danger");
       if (!item.informational) { control.setAttribute("role", check ? "menuitemcheckbox" : "menuitem"); control.setAttribute("aria-label", item.label); control.disabled = !!item.disabled; }
       if (check) control.setAttribute("aria-checked", String(item.checked));
-      control.innerHTML = (check ? icon("check") : item.icon === false ? "" : icon(item.icon || "right")) + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
+      control.innerHTML = (check ? icon("check") : item.iconHtml || (item.icon === false ? "" : icon(item.icon || "right"))) + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
       if (item.status) {
         control.classList.add("has-detail"); if (check || item.icon !== false) control.classList.add("has-icon");
         var status = document.createElement("small"); status.textContent = item.status; control.appendChild(status);
@@ -175,6 +176,14 @@
   };
 
   window.RNAssistantActionMenu = Object.freeze({ createTrigger: createTrigger, render: render, open: open, openButtons: openButtons, closeAll: closeAll,
+    treeActions: function (label, actions) {
+      return [{ title: label, menu: true, iconHtml: icon("more"), onClick: function (node, button) {
+        open(button, actions.filter(function (action) { return !action.hidden; }).map(function (action) {
+          return { label: action.title, iconHtml: action.iconHtml, danger: action.danger, disabled: action.disabled,
+            onSelect: function () { action.onClick(node, button); } };
+        }), { label: label });
+      } }];
+    },
     closeWithin: function (root) { if (popupTrigger && root.contains(popupTrigger)) closePopup(false); }
   });
   document.querySelectorAll("[data-rna-action-menu]").forEach(function (mount) {
