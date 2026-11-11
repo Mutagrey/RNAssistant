@@ -536,7 +536,7 @@ namespace RNAssistant.Runtime
                         pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
-                        AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, currentRunOnly: true)),
+                        AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, _payloads, currentRunOnly: true)),
                         pendingPorts, pendingPorts.Tools, pendingPorts, cancellationToken, rejectPending: true, admission: _executionAdmission).ConfigureAwait(false);
                 }
                 if (ConversationInboxService.HasPendingWait(session))
@@ -575,7 +575,7 @@ namespace RNAssistant.Runtime
                 session.Mode = acceptedMode;
                 session.MutationPolicy = policy.MutationPolicy;
 
-                var previous = RestoreAcceptedHistory(session);
+                var previous = RestoreAcceptedHistory(session, _payloads);
                 var runId = Guid.NewGuid().ToString("N");
                 var titleSeed = ChatTitleBuilder.ResolveUserSeed(session, message);
                 var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
@@ -714,7 +714,7 @@ namespace RNAssistant.Runtime
                      !string.Equals(settings.ReasoningRequestMode, modelConfiguration.ReasoningRequestMode,
                          StringComparison.Ordinal)))
                     throw new InvalidOperationException("Approval must continue with the accepted run's endpoint, model digest, context, response mode, instruction role, tool result role and reasoning mode.");
-                var history = RestoreAcceptedHistory(session, currentRunOnly: true);
+                var history = RestoreAcceptedHistory(session, _payloads, currentRunOnly: true);
                 var continuation = AgentRunContinuation.Restore(run, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
                 var pendingCursor = ConversationEventFeed.Cursor(session);
@@ -1038,7 +1038,7 @@ namespace RNAssistant.Runtime
             return session;
         }
 
-        private IReadOnlyList<AgentMessage> RestoreAcceptedHistory(ChatSession session, bool currentRunOnly = false)
+        internal static IReadOnlyList<AgentMessage> RestoreAcceptedHistory(ChatSession session, ChatBlobStore payloads, bool currentRunOnly = false)
         {
             const string recovery = "История чата содержит неполную запись вызова. " +
                 "Создайте новый чат; старая история сохранена. ";
@@ -1070,7 +1070,7 @@ namespace RNAssistant.Runtime
                 }
                 if (item.Role == "assistant" && item.ProtocolMessage)
                 {
-                    var complete = AcceptedCallPayloadService.Hydrate(item, _payloads);
+                    var complete = AcceptedCallPayloadService.Hydrate(item, payloads);
                     var accepted = ConversationResponseHistoryReader.Read(complete);
                     if (!accepted.Success) throw new InvalidOperationException("Stored workspace response is invalid: " + accepted.Error);
                     if (accepted.Response.ToolCalls.Any(call => CapabilityNaming.IsRetiredTool(call.Name)))

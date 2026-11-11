@@ -27,8 +27,18 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidOperationException("Dispatch requires its exact in-flight checkpoint.");
             if (context?.Policy.MayHaveSideEffects == true && (context.Call.Name != ResourceMutationToolCatalog.Write ||
                 context.Policy.Policy?.ExecutionClass != ToolExecutionClass.ManagedMutation) ||
-                execution?.Outcome == ToolExecutionOutcome.AwaitingConfirmation || execution?.Outcome == ToolExecutionOutcome.Waiting)
+                execution?.Outcome == ToolExecutionOutcome.Waiting)
                 throw TextStoreScope();
+            var awaiting = execution?.Outcome == ToolExecutionOutcome.AwaitingConfirmation;
+            if (awaiting)
+            {
+                var pending = session.LastRun.KernelState.Summary.PendingConfirmation;
+                if (pending == null || pending.PendingId != execution.PendingId || pending.StepId != context.StepId ||
+                    !SameRunValue(pending.Call, context.Call) || !SameRunValue(pending.Policy, context.Policy) ||
+                    pending.PreparedStateJson != execution.PreparedStateJson || execution.MayHaveDispatched ||
+                    execution.Evidence.Effect != ToolEffectEvidence.None)
+                    throw new InvalidDataException("Pending approval requires its exact preparation without dispatch.");
+            }
             ConversationResultFact terminal = null;
             if (command.FactKind == AgentRunEventKind.ToolCompleted && !command.ResultProjection &&
                 execution?.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
@@ -47,8 +57,13 @@ namespace RNAssistant.Core.Storage
             }
             return new ConversationRuntimeTools(command.FactKind, context?.Call.Id, context?.Call.Name, context?.StepId,
                 command.ActivityId, command.ResultProjection, context?.Policy.MayHaveSideEffects == true, terminal,
-                execution?.Evidence.Effect == ToolEffectEvidence.None || execution?.Evidence.Effect == ToolEffectEvidence.VerifiedNoChange);
+                execution?.Evidence.Effect == ToolEffectEvidence.None || execution?.Evidence.Effect == ToolEffectEvidence.VerifiedNoChange,
+                awaiting ? execution.PendingId : null, context?.IsConfirmed == true,
+                awaiting ? PreparationHash(execution.PreparedStateJson) : context?.IsConfirmed == true ? PreparationHash(context.PreparedStateJson) : null);
         }
+
+        private static string PreparationHash(string value)
+        { return value == null ? null : TextPatternEngine.Sha256(value); }
 
         private static IEnumerable<PayloadRef> MessageReferences(ChatMessage message)
         {
@@ -110,16 +125,30 @@ namespace RNAssistant.Core.Storage
                 var accepted = FindCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId);
                 if (accepted == null || accepted.Call.ToolName != tools.ToolName || accepted.Call.AcceptedCallOrigin.StepId != tools.StepId)
                     throw new InvalidDataException("Runtime entry does not identify its accepted call.");
-                if (tools.Kind == AgentRunEventKind.ToolStarted &&
-                    (StartedOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) != null ||
-                    TerminalOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) != null))
-                    throw new InvalidOperationException("An entered or terminal call cannot enter the runtime again.");
-                if (tools.ResultProjection && TerminalOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) == null)
+                var pending = PendingTool(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId);
+                var start = StartedOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId);
+                var terminal = TerminalOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId);
+                if (tools.Kind == AgentRunEventKind.ToolStarted)
+                {
+                    if (terminal != null || start == null && tools.Confirmed)
+                        throw new InvalidOperationException("A terminal or unprepared call cannot be confirmed.");
+                    if (start != null && (!tools.Confirmed || pending == null ||
+                        pending.Position.Sequence <= FindChatWrite(db, start).Position.Sequence ||
+                        pending.Fact.Checkpoint.InvocationId == fact.Checkpoint.InvocationId ||
+                        pending.Fact.Tools.PreparationHash != tools.PreparationHash))
+                        throw new InvalidOperationException("Runtime re-entry requires an unconsumed approval and its claimed invocation.");
+                }
+                if (tools.PendingId != null && (terminal != null || start == null || !tools.NoEffect ||
+                    (tools.ResultProjection ? pending?.Fact.Tools.PendingId != tools.PendingId ||
+                        pending.Fact.Tools.PreparationHash != tools.PreparationHash : pending != null)))
+                    throw new InvalidDataException("Pending approval conflicts with its accepted runtime entry.");
+                if (tools.ResultProjection && terminal == null && tools.PendingId == null)
                     throw new InvalidDataException("Result presentation has no committed terminal.");
                 var activity = fact.Messages.SingleOrDefault(item => item.Header.Id == tools.ActivityId)?.Header;
                 if (activity?.Activity == null || activity.RunId != fact.Run.RunId || activity.Activity.RunId != fact.Run.RunId ||
                     activity.Activity.ToolCallId != tools.CallId || activity.Activity.ToolId != tools.ToolName || activity.Activity.StepId != tools.StepId ||
-                    tools.Terminal != null && !SameRunValue(activity.ExecutionProgress, tools.Terminal.Result.ExecutionProgress))
+                    tools.Terminal != null && !SameRunValue(activity.ExecutionProgress, tools.Terminal.Result.ExecutionProgress) ||
+                    tools.PendingId != null && (activity.ExecutionProgress?.Outcome != ToolExecutionOutcome.AwaitingConfirmation || activity.EvidenceReference != null))
                     throw new InvalidDataException("Kernel tool event lacks its exact activity projection.");
             }
             foreach (var entry in fact.Messages)
@@ -146,8 +175,12 @@ namespace RNAssistant.Core.Storage
                         throw new InvalidDataException("Message refers to a foreign accepted call.");
                     var terminal = tools?.Terminal?.Result.ToolCallId == callId ? tools.Terminal :
                         Find(db, TerminalOperation(db, fact.Card.ChatId, message.RunId, callId) as string)?.Fact;
+                    var pendingProgress = terminal != null || message.Activity == null || message.ExecutionProgress == null ? null :
+                        message.Id == tools?.ActivityId && tools.PendingId != null ? message.ExecutionProgress :
+                        PendingTool(db, fact.Card.ChatId, message.RunId, callId)?.Fact.Messages
+                            .Single(item => item.Header.Activity?.ToolCallId == callId).Header.ExecutionProgress;
                     if (message.EvidenceReference?.Alias != terminal?.Result.EvidenceReference?.Alias ||
-                        message.ExecutionProgress != null && !SameRunValue(message.ExecutionProgress, terminal?.Result.ExecutionProgress))
+                        message.ExecutionProgress != null && !SameRunValue(message.ExecutionProgress, terminal?.Result.ExecutionProgress ?? pendingProgress))
                         throw new InvalidDataException("Presentation cannot change a committed execution outcome.");
                 }
                 if (prior?.Activity != null && message.Id != tools?.ActivityId &&
@@ -163,6 +196,21 @@ namespace RNAssistant.Core.Storage
             { AddCallKey(command, chat, run, call); return command.ExecuteScalar() as string; }
         }
 
+        private ConversationChatReceipt PendingTool(SqliteConnection db, string chat, string run, string call)
+        {
+            using (var command = Command(db, "SELECT pending FROM call_fact WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call"))
+            {
+                AddCallKey(command, chat, run, call);
+                var operation = command.ExecuteScalar() as string;
+                if (operation == null) return null;
+                var pending = FindChatWrite(db, operation);
+                if (pending?.Fact.Card.ChatId != chat || pending.Fact.Run.RunId != run ||
+                    pending.Fact.Tools?.CallId != call || pending.Fact.Tools.PendingId == null || pending.Fact.Tools.ResultProjection)
+                    throw new InvalidDataException("Foreign pending approval locator.");
+                return pending;
+            }
+        }
+
         private void ApplyChatToolRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position,
             ConversationChatCommit fact, Dictionary<string, ContextCallKey> keys, ISet<string> existing, long nextEvidence)
         {
@@ -173,8 +221,12 @@ namespace RNAssistant.Core.Storage
                 ApplyCallRows(db, tx, call, record.Operation, fingerprint, position, LookupCallKey(keys, fingerprint));
             }
             if (fact.Tools?.Kind == AgentRunEventKind.ToolStarted)
-                using (var command = Command(db, "UPDATE call_fact SET started=$operation WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call", tx))
+                using (var command = Command(db, "UPDATE call_fact SET started=$operation,pending=NULL WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call", tx))
                 { AddCallKey(command, fact.Card.ChatId, fact.Run.RunId, fact.Tools.CallId); command.Parameters.AddWithValue("$operation", record.Operation); command.ExecuteNonQuery(); }
+            if (fact.Tools?.PendingId != null && !fact.Tools.ResultProjection || fact.Tools?.Terminal != null)
+                using (var command = Command(db, "UPDATE call_fact SET pending=$pending WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call", tx))
+                { AddCallKey(command, fact.Card.ChatId, fact.Run.RunId, fact.Tools.CallId);
+                    command.Parameters.AddWithValue("$pending", fact.Tools.PendingId == null ? (object)DBNull.Value : record.Operation); command.ExecuteNonQuery(); }
             if (fact.Tools?.Terminal != null)
                 ApplyResultRows(db, tx, fact.Tools.Terminal, record.Operation, Fingerprint(fact.Tools.Terminal), position, nextEvidence);
             foreach (var reference in fact.References ?? new ModelResourceReference[0])
@@ -214,18 +266,25 @@ namespace RNAssistant.Core.Storage
         public bool MayHaveSideEffects { get; private set; }
         public ConversationResultFact Terminal { get; private set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool NoEffect { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string PendingId { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool Confirmed { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string PreparationHash { get; private set; }
         [JsonConstructor] internal ConversationRuntimeTools(AgentRunEventKind kind, string callId, string toolName, string stepId,
-            string activityId, bool resultProjection, bool mayHaveSideEffects, ConversationResultFact terminal, bool noEffect = false)
+            string activityId, bool resultProjection, bool mayHaveSideEffects, ConversationResultFact terminal, bool noEffect = false,
+            string pendingId = null, bool confirmed = false, string preparationHash = null)
         {
             var toolEvent = kind == AgentRunEventKind.ToolStarted || kind == AgentRunEventKind.ToolCompleted;
             if (!Enum.IsDefined(typeof(AgentRunEventKind), kind) || toolEvent &&
                 (string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(toolName) || string.IsNullOrWhiteSpace(stepId) || string.IsNullOrWhiteSpace(activityId)) ||
                 !toolEvent && (callId != null || toolName != null || stepId != null || activityId != null || mayHaveSideEffects) ||
-                (resultProjection || terminal != null) && kind != AgentRunEventKind.ToolCompleted || resultProjection && terminal != null)
+                (resultProjection || terminal != null) && kind != AgentRunEventKind.ToolCompleted || resultProjection && terminal != null ||
+                pendingId != null && (string.IsNullOrWhiteSpace(pendingId) || kind != AgentRunEventKind.ToolCompleted || terminal != null) ||
+                !toolEvent && (confirmed || preparationHash != null))
                 throw new ArgumentException("An exact typed kernel tool event is required.");
             Kind = kind; CallId = callId; ToolName = toolName; StepId = stepId; ActivityId = activityId;
             ResultProjection = resultProjection; MayHaveSideEffects = mayHaveSideEffects; Terminal = terminal;
             NoEffect = noEffect;
+            PendingId = pendingId; Confirmed = confirmed; PreparationHash = preparationHash;
         }
     }
 }

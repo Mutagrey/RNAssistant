@@ -2,6 +2,15 @@
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 mutation confirmation (2026-11-11): existing Office/Workspace consumers now
+resume the saved file/VBA `core.write` through ConversationJournal. Pending has no
+terminal/E; preparation remains in checkpoint CAS, with one disposable call locator.
+Resume claims a new invocation before dispatch and consumes that locator on exact
+runtime entry. Repeated approval, preparation mismatch and lost claim acknowledgement
+cannot repeat the effect. Workspace denial retains NotDispatched. Owner: Core
+journal / existing kernel consumers. Wait/recovery, other mutation/Store ports and
+P7 composition remain open; no new adapter. [Contract](../session-events.md#journal-mutation-confirmation--2026-11-11).
+
 P1/P2 bound mutation calls (2026-11-11): `core.write` now uses existing Workspace
 file and Office VBA owners with ResourceJournal. Prepared facts bind exact accepted
 call/runtime-entry positions before dispatch; schema 14 indexes one attempt per
@@ -10,7 +19,7 @@ promoting Unknown or replaying work. Office/Workspace catalogs accept the same
 injected ports. Scope guards in the existing mutation owners reject unconnected
 targets; remove those restrictions as their owners join the journal composition.
 Owner: Core journal / Office resource authority / Workspace file owner. Remaining
-mutations, confirmation/wait/recovery and full production composition retain the
+mutations, wait/recovery and full production composition retain the
 same P7 gate; no additional store/adapter or legacy optimization.
 [Contract](../session-events.md#bound-mutation-calls-on-the-journal--2026-11-11).
 
@@ -49,7 +58,7 @@ model presentation does not create a second terminal. Indexed T/E/R and ToolPack
 admissions support exact finish evidence and cross-turn reuse. Lost terminal ack,
 unknown read result, restart/rebuild/restore and citation correction are covered.
 Default production composition remains unchanged. The bound-mutation slice above
-connects the first write; other mutations, confirmation/wait and interrupted
+connects the first write and confirmation; other mutations, agent waits and interrupted
 recovery remain unsupported by this integration.
 The same P7 removal gate applies; no additional adapter was introduced.
 [Contract](../session-events.md#atomic-read-tool-runtime-on-the-journal--2026-11-11).

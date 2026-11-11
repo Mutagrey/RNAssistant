@@ -1097,3 +1097,43 @@ after-state/CAS ownership.
    complete-port removal condition. Temporary owner restrictions are removed as
    each semantic owner joins this composition. No new adapter or product version
    bump; this intermediate slice does not switch production, release or push.
+
+## P1/P2 — journal mutation confirmation (2026-11-11)
+
+1. Advances F01/F04 consumer migration: ConversationJournal now persists and resumes
+   the existing kernel approval for single-call file/VBA `core.write` through actual
+   Office run service and Workspace ports. No approval service/store is introduced.
+2. Pending preparation remains in checkpoint CAS, without terminal/E or a source
+   mutation attempt. Schema 15 adds an addressed pending locator to the existing call
+   index; compact ID/hash binds it to exact preparation. Resume claims a new invocation
+   in the original run before source dispatch, then consumes the pending locator on
+   runtime entry. Stale/changed approval fails before execution. Lost claim ack does
+   not recreate pending or retry the effect. Workspace denial yields NotDispatched;
+   the existing evidence owner rejects using that receipt as successful write proof.
+3. Removed the unconditional confirmation rejection from the journal path. Workspace's
+   existing history reconstruction now takes its payload owner explicitly and is
+   reused by the integration. Production C# net +64 lines; no ChatStore changes,
+   parallel history, new registry/adapter, old-history import, dual-write or fallback.
+4. Thirteen distinct checks pass on macOS/net8/C#7.3 in isolated `d1e7b4a2` plus this
+   slice: four `journal confirmation:`, four `journal mutation:`, four `journal
+   runtime:` and `storage optimization: run checkpoints and invocation ownership`.
+   Approval tests cover both consumers, exact preparation, stale second resume,
+   restart/rebuild and clean journal/CAS restore after approval; denial uses real
+   Workspace ports. Existing unknown/lost resource/terminal acknowledgement cases
+   also pass. Version format validation passes. No Office/VSTO/Windows validation.
+5. Same read-tool fixture before/after: finish admission remains 9 canonical records,
+   about 56 KB for Office / 62 KB for Workspace, zero historical body hydration,
+   before and after restart. Approval lookup uses one indexed call and exact frames;
+   its prepared JSON is not copied into headers. Previously this path rejected
+   confirmation, so no old/new confirmation latency comparison exists. CPU,
+   allocations, physical I/O and Windows timings were not measured.
+6. Still open: interrupted-run reconciliation after a consumed claim or in-flight
+   call, agent waits, other mutation/resource owners, remaining Store operations,
+   Inbox/control/feed and P3 request preparation, including metadata/header overhead.
+   Production switch still requires complete history/CAS/key/Workspace locator and
+   move-intent backup, stopped old writers and Windows/Office photo evidence. The
+   clean journal restore is not full application restore. P4 remains deferred.
+7. Session events, Resource Fabric, MIGRATION_MAP, PROGRESS and Harness guide updated.
+   Existing adapters/backends retain their complete-port P7 removal condition;
+   temporary semantic-owner restrictions remain until those owners are connected.
+   No product bump for this intermediate integration, production switch or push.

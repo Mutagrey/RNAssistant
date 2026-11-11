@@ -155,7 +155,11 @@ consumers: calls/start/terminal + checkpoint атомарны, T/E/R и admissio
 ссылается на точный resource receipt; lost ack не превращает Unknown в Ok. Поздняя
 inspection добавляет proof без переписывания terminal; неподключённые owners явно
 отклоняются до invocation. Каталоги Office/Workspace также используют эти ports.
-Остальные mutation/resource owners, confirmation/wait,
+Подключено явное подтверждение `core.write`: ожидание переживает restart/rebuild,
+resume фиксирует новую invocation до записи. Повторное подтверждение, изменённая
+подготовка и потеря квитанции claim не исполняют mutation; отказ Workspace сохраняет
+NotDispatched. Проверены 13 адресных checks в изолированном срезе.
+Остальные mutation/resource owners, wait,
 rewrite/move/delete/recovery, usage, Inbox/control/feed и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
@@ -167,6 +171,7 @@ production composition остаются открыты. Backup смешанно�
 [Resource-срез](../audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
 [Read-tool-срез](../audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
 [Mutation-срез](../audits/storage-context-optimization.md#p1p2--bound-mutation-calls-2026-11-11).
+[Confirmation-срез](../audits/storage-context-optimization.md#p1p2--journal-mutation-confirmation-2026-11-11).
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace

@@ -66,10 +66,14 @@ namespace RNAssistant.Core.Storage
                 throw TextStoreScope();
             var prior = CurrentRun(db, session.Id);
             var summary = state.Summary;
-            var invocation = retry?.InvocationId ?? (prior?.Fact.RunId == run.RunId ? prior.Fact.InvocationId : commit.OperationId);
+            var resume = retry?.Resume ?? (prior?.Fact.RunId == run.RunId &&
+                prior.Fact.Lifecycle == RunLifecycle.AwaitingConfirmation && summary.Lifecycle == RunLifecycle.Running);
+            if (resume && commit.FactKind != AgentRunEventKind.SummaryChanged)
+                throw new InvalidOperationException("Confirmation must claim its saved run before entering the runtime.");
+            var invocation = retry?.InvocationId ?? (resume || prior?.Fact.RunId != run.RunId ? commit.OperationId : prior.Fact.InvocationId);
             return new ConversationRunCheckpoint(session.Id, run.RunId, run.TurnId, invocation,
                 retry?.Revision ?? (prior?.Fact.Revision ?? 0) + 1, retry == null ? prior?.Position.Hash : retry.PreviousHash,
-                false, summary.Lifecycle, summary.PauseId, summary.IterationsUsed, summary.ToolStepsUsed,
+                resume, summary.Lifecycle, summary.PauseId, summary.IterationsUsed, summary.ToolStepsUsed,
                 summary.ToolCounts, state.Limits, ConversationRunPolicy.ForAcceptedRun(session), run.ModelConfiguration,
                 body, RunReferences(state));
         }

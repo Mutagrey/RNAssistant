@@ -111,6 +111,15 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal confirmation:` runs four focused checks: real Office/Workspace approval
+after restart/rebuild, lost invocation-claim acknowledgement, Workspace denial and
+changed preparation. Checks enforce one accepted call/write, no E or resource
+attempt while pending, stale approval rejection, preserved budgets and a denial
+receipt that cannot prove success. Approved Workspace turns also exercise clean
+journal/CAS restore. Pair with `journal mutation:`, `journal runtime:` and
+`storage optimization: run checkpoints and invocation ownership`. Interrupted-run
+reconciliation, other mutation owners and Windows/Office qualification remain open.
+
 `journal mutation:` runs four focused checks through the real Office/Workspace
 runtime and scripted HTTP: VBA/file `core.write`, unknown and lost authority ack,
 lost terminal ack, and unconnected owner refusal before dispatch. Checks retain
@@ -118,7 +127,7 @@ exact call/start proof, one invocation, resource outcome linkage, unknown obliga
 independent work, explicit late inspection, rebuild and clean journal/CAS restore.
 Known empty scope locks permit backup; nonempty locks still reject it. Pair with
 `journal runtime:`, `journal resources:`, native publication/late-outcome and
-canonical closure/backup tests below. Other mutation owners, confirmation/wait,
+canonical closure/backup tests below. Other mutation owners, agent waits,
 full application restore and Windows/Office qualification remain open.
 
 `journal resources:` runs three direct-port checks: actual Workspace file lifecycle

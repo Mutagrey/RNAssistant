@@ -1917,7 +1917,7 @@ receipt; it cannot manufacture a terminal outcome. Unknown retains its evidence,
 blocks unsafe writes to its target, and never replays on restart or explicit inspection.
 
 Current heads and exact revision/view pages use the shared disposable index (schema
-14; the original direct-port slice used 12). Snapshot history loads only on explicit `Commits` access, pinned to generation
+15; the original direct-port slice used 12). Snapshot history loads only on explicit `Commits` access, pinned to generation
 and canonical hash; mutation recovery uses `FindMutationCommit(attemptId)`. Capturing
 heads is still proportional to the number of current heads. The existing advisory
 observer list moved to the journal owner; no second notification registry was added.

@@ -1,5 +1,28 @@
 # Session event stream
 
+## Journal mutation confirmation — 2026-11-11
+
+The isolated `core.write` integration now supports explicit approval through the
+existing Office run service and Workspace runtime. Pending preparation stays in
+the kernel checkpoint/CAS. Its compact ID/hash and an addressed locator in the
+existing call index (schema 15) identify the approval without another durable store.
+Pending activity has no execution terminal or E; no source attempt is prepared while
+waiting. Restart/rebuild retains the same accepted call, preparation and budget.
+
+Resume first commits a new invocation claim in the original run. Only the exact
+unconsumed preparation may re-enter the runtime; its new start consumes the pending
+locator atomically. A stale approval or changed prepared state fails before source
+dispatch. Lost claim acknowledgement leaves the durable claim intact and does not
+automatically execute or recreate approval. Existing interrupted-run reconciliation
+still needs integration; this slice does not qualify automatic recovery of that gap.
+Workspace denial records NotDispatched, clears approval and cancels the run. Its
+terminal receipt can describe rejection but cannot prove a successful write.
+
+Checked scope is single-call file/VBA `core.write`, including later journal/CAS
+restore. Other mutation owners, agent waits, remaining recovery/control/Store ports
+and production cutover remain open; Windows/Office evidence is separate.
+[Report](audits/storage-context-optimization.md#p1p2--journal-mutation-confirmation-2026-11-11).
+
 ## Bound mutation calls on the journal — 2026-11-11
 
 The isolated integration now executes `core.write` through the real Workspace file
@@ -19,7 +42,7 @@ remains available; unsafe writes to the unresolved target remain blocked.
 
 Office and Workspace catalog publications use the injected resource ports in this
 composition. Unsupported mutation commands and unconnected `core.write` owners
-reject before invocation. Confirmation/wait, remaining semantic owners, interrupted
+reject before invocation. Confirmation is connected above; agent waits, remaining semantic owners, interrupted
 run reconciliation, other Store/Inbox/control/feed operations and P3 request
 preparation still need integration. Default production composition is unchanged;
 there is no import, fallback, dual-write or additional store. Full backup/root switch
@@ -48,7 +71,7 @@ next turn. Admission bodies are read outside the append lock. Schema 13 rebuilds
 these projections from journals/CAS.
 
 This remains an isolated integration, not the production switch. The mutation slice
-above adds the first bound write; confirmation/wait and interrupted-run recovery
+above adds the first bound write and confirmation; agent waits and interrupted-run recovery
 still reject unsupported paths explicitly. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
 full backup/cutover gates stay open. No ChatStore optimization, adapter, dual-write
 or fallback is added. [Evidence](audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).

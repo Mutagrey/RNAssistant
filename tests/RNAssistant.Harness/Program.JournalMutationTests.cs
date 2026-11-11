@@ -34,6 +34,18 @@ namespace RNAssistant.Harness
         private static void JournalMutationUnsupportedOwner()
         { JournalMutationTurn(true, "unsupported-owner"); JournalMutationTurn(false, "unsupported-owner"); }
 
+        private static void JournalConfirmationParity()
+        { foreach (var office in new[] { true, false }) JournalMutationTurn(office, "confirm"); }
+
+        private static void JournalConfirmationClaimLoss()
+        { foreach (var office in new[] { true, false }) JournalMutationTurn(office, "confirm-claim-ack"); }
+
+        private static void JournalConfirmationDenial()
+        { JournalMutationTurn(false, "confirm-deny"); }
+
+        private static void JournalConfirmationPreparation()
+        { foreach (var office in new[] { true, false }) JournalMutationTurn(office, "confirm-preparation"); }
+
         private static void JournalMutationTurn(bool office, string fault)
         {
             WithTempPaths(paths => {
@@ -43,8 +55,10 @@ namespace RNAssistant.Harness
                 var resources = new ResourceJournal(paths); var payloads = new ChatBlobStore(paths);
                 var files = new WorkspaceFileService(paths, resources, resources, resources);
                 var adapter = new FakeOfficeAdapter();
+                var confirmation = fault?.StartsWith("confirm", StringComparison.Ordinal) == true;
+                var claimStopped = fault == "confirm-claim-ack" || fault == "confirm-preparation";
                 var settings = new AppSettings { Model = "journal-mutation", StreamResponses = false, SmartChatTitles = false,
-                    AutoCompressContext = false, AutoConfirmToolActions = true, ContextWindowOverrideTokens = 65536,
+                    AutoCompressContext = false, AutoConfirmToolActions = !confirmation, ContextWindowOverrideTokens = 65536,
                     RequestTimeoutSeconds = 5, MaxAgentFormatRetries = 0 };
                 var executor = office ? new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths),
                     new ToolStore(paths), () => settings, paths: paths, resourceAuthorityStore: resources,
@@ -110,40 +124,104 @@ namespace RNAssistant.Harness
                     });
                     try
                     {
+                        Func<ChatSession, WorkspaceConversationService.WorkspacePorts> workspacePorts = session =>
+                            new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
+                                new DocumentArtifactStore(resources, resources, payloads), files, payloads,
+                                new WorkspaceWebSnapshotStore(paths, files), workspace, session, settings, () => "fixture-key", null,
+                                mutationOrigin: context => journal.MutationOrigin(session, context), resourceAuthority: resources, resourceMutations: resources);
+                        var client = new LlmClient(() => "fixture-key");
+                        var service = office ? new ConversationRunService(adapter, executor, store, journal,
+                            (configuration, messages, options, stream, token) => client.CompleteAsync(configuration, messages, options, stream, token)) : null;
                         Action run = () => {
                             if (office)
                             {
-                                var client = new LlmClient(() => "fixture-key");
-                                var service = new ConversationRunService(adapter, executor, store, journal,
-                                    (configuration, messages, options, stream, token) => client.CompleteAsync(configuration, messages, options, stream, token));
                                 service.ExecuteAsync(ChatModes.Agent, "Create the source.", chat, chat.Context, settings,
-                                    executor.GetControllerTools().ToArray(), null).GetAwaiter().GetResult();
+                                    executor.GetControllerTools().ToArray(), null, (session, command, preparation) => "journal-approval").GetAwaiter().GetResult();
                             }
                             else
                             {
                                 var id = Guid.NewGuid().ToString("N");
                                 chat.LastRun = new ChatRunRecord { RunId = id, TurnId = id, StartedUtc = DateTime.UtcNow,
-                                    ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent, autoConfirmToolActions: true) };
+                                    ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent, autoConfirmToolActions: !confirmation) };
                                 var user = new ChatMessage { Role = "user", Content = "Create the source.", RunId = id };
                                 chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
-                                var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
-                                    new DocumentArtifactStore(resources, resources, payloads), files, payloads,
-                                    new WorkspaceWebSnapshotStore(paths, files), workspace, chat, settings, () => "fixture-key", null,
-                                    mutationOrigin: context => journal.MutationOrigin(chat, context), resourceAuthority: resources, resourceMutations: resources);
+                                var ports = workspacePorts(chat);
                                 ConversationRunCoordinator.RunAsync(new AgentRunRequest(id, id, user.Content, new AgentRunLimits(5, 5)),
                                     ports, ports.Tools, ports, CancellationToken.None).GetAwaiter().GetResult();
                             }
                         };
                         if (fault == "terminal-ack") RuntimeThrows<RunStoreException>(run); else run();
+                        if (confirmation)
+                        {
+                            journal.Rebuild(); chat = store.Load(chat.Id);
+                            var pending = chat.LastRun.KernelState.Summary.PendingConfirmation;
+                            AssertEqual(RunLifecycle.AwaitingConfirmation, chat.LastRun.KernelState.Summary.Lifecycle, "approval survives restart and rebuild");
+                            AssertTrue(pending != null && pending.PreparedStateJson != null, "exact preparation remains durable");
+                            AssertEqual(0, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "pending cannot issue terminal evidence");
+                            AssertEqual(0, resources.Unresolved().Count, "waiting does not prepare a source mutation");
+                            AssertEqual(1, calls, "waiting does not request another model response");
+                            var priorInvocation = journal.CurrentRun(chat.Id).Fact.InvocationId;
+                            var stale = store.Load(chat.Id);
+                            if (fault == "confirm-preparation")
+                            {
+                                var changed = JObject.FromObject(chat.LastRun.KernelState);
+                                changed["Summary"]["PendingConfirmation"]["PreparedStateJson"] = pending.PreparedStateJson + " ";
+                                chat.LastRun.KernelState = changed.ToObject<AgentRunState>();
+                            }
+                            Action<ChatSession> resume = session => {
+                                var approval = session.LastRun.KernelState.Summary.PendingConfirmation;
+                                if (office) service.ConfirmAsync(approval.PendingId, PendingCommand(session), session,
+                                    new ConversationRunInput(settings, session.Context, executor.GetControllerTools().ToArray()), null).GetAwaiter().GetResult();
+                                else
+                                {
+                                    var continuation = AgentRunContinuation.Restore(session.LastRun.KernelState, 0,
+                                        WorkspaceConversationService.RestoreAcceptedHistory(session, payloads, true));
+                                    var ports = workspacePorts(session);
+                                    ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId, approval.PendingId, continuation,
+                                        ports, ports.Tools, ports, CancellationToken.None, rejectPending: fault == "confirm-deny").GetAwaiter().GetResult();
+                                }
+                            };
+                            if (fault == "confirm-claim-ack")
+                                journal.Journal.Fault = stage => { if (stage == "after_flush") { journal.Journal.Fault = null; throw new IOException("lost confirmation claim acknowledgement"); } };
+                            if (claimStopped) RuntimeThrows<RunStoreException>(() => resume(chat)); else resume(chat);
+                            RuntimeThrows<RunStoreException>(() => resume(stale));
+                            AssertTrue(priorInvocation != journal.CurrentRun(chat.Id).Fact.InvocationId, "approval claims a new invocation in the same run");
+                            if (claimStopped)
+                            {
+                                journal.Rebuild(); var claimed = store.Load(chat.Id);
+                                AssertTrue(claimed.LastRun.KernelState.Summary.PendingConfirmation == null, "lost claim acknowledgement cannot recreate an approval");
+                                AssertEqual(0, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "claim loss precedes dispatch and terminal");
+                                AssertEqual(0, resources.Unresolved().Count, "claim loss does not prepare a source write");
+                                AssertEqual(1, calls, "claim loss makes no model request");
+                            }
+                        }
                     }
                     catch (Exception error) { Console.WriteLine((office ? "Office " : "Workspace ") + fault + ": " + error); throw; }
                     finally { try { listener.Stop(); } catch (ObjectDisposedException) { } AssertTrue(provider.Wait(10000), "mutation provider stops"); }
                 }
                 resources.Journal.Fault = null; journal.Journal.Fault = null; files.FaultPoint = null;
+                if (claimStopped)
+                {
+                    AssertEqual(0, dispatched, "no invocation after uncertain claim acknowledgement");
+                    if (!office) AssertTrue(!File.Exists(Path.Combine(workspace.RootPath, target)), "no file after lost claim acknowledgement");
+                    return;
+                }
                 var restored = store.Load(chat.Id);
                 var call = restored.Messages.Single(item => item.AcceptedCallOrigin != null);
                 var origin = new ResourceMutationOrigin(scope, chat.Id, call.RunId, call.ToolCallId, call.AcceptedCallOrigin.StepId);
                 var terminal = journal.ReadWindow(chat.Id, long.MaxValue, 8).Single();
+                if (fault == "confirm-deny")
+                {
+                    AssertEqual(ToolExecutionOutcome.NotDispatched, terminal.Fact.Result.ExecutionProgress.Outcome, "denial closes the accepted call without invocation");
+                    AssertTrue(terminal.Fact.ResourceOutcome == null && !File.Exists(Path.Combine(workspace.RootPath, target)), "denial creates neither resource effect nor a file");
+                    var alias = terminal.Fact.Result.EvidenceReference.Alias;
+                    var admission = ConversationFinishEvidenceAdmission.Evaluate(journal, restored, call.RunId, restored.LastRun.TurnId,
+                        new[] { call.ToolCallId }, new[] { new ConversationResultClaim("Written.", new[] { alias }, ConversationAssessment.Satisfied) }, payloads, new[] { alias });
+                    AssertTrue(!admission.Accepted, "a denial receipt cannot prove a successful write");
+                    AssertEqual(RunLifecycle.Cancelled, restored.LastRun.KernelState.Summary.Lifecycle, "denial is durable cancellation");
+                    journal.Rebuild(); AssertEqual(terminal.Position.Hash, journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash, "denial rebuild retains one terminal");
+                    return;
+                }
                 if (unsupported)
                 {
                     AssertEqual(ToolExecutionOutcome.Error, terminal.Fact.Result.ExecutionProgress.Outcome, "unconnected owner rejects before dispatch");

@@ -28,6 +28,7 @@ namespace RNAssistant.Core.Storage
                 var started = operation == null ? null : FindChatWrite(db, operation);
                 if (current?.Fact.Run?.RunId != origin.RunId || run?.Fact.Lifecycle != RunLifecycle.Running ||
                     call?.Call.AcceptedCallOrigin.StepId != origin.StepId || started?.Fact.Tools?.MayHaveSideEffects != true ||
+                    started.Fact.Tools.Kind != AgentRunEventKind.ToolStarted || PendingTool(db, origin.ChatId, origin.RunId, origin.CallId) != null ||
                     TerminalOperation(db, origin.ChatId, origin.RunId, origin.CallId) != null)
                     throw new InvalidOperationException("Mutation requires its active accepted call and runtime entry.");
                 return new ResourceCallLink(origin, call.Position, started.Position);

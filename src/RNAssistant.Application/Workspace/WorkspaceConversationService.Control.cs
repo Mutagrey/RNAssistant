@@ -56,7 +56,7 @@ namespace RNAssistant.Runtime
                     session.Messages.Any(item => item.RunId == request.RunId && item.ProtocolMessage && item.ExcludeFromModelContext))
                     throw new InvalidOperationException("An interrupted tool exchange requires explicit inspection/new input, not same-run continuation.");
                 var waiting = ConversationInboxService.HasPendingWait(session);
-                var history = RestoreAcceptedHistory(session, currentRunOnly: true);
+                var history = RestoreAcceptedHistory(session, _payloads, currentRunOnly: true);
                 var continuation = waiting ? AgentRunContinuation.RestoreWait(session.LastRun.KernelState, 0, history)
                     : AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
