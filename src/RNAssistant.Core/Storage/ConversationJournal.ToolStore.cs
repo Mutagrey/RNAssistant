@@ -15,8 +15,9 @@ namespace RNAssistant.Core.Storage
 {
     internal sealed partial class ConversationJournal
     {
-        private ConversationRuntimeTools PrepareChatTools(ChatSession session, ConversationRunCommit command)
+        private ConversationRuntimeTools PrepareChatTools(ChatSession session, ConversationRunCommit command, out ResourceJournalReceipt outcome)
         {
+            outcome = null;
             if (command == null) return null;
             var context = command.ToolContext; var execution = command.Execution;
             if (context != null && (context.RunId != command.RunId || context.TurnId != session.LastRun.TurnId))
@@ -24,7 +25,8 @@ namespace RNAssistant.Core.Storage
             if (command.FactKind == AgentRunEventKind.ToolStarted &&
                 !SameRunValue(context, session.LastRun.KernelState.InFlightTool))
                 throw new InvalidOperationException("Dispatch requires its exact in-flight checkpoint.");
-            if (context?.Policy.MayHaveSideEffects == true || context?.Policy.RequiresConfirmation == true ||
+            if (context?.Policy.MayHaveSideEffects == true && (context.Call.Name != ResourceMutationToolCatalog.Write ||
+                context.Policy.Policy?.ExecutionClass != ToolExecutionClass.ManagedMutation) ||
                 execution?.Outcome == ToolExecutionOutcome.AwaitingConfirmation || execution?.Outcome == ToolExecutionOutcome.Waiting)
                 throw TextStoreScope();
             ConversationResultFact terminal = null;
@@ -32,14 +34,20 @@ namespace RNAssistant.Core.Storage
                 execution?.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
             {
                 if (execution == null) throw new InvalidOperationException("A kernel terminal requires execution evidence.");
-                if (execution.ResourceEffect != null || execution.AuthorityCommitId != null) throw TextStoreScope();
+                if (context.Policy.MayHaveSideEffects)
+                    outcome = new ResourceJournal(_paths, _protector).CallOutcome(MutationOrigin(session, context));
+                if (execution.AuthorityCommitId != null && execution.AuthorityCommitId != outcome?.CommitId ||
+                    execution.ResourceEffect != null && !SameRunValue(execution.ResourceEffect, outcome?.Effect))
+                    throw new InvalidDataException("Execution refers to a foreign or unavailable resource outcome.");
                 var materialized = new ToolResultMaterialization(ToolResultPersistence.Terminal(execution),
-                    resourceEvidence: execution.ResourceEvidence) { ExecutionProgress = ToolExecutionProgress.Capture(execution) };
+                    resourceEvidence: execution.ResourceEvidence, resourceEffect: outcome?.Effect, authorityCommitId: outcome?.CommitId)
+                    { ExecutionProgress = ToolExecutionProgress.Capture(execution) };
                 terminal = new ConversationResultFact(session.Id, ToolResultPersistence.Create(context.Call.Id,
-                    context.Call.Name, context.StepId, materialized, _bodies, context.RunId));
+                    context.Call.Name, context.StepId, materialized, _bodies, context.RunId), outcome == null ? null : ResourceOutcomeLink.From(outcome));
             }
             return new ConversationRuntimeTools(command.FactKind, context?.Call.Id, context?.Call.Name, context?.StepId,
-                command.ActivityId, command.ResultProjection, context?.Policy.MayHaveSideEffects == true, terminal);
+                command.ActivityId, command.ResultProjection, context?.Policy.MayHaveSideEffects == true, terminal,
+                execution?.Evidence.Effect == ToolEffectEvidence.None || execution?.Evidence.Effect == ToolEffectEvidence.VerifiedNoChange);
         }
 
         private static IEnumerable<PayloadRef> MessageReferences(ChatMessage message)
@@ -62,7 +70,6 @@ namespace RNAssistant.Core.Storage
         {
             var tools = fact.Tools;
             if (tools != null && fact.Checkpoint == null) throw new InvalidDataException("Runtime facts require an atomic checkpoint.");
-            if (tools?.MayHaveSideEffects == true) throw TextStoreScope();
             var offset = 0;
             foreach (var call in ChatCalls(fact))
             {
@@ -80,6 +87,9 @@ namespace RNAssistant.Core.Storage
                     tools.Terminal.Result.ResultStepId != tools.StepId) throw new InvalidDataException("Foreign kernel terminal.");
                 ValidateResult(db, tools.Terminal, record.Operation, true); ValidateOutcome(tools.Terminal, outcome);
                 var progress = tools.Terminal.Result.ExecutionProgress;
+                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null :
+                    !tools.NoEffect && progress.Outcome != ToolExecutionOutcome.Unknown && progress.Outcome != ToolExecutionOutcome.NotDispatched))
+                    throw new InvalidDataException("Possible resource effects require exact linked proof or an unknown terminal.");
                 if (progress.Outcome != ToolExecutionOutcome.NotDispatched && StartedOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) == null)
                     throw new InvalidDataException("Terminal has no canonical runtime entry.");
                 var before = priorRun?.Fact.RunId == fact.Run.RunId ? priorRun.Fact.Counts : new ToolCounts();
@@ -203,8 +213,9 @@ namespace RNAssistant.Core.Storage
         public bool ResultProjection { get; private set; }
         public bool MayHaveSideEffects { get; private set; }
         public ConversationResultFact Terminal { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool NoEffect { get; private set; }
         [JsonConstructor] internal ConversationRuntimeTools(AgentRunEventKind kind, string callId, string toolName, string stepId,
-            string activityId, bool resultProjection, bool mayHaveSideEffects, ConversationResultFact terminal)
+            string activityId, bool resultProjection, bool mayHaveSideEffects, ConversationResultFact terminal, bool noEffect = false)
         {
             var toolEvent = kind == AgentRunEventKind.ToolStarted || kind == AgentRunEventKind.ToolCompleted;
             if (!Enum.IsDefined(typeof(AgentRunEventKind), kind) || toolEvent &&
@@ -214,6 +225,7 @@ namespace RNAssistant.Core.Storage
                 throw new ArgumentException("An exact typed kernel tool event is required.");
             Kind = kind; CallId = callId; ToolName = toolName; StepId = stepId; ActivityId = activityId;
             ResultProjection = resultProjection; MayHaveSideEffects = mayHaveSideEffects; Terminal = terminal;
+            NoEffect = noEffect;
         }
     }
 }

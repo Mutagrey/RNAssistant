@@ -105,6 +105,16 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal mutation:` runs four focused checks through the real Office/Workspace
+runtime and scripted HTTP: VBA/file `core.write`, unknown and lost authority ack,
+lost terminal ack, and unconnected owner refusal before dispatch. Checks retain
+exact call/start proof, one invocation, resource outcome linkage, unknown obligations,
+independent work, explicit late inspection, rebuild and clean journal/CAS restore.
+Known empty scope locks permit backup; nonempty locks still reject it. Pair with
+`journal runtime:`, `journal resources:`, native publication/late-outcome and
+canonical closure/backup tests below. Other mutation owners, confirmation/wait,
+full application restore and Windows/Office qualification remain open.
+
 `journal resources:` runs three direct-port checks: actual Workspace file lifecycle
 (create/replace/delete/restore/move), uncertain dispatch and independent file access;
 Office mutation observer multi-head publication and unknown recovery; immutable
@@ -114,7 +124,8 @@ head capture plus attempt lookup. Relevant existing regressions: `storage optimi
 resource publication and late outcome`, `storage optimization: canonical closure and
 backup restore`, `resource cutover: atomic authority and replay`, `resource cutover:
 explicit reset invalidates cached journals`, `workspace files: recoverable delete and
-explicit restore`, and `journal runtime:`. Mutation tool turns, production composition,
+explicit restore`, and `journal runtime:`. The first bound mutation turn is covered
+above; remaining owners, production composition,
 workspace locator/move-intent backup and Windows/Office qualification remain open.
 
 `journal runtime:` runs four focused checks: real Office run service and Workspace
@@ -130,7 +141,7 @@ presentation. Pair with
 Relevant regressions: `tool pack: durable admission replays across chat turns`,
 `workspace: accepted call history survives a new turn`, `workspace Plan: scoped
 reads preserve publication barrier`, and `storage optimization: run checkpoints
-and invocation ownership`. Production composition/Inbox/mutation linkage and Windows/Office
+and invocation ownership`. Production composition/Inbox/remaining mutations and Windows/Office
 qualification remain separate. Resource owners still produce legacy journals, so
 full application backup correctly refuses that mixed root.
 

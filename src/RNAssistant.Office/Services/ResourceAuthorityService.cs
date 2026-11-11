@@ -445,6 +445,7 @@ namespace RNAssistant.Office.Services
         private readonly ChatBlobStore _payloads;
         private readonly Action<ChatSession> _persistResources;
         private readonly Func<ResourceIdentity, ResourceMutationReadBack> _captureCatalog;
+        private readonly Func<ToolExecutionContext, ResourceMutationOrigin> _origin;
         private readonly Dictionary<string, MutationAttempt> _attempts =
             new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
         private readonly object _sync = new object();
@@ -454,7 +455,8 @@ namespace RNAssistant.Office.Services
         internal ResourceMutationAuthorityObserver(ResourceAuthorityService authority,
             IResourceMutationJournal journal, ChatSession session, ChatBlobStore payloads,
             Action<ChatSession> persistResources = null,
-            Func<ResourceIdentity, ResourceMutationReadBack> captureCatalog = null)
+            Func<ResourceIdentity, ResourceMutationReadBack> captureCatalog = null,
+            Func<ToolExecutionContext, ResourceMutationOrigin> origin = null)
         {
             _authority = authority ?? throw new ArgumentNullException(nameof(authority));
             _journal = journal ?? throw new ArgumentNullException(nameof(journal));
@@ -462,6 +464,7 @@ namespace RNAssistant.Office.Services
             _payloads = payloads ?? throw new ArgumentNullException(nameof(payloads));
             _persistResources = persistResources;
             _captureCatalog = captureCatalog;
+            _origin = origin;
         }
 
         public string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null)
@@ -470,6 +473,8 @@ namespace RNAssistant.Office.Services
             if (AgentCommunicationToolCatalog.Owns(context.Call.Name) || context.Call.Name == ChatRenameToolHandler.ToolId) return null;
             var route = ResourceMutationToolCatalog.Owns(context.Call.Name) ? RNAssistant.Office.Tools.ResourceMutationPrepared.Read(preparedStateJson) : null;
             var operation = route?.Operation ?? context.Call.Name;
+            if (_origin != null && operation != RNAssistant.Office.Tools.VbaToolCatalog.WriteModule)
+                throw new ToolMutationPreparationException("journal_mutation_owner_unavailable", "Journal mutation owner is not connected for this target.");
             if (route != null) { arguments = route.RoutingArguments; preparedStateJson = route.OwnerState; }
             var scope = ResourceMutationDomains.Scope(_authority, _session, operation);
             var expected = StringArgument(arguments, "expectedRevision");
@@ -497,7 +502,7 @@ namespace RNAssistant.Office.Services
                 if (ResourceMutationDomains.IsDocumentArtifactOperation(operation) || TaskListToolCatalog.Owns(operation))
                     expected = snapshot.GetHead(target)?.Revision?.Revision;
                 var payload = PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json"));
-                var attempt = _journal.Prepare(scope, operation, target, expected, payload, intendedImpacts: impacts);
+                var attempt = _journal.Prepare(scope, operation, target, expected, payload, intendedImpacts: impacts, origin: _origin?.Invoke(context));
                 lock (_sync)
                 {
                     _attempts[attempt.AttemptId] = attempt; _leases[attempt.AttemptId] = lease;

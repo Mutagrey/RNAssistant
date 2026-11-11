@@ -188,7 +188,8 @@ namespace RNAssistant.Core.Storage
                     documentTitle: session.DocumentTitle, documentPath: session.DocumentPath, selectedModel: session.Model, reasoningEnabled: session.ReasoningEnabled);
                 ValidateChatAddress(card);
                 var messages = commit.Messages.Select(write => PublishText(write.Message)).ToArray();
-                var tools = PrepareChatTools(session, commit as ConversationRunCommit);
+                ResourceJournalReceipt outcome;
+                var tools = PrepareChatTools(session, commit as ConversationRunCommit, out outcome);
                 var keys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
                 foreach (var message in messages.Where(item => item.Header.AcceptedCallOrigin != null))
                 { var call = new ConversationCallFact(session.Id, message.Header); var key = CallFingerprint(call); keys[key] = PrepareContextCallKey(call.Call, key); }
@@ -217,9 +218,9 @@ namespace RNAssistant.Core.Storage
                         return prior;
                     }
                     var record = DeliveryRecord(commit.OperationId, "chat.committed", fact, fingerprint);
-                    ValidateChatFact(db, record, keys);
+                    ValidateChatFact(db, record, keys, outcome);
                     var position = Journal.Append(cursor, record.Operation, fingerprint, record.Kind, record.Data);
-                    try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position, keys); }
+                    try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position, keys, outcome); }
                     catch (Exception error) when (error is IOException || error is SqliteException) { /* canonical receipt remains accepted */ }
                     return new ConversationChatReceipt(fact, record.Operation, position);
                 }, CancellationToken.None);

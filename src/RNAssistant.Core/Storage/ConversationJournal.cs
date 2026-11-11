@@ -118,9 +118,9 @@ namespace RNAssistant.Core.Storage
                 return Access((db, cursor) => {
                     var existing = FindResourceLink(db, operation);
                     if (existing != null) return existing.Outcome;
-                    ValidateLink(db, operation, fact);
+                    ValidateLink(db, operation, fact, proof);
                     var position = Journal.Append(cursor, operation, fingerprint, "resource.linked", JObject.FromObject(fact));
-                    try { Fault?.Invoke("before_index"); ApplyLink(db, operation, fingerprint, fact, position); }
+                    try { Fault?.Invoke("before_index"); ApplyLink(db, operation, fingerprint, fact, position, proof); }
                     catch (Exception error) when (error is SqliteException || error is IOException) { /* canonical link accepted */ }
                     return fact.Outcome;
                 }, token);
@@ -299,7 +299,7 @@ namespace RNAssistant.Core.Storage
                 else if (record.Kind == "resource.linked")
                 {
                     var fact = DecodeLink(record); RequireOutcome(fact.Outcome, outcome);
-                    ApplyLink(db, record.Operation, record.Fingerprint, fact, position);
+                    ApplyLink(db, record.Operation, record.Fingerprint, fact, position, outcome);
                 }
                 else
                 {
@@ -324,7 +324,7 @@ namespace RNAssistant.Core.Storage
                 }
                 else if (record.Kind == "resource.linked")
                 {
-                    var fact = DecodeLink(record); RequireOutcome(fact.Outcome, outcome); ValidateLink(db, record.Operation, fact);
+                    var fact = DecodeLink(record); RequireOutcome(fact.Outcome, outcome); ValidateLink(db, record.Operation, fact, outcome);
                     references = new PayloadRef[0];
                 }
                 else
@@ -512,7 +512,7 @@ namespace RNAssistant.Core.Storage
                 accepted.Call.ToolCallReference.Alias != fact.Result.ToolCallReference?.Alias || OperationExists(db, operation) ||
                 TerminalOperation(db, fact.ChatId, fact.Result.RunId, fact.Result.ToolCallId) != null)
                 throw new InvalidDataException("Result does not match its exact accepted call.");
-            ValidateResourceBinding(accepted.ResourceBinding, fact);
+            ValidateResourceBinding(accepted.ResourceBinding, fact, chatCommit);
             var next = Convert.ToInt64(Scalar(db, "SELECT next_e FROM chat_sequence WHERE stream=$stream AND chat=$chat", fact.ChatId));
             if (fact.Result.EvidenceReference != null && fact.Result.EvidenceReference.Ordinal != next)
                 throw new InvalidDataException("Terminal evidence ordinal mismatch.");
@@ -561,9 +561,9 @@ namespace RNAssistant.Core.Storage
             { command.Parameters.AddWithValue("$operation", operation); command.Parameters.AddWithValue("$kind", kind); command.ExecuteNonQuery(); }
         }
 
-        private static void ValidateResourceBinding(ConversationResourceBinding binding, ConversationResultFact fact)
+        private static void ValidateResourceBinding(ConversationResourceBinding binding, ConversationResultFact fact, bool callOrigin = false)
         {
-            if (fact.ResourceOutcome != null && (binding == null || !binding.Matches(fact.ResourceOutcome)))
+            if (fact.ResourceOutcome != null && (binding == null ? !callOrigin : !binding.Matches(fact.ResourceOutcome)))
                 throw new InvalidDataException("Result refers to another resource attempt.");
             if (binding != null && fact.ResourceOutcome == null &&
                 fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown &&
@@ -574,22 +574,26 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("Unresolved resource effect has no eligible success evidence.");
         }
 
-        private static void ValidateOutcome(ConversationResultFact fact, ResourceJournalReceipt outcome)
+        private void ValidateOutcome(ConversationResultFact fact, ResourceJournalReceipt outcome)
         {
             var link = fact.ResourceOutcome;
             if (link == null) return;
             RequireOutcome(link, outcome);
-            if (fact.Result.AuthorityCommitId != outcome.Fact.Publication.CommitId || fact.Result.ResourceEffect == null ||
-                !JToken.DeepEquals(JObject.FromObject(fact.Result.ResourceEffect), JObject.FromObject(outcome.Fact.Publication.Effect)))
+            var origin = outcome.Fact.Call?.Origin;
+            if (origin != null && (origin.ConversationScope != _scope || origin.ChatId != fact.ChatId ||
+                origin.RunId != fact.Result.RunId || origin.CallId != fact.Result.ToolCallId || origin.StepId != fact.Result.ResultStepId))
+                throw new InvalidDataException("Resource outcome belongs to another accepted runtime call.");
+            if (fact.Result.AuthorityCommitId != outcome.CommitId || fact.Result.ResourceEffect == null ||
+                !JToken.DeepEquals(JObject.FromObject(fact.Result.ResourceEffect), JObject.FromObject(outcome.Effect)))
                 throw new InvalidDataException("Conversation effect disagrees with its exact resource receipt.");
-            if (outcome.Fact.Publication.Unknown && (fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown ||
-                fact.Result.EvidenceReference != null)) throw new InvalidDataException("Unknown resource outcome has no success evidence.");
+            if (outcome.Unknown && (fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown ||
+                outcome.Fact.Call == null && fact.Result.EvidenceReference != null)) throw new InvalidDataException("Unknown resource outcome has no success evidence.");
         }
 
         private static void RequireOutcome(ResourceOutcomeLink link, ResourceJournalReceipt outcome)
         {
             if (outcome == null || outcome.Position.Hash != link.Position.Hash || outcome.Operation != link.Operation ||
-                !outcome.Fact.Scope.Equals(link.Scope) || outcome.Fact.Publication?.AttemptId != link.AttemptId)
+                !outcome.Fact.Scope.Equals(link.Scope) || (outcome.Fact.Attempt?.AttemptId ?? outcome.Fact.Publication?.AttemptId) != link.AttemptId)
                 throw new OutcomeNeeded(link);
         }
 
@@ -616,16 +620,19 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private void ValidateLink(SqliteConnection db, string operation, ConversationResourceOutcomeFact fact)
+        private void ValidateLink(SqliteConnection db, string operation, ConversationResourceOutcomeFact fact, ResourceJournalReceipt proof)
         {
             var accepted = FindCall(db, fact.ChatId, fact.RunId, fact.CallId);
-            if (OperationExists(db, operation) || accepted?.ResourceBinding?.Matches(fact.Outcome) != true)
+            var origin = proof?.Fact.Call?.Origin;
+            var exactOrigin = accepted != null && origin?.ConversationScope == _scope && origin.ChatId == fact.ChatId &&
+                origin.RunId == fact.RunId && origin.CallId == fact.CallId && origin.StepId == accepted.Call.AcceptedCallOrigin.StepId;
+            if (OperationExists(db, operation) || !(accepted?.ResourceBinding?.Matches(fact.Outcome) == true || exactOrigin))
                 throw new InvalidDataException("Resource linkage has no exact accepted call/attempt.");
         }
 
-        private void ApplyLink(SqliteConnection db, string operation, string fingerprint, ConversationResourceOutcomeFact fact, JournalCursor position)
+        private void ApplyLink(SqliteConnection db, string operation, string fingerprint, ConversationResourceOutcomeFact fact, JournalCursor position, ResourceJournalReceipt proof)
         {
-            ValidateLink(db, operation, fact);
+            ValidateLink(db, operation, fact, proof);
             using (var tx = db.BeginTransaction())
             using (var command = Command(db, "INSERT INTO resource_link VALUES($stream,$chat,$run,$call,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
             {

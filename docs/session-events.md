@@ -1,5 +1,31 @@
 # Session event stream
 
+## Bound mutation calls on the journal — 2026-11-11
+
+The isolated integration now executes `core.write` through the real Workspace file
+and Office VBA owners. Before dispatch, `resource.prepared` retains its runtime-owned
+conversation/chat/run/call/step origin and exact accepted-call/runtime-entry journal
+positions. The resource owner verifies those immutable facts; the existing shared
+index (schema 14) locates one attempt per origin. Re-entry cannot prepare another
+invocation. Neither the model nor the UI supplies this authority.
+
+An atomic chat terminal links the exact resource authority receipt, including its
+effect and attempt. Lost authority acknowledgement may leave the runtime outcome
+Unknown even when the resource receipt exists; persistence must not promote it to
+Ok. Without read-back, the prepared/dispatched attempt remains unresolved and the
+unknown obligation survives restart/rebuild. Explicit later inspection adds an
+addressed resource link without rewriting the original terminal. Unrelated work
+remains available; unsafe writes to the unresolved target remain blocked.
+
+Office and Workspace catalog publications use the injected resource ports in this
+composition. Unsupported mutation commands and unconnected `core.write` owners
+reject before invocation. Confirmation/wait, remaining semantic owners, interrupted
+run reconciliation, other Store/Inbox/control/feed operations and P3 request
+preparation still need integration. Default production composition is unchanged;
+there is no import, fallback, dual-write or additional store. Full backup/root switch
+and Windows/Office qualification remain open.
+[Evidence](audits/storage-context-optimization.md#p1p2--bound-mutation-calls-2026-11-11).
+
 ## Atomic read-tool runtime on the journal — 2026-11-11
 
 Real Office and Workspace consumers now execute read-tool turns through the
@@ -21,10 +47,9 @@ corrected without repeating tools; a delivered historical E remains usable on th
 next turn. Admission bodies are read outside the append lock. Schema 13 rebuilds
 these projections from journals/CAS.
 
-This remains an isolated integration, not the production switch. Side effects,
-confirmation/wait and interrupted-run recovery reject unsupported paths explicitly;
-resource-port mutation outcomes still need exact accepted-call correlation before
-dispatch. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
+This remains an isolated integration, not the production switch. The mutation slice
+above adds the first bound write; confirmation/wait and interrupted-run recovery
+still reject unsupported paths explicitly. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
 full backup/cutover gates stay open. No ChatStore optimization, adapter, dual-write
 or fallback is added. [Evidence](audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
 
@@ -52,7 +77,7 @@ Office `ConversationRunService` and Workspace runtime ports pass reflection, fin
 restart and a second turn through AgentKernel and an actual scripted HTTP endpoint.
 Workspace runtime, Plan and task-list composition consume `IConversationStore`;
 the existing artifact owner is supplied explicitly. Production composition still
-uses the old backend until the complete port switch. Mutation/resource linkage,
+uses the old backend until the complete port switch. Remaining mutation/resource owners,
 Inbox/control and interrupted-run recovery consumers
 remain open. Rebuild and restore retain an unfinished checkpoint without executing
 it. Backup still refuses roots containing legacy resource journals; full application

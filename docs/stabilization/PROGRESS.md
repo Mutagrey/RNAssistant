@@ -140,7 +140,12 @@ consumers: calls/start/terminal + checkpoint атомарны, T/E/R и admissio
 Неверная citation исправляется без повторного tool; историческая E используется
 после restart в следующем turn. Lost terminal ack, unknown read, rebuild/restore
 проверены; Office сохраняет terminal до подготовки model presentation.
-Связь resource mutation с exact accepted call до dispatch, остальные resource owners,
+Следующий срез связал `core.write` с exact accepted call/runtime entry до dispatch:
+реальные Workspace file и Office VBA owners используют journal ports. Terminal
+ссылается на точный resource receipt; lost ack не превращает Unknown в Ok. Поздняя
+inspection добавляет proof без переписывания terminal; неподключённые owners явно
+отклоняются до invocation. Каталоги Office/Workspace также используют эти ports.
+Остальные mutation/resource owners, confirmation/wait,
 rewrite/move/delete/recovery, usage, Inbox/control/feed и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
@@ -151,6 +156,7 @@ production composition остаются открыты. Backup смешанно�
 [Runtime-срез](../audits/storage-context-optimization.md#p1p2--atomic-no-tool-runtime-integration-2026-11-11).
 [Resource-срез](../audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
 [Read-tool-срез](../audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
+[Mutation-срез](../audits/storage-context-optimization.md#p1p2--bound-mutation-calls-2026-11-11).
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace

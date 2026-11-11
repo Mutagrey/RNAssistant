@@ -48,7 +48,8 @@ namespace RNAssistant.Office.Tools
         private readonly ISet<string> _controllerToolIds;
         private readonly HostRuntime _hostRuntime;
         private readonly ResourceAuthorityService _resourceAuthority;
-        private readonly ResourceMutationJournal _resourceMutationJournal;
+        private readonly IResourceMutationJournal _resourceMutationJournal;
+        private readonly Func<ChatSession, ToolExecutionContext, ResourceMutationOrigin> _resourceOrigin;
         private readonly DocumentAuthorityRegistry _documentAuthorities;
         private readonly Action<ChatSession, ConversationCommit> _persistResourceFacts;
         private readonly CatalogPublicationService _catalogPublication;
@@ -73,9 +74,11 @@ namespace RNAssistant.Office.Tools
             AppDataPaths paths = null,
             Func<ChatSession, string, bool> loadArtifactBody = null,
             Func<ChatAttachment, int, string> readAttachmentText = null,
-            ResourceAuthorityStore resourceAuthorityStore = null,
+            IResourceAuthorityStore resourceAuthorityStore = null,
             Action<ChatSession, ConversationCommit> persistResourceFacts = null,
-            Func<ChatAttachment, byte[]> readAttachmentBytes = null)
+            Func<ChatAttachment, byte[]> readAttachmentBytes = null,
+            IResourceMutationJournal resourceMutationJournal = null,
+            Func<ChatSession, ToolExecutionContext, ResourceMutationOrigin> resourceOrigin = null)
         {
             if (vbaJournalStore == null) throw new ArgumentNullException(nameof(vbaJournalStore));
             paths = paths ?? vbaJournalStore.Paths;
@@ -100,8 +103,10 @@ namespace RNAssistant.Office.Tools
                 loadSettings, saveSettings);
             _hostRuntime = new HostRuntime(adapter, paths);
             resourceAuthorityStore = resourceAuthorityStore ?? new ResourceAuthorityStore(paths);
-            _resourceMutationJournal = new ResourceMutationJournal(paths);
-            _resourceAuthority = new ResourceAuthorityService(resourceAuthorityStore, resourceAuthorityStore, _resourceMutationJournal,
+            _resourceMutationJournal = resourceMutationJournal ?? new ResourceMutationJournal(paths);
+            _resourceOrigin = resourceOrigin;
+            var resourceRevisions = resourceAuthorityStore as IResourceRevisionStore ?? throw new ArgumentException("The authority owner must supply revision access.");
+            _resourceAuthority = new ResourceAuthorityService(resourceAuthorityStore, resourceRevisions, _resourceMutationJournal,
                 vbaJournalStore.Payloads);
             _vbaExecutor = new VbaToolExecutor(adapter, vbaJournalStore, _resourceAuthority);
             ResourceMutationAuthorityObserver.ReconcileInterrupted(_resourceAuthority, _resourceMutationJournal);
@@ -257,7 +262,8 @@ namespace RNAssistant.Office.Tools
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads,
                         saved => _persistResourceFacts?.Invoke(saved, new ConversationCommit()),
-                        _catalogPublication.CaptureReadBack), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission, AgentCommunication, AgentInbox,
+                        _catalogPublication.CaptureReadBack, _resourceOrigin == null ? (Func<ToolExecutionContext, ResourceMutationOrigin>)null :
+                            context => _resourceOrigin(session, context)), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission, AgentCommunication, AgentInbox,
                         () => ExternalBrowserReadSource, BeginLiveOfficeRead);
         }
 

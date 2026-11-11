@@ -4,12 +4,34 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.Data.Sqlite;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
     internal sealed partial class ResourceJournal
     {
+        private static string OriginAttempt(SqliteConnection db, ResourceMutationOrigin origin)
+        {
+            using (var command = db.CreateCommand())
+            {
+                command.CommandText = "SELECT attempt FROM resource_attempt WHERE origin=$origin";
+                command.Parameters.AddWithValue("$origin", JsonConvert.SerializeObject(origin));
+                return command.ExecuteScalar() as string;
+            }
+        }
+
+        internal ResourceJournalReceipt CallOutcome(ResourceMutationOrigin origin)
+        {
+            return Access((db, cursor) => {
+                var id = OriginAttempt(db, origin); if (id == null) return null;
+                var receipt = FindAttempt(db, ParseScope(AttemptScope(db, id)), id);
+                if (receipt?.Fact.Call == null || JsonConvert.SerializeObject(receipt.Fact.Call.Origin) != JsonConvert.SerializeObject(origin))
+                    throw new InvalidDataException("Resource origin locator mismatch.");
+                return receipt.Fact.Authority == null && receipt.Fact.Publication == null ? null : receipt;
+            }, CancellationToken.None);
+        }
+
         public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity)
         { return scope == null || identity == null ? null : Head(scope, identity); }
         public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference)

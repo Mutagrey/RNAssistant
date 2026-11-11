@@ -15,6 +15,13 @@ namespace RNAssistant.Core.Storage
         private const string BackupFormat = "rnassistant-journal-backup-v1";
         private static readonly string[] KeyProfileFiles = { "settings.json", "secret.bin", "history-secret.bin", "history-protection.salt" };
 
+        private static bool IsResourceLeaseFile(string name)
+        {
+            return name == "mutation-attempts.jsonl.lck" || name == "authority.lck" ||
+                name.Length == 77 && name.StartsWith("mutation-", StringComparison.Ordinal) && name.EndsWith(".lck", StringComparison.Ordinal) &&
+                name.Substring(9, 64).All(c => c >= '0' && c <= '9' || c >= 'a' && c <= 'f');
+        }
+
         // Isolated new-generation API until P7. Never exports an incomplete mixture
         // of old/new stores or overwrites an existing backup. Raw key material is
         // never exported: secret.bin/history-secret.bin remain DPAPI CurrentUser.
@@ -25,8 +32,8 @@ namespace RNAssistant.Core.Storage
                 _ensureQuiescent();
                 foreach (var directory in new[] { _paths.ChatDirectory, _paths.VbaJournalDirectory, _paths.ResourceAuthorityDirectory })
                     if (Directory.EnumerateFileSystemEntries(directory).Any(path => directory != _paths.ResourceAuthorityDirectory ||
-                        (Path.GetFileName(path) != "mutation-attempts.jsonl.lck" && Path.GetFileName(path) != "authority.lck") ||
-                        Directory.Exists(path) || StorageFileSystem.IsReparsePoint(path)))
+                        !IsResourceLeaseFile(Path.GetFileName(path)) || Directory.Exists(path) ||
+                        StorageFileSystem.IsReparsePoint(path) || new FileInfo(path).Length != 0))
                         throw new InvalidOperationException("Journal backup requires the new generation; legacy stores need their existing preservation path.");
                 var snapshot = AuditInternal();
                 if (!snapshot.Report.CanGarbageCollect || snapshot.Report.MissingBlobCount != 0 || snapshot.Report.CorruptBlobCount != 0)

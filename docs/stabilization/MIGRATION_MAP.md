@@ -2,6 +2,18 @@
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 bound mutation calls (2026-11-11): `core.write` now uses existing Workspace
+file and Office VBA owners with ResourceJournal. Prepared facts bind exact accepted
+call/runtime-entry positions before dispatch; schema 14 indexes one attempt per
+origin. Chat terminals and later inspection link exact resource receipts without
+promoting Unknown or replaying work. Office/Workspace catalogs accept the same
+injected ports. Scope guards in the existing mutation owners reject unconnected
+targets; remove those restrictions as their owners join the journal composition.
+Owner: Core journal / Office resource authority / Workspace file owner. Remaining
+mutations, confirmation/wait/recovery and full production composition retain the
+same P7 gate; no additional store/adapter or legacy optimization.
+[Contract](../session-events.md#bound-mutation-calls-on-the-journal--2026-11-11).
+
 P1/P2 direct text Store slice (2026-11-11): `ConversationJournal` now implements
 `IConversationStore` itself; no wrapper over `ChatStore` is introduced. Scoped text
 create/append/preferences/selection, metadata/catalog and paging are exercised through
@@ -36,9 +48,9 @@ Existing call/result/context reducers share its frame/transaction; Office's late
 model presentation does not create a second terminal. Indexed T/E/R and ToolPack
 admissions support exact finish evidence and cross-turn reuse. Lost terminal ack,
 unknown read result, restart/rebuild/restore and citation correction are covered.
-No production constructor or old backend changes. Next dependency: resource
-preparation/outcome must carry exact accepted-call origin before dispatch; writes,
-confirmation/wait and interrupted recovery remain unsupported by this integration.
+Default production composition remains unchanged. The bound-mutation slice above
+connects the first write; other mutations, confirmation/wait and interrupted
+recovery remain unsupported by this integration.
 The same P7 removal gate applies; no additional adapter was introduced.
 [Contract](../session-events.md#atomic-read-tool-runtime-on-the-journal--2026-11-11).
 

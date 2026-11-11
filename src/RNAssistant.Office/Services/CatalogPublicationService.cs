@@ -15,7 +15,7 @@ namespace RNAssistant.Office.Services
         internal static readonly ResourceAuthorityScopeId ScopeId = SkillPublicationService.ScopeId;
         internal const string PromptDefaultsKind = "prompt-defaults";
         private readonly ResourceAuthorityService _authority;
-        private readonly ResourceMutationJournal _journal;
+        private readonly IResourceMutationJournal _journal;
         private readonly ToolStore _tools;
         private readonly Func<string> _prompts;
         private readonly string _promptDefaults = PromptSettingsService.CaptureTemplates(new AppSettings());
@@ -25,7 +25,7 @@ namespace RNAssistant.Office.Services
         internal string BuiltInToolsKind { get; private set; }
         internal bool HasBuiltInTools { get { return _builtInTools != null; } }
 
-        internal CatalogPublicationService(ResourceAuthorityService authority, ResourceMutationJournal journal,
+        internal CatalogPublicationService(ResourceAuthorityService authority, IResourceMutationJournal journal,
             ToolStore tools, SkillStore skills, Func<string> prompts, IOfficeApplicationAdapter adapter = null)
         {
             _authority = authority; _journal = journal; _tools = tools; _prompts = prompts;

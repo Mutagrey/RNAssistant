@@ -27,6 +27,8 @@ Internal `BackupJournals`/`RestoreJournals` are exercised only on isolated new r
 until P7. Backup refuses mixed legacy roots; it copies every verified canonical
 segment and complete CAS closure, plus existing settings, salt and DPAPI-protected
 key files. It does not include SQLite, orphans, locks or optional diagnostics.
+Known empty resource scope-lock files are allowed in a new root. Unexpected names,
+nonempty locks, directories and reparse points do not bypass mixed-root rejection.
 A checksum/HMAC manifest authenticates the file set. Restore creates a private root,
 verifies all files/semantic closure, rebuilds the index and only then publishes a
 previously absent destination. Failure cannot overwrite an existing destination.

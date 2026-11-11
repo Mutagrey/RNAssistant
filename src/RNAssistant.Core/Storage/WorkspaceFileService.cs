@@ -675,11 +675,11 @@ namespace RNAssistant.Core.Storage
         }
 
         public WorkspaceFileObservation CreateText(WorkspaceDescriptor workspace, string relativePath, string text,
-            Action onDispatch = null, string effectOperation = null)
+            Action onDispatch = null, string effectOperation = null, ResourceMutationOrigin origin = null)
         {
             if (TextByteLength(text) > MaximumTextBytes)
-                return WriteStagedText(workspace, relativePath, text, null, onDispatch, effectOperation);
-            return CreateTextCore(workspace, relativePath, text, null, "files.create", onDispatch, effectOperation);
+                return WriteStagedText(workspace, relativePath, text, null, onDispatch, effectOperation, origin);
+            return CreateTextCore(workspace, relativePath, text, null, "files.create", onDispatch, effectOperation, origin);
         }
 
         public WorkspaceFileObservation CopyText(WorkspaceDescriptor workspace, string sourceRelativePath,
@@ -821,7 +821,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private WorkspaceFileObservation CreateTextCore(WorkspaceDescriptor workspace, string relativePath,
-            string text, ResourceRef copySource, string operation, Action onDispatch, string effectOperation = null)
+            string text, ResourceRef copySource, string operation, Action onDispatch, string effectOperation = null, ResourceMutationOrigin origin = null)
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
@@ -842,18 +842,18 @@ namespace RNAssistant.Core.Storage
                     ResolvePath(workspace, relativePath, false, true);
                     using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     { output.Write(bytes, 0, bytes.Length); output.Flush(true); }
-                }, path, copySource, effectOperation: effectOperation);
+                }, path, copySource, effectOperation: effectOperation, origin: origin);
             }
         }
 
         public WorkspaceFileObservation ReplaceText(WorkspaceDescriptor workspace, string relativePath,
-            ResourceRef expected, string text, Action onDispatch = null, string effectOperation = null)
+            ResourceRef expected, string text, Action onDispatch = null, string effectOperation = null, ResourceMutationOrigin origin = null)
         {
             if (TextByteLength(text) > MaximumTextBytes || IsLargeExpected(expected))
-                return WriteStagedText(workspace, relativePath, text, expected, onDispatch, effectOperation);
-            try { return ReplaceTextCore(workspace, relativePath, expected, text, null, "files.replace", onDispatch, effectOperation); }
+                return WriteStagedText(workspace, relativePath, text, expected, onDispatch, effectOperation, origin);
+            try { return ReplaceTextCore(workspace, relativePath, expected, text, null, "files.replace", onDispatch, effectOperation, origin); }
             catch (WorkspaceFileException error) when (error.Code == "file_too_large")
-            { return WriteStagedText(workspace, relativePath, text, expected, onDispatch, effectOperation); }
+            { return WriteStagedText(workspace, relativePath, text, expected, onDispatch, effectOperation, origin); }
         }
 
         public WorkspaceFileObservation RestoreHistoricalText(WorkspaceDescriptor workspace, string relativePath,
@@ -1018,7 +1018,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private WorkspaceFileObservation ReplaceTextCore(WorkspaceDescriptor workspace, string relativePath,
-            ResourceRef expected, string text, ResourceRef restoredFrom, string operation, Action onDispatch, string effectOperation = null)
+            ResourceRef expected, string text, ResourceRef restoredFrom, string operation, Action onDispatch, string effectOperation = null, ResourceMutationOrigin origin = null)
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
@@ -1071,7 +1071,7 @@ namespace RNAssistant.Core.Storage
                         File.Replace(temp, path, null);
                     }
                     finally { if (File.Exists(temp)) File.Delete(temp); }
-                }, path, effectOperation: effectOperation);
+                }, path, effectOperation: effectOperation, origin: origin);
             }
         }
 
@@ -1293,10 +1293,10 @@ namespace RNAssistant.Core.Storage
         private WorkspaceFileObservation Mutate(ResourceAuthorityScopeId scope, string id, string relativePath,
             byte[] bytes, ResourceRef before, ResourceRef restoredFrom, string operation,
             Action onDispatch, Action<Action> dispatch, string path, ResourceRef copySource = null,
-            ResourceHeadState expectedHead = null, string effectOperation = null)
+            ResourceHeadState expectedHead = null, string effectOperation = null, ResourceMutationOrigin origin = null)
         {
             var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
-            var attempt = _journal.Prepare(scope, operation, Identity(id), before?.Revision, payload);
+            var attempt = _journal.Prepare(scope, operation, Identity(id), before?.Revision, payload, origin: origin);
             var dispatched = false;
             try
             {

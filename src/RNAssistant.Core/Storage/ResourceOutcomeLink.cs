@@ -4,6 +4,20 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
+    internal sealed class ResourceCallLink
+    {
+        public ResourceMutationOrigin Origin { get; private set; }
+        public JournalCursor Accepted { get; private set; }
+        public JournalCursor Started { get; private set; }
+        [JsonConstructor]
+        internal ResourceCallLink(ResourceMutationOrigin origin, JournalCursor accepted, JournalCursor started)
+        {
+            if (origin == null || accepted == null || started == null || started.Sequence <= accepted.Sequence)
+                throw new ArgumentException("Exact accepted-call and runtime-entry positions are required.");
+            Origin = origin; Accepted = accepted.Copy(); Started = started.Copy();
+        }
+    }
+
     // Runtime-owned binding recorded with the accepted call before resource
     // preparation/dispatch. It is not a model-facing URI or an execution request.
     internal sealed class ConversationResourceBinding
@@ -61,6 +75,9 @@ namespace RNAssistant.Core.Storage
         internal static ResourceOutcomeLink From(ResourceJournalReceipt receipt)
         {
             var publication = receipt?.Fact.Publication;
+            if (receipt?.Fact.Authority != null && receipt.Fact.Attempt != null)
+                return new ResourceOutcomeLink(receipt.Fact.Scope, receipt.Fact.Attempt.AttemptId, receipt.Fact.Attempt.Target,
+                    receipt.Operation, receipt.Fingerprint, receipt.Fact.Authority.CommitId, receipt.Position);
             if (publication == null || publication.AttemptId == null) throw new ArgumentException("A published exact attempt receipt is required.");
             return new ResourceOutcomeLink(publication.Scope, publication.AttemptId, publication.Target,
                 receipt.Operation, receipt.Fingerprint, publication.CommitId, receipt.Position);

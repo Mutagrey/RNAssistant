@@ -89,8 +89,8 @@ namespace RNAssistant.Core.Storage
         {
             if (link == null) throw new ArgumentNullException(nameof(link));
             var receipt = Read(link.Scope, link.Operation, link.Fingerprint, link.Position);
-            if (receipt.Fact.Publication == null || receipt.Fact.Publication.AttemptId != link.AttemptId ||
-                receipt.Fact.Publication.CommitId != link.CommitId || !receipt.Fact.Publication.Target.Equals(link.Target))
+            var actual = ResourceOutcomeLink.From(receipt);
+            if (actual.AttemptId != link.AttemptId || actual.CommitId != link.CommitId || !actual.Target.Equals(link.Target))
                 throw new InvalidDataException("Resource outcome link identifies a different attempt/publication.");
             return receipt;
         }
@@ -102,6 +102,7 @@ namespace RNAssistant.Core.Storage
             {
                 var fact = JObject.FromObject(proposed).ToObject<ResourceJournalFact>();
                 ValidateShape(fact);
+                if (fact.Kind == "resource.prepared" && fact.Call != null) VerifyCall(fact.Call);
                 foreach (var reference in References(fact)) Verify(reference);
                 var fingerprint = Fingerprint(fact);
                 return Access((db, cursor) => {
@@ -127,6 +128,8 @@ namespace RNAssistant.Core.Storage
             if (PrepareStoreTransition(db, fact)) return;
             if (fact.Kind == "resource.prepared")
             {
+                if (fact.Call != null && OriginAttempt(db, fact.Call.Origin) != null)
+                    throw new InvalidOperationException("This runtime call already has a resource preparation.");
                 if (AttemptScope(db, fact.Attempt.AttemptId) != null) throw new InvalidOperationException("Resource attempt is already prepared.");
                 var head = Head(db, fact.Scope, fact.Attempt.Target);
                 if (fact.Attempt.ExpectedRevision != null && head?.Revision?.Revision != fact.Attempt.ExpectedRevision ||
@@ -138,6 +141,7 @@ namespace RNAssistant.Core.Storage
             var attemptId = fact.Kind == "resource.dispatch" ? fact.AttemptId : fact.Publication.AttemptId;
             var predecessor = attemptId == null ? null : FindAttempt(db, fact.Scope, attemptId);
             var attempt = predecessor?.Fact.Attempt;
+            fact.Call = predecessor?.Fact.Call;
             fact.PreparedHead = predecessor?.Fact.PreparedHead;
             if (fact.Kind == "resource.dispatch")
             {
@@ -279,13 +283,15 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("Resource transition does not match its canonical predecessor.");
         }
 
-        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, CancellationToken token, bool recover = true)
+        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, CancellationToken token, bool recover = true, string verifiedCall = null)
         {
             var cursor = JournalIndex.LoadCursor(db, "resources"); var applied = cursor;
             var current = Journal.CatchUp(cursor, (record, position) => {
                 Apply(db, record.Operation, record.Fingerprint, Decode(record), position); applied = position;
             }, record => {
                 var fact = Decode(record); ValidateTransition(db, fact);
+                if (fact.Kind == "resource.prepared" && fact.Call != null && CallKey(fact.Call) != verifiedCall)
+                    throw new CallProofNeeded(fact.Call);
                 foreach (var reference in References(fact))
                     if (!verified.Contains(ReferenceKey(reference))) throw new ReferenceNeeded(reference);
             }, token, recover);
@@ -296,14 +302,16 @@ namespace RNAssistant.Core.Storage
 
         internal void ReplayInto(string path, CancellationToken token, bool recover = true)
         {
-            var verified = new HashSet<string>(StringComparer.Ordinal);
+            var verified = new HashSet<string>(StringComparer.Ordinal); string verifiedCall = null;
             while (true)
             {
-                PayloadRef required;
+                PayloadRef required = null; ResourceCallLink call = null;
                 using (Journal.AcquireAppendLock(token))
                 using (var db = JournalIndex.Open(_paths, path))
-                { try { CatchUp(db, verified, token, recover); return; } catch (ReferenceNeeded error) { required = error.Reference; } }
-                Verify(required); verified.Add(ReferenceKey(required));
+                { try { CatchUp(db, verified, token, recover, verifiedCall); return; }
+                    catch (ReferenceNeeded error) { required = error.Reference; } catch (CallProofNeeded error) { call = error.Call; } }
+                if (call != null) { VerifyCall(call); verifiedCall = CallKey(call); }
+                else { Verify(required); verified.Add(ReferenceKey(required)); }
             }
         }
 
@@ -311,22 +319,24 @@ namespace RNAssistant.Core.Storage
         {
             using (RuntimeStorageActivity.Acquire(_paths, token))
             {
-                var verified = new HashSet<string>(StringComparer.Ordinal); var repaired = false;
+                var verified = new HashSet<string>(StringComparer.Ordinal); var repaired = false; string verifiedCall = null;
                 while (true)
                 {
-                    PayloadRef required = null;
+                    PayloadRef required = null; ResourceCallLink call = null;
                     try
                     {
                         using (JournalIndexAdmission.Enter(_paths, token))
                         using (Journal.AcquireAppendLock(token))
                         using (var db = JournalIndex.Open(_paths))
-                        { try { return action(db, CatchUp(db, verified, token)); } catch (ReferenceNeeded error) { required = error.Reference; } }
+                        { try { return action(db, CatchUp(db, verified, token, verifiedCall: verifiedCall)); }
+                            catch (ReferenceNeeded error) { required = error.Reference; } catch (CallProofNeeded error) { call = error.Call; } }
                     }
                     catch (SqliteException error) when (!repaired && JournalIndex.IsDamaged(error))
                     { repaired = true; JournalIndex.Repair(_paths, _protector, false, token); continue; }
                     catch (JournalIndex.IndexVersionMismatch) when (!repaired)
                     { repaired = true; JournalIndex.Repair(_paths, _protector, false, token); continue; }
-                    Verify(required); verified.Add(ReferenceKey(required));
+                    if (call != null) { VerifyCall(call); verifiedCall = CallKey(call); }
+                    else { Verify(required); verified.Add(ReferenceKey(required)); }
                 }
             }
         }
@@ -341,6 +351,9 @@ namespace RNAssistant.Core.Storage
 
         private static void ValidateShape(ResourceJournalFact fact)
         {
+            if (fact?.Call != null && (fact.Attempt == null || fact.Attempt.AttemptId != ConversationResourceBinding.ForCall(
+                fact.Call.Origin.ConversationScope, fact.Call.Origin.ChatId, fact.Call.Origin.RunId, fact.Call.Origin.CallId,
+                fact.Scope, fact.Attempt.Target).AttemptId)) throw new InvalidDataException("Foreign resource call binding.");
             if (ValidateStoreShape(fact)) return;
             if (fact?.Scope == null || fact.Kind != "resource.prepared" && fact.Kind != "resource.dispatch" && fact.Kind != "resource.published")
                 throw new InvalidDataException("Unknown resource fact.");
@@ -358,6 +371,7 @@ namespace RNAssistant.Core.Storage
             if (IsStoreFact(fact)) return StoreFingerprint(fact);
             object value = fact.Kind == "resource.prepared" ? (object)fact.Attempt : fact.Kind == "resource.published" ? (object)fact.Publication :
                 new { fact.Scope, fact.AttemptId };
+            if (fact.Kind == "resource.prepared" && fact.Call != null) value = new { Command = value, fact.Call };
             return RNAssistant.Core.Tools.TextPatternEngine.Sha256(fact.Kind + "\n" + JsonConvert.SerializeObject(value));
         }
         internal static IEnumerable<PayloadRef> CanonicalReferences(JournalRecord record)
@@ -368,6 +382,11 @@ namespace RNAssistant.Core.Storage
             .Concat(ViewOf(fact)?.Parts ?? new PayloadRef[0]).Where(reference => reference != null).GroupBy(ReferenceKey).Select(group => group.First()); }
         private void Verify(PayloadRef reference)
         { if (!_bodies.HasVerifiedReference(reference.ToBlobReference())) throw new InvalidDataException("Resource body is unavailable before acceptance."); }
+        private void VerifyCall(ResourceCallLink call)
+        { new ConversationJournal(_paths, call.Origin.ConversationScope, _protector).VerifyMutation(call); }
+        private static string CallKey(ResourceCallLink call) { return JsonConvert.SerializeObject(call); }
+        private sealed class CallProofNeeded : Exception
+        { internal readonly ResourceCallLink Call; internal CallProofNeeded(ResourceCallLink call) { Call = call; } }
         private static string ReferenceKey(PayloadRef reference) { return reference.Sha256 + ":" + reference.ByteLength + ":" + reference.ProtectionKeyId; }
         private static bool SameHead(ResourceHeadState left, ResourceHeadState right)
         { return left == null ? right == null : right != null && left.SameAuthority(right); }
@@ -383,6 +402,7 @@ namespace RNAssistant.Core.Storage
         public ResourceAuthorityScopeId Scope { get; set; }
         public string AttemptId { get; set; }
         public MutationAttempt Attempt { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceCallLink Call { get; set; }
         public ResourcePublication Publication { get; set; }
         public long Generation { get; set; }
         public bool AdvancesHead { get; set; }
@@ -433,6 +453,9 @@ namespace RNAssistant.Core.Storage
         internal readonly JournalCursor Position;
         internal bool ProjectionAvailable;
         internal bool Duplicate;
+        internal string CommitId { get { return Fact.Authority?.CommitId ?? Fact.Publication?.CommitId; } }
+        internal ResourceEffect Effect { get { return Fact.Authority?.Effect ?? Fact.Publication?.Effect; } }
+        internal bool Unknown { get { return Effect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch; } }
         internal ResourceJournalReceipt(string root, string operation, string fingerprint, ResourceJournalFact fact, JournalCursor position, bool projectionAvailable)
         { Root = root; Operation = operation; Fingerprint = fingerprint; Fact = fact; Position = position; ProjectionAvailable = projectionAvailable; }
     }

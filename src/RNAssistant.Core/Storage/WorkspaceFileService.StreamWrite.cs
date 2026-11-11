@@ -169,7 +169,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private WorkspaceFileObservation WriteStagedText(WorkspaceDescriptor workspace,
-            string relativePath, string text, ResourceRef expected, Action onDispatch, string effectOperation = null)
+            string relativePath, string text, ResourceRef expected, Action onDispatch, string effectOperation = null, ResourceMutationOrigin origin = null)
         {
             RequireWritable(workspace);
             text = text ?? string.Empty;
@@ -191,7 +191,7 @@ namespace RNAssistant.Core.Storage
                     staged.Flush(true);
                 }
                 var saved = CommitStagedFileCore(workspace, relativePath, stagedPath, expected,
-                    long.MaxValue, onDispatch, default(CancellationToken), true, effectOperation: effectOperation);
+                    long.MaxValue, onDispatch, default(CancellationToken), true, effectOperation: effectOperation, origin: origin);
                 return new WorkspaceFileObservation { RelativePath = relativePath,
                     Reference = saved.Reference, ContentSha256 = saved.ContentSha256,
                     SourceByteLength = saved.ByteLength, AuthorityCommit = saved.AuthorityCommit };
@@ -253,7 +253,7 @@ namespace RNAssistant.Core.Storage
         private WorkspaceFileSnapshot CommitStagedFileCore(WorkspaceDescriptor workspace,
             string relativePath, string stagedPath, ResourceRef expected, long maximumBytes,
             Action onDispatch, CancellationToken token, bool textSource,
-            ResourceRef copySource = null, Action preDispatchCheck = null, string effectOperation = null)
+            ResourceRef copySource = null, Action preDispatchCheck = null, string effectOperation = null, ResourceMutationOrigin origin = null)
         {
             RequireWritable(workspace);
             if (copySource != null && (expected != null || !textSource))
@@ -298,7 +298,7 @@ namespace RNAssistant.Core.Storage
                         PublishedEvidence(expected, ResourceRepresentations.Raw));
                 var operation = copySource != null ? "files.copy" :
                     expected == null ? "files.create" : "files.replace";
-                var attempt = _journal.Prepare(scope, operation, Identity(id), expected?.Revision, payload);
+                var attempt = _journal.Prepare(scope, operation, Identity(id), expected?.Revision, payload, origin: origin);
                 var dispatched = false;
                 var temporary = path + ".rna-" + Guid.NewGuid().ToString("N") + ".tmp";
                 try

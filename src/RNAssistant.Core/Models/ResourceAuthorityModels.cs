@@ -374,11 +374,30 @@ namespace RNAssistant.Core.Models
             int offset, int limit, int? snapshotCount = null);
     }
 
+    // Optional for manual resource operations; supplied by the runtime composition
+    // for model calls. The journal verifies it against accepted immutable facts.
+    public sealed class ResourceMutationOrigin
+    {
+        public string ConversationScope { get; private set; }
+        public string ChatId { get; private set; }
+        public string RunId { get; private set; }
+        public string CallId { get; private set; }
+        public string StepId { get; private set; }
+        [JsonConstructor]
+        public ResourceMutationOrigin(string conversationScope, string chatId, string runId, string callId, string stepId)
+        {
+            if (string.IsNullOrWhiteSpace(conversationScope) || string.IsNullOrWhiteSpace(chatId) ||
+                string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(stepId))
+                throw new ArgumentException("An exact accepted runtime call is required.");
+            ConversationScope = conversationScope; ChatId = chatId; RunId = runId; CallId = callId; StepId = stepId;
+        }
+    }
+
     public interface IResourceMutationJournal
     {
         MutationAttempt Prepare(ResourceAuthorityScopeId scope, string operation, ResourceIdentity target,
             string expectedRevision = null, PayloadRef payload = null, string semanticHash = null,
-            IEnumerable<ResourceImpact> intendedImpacts = null);
+            IEnumerable<ResourceImpact> intendedImpacts = null, ResourceMutationOrigin origin = null);
         MutationAttempt MarkDispatchMayHaveOccurred(string attemptId);
         MutationAttempt Resolve(string attemptId, string authorityCommitId);
         MutationAttempt AbandonBeforeDispatch(string attemptId);

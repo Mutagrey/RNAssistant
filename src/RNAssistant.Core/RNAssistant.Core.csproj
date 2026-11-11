@@ -392,6 +392,7 @@
     <Compile Include="Storage\ConversationJournal.Store.cs" />
     <Compile Include="Storage\ConversationJournal.RuntimeStore.cs" />
     <Compile Include="Storage\ConversationJournal.ToolStore.cs" />
+    <Compile Include="Storage\ConversationJournal.Mutations.cs" />
     <Compile Include="Storage\ConversationJournal.References.cs" />
     <Compile Include="Storage\ConversationJournal.Events.cs" />
     <Compile Include="Storage\ConversationJournal.Delivery.cs" />

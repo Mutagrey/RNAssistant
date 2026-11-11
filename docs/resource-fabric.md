@@ -1873,6 +1873,25 @@ replacement or an invented empty body.
 
 ## Context and storage
 
+### Accepted mutation origin — 2026-11-11
+
+The new-root composition supplies `ResourceMutationOrigin` through existing
+Workspace file and Office mutation owners. `ResourceJournal.Prepare` binds it to
+the exact accepted call and durable runtime entry before source dispatch; the
+binding is inherited by dispatch and authority resolution. The existing attempt
+index has a unique origin locator, preventing a second invocation for that call.
+Verification reads immutable conversation frames outside resource/index locks;
+rebuild does not acquire another journal's append lock or enumerate chat history.
+
+`ConversationJournal` selects the authority receipt by that origin and commits its
+link with the kernel terminal. A late receipt never upgrades an Unknown execution;
+later explicit inspection links its own proof without replacing the old terminal.
+Current checked scope is `core.write` for a Workspace file and Office VBA source,
+with existing guards/read-back and real catalog publication owners. Unconnected
+semantic owners reject before invocation in this composition. Other mutations and
+default production switching remain open.
+[Contract](session-events.md#bound-mutation-calls-on-the-journal--2026-11-11).
+
 ### Direct journal resource ports — 2026-11-11
 
 In isolated new roots, `ResourceJournal` directly implements the existing authority
@@ -1885,16 +1904,16 @@ receipt; it cannot manufacture a terminal outcome. Unknown retains its evidence,
 blocks unsafe writes to its target, and never replays on restart or explicit inspection.
 
 Current heads and exact revision/view pages use the shared disposable index (schema
-12). Snapshot history loads only on explicit `Commits` access, pinned to generation
+14; the original direct-port slice used 12). Snapshot history loads only on explicit `Commits` access, pinned to generation
 and canonical hash; mutation recovery uses `FindMutationCommit(attemptId)`. Capturing
 heads is still proportional to the number of current heads. The existing advisory
 observer list moved to the journal owner; no second notification registry was added.
 
 Checked host-neutral: actual file create/replace/delete/restore/move, interrupted
 dispatch, independent file access, multi-head Office publication, unknown recovery,
-lost acknowledgement, index rebuild and resource-journal/CAS restore. Full kernel
-tool call/result linkage, other semantic owners and production composition remain
-open. Default composition still uses the old resource backend; the new owner refuses
+lost acknowledgement, index rebuild and resource-journal/CAS restore. The mutation
+slice above adds the first kernel call/result linkage; other semantic owners and
+production composition remain open. Default composition still uses the old resource backend; the new owner refuses
 legacy resource JSONL rather than importing it. Root cutover and real Office evidence
 remain separate. Backup of resource journals is not a full application backup: live
 workspace identities/locators, move intents and other owners need the P6/P7 integration

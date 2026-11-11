@@ -1050,3 +1050,50 @@ after-state/CAS ownership.
    production adapters/backends retain their complete-port P7 removal condition;
    this intermediate integration adds none. Product version is unchanged, with no
    production switch, release, push or Windows qualification claim.
+
+## P1/P2 — bound mutation calls (2026-11-11)
+
+1. Advances the F01/F04/F07 consumer migration: the existing ConversationJournal
+   and ResourceJournal now connect accepted kernel calls to single-target mutation
+   preparation/outcomes. Real Workspace file and Office VBA owners execute
+   `core.write`; catalog publications use those same injected resource ports.
+   This does not close the production migration of these findings.
+2. `prepared` retains exact accepted-call/runtime-entry positions before dispatch.
+   Schema 14 adds a unique origin locator to the existing attempt index. Terminal
+   commits link the exact resource authority receipt. Lost authority acknowledgement
+   preserves Unknown even when a receipt exists; missing read-back keeps an unresolved
+   attempt and required unknown context. Explicit inspection links later proof
+   without rewriting the terminal or repeating the mutation. Unconnected owners
+   reject before invocation; independent file work remains available.
+3. Removed concrete resource-backend dependencies from Office executor/catalog and
+   Workspace catalog composition; the old backend explicitly rejects bound origins.
+   No ChatStore optimization, new store/registry, import, dual-write or fallback.
+   Production C# net +198 lines. New-root backup accepts only known empty resource
+   lease files; nonempty files still block backup rather than being silently omitted.
+4. Thirteen distinct focused checks pass in isolated `8d957f6b` plus this slice,
+   macOS/net8/C#7.3: four `journal mutation:` cases, four `journal runtime:`, three
+   `journal resources:`, native publication/late-outcome and canonical closure/backup.
+   Faults cover missing read-back, lost authority/terminal acknowledgement, exact
+   repeat/foreign-origin rejection, restart/rebuild, late inspection and clean
+   journal/CAS restore. Existing post-unknown inspection requirements remain enforced;
+   an unverified model finish cannot bypass them. Version format validation passes.
+   No Office/VSTO validation or Windows qualification was run.
+5. Same existing one-head fixture before/after: H=100/1000 head capture plus addressed
+   attempt lookup remains **5 records / 5,780 bytes** and **5 / 5,792 bytes**. Read-tool
+   finish selection remains 9 records and zero historical body hydration. New origin
+   lookup uses the unique index; proof verification reads two addressed conversation
+   frames outside resource/index locks. The previous integrated path rejected these
+   mutations, so there is no comparable old/new mutation latency. CPU/allocations,
+   physical I/O and Windows timings were not measured; no speedup is claimed.
+6. Next: remaining mutation/resource owners and confirmation/wait/recovery, then
+   remaining Store/rewrite/move/delete/usage, Inbox/control/feed and P3 request
+   preparation. Metadata/header byte/allocation overhead remains in that queue.
+   Full restore must also preserve Workspace identity locators and move intents;
+   these journal-only restore checks do not close that gate. Cutover needs verified
+   history/CAS/key/owner backup, stopped legacy writers and Windows/Office photos.
+   P4 remains deferred.
+7. Session events, Resource Fabric, CAS maintenance, MIGRATION_MAP, PROGRESS and
+   Harness guide updated. Existing production adapters/backends retain their P7
+   complete-port removal condition. Temporary owner restrictions are removed as
+   each semantic owner joins this composition. No new adapter or product version
+   bump; this intermediate slice does not switch production, release or push.

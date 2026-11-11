@@ -31,8 +31,9 @@ namespace RNAssistant.Core.Storage
 
         public MutationAttempt Prepare(ResourceAuthorityScopeId scope, string operation,
             ResourceIdentity target, string expectedRevision = null, PayloadRef payload = null,
-            string semanticHash = null, IEnumerable<ResourceImpact> intendedImpacts = null)
+            string semanticHash = null, IEnumerable<ResourceImpact> intendedImpacts = null, ResourceMutationOrigin origin = null)
         {
+            if (origin != null) throw new NotSupportedException("Accepted journal calls require the resource journal owner.");
             var attempt = MutationAttempt.Prepare(scope, operation, target,
                 expectedRevision, payload, semanticHash, intendedImpacts);
             lock (_sync)

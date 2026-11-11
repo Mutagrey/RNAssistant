@@ -91,10 +91,20 @@ namespace RNAssistant.Core.Storage
 
         public MutationAttempt Prepare(ResourceAuthorityScopeId scope, string operation, ResourceIdentity target,
             string expectedRevision = null, PayloadRef payload = null, string semanticHash = null,
-            IEnumerable<ResourceImpact> intendedImpacts = null)
+            IEnumerable<ResourceImpact> intendedImpacts = null, ResourceMutationOrigin origin = null)
         {
             var attempt = MutationAttempt.Prepare(scope, operation, target, expectedRevision, payload, semanticHash, intendedImpacts);
-            return Prepare("prepare:" + attempt.AttemptId, attempt).Fact.Attempt;
+            if (origin == null) return Prepare("prepare:" + attempt.AttemptId, attempt).Fact.Attempt;
+            var conversation = new ConversationJournal(_paths, origin.ConversationScope, _protector);
+            var proof = conversation.BindMutation(origin);
+            var binding = ConversationResourceBinding.ForCall(origin.ConversationScope, origin.ChatId, origin.RunId, origin.CallId, scope, target);
+            attempt = new MutationAttempt(binding.AttemptId, scope, operation, target, expectedRevision, payload,
+                semanticHash, MutationAttemptState.Prepared, attempt.PreparedAt, intendedImpacts: intendedImpacts);
+            // Re-entering this API is not a safe retry of an invocation. A lost
+            // acknowledgement remains addressable by its deterministic attempt.
+            if (Attempt(scope, attempt.AttemptId) != null) throw new InvalidOperationException("This call already prepared this resource attempt.");
+            return Commit("prepare:" + attempt.AttemptId, new ResourceJournalFact {
+                Kind = "resource.prepared", Scope = scope, Attempt = attempt, Call = proof }, CancellationToken.None).Fact.Attempt;
         }
 
         public MutationAttempt MarkDispatchMayHaveOccurred(string attemptId)
@@ -170,7 +180,8 @@ namespace RNAssistant.Core.Storage
             }
             else if (fact.Kind == "resource.abandoned")
             {
-                var previous = FindAttempt(db, fact.Scope, fact.AttemptId)?.Fact.Attempt;
+                var predecessor = FindAttempt(db, fact.Scope, fact.AttemptId)?.Fact;
+                var previous = predecessor?.Attempt; fact.Call = predecessor?.Call;
                 if (previous?.State != MutationAttemptState.Prepared) throw new InvalidOperationException("Only a prepared attempt may be abandoned.");
                 fact.Attempt = previous.Transition(MutationAttemptState.AbandonedBeforeDispatch);
             }
@@ -189,7 +200,8 @@ namespace RNAssistant.Core.Storage
                 }
                 if (commit.MutationAttemptId != null)
                 {
-                    var previous = FindAttempt(db, fact.Scope, commit.MutationAttemptId)?.Fact.Attempt;
+                    var predecessor = FindAttempt(db, fact.Scope, commit.MutationAttemptId)?.Fact;
+                    var previous = predecessor?.Attempt; fact.Call = predecessor?.Call;
                     if (previous?.State != MutationAttemptState.DispatchMayHaveOccurred || commit.Effect == null)
                         throw new InvalidOperationException("Authority outcome requires an exact possibly-dispatched attempt.");
                     fact.Attempt = previous.Transition(MutationAttemptState.Resolved, commit.CommitId);
@@ -202,9 +214,10 @@ namespace RNAssistant.Core.Storage
         private void ApplyStoreRows(SqliteConnection db, SqliteTransaction tx, string operation, ResourceJournalFact fact, JournalCursor position)
         {
             if (fact.Attempt != null)
-                using (var command = Command(db, "INSERT INTO resource_attempt VALUES($scope,$attempt,$operation,$state,$ticks) ON CONFLICT(scope,attempt) DO UPDATE SET operation=$operation,state=$state", fact.Scope, tx))
+                using (var command = Command(db, "INSERT INTO resource_attempt VALUES($scope,$attempt,$operation,$state,$ticks,$origin) ON CONFLICT(scope,attempt) DO UPDATE SET operation=$operation,state=$state", fact.Scope, tx))
                 {
                     command.Parameters.AddWithValue("$attempt", fact.Attempt.AttemptId); command.Parameters.AddWithValue("$operation", operation);
+                    command.Parameters.AddWithValue("$origin", fact.Call == null ? (object)DBNull.Value : JsonConvert.SerializeObject(fact.Call.Origin));
                     command.Parameters.AddWithValue("$state", (int)fact.Attempt.State); command.Parameters.AddWithValue("$ticks", fact.Attempt.PreparedAt.Ticks); command.ExecuteNonQuery();
                 }
             var authority = AuthorityOf(fact);

@@ -14,7 +14,7 @@ namespace RNAssistant.Core.Services
         public static readonly ResourceAuthorityScopeId ScopeId = new ResourceAuthorityScopeId("catalog", "local");
         private readonly IResourceAuthorityStore _authority;
         private readonly IResourceRevisionStore _revisions;
-        private readonly ResourceMutationJournal _journal;
+        private readonly IResourceMutationJournal _journal;
         private readonly ChatBlobStore _payloads;
         private readonly SkillStore _store;
         private readonly SkillCatalogSnapshot _builtIns;
@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Services
         public string BuiltInKind { get; private set; }
 
         public SkillPublicationService(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
-            ResourceMutationJournal journal, ChatBlobStore payloads, SkillStore store,
+            IResourceMutationJournal journal, ChatBlobStore payloads, SkillStore store,
             string host, IEnumerable<SkillDefinition> builtIns)
         {
             _authority = authority; _revisions = revisions; _journal = journal;

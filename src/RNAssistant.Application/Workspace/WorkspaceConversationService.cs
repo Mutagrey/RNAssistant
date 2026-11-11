@@ -1185,7 +1185,7 @@ namespace RNAssistant.Runtime
             private readonly WorkspacePlanService _plans;
             private readonly SkillPublicationService _skillPublications;
             private readonly SkillCatalogService _skillCatalog;
-            private readonly ResourceAuthorityStore _catalogAuthority;
+            private readonly IResourceAuthorityStore _catalogAuthority;
             private SkillCatalogSnapshot _skills;
             private readonly ToolPackSnapshot _toolPack;
             private SkillRequestSurface _skillSurface;
@@ -1206,7 +1206,9 @@ namespace RNAssistant.Runtime
                 IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null,
                 bool pluginSource = false, Action<WorkspaceModelProgress> modelProgress = null,
                 CallableToolProfile toolProfile = null, Action<LlmRequestDiagnosticUpdate> diagnosticProgress = null,
-                AgentCommunicationService agentCommunication = null, ConversationInboxService agentInbox = null)
+                AgentCommunicationService agentCommunication = null, ConversationInboxService agentInbox = null,
+                Func<ToolExecutionContext, ResourceMutationOrigin> mutationOrigin = null,
+                IResourceAuthorityStore resourceAuthority = null, IResourceMutationJournal resourceMutations = null)
             {
                 _conversations = conversations; _events = events; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
@@ -1240,10 +1242,11 @@ namespace RNAssistant.Runtime
                 var registry = new ToolHandlerRegistry();
                 var chatCatalog = new ConversationCatalogAccess(agentCommunication, session, _settings.MaxCollaborationAgents);
                 var entries = new List<ToolCatalogEntry>();
-                var authorityStore = new ResourceAuthorityStore(paths);
+                var authorityStore = resourceAuthority ?? new ResourceAuthorityStore(paths);
                 _catalogAuthority = authorityStore;
-                _skillPublications = new SkillPublicationService(authorityStore, authorityStore,
-                    new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
+                _skillPublications = new SkillPublicationService(authorityStore,
+                    authorityStore as IResourceRevisionStore ?? throw new ArgumentException("Resource owner must provide revisions.", nameof(resourceAuthority)),
+                    resourceMutations ?? new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
                 Register(registry, entries, SkillLoadToolHandler.Entry(),
                     new SkillLoadToolHandler(session, () => _skills, () => _toolPack, _settings, AdmitSkillSelection));
@@ -1278,7 +1281,7 @@ namespace RNAssistant.Runtime
                     foreach (var entry in ResourceMutationToolCatalog.GetTools())
                     {
                         var handler = new FileHandler(files, workspace,
-                            entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered, _plans.Handler(_delivered));
+                            entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered, _plans.Handler(_delivered), mutationOrigin);
                         Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
                     }
                 }
@@ -2107,14 +2110,18 @@ namespace RNAssistant.Runtime
             private readonly ResourceSearchObservation _search;
             private readonly IToolHandler _office;
             private readonly PlanResourceToolHandler _plan;
+            private readonly Func<ToolExecutionContext, ResourceMutationOrigin> _mutationOrigin;
             private bool IsOffice(ToolHandlerContext context) { return Value(context, "target").Contains(": "); }
             public FileHandler(WorkspaceFileService files, WorkspaceDescriptor workspace,
                 string operation, ChatBlobStore payloads,
-                ResourceSearchObservation search, IToolHandler office = null, IReadOnlyDictionary<string, ResourceEvidence> delivered = null, PlanResourceToolHandler plan = null)
-            { _plan = plan; _office = (office as ResourcePatchBatchHandler)?.TargetHandler ?? office; _files = files; _workspace = workspace; _delivered = delivered ?? throw new ArgumentNullException(nameof(delivered)); _operation = operation; _payloads = payloads; _search = search; }
+                ResourceSearchObservation search, IToolHandler office = null, IReadOnlyDictionary<string, ResourceEvidence> delivered = null, PlanResourceToolHandler plan = null,
+                Func<ToolExecutionContext, ResourceMutationOrigin> mutationOrigin = null)
+            { _mutationOrigin = mutationOrigin; _plan = plan; _office = (office as ResourcePatchBatchHandler)?.TargetHandler ?? office; _files = files; _workspace = workspace; _delivered = delivered ?? throw new ArgumentNullException(nameof(delivered)); _operation = operation; _payloads = payloads; _search = search; }
 
             public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken token)
             {
+                if (_mutationOrigin != null && (PlanSourceDocument.IsTarget(Value(context, "target")) || IsOffice(context)))
+                    return Task.FromResult(new ToolPreparationResult(ToolResult.Error("Journal mutation owner is not connected for this target.")));
                 if (PlanSourceDocument.IsTarget(Value(context, "target")) && _plan != null) return _plan.PrepareAsync(context, token);
                 if (_workspace.ReadOnly) return Task.FromResult(new ToolPreparationResult(ToolResult.Error("This workspace is read-only; only Plan source edits are available.")));
                 if (IsOffice(context) && _office is IPreparableToolHandler preparable) return preparable.PrepareAsync(context, token);
@@ -2209,8 +2216,11 @@ namespace RNAssistant.Runtime
                         changed = _files.MoveText(_workspace, path, expected, Value(context, "destination"), context.MarkDispatchPossible, _operation);
                     }
                     else if (_operation == ResourceMutationToolCatalog.Write)
-                        changed = expected == null ? _files.CreateText(_workspace, path, Value(context, "content"), context.MarkDispatchPossible, _operation)
-                            : _files.ReplaceText(_workspace, path, expected, Value(context, "content"), context.MarkDispatchPossible, _operation);
+                    {
+                        var origin = _mutationOrigin?.Invoke(context.Execution);
+                        changed = expected == null ? _files.CreateText(_workspace, path, Value(context, "content"), context.MarkDispatchPossible, _operation, origin)
+                            : _files.ReplaceText(_workspace, path, expected, Value(context, "content"), context.MarkDispatchPossible, _operation, origin);
+                    }
                     else
                         changed = _operation == ResourceMutationToolCatalog.Patch
                             ? _files.ApplyTextEdits(_workspace, path, expected, TextPatch.FromArguments(context.Arguments).WithCoverage(TextPatch.Coverage(new[] { state.Source })), context.MarkDispatchPossible, token, effectOperation: _operation)
