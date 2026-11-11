@@ -28,7 +28,7 @@ namespace RNAssistant.Harness
                 Arguments = new Dictionary<string, object> { ["at"] = "2026-08-28T12:34:56Z" } };
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
             {
-                var message = AgentJsonProtocol.CreateToolCallMessage(call, "Accepted step.",
+                var message = ConversationRunProjection.CreateToolCallMessage(call, "Accepted step.",
                     "Read the requested history item.", null, role, FixtureCallOrigin());
                 message.ExcludeFromModelContext = true;
                 var before = JsonConvert.SerializeObject(message);
@@ -65,7 +65,7 @@ namespace RNAssistant.Harness
             AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
                     new ToolCall("patch_rejected", ResourceMutationToolCatalog.Patch, rejectedPatchJson), out error),
                 "rejected patch syntax does not make current-schema history incompatible");
-            var rejectedCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+            var rejectedCall = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                 Id = "patch_rejected", Name = ResourceMutationToolCatalog.Patch, Arguments = rejectedPatchArguments },
                 "Trying an edit.", "Apply the requested source change.", null, ToolResultRoles.User, FixtureCallOrigin());
             var rejectedResult = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
@@ -84,7 +84,7 @@ namespace RNAssistant.Harness
 
         private static void ConversationHistoryRejectsAmbiguousRecords()
         {
-            Func<ChatMessage> jsonMessage = () => AgentJsonProtocol.CreateToolCallMessage(
+            Func<ChatMessage> jsonMessage = () => ConversationRunProjection.CreateToolCallMessage(
                 new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.",
                 "Read the requested item.", null, ToolResultRoles.User, FixtureCallOrigin());
             Func<ChatMessage> nativeMessage = () => {
@@ -3341,6 +3341,10 @@ namespace RNAssistant.Harness
                 session = AssertKernelReplay(session);
                 AssertEqual(2, session.Messages.Count(message => message.ToolName == ResourceToolCatalog.FindToolId &&
                     message.AcceptedCallOrigin != null), "both accepted calls survive durable replay");
+                AssertTrue(session.Messages.FindIndex(message => message.ProtocolMessage && message.Role != "assistant" &&
+                    message.ToolName == ResourceToolCatalog.FindToolId) > session.Messages.FindLastIndex(message =>
+                        message.ToolName == ResourceToolCatalog.FindToolId && message.AcceptedCallOrigin != null),
+                    "durable history keeps batch acceptance before results; request projection owns call/result pairing");
                 var next = service.ExecuteAsync(ChatModes.Agent, "Summarize", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Completed, next.RunViewState.Lifecycle,
                     "next turn can replay the persisted batch: " + next.RunViewState.Reason + " / " + next.AssistantText);

@@ -124,6 +124,16 @@ reference allocation, historical/restart/fork evidence, indexed canonical select
 resource identity, message state transitions and saved-wait/Workspace-cold cancellation.
 These host-neutral checks do not qualify Windows/Office delivery.
 
+P1 common fact projection: `storage: shared runtime accepted projection` checks
+exact batch origin, first-call reasoning/usage, large argument CAS and literal
+string hydration after restart. Use actual consumer filters `agent: native read
+batch keeps paired replay`, `workspace: accepted call history survives a new turn`,
+`v8 recovery: accepted tool reasoning survives reopen`, saved-wait cancellation and
+host-parity/retained mutation guards. For fault paths select exact replay filters
+(`failed append prevents dispatch`, `interrupted write remains unknown`,
+`known unprojected effect survives recovery`), not the whole historical group.
+Eight independently reproduced gaps are recorded in [Backlog](../../docs/stabilization/BACKLOG.md#host-neutral-harness-baseline-failures--2026-10-13).
+
 ## Optional assignments (4b, 2026-11-10)
 
 `agent assignments:` checks explicit result correlation (including failed/declined),

@@ -37,36 +37,19 @@ namespace RNAssistant.Office.Services
             if (expectedRevision != _cursor) throw new InvalidOperationException("Stale kernel continuation cursor.");
             var firstMessage = _session.Messages.Count;
             var run = _session.LastRun;
-            run.KernelState = AgentRunState.Apply(run.KernelState, fact);
-            ConversationRunProjection.Apply(run);
+            ConversationRunProjection.Apply(run, fact);
             ChatMessage activity = null;
             switch (fact.Kind)
             {
-                case AgentRunEventKind.ExecutionQueued:
-                    run.Phase = "queued_execution";
-                    break;
-                case AgentRunEventKind.ExecutionAdmitted:
-                    run.Phase = "running";
-                    break;
-                case AgentRunEventKind.ModelStepStarted:
-                    run.Phase = "thinking";
-                    break;
                 case AgentRunEventKind.ResponseAccepted:
                     _stepMessage = fact.Response.Message;
+                    var acceptedMessages = ConversationRunProjection.CreateAcceptedResponse(fact,
+                        _lastModel?.Completion, _executor.Payloads);
+                    if (_modelSession != null) _modelSession.AppendAcceptedResponse(acceptedMessages);
+                    else _session.Messages.AddRange(acceptedMessages);
                     if (fact.Response.ToolCalls.Count == 0)
                     {
-                        if (string.IsNullOrWhiteSpace(fact.SourceModelAttemptId))
-                            throw new InvalidOperationException("Accepted v8 decision lacks its model attempt origin.");
-                        var decision = AgentTranscript.CreateAssistantMessage(
-                            ModelProtocolWire.WriteAcceptedDecision(fact.Response.Action, fact.Response.Reason,
-                                fact.Response.Message, fact.Response.Decision, fact.Response.Results, fact.Response.Outcome),
-                            _lastModel == null ? null : _lastModel.Completion,
-                            responseStatus: fact.Response.Final ? AgentResponseStatuses.Completed : AgentResponseStatuses.InProgress);
-                        decision.ProtocolMessage = true;
-                        decision.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
-                        decision.ResponseModelAttemptId = fact.SourceModelAttemptId;
-                        if (_modelSession != null) _modelSession.AttachResponseEvidence(decision);
-                        _session.Messages.Add(decision);
+                        var decision = acceptedMessages[0];
                         if (fact.Response.Action == ConversationResponse.ReflectionAction)
                         {
                             var visibleDecision = string.IsNullOrWhiteSpace(fact.Response.Message)
@@ -88,19 +71,8 @@ namespace RNAssistant.Office.Services
                             _session.Messages.Add(activity);
                         }
                     }
-                    // Persist the entire accepted batch before any dispatch. Callable
-                    // pack membership changes only at the next model-step boundary.
-                    for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
-                        _modelSession.AppendToolCall(new AgentToolCall
-                            { Id = fact.Response.ToolCalls[index].Id, Name = fact.Response.ToolCalls[index].Name,
-                                Arguments = ReadArguments(fact.Response.ToolCalls[index]) },
-                            index == 0 ? fact.Response.Message : string.Empty,
-                            fact.Response.Reason,
-                            index == 0 ? _lastModel.Completion : null,
-                            new AcceptedToolCallOrigin(fact.StepId, _lastModel.SourceModelAttemptId, index, fact.Response.ToolCalls.Count));
                     break;
                 case AgentRunEventKind.ToolStarted:
-                    run.Phase = "executing";
                     var context = fact.ToolContext;
                     var command = Command(context.Call, context.StepId, context.IsConfirmed);
                     activity = FindActivity(context.Call.Id) ?? AgentTranscript.CreateRunningToolMessage(
@@ -116,7 +88,6 @@ namespace RNAssistant.Office.Services
                     activity.Activity.Status = "waiting";
                     activity.Activity.ExecutionStatus = "waiting";
                     activity.Activity.ResultMessage = "Ожидаю сообщения агентов";
-                    run.Phase = "waiting_agents";
                     break;
                 case AgentRunEventKind.ToolCompleted:
                     activity = ProjectToolCompletion(fact);
@@ -233,7 +204,7 @@ namespace RNAssistant.Office.Services
                                 "Result materialization failed: " + ex.Message, "result_materialization_failed"),
                             int.MaxValue, _input.Settings.ToolResultRole, _input.Settings);
                         fallback.RunId = _session.LastRun.RunId;
-                        ConversationModelSession.AppendPairedResult(_session.Messages, fallback);
+                        _session.Messages.Add(fallback);
                     }
                 }
             }
@@ -317,51 +288,6 @@ namespace RNAssistant.Office.Services
             else if (activity != null)
                 _progress(fact.Kind == AgentRunEventKind.ToolWaiting ? "waiting_agents" : fact.Kind == AgentRunEventKind.ToolStarted ? "tool_running" : "tool_result",
                     activity.Activity.ResultMessage ?? _stepMessage ?? "Выполняю действие", activity.Activity);
-        }
-    }
-
-    internal static class ConversationRunProjection
-    {
-        internal static string AssistantMessage(RunSummary summary)
-        {
-            if (summary == null) return string.Empty;
-            var message = summary.AssistantMessage ?? string.Empty;
-            if (summary.Lifecycle != RunLifecycle.Completed || summary.ToolCounts == null)
-                return message;
-            var errors = summary.ToolCounts.WriteError;
-            var unknown = summary.ToolCounts.WriteUnknown;
-            if (errors <= 0 && unknown <= 0) return message;
-            var notice = unknown > 0
-                ? "История попыток: состояние " + unknown +
-                    " операций записи осталось неизвестным. Успешное применение всех изменений не подтверждено."
-                : "История попыток: " + errors + " операций записи завершились ошибкой.";
-            notice += " Это счётчики попыток, а не число нерешённых проблем; " +
-                "последующее исправление конкретной операции ими не определяется.";
-            return string.IsNullOrWhiteSpace(message)
-                ? notice
-                : message.TrimEnd() + "\n\n" + notice;
-        }
-
-        internal static string Status(RunSummary summary)
-        {
-            if (summary.Lifecycle == RunLifecycle.Waiting) return "running";
-            if (summary.Lifecycle == RunLifecycle.AwaitingConfirmation) return "waiting_confirmation";
-            if (summary.Lifecycle == RunLifecycle.Completed &&
-                summary.Reason == "awaiting_user") return "awaiting_user";
-            return summary.Lifecycle.ToString().ToLowerInvariant();
-        }
-
-        internal static void Apply(ChatRunRecord run)
-        {
-            var summary = run.KernelState.Summary;
-            run.RunId = summary.RunId;
-            run.TurnId = summary.TurnId;
-            run.Status = Status(summary);
-            run.Phase = summary.Lifecycle == RunLifecycle.Waiting ? (summary.PauseId == null ? "waiting_agents" : "paused") : run.Status;
-            run.CurrentAction = AssistantMessage(summary);
-            run.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
-            run.IterationsUsed = summary.IterationsUsed;
-            run.ToolStepsUsed = summary.ToolStepsUsed;
         }
     }
 }

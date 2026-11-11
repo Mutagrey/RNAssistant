@@ -47,7 +47,7 @@ namespace RNAssistant.Harness
                     ResourceRepresentations.Text, variant == "partial" ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2) : ResourceCoverage.Whole(),
                     variant != "partial", 1, dependencies: new[] { new ResourceDependency(skill.Publication,
                         ResourceRepresentations.Text, ResourceCoverage.Whole(), "catalog-publication") }, immutable: true));
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "read-skill", Name = "core.read",
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "read-skill", Name = "core.read",
                     Arguments = new Dictionary<string, object> { ["target"] = skill.Id } }, "Read", "Read the skill source.", null, role, FixtureCallOrigin("read-skill"));
                 var durable = result.Content;
                 var snapshot = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { call, result }, null,

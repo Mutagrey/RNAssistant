@@ -94,7 +94,15 @@ legacy backend; this carrier has no messages and cannot enter generic `Commit` a
 runtime command. Storage still reads its canonical aggregate once. Removal condition:
 switch these consumers to the new journal reducer at P2/P7 and delete this internal
 conversion together with the old aggregate runtime path. No second store, fallback
-or dual-write. Ordinary commit/read DTOs and shared fact translation remain open.
+or dual-write. Ordinary commit/read DTOs remain open.
+
+P1 common fact projection: the existing `ConversationRunProjection` moved from
+Office to Core Services; Office/Workspace and saved-wait cancellation consume it.
+Removed Workspace's separate accepted-response/run-state constructors, Office's
+call factory and `AppendPairedResult` insertion. Both hosts use chronological
+append; existing request compilation owns call/result pairing. Office request
+evidence and tool/media presentation stay with their owners, and result persistence
+continues through `ToolResultPersistence`. No adapter or extra facade was added.
 
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 

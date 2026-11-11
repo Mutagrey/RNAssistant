@@ -198,7 +198,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, dispatched, "multi-hunk patch dispatches once");
                 AssertEqual(TextPatternEngine.Sha256(source.Replace("first", "FIRST").Replace("last", "LAST")), TextPatternEngine.Sha256(new System.Text.UTF8Encoding(false).GetString(File.ReadAllBytes(Path.Combine(workspace.RootPath, "large.txt")))), "UTF-8 content and CRLF remain exact except hunks");
                 AssertTrue(changed.AuthorityCommit != null, "streamed read-back publishes authority");
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = "large-patch", Name = "core.patch", Arguments = new Dictionary<string, object> { ["targets"] = PatchTargets(PatchSection("large.txt", largeHunks))} },
                     "Edit.", "Update large file.", null, ToolResultRoles.User, FixtureCallOrigin());
                 var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "large-patch", ToolId = "core.patch" },
@@ -303,7 +303,7 @@ namespace RNAssistant.Harness
                 var mixedResult = ConfirmVbaNative(mixedPending);
                 AssertEqual(ToolExecutionOutcome.Ok, mixedResult.Outcome, "mixed owners publish sequentially: " + mixedResult.Result.DataJson);
                 AssertEqual(4, mixedResult.ResourceEffect.Targets.Count, "each owner keeps its own effect");
-                var acceptedMixed = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = mixedResult.Context.Call.Id, Name = "core.patch",
+                var acceptedMixed = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = mixedResult.Context.Call.Id, Name = "core.patch",
                     Arguments = mixed.Arguments }, "Edit.", "Related edits.", null, ToolResultRoles.User, FixtureCallOrigin());
                 var terminalMixed = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = mixedResult.Context.Call.Id, ToolId = "core.patch" }, mixedResult.Result, ToolResultRoles.User);
                 acceptedMixed.RunId = terminalMixed.RunId = mixedResult.Context.RunId; terminalMixed.ResourceEffect = mixedResult.ResourceEffect;
@@ -373,7 +373,7 @@ namespace RNAssistant.Harness
                 AssertTrue(completed.ResourceEffect.Targets.All(t => t.Status == ResourceTargetStatus.Changed), "both member writes are confirmed");
                 AssertEqual("<main>two</main>", source("index.html"), "first member saved");
                 AssertEqual("let count = 2;", source("script.js"), "second member saved");
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = completed.Context.Call.Id,
+                var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = completed.Context.Call.Id,
                     Name = "core.patch", Arguments = patch.Arguments }, "Edit.", "Update two HTML members.", null, ToolResultRoles.User, FixtureCallOrigin());
                 var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = completed.Context.Call.Id,
                     ToolId = "core.patch" }, completed.Result, ToolResultRoles.User);
@@ -437,7 +437,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "Sub Run()\nDebug.Print 1\nDebug.Print 1\nEnd Sub";
                 Func<ToolInvocation, IEnumerable<ResourceEvidence>, VbaPendingExecution> prepare = (command, delivered) => {
                     command.ToolCallId = "c" + Guid.NewGuid().ToString("N");
-                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                         Id = command.ToolCallId, Name = command.ToolId, Arguments = command.Arguments },
                         "Edit.", "Change source.", null, ToolResultRoles.User, FixtureCallOrigin("run-vba-native:1"));
                     accepted.RunId = "run-vba-native";
@@ -518,7 +518,7 @@ namespace RNAssistant.Harness
                 Func<TextPatch, IEnumerable<ResourceEvidence>, VbaPendingExecution> prepare = (body, observed) => {
                     var command = Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Scene3D", body)));
                     command.ToolCallId = Guid.NewGuid().ToString("N");
-                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                         Id = command.ToolCallId, Name = command.ToolId, Arguments = command.Arguments },
                         "Edit.", "Change these full lines.", null, ToolResultRoles.User, FixtureCallOrigin("run-vba-native:1"));
                     accepted.RunId = "run-vba-native"; accepted.ResourceEvidence = observed.ToList();
@@ -677,7 +677,7 @@ namespace RNAssistant.Harness
                             AssertEqual(1, result.Targets[1].Diagnostic.Edit.Value, "diagnostic hunk is local to its target");
                             AssertEqual("read_target", result.Targets[1].Diagnostic.NextAction,
                                 "missing context directs the model to refresh the rejected target");
-                            var acceptedFailure = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                            var acceptedFailure = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                                 Id = call.Id, Name = call.Name, Arguments = new Dictionary<string, object> { ["targets"] = body } },
                                 "", "Attempt the requested edit.", null, ToolResultRoles.User, FixtureCallOrigin());
                             var terminalFailure = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
@@ -723,7 +723,7 @@ namespace RNAssistant.Harness
                     AssertTrue(completed.Recovery == null, "never automatically replay a changed package");
                     AssertEqual("a.txt new\r\n", File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "first result survives subsequent failure");
                     if (scenario != "success") AssertEqual("c.txt old\r\n", File.ReadAllText(Path.Combine(workspace.RootPath, "c.txt")), "remainder never starts");
-                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name,
+                    var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name,
                         Arguments = new Dictionary<string, object> { ["targets"] = body } }, "Edit.", "Related edits.", null, ToolResultRoles.User, FixtureCallOrigin());
                     var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = call.Id, ToolId = call.Name }, completed.Result, ToolResultRoles.User);
                     accepted.RunId = terminal.RunId = "run"; terminal.ResourceEffect = completed.ResourceEffect;
@@ -873,7 +873,7 @@ namespace RNAssistant.Harness
                 var historyBefore = observed["history.txt"];
                 var historyPatch = PatchArguments("history.txt", EditSet(Edit("before", "after")));
                 var recorded = apply("core.patch", historyPatch);
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = recorded.Context.Call.Id, Name = "core.patch", Arguments = historyPatch.ToObject<Dictionary<string, object>>() },
+                var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = recorded.Context.Call.Id, Name = "core.patch", Arguments = historyPatch.ToObject<Dictionary<string, object>>() },
                     "Edit.", "Change history.", null, ToolResultRoles.User, FixtureCallOrigin());
                 accepted.RunId = "r"; accepted.ResourceEvidence = new List<ResourceEvidence> { historyBefore };
                 var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = recorded.Context.Call.Id, ToolId = "core.patch" }, recorded.Result, ToolResultRoles.User);
@@ -896,7 +896,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Unknown, unknown.Outcome, "possible write with failed read-back is unknown");
                 AssertTrue(unknown.MayHaveDispatched, "unknown keeps dispatch evidence");
                 AssertContains(File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "written", "failure after dispatch must not be reported as no effect");
-                var uncertainCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                var uncertainCall = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = unknown.Context.Call.Id, Name = "core.patch", Arguments = JObject.Parse(unknown.Context.Call.ArgumentsJson).ToObject<Dictionary<string, object>>() },
                     "Edit.", "Change source.", null, ToolResultRoles.User, FixtureCallOrigin());
                 uncertainCall.ResourceEvidence = new List<ResourceEvidence> { historyBefore, whole };

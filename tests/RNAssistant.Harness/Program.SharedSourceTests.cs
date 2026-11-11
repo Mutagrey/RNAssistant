@@ -53,7 +53,7 @@ namespace RNAssistant.Harness
                 AssertEqual(source.Result.Text, executor.Payloads.ReadText(sourceObservation.Payload.ToBlobReference()), "after-source includes title and status header");
                 var same = PlanWriteCommand("title", "Alpha", "status", "ready", "markdown", "# Tasks\nfirst\n");
                 same.ToolCallId = Guid.NewGuid().ToString("N");
-                var fromSource = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = same.ToolCallId, Name = same.ToolId, Arguments = same.Arguments },
+                var fromSource = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = same.ToolCallId, Name = same.ToolId, Arguments = same.Arguments },
                     "Save.", "Use the delivered source.", null, ToolResultRoles.User, FixtureCallOrigin());
                 fromSource.ResourceEvidence = terminal.ResourceEvidence; session.Messages.Add(fromSource);
                 var sameCall = new ToolCall(same.ToolCallId, same.ToolId, JsonConvert.SerializeObject(same.Arguments));
@@ -81,7 +81,7 @@ namespace RNAssistant.Harness
                 var observed = execute("core.read", new Dictionary<string, object> { ["target"] = "plan: Alpha", ["representation"] = "text" });
                 var callId = Guid.NewGuid().ToString("N");
                 var args = new Dictionary<string, object> { ["targets"] = PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("status: ready", "status: draft")))) };
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = callId, Name = "core.patch", Arguments = args },
+                var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = callId, Name = "core.patch", Arguments = args },
                     "Edit.", "Edit Plan.", null, ToolResultRoles.User, FixtureCallOrigin());
                 accepted.ResourceEvidence = observed.ResourceEvidence.ToList(); session.Messages.Add(accepted);
                 var unobserved = new ToolCall(callId, "core.patch", JsonConvert.SerializeObject(args));

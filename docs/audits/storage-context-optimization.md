@@ -634,3 +634,43 @@ after-state/CAS ownership.
 7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. The temporary
    state carrier is removed with the aggregate runtime backend at the journal
    consumer switch; no compatibility migration, fallback or dual-write is added.
+
+## P1 — common accepted facts and chronological results (2026-11-11)
+
+1. P1.2/F01 host-drift subset: existing `ConversationRunProjection` moved from
+   Office to Core Services. Office/Workspace and saved-wait cancellation use its
+   run-state projection; both live model consumers use its accepted response factory.
+2. Exact origin, per-position call identity, first-call reasoning/usage and large
+   argument CAS now have one implementation. Literal strings remain exact. Actual
+   request-delivery evidence stays with the Office model session; terminal results
+   retain `ToolResultPersistence`, and host tool/media presentation remains separate.
+   The real Office batch exposed a regression in `5b0df48c`: result insertion beside
+   an earlier call escaped tail capture and failed the mandatory append. Both hosts
+   now append in occurrence order; existing request compilation pairs call/results.
+3. Removed Workspace's separate accepted/run constructors, Office's call factory,
+   duplicate reasoning projection and `AppendPairedResult`. Production C# +181/−215,
+   net −34; one Core compile item added. No new owner/store/registry/facade or adapter.
+4. Twelve targeted checks pass on macOS/net8/C#7.3: actual Office batch/restart and
+   reasoning consumers, Workspace turn/restart, retained read/mutation parity,
+   Workspace confirmation/unknown guards, saved wait, five exact replay/fault
+   cases and one shared accepted-batch CAS/restart check. The latter covers large
+   literal arguments, ISO-looking strings, reasoning bounds and missing origin.
+   A local current working-tree batch run also passed; the selected set uses isolated
+   e8d719b6 + owned changes through this slice, excluding concurrent Browser/window
+   work. This is not full current-HEAD or Windows/Office qualification.
+5. Structural counters: accepted/run projection owners 2 → 1; actual two-call batch
+   still persists two exact accepted records and executes two reads once, including
+   restart. Historical insertion search/shift is removed from result recording.
+   No new timing, allocation or I/O benchmark was run; no end-to-end speedup is
+   claimed, and the legacy backend still materializes full history.
+6. Eight selected failures reproduce before and after the shared projection with
+   the chronological correction held constant; exact failures and owners are in
+   [Backlog](../stabilization/BACKLOG.md#host-neutral-harness-baseline-failures--2026-10-13).
+   Their assertions/budgets were not weakened. Store/read DTOs, resource owners,
+   coordinated consumer cutover and Windows evidence remain open. No P0/index/
+   restore mechanism was redesigned or requalified in this slice.
+7. Session events, MIGRATION_MAP, PROGRESS, Harness guide and §8.4 updated. Remaining
+   P4 is deferred per user scope. Before cutover: verified history/CAS/key backup,
+   stopped old writers and short Windows/Office photo evidence; the new generation
+   starts new history, retaining the old data separately. The prior internal legacy
+   state carrier still ends with the aggregate-backend switch; no new adapter.

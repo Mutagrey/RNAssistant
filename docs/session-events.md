@@ -668,7 +668,20 @@ its canonical message prefix internally, applies the delta and preserves declare
 tail order independently of lifecycle operation order. This removes history from
 the runtime write boundary, not from the backend: full replay, normalization and
 projection/cache maintenance still depend on history size. Ordinary commits/read
-DTOs and common kernel-fact materialization remain separate P1 work.
+DTOs remain separate P1 work.
+
+Core `ConversationRunProjection` now owns the common kernel run-state and accepted
+response projection. Office/Workspace use the same decision/call construction,
+exact step/model-attempt origin, first-call reasoning/usage and accepted-argument
+CAS publication. Saved-wait cancellation uses the same run projection. Office
+attaches actual request-delivery evidence and builds host presentation separately;
+terminal results retain their existing `ToolResultPersistence` owner.
+
+Both hosts append results in occurrence order. Office no longer inserts a result
+beside its earlier call: that insertion escaped tail capture and caused a mandatory
+commit failure. Existing request compilation owns call/result pairing, including
+batch replay after restart. No whole-history ID capture or new ordering store is
+needed. Durable-before-dispatch and effect-before-optional-delivery barriers remain.
 
 Office model-input preparation names changes to existing messages through
 `ConversationRunInput.UpdatedMessages`. The kernel drains these into its next

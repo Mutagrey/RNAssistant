@@ -47,7 +47,7 @@ namespace RNAssistant.Harness
                     ToolVerification.None, false, false, new[] { "agent" }, evidenceEligibility: eligibility));
                 var context = new ToolExecutionContext(new ToolCall(id, policy.ToolId, "{}"), policy,
                     Run.RunId, Run.TurnId, "step-" + id, DateTime.UtcNow, false, 1);
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id, Name = policy.ToolId },
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = id, Name = policy.ToolId },
                     "Inspect " + id, "Read.", null, ToolResultRoles.User, new AcceptedToolCallOrigin(context.StepId, "attempt-" + id, 0));
                 call.RunId = Run.RunId;
                 if (external)
@@ -164,7 +164,7 @@ namespace RNAssistant.Harness
                     var arguments = new JObject { ["query"] = "Line 1\n\"quoted\" \\n \\path Привет",
                         ["id"] = "application-id", ["function"] = new JObject { ["name"] = "data", ["arguments"] = "{\"key\":1}" },
                         ["items"] = new JArray(1, true, JValue.CreateNull()) };
-                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                         Id = result.ToolCallId, Name = result.ToolName, Arguments = arguments.ToObject<Dictionary<string, object>>() },
                         "Read.", "Inspect.", null, storedRole, FixtureCallOrigin(result.ToolCallId));
                     call.RunId = result.RunId;

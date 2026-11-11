@@ -529,7 +529,7 @@ namespace RNAssistant.Harness
                     CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "exact current HTML source is read");
                 var args = new Dictionary<string, object> { ["target"] = target, ["representation"] = "source" };
-                var acceptedRead = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                var acceptedRead = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = readCall.Id, Name = readCall.Name, Arguments = args }, "Read source.",
                     "Read the current HTML source.", null,
                     settings.ToolResultRole, new AcceptedToolCallOrigin("read-step", "read-attempt", 0));
@@ -557,12 +557,12 @@ namespace RNAssistant.Harness
                         item.ResourceEvidence.Any(evidence => evidence.View == ResourceRepresentations.Source)),
                         "complete read remains visible in the next model input");
                     const string writeId = "html-visible-write";
-                    model.AppendToolCall(new AgentToolCall { Id = writeId,
+                    model.AppendAcceptedResponse(new[] { ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = writeId,
                         Name = ResourceMutationToolCatalog.Write,
                         Arguments = new Dictionary<string, object> { ["target"] = target,
                             ["content"] = "<main>after</main>" } }, "Update page.",
-                        "Update the observed HTML source.", null,
-                        new AcceptedToolCallOrigin("write-step", "write-attempt", 0));
+                        "Update the observed HTML source.", null, ToolResultRoles.User,
+                        new AcceptedToolCallOrigin("write-step", "write-attempt", 0)) });
                     var accepted = session.Messages.Last();
                     accepted.RunId = session.LastRun.RunId;
                     AssertTrue(accepted.ResourceEvidence.Any(evidence =>
@@ -597,7 +597,7 @@ namespace RNAssistant.Harness
             };
             var values = JsonConvert.DeserializeObject<Dictionary<string, object>>(
                 (arguments ?? new JObject()).ToString(Formatting.None));
-            var call = AgentJsonProtocol.CreateToolCallMessage(
+            var call = ConversationRunProjection.CreateToolCallMessage(
                 new AgentToolCall
                 {
                     Id = callId,

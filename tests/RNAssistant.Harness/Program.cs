@@ -710,6 +710,7 @@ namespace RNAssistant.Harness
                 Test("storage: runtime boundary delta order", RuntimeCommitKeepsDeltaOrder),
                 Test("storage: runtime boundary capture cost", RuntimeCommitCaptureCost),
                 Test("storage: runtime boundary store cost", RuntimeCommitStoreCost),
+                Test("storage: shared runtime accepted projection", RuntimeProjectionPreservesAcceptedBatch),
                 Test("storage: natural list changes omit reorder", NaturalListChangesOmitReorder),
                 Test("storage: headers use artifact metadata", ChatHeadersUseArtifactMetadata),
                 Test("storage: canonical record encoding is stable", ChatRecordCanonicalEncodingIsStable),

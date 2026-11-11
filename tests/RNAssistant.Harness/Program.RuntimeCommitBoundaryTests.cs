@@ -17,6 +17,43 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void RuntimeProjectionPreservesAcceptedBatch()
+        {
+            WithTempPaths(paths => {
+                var store = new ChatStore(paths);
+                var session = store.Create("Workspace", "accepted-projection", "Workspace", "Accepted");
+                session.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn" }; store.Save(session);
+                var text = new string('x', 9000) + "\\literal\\n";
+                var arguments = JsonConvert.SerializeObject(new { text, stamp = "2026-11-11T12:34:56.000Z" });
+                var response = new AgentResponse(ConversationResponse.ExecuteAction, "Read exact sources.", "Read both.",
+                    new[] { new ToolCall("one", "core.read", arguments), new ToolCall("two", "core.read", "{}") });
+                var fact = new AgentRunEvent(AgentRunEventKind.ResponseAccepted, RuntimeBoundaryFact(session).Summary,
+                    stepId: "step", response: response, sourceModelAttemptId: "attempt");
+                var payloads = new ChatBlobStore(paths);
+                var messages = ConversationRunProjection.CreateAcceptedResponse(fact, new RNAssistant.Core.Llm.LlmCompletionResult {
+                    ReasoningContent = new string('r', 24001), CompletionTokens = 10 }, payloads);
+                session.Messages.AddRange(messages);
+                new ConversationRunCommit(session, fact, messages).Persist(store.CommitRun, session);
+                var loaded = new ChatStore(paths).Load(session.Id).Messages;
+                AssertEqual(2, loaded.Count, "one durable record per accepted batch position");
+                AssertTrue(AcceptedCallPayloadService.IsExternalizedCall(loaded[0]), "large accepted arguments use the existing CAS owner");
+                AssertTrue(loaded[0].Content.Length < 200, "large source stays out of accepted metadata");
+                AssertEqual(24000, loaded[0].ReasoningContent.Length, "reasoning has the shared transcript bound");
+                AssertTrue(loaded[0].ReasoningTruncated && loaded[1].ReasoningContent == null && loaded[1].CompletionTokens == null,
+                    "only the first call carries bounded reasoning and usage");
+                AssertEqual(1, loaded[1].AcceptedCallOrigin.CallIndex, "batch position survives restart");
+                AssertEqual("attempt", loaded[1].AcceptedCallOrigin.ModelAttemptId, "origin comes from the kernel fact");
+                var hydrated = AcceptedCallPayloadService.Hydrate(loaded[0], payloads);
+                var accepted = ConversationResponseHistoryReader.Read(hydrated);
+                var exact = JsonConvert.DeserializeObject<Dictionary<string, string>>(accepted.Response.ToolCalls.Single().ArgumentsJson);
+                AssertEqual(text, exact["text"], "literal backslashes survive shared projection and CAS hydration");
+                AssertEqual("2026-11-11T12:34:56.000Z", exact["stamp"], "ISO-looking strings are not rewritten as dates");
+                var missingOrigin = new AgentRunEvent(AgentRunEventKind.ResponseAccepted, fact.Summary,
+                    stepId: "step", response: response);
+                RuntimeThrows<InvalidOperationException>(() => ConversationRunProjection.CreateAcceptedResponse(missingOrigin, null, payloads));
+            });
+        }
+
         private static AgentRunEvent RuntimeBoundaryFact(ChatSession session)
         {
             return new AgentRunEvent(AgentRunEventKind.ModelStepStarted,
@@ -79,7 +116,7 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = "run", TurnId = "run" }; store.Save(session);
                 var context = PersistenceContext("run", "call");
                 var summary = RuntimeBoundaryFact(session).Summary;
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = context.Call.Id,
+                var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = context.Call.Id,
                     Name = context.Call.Name, Arguments = new Dictionary<string, object> { ["range"] = "A1" } },
                     "Read", "Read the requested source.", null, ToolResultRoles.User,
                     new AcceptedToolCallOrigin(context.StepId, "attempt", 0, 1));

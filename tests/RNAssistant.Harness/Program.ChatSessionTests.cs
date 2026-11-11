@@ -2450,7 +2450,7 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = runId, RuntimeId = "old-runtime", Status = "running",
                     StartedUtc = DateTime.UtcNow, KernelState = new AgentRunState(summary, new AgentRunLimits(10, 10),
                         inFlight ? PersistenceContext(runId, "unfinished") : null) };
-                Func<string, ChatMessage> call = id => AgentJsonProtocol.CreateToolCallMessage(
+                Func<string, ChatMessage> call = id => ConversationRunProjection.CreateToolCallMessage(
                     new AgentToolCall { Id = id, Name = "excel.inspect" }, "Read",
                     "Inspect the current document.", null, role, FixtureCallOrigin("step-" + id));
                 var completed = call("completed");
@@ -2497,7 +2497,7 @@ namespace RNAssistant.Harness
                 {
                     Id = "safe-call", Name = "excel.inspect"
                 };
-                var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, string.Empty,
+                var callMessage = ConversationRunProjection.CreateToolCallMessage(call, string.Empty,
                     "Inspect the current document.", null,
                     ToolResultRoles.User, FixtureCallOrigin("safe-step"));
                 callMessage.RunId = "safe-run";

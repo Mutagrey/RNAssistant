@@ -195,7 +195,7 @@ namespace RNAssistant.Harness
 
         private static ChatMessage JournalAgentCall(string call, string run, string tool = AgentCommunicationToolCatalog.Send)
         {
-            var message = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = call, Name = tool,
+            var message = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = call, Name = tool,
                 Arguments = new Dictionary<string, object> { ["agent_id"] = "peer", ["message"] = "source" } }, "", "Contact the exact peer.", null,
                 ToolResultRoles.User, new AcceptedToolCallOrigin("step-" + call, "model-" + call, 0, 1));
             message.RunId = run; return message;

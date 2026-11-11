@@ -22,10 +22,7 @@ namespace RNAssistant.Application.Conversations
             {
                 if (session.LastRun.RunId != fact.Summary.RunId || session.LastRun.TurnId != fact.Summary.TurnId)
                     throw new InvalidOperationException("Saved pause belongs to another run or turn.");
-                session.LastRun.KernelState = AgentRunState.Apply(session.LastRun.KernelState, fact);
-                session.LastRun.Status = "cancelled";
-                session.LastRun.Phase = "cancelled";
-                session.LastRun.CurrentAction = fact.Summary.AssistantMessage;
+                ConversationRunProjection.Apply(session.LastRun, fact);
                 var pausedView = RunViewStateProjector.StampCurrentRun(session, includeProtocolResponses: true);
                 new ConversationRunCommit(session, fact, new ChatMessage[0], updated: session.Messages.Where(message =>
                     pausedView != null && ReferenceEquals(message.RunViewState, pausedView))).Persist(store.CommitRun, session);
@@ -54,12 +51,7 @@ namespace RNAssistant.Application.Conversations
                 ExecutionProgress = ToolExecutionProgress.Capture(fact.Execution) };
             if (result.Role != ToolResultRoles.User && result.Role != ToolResultRoles.Tool && result.Role != ToolResultRoles.Developer)
                 throw new InvalidOperationException("Saved wait result role is unsupported.");
-            session.LastRun.KernelState = AgentRunState.Apply(session.LastRun.KernelState, fact);
-            session.LastRun.Status = "cancelled";
-            session.LastRun.Phase = "cancelled";
-            session.LastRun.CurrentAction = fact.Summary.AssistantMessage;
-            session.LastRun.IterationsUsed = fact.Summary.IterationsUsed;
-            session.LastRun.ToolStepsUsed = fact.Summary.ToolStepsUsed;
+            ConversationRunProjection.Apply(session.LastRun, fact);
             activity.Activity.Status = "cancelled";
             activity.Activity.ExecutionStatus = "notdispatched";
             activity.Activity.ResultMessage = fact.Execution.Message;

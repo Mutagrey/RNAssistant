@@ -266,7 +266,7 @@ namespace RNAssistant.Harness
 
         private static ChatMessage JournalReadCall(string callId, string run, string step)
         {
-            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+            var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                 Id = callId, Name = "core.read", Arguments = new Dictionary<string, object> { ["target"] = "source.txt" } },
                 "", "Read the exact source.", null, ToolResultRoles.User, new AcceptedToolCallOrigin(step, "attempt:" + callId, 0, 1));
             call.RunId = run;

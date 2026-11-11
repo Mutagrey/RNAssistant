@@ -220,7 +220,7 @@ namespace RNAssistant.Harness
                             var session = service.CreateSession(workspace, "Office result history");
                             sessionId = session.Id;
                             var original = new ChatMessage { Role = "user", Content = "Replace text", RunId = "prior-run" };
-                            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                            var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                                 Id = "prior-call", Name = WordToolIds.ReplaceText,
                                 Arguments = new Dictionary<string, object> { ["find"] = "old", ["replace"] = "new" }
                             }, "Replacing.", "Apply the requested replacement.", null,

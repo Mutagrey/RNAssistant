@@ -31,7 +31,7 @@ namespace RNAssistant.Harness
                 Name = ResourceToolCatalog.ReadToolId,
                 Arguments = new Dictionary<string, object> { ["target"] = "Excel range: Data!A1:B4" }
             };
-            var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, string.Empty,
+            var callMessage = ConversationRunProjection.CreateToolCallMessage(call, string.Empty,
                 "Read the requested range.", null,
                 ToolResultRoles.User, FixtureCallOrigin("inspector-step"));
             callMessage.RunId = "run-1";

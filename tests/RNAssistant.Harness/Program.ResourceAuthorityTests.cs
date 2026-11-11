@@ -1610,7 +1610,7 @@ namespace RNAssistant.Harness
                 var content = new string('x', 17 * 1024 * 1024);
                 var arguments = "{\"content\":\"" + content + "\"}";
                 var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "html.source.write" };
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = invocation.ToolCallId, Name = invocation.ToolId,
                     Arguments = new Dictionary<string, object> { { "content", content } }
                 }, "Large accepted write.", "Save the complete HTML file.", null, "tool",
@@ -2171,7 +2171,7 @@ namespace RNAssistant.Harness
                 var command = Command(ResourceToolCatalog.ReadToolId, "target", "Excel range: Data!J1", "representation", "text");
                 command.ToolCallId = read.Context.Call.Id;
                 chatA.Messages.Add(new ChatMessage { Role = "user", Content = "Read the cell and use the observation." });
-                chatA.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                chatA.Messages.Add(ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = command.ToolCallId, Name = command.ToolId,
                     Arguments = new Dictionary<string, object> { ["target"] = "Excel range: Data!J1", ["representation"] = "text" }
                 }, "Read the cell.", "Use the current cell observation.", null,
@@ -2228,13 +2228,13 @@ namespace RNAssistant.Harness
                     AssertContains(retained.Text, marker, "historical source remains available after invalidation");
                     AssertEqual(calls, adapter.ExcelBackendCalls.Count, "next compile and historical read perform no Office I/O or write replay");
                     AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "completed outcome leaves no unresolved mutation attempt");
-                    model.AppendToolCall(new AgentToolCall
+                    model.AppendAcceptedResponse(new[] { ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
                     {
                         Id = "next-call-" + scenario,
                         Name = "core.find",
                         Arguments = new Dictionary<string, object> { ["scope"] = "document", ["query"] = "Data" }
-                    }, "Continue.", "Find the current resource.", null,
-                        new AcceptedToolCallOrigin("next-step-" + scenario, "next-attempt-" + scenario, 0));
+                    }, "Continue.", "Find the current resource.", null, ToolResultRoles.User,
+                        new AcceptedToolCallOrigin("next-step-" + scenario, "next-attempt-" + scenario, 0)) });
                     AssertEqual(scenario == "no-op",
                         chatA.Messages.Last().ResourceEvidence.Any(item => item.EvidenceId == evidence.EvidenceId),
                         "only source actually visible in the next model request authorizes its accepted call");

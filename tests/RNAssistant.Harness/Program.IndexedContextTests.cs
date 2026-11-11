@@ -24,7 +24,7 @@ namespace RNAssistant.Harness
             string run, ToolResultMaterialization materialized, string tool = "core.read", JObject arguments = null,
             ChatBlobStore externalize = null)
         {
-            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id, Name = tool,
+            var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = id, Name = tool,
                 Arguments = (arguments ?? new JObject { ["target"] = "source.txt" }).ToObject<Dictionary<string, object>>() }, "", "Inspect the exact source.", null,
                 ToolResultRoles.User, new AcceptedToolCallOrigin("step:" + id, "attempt:" + id, 0, 1));
             call.RunId = run;

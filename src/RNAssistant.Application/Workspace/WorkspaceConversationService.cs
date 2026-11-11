@@ -1941,65 +1941,10 @@ namespace RNAssistant.Runtime
             public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)
             {
                 if (expectedRevision != _cursor) throw new InvalidOperationException("Stale workspace run cursor.");
-                if (fact.Kind == AgentRunEventKind.ResponseAccepted &&
-                    (string.IsNullOrWhiteSpace(fact.StepId) || string.IsNullOrWhiteSpace(fact.SourceModelAttemptId)))
-                    throw new InvalidOperationException("Accepted workspace decision has no exact model-attempt origin.");
                 var firstMessage = _session.Messages.Count;
-                _session.LastRun.KernelState = AgentRunState.Apply(_session.LastRun.KernelState, fact);
-                _session.LastRun.Status = fact.Summary.Lifecycle == RunLifecycle.Waiting ? "running" : fact.Summary.Lifecycle.ToString().ToLowerInvariant();
-                if (fact.Summary.Lifecycle == RunLifecycle.Waiting) _session.LastRun.Phase = fact.Summary.PauseId == null ? "waiting_agents" : "paused";
-                else if (_session.LastRun.Phase == "waiting_agents" || _session.LastRun.Phase == "paused") _session.LastRun.Phase = null;
-                if (fact.Kind == AgentRunEventKind.ExecutionQueued) _session.LastRun.Phase = "queued_execution";
-                else if (_session.LastRun.Phase == "queued_execution") _session.LastRun.Phase = null;
-                _session.LastRun.IterationsUsed = fact.Summary.IterationsUsed;
-                _session.LastRun.ToolStepsUsed = fact.Summary.ToolStepsUsed;
+                ConversationRunProjection.Apply(_session.LastRun, fact);
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted)
-                {
-                    if (fact.Response.ToolCalls.Count == 0)
-                        _session.Messages.Add(new ChatMessage
-                        {
-                            Role = "assistant", ProtocolMessage = true,
-                            ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                            ResponseModelAttemptId = fact.SourceModelAttemptId,
-                            ResponseStatus = fact.Response.Final ? AgentResponseStatuses.Completed : AgentResponseStatuses.InProgress,
-                            Content = ModelProtocolWire.WriteAcceptedDecision(fact.Response.Action,
-                                fact.Response.Reason, fact.Response.Message, fact.Response.Decision, fact.Response.Results, fact.Response.Outcome),
-                            RunId = fact.Summary.RunId
-                        });
-                    for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
-                    {
-                        var call = fact.Response.ToolCalls[index];
-                        var arguments = JObject.Parse(call.ArgumentsJson);
-                        _session.Messages.Add(new ChatMessage
-                        {
-                            Role = "assistant", ProtocolMessage = true,
-                            ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                            ResponseStatus = AgentResponseStatuses.InProgress,
-                            ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                            ToolResultRole = ToolResultRoles.User,
-                            Content = ModelProtocolWire.WriteAcceptedCall(fact.Response.Reason,
-                                    index == 0 ? fact.Response.Message : string.Empty,
-                                    new ConversationToolCall { Name = call.Name, Arguments = arguments }),
-                            ToolCalls = new List<LlmToolCall>(),
-                            ToolCallId = call.Id,
-                            ToolName = call.Name,
-                            AcceptedCallOrigin = new AcceptedToolCallOrigin(fact.StepId, fact.SourceModelAttemptId, index, fact.Response.ToolCalls.Count),
-                            RunId = fact.Summary.RunId
-                        });
-                    }
-                }
-                if (fact.Kind == AgentRunEventKind.ResponseAccepted && _lastCompletion != null)
-                {
-                    var message = _session.Messages[firstMessage];
-                    var reasoning = _lastCompletion.ReasoningContent ?? string.Empty;
-                    message.ReasoningContent = reasoning.Length > 24000 ? reasoning.Substring(0, 24000) : reasoning;
-                    message.ReasoningTokens = _lastCompletion.ReasoningTokens;
-                    message.ReasoningTruncated = _lastCompletion.ReasoningTruncated || reasoning.Length > 24000;
-                    message.PromptTokens = _lastCompletion.PromptTokens;
-                    message.CompletionTokens = _lastCompletion.CompletionTokens;
-                    message.TotalTokens = _lastCompletion.TotalTokens;
-                    message.UsageJson = _lastCompletion.UsageJson;
-                }
+                    _session.Messages.AddRange(ConversationRunProjection.CreateAcceptedResponse(fact, _lastCompletion, _payloads));
                 ChatMessage activity = null;
                 if (fact.Kind == AgentRunEventKind.ToolStarted || fact.Kind == AgentRunEventKind.ToolCompleted || fact.Kind == AgentRunEventKind.ToolWaiting)
                     activity = ProjectToolActivity(fact);

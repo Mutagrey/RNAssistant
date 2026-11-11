@@ -176,18 +176,13 @@ namespace RNAssistant.Office.Services
             _lastSnapshot = null;
         }
 
-        internal void AppendToolCall(AgentToolCall call, string message, string reason, LlmCompletionResult completion,
-            AcceptedToolCallOrigin origin)
+        internal void AppendAcceptedResponse(IEnumerable<ChatMessage> messages)
         {
-            var accepted = AgentJsonProtocol.CreateToolCallMessage(call, message, reason, completion, _settings.ToolResultRole, origin);
-            AttachResponseEvidence(accepted);
-            var arguments = JsonConvert.SerializeObject(call.Arguments);
-            if (_payloads != null && arguments.Length > 8192)
+            foreach (var message in messages)
             {
-                accepted.ArgumentPayload = PayloadRef.FromBlob(_payloads.StoreText(arguments, "application/json"));
-                AcceptedCallPayloadService.Externalize(accepted, _payloads);
+                AttachResponseEvidence(message);
+                _session.Messages.Add(message);
             }
-            _session.Messages.Add(accepted);
             _lastSnapshot = null;
         }
 
@@ -277,7 +272,7 @@ namespace RNAssistant.Office.Services
             ChatMessage model;
             var accepted = MaterializeToolResultMessage(
                 command, result, out model);
-            AppendPairedResult(_session.Messages, accepted);
+            _session.Messages.Add(accepted);
             _lastSnapshot = null;
             _toolPack.StageReadResult(model);
             if (prepared.Media != null && result.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
@@ -285,16 +280,6 @@ namespace RNAssistant.Office.Services
                 prepared.Media.RunId = accepted.RunId;
                 _session.Messages.Add(prepared.Media);
             }
-        }
-
-        internal static void AppendPairedResult(List<ChatMessage> messages, ChatMessage result)
-        {
-            // The whole accepted read batch is durable before execution. Materialized
-            // native-tool history must still pair each call/result, including replay.
-            var callIndex = messages.FindLastIndex(message => message.Role == "assistant" &&
-                message.ProtocolMessage && message.ToolCallId == result.ToolCallId);
-            if (callIndex < 0) messages.Add(result);
-            else messages.Insert(callIndex + 1, result);
         }
 
         internal bool EndResponse(string nextStepId)

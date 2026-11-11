@@ -31,7 +31,7 @@ namespace RNAssistant.Harness
                     var origin = JsonConvert.DeserializeObject<AcceptedToolCallOrigin>(new JObject {
                         ["StepId"] = "step", ["ModelAttemptId"] = "attempt", ["CallIndex"] = index
                     }.ToString(Formatting.None));
-                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "old-" + index, Name = "test.read" },
+                    var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "old-" + index, Name = "test.read" },
                         null, "Read.", null, "user", new AcceptedToolCallOrigin("step", "attempt", index, 2));
                     call.AcceptedCallOrigin = origin;
                     legacy.Messages.Add(call);
@@ -129,7 +129,7 @@ namespace RNAssistant.Harness
                 var calls = new List<ChatMessage>(); var results = new List<ChatMessage>();
                 for (var i = 0; i < 2; i++)
                 {
-                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "internal-" + i, Name = "test.read",
+                    var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "internal-" + i, Name = "test.read",
                         Arguments = new Dictionary<string, object> { ["query"] = i == 0 ? "A" : "B" } },
                         null, "Read both sources.", null, "user", new AcceptedToolCallOrigin("step", "attempt", i, 2));
                     call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, i + 1); calls.Add(call);
@@ -198,7 +198,7 @@ namespace RNAssistant.Harness
                 request.CallContext = new ModelProtocolCallContext(new[] { "test.read" });
                 request.Options = ModelProtocolWire.CreateRequestOptions(request.Settings.AgentResponseMode, request.CallableTools, request.CallContext);
                 var trace = new List<LlmTraceRecord>(); request.Options.TraceSink = trace.Add;
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "accepted-call", Name = "test.read" },
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "accepted-call", Name = "test.read" },
                     "Read.", "Inspect.", null, ToolResultRoles.Tool, FixtureCallOrigin());
                 call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
                 var result = ContinuityResult(call.ToolCallId, call.ToolName, RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read."), ToolResultRoles.Tool);
@@ -281,7 +281,7 @@ namespace RNAssistant.Harness
             {
                 var request = NewProtocolRequest(2, strict);
                 request.Settings.ToolResultRole = role;
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "accepted-read", Name = "test.read" },
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "accepted-read", Name = "test.read" },
                     "", "Read Module1 source.", null, role, FixtureCallOrigin());
                 var result = ContinuityResult(call.ToolCallId, call.ToolName,
                     RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Source read.", "{\"text\":\"Sub TestScene3DRun1()\\nEnd Sub\"}"), role);

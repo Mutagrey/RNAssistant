@@ -31,7 +31,7 @@ namespace RNAssistant.Harness
         private static ChatMessage ContextAcceptedCall(string id, string role = ToolResultRoles.User,
             AcceptedToolCallOrigin origin = null)
         {
-            return AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
+            return ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
             {
                 Id = id, Name = "excel.inspect", Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
             }, "Read.", "Inspect the requested sheets.", null, role, origin ?? FixtureCallOrigin());
@@ -1728,7 +1728,7 @@ namespace RNAssistant.Harness
             {
                 var settings = new AppSettings { ToolResultRole = role };
                 AssertEqual(ToolResultRoles.User, settings.ToolResultRole, "retired role setting cannot change the production profile");
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = "call_1", Name = "excel.inspect", Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
                 }, "Reading.", "Inspect the requested sheets.", null, role, FixtureCallOrigin());
                 var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
@@ -1989,7 +1989,7 @@ namespace RNAssistant.Harness
                 AssertContains(archived.Content, item.Hidden,
                     "historical Office result remains intact for diagnostics");
             }
-            var wordCall = AgentJsonProtocol.CreateToolCallMessage(
+            var wordCall = ConversationRunProjection.CreateToolCallMessage(
                 new AgentToolCall { Id = "word_hash", Name = WordToolIds.ReplaceText,
                     Arguments = new Dictionary<string, object> { ["find"] = "old", ["replace"] = "new" } },
                 "Replacing text.", "Apply the requested replacement.", null, ToolResultRoles.User, FixtureCallOrigin());
@@ -2027,7 +2027,7 @@ namespace RNAssistant.Harness
                     genericReference.Uri, StringComparison.Ordinal) < 0,
                 "switched result prose cannot leak an exact resource reference");
             var acceptedProjection = ModelToolResultProjection.Project(
-                AgentJsonProtocol.CreateToolCallMessage(
+                ConversationRunProjection.CreateToolCallMessage(
                     new AgentToolCall
                     {
                         Id = "accepted_message_projection",
@@ -2042,7 +2042,7 @@ namespace RNAssistant.Harness
             AssertTrue(acceptedProjection.Content.IndexOf(
                     genericReference.Uri, StringComparison.Ordinal) < 0,
                 "accepted v8 reason and message cannot replay an exact resource reference");
-            var literalCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
+            var literalCall = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
             {
                 Id = "source_literal", Name = "files.create",
                 Arguments = new Dictionary<string, object> { { "relativePath", "note.txt" },
@@ -2074,7 +2074,7 @@ namespace RNAssistant.Harness
                     "projection does not rewrite archived HTML evidence");
             }
 
-            var oldHtmlCall = AgentJsonProtocol.CreateToolCallMessage(
+            var oldHtmlCall = ConversationRunProjection.CreateToolCallMessage(
                 new AgentToolCall { Id = "old_html", Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
                     Arguments = new Dictionary<string, object> {
                         ["path"] = "index.html", ["content"] = "<main>saved</main>"
@@ -2096,7 +2096,7 @@ namespace RNAssistant.Harness
                 htmlContext.IndexOf("Source SHA-256", StringComparison.OrdinalIgnoreCase) < 0,
                 "old HTML write hash is absent from the actual next request");
 
-            var replayCall = AgentJsonProtocol.CreateToolCallMessage(
+            var replayCall = ConversationRunProjection.CreateToolCallMessage(
                 new AgentToolCall { Id = "replay_find", Name = ResourceToolCatalog.FindToolId,
                     Arguments = new Dictionary<string, object> {
                         ["query"] = "Literal " + genericReference.Uri + " " + runtimeHash
@@ -2149,7 +2149,7 @@ namespace RNAssistant.Harness
                     "rna://", StringComparison.OrdinalIgnoreCase) < 0,
                 "malformed generic result cannot leak raw runtime content");
 
-            var mutationCall = AgentJsonProtocol.CreateToolCallMessage(
+            var mutationCall = ConversationRunProjection.CreateToolCallMessage(
                 new AgentToolCall
                 {
                     Id = "mutation_projection",

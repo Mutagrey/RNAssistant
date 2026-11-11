@@ -230,7 +230,7 @@ namespace RNAssistant.Harness
                     ["representation"] = "source"
                 }
             };
-            var semanticAccepted = AgentJsonProtocol.CreateToolCallMessage(
+            var semanticAccepted = ConversationRunProjection.CreateToolCallMessage(
                 semanticCall, "Reading source.", "Inspect the requested source.", null, ToolResultRoles.Tool,
                 FixtureCallOrigin("semantic-resource-step"));
             var semanticResult = AgentJsonProtocol.CreateToolResultMessage(
@@ -280,7 +280,7 @@ namespace RNAssistant.Harness
                     ["representation"] = "source"
                 }
             };
-            var obsoleteAccepted = AgentJsonProtocol.CreateToolCallMessage(
+            var obsoleteAccepted = ConversationRunProjection.CreateToolCallMessage(
                 obsoleteCall, "Reading old state.", "Inspect the old resource request.", null, ToolResultRoles.Tool,
                 FixtureCallOrigin("obsolete-resource-step"));
             var obsoleteResult = AgentJsonProtocol.CreateToolResultMessage(
@@ -999,12 +999,12 @@ namespace RNAssistant.Harness
                     CancellationToken.None, payloads: executor.Payloads).GetAwaiter().GetResult())
                 {
                     const string callId = "read_oversized_capability";
-                    modelSession.AppendToolCall(new AgentToolCall
+                    modelSession.AppendAcceptedResponse(new[] { ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
                     {
                         Id = callId,
                         Name = CapabilityToolCatalog.ReadToolId,
                         Arguments = new Dictionary<string, object> { { "id", skillId } }
-                    }, string.Empty, "Read the requested capability.", null, FixtureCallOrigin("oversized-capability-step"));
+                    }, string.Empty, "Read the requested capability.", null, ToolResultRoles.User, FixtureCallOrigin("oversized-capability-step")) });
                     session.Messages[session.Messages.Count - 1].RunId =
                         session.LastRun.RunId;
                     var command = Command(CapabilityToolCatalog.ReadToolId, "id", skillId);
@@ -1436,13 +1436,13 @@ namespace RNAssistant.Harness
                     {
                         var tool = optionalTools[index];
                         var callId = "read_" + tool.Id;
-                        modelSession.AppendToolCall(new AgentToolCall
+                        modelSession.AppendAcceptedResponse(new[] { ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
                         {
                             Id = callId,
                             Name = CapabilityToolCatalog.ReadToolId,
                             Arguments = new Dictionary<string, object> { { "id", tool.Id } }
-                        }, string.Empty, "Read the requested capability.", null,
-                            FixtureCallOrigin("overflow-step", "overflow-attempt", index, optionalTools.Length));
+                        }, string.Empty, "Read the requested capability.", null, ToolResultRoles.User,
+                            FixtureCallOrigin("overflow-step", "overflow-attempt", index, optionalTools.Length)) });
                         session.Messages.Last().RunId = session.LastRun.RunId;
                         var command = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id);
                         command.ToolCallId = callId;
@@ -1585,7 +1585,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "compaction-run", TurnId = "compaction-turn" };
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Inspect the tool before continuing." });
-                session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
+                session.Messages.Add(ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
                 {
                     Id = "read_before_compaction",
                     Name = CapabilityToolCatalog.ReadToolId,

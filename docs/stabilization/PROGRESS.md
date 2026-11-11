@@ -65,8 +65,9 @@ GC под maintenance gate и restore всех новых journals/CAS без и
 общий набор после P4a — 16 checks. Backup APIs пока internal/isolated, DPAPI на Windows не
 проверен. P4a добавил общий bounded verified cache для малых CAS bodies и exact text windows:
 на 24 окнах просмотрено 72 144 вместо 1 728 000 символов с сохранением проверок
-текущих байтов и live guards. Далее оставшиеся P3/P4 и consumers.
-Multi-target/resource semantic-owner integration, P3/P4, production backup/GC integration,
+текущих байтов и live guards. Остаток P4 отложен до переключения, если сохраняется
+корректность текущих чтений; P0 и доказанные механизмы не разрабатываются повторно.
+Multi-target/resource semantic-owner integration, P3, production backup/GC integration,
 cutover и Windows/Office evidence открыты; общая оптимизация не завершена.
 
 P3a: общий compiler сохраняет все delivered entries, но только 16 примеров исключений
@@ -116,7 +117,26 @@ own-append recovery сохранены. Удалены aggregate overload и Off
 с изменениями этого среза. При 24 captures и H=100/1000/10000 выделения — 79 680 байт
 вместо 186 728 / 1 765 288 / 16 162 792. Старый backend всё ещё материализует H
 сообщений; ускорение полной записи не заявляется. Обычные commit/read DTO,
-общий kernel-fact перевод и переключение consumers остаются открытыми.
+оставшийся kernel-fact перевод и переключение consumers остаются открытыми.
+
+P1 shared projection: существующий `ConversationRunProjection` перенесён из Office
+в Core; Office/Workspace и saved-wait cancellation используют общий перевод run
+state и accepted responses. Общие origin, reasoning/usage и CAS аргументов; result
+persistence сохраняет прежнего owner. Удалена вставка Office result в середину
+истории: она пропускалась новым tail capture и вызывала mandatory commit failure.
+Chronological append и существующая сборка пар в запросе проходят batch/restart.
+Production C# — net −34 строки; без новых stores/registries/facades.
+12 адресных checks проходят host-neutral. Ещё 8 выбранных failures воспроизводятся
+без общего projection и сохранены в [backlog](BACKLOG.md#host-neutral-harness-baseline-failures--2026-10-13);
+это не полный текущий HEAD и не Windows/Office qualification.
+
+Маршрут до переключения сужен по [уточнению пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md#84-порядок-небольших-срезов):
+реальные consumers и короткие сквозные проверки каждого среза; финально — чат,
+mutation, unknown, restart, lost acknowledgement, rebuild и restore. До cutover
+обязательны проверенная копия history/CAS/ключей, остановка старых writers и короткий
+Windows/Office прогон по фото. Новый формат начинает новую историю, прежние данные
+сохраняются отдельно. Ресурсные owners и оставшиеся Store-операции — главная
+неопределённость; P7 ещё не выполнен.
 
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10

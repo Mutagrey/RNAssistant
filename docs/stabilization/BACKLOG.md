@@ -712,6 +712,29 @@ storage/protocol fixes closed part of that set; do not present it as today's lis
 The [2026-10-15 correction](RISK_REGISTER.md#baseline-test-failures-during-architecture-follow-through--2026-10-15)
 also does not establish that later changes remain green.
 
+2026-11-11, P1 common projection: eight selected failures reproduce with and without
+the shared projection on isolated e8d719b6 + owned changes through `5b0df48c`, with
+only the chronological-result correction applied to both. They are not a current
+full-HEAD failure count. Owners: the corresponding Harness/domain owners; retain
+the original assertions and localize separately before changing production policy:
+
+- `v8 recovery: workspace live and accepted reasoning`: strict 24K fixture exceeds
+  its 10,829-token message budget (13,895 mandatory tokens); no budget was raised.
+- `auto confirmation: native multistep and unknown non-retry`: inspected-unknown
+  completion still fails; its final admission cause needs localization.
+- `agent: runtime ids preserve complete HTML in native history`: creation targets
+  `HTML file: report.html` without the now-required explicit workspace.
+- `kernel replay: normal effect and own trace CAS` / `write error`: scripted
+  finish lacks mandatory v8 outcome.
+- `kernel replay: confirmation and stale cursor`, `cancelled confirmation`,
+  `known effect survives model preparation failure`: fixtures do not reach their
+  expected skill confirmation (missing successful evidence / exhausted script).
+
+The shared projection slice instead verifies the actual Office batch/restart,
+Workspace turn/restart, Office reasoning, saved-wait cancellation, native read,
+unknown finish refusal, retained terminal effect and append-fault paths. These
+checks do not close the separate fixture/domain gaps above.
+
 At `a05ffe96`, focused current-tree checks have seven failures: four `agent:`, one
 `kernel replay:`, the conversation-port architecture assertion and Common R61
 inventory. Exact names/results and the independently reproduced skill-budget

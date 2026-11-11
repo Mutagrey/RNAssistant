@@ -119,7 +119,7 @@ namespace RNAssistant.Harness
 
         private static ChatMessage JournalMutationCall(string id, string run, string step)
         {
-            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id, Name = "core.write",
+            var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = id, Name = "core.write",
                 Arguments = new Dictionary<string, object> { ["target"] = "source.txt", ["content"] = "new source" } },
                 "", "Replace the exact delivered source.", null, ToolResultRoles.User, new AcceptedToolCallOrigin(step, "model:" + id, 0, 1));
             call.RunId = run; return call;

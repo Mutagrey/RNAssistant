@@ -49,7 +49,7 @@ namespace RNAssistant.Harness
                     ids.Add(call.Id);
                     var context = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "fixture", policy),
                         summary.RunId, summary.TurnId, "step-" + i, DateTime.UtcNow, false, 1);
-                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name },
+                    var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name },
                         "", "Inspect.", null, ToolResultRoles.User, new AcceptedToolCallOrigin(context.StepId, "attempt-" + i, 0));
                     accepted.RunId = summary.RunId;
                     session.Messages.Add(accepted);
@@ -132,7 +132,7 @@ namespace RNAssistant.Harness
             AssertEqual("R1", ModelReference.Create(ModelReferenceKind.Resource, 1).Alias, "resource is a separate type");
             foreach (var role in new[] { ToolResultRoles.User })
             {
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "call_canonical", Name = "test.read",
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "call_canonical", Name = "test.read",
                     Arguments = new Dictionary<string, object> { ["text"] = "call_canonical e1 r2 日本語\nРусский" } },
                     "Reading.", "Read requested text.", null, role, FixtureCallOrigin());
                 call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 7);
@@ -227,7 +227,7 @@ namespace RNAssistant.Harness
         private static async Task ModelReferencesFreezeRepairAndFallback()
         {
             var request = NewProtocolRequest(2);
-            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "canonical-repair", Name = "test.read" },
+            var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "canonical-repair", Name = "test.read" },
                 "Read.", "Read source.", null, ToolResultRoles.User, FixtureCallOrigin());
             call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 9);
             var resultMessage = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = call.ToolCallId, ToolId = call.ToolName },
@@ -475,7 +475,7 @@ namespace RNAssistant.Harness
                 Func<ChatSession, string, ChatMessage> accept = (target, id) =>
                 {
                     var context = PersistenceContext(summary.RunId, id);
-                    var message = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id, Name = context.Call.Name,
+                    var message = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = id, Name = context.Call.Name,
                         Arguments = new Dictionary<string, object> { ["range"] = "A1" } }, "Read.", "Read range.", null,
                         ToolResultRoles.User, new AcceptedToolCallOrigin(context.StepId, "attempt-" + id, 0));
                     message.RunId = summary.RunId;

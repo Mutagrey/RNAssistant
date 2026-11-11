@@ -111,35 +111,6 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        public static ChatMessage CreateToolCallMessage(
-            AgentToolCall call,
-            string message,
-            string reason,
-            RNAssistant.Core.Llm.LlmCompletionResult completion,
-            string toolResultRole,
-            AcceptedToolCallOrigin origin)
-        {
-            if (call == null || string.IsNullOrWhiteSpace(call.Id) || string.IsNullOrWhiteSpace(call.Name) ||
-                string.IsNullOrWhiteSpace(reason) || origin == null)
-                throw new ArgumentException("Accepted runtime call identity and origin are required.");
-            var normalizedRole = ToolResultRoles.User;
-            var content = ModelProtocolWire.WriteAcceptedCall(reason, message, new ConversationToolCall
-                {
-                    Name = call.Name,
-                    Arguments = JObject.FromObject(call.Arguments ?? new Dictionary<string, object>())
-                });
-            var protocolMessage = AgentTranscript.CreateAssistantMessage(content, completion);
-            protocolMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
-            protocolMessage.ToolResultProtocolVersion = ToolResultWire.CurrentVersion;
-            protocolMessage.ResponseStatus = AgentResponseStatuses.InProgress;
-            protocolMessage.ProtocolMessage = true;
-            protocolMessage.ToolResultRole = normalizedRole;
-            protocolMessage.ToolCallId = call.Id;
-            protocolMessage.AcceptedCallOrigin = origin;
-            protocolMessage.ToolName = call.Name;
-            return protocolMessage;
-        }
-
         private static JToken BoundData(JToken parsed, int maxDataTokens, AppSettings settings)
         {
             var compact = parsed.ToString(Formatting.None);

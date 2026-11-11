@@ -34,7 +34,7 @@ namespace RNAssistant.Harness
                 result.ResourceEffect = new ResourceEffect("effect", "create", status == ToolResultStatus.Ok
                     ? ResourceEffectOutcome.VerifiedChanged : status == ToolResultStatus.Error
                     ? ResourceEffectOutcome.FailedNoEffect : ResourceEffectOutcome.UnknownAfterDispatch);
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "recent", Name = "core.write",
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "recent", Name = "core.write",
                     Arguments = new Dictionary<string, object> { { "target", "index.html" }, { "content", "<p>exact body</p>" } } },
                     "Create the page.", "Create the requested page.", null, role, FixtureCallOrigin("recent"));
                 var snapshot = compiler.Compile(authority, new ChatMessage[0], new[] { call, result }, null,
@@ -86,11 +86,11 @@ namespace RNAssistant.Harness
             {
                 var old = ContinuityResult("old", "core.write", ToolResult.Error("Already exists.", "{\"code\":\"target_exists\"}"), role);
                 old.ResourceEffect = new ResourceEffect("effect", "create", ResourceEffectOutcome.FailedNoEffect);
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "old", Name = "core.write",
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "old", Name = "core.write",
                     Arguments = new Dictionary<string, object> { { "target", "index.html" }, { "content", new string('x', 20000) } } },
                     "Attempted create.", "Try the requested create.", null, role, FixtureCallOrigin("old"));
                 var latest = ContinuityResult("last", "core.patch", ToolResult.Error("Ambiguous patch.", "{\"code\":\"patch_ambiguous\",\"targets\":[]}"), role);
-                var latestCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "last", Name = "core.patch",
+                var latestCall = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "last", Name = "core.patch",
                     Arguments = new Dictionary<string, object> { { "targets", new[] { new { target = "index.html",
                         edits = new[] { new { old = "repeated", @new = "changed" } } } } } } },
                     "Attempted patch.", "Try the requested patch.", null, role, FixtureCallOrigin("last"));
@@ -211,7 +211,7 @@ namespace RNAssistant.Harness
                 for (var index = 0; index < 3; index++)
                 {
                     var id = "read-" + index;
-                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id,
+                    var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = id,
                         Name = "core.read", Arguments = new Dictionary<string, object> { { "target", "notes.txt" } } },
                         index == 0 ? finding : "", "Read the requested notes.", null, role, FixtureCallOrigin(id));
                     call.RunId = "continuity";
@@ -472,7 +472,7 @@ namespace RNAssistant.Harness
                 result.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.FailedNoEffect);
                 var arguments = new Dictionary<string, object> { { "target", "index.html" } };
                 arguments.Add(tool == "resources.move" ? "destination" : "content", tool == "resources.move" ? "archive/index.html" : new string('x', 10000));
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = result.ToolCallId, Name = tool, Arguments = arguments }, "Attempted write.",
                     "Try the requested write.", null, role, FixtureCallOrigin("target"));
                 call.RunId = result.RunId;
@@ -615,7 +615,7 @@ namespace RNAssistant.Harness
                 var arguments = resource.Tool == "core.patch" ? new Dictionary<string, object> {
                     { "targets", PatchTargets(resource.Targets.Select(target => PatchSection(target, LineHunk("old", "new"))).ToArray()) } } :
                     new Dictionary<string, object> { { "target", resource.Targets[0] }, { "content", "HISTORICAL_BODY" } };
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                     Id = mutation.ToolCallId, Name = resource.Tool, Arguments = arguments },
                     "", "Edit the requested source.", null, role, FixtureCallOrigin(mutation.ToolCallId));
                 call.RunId = mutation.RunId;
@@ -924,7 +924,7 @@ namespace RNAssistant.Harness
                 AssertEqual(body, (string)JObject.Parse(restoredView.Content)["text"], "reference projection preserves the hydrated CAS text");
                 var write = ContinuityResult("large_write", "core.write", ToolResult.Ok("Written.", "{\"target\":\"other.txt\"}"));
                 write.ResourceEffect = new ResourceEffect("fx", "core.write", ResourceEffectOutcome.VerifiedChanged);
-                var writeCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "core.write",
+                var writeCall = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "core.write",
                     Arguments = new Dictionary<string, object> { ["target"] = "other.txt", ["content"] = new string('x', 12000) } },
                     "Saved another file.", "Save the requested file.", null, "tool", FixtureCallOrigin("large_write"));
                 var latest = ContinuityResult("latest", "fixture.read", ToolResult.Ok("Small result.", "{}"));
@@ -1292,7 +1292,7 @@ namespace RNAssistant.Harness
 
         private static ChatMessage ContinuityCall(ChatMessage result)
         {
-            var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+            var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                 Id = result.ToolCallId, Name = result.ToolName, Arguments = new Dictionary<string, object>() },
                 "", "Read the recorded tool result.", null, result.ToolResultRole, FixtureCallOrigin(result.ToolCallId));
             call.RunId = result.RunId;

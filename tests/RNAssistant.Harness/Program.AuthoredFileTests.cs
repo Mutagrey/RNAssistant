@@ -173,7 +173,7 @@ namespace RNAssistant.Harness
                 Func<ToolInvocation, IEnumerable<ResourceEvidence>, VbaPendingExecution> prepare = (command, evidence) =>
                 {
                     command.ToolCallId = "file_" + Guid.NewGuid().ToString("N");
-                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
                         Id = command.ToolCallId, Name = command.ToolId, Arguments = command.Arguments },
                         "Edit.", "Change the observed lines.", null, ToolResultRoles.User, FixtureCallOrigin("run-vba-native:1"));
                     accepted.RunId = "run-vba-native";

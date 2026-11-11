@@ -2636,7 +2636,7 @@ namespace RNAssistant.Harness
                         Name = "excel.read_range",
                         Arguments = new Dictionary<string, object> { ["range"] = "A1" }
                     };
-                    var message = AgentJsonProtocol.CreateToolCallMessage(call, "Read.",
+                    var message = ConversationRunProjection.CreateToolCallMessage(call, "Read.",
                         "Read the requested range.", null, role,
                         new AcceptedToolCallOrigin("step-" + role, "attempt-" + role, 0));
                     message.RunId = "run-roles";
@@ -2749,7 +2749,7 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = "run-transition", TurnId = "run-transition" };
                 var summary = new RunSummary("run-transition", "run-transition", RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null);
                 var context = PersistenceContext(summary.RunId, "call-transition");
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(
+                var accepted = ConversationRunProjection.CreateToolCallMessage(
                     new AgentToolCall
                     {
                         Id = "call-transition",

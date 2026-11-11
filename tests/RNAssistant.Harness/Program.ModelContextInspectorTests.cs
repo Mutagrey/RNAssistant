@@ -34,7 +34,7 @@ namespace RNAssistant.Harness
                     var context = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "fixture",
                         new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" }, evidenceEligibility: eligibility)),
                         summary.RunId, summary.TurnId, "step-" + index, DateTime.UtcNow, false, 1);
-                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name },
+                    var accepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name },
                         "", "Inspect.", null, ToolResultRoles.Tool, new AcceptedToolCallOrigin(context.StepId, "attempt-" + index, 0));
                     accepted.RunId = summary.RunId; session.Messages.Add(accepted);
                     new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,

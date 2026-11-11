@@ -15,7 +15,6 @@ namespace RNAssistant.Office
 {
     internal static class AgentTranscript
     {
-        private const int MaxTranscriptReasoningChars = 24000;
         private const int MaxTranscriptArgumentsChars = 64000;
         private const int MaxTranscriptDataChars = 128000;
         private const int MaxRenderableTranscriptDataChars = 2000000;
@@ -109,28 +108,17 @@ namespace RNAssistant.Office
             ChatActivity activity = null,
             string responseStatus = null)
         {
-            var reasoning = completion == null ? null : completion.ReasoningContent;
-            var transcriptReasoningTruncated = !string.IsNullOrEmpty(reasoning) && reasoning.Length > MaxTranscriptReasoningChars;
-            return new ChatMessage
+            var message = new ChatMessage
             {
-                Role = "assistant",
-                Content = content ?? string.Empty,
+                Role = "assistant", Content = content ?? string.Empty,
                 ExcludeFromModelContext = activity != null,
                 ResponseProtocolVersion = AgentResponseStatuses.IsKnown(responseStatus)
-                    ? AgentResponseProtocol.CurrentVersion
-                    : 0,
+                    ? AgentResponseProtocol.CurrentVersion : 0,
                 ResponseStatus = AgentResponseStatuses.IsKnown(responseStatus) ? responseStatus : null,
-                Activity = activity,
-                PromptTokens = completion == null ? null : completion.PromptTokens,
-                CompletionTokens = completion == null ? null : completion.CompletionTokens,
-                TotalTokens = completion == null ? null : completion.TotalTokens,
-                UsageJson = completion == null ? null : completion.UsageJson,
-                ReasoningContent = transcriptReasoningTruncated
-                    ? reasoning.Substring(0, MaxTranscriptReasoningChars)
-                    : reasoning,
-                ReasoningTokens = completion == null ? null : completion.ReasoningTokens,
-                ReasoningTruncated = completion != null && (completion.ReasoningTruncated || transcriptReasoningTruncated)
+                Activity = activity
             };
+            ConversationRunProjection.ApplyCompletion(message, completion);
+            return message;
         }
 
         public static ToolResultDescriptionDto DescribeResult(ToolInvocation command, ToolRunResult result)
