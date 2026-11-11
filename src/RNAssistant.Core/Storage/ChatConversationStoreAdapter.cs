@@ -44,9 +44,9 @@ namespace RNAssistant.Core.Storage
             _store.Commit(session, commit);
         }
 
-        public void CommitRun(ChatSession session, ConversationRunCommit commit)
+        public void CommitRun(ConversationRunCommit commit)
         {
-            _store.CommitRun(session, commit);
+            _store.CommitRun(commit);
         }
 
         public void SetTitle(ChatSession session, string title) { _store.SetTitle(session, title); }

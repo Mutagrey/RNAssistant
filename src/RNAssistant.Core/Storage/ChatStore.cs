@@ -301,14 +301,19 @@ namespace RNAssistant.Core.Storage
         internal void Commit(ChatSession session, ConversationCommit commit)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
+            if (commit is ConversationRunCommit)
+                throw new InvalidOperationException("Runtime facts must use the exact CommitRun boundary.");
             SaveInternal(session, commit);
         }
 
-        internal void CommitRun(ChatSession session, ConversationRunCommit commit)
+        internal void CommitRun(ConversationRunCommit commit)
         {
-            if (commit == null || session?.LastRun?.RunId != commit.RunId)
-                throw new InvalidOperationException("The runtime commit must belong to the current run.");
-            SaveInternal(session, commit);
+            if (commit == null) throw new ArgumentNullException(nameof(commit));
+            var state = commit.CreateStateProjection();
+            if (state.LastRun?.RunId != commit.RunId)
+                throw new InvalidOperationException("Runtime commit state belongs to another run.");
+            try { SaveInternal(state, commit); commit.RecordStorageState(state, true); }
+            catch { commit.RecordStorageState(state, false); throw; }
         }
 
         internal SessionEvent AppendTrace(
@@ -948,7 +953,8 @@ namespace RNAssistant.Core.Storage
                 foreach (var message in session.Revision == 0 ? session.Messages ?? new List<ChatMessage>() :
                     commit.Messages.Select(write => write.Message))
                     RuntimePayloadService.ExternalizeActivity(message.Activity, _blobs);
-                NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
+                if (!(commit is ConversationRunCommit))
+                    NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
                 var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
                 using (AcquireDocumentPathLock(path))
                 {
@@ -960,9 +966,12 @@ namespace RNAssistant.Core.Storage
         private void SaveInternalLocked(ChatSession session, string path, ConversationCommit commit)
         {
             var timer = Stopwatch.StartNew();
-            EnsureUniqueArtifactIdentities(session);
-            EnsureChartArtifacts(session, session.Revision == 0 ? session.Messages : commit.Messages.Select(write => write.Message));
-            ExternalizeArtifacts(session);
+            if (!(commit is ConversationRunCommit))
+            {
+                EnsureUniqueArtifactIdentities(session);
+                EnsureChartArtifacts(session, session.Revision == 0 ? session.Messages : commit.Messages.Select(write => write.Message));
+                ExternalizeArtifacts(session);
+            }
             var externalizeMs = timer.ElapsedMilliseconds;
             var exists = File.Exists(path);
             if (commit is ConversationRunCommit && !exists)
@@ -984,6 +993,39 @@ namespace RNAssistant.Core.Storage
             if (!exists && session.Revision > 0)
             {
                 throw new ChatConcurrencyException("Chat storage changed while this session was open. Reload the chat before saving again.");
+            }
+
+            var runtimeOrderChanged = false;
+            var runtimeCommit = commit as ConversationRunCommit;
+            if (runtimeCommit != null)
+            {
+                // Only this legacy backend still needs the complete projection.
+                // The command names exact writes, never a caller-owned archive.
+                session.Messages = new List<ChatMessage>(stored.Messages);
+                var positions = session.Messages.Select((message, index) => new { message.Id, Index = index })
+                    .ToDictionary(item => item.Id, item => item.Index, StringComparer.OrdinalIgnoreCase);
+                var firstNew = session.Messages.Count;
+                foreach (var write in commit.Messages)
+                {
+                    int index;
+                    if (positions.TryGetValue(write.Message.Id, out index)) session.Messages[index] = write.Message;
+                    else { positions.Add(write.Message.Id, session.Messages.Count); session.Messages.Add(write.Message); }
+                }
+                if (session.Messages.Count != ((ConversationRunCommit)commit).ExpectedMessageCount)
+                    throw new InvalidOperationException("A runtime commit omitted message writes or removals.");
+                var order = runtimeCommit.AppendedOrder.Select((id, index) => new { Id = id, Index = index })
+                    .ToDictionary(item => item.Id, item => item.Index, StringComparer.OrdinalIgnoreCase);
+                var tail = session.Messages.GetRange(firstNew, session.Messages.Count - firstNew);
+                var ordered = tail.OrderBy(message => order.ContainsKey(message.Id) ? order[message.Id] : int.MaxValue).ToArray();
+                runtimeOrderChanged = !tail.SequenceEqual(ordered);
+                if (runtimeOrderChanged)
+                    for (var index = 0; index < ordered.Length; index++) session.Messages[firstNew + index] = ordered[index];
+                NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
+                if (session.Messages.Count != runtimeCommit.ExpectedMessageCount)
+                    throw new InvalidOperationException("The runtime delta contains an invalid message.");
+                EnsureUniqueArtifactIdentities(session);
+                EnsureChartArtifacts(session, commit.Messages.Select(write => write.Message));
+                ExternalizeArtifacts(session);
             }
 
             AllocateToolCallReferences(session, stored, commit);
@@ -1037,17 +1079,20 @@ namespace RNAssistant.Core.Storage
                             projectedAfter["Artifacts"] as JArray);
                         ApplyOperations(projectedAfter, writes, replay);
                         replay.Materialize(projectedAfter);
-                        var actualIds = ((JArray)projectedAfter["Messages"]).Select(item => (string)item["Id"]).ToArray();
-                        var requestedIds = session.Messages.Select(message => message.Id).ToArray();
-                        if (actualIds.Length != requestedIds.Length || !new HashSet<string>(actualIds,
-                            StringComparer.OrdinalIgnoreCase).SetEquals(requestedIds))
-                            throw new InvalidOperationException("A conversation commit omitted message writes or removals.");
-                        if (!actualIds.SequenceEqual(requestedIds, StringComparer.OrdinalIgnoreCase))
+                        if (runtimeCommit == null || runtimeOrderChanged)
                         {
-                            writes.Add(Operation(SessionOperationTypes.MessagesReorder,
-                                new JObject { ["Ids"] = JArray.FromObject(requestedIds) }));
-                            replay.Reorder("Messages", JArray.FromObject(requestedIds));
-                            replay.Materialize(projectedAfter);
+                            var actualIds = ((JArray)projectedAfter["Messages"]).Select(item => (string)item["Id"]).ToArray();
+                            var requestedIds = session.Messages.Select(message => message.Id).ToArray();
+                            if (actualIds.Length != requestedIds.Length || !new HashSet<string>(actualIds,
+                                StringComparer.OrdinalIgnoreCase).SetEquals(requestedIds))
+                                throw new InvalidOperationException("A conversation commit omitted message writes or removals.");
+                            if (!actualIds.SequenceEqual(requestedIds, StringComparer.OrdinalIgnoreCase))
+                            {
+                                writes.Add(Operation(SessionOperationTypes.MessagesReorder,
+                                    new JObject { ["Ids"] = JArray.FromObject(requestedIds) }));
+                                replay.Reorder("Messages", JArray.FromObject(requestedIds));
+                                replay.Materialize(projectedAfter);
+                            }
                         }
                         operations.AddRange(writes);
                     }

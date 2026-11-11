@@ -645,7 +645,11 @@ receipt's Arsenal is a read projection, not another store or permission authorit
 `ConversationKernelAdapter.Store` saves accepted responses and execution boundaries
 before dispatch, and records actual counts before optional result/media/context
 materialization. Office and workspace runtime adapters use `ConversationRunCommit`
-through `IConversationStore.CommitRun` / the existing `ChatStore`. The runtime fact
+through `IConversationStore.CommitRun(command)` / the existing `ChatStore`. The
+command carries exact session/scope/run, expected revision and message count,
+current non-history state and explicit message writes. It retains no caller message
+archive. Office captures the appended tail by list position instead of scanning all
+message IDs. The runtime fact
 selects accepted-response and execution operations; the exact runtime call identity
 distinguishes a result from its media helper. Helpers use `message.updated`, never
 a user-request or tool-result event. `done`, `blocked` and `needs_input`
@@ -654,6 +658,17 @@ A commit names appended/updated messages, including the stamped run-view project
 and released media. Storage serializes those messages and preserves paired batch
 ordering without diffing every message body. Omitting a new message fails before
 append. Initial/user admission is saved before the first kernel fact.
+
+`ConversationRunCommit.Persist` submits once and applies the confirmed cursor and
+derived state to the caller without replacing its messages. A returning handler
+without a receipt is an error. Own-append recovery may advance that cursor on an
+exception; it does not acknowledge success or adopt a foreign tail. The generic
+`Commit` rejects runtime commands. The existing backend temporarily reconstructs
+its canonical message prefix internally, applies the delta and preserves declared
+tail order independently of lifecycle operation order. This removes history from
+the runtime write boundary, not from the backend: full replay, normalization and
+projection/cache maintenance still depend on history size. Ordinary commits/read
+DTOs and common kernel-fact materialization remain separate P1 work.
 
 Office model-input preparation names changes to existing messages through
 `ConversationRunInput.UpdatedMessages`. The kernel drains these into its next

@@ -584,3 +584,53 @@ after-state/CAS ownership.
 7. Updated Conversation protocol, Session events, plan P3.10 (user clarification),
    MIGRATION_MAP, PROGRESS and Harness guide. No adapter or dual-write added; isolated
    owners remain until the coordinated P7 consumer switch deletes old archive paths.
+
+## P1 — runtime write boundary without caller history (2026-11-11)
+
+1. F04, contract-boundary subset: existing Core `ConversationRunCommit` owns exact
+   scope/run/revision, scalar message count, current non-history state and named
+   writes. Office/Workspace and saved-wait cancellation consume the same boundary.
+   This addresses the observed Office full-ID capture and aggregate store argument;
+   it does not complete P1 or remove the backend's full-history dependency.
+2. A synchronous single submission requires a confirmed position and applies only
+   cursor/derived metadata to the caller. Its messages are never replaced. Own
+   recovered appends preserve the cursor while the exception still escapes; stale
+   CAS cannot adopt another writer's tail. Checkpoint/active view and declared
+   activity/result/media order survive the internal canonical-prefix reconstruction.
+3. Removed `CommitRun(session, command)` and Office per-fact whole-ID sets/diffs;
+   consumers select the new tail by list position. Generic `Commit` rejects runtime
+   commands. The existing backend still reads one complete projection, with no
+   extra load or second store. Internal history-free state conversion is temporary;
+   its owner/removal condition is recorded in MIGRATION_MAP. Production C# delta:
+   +179/−38 (net +141); no additional owner or store is introduced.
+4. Fourteen focused checks pass on macOS/net8/C#7.3: six `storage: runtime` checks
+   plus host parity/retained guards, durable aliases, historical restart/fork,
+   indexed selection, resource revisions, lifecycle operations, saved wait and
+   Workspace cold cancellation. Coverage includes omitted writes, exact scope/CAS,
+   missing receipt, single submission, before-write/after-flush faults and delta
+   order. The existing final-response fixture now supplies mandatory v8 `outcome`;
+   its previous input failed protocol validation before reaching storage.
+   Validation uses isolated e8d719b6 + owned changes through this slice, excluding
+   concurrent Browser/window work; not full current-HEAD or Office qualification.
+5. Same one-message delta, 24 preparations, growing only the caller's message
+   history. Fixture setup and storage excluded; the new probe includes state capture:
+
+   | H | Allocated bytes before → after | Local wall ms before → after |
+   |---:|---:|---:|
+   | 100 | 186,728 → 79,680 | 0.2414 → 0.0479 |
+   | 1,000 | 1,765,288 → 79,680 | 1.2599 → 0.0440 |
+   | 10,000 | 16,162,792 → 79,680 | 18.7827 → 0.0529 |
+
+   Separate state-only backend probe compares ordinary aggregate commit with the
+   new runtime command on the same fixtures. Both materialize 100/1,000/10,000
+   messages. At H=10,000 allocated bytes are 181,514,536 → 182,497,456 (+0.54%);
+   local wall time 702.06 → 599.68 ms is one noisy sample, not a storage speedup
+   claim. Non-history metadata/artifacts may still grow. CPU, logical/physical I/O
+   and Windows latency were not measured for this slice.
+6. F04 remains open for ordinary commit/read DTOs and backend aggregate replay.
+   Shared kernel-fact translation, semantic resource integration and coordinated
+   P2/P3/P5/P7 cutover remain separate work. No new operation-id/idempotency or
+   resource transaction guarantee is claimed. Windows/Office delivery remains open.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. The temporary
+   state carrier is removed with the aggregate runtime backend at the journal
+   consumer switch; no compatibility migration, fallback or dual-write is added.

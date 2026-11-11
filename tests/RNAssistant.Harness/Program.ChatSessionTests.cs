@@ -2002,7 +2002,7 @@ namespace RNAssistant.Harness
             public ChatSession CreateTransient(string host, string key, string title, string name)
             { return _inner.CreateTransient(host, key, title, name); }
             public void Commit(ChatSession session, ConversationCommit commit) { _inner.Commit(session, commit); }
-            public void CommitRun(ChatSession session, ConversationRunCommit commit) { _inner.CommitRun(session, commit); }
+            public void CommitRun(ConversationRunCommit commit) { _inner.CommitRun(commit); }
             public void SetTitle(ChatSession session, string value) { _inner.SetTitle(session, value); }
             public void SetModel(ChatSession session, string value) { _inner.SetModel(session, value); }
             public void SetReasoningEnabled(ChatSession session, bool value) { _inner.SetReasoningEnabled(session, value); }
@@ -2324,11 +2324,11 @@ namespace RNAssistant.Harness
                 store.Save(session);
                 var summary = new RunSummary("old-run", "old-run", RunLifecycle.Running,
                     new ToolCounts(), 1, 0, "", null, null);
-                store.CommitRun(session, new ConversationRunCommit(
+                new ConversationRunCommit(session,
                     new AgentRunEvent(AgentRunEventKind.ToolStarted, summary,
                         toolContext: PersistenceContext("old-run", "call-without-result")),
                     new ChatMessage[0], session.Messages.Single(message =>
-                        message.Activity?.ToolCallId == "call-without-result")));
+                        message.Activity?.ToolCallId == "call-without-result")).Persist(store.CommitRun, session);
                 AssertTrue(store.HasOpenToolExecution(session, "old-run"),
                     "startup fixture has a durable execution boundary, independent of UI labels");
 

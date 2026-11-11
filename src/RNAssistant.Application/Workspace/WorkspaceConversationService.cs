@@ -1990,7 +1990,7 @@ namespace RNAssistant.Runtime
                 }
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted && _lastCompletion != null)
                 {
-                    var message = _session.Messages.Skip(firstMessage).First();
+                    var message = _session.Messages[firstMessage];
                     var reasoning = _lastCompletion.ReasoningContent ?? string.Empty;
                     message.ReasoningContent = reasoning.Length > 24000 ? reasoning.Substring(0, 24000) : reasoning;
                     message.ReasoningTokens = _lastCompletion.ReasoningTokens;
@@ -2030,11 +2030,12 @@ namespace RNAssistant.Runtime
                 var runView = RunViewStateProjector.StampCurrentRun(_session, includeProtocolResponses: true);
                 var projected = _session.Messages.LastOrDefault(message => runView != null &&
                     ReferenceEquals(message.RunViewState, runView));
-                _chats.CommitRun(_session, new ConversationRunCommit(fact, _session.Messages.Skip(firstMessage),
-                    activity, updated: projected == null ? null : new[] { projected }));
+                var appended = _session.Messages.GetRange(firstMessage, _session.Messages.Count - firstMessage);
+                new ConversationRunCommit(_session, fact, appended,
+                    activity, updated: projected == null ? null : new[] { projected }).Persist(_chats.CommitRun, _session);
                 if (fact.Kind == AgentRunEventKind.ToolCompleted &&
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation && _callable != null)
-                    foreach (var message in _session.Messages.Skip(firstMessage))
+                    foreach (var message in appended)
                         _callable.StageReadResult(message.ToolName == CapabilityToolCatalog.ReadToolId
                             ? ToolResultPersistence.Hydrate(message, _payloads) : message);
                 _cursor++;

@@ -12,7 +12,7 @@ namespace RNAssistant.Core.Persistence
         // Identity/revision only for read-only diagnostics; never commit this partial session.
         ChatSession ReadDiagnosticsSession(string sessionId);
         void Commit(ChatSession session, ConversationCommit commit);
-        void CommitRun(ChatSession session, ConversationRunCommit commit);
+        void CommitRun(ConversationRunCommit commit);
         void SetTitle(ChatSession session, string title);
         void SetModel(ChatSession session, string model);
         void SetReasoningEnabled(ChatSession session, bool enabled);

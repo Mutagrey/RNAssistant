@@ -37,15 +37,15 @@ namespace RNAssistant.Harness
                     var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name },
                         "", "Inspect.", null, ToolResultRoles.Tool, new AcceptedToolCallOrigin(context.StepId, "attempt-" + index, 0));
                     accepted.RunId = summary.RunId; session.Messages.Add(accepted);
-                    chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
-                        summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Inspect.", "", new[] { call })), new[] { accepted }));
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                        summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Inspect.", "", new[] { call })), new[] { accepted }).Persist(chats.CommitRun, session);
                     var activity = new ChatMessage { Role = "assistant", RunId = summary.RunId, ExcludeFromModelContext = true,
                         Activity = new ChatActivity { RunId = summary.RunId, StepId = context.StepId, ToolId = call.Name, ToolCallId = call.Id } };
                     session.Messages.Add(activity);
-                    chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted,
-                        summary, toolContext: context), new ChatMessage[0], activity));
-                    if (outcome.HasValue) chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted,
-                        summary, execution: KernelRecord(context, outcome.Value)), new ChatMessage[0], activity));
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                        summary, toolContext: context), new ChatMessage[0], activity).Persist(chats.CommitRun, session);
+                    if (outcome.HasValue) new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                        summary, execution: KernelRecord(context, outcome.Value)), new ChatMessage[0], activity).Persist(chats.CommitRun, session);
                 };
                 record(1, ToolExecutionOutcome.Ok, EvidenceEligibility.None);
                 record(2, ToolExecutionOutcome.Error, EvidenceEligibility.Eligible);
@@ -100,8 +100,8 @@ namespace RNAssistant.Harness
                         ResponseModelAttemptId = "finish-attempt", RunId = summary.RunId,
                         Content = ModelProtocolWire.WriteAcceptedDecision("finish", "Verified.", "Read verified.", results: new[] { claim }, outcome: ConversationOutcome.Completed) };
                     session.Messages.Add(decision);
-                    chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
-                        summary, response: new AgentResponse("finish", "Verified.", "Read verified.", results: new[] { claim }, outcome: ConversationOutcome.Completed)), new[] { decision }));
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                        summary, response: new AgentResponse("finish", "Verified.", "Read verified.", results: new[] { claim }, outcome: ConversationOutcome.Completed)), new[] { decision }).Persist(chats.CommitRun, session);
                     AssertEqual(0, report(first).Finishes.Count, "repair request owns the subsequent accepted finish");
                     var acceptedFinish = report(second).Finishes.Single();
                     AssertEqual("E2", acceptedFinish.Claims.Single().Evidence.Single(), "canonical finish citations normalize case");

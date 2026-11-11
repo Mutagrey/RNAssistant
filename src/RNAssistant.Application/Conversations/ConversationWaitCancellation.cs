@@ -27,8 +27,8 @@ namespace RNAssistant.Application.Conversations
                 session.LastRun.Phase = "cancelled";
                 session.LastRun.CurrentAction = fact.Summary.AssistantMessage;
                 var pausedView = RunViewStateProjector.StampCurrentRun(session, includeProtocolResponses: true);
-                store.CommitRun(session, new ConversationRunCommit(fact, new ChatMessage[0], updated: session.Messages.Where(message =>
-                    pausedView != null && ReferenceEquals(message.RunViewState, pausedView))));
+                new ConversationRunCommit(session, fact, new ChatMessage[0], updated: session.Messages.Where(message =>
+                    pausedView != null && ReferenceEquals(message.RunViewState, pausedView))).Persist(store.CommitRun, session);
                 return;
             }
             var context = fact.Execution.Context;
@@ -68,8 +68,8 @@ namespace RNAssistant.Application.Conversations
             activity.ExecutionProgress = result.ExecutionProgress;
             session.Messages.Add(result);
             var view = RunViewStateProjector.StampCurrentRun(session, includeProtocolResponses: true);
-            store.CommitRun(session, new ConversationRunCommit(fact, new[] { result }, activity,
-                updated: session.Messages.Where(message => view != null && ReferenceEquals(message.RunViewState, view))));
+            new ConversationRunCommit(session, fact, new[] { result }, activity,
+                updated: session.Messages.Where(message => view != null && ReferenceEquals(message.RunViewState, view))).Persist(store.CommitRun, session);
         }
     }
 }

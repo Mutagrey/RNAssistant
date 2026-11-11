@@ -53,19 +53,19 @@ namespace RNAssistant.Harness
                         "", "Inspect.", null, ToolResultRoles.User, new AcceptedToolCallOrigin(context.StepId, "attempt-" + i, 0));
                     accepted.RunId = summary.RunId;
                     session.Messages.Add(accepted);
-                    store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
-                        summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Inspect.", "", new[] { call })), new[] { accepted }));
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                        summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Inspect.", "", new[] { call })), new[] { accepted }).Persist(store.CommitRun, session);
                     AssertEqual("T" + i, accepted.ToolCallReference.Alias, "all accepted calls get T");
                     AssertTrue(accepted.EvidenceReference == null, "acceptance issues no E");
                     var activity = new ChatMessage { Role = "assistant", RunId = summary.RunId, ExcludeFromModelContext = true,
                         Activity = new ChatActivity { RunId = summary.RunId, StepId = context.StepId, ToolId = call.Name, ToolCallId = call.Id } };
                     session.Messages.Add(activity);
-                    store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted,
-                        summary, toolContext: context), new ChatMessage[0], activity));
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                        summary, toolContext: context), new ChatMessage[0], activity).Persist(store.CommitRun, session);
                     if (i == 2)
                     {
-                        store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted,
-                            summary, execution: KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation)), new ChatMessage[0], activity));
+                        new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                            summary, execution: KernelRecord(context, ToolExecutionOutcome.AwaitingConfirmation)), new ChatMessage[0], activity).Persist(store.CommitRun, session);
                         AssertTrue(activity.EvidenceReference == null, "pending approval cannot issue evidence");
                         session = new ChatStore(paths).Load(session.Id);
                         activity = session.Messages.Single(message => message.Activity?.ToolCallId == call.Id);
@@ -74,8 +74,8 @@ namespace RNAssistant.Harness
                             context.StepId, context.StartedUtc, true, 1);
                     }
                     var outcome = i == 2 ? ToolExecutionOutcome.Error : ToolExecutionOutcome.Ok;
-                    store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted,
-                        summary, execution: KernelRecord(context, outcome)), new ChatMessage[0], activity));
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                        summary, execution: KernelRecord(context, outcome)), new ChatMessage[0], activity).Persist(store.CommitRun, session);
                     AssertEqual(i == 1 ? null : "E" + (i - 1), activity.EvidenceReference?.Alias,
                         "only trusted eligible terminal results get a separate E");
                     if (i == 1) AssertTrue(finish(new ConversationResultClaim[0], new string[0]).Accepted,
@@ -480,8 +480,8 @@ namespace RNAssistant.Harness
                         ToolResultRoles.User, new AcceptedToolCallOrigin(context.StepId, "attempt-" + id, 0));
                     message.RunId = summary.RunId;
                     target.Messages.Add(message);
-                    store.CommitRun(target, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
-                        summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Read range.", "Read.", new[] { context.Call })), new[] { message }));
+                    new ConversationRunCommit(target, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                        summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Read range.", "Read.", new[] { context.Call })), new[] { message }).Persist(store.CommitRun, target);
                     return message;
                 };
                 var call = accept(session, "canonical-one");
@@ -509,11 +509,11 @@ namespace RNAssistant.Harness
                     Activity = new ChatActivity { RunId = summary.RunId, StepId = context1.StepId,
                         ToolCallId = call.ToolCallId, ToolId = call.ToolName } };
                 session.Messages.Add(activity);
-                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted,
-                    summary, toolContext: context1), new ChatMessage[0], activity));
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                    summary, toolContext: context1), new ChatMessage[0], activity).Persist(store.CommitRun, session);
                 activity.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
-                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted,
-                    summary, execution: KernelRecord(context1)), new ChatMessage[0], activity));
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                    summary, execution: KernelRecord(context1)), new ChatMessage[0], activity).Persist(store.CommitRun, session);
                 AssertTrue(evaluate("E1", new[] { "E1" }).Accepted, "delivered canonical terminal reference is accepted");
                 AssertEqual("undelivered_evidence", evaluate("E1", new string[0]).Code, "hidden valid reference is rejected");
                 foreach (var invalid in new[] { call.ToolCallId, "R1", "T1", "E2" })

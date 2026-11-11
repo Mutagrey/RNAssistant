@@ -375,6 +375,24 @@ namespace RNAssistant.Core.Models
 
     public sealed class ChatSession
     {
+        // Transient commit state, never a history window or a load/save snapshot.
+        // Canonical messages are supplied by storage, not by the runtime caller.
+        internal ChatSession CopyForRunCommit()
+        {
+            var copy = (ChatSession)MemberwiseClone();
+            copy.Messages = new List<ChatMessage>();
+            copy.Artifacts = Artifacts?.ToList();
+            copy.ArtifactLinks = ArtifactLinks?.ToList();
+            copy.PreviousDocumentKeys = PreviousDocumentKeys?.ToList();
+            copy.ResourceCopies = ResourceCopies?.ToList();
+            copy.ContextCheckpoints = (ContextCheckpoints ?? new List<ContextCheckpoint>())
+                .Where(item => item.Id == ActiveContextCheckpointId).ToList();
+            copy.ResourceReferenceIndex = new List<RNAssistant.Core.ModelProtocol.ModelResourceReference>();
+            // The active view is rebuilt from exact artifact refs after commit.
+            copy.HtmlWorkspace = new HtmlWorkspace();
+            return copy;
+        }
+
         public const int CurrentFormatVersion = 8;
         public static bool IsReadableFormat(int? version) { return version == 6 || version == 7 || version == CurrentFormatVersion; }
 

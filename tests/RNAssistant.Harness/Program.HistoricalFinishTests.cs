@@ -56,16 +56,16 @@ namespace RNAssistant.Harness
                     AcceptedCallPayloadService.Externalize(call, Blobs);
                 }
                 Session.Messages.Add(call); Calls.Add(id);
-                Store.CommitRun(Session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                new ConversationRunCommit(Session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
                     Run, response: new AgentResponse(ConversationResponse.ExecuteAction, "Read.", "Inspect " + id,
-                        new[] { context.Call })), new[] { call }));
+                        new[] { context.Call })), new[] { call }).Persist(Store.CommitRun, Session);
                 var activity = new ChatMessage { Role = "assistant", RunId = Run.RunId, ExcludeFromModelContext = true,
                     Activity = new ChatActivity { RunId = Run.RunId, StepId = context.StepId, ToolId = call.ToolName, ToolCallId = id } };
                 Session.Messages.Add(activity);
-                Store.CommitRun(Session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted,
-                    Run, toolContext: context), new ChatMessage[0], activity));
-                Store.CommitRun(Session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted,
-                    Run, execution: KernelRecord(context, outcome)), new ChatMessage[0], activity));
+                new ConversationRunCommit(Session, new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                    Run, toolContext: context), new ChatMessage[0], activity).Persist(Store.CommitRun, Session);
+                new ConversationRunCommit(Session, new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                    Run, execution: KernelRecord(context, outcome)), new ChatMessage[0], activity).Persist(Store.CommitRun, Session);
                 return call;
             }
             internal FinishAdmission Finish(string reference, string[] delivered = null,

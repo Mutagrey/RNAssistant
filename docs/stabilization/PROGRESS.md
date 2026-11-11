@@ -25,7 +25,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 это открытая [задача release tooling](BACKLOG.md#release-script-version-range--2026-11-11),
 которая не мешает обычным bumps. Release execution/Windows evidence остаётся открытым.
 
-## Оптимизация хранения/контекста — §8.3, P2, P3a–f, P4a, P5/P6, 2026-11-11
+## Оптимизация хранения/контекста — §8.3, P1/P2, P3a–f, P4a, P5/P6, 2026-11-11
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace
@@ -99,6 +99,15 @@ unknown/recovery хранятся адресно независимо от promp
 проверок проходят. Production restore дополнительно сохраняет runtime unknown при
 wire `ok`; сам архивный обход пока остаётся. Подключение semantic detail reads,
 индексированных guards и consumers — совместный P7 gate, не закрытый этим срезом.
+
+P1 runtime write boundary: Office/Workspace и отмена сохранённого wait передают
+команду без архива сообщений; exact revision/count, checkpoint, порядок delta и
+own-append recovery сохранены. Удалены aggregate overload и Office обход всех ID
+перед каждым fact. 14 адресных проверок проходят host-neutral на изолированной базе
+с изменениями этого среза. При 24 captures и H=100/1000/10000 выделения — 79 680 байт
+вместо 186 728 / 1 765 288 / 16 162 792. Старый backend всё ещё материализует H
+сообщений; ускорение полной записи не заявляется. Обычные commit/read DTO,
+общий kernel-fact перевод и переключение consumers остаются открытыми.
 
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10

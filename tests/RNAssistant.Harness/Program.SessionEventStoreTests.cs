@@ -2641,9 +2641,9 @@ namespace RNAssistant.Harness
                         new AcceptedToolCallOrigin("step-" + role, "attempt-" + role, 0));
                     message.RunId = "run-roles";
                     session.Messages.Add(message);
-                    store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
                         response: new AgentResponse(ConversationResponse.ExecuteAction, "Read the requested range.", "Read.",
-                            new[] { PersistenceContext(summary.RunId, id).Call })), new[] { message }));
+                            new[] { PersistenceContext(summary.RunId, id).Call })), new[] { message }).Persist(store.CommitRun, session);
                 }
 
                 var callOperations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
@@ -2664,8 +2664,8 @@ namespace RNAssistant.Harness
                         TerminalToolResult.Ok("Read complete."), role);
                     result.RunId = "run-roles";
                     session.Messages.Add(result);
-                    store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary,
-                        execution: KernelRecord(PersistenceContext(summary.RunId, id))), new[] { result }));
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary,
+                        execution: KernelRecord(PersistenceContext(summary.RunId, id))), new[] { result }).Persist(store.CommitRun, session);
                 }
                 var resultOperations = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
                     .Where(item => item.Type == SessionEventTypes.SessionCommit)
@@ -2696,15 +2696,16 @@ namespace RNAssistant.Harness
                     var reason = "Record the model's no-call decision.";
                     var decision = index == 2 ? null : "Consider the remaining work.";
                     var results = index == 2 ? new ConversationResultClaim[0] : null;
+                    var outcome = index == 2 ? (ConversationOutcome?)ConversationOutcome.Completed : null;
                     var message = new ChatMessage { Role = "assistant", ProtocolMessage = true,
                         ResponseProtocolVersion = ConversationResponse.ProtocolVersion, RunId = summary.RunId,
                         Content = ModelProtocolWire.WriteAcceptedDecision(action, reason, action,
-                            decision: decision, results: results) };
+                            decision: decision, results: results, outcome: outcome) };
                     session.Messages.Add(message);
                     var fact = new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
                         response: new AgentResponse(action, reason, action,
-                            decision: decision, results: results));
-                    store.CommitRun(session, new ConversationRunCommit(fact, new[] { message }));
+                            decision: decision, results: results, outcome: outcome));
+                    new ConversationRunCommit(session, fact, new[] { message }).Persist(store.CommitRun, session);
                 }
                 var events = store.ReadEvents(session.Host, session.DocumentKey, session.Id);
                 var causal = new EventStreamTrajectoryQuery().QueryView(events, new TrajectoryViewQueryRequest
@@ -2721,8 +2722,8 @@ namespace RNAssistant.Harness
                 session.Messages.Add(unlisted);
                 try
                 {
-                    store.CommitRun(session, new ConversationRunCommit(
-                        new AgentRunEvent(AgentRunEventKind.ModelStepStarted, summary), new ChatMessage[0]));
+                    new ConversationRunCommit(session,
+                        new AgentRunEvent(AgentRunEventKind.ModelStepStarted, summary), new ChatMessage[0]).Persist(store.CommitRun, session);
                     throw new Exception("An incomplete runtime commit was accepted.");
                 }
                 catch (InvalidOperationException) { }
@@ -2776,12 +2777,12 @@ namespace RNAssistant.Harness
                     }
                 };
                 session.Messages.Add(accepted);
-                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
                     response: new AgentResponse(ConversationResponse.ExecuteAction, "Read the requested range.",
-                        "Read.", new[] { context.Call })), new[] { accepted }));
+                        "Read.", new[] { context.Call })), new[] { accepted }).Persist(store.CommitRun, session);
                 session.Messages.Add(activity);
-                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted, summary,
-                    toolContext: context), new ChatMessage[0], activity));
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolStarted, summary,
+                    toolContext: context), new ChatMessage[0], activity).Persist(store.CommitRun, session);
 
                 accepted.Sequence = 1;
                 activity.Activity.ResultMessage = "Still running.";
@@ -2794,8 +2795,8 @@ namespace RNAssistant.Harness
                 store.Commit(session, new ConversationCommit(new[] { activity }));
                 AssertTrue(store.HasOpenToolExecution(session, "run-transition"),
                     "a terminal UI label cannot manufacture a runtime completion");
-                store.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary,
-                    execution: KernelRecord(context)), new ChatMessage[0], activity));
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary,
+                    execution: KernelRecord(context)), new ChatMessage[0], activity).Persist(store.CommitRun, session);
                 AssertTrue(!store.HasOpenToolExecution(session, "run-transition"),
                     "the terminal transition closes the active execution");
 

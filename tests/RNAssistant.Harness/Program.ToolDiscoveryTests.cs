@@ -1457,11 +1457,11 @@ namespace RNAssistant.Harness
                     var accepted = session.Messages.Where(message => message.AcceptedCallOrigin != null).ToArray();
                     var summary = new RunSummary(session.LastRun.RunId, session.LastRun.TurnId, RunLifecycle.Running,
                         new ToolCounts(), 1, 0, "", null, null);
-                    store.CommitRun(session, new RNAssistant.Core.Persistence.ConversationRunCommit(
+                    new RNAssistant.Core.Persistence.ConversationRunCommit(session,
                         new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
                             response: new AgentResponse(ConversationResponse.ExecuteAction, "Read requested schemas.", "",
                                 accepted.Select(message => new ToolCall(message.ToolCallId, message.ToolName, "{}")))),
-                        accepted, updated: session.Messages.Where(message => message.AcceptedCallOrigin == null)));
+                        accepted, updated: session.Messages.Where(message => message.AcceptedCallOrigin == null)).Persist(store.CommitRun, session);
                     modelSession.EndResponse("after-overflow");
                     if (oversized) settings.ContextWindowOverrideTokens = 131072;
                     var request = modelSession.CreateRequest("after-overflow",

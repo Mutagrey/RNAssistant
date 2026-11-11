@@ -106,6 +106,15 @@ with retained-result, shared-index/process repair, run-checkpoint, late-outcome 
 canonical backup/restore cases. These are isolated storage checks, not a production
 cutover or Office qualification.
 
+`storage: runtime` selects six checks: existing final-response persistence and five
+runtime-boundary cases (history-free state, own-append faults, delta ordering,
+capture and backend costs at H=100/1000/10000). The capture probe excludes storage;
+the backend probe explicitly reports its remaining full-history materialization.
+For consumer changes, pair with host-parity/retained mutation guards, durable model
+reference allocation, historical/restart/fork evidence, indexed canonical selection,
+resource identity, message state transitions and saved-wait/Workspace-cold cancellation.
+These host-neutral checks do not qualify Windows/Office delivery.
+
 ## Optional assignments (4b, 2026-11-10)
 
 `agent assignments:` checks explicit result correlation (including failed/declined),

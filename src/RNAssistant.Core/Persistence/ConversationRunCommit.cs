@@ -53,14 +53,34 @@ namespace RNAssistant.Core.Persistence
     public sealed class ConversationRunCommit : ConversationCommit
     {
         public string RunId { get; private set; }
+        public string SessionId { get { return _state.Id; } }
+        public string Host { get { return _state.Host; } }
+        public string DocumentKey { get { return _state.DocumentKey; } }
+        public long ExpectedRevision { get { return _state.Revision; } }
+        public int ExpectedMessageCount { get; private set; }
+        internal IReadOnlyList<string> AppendedOrder { get; private set; }
+        public SessionEventPosition Position { get; private set; }
+        private readonly ChatSession _state;
+        private ChatSession _applied;
+        private bool _projectionApplied;
+        private bool _submitted;
 
-        public ConversationRunCommit(AgentRunEvent fact, IEnumerable<ChatMessage> appended,
-            ChatMessage activity = null, bool resultProjection = false, IEnumerable<ChatMessage> updated = null)
+        public ConversationRunCommit(ChatSession session, AgentRunEvent fact, IEnumerable<ChatMessage> appended,
+            ChatMessage activity = null, bool resultProjection = false, IEnumerable<ChatMessage> updated = null,
+            int? expectedMessageCount = null)
         {
             if (fact?.Summary == null) throw new ArgumentNullException(nameof(fact));
+            if (session?.LastRun?.RunId != fact.Summary.RunId || string.IsNullOrWhiteSpace(session.Id) ||
+                string.IsNullOrWhiteSpace(session.Host) || string.IsNullOrWhiteSpace(session.DocumentKey) || session.Revision <= 0)
+                throw new InvalidOperationException("A runtime commit requires its persisted conversation and current run.");
+            _state = session.CopyForRunCommit();
+            ExpectedMessageCount = expectedMessageCount ?? session.Messages.Count;
+            if (ExpectedMessageCount < 0) throw new ArgumentOutOfRangeException(nameof(expectedMessageCount));
             RunId = fact.Summary.RunId;
             var writes = new List<ConversationMessageWrite>();
-            foreach (var message in appended ?? new ChatMessage[0])
+            var additions = (appended ?? new ChatMessage[0]).ToArray();
+            AppendedOrder = Array.AsReadOnly(additions.Select(message => message.Id).ToArray());
+            foreach (var message in additions)
             {
                 if (ReferenceEquals(message, activity)) continue;
                 string operation;
@@ -99,6 +119,63 @@ namespace RNAssistant.Core.Persistence
             if (writes.Select(write => write.Message.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != writes.Count)
                 throw new InvalidOperationException("A runtime commit contains duplicate message writes.");
             Messages = writes.AsReadOnly();
+        }
+
+        // A synchronous submission, not a retained session/snapshot delegate.
+        // Preserve the old own-append recovery cursor even when the call throws.
+        public void Persist(Action<ConversationRunCommit> write, ChatSession projection)
+        {
+            if (write == null) throw new ArgumentNullException(nameof(write));
+            if (_submitted || projection == null || projection.Id != SessionId || projection.Host != Host ||
+                projection.DocumentKey != DocumentKey || projection.Revision != ExpectedRevision || projection.LastRun?.RunId != RunId)
+                throw new InvalidOperationException("The runtime commit belongs to another projection, revision or submission.");
+            _submitted = true;
+            try
+            {
+                write(this);
+                if (Position == null) throw new InvalidOperationException("Runtime storage did not confirm the commit.");
+            }
+            finally
+            {
+                if (_applied != null)
+                {
+                    projection.Revision = _applied.Revision;
+                    projection.UpdatedUtc = _applied.UpdatedUtc;
+                    projection.StorageHeadHash = _applied.StorageHeadHash;
+                    projection.StorageByteLength = _applied.StorageByteLength;
+                    projection.StorageLastWriteUtcTicks = _applied.StorageLastWriteUtcTicks;
+                    projection.StorageTailByteOffset = _applied.StorageTailByteOffset;
+                    projection.ToolCallReferenceSequence = _applied.ToolCallReferenceSequence;
+                    projection.EvidenceReferenceSequence = _applied.EvidenceReferenceSequence;
+                    projection.ResourceReferenceIndex = _applied.ResourceReferenceIndex;
+                    if (_projectionApplied)
+                    {
+                        projection.Artifacts = _applied.Artifacts;
+                        projection.HtmlWorkspace = _applied.HtmlWorkspace;
+                        projection.HtmlWorkspaceRecovery = _applied.HtmlWorkspaceRecovery;
+                        projection.ContextCheckpoints = _applied.ContextCheckpoints;
+                        projection.ActiveContextCheckpointId = _applied.ActiveContextCheckpointId;
+                        projection.ActiveHtmlArtifactId = _applied.ActiveHtmlArtifactId;
+                        projection.ActiveTaskListArtifactId = _applied.ActiveTaskListArtifactId;
+                        projection.ActivePlanDocumentArtifactId = _applied.ActivePlanDocumentArtifactId;
+                    }
+                    _applied = null;
+                }
+            }
+        }
+
+        // Temporary conversion inside the existing aggregate backend. Never expose
+        // this state as a partial ChatSession to callers or generic Commit.
+        internal ChatSession CreateStateProjection() { return _state.CopyForRunCommit(); }
+        internal void RecordStorageState(ChatSession state, bool projectionApplied)
+        {
+            if (state.Revision <= ExpectedRevision) return;
+            _applied = state.CopyForRunCommit();
+            _projectionApplied = projectionApplied;
+            _applied.ResourceReferenceIndex = state.ResourceReferenceIndex;
+            _applied.HtmlWorkspace = state.HtmlWorkspace;
+            _applied.ContextCheckpoints = state.ContextCheckpoints;
+            Position = new SessionEventPosition(state.Id, state.Revision, state.StorageHeadHash);
         }
     }
 

@@ -35,7 +35,7 @@ namespace RNAssistant.Office.Services
         public async Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)
         {
             if (expectedRevision != _cursor) throw new InvalidOperationException("Stale kernel continuation cursor.");
-            var previousMessages = new HashSet<string>(_session.Messages.Select(message => message.Id), StringComparer.Ordinal);
+            var firstMessage = _session.Messages.Count;
             var run = _session.LastRun;
             run.KernelState = AgentRunState.Apply(run.KernelState, fact);
             ConversationRunProjection.Apply(run);
@@ -144,16 +144,16 @@ namespace RNAssistant.Office.Services
                     }
                 }
             }
-            var appended = _session.Messages.Where(message => !previousMessages.Contains(message.Id)).ToArray();
+            var appended = _session.Messages.GetRange(firstMessage, _session.Messages.Count - firstMessage);
             StampMessages(appended);
             Save(fact, appended, fact.Kind == AgentRunEventKind.ResponseAccepted ? null : activity);
             if (fact.Kind == AgentRunEventKind.ToolCompleted)
             {
                 // Counts and the completed activity are already durable. Context/media
                 // preparation cannot rewrite a known effect or cause a tool retry.
-                previousMessages = new HashSet<string>(_session.Messages.Select(message => message.Id), StringComparer.Ordinal);
+                firstMessage = _session.Messages.Count;
                 await MaterializeResultAsync(fact.Execution).ConfigureAwait(false);
-                appended = _session.Messages.Where(message => !previousMessages.Contains(message.Id)).ToArray();
+                appended = _session.Messages.GetRange(firstMessage, _session.Messages.Count - firstMessage);
                 StampMessages(appended);
                 Save(fact, appended, activity, true);
             }
@@ -173,8 +173,8 @@ namespace RNAssistant.Office.Services
             var projected = _session.Messages.LastOrDefault(message => view != null && ReferenceEquals(message.RunViewState, view));
             if (projected != null) _pendingMessageUpdates.Add(projected);
             if (fact == null) _conversations.Commit(_session, ConversationCommit.UserInput(appended.Single(), _pendingMessageUpdates));
-            else _conversations.CommitRun(_session, new ConversationRunCommit(fact, appended, activity,
-                resultProjection, _pendingMessageUpdates));
+            else new ConversationRunCommit(_session, fact, appended, activity,
+                resultProjection, _pendingMessageUpdates).Persist(_conversations.CommitRun, _session);
             _pendingMessageUpdates.Clear();
             if (_saved != null) _saved(_session);
         }

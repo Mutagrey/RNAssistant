@@ -85,6 +85,17 @@ reads and action guards together with context selection; the summary alone canno
 replace those guards. Externalized signature reconstruction stays outside append/SQL
 locks. Unknown runtime outcomes behind wire `ok` are retained by production restore.
 
+P1 runtime write boundary: Office/Workspace and saved-wait cancellation now submit
+`ConversationRunCommit` alone, with exact identity/revision/count, non-history state
+and explicit delta. Removed the aggregate `CommitRun(session, command)` overload and
+Office whole-history ID capture. The existing Core persistence owner temporarily
+uses `ChatSession.CopyForRunCommit` / `CreateStateProjection` internally to feed the
+legacy backend; this carrier has no messages and cannot enter generic `Commit` as a
+runtime command. Storage still reads its canonical aggregate once. Removal condition:
+switch these consumers to the new journal reducer at P2/P7 and delete this internal
+conversion together with the old aggregate runtime path. No second store, fallback
+or dual-write. Ordinary commit/read DTOs and shared fact translation remain open.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.
