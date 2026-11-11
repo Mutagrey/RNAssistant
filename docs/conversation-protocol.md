@@ -1148,6 +1148,14 @@ identical partial/table results are valid bodies. Diagnostics and metadata witho
 source bytes cannot suppress a body or grant source-read authority. Exact selected
 skill materialization continues to preserve the matching read evidence.
 
+Within one compiler atom, `ContextReadBody` reuses parsed body-presence/status and
+the exact body key. Mutable result headers are checked on every lookup; changed
+content/call binding is parsed again, changed payload/evidence changes the key.
+Only metadata/hash and the existing content reference are retained, not a second
+text body or parsed tree. Omission/replacement clears the atom's derived state.
+Deduplication, receipt presentation and delivered observations consume this owner;
+it grants no authority across requests and does not replace working-set recovery.
+
 An omitted read carries `data.observation` with `bodyIncluded:false`, an explicit
 `omittedReason` (`duplicate`, `superseded`, `unavailable` or `budget`) and its observed
 R label when exactly bound. Coverage stays beside the receipt. `retainedAt:T2`

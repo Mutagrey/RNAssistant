@@ -14,7 +14,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 это открытая [задача release tooling](BACKLOG.md#release-script-version-range--2026-11-11),
 которая не мешает обычным bumps. Release execution/Windows evidence остаётся открытым.
 
-## Оптимизация хранения/контекста — §8.3, P2, P3a–d, P4a, P5/P6, 2026-11-11
+## Оптимизация хранения/контекста — §8.3, P2, P3a–e, P4a, P5/P6, 2026-11-11
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace
@@ -72,6 +72,13 @@ P3d: live run owner больше не хранит/копирует `ChatSession
 снижены с 21,9/217,5/2172,5 МБ до 1576 байт во всех случаях. Три новых проверки и
 девять адресных регрессий проходят host-neutral. Explicit detail load и durable
 aggregate commit остаются полными; Windows controller/Office qualification открыта.
+
+P3e: общий compiler переиспользует read-body metadata/key внутри одного atom вместо
+повторного разбора/hash. Изменение content/binding/payload/evidence не использует
+прежний ключ; omission освобождает derived state. На 6 чтениях / 12 preparations
+выделения — 142,7 МБ вместо 247,3 МБ, wire SHA совпадает. Две новые проверки и
+восемь регрессий проходят, включая retained guards обоих hosts. Это локальный срез
+F11; полный обход архива и индексированное восстановление working set ещё открыты.
 
 
 ## Мультиагенты: необязательные поручения — In Review, 2026-11-10

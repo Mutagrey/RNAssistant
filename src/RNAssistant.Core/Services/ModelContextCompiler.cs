@@ -16,11 +16,19 @@ namespace RNAssistant.Core.Services
 {
     internal sealed class ContextAtom
     {
+        private ContextReadBody _readBody;
+        internal ContextReadBody ReadBody { get { return _readBody ?? (_readBody = new ContextReadBody()); } }
+        private List<ChatMessage> _messages = new List<ChatMessage>();
+        internal List<ChatMessage> Messages
+        { get { return _messages; } set { _messages = value; _readBody = null; } }
+        internal void ClearMessages() { _messages.Clear(); _readBody = null; }
+        private bool _bodyOmitted;
+        internal bool BodyOmitted
+        { get { return _bodyOmitted; } set { _bodyOmitted = value; if (value) _readBody = null; } }
         internal string Id;
         internal string Kind;
         internal string CausalFrameId;
         internal bool MustKeep;
-        internal bool BodyOmitted;
         internal bool KeepPair;
         internal bool FoldForBudget;
         internal ContextAtom RetainedBody;
@@ -30,7 +38,6 @@ namespace RNAssistant.Core.Services
         internal Dictionary<string, List<ContextMessagePresentation>> BodyParts = new Dictionary<string, List<ContextMessagePresentation>>();
         internal ContextNoteRole ContextRole;
         internal string ContextTitle;
-        internal List<ChatMessage> Messages = new List<ChatMessage>();
         internal ChatMessage Narration;
         internal IEnumerable<ChatMessage> PromptMessages
         { get { return Narration == null ? Messages : new[] { Narration }.Concat(Messages); } }
@@ -256,7 +263,7 @@ namespace RNAssistant.Core.Services
                     {
                         RecordExclusion(exclusions, atom, exclusion);
                         atom.Kind = "omitted-source";
-                        atom.Messages.Clear();
+                        atom.ClearMessages();
                         continue;
                     }
                     if (failed)
@@ -276,7 +283,7 @@ namespace RNAssistant.Core.Services
                         // An obsolete after-state adds only a redundant change marker.
                         RecordExclusion(exclusions, atom, exclusion);
                         atom.Kind = "omitted-source";
-                        atom.Messages.Clear();
+                        atom.ClearMessages();
                         continue;
                     }
                     Mark(atom, string.Join("; ", invalid.Select(item =>
@@ -327,7 +334,7 @@ namespace RNAssistant.Core.Services
             Action<ContextAtom, ContextExclusionKind> omitArchivedBody = (atom, reason) =>
             {
                 RecordExclusion(exclusions, atom, reason);
-                atom.Messages.Clear(); atom.BodyParts.Clear();
+                atom.ClearMessages(); atom.BodyParts.Clear();
                 receipt.EvictedBodies++;
                 if (omittedTargets.Count < 12 && atom.ArchivedTarget != null && !atom.ArchivedTarget.Contains("://"))
                     omittedTargets.Add(atom.ArchivedTarget);
@@ -336,7 +343,7 @@ namespace RNAssistant.Core.Services
             {
                 RecordExclusion(exclusions, atom.ArchivedCall?.Id, reason);
                 RecordExclusion(exclusions, atom, reason);
-                atom.Messages.Clear(); atom.BodyParts.Clear();
+                atom.ClearMessages(); atom.BodyParts.Clear();
             };
             var optionalReceipts = 0;
             var optionalCandidates = 0;
@@ -357,7 +364,7 @@ namespace RNAssistant.Core.Services
                     // An archived native pair already carries this terminal E.
                     // A separate source view has another ID and still needs its receipt.
                     var result = restoredPair.Messages.Last();
-                    atom.Messages.Clear();
+                    atom.ClearMessages();
                     if (atom.MustKeep)
                     {
                         ToolResultWireReadResult wire; string error;
@@ -377,7 +384,7 @@ namespace RNAssistant.Core.Services
                 {
                     RecordExclusion(exclusions, atom, ContextExclusionKind.DuplicateBody);
                     atom.RetainedBody = observedBody;
-                    atom.Messages.Clear();
+                    atom.ClearMessages();
                     receipt.Deduplicated++;
                     continue;
                 }
@@ -560,7 +567,7 @@ namespace RNAssistant.Core.Services
                 {
                     RecordExclusion(exclusions, atom, ContextExclusionKind.DuplicateBody);
                     atom.RetainedBody = observedBody;
-                    atom.Messages.Clear(); atom.BodyParts.Clear();
+                    atom.ClearMessages(); atom.BodyParts.Clear();
                     receipt.Deduplicated++;
                     continue;
                 }
@@ -605,7 +612,7 @@ namespace RNAssistant.Core.Services
                     var receiptCost = ModelContextBudget.EstimateMessagesTokens(new[] { completed }, settings);
                     if (!atom.MustKeep && receiptCost > receiptBudget)
                     { omitArchivedOperation(atom, ContextExclusionKind.OperationBudget); continue; }
-                    atom.Messages.Clear();
+                    atom.ClearMessages();
                     atom.Messages.Add(completed);
                     atom.BodyParts.Clear();
                     RecordExclusion(exclusions, atom.ArchivedCall?.Id, ContextExclusionKind.OperationReceipt);
@@ -730,7 +737,7 @@ namespace RNAssistant.Core.Services
                 .SelectMany(atom => atom.Messages).Select(message => message.Id), StringComparer.Ordinal);
             foreach (var atom in atoms.Where(atom => atom.ArchivedOperation && atom.Messages.Count > 0 &&
                 retainedArchivedMessages.Contains(atom.Messages[0].Id)))
-            { atom.Messages.Clear(); atom.BodyParts.Clear(); }
+            { atom.ClearMessages(); atom.BodyParts.Clear(); }
             var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             receipt.Messages = DescribeMessages(atoms, required, (facts ?? new ChatMessage[0])
                 .Concat(workingSet == null ? Enumerable.Empty<ChatMessage>() : workingSet.Operations.Concat(workingSet.Bodies)
@@ -742,8 +749,9 @@ namespace RNAssistant.Core.Services
                 throw new PromptBudgetExceededException("Current evidence and causal frames use approximately " +
                     receipt.EstimatedTokens + " tokens at a message budget of " + budget +
                     " after correctness filtering. Compact context or select a narrower resource view.", true);
-            var delivered = messages.Where(message => message.SyntheticResourceObservation ||
-                    IsResourceRead(message) && (VisibleReadBody(message) != null || selectedSkillReads.Contains(message.Id)))
+            var delivered = atoms.SelectMany(atom => atom.PromptMessages.Where(message => message.SyntheticResourceObservation ||
+                    message.ToolName == "core.read" && atom.ReadBody.IsSuccessfulResourceRead(message) &&
+                        (atom.ReadBody.HasVisibleBody(message) || selectedSkillReads.Contains(message.Id))))
                 .SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(evidence => _reducer.Reduce(evidence, authority.Resources).State == EvidenceState.Current)
                 .GroupBy(evidence => evidence.EvidenceId, StringComparer.Ordinal).Select(group => group.First());
@@ -771,48 +779,18 @@ namespace RNAssistant.Core.Services
             return true;
         }
 
-        private static bool IsResourceRead(ChatMessage message)
-        {
-            ToolResultWireReadResult wire; string error;
-            return message.ToolName == "core.read" && message.CompletedOperation == null &&
-                ToolResultHistoryReader.TryRead(message, out wire, out error) && wire.Result.Status == ToolResultStatus.Ok;
-        }
-
         private static string BodyKey(ContextAtom atom)
         {
             if (atom == null || atom.BodyOmitted || atom.Evidence.Count != 1 || atom.Messages.Count == 0) return null;
-            var evidence = atom.Evidence[0];
-            var message = atom.Messages.Last();
-            string hash;
-            if ((message.SyntheticResourceObservation || message.ResultBody?.Kind == ToolResultBodyKind.ResourceText) && message.ResultPayload != null)
-                hash = message.ResultPayload.Sha256;
-            else
-            {
-                var body = VisibleReadBody(message);
-                if (body == null) return null;
-                using (var sha = System.Security.Cryptography.SHA256.Create())
-                    hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(body)))
-                        .Replace("-", string.Empty).ToLowerInvariant();
-            }
-            // Payload identity is independent of the resource head. Equal heads
-            // with different slices/bytes, or a different authority scope, cannot
-            // suppress a source. CAS hashes also allow skipping redundant I/O.
-            return JsonConvert.SerializeObject(new { evidence.ScopeId, evidence.Resource.Uri,
-                evidence.Resource.Revision, evidence.View, evidence.Coverage, evidence.Complete, hash });
+            // Payload/visible-byte identity remains independent of the resource head.
+            // Reuse only this atom's exact content; no request or live authority is cached.
+            return atom.ReadBody.Key(atom.Evidence[0], atom.Messages.Last());
         }
 
-        private static string VisibleReadBody(ChatMessage message)
+        private static bool HasVisibleReadBody(ContextAtom atom, ChatMessage message)
         {
-            if (message == null || message.CompletedOperation != null ||
-                message.ToolName != "core.read" && message.ToolName != "core.tools.read") return null;
-            ToolResultWireReadResult wire; string error;
-            if (!ToolResultHistoryReader.TryRead(message, out wire, out error) || wire.Result.Status != ToolResultStatus.Ok) return null;
-            var data = wire.Data as JObject;
-            if ((bool?)data?["rawContentIncluded"] == false || (bool?)data?["bodyIncluded"] == false) return null;
-            if (data?["text"]?.Type == JTokenType.String) return (string)data["text"];
-            var structured = ModelResultProjection.SelectFields(data, "table", "tree");
-            return structured.Properties().Any(item => item.Value.Type != JTokenType.Null)
-                ? structured.ToString(Formatting.None) : null;
+            return message?.ToolName == "core.read" || message?.ToolName == "core.tools.read"
+                ? atom.ReadBody.HasVisibleBody(message) : false;
         }
 
         private static ContextAtom InteractionAtom(ChatMessage call, ChatMessage result, bool required)
@@ -1064,7 +1042,7 @@ namespace RNAssistant.Core.Services
             if (!ToolResultHistoryReader.TryRead(result, out wire, out error) ||
                 wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
                 result.ToolName != "core.read" && atom.Kind != "terminal-mutation" ||
-                !HasCompleteSource(result) && VisibleReadBody(result) == null) return false;
+                !HasCompleteSource(result) && !HasVisibleReadBody(atom, result)) return false;
             var projected = _projection.Project(result);
             if (!ToolResultHistoryReader.TryRead(projected, out wire, out error)) return false;
             if (aggregateBudget) atom.KeepPair = true;
@@ -1219,7 +1197,7 @@ namespace RNAssistant.Core.Services
                 var retainedBody = bodyParts?.FirstOrDefault(part => part.RetainedAtMessageId != null);
                 summary = summary || retainedBody != null;
                 var unchangedData = bodyParts != null && bodyParts.Any(p => p.Kind == "data" && p.Presentation == ContextPresentationKind.Full);
-                var visibleRead = !omittedBody && VisibleReadBody(message) != null;
+                var visibleRead = !omittedBody && HasVisibleReadBody(atom, message);
                 var resourceBody = evidence.Length > 0 && !IsFailedResult(message) &&
                     (message.SyntheticResourceObservation || visibleRead || unchangedData);
                 var presentation = summary ? ContextPresentationKind.Summary :

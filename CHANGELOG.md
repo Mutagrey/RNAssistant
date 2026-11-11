@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.2.4-dev
+
+- Model context preparation reuses exact read-body metadata and hashes within each
+  request, reducing repeated parsing while preserving body identity, omission and
+  actual-delivery guards.
+
 ### 16.2.3-dev
 
 - Active run progress/checkpoints and status reads no longer copy chat history.

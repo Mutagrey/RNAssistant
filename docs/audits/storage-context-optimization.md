@@ -498,3 +498,35 @@ after-state/CAS ownership.
    slice does not make the complete progress or persistence pipeline bounded.
 7. Conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide updated.
    No temporary adapter. The journal generation/root switch remains isolated/P7.
+
+## P3e — reuse exact read-body metadata within compilation (2026-11-11)
+
+1. F11, repeated body parsing/key portion: Core `ContextReadBody` owns the derived
+   metadata for one compiler atom; registered in the old-style Core project.
+2. Key lookup, presence checks, receipt presentation and delivered observations
+   reuse exact input metadata. Header validity is rechecked on a hit; changed
+   content/call/tool binding is parsed again, payload/evidence identity is respected.
+   Hashing is lazy. Parsed trees and separate text bodies are not retained, and
+   omission/replacement drops derived state. Actual delivery/live guards are unchanged.
+3. Removed repeated `VisibleReadBody`/`IsResourceRead` parsing and per-lookup body
+   hashing/key serialization from the compiler. Shared header validation stays in
+   `ToolResultHistoryReader`. Production C# delta +132/-65 (net +67); no cross-request
+   cache, new store or recovery adapter.
+4. T02/T05/T06 subset: two new checks and eight focused regressions pass on
+   macOS/net8/C#7.3, isolated e8d719b6 + owned changes. They cover changed bindings,
+   invalid protocol/receipt/omission, payload replacement, duplicate/partial/table/
+   empty bodies, coverage/scope/resource differences, final retained pointers,
+   working-set recovery, budget folding and scripted Office/Workspace live guards.
+   Concurrent Browser/window work is excluded; this is not current-HEAD or Office qualification.
+5. Same six inline reads (108,006 text characters, three duplicate pairs), 12 actual
+   compiler preparations: allocated bytes 247,310,616 → 142,690,200 (−42.3%). One
+   local wall sample 102.33 → 62.27 ms. Warm-up/input creation/final wire comparison
+   excluded. Final wire SHA-256 matches before/after:
+   `CA1927CBD1E9FA1D864DA0112FC2ED79CFBB69A58CA3EA6C67CE5CD50E71F42D`.
+   Both fixtures hydrate zero CAS bodies; CPU/physical I/O and Windows latency are unmeasured.
+6. Working-set restore still scans history to retain unknown effects and unresolved
+   recovery; safely removing that scan requires indexed membership/checkpoint work.
+   Across-request reconstruction, aggregate persistence and complete P3/P7 gates
+   remain open. This result is not a bounded-restart claim.
+7. Conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide updated.
+   No temporary adapter; new journal/root integration is still separate.

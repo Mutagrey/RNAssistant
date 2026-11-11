@@ -685,6 +685,8 @@ namespace RNAssistant.Harness
                 Test("storage optimization: frozen skill snapshots without JSON getters", SkillSnapshotCopiesPreserveFrozenBindings),
                 Test("storage optimization: typed model snapshot isolation", ModelSnapshotCopiesPreserveIsolation),
                 Test("storage optimization: bounded live run metadata", RunOwnerSnapshotCostCurve),
+                Test("storage optimization: read body preparation", ContextReadBodyPreparationCost),
+                Test("storage optimization: read body identity invalidation", ContextReadBodyInvalidatesChangedInputs),
                 Test("storage optimization: live run canonical reads", LiveRunReadsCanonicalSessionAndCatalog),
                 Test("storage optimization: live run exact Inbox stop", LiveRunStopAddressesExistingInbox),
                 Test("storage optimization: host parity and retained mutation guards", RetainedResultHostParity),

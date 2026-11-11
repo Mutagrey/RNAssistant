@@ -69,6 +69,12 @@ canonical headers/sessions; Office and Workspace Stop address the existing Inbox
 without hydration. No adapter or second store. Aggregate commits, explicit detail
 loads, kernel history/working-set restore and remaining context scans stay open.
 
+P3e extracts request-local read-body metadata into `ContextReadBody`. The common
+compiler uses it for exact keys, body presence, receipts and delivered observations;
+the repeated parsing/hash helpers are removed. The existing history reader owns
+header validation. Omission/replacement discards derived metadata; no parsed tree,
+body cache, store or adapter is added. Archive scans and indexed restart remain open.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.

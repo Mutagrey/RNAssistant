@@ -10,6 +10,26 @@ namespace RNAssistant.Core.Services
         public static bool TryRead(ChatMessage message, out ToolResultWireReadResult result, out string error)
         {
             result = null;
+            if (!TryReadHeader(message, out error)) return false;
+            var json = message.Content ?? string.Empty;
+            var parsed = ToolResultWire.Read(json);
+            if (!parsed.Success)
+            {
+                error = parsed.Error;
+                return false;
+            }
+            if (parsed.ToolCallId != message.ToolCallId ||
+                message.ToolName != parsed.Name)
+            {
+                error = "Result body disagrees with its runtime call id or canonical tool name.";
+                return false;
+            }
+            result = parsed;
+            return true;
+        }
+
+        internal static bool TryReadHeader(ChatMessage message, out string error)
+        {
             error = null;
             if (message == null || message.Activity != null || !message.ProtocolMessage ||
                 message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
@@ -25,20 +45,6 @@ namespace RNAssistant.Core.Services
                 error = "JSON result history requires the user transport role.";
                 return false;
             }
-            var json = message.Content ?? string.Empty;
-            var parsed = ToolResultWire.Read(json);
-            if (!parsed.Success)
-            {
-                error = parsed.Error;
-                return false;
-            }
-            if (parsed.ToolCallId != message.ToolCallId ||
-                message.ToolName != parsed.Name)
-            {
-                error = "Result body disagrees with its runtime call id or canonical tool name.";
-                return false;
-            }
-            result = parsed;
             return true;
         }
     }

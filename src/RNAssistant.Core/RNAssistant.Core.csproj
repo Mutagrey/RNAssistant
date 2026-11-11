@@ -279,6 +279,7 @@
     <Compile Include="Services\ModelContextCompiler.cs" />
     <Compile Include="Services\ContextCompactionRuntime.cs" />
     <Compile Include="Services\ContextWorkingSet.cs" />
+    <Compile Include="Services\ContextReadBody.cs" />
     <Compile Include="Services\ToolProtocolMessages.cs" />
     <Compile Include="Services\ModelTracePersistenceService.cs" />
     <Compile Include="Services\ModelDiagnosticBuffer.cs" />

@@ -68,6 +68,12 @@ regressions: run lease/duplicate confirmation, invocation ownership, catalog rea
 document-key migration, Workspace Stop, stale cancellation and shared run recovery.
 This does not qualify full-session persistence, detail I/O or native Office delivery.
 
+`storage optimization: read body` checks repeated preparation cost and invalidation
+of content, call/tool binding, transport headers, omission, receipts and payloads.
+Pair with chronological read retention, active/archive body selection, budget folding,
+bounded working-set/VBA coverage, compiler presentation, exact read cost and the
+scripted host-parity/retained-guard check. Metadata reuse ends with the compilation.
+
 
 ## Optional assignments (4b, 2026-11-10)
 
