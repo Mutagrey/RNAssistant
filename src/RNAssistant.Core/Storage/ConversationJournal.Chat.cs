@@ -38,7 +38,8 @@ namespace RNAssistant.Core.Storage
         {
             if (record.Kind == "chat.selected") { DecodeChatSelection(record); return new PayloadRef[0]; }
             var fact = DecodeChatCommit(record);
-            return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning }))
+            return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning }.Concat(MessageReferences(item.Header))))
+                .Concat(fact.Tools?.Terminal == null ? new PayloadRef[0] : MessageReferences(fact.Tools.Terminal.Result))
                 .Where(item => item != null).Concat(fact.Checkpoint?.References ?? new PayloadRef[0]);
         }
 
@@ -75,7 +76,7 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("Chat address is outside this exact journal scope.");
         }
 
-        private IEnumerable<PayloadRef> ValidateChatFact(SqliteConnection db, JournalRecord record)
+        private IEnumerable<PayloadRef> ValidateChatFact(SqliteConnection db, JournalRecord record, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
         {
             if (OperationExists(db, record.Operation)) throw new InvalidDataException("Duplicate chat operation.");
             if (record.Kind == "chat.selected")
@@ -88,7 +89,8 @@ namespace RNAssistant.Core.Storage
             var current = TextChat(db, fact.Card.ChatId);
             if (fact.ExpectedRevision != (current?.Position.Sequence ?? 0))
                 throw new ChatConcurrencyException("Chat changed before the journal commit.");
-            if (current == null && Card(db, fact.Card.ChatId) != null)
+            if (current == null && (Card(db, fact.Card.ChatId) != null ||
+                Scalar(db, "SELECT 1 FROM call_fact WHERE stream=$stream AND chat=$chat LIMIT 1", fact.Card.ChatId) != null))
                 throw new InvalidOperationException("Chat belongs to an integration not supported by the text store yet.");
             if (current != null && (!JToken.DeepEquals(JObject.FromObject(current.Fact.Card.Address), JObject.FromObject(fact.Card.Address)) ||
                 current.Fact.Card.CreatedUtc != fact.Card.CreatedUtc))
@@ -103,7 +105,8 @@ namespace RNAssistant.Core.Storage
                     if (fact.Checkpoint == null && (message.Header.ProtocolMessage || message.Header.RuntimeProjection || message.Header.Activity != null))
                         throw new InvalidOperationException("New runtime messages require their atomic kernel checkpoint.");
                 }
-                else if (!SameRunValue(prior.Body, message.Body) || !SameRunValue(prior.Reasoning, message.Reasoning) ||
+                else if ((prior.Header.Activity == null || message.Header.Id != fact.Tools?.ActivityId) && !SameRunValue(prior.Body, message.Body) ||
+                    !SameRunValue(prior.Reasoning, message.Reasoning) ||
                     prior.Header.Role != message.Header.Role || prior.Header.CreatedUtc != message.Header.CreatedUtc ||
                     prior.Header.ProtocolMessage != message.Header.ProtocolMessage || prior.Header.RuntimeProjection != message.Header.RuntimeProjection ||
                     prior.Header.ResponseModelAttemptId != message.Header.ResponseModelAttemptId ||
@@ -113,12 +116,13 @@ namespace RNAssistant.Core.Storage
             if (fact.MessageCount != (current?.Fact.MessageCount ?? 0) + added)
                 throw new InvalidOperationException("Chat message count does not match its exact append/update delta.");
             ValidateChatRun(db, record, fact);
+            ValidateChatTools(db, record, fact, keys, outcome);
             return ChatReferences(record);
         }
 
-        private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position)
+        private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
         {
-            ValidateChatFact(db, record);
+            ValidateChatFact(db, record, keys, outcome);
             var committed = record.Kind == "chat.committed" ? DecodeChatCommit(record) : null;
             long lastActivity = 0;
             var existing = new HashSet<string>(StringComparer.Ordinal);
@@ -134,6 +138,8 @@ namespace RNAssistant.Core.Storage
                     if (ChatMessageOperation(db, committed.Card.ChatId, message.Header.Id) != null) existing.Add(message.Header.Id);
                 }
             }
+            var nextEvidence = committed?.Tools?.Terminal == null ? 0 : Convert.ToInt64(Scalar(db,
+                "SELECT next_e FROM chat_sequence WHERE stream=$stream AND chat=$chat", committed.Card.ChatId));
             using (var tx = db.BeginTransaction())
             {
                 RegisterOperation(db, tx, record.Operation, record.Kind);
@@ -166,6 +172,7 @@ namespace RNAssistant.Core.Storage
                             command.ExecuteNonQuery();
                         }
                 }
+                if (committed != null) ApplyChatToolRows(db, tx, record, position, committed, keys, existing, nextEvidence);
                 if (committed?.Checkpoint != null) ApplyRunRows(db, tx, record, position, committed.Checkpoint);
                 SaveCursor(db, position, tx); tx.Commit();
             }
@@ -181,19 +188,28 @@ namespace RNAssistant.Core.Storage
                     documentTitle: session.DocumentTitle, documentPath: session.DocumentPath, selectedModel: session.Model, reasoningEnabled: session.ReasoningEnabled);
                 ValidateChatAddress(card);
                 var messages = commit.Messages.Select(write => PublishText(write.Message)).ToArray();
+                var tools = PrepareChatTools(session, commit as ConversationRunCommit);
+                var keys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
+                foreach (var message in messages.Where(item => item.Header.AcceptedCallOrigin != null))
+                { var call = new ConversationCallFact(session.Id, message.Header); var key = CallFingerprint(call); keys[key] = PrepareContextCallKey(call.Call, key); }
                 var context = PayloadRef.FromBlob(_bodies.StoreText(JsonConvert.SerializeObject(session.Context), "application/json"));
                 var receiptBody = session.LastContextReceipt == null ? null : StoreChatJson(session.LastContextReceipt);
                 var runBody = session.LastRun?.KernelState == null ? null : StoreChatJson(session.LastRun.KernelState);
                 var run = CopyRunHeader(session.LastRun);
                 foreach (var reference in new[] { context, receiptBody, runBody, modelEvent?.Body }
-                    .Concat(messages.SelectMany(item => new[] { item.Body, item.Reasoning })).Where(item => item != null))
+                    .Concat(messages.SelectMany(item => new[] { item.Body, item.Reasoning }.Concat(MessageReferences(item.Header))))
+                    .Concat(tools?.Terminal == null ? new PayloadRef[0] : MessageReferences(tools.Terminal.Result)).Where(item => item != null))
                     if (!_bodies.HasVerifiedReference(reference.ToBlobReference())) throw new InvalidDataException("Chat body is unavailable before acceptance.");
                 return Access((db, cursor) => {
+                    if (!(commit is ConversationRunCommit) && messages.Any(item =>
+                        (item.Header.ToolCallId != null || item.Header.Activity != null) &&
+                        ChatEntry(db, session.Id, item.Header.Id) == null)) throw TextStoreScope();
                     var prior = FindChatWrite(db, commit.OperationId);
                     var checkpoint = commit is ConversationRunCommit runtime
                         ? PrepareStoreCheckpoint(db, runtime, session, runBody, prior?.Fact.Checkpoint) : null;
                     var fact = new ConversationChatCommit(card, commit.JournalRevision, commit.JournalMessageCount, messages, context, DateTime.UtcNow,
-                        run, runBody, checkpoint, receiptBody, modelEvent);
+                        run, runBody, checkpoint, receiptBody, modelEvent, tools);
+                    AssignChatReferences(db, fact, prior?.Fact);
                     var fingerprint = ChatFingerprint(fact);
                     if (prior != null)
                     {
@@ -201,9 +217,9 @@ namespace RNAssistant.Core.Storage
                         return prior;
                     }
                     var record = DeliveryRecord(commit.OperationId, "chat.committed", fact, fingerprint);
-                    ValidateChatFact(db, record);
+                    ValidateChatFact(db, record, keys);
                     var position = Journal.Append(cursor, record.Operation, fingerprint, record.Kind, record.Data);
-                    try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position); }
+                    try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position, keys); }
                     catch (Exception error) when (error is IOException || error is SqliteException) { /* canonical receipt remains accepted */ }
                     return new ConversationChatReceipt(fact, record.Operation, position);
                 }, CancellationToken.None);
@@ -213,12 +229,19 @@ namespace RNAssistant.Core.Storage
         private ConversationTextEntry PublishText(ChatMessage message)
         {
             ConversationTextEntry.RequireText(message);
-            if (message.ProtocolMessage)
+            if (message.AcceptedCallOrigin != null)
             {
-                var parsed = ConversationResponseHistoryReader.Read(message);
-                if (!parsed.Success || parsed.Response.ToolCalls.Count != 0 || parsed.Response.Results?.Any(result => result.Evidence.Count != 0) == true)
-                    throw TextStoreScope();
+                message = message.CopyForContext();
+                if (message.AcceptedCallPayload == null)
+                {
+                    var parsed = ConversationResponseHistoryReader.Read(message);
+                    if (!parsed.Success || parsed.Response.ToolCalls.Count != 1) throw new InvalidDataException("Invalid accepted call.");
+                    message.ArgumentPayload = PayloadRef.FromBlob(_bodies.StoreText(parsed.Response.ToolCalls[0].ArgumentsJson, "application/json"));
+                    AcceptedCallPayloadService.Externalize(message, _bodies);
+                }
             }
+            else if (message.ProtocolMessage && message.ToolCallId == null && !ConversationResponseHistoryReader.Read(message).Success)
+                throw new InvalidDataException("Invalid accepted response.");
             var header = message.CopyForContext(); header.Content = null; header.ReasoningContent = null;
             return new ConversationTextEntry(header, PayloadRef.FromBlob(_bodies.StoreText(message.Content ?? string.Empty, "text/plain")),
                 message.ReasoningContent == null ? null : PayloadRef.FromBlob(_bodies.StoreText(message.ReasoningContent, "text/plain")));
@@ -244,12 +267,11 @@ namespace RNAssistant.Core.Storage
             if (commit.RemovedMessageIds.Count != 0 ||
                 session.ParentSessionId != null || session.ParentSessionRevision != null || session.ForkedThroughMessageId != null ||
                 session.TitleAssignedByAgent || session.PreviousDocumentKeys.Count != 0 ||
-                session.ToolCallReferenceSequence != 0 || session.EvidenceReferenceSequence != 0 ||
                 session.ActiveContextCheckpointId != null || session.ActiveHtmlArtifactId != null ||
                 session.ActiveTaskListArtifactId != null || session.ActivePlanDocumentArtifactId != null ||
                 session.AgentCreation != null ||
                 session.Artifacts.Count != 0 || session.ArtifactLinks.Count != 0 || session.ContextCheckpoints.Count != 0 ||
-                session.ResourceCopies.Count != 0 || session.ResourceReferenceIndex.Count != 0 || session.Context.Notes.Count != 0 ||
+                session.ResourceCopies.Count != 0 || session.Context.Notes.Count != 0 ||
                 session.HtmlWorkspace.Files.Count != 0 || session.HtmlWorkspace.DataSources.Count != 0 ||
                 session.HtmlWorkspace.ActiveFileId != null || session.HtmlWorkspace.History.Count != 0 || session.HtmlWorkspace.RedoBranches.Count != 0)
                 throw TextStoreScope();
@@ -258,7 +280,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private static NotSupportedException TextStoreScope()
-        { return new NotSupportedException("Journal Store supports no-tool conversations. Tools, resources, history rewrites, move/delete and usage are not connected yet."); }
+        { return new NotSupportedException("Journal Store does not yet support this resource, agent, history-rewrite, move/delete or usage operation."); }
 
         private static ConversationChatSelection DecodeChatSelection(JournalRecord record)
         {
@@ -284,17 +306,10 @@ namespace RNAssistant.Core.Storage
         {
             if (message == null || string.IsNullOrWhiteSpace(message.Id) || message.CreatedUtc.Kind != DateTimeKind.Utc ||
                 message.Role != "user" && message.Role != "assistant") throw new ArgumentException("An exact user/assistant text message is required.");
-            if (message.SyntheticResourceObservation ||
-                message.ToolName != null || message.ToolResultRole != null || message.ResultStepId != null || message.AuthorityCommitId != null ||
-                (message.ProjectedSourceMessageIds?.Count ?? 0) != 0 || (message.ProjectedEvidenceReferences?.Count ?? 0) != 0 ||
-                message.ToolCallId != null || message.Activity?.ToolCallId != null || message.Activity?.ToolId != null || message.Activity?.ExecutionEvidence != null || message.AcceptedCallOrigin != null || message.AgentCommunication != null ||
-                message.ToolCallReference != null || message.EvidenceReference != null || message.ArgumentPayload != null ||
-                message.AcceptedCallPayload != null || message.ResultPayload != null || message.ResultBody != null || message.ResourceEffect != null ||
-                message.ExecutionProgress != null || message.CompletedOperation != null || message.HtmlWorkspaceCheckpoint != null ||
-                message.AttachmentAnalysis != null || message.ToolResultProtocolVersion != 0 ||
-                (message.ToolCalls?.Count ?? 0) != 0 || (message.Attachments?.Count ?? 0) != 0 ||
-                (message.ResourceRefs?.Count ?? 0) != 0 || (message.ResourceEvidence?.Count ?? 0) != 0 ||
-                (message.ResourceModelReferences?.Count ?? 0) != 0 || (message.ContextClaims?.Count ?? 0) != 0)
+            if (message.SyntheticResourceObservation || message.AgentCommunication != null ||
+                message.CompletedOperation != null || message.HtmlWorkspaceCheckpoint != null ||
+                message.AttachmentAnalysis != null || (message.Attachments?.Count ?? 0) != 0 ||
+                (message.ContextClaims?.Count ?? 0) != 0)
                 throw new NotSupportedException("Runtime/resource messages require their typed journal integration.");
         }
     }
@@ -312,10 +327,12 @@ namespace RNAssistant.Core.Storage
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationRunCheckpoint Checkpoint { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PayloadRef ContextReceipt { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationModelEvent ModelEvent { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationRuntimeTools Tools { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ModelResourceReference> References { get; internal set; }
         [JsonConstructor] internal ConversationChatCommit(ConversationCard card, long expectedRevision, int messageCount,
             IReadOnlyList<ConversationTextEntry> messages, PayloadRef context, DateTime createdUtc,
             ChatRunRecord run = null, PayloadRef runState = null, ConversationRunCheckpoint checkpoint = null,
-            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null)
+            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null, ConversationRuntimeTools tools = null, IReadOnlyList<ModelResourceReference> references = null)
         {
             if (card == null || expectedRevision < 0 || messageCount < 0 || messages == null || messages.Count > 128 || context == null ||
                 messages.Any(item => item == null) || messages.Select(item => item.Header.Id).Distinct(StringComparer.Ordinal).Count() != messages.Count ||
@@ -325,6 +342,7 @@ namespace RNAssistant.Core.Storage
             if (run?.KernelState != null || runState != null && run == null || checkpoint != null &&
                 (checkpoint.ChatId != card.ChatId || checkpoint.RunId != run?.RunId || checkpoint.Body.Sha256 != runState?.Sha256))
                 throw new ArgumentException("Runtime metadata and checkpoint identity disagree.");
+            Tools = tools; References = references;
             Run = run; RunState = runState; Checkpoint = checkpoint; ContextReceipt = contextReceipt; ModelEvent = modelEvent;
         }
     }

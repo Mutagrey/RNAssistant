@@ -1,5 +1,33 @@
 # Session event stream
 
+## Atomic read-tool runtime on the journal — 2026-11-11
+
+Real Office and Workspace consumers now execute read-tool turns through the
+existing `ConversationJournal` ports. Accepted calls, runtime entry and terminal
+results use its existing call/result/context reducers within `chat.committed`:
+message delta, kernel checkpoint and derived index cursor advance together.
+Office keeps its existing order: persist execution terminal first, materialize the
+model result afterwards. Presentation failure cannot erase the terminal or permit
+another dispatch of that accepted call. Lost acknowledgement recovers the exact
+own receipt; restart, rebuild and restore never execute it.
+
+The journal allocates T/E and revision-specific R aliases. New R bindings live in
+the canonical delta; the disposable index locates them without copying the full
+reference history into each commit. ToolPack admission reads select exact runs.
+Finish admission selects current calls and cited terminal aliases, verifies their
+canonical call/start/result records and retained identities, and hydrates accepted
+bodies only through the existing evidence admission owner. Wrong citations are
+corrected without repeating tools; a delivered historical E remains usable on the
+next turn. Admission bodies are read outside the append lock. Schema 13 rebuilds
+these projections from journals/CAS.
+
+This remains an isolated integration, not the production switch. Side effects,
+confirmation/wait and interrupted-run recovery reject unsupported paths explicitly;
+resource-port mutation outcomes still need exact accepted-call correlation before
+dispatch. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
+full backup/cutover gates stay open. No ChatStore optimization, adapter, dual-write
+or fallback is added. [Evidence](audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
+
 ## Atomic no-tool runtime on the journal — 2026-11-11
 
 `ConversationJournal` now accepts `IConversationStore.CommitRun` directly. One
@@ -16,18 +44,16 @@ The existing event port writes typed model manifests/diagnostics to that same
 stream. Full event reads expose native `chat.committed` metadata and model events;
 legacy operation replay is not synthesized. Callable membership uses an addressed
 `ReadToolPackAdmissions` query instead of reading all events. The legacy adapter
-retains its previous internal read until cutover. Admission absence is verified
-against the addressed no-tool integration, which explicitly rejects tool/admission
-writes. Finish admission likewise verifies the exact chat/run checkpoint before
-reporting no tool evidence. Feed/cursor delivery and tool evidence integration remain
-separate work; they do not fall back to the old store.
+retains its previous internal read until cutover. The read-tool slice above adds
+indexed admission and finish evidence; feed/cursor delivery remains separate work,
+without falling back to the old store.
 
 Office `ConversationRunService` and Workspace runtime ports pass reflection, finish,
 restart and a second turn through AgentKernel and an actual scripted HTTP endpoint.
 Workspace runtime, Plan and task-list composition consume `IConversationStore`;
 the existing artifact owner is supplied explicitly. Production composition still
-uses the old backend until the complete port switch. The new store accepts no-tool
-runs only: mutation/resource, Inbox/control and interrupted-run recovery consumers
+uses the old backend until the complete port switch. Mutation/resource linkage,
+Inbox/control and interrupted-run recovery consumers
 remain open. Rebuild and restore retain an unfinished checkpoint without executing
 it. Backup still refuses roots containing legacy resource journals; full application
 backup requires their migration. No Windows/Office/DPAPI qualification is implied.

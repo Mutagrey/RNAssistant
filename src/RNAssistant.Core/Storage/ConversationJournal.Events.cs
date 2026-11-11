@@ -5,7 +5,9 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Microsoft.Data.Sqlite;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 
@@ -18,16 +20,20 @@ namespace RNAssistant.Core.Storage
             if (write == null) throw new ArgumentNullException(nameof(write));
             SessionEventDescriptors.EnsureEventPortWritable(write.Descriptor);
             var trace = write.Data as LlmTraceRecord;
-            if (trace == null || write.Payload != null || trace.PayloadUtf8Bytes != null || trace.PayloadJson != null)
+            var admission = write.Data as ToolPackExtensionEventData;
+            var admissionKind = write.Descriptor.Kind == SessionEventKind.ToolPackExtensionAccepted ||
+                write.Descriptor.Kind == SessionEventKind.ToolPackExtensionRejected;
+            if (write.Payload != null || (admissionKind ? admission == null : trace == null) ||
+                trace?.PayloadUtf8Bytes != null || trace?.PayloadJson != null)
                 throw TextStoreScope();
-            if (session?.LastRun == null || trace.SessionId != session.Id || trace.RunId != session.LastRun.RunId ||
+            if (session?.LastRun == null || trace != null && (trace.SessionId != session.Id || trace.RunId != session.LastRun.RunId) ||
                 write.Correlation?.RunId != session.LastRun.RunId || write.Correlation.TurnId != session.LastRun.TurnId)
                 throw new InvalidOperationException("Model event belongs to another run.");
             RequireTextRoot();
             using (RuntimeStorageActivity.Acquire(_paths))
             {
                 var item = new ConversationModelEvent(write.Descriptor.Kind, write.Correlation.RunId,
-                    write.Correlation.TurnId, write.Correlation.StepId, StoreChatJson(trace));
+                    write.Correlation.TurnId, write.Correlation.StepId, StoreChatJson(write.Data));
                 var command = new ConversationCommit();
                 ConversationChatReceipt receipt;
                 try { receipt = CommitChat(session, command, item); }
@@ -54,11 +60,30 @@ namespace RNAssistant.Core.Storage
 
         IReadOnlyList<SessionEvent> IEventStore.ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs)
         {
-            // This integration cannot write tool calls/admissions. Validate the
-            // addressed canonical generation before reporting that absence.
             if (runs == null) throw new ArgumentNullException(nameof(runs));
-            RequireChatRevision(session, ReadChat(session.Id));
-            return new SessionEvent[0];
+            RequireTextRoot();
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                var receipts = Access((db, cursor) => {
+                    RequireChatRevision(session, TextChat(db, session.Id));
+                    var operations = new List<Tuple<string, string>>();
+                    foreach (var run in runs.Distinct(StringComparer.Ordinal))
+                        using (var command = Command(db, "SELECT operation FROM chat_event WHERE stream=$stream AND chat=$chat AND kind=$kind AND run=$run ORDER BY sequence"))
+                        {
+                            command.Parameters.AddWithValue("$chat", session.Id); command.Parameters.AddWithValue("$run", run);
+                            command.Parameters.AddWithValue("$kind", (int)SessionEventKind.ToolPackExtensionAccepted);
+                            using (var reader = command.ExecuteReader()) while (reader.Read()) operations.Add(Tuple.Create(run, reader.GetString(0)));
+                        }
+                    return operations.Select(operation => {
+                        var receipt = FindChatWrite(db, operation.Item2);
+                        if (receipt?.Fact.Card.ChatId != session.Id || receipt.Fact.ModelEvent?.RunId != operation.Item1 ||
+                            receipt.Fact.ModelEvent.Kind != SessionEventKind.ToolPackExtensionAccepted)
+                            throw new InvalidDataException("Tool admission locator mismatch.");
+                        return receipt;
+                    }).OrderBy(item => item.Position.Sequence).ToArray();
+                }, CancellationToken.None);
+                return receipts.Select(ProjectChatEvent).ToArray();
+            }
         }
 
         private static void RequireChatRevision(ConversationMetadata metadata, ConversationChatReceipt chat)
@@ -74,12 +99,57 @@ namespace RNAssistant.Core.Storage
             return Access((db, cursor) => {
                 var current = TextChat(db, session.Id); RequireChatRevision(ConversationMetadata.From(session), current);
                 var run = CurrentRun(db, session.Id);
-                if (run == null || run.Fact.RunId != runId || current.Fact.Run?.RunId != runId ||
-                    run.Fact.ToolStepsUsed != 0 || !SameRunValue(run.Fact.Counts, new RNAssistant.Core.Agent.ToolCounts()))
-                    throw TextStoreScope();
+                if (run == null || run.Fact.RunId != runId || current.Fact.Run?.RunId != runId)
+                    throw new InvalidOperationException("Finish evidence belongs to another run.");
+                var calls = new HashSet<Tuple<string, string>>();
+                using (var command = Command(db, "SELECT call FROM call_fact WHERE stream=$stream AND chat=$chat AND run=$run"))
+                {
+                    command.Parameters.AddWithValue("$chat", session.Id); command.Parameters.AddWithValue("$run", runId);
+                    using (var reader = command.ExecuteReader()) while (reader.Read()) calls.Add(Tuple.Create(runId, reader.GetString(0)));
+                }
+                foreach (var alias in references)
+                {
+                    string normalized;
+                    if (!ModelReference.TryNormalize(alias, out normalized) || normalized[0] != 'E') continue;
+                    using (var command = Command(db, "SELECT operation FROM result_fact WHERE stream=$stream AND chat=$chat AND ordinal=$ordinal"))
+                    {
+                        command.Parameters.AddWithValue("$chat", session.Id);
+                        command.Parameters.AddWithValue("$ordinal", new ModelReference(ModelReferenceKind.Evidence, normalized).Ordinal);
+                        var result = Find(db, command.ExecuteScalar() as string)?.Fact;
+                        if (result == null) continue;
+                        if (result.ChatId != session.Id || result.Result.EvidenceReference?.Alias != normalized)
+                            throw new InvalidDataException("Evidence alias locator mismatch.");
+                        calls.Add(Tuple.Create(result.Result.RunId, result.Result.ToolCallId));
+                    }
+                }
+                var facts = new List<ConversationFinishEvidenceAdmission.Fact>();
+                foreach (var call in calls) AddFinishFacts(db, session.Id, call.Item1, call.Item2, facts);
+                var retained = facts.Select(item => item.Message.Id).Distinct(StringComparer.Ordinal)
+                    .Where(id => ChatMessageOperation(db, session.Id, id) != null).ToArray();
                 return new FinishEvidenceSnapshot(new SessionEventPosition(session.Id, current.Position.Sequence, current.Position.Hash),
-                    new ConversationFinishEvidenceAdmission.Fact[0], new string[0]);
+                    facts, retained);
             }, CancellationToken.None);
+        }
+
+        private void AddFinishFacts(SqliteConnection db, string chat, string run, string call,
+            List<ConversationFinishEvidenceAdmission.Fact> facts)
+        {
+            var accepted = FindCall(db, chat, run, call) ?? throw new InvalidDataException("Missing accepted call.");
+            var frame = FindChatWrite(db, accepted.Operation) ?? throw TextStoreScope();
+            facts.Add(new ConversationFinishEvidenceAdmission.Fact { Kind = SessionOperationTypes.ToolCallRecorded,
+                RunId = run, TurnId = frame.Fact.Run.TurnId, Message = accepted.Call, Sequence = frame.Position.Sequence });
+            foreach (var operation in new[] { StartedOperation(db, chat, run, call), TerminalOperation(db, chat, run, call) as string })
+            {
+                if (operation == null) continue;
+                var receipt = FindChatWrite(db, operation) ?? throw TextStoreScope();
+                var tools = receipt.Fact.Tools;
+                if (receipt.Fact.Card.ChatId != chat || receipt.Fact.Run?.RunId != run || tools?.CallId != call)
+                    throw new InvalidDataException("Tool lifecycle locator mismatch.");
+                var message = receipt.Fact.Messages.Single(item => item.Header.Id == tools.ActivityId).Header;
+                facts.Add(new ConversationFinishEvidenceAdmission.Fact {
+                    Kind = tools.Terminal == null ? SessionOperationTypes.ToolExecutionStarted : SessionOperationTypes.ToolExecutionFinished,
+                    RunId = run, TurnId = receipt.Fact.Run.TurnId, Message = message, Sequence = receipt.Position.Sequence });
+            }
         }
 
         IReadOnlyList<SessionEvent> IEventStore.Read(ConversationMetadata session, SessionEventReadMode mode)
@@ -121,7 +191,8 @@ namespace RNAssistant.Core.Storage
         [JsonConstructor] internal ConversationModelEvent(SessionEventKind kind, string runId, string turnId, string stepId, PayloadRef body)
         {
             if (kind != SessionEventKind.ModelRequestPrepared && kind != SessionEventKind.ModelResponseReceived &&
-                kind != SessionEventKind.ModelResponseAccepted && kind != SessionEventKind.ModelAttemptRejected && kind != SessionEventKind.ModelFailure ||
+                kind != SessionEventKind.ModelResponseAccepted && kind != SessionEventKind.ModelAttemptRejected && kind != SessionEventKind.ModelFailure &&
+                kind != SessionEventKind.ToolPackExtensionAccepted && kind != SessionEventKind.ToolPackExtensionRejected ||
                 string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || body == null)
                 throw new ArgumentException("An exact model manifest/diagnostic event is required.");
             Kind = kind; RunId = runId; TurnId = turnId; StepId = stepId; Body = body;

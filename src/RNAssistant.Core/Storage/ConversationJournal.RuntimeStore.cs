@@ -36,9 +36,8 @@ namespace RNAssistant.Core.Storage
             if (run == null) return;
             var state = run.KernelState; var summary = state?.Summary;
             if ((run.SelectedSkills?.Count ?? 0) != 0 || run.InterruptedEffectPossible || run.InterruptedToolId != null ||
-                state?.InFlightTool != null || summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId ||
-                summary.ToolStepsUsed != 0 || !SameRunValue(summary.ToolCounts, new ToolCounts()) ||
-                summary.PendingConfirmation != null || summary.Lifecycle == RunLifecycle.Waiting)) throw TextStoreScope();
+                summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId ||
+                summary.Lifecycle == RunLifecycle.Waiting)) throw TextStoreScope();
         }
 
         private string ChatMessageOperation(SqliteConnection db, string chat, string id)
@@ -63,8 +62,7 @@ namespace RNAssistant.Core.Storage
             ChatSession session, PayloadRef body, ConversationRunCheckpoint retry)
         {
             var run = session.LastRun; var state = run?.KernelState;
-            if (state == null || body == null || commit.FactKind == AgentRunEventKind.ToolStarted ||
-                commit.FactKind == AgentRunEventKind.ToolCompleted || commit.FactKind == AgentRunEventKind.ToolWaiting)
+            if (state == null || body == null || commit.FactKind == AgentRunEventKind.ToolWaiting)
                 throw TextStoreScope();
             var prior = CurrentRun(db, session.Id);
             var summary = state.Summary;
@@ -108,14 +106,14 @@ namespace RNAssistant.Core.Storage
             if (commit == null) throw new ArgumentNullException(nameof(commit));
             RequireTextRoot();
             var state = commit.CreateStateProjection();
-            try { ApplyChatReceipt(state, CommitChat(state, commit)); }
+            try { var receipt = CommitChat(state, commit); ApplyChatReceipt(state, receipt); ApplyMessageReferences(commit, receipt); }
             catch (IOException)
             {
                 var own = Access((db, cursor) => FindChatWrite(db, commit.OperationId), CancellationToken.None);
-                if (own?.Fact.Card.ChatId == state.Id) ApplyChatReceipt(state, own);
+                if (own?.Fact.Card.ChatId == state.Id) { ApplyChatReceipt(state, own); ApplyMessageReferences(commit, own); }
                 throw;
             }
-            finally { commit.RecordStorageState(state, false); }
+            finally { commit.RecordStorageState(state, false, true); }
         }
 
         private ChatRunRecord LoadChatRun(ConversationChatCommit fact)

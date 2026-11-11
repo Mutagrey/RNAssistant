@@ -114,18 +114,23 @@ head capture plus attempt lookup. Relevant existing regressions: `storage optimi
 resource publication and late outcome`, `storage optimization: canonical closure and
 backup restore`, `resource cutover: atomic authority and replay`, `resource cutover:
 explicit reset invalidates cached journals`, `workspace files: recoverable delete and
-explicit restore`, and `journal runtime:`. Full tool turns, production composition,
+explicit restore`, and `journal runtime:`. Mutation tool turns, production composition,
 workspace locator/move-intent backup and Windows/Office qualification remain open.
 
-`journal runtime:` runs two focused checks: real Office run service and Workspace
+`journal runtime:` runs four focused checks: real Office run service and Workspace
 ports through AgentKernel and scripted HTTP (reflection/finish, restart/next turn,
 mandatory manifests, no legacy chat writes), plus atomic checkpoint/answer lost-ack,
-index lag, stale rejection and clean-root restore without replay. Pair with
+index lag, stale rejection and clean-root restore without replay. Read-tool parity
+adds real Excel/file reads, T/E/R, rejected citation/correction without repeat,
+historical E reuse after restart and bounded finish selection without body hydration.
+The terminal-receipt fixture covers Ok/Unknown read, lost ack/retry, dispatch replay
+rejection, indexed ToolPack admission, rebuild and clean-root restore before model
+presentation. Pair with
 `journal text:` for page/metadata and H=100/1000/10000 kernel append counters.
 Relevant regressions: `tool pack: durable admission replays across chat turns`,
 `workspace: accepted call history survives a new turn`, `workspace Plan: scoped
 reads preserve publication barrier`, and `storage optimization: run checkpoints
-and invocation ownership`. Production composition/Inbox/tools and Windows/Office
+and invocation ownership`. Production composition/Inbox/mutation linkage and Windows/Office
 qualification remain separate. Resource owners still produce legacy journals, so
 full application backup correctly refuses that mixed root.
 
@@ -133,8 +138,8 @@ full application backup correctly refuses that mixed root.
 `IConversationStore` integration: real Office creation/bridge page and Workspace
 Store consumers; lost acknowledgement, stale/reused receipts, rebuild and backup/
 restore with plaintext and synthetic protection; H=100/1000/10000 metadata/header/
-append counters and exact page bodies. No-tool runtime is covered above; tools and
-resource operations remain unsupported. These text-only checks do not cover production
+append counters and exact page bodies. Runtime/read tools are covered above;
+resource mutation linkage remains unsupported. These text-only checks do not cover production
 cutover or Windows/DPAPI qualification. Relevant regressions are `workspace: create
 reopen session and relocate`, `chat sessions: catalog avoids active history`,
 `storage optimization: atomic agent delivery and wait` and

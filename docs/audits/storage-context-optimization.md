@@ -1003,3 +1003,50 @@ after-state/CAS ownership.
    runtime composition switches at P7, when `ResourceAuthorityStore` and
    `ResourceMutationJournal` are removed together. No new compatibility adapter.
    This intermediate integration has no product version bump or release claim.
+
+## P1/P2 — atomic read-tool runtime (2026-11-11)
+
+1. The next dependency is now connected: `ConversationJournal.CommitRun` feeds
+   accepted calls, runtime entry and terminals into its existing call/result/context
+   reducers. Each fact shares one frame/index transaction with its message delta and
+   kernel checkpoint. Schema 13 indexes lifecycle locators, new R bindings and typed
+   ToolPack admissions; these are disposable projections, not new durable owners.
+2. Actual Office run service and Workspace ports pass an Excel range/file read,
+   invalid E citation and correction without another execution, restart and reuse of
+   historical E in the next turn. Office retains its terminal-before-presentation
+   order. Terminal acknowledgement loss accepts the own receipt exactly once; Ok
+   and Unknown read outcomes, counters and call/start identity survive restart,
+   rebuild and restore before model presentation. These Unknown cases are reads,
+   not qualification of uncertain external mutation.
+3. Extracted row-level reducers for use in the existing atomic transaction. T/E/R
+   allocation updates only the current delta; full reference hydration is reserved
+   for explicit Load. Standalone native tool writes cannot enter an integrated chat;
+   that boundary is checked before append, without scanning all prior calls during
+   each metadata/header read. Production C# +577/−84, net +493. No ChatStore changes,
+   wrapper, old-history import, dual-write, fallback or new production writer.
+4. Nine distinct focused checks pass in isolated `c75218b2` plus this slice,
+   macOS/net8/C#7.3: four `journal runtime:` cases, three `journal text:` cases,
+   retained results/context and native resource publication/late-outcome regressions.
+   Coverage includes typed admission/rebuild, stale writes, unsupported mixed writes,
+   clean-root CAS backup/restore and dispatch rejection after a terminal. Version
+   format validation passes. No Office/VSTO or Windows qualification was run.
+5. Addressed finish selection for one cited read uses 9 canonical record reads,
+   about 56 KB in Office and 62 KB in Workspace, with zero historical body hydration,
+   both in its original turn and after restart in the next turn. Selection scales
+   with current calls/cited evidence, not an event-history enumeration; admission
+   bodies are read outside append locks. Existing H=100/1000/10000 probes retain
+   4 metadata/header reads, 3 append reads and 5 no-tool kernel-append reads.
+   No tool-loop H scaling, CPU, physical-I/O or Windows latency claim is made;
+   the previous direct Store did not support tools, so no old/new speedup is claimed.
+6. Next: bind resource preparation/outcome to the exact accepted call before dispatch,
+   then finish resource composition and remaining Store/rewrite/move/delete/usage,
+   confirmation/wait/recovery, Inbox/control/feed and P3 request preparation.
+   Remaining metadata/header byte/allocation overhead stays in that queue. The
+   direct integration rejects unsupported effects and confirmation before dispatch.
+   Production cutover still needs complete history/CAS/key and workspace locator/
+   move-intent backup, stopped old writers and Windows/Office photo evidence.
+   P4 remains deferred. Existing proven mutation/Unknown mechanisms are reused.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. Existing
+   production adapters/backends retain their complete-port P7 removal condition;
+   this intermediate integration adds none. Product version is unchanged, with no
+   production switch, release, push or Windows qualification claim.

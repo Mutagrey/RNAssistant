@@ -6,6 +6,7 @@ using System.Threading;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -35,8 +36,7 @@ namespace RNAssistant.Core.Storage
         {
             var chat = CurrentChat(db, id);
             if (chat == null && Card(db, id) != null) throw TextStoreScope();
-            if (chat != null && (Scalar(db, "SELECT 1 FROM call_fact WHERE stream=$stream AND chat=$chat LIMIT 1", id) != null ||
-                Scalar(db, "SELECT 1 FROM input_state WHERE stream=$stream AND recipient=$chat LIMIT 1", id) != null))
+            if (chat != null && Scalar(db, "SELECT 1 FROM input_state WHERE stream=$stream AND recipient=$chat LIMIT 1", id) != null)
                 throw TextStoreScope();
             var run = chat == null ? null : CurrentRun(db, id);
             if (run != null && (chat.Fact.Run == null || (run.Fact.RunId == chat.Fact.Run.RunId
@@ -69,13 +69,13 @@ namespace RNAssistant.Core.Storage
         void IConversationStore.Commit(ChatSession session, ConversationCommit commit)
         {
             RequireTextRoot();
-            try { ApplyChatReceipt(session, CommitChat(session, commit)); }
+            try { var receipt = CommitChat(session, commit); ApplyChatReceipt(session, receipt); ApplyMessageReferences(commit, receipt); }
             catch (IOException)
             {
                 // Recover only this operation's receipt; a lost acknowledgement
                 // remains an exception. Retrying the same command cannot append twice.
                 var own = Access((db, cursor) => FindChatWrite(db, commit.OperationId), CancellationToken.None);
-                if (own?.Fact.Card.ChatId == session.Id) ApplyChatReceipt(session, own);
+                if (own?.Fact.Card.ChatId == session.Id) { ApplyChatReceipt(session, own); ApplyMessageReferences(commit, own); }
                 throw;
             }
         }
@@ -84,6 +84,12 @@ namespace RNAssistant.Core.Storage
         {
             if (session.Revision > receipt.Position.Sequence)
                 throw new ChatConcurrencyException("An earlier receipt cannot rewind the current chat projection.");
+            if (session.Revision < receipt.Position.Sequence) session.ResourceReferenceIndex.AddRange(receipt.Fact.References ?? new ModelResourceReference[0]);
+            foreach (var message in receipt.Fact.Messages.Select(item => item.Header).Concat(receipt.Fact.Tools?.Terminal == null ? new ChatMessage[0] : new[] { receipt.Fact.Tools.Terminal.Result }))
+            {
+                session.ToolCallReferenceSequence = Math.Max(session.ToolCallReferenceSequence, message.ToolCallReference?.Ordinal ?? 0);
+                session.EvidenceReferenceSequence = Math.Max(session.EvidenceReferenceSequence, message.EvidenceReference?.Ordinal ?? 0);
+            }
             session.Revision = receipt.Position.Sequence; session.UpdatedUtc = receipt.Fact.CreatedUtc;
             session.StorageHeadHash = receipt.Position.Hash; session.StorageByteLength = receipt.Position.End;
             session.StorageTailByteOffset = receipt.Position.Start;
@@ -161,7 +167,8 @@ namespace RNAssistant.Core.Storage
                     session.Messages.AddRange(page.PageMessages);
                     if (before == receipt.Fact.MessageCount) break;
                 }
-                ApplyChatReceipt(session, receipt); return session;
+                ApplyChatReceipt(session, receipt);
+                LoadChatReferences(session); return session;
             }
         }
 

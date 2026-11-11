@@ -69,6 +69,10 @@ namespace RNAssistant.Core.Persistence
     {
         public string RunId { get; private set; }
         internal AgentRunEventKind FactKind { get; private set; }
+        internal RNAssistant.Core.Tools.ToolExecutionContext ToolContext { get; private set; }
+        internal RNAssistant.Core.Tools.ToolExecutionRecord Execution { get; private set; }
+        internal bool ResultProjection { get; private set; }
+        internal string ActivityId { get; private set; }
         public string SessionId { get { return _state.Id; } }
         public string Host { get { return _state.Host; } }
         public string DocumentKey { get { return _state.DocumentKey; } }
@@ -80,6 +84,7 @@ namespace RNAssistant.Core.Persistence
         private ChatSession _applied;
         private bool _projectionApplied;
         private bool _submitted;
+        private bool _referenceDelta;
 
         public ConversationRunCommit(ChatSession session, AgentRunEvent fact, IEnumerable<ChatMessage> appended,
             ChatMessage activity = null, bool resultProjection = false, IEnumerable<ChatMessage> updated = null,
@@ -93,6 +98,8 @@ namespace RNAssistant.Core.Persistence
             ExpectedMessageCount = expectedMessageCount ?? session.Messages.Count;
             if (ExpectedMessageCount < 0) throw new ArgumentOutOfRangeException(nameof(expectedMessageCount));
             RunId = fact.Summary.RunId; FactKind = fact.Kind;
+            ToolContext = fact.ToolContext ?? fact.Execution?.Context; Execution = fact.Execution;
+            ResultProjection = resultProjection; ActivityId = activity?.Id;
             var writes = new List<ConversationMessageWrite>();
             var additions = (appended ?? new ChatMessage[0]).ToArray();
             AppendedOrder = Array.AsReadOnly(additions.Select(message => message.Id).ToArray());
@@ -163,7 +170,8 @@ namespace RNAssistant.Core.Persistence
                     projection.StorageTailByteOffset = _applied.StorageTailByteOffset;
                     projection.ToolCallReferenceSequence = _applied.ToolCallReferenceSequence;
                     projection.EvidenceReferenceSequence = _applied.EvidenceReferenceSequence;
-                    projection.ResourceReferenceIndex = _applied.ResourceReferenceIndex;
+                    if (_referenceDelta) projection.ResourceReferenceIndex.AddRange(_applied.ResourceReferenceIndex);
+                    else projection.ResourceReferenceIndex = _applied.ResourceReferenceIndex;
                     if (_projectionApplied)
                     {
                         projection.Artifacts = _applied.Artifacts;
@@ -183,11 +191,12 @@ namespace RNAssistant.Core.Persistence
         // Temporary conversion inside the existing aggregate backend. Never expose
         // this state as a partial ChatSession to callers or generic Commit.
         internal ChatSession CreateStateProjection() { return _state.CopyForRunCommit(); }
-        internal void RecordStorageState(ChatSession state, bool projectionApplied)
+        internal void RecordStorageState(ChatSession state, bool projectionApplied, bool referenceDelta = false)
         {
             if (state.Revision <= ExpectedRevision) return;
             _applied = state.CopyForRunCommit();
             _projectionApplied = projectionApplied;
+            _referenceDelta = referenceDelta;
             _applied.ResourceReferenceIndex = state.ResourceReferenceIndex;
             _applied.HtmlWorkspace = state.HtmlWorkspace;
             _applied.ContextCheckpoints = state.ContextCheckpoints;

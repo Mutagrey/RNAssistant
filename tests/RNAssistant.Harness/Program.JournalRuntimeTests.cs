@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -12,6 +13,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 using RNAssistant.Runtime;
 
@@ -20,10 +22,18 @@ namespace RNAssistant.Harness
     internal static partial class Program
     {
         private static void JournalRuntimeHostParity()
+        { JournalRuntimeHostParity(false); }
+
+        private static void JournalRuntimeToolParity()
+        { JournalRuntimeHostParity(true); }
+
+        private static void JournalRuntimeHostParity(bool tools)
         {
             foreach (var office in new[] { true, false }) WithTempExecutor((executor, adapter) => {
                 var paths = FixturePaths.Value;
                 var workspace = office ? null : new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
+                if (tools && workspace != null) File.WriteAllText(Path.Combine(workspace.RootPath, "source.txt"), "Journal source.");
+                var toolId = "core.read";
                 var scope = office ? "document:" + DocumentAuthorityId.Create().Id : "workspace:" + workspace.WorkspaceId;
                 var journal = new ConversationJournal(paths, scope); IConversationStore store = journal;
                 var chat = office ? new ChatSessionService(adapter, store).CreatePersistentChat("Journal runtime") :
@@ -40,21 +50,42 @@ namespace RNAssistant.Harness
                     var provider = Task.Run(async () => {
                         try
                         {
-                            while (calls < 3)
+                            while (true)
                             {
                                 var request = await listener.GetContextAsync().ConfigureAwait(false);
                                 string wire; using (var reader = new StreamReader(request.Request.InputStream)) wire = await reader.ReadToEndAsync().ConfigureAwait(false);
                                 var number = ++calls;
-                                if (number == 3) AssertContains(wire, "Journal answer", "the next turn receives retained accepted history");
+                                AssertTrue(number <= (tools ? 4 : 3), "the scripted scenario requires no further requests");
+                                if (number == (tools ? 4 : 3)) AssertContains(wire, "Journal answer", "the next turn receives retained accepted history");
                                 var response = number == 1
                                     ? ModelProtocolWire.WriteAcceptedDecision("reflection", "Check the requested answer.", "", "Answer directly.")
                                     : ModelProtocolWire.WriteAcceptedDecision("finish", "The text answer is ready.", "Journal answer",
                                         outcome: ConversationOutcome.Completed, results: new ConversationResultClaim[0]);
+                                if (tools && number == 1)
+                                    response = ModelProtocolWire.WriteAcceptedCall("Inspect the requested source.", null,
+                                        new ConversationToolCall { Name = toolId, Arguments = office
+                                            ? new JObject { ["target"] = "Excel range: Data!A1:B2", ["representation"] = "text" }
+                                            : new JObject { ["target"] = "source.txt" } });
+                                if (tools && (number == 2 || number == 3))
+                                {
+                                    AssertContains(wire, "E1", "the request receives the committed evidence alias");
+                                    response = ScriptedVerifiedFinish(store.Load(chat.Id), "Source inspected.", "Journal answer", "Inspected the source.", toolId);
+                                    if (number == 2)
+                                    {
+                                        var invalid = JObject.Parse(response); invalid["results"][0]["evidence"] = new JArray("E999");
+                                        response = invalid.ToString(Newtonsoft.Json.Formatting.None);
+                                    }
+                                }
+                                if (tools && number == 4)
+                                    response = ModelProtocolWire.WriteAcceptedDecision("finish", "Use the retained read.", "Journal answer",
+                                        outcome: ConversationOutcome.Completed, results: new[] {
+                                            new ConversationResultClaim("Previously inspected source.", new[] { "E1" }, ConversationAssessment.Satisfied) });
                                 await SteeringReply(request, response).ConfigureAwait(false);
                             }
                         }
                         catch (HttpListenerException) { }
                         catch (ObjectDisposedException) { }
+                        catch { listener.Abort(); throw; }
                     });
                     try
                     {
@@ -93,9 +124,24 @@ namespace RNAssistant.Harness
                             AssertEqual(chat.Revision, retained.Revision, "restart preserves the exact accepted cursor");
                             AssertTrue(retained.Messages.Any(message => message.ProtocolMessage && message.Content.Contains("Journal answer")), "accepted answer is durable");
                             AssertEqual(RunLifecycle.Completed, retained.LastRun.KernelState.Summary.Lifecycle, "canonical checkpoint survives restart");
+                            if (tools)
+                            {
+                                var accepted = retained.Messages.Single(item => item.AcceptedCallOrigin != null);
+                                var terminal = retained.Messages.Single(item => item.Activity?.ToolCallId == accepted.ToolCallId && item.ExecutionProgress != null);
+                                AssertEqual("T1", accepted.ToolCallReference.Alias, "one accepted call, including after citation correction");
+                                AssertEqual("E1", terminal.EvidenceReference.Alias, "execution and presentation share one terminal reference");
+                                AssertEqual(1, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "one canonical terminal survives the next turn");
+                                AssertTrue(retained.ResourceReferenceIndex.Count > 0, "read retains indexed resource aliases");
+                                var bodies = journal.ChatBodyReads; var records = journal.Journal.ReadRecords; var readBytes = journal.Journal.ReadBytes;
+                                AssertEqual(3, ((IEventStore)journal).ReadFinishEvidence(retained, retained.LastRun.RunId, new[] { "E1" }).Facts.Count,
+                                    "current and historical E selection resolve the same call/start/terminal");
+                                AssertEqual(bodies, journal.ChatBodyReads, "finish selection does not hydrate historical bodies");
+                                Console.WriteLine("journal finish {0} turn={1}: records={2}, bytes={3}, history bodies=0", office ? "Office" : "Workspace",
+                                    turn, journal.Journal.ReadRecords - records, journal.Journal.ReadBytes - readBytes);
+                            }
                             var manifests = ((IEventStore)journal).Read(ConversationMetadata.From(retained), SessionEventReadMode.Validated)
                                 .Where(item => item.Type == SessionEventDescriptors.For(SessionEventKind.ModelRequestPrepared).Type).ToArray();
-                            AssertEqual(turn == 0 ? 2 : 3, manifests.Length, "each actual HTTP request has a durable manifest");
+                            AssertEqual((turn == 0 ? 2 : 3) + (tools ? 1 : 0), manifests.Length, "each actual HTTP request has a durable manifest");
                             AssertTrue(manifests.All(item => item.Payload == null && item.Data["Manifest"] != null), "raw traffic remains outside durable history");
                             chat = retained; journal = new ConversationJournal(paths, scope); store = journal;
                         }
@@ -103,7 +149,7 @@ namespace RNAssistant.Harness
                     catch (Exception error) { Console.WriteLine((office ? "Office: " : "Workspace: ") + error); throw; }
                     finally { listener.Stop(); AssertTrue(provider.Wait(10000), "scripted provider stops"); }
                 }
-                AssertEqual(3, calls, "there is no format retry or repeated request");
+                AssertEqual(tools ? 4 : 3, calls, "only the scripted finish correction adds a request");
                 var bytes = StorageJournal.Inventory(paths).SelectMany(stream => stream.Segments).ToDictionary(path => path, File.ReadAllBytes);
                 journal.Rebuild();
                 AssertEqual(RunLifecycle.Completed, store.Load(chat.Id).LastRun.KernelState.Summary.Lifecycle, "combined run/message reducer rebuilds");
@@ -157,6 +203,76 @@ namespace RNAssistant.Harness
                 var unsafeMessage = new ChatMessage { Role = "assistant", Content = "tool", ToolCallId = "write" };
                 RuntimeThrows<NotSupportedException>(() => store.Commit(chat, new ConversationCommit(new[] { unsafeMessage })));
                 AssertEqual(before, journal.Journal.WrittenBytes, "unconnected tool writes fail before canonical append");
+            });
+        }
+
+        private static void JournalRuntimeToolReceipt()
+        {
+            foreach (var unknown in new[] { false, true }) WithTempPaths(paths => {
+                var journal = new ConversationJournal(paths, "document:tool-receipt"); IConversationStore store = journal;
+                var chat = store.CreateTransient("Word", "doc", "Document", "Tool receipt"); store.Commit(chat, new ConversationCommit());
+                var initial = CheckpointState("run", RunLifecycle.Running, 0, 0);
+                chat.LastRun = new ChatRunRecord { RunId = "run", TurnId = initial.Summary.TurnId, StartedUtc = DateTime.UtcNow,
+                    KernelState = initial, ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                ConversationRunCommit prepare(AgentRunEvent fact, ChatMessage[] appended, ChatMessage toolActivity = null)
+                {
+                    chat.LastRun.KernelState = AgentRunState.Apply(chat.LastRun.KernelState, fact);
+                    ConversationRunProjection.Apply(chat.LastRun); chat.Messages.AddRange(appended);
+                    return new ConversationRunCommit(chat, fact, appended, toolActivity);
+                }
+                prepare(new AgentRunEvent(AgentRunEventKind.Started, initial.Summary, limits: initial.Limits), new ChatMessage[0]).Persist(store.CommitRun, chat);
+                var summary = new RunSummary("run", initial.Summary.TurnId, RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null);
+                var call = new ToolCall("read", "core.read", "{\"target\":\"source.txt\"}");
+                var accepted = JournalReadCall(call.Id, "run", "step");
+                prepare(new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary, response:
+                    new AgentResponse("execute", "Read the source.", null, new[] { call })), new[] { accepted }).Persist(store.CommitRun, chat);
+                var context = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "read-v1",
+                    new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, true, new[] { ChatModes.Agent })),
+                    "run", summary.TurnId, "step", DateTime.UtcNow, false, 10);
+                var activity = new ChatMessage { Role = "assistant", Content = "Reading", RunId = "run", ExcludeFromModelContext = true,
+                    Activity = new ChatActivity { Kind = "tool", RunId = "run", ToolCallId = call.Id, ToolId = call.Name, StepId = "step" } };
+                prepare(new AgentRunEvent(AgentRunEventKind.ToolStarted, summary, toolContext: context), new[] { activity }, activity).Persist(store.CommitRun, chat);
+                var interrupted = store.Load(chat.Id);
+                AssertEqual(call.Id, interrupted.LastRun.KernelState.InFlightTool.Call.Id, "restart retains an entered call without replaying it");
+                RuntimeThrows<InvalidOperationException>(() => journal.CommitCall(chat.Id, "standalone",
+                    JournalReadCall("other", "run", "other-step")));
+                var execution = new ToolExecutionRecord(context, unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok,
+                    DateTime.UtcNow, "Read finished", result: new RNAssistant.Core.Tools.Contracts.ToolResult(
+                        unknown ? RNAssistant.Core.Tools.Contracts.ToolResultStatus.Unknown : RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok));
+                summary = new RunSummary("run", summary.TurnId, RunLifecycle.Running, summary.ToolCounts.Add(execution), 1, 1, "", null, null);
+                activity.Content = "Finished"; activity.ExecutionProgress = ToolExecutionProgress.Capture(execution);
+                var completed = new AgentRunEvent(AgentRunEventKind.ToolCompleted, summary, execution: execution);
+                var command = prepare(completed, new ChatMessage[0], activity);
+                journal.Journal.Fault = point => { if (point == "after_flush") throw new IOException("lost terminal acknowledgement"); };
+                RuntimeThrows<IOException>(() => command.Persist(store.CommitRun, chat)); journal.Journal.Fault = null;
+                AssertTrue(command.Position != null, "terminal own receipt is recovered after lost acknowledgement");
+                var before = journal.Journal.WrittenBytes; store.CommitRun(command);
+                AssertEqual(before, journal.Journal.WrittenBytes, "retry accepts the same frame without adding another terminal");
+                var retained = store.Load(chat.Id);
+                AssertEqual(1, retained.LastRun.KernelState.Summary.ToolCounts.ReadOk + retained.LastRun.KernelState.Summary.ToolCounts.ReadError,
+                    "terminal and counter survive together");
+                AssertEqual(execution.Outcome, retained.Messages.Single(item => item.Activity != null).ExecutionProgress.Outcome,
+                    "restart preserves the terminal outcome before result presentation");
+                var snapshot = ((IEventStore)journal).ReadFinishEvidence(retained, "run", new[] { "E1" });
+                AssertEqual(3, snapshot.Facts.Count, "addressed finish proof contains call, start and terminal");
+                RuntimeThrows<InvalidOperationException>(() => prepare(new AgentRunEvent(AgentRunEventKind.ToolStarted, summary,
+                    toolContext: context), new ChatMessage[0], activity).Persist(store.CommitRun, chat));
+                AssertEqual(before, journal.Journal.WrittenBytes, "the same call cannot dispatch again after lost acknowledgement");
+                var events = (IEventStore)journal;
+                events.Append(retained, new SessionEventWrite(SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted),
+                    new ToolPackExtensionEventData { Admitted = true, Mode = ChatModes.Agent, Host = "Word" },
+                    null, new SessionEventCorrelation("run", summary.TurnId, "step")));
+                AssertEqual(0, events.ReadToolPackAdmissions(ConversationMetadata.From(retained), new[] { "other-run" }).Count,
+                    "admission query is scoped to the requested runs");
+                journal.Rebuild();
+                AssertEqual(1, events.ReadToolPackAdmissions(ConversationMetadata.From(retained), new[] { "run" }).Count,
+                    "typed admission and its addressed index rebuild together");
+                AssertEqual(1, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "rebuild retains one terminal and its context index");
+                var backup = Path.Combine(paths.Root, "backup"); JournalCasService(paths, StorageProtector.None).BackupJournals(backup);
+                var target = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "restore"), _ => StorageProtector.None);
+                IConversationStore restored = new ConversationJournal(target, "document:tool-receipt");
+                AssertEqual(execution.Outcome, restored.Load(chat.Id).Messages.Single(item => item.Activity != null).ExecutionProgress.Outcome,
+                    "backup restores the same outcome without replay");
             });
         }
     }

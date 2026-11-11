@@ -63,6 +63,7 @@ namespace RNAssistant.Core.Storage
                 var fact = new ConversationResultFact(chatId, message, outcomeLink);
                 var fingerprint = Fingerprint(fact);
                 return Access((db, cursor) => {
+                    RequireStandaloneToolCommit(db, chatId);
                     var prior = Find(db, operationId);
                     if (prior != null)
                     {
@@ -165,6 +166,7 @@ namespace RNAssistant.Core.Storage
                 var fingerprint = CallFingerprint(fact);
                 var contextKey = new ContextCallKey(fingerprint, AgentProgressTracker.Signature(parsed.Response.ToolCalls[0]));
                 return Access((db, cursor) => {
+                    RequireStandaloneToolCommit(db, chatId);
                     var prior = FindCall(db, chatId, call.RunId, call.ToolCallId);
                     if (prior != null)
                     {
@@ -223,19 +225,19 @@ namespace RNAssistant.Core.Storage
         internal void ReplayInto(string indexPath, CancellationToken token, bool recover = true)
         {
             var verified = new HashSet<string>(StringComparer.Ordinal);
-            ResourceJournalReceipt outcome = null; ContextCallKey contextKey = null;
+            ResourceJournalReceipt outcome = null; var contextKeys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
             while (true)
             {
                 PayloadRef required = null; ResourceOutcomeLink requiredOutcome = null; ContextCallKeyNeeded requiredCall = null;
                 using (Journal.AcquireAppendLock(token))
                 using (var db = OpenIndex(indexPath))
                 {
-                    try { CatchUp(db, verified, outcome, contextKey, token, recover); return; }
+                    try { CatchUp(db, verified, outcome, contextKeys, token, recover); return; }
                     catch (TailReferenceNeeded error) { required = error.Reference; }
                     catch (OutcomeNeeded error) { requiredOutcome = error.Link; }
                     catch (ContextCallKeyNeeded error) { requiredCall = error; }
                 }
-                if (requiredCall != null) contextKey = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
+                if (requiredCall != null) contextKeys[requiredCall.Fingerprint] = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
                 else if (requiredOutcome != null) outcome = new ResourceJournal(_paths, _protector).ReadOutcome(requiredOutcome);
                 else VerifyReference(required, verified);
             }
@@ -246,7 +248,7 @@ namespace RNAssistant.Core.Storage
             using (RuntimeStorageActivity.Acquire(_paths, token))
             {
                 var verified = new HashSet<string>(StringComparer.Ordinal);
-                ResourceJournalReceipt outcome = null; ContextCallKey contextKey = null;
+                ResourceJournalReceipt outcome = null; var contextKeys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
                 var repairAttempted = false;
                 while (true)
                 {
@@ -257,7 +259,7 @@ namespace RNAssistant.Core.Storage
                         using (Journal.AcquireAppendLock(token))
                         using (var db = OpenIndex())
                         {
-                            try { return action(db, CatchUp(db, verified, outcome, contextKey, token)); }
+                            try { return action(db, CatchUp(db, verified, outcome, contextKeys, token)); }
                             catch (TailReferenceNeeded error) { required = error.Reference; }
                             catch (OutcomeNeeded error) { requiredOutcome = error.Link; }
                             catch (ContextCallKeyNeeded error) { requiredCall = error; }
@@ -269,7 +271,7 @@ namespace RNAssistant.Core.Storage
                     { repairAttempted = true; RepairIndex(false, token); continue; }
                     // Recovery verifies the one unresolved tail body outside all
                     // append/SQL locks, while the existing GC activity remains held.
-                    if (requiredCall != null) contextKey = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
+                    if (requiredCall != null) contextKeys[requiredCall.Fingerprint] = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
                     else if (requiredOutcome != null) outcome = new ResourceJournal(_paths, _protector).ReadOutcome(requiredOutcome);
                     else VerifyReference(required, verified);
                 }
@@ -284,16 +286,16 @@ namespace RNAssistant.Core.Storage
         }
 
 
-        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, ResourceJournalReceipt outcome, ContextCallKey contextKey, CancellationToken token, bool recover = true)
+        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, ResourceJournalReceipt outcome, Dictionary<string, ContextCallKey> contextKeys, CancellationToken token, bool recover = true)
         {
             var cursor = JournalIndex.LoadCursor(db, _scope);
             var applied = cursor;
             var current = Journal.CatchUp(cursor, (record, position) => {
-                if (IsChatFact(record.Kind)) ApplyChatFact(db, record, position);
+                if (IsChatFact(record.Kind)) ApplyChatFact(db, record, position, contextKeys, outcome);
                 else if (record.Kind == "queue.control") ApplyControl(db, record, position);
                 else if (record.Kind == "run.checkpoint") ApplyRun(db, record, position);
                 else if (IsDeliveryFact(record.Kind)) ApplyDeliveryRecord(db, record, position);
-                else if (record.Kind == "tool.accepted") ApplyCall(db, DecodeCall(record), record.Operation, record.Fingerprint, position, contextKey);
+                else if (record.Kind == "tool.accepted") ApplyCall(db, DecodeCall(record), record.Operation, record.Fingerprint, position, LookupCallKey(contextKeys, record.Fingerprint));
                 else if (record.Kind == "resource.linked")
                 {
                     var fact = DecodeLink(record); RequireOutcome(fact.Outcome, outcome);
@@ -304,10 +306,10 @@ namespace RNAssistant.Core.Storage
                     var fact = Decode(record); ValidateOutcome(fact, outcome);
                     Apply(db, fact, record.Operation, record.Fingerprint, position);
                 }
-                applied = position;
+                applied = position; contextKeys.Clear();
             }, record => {
                 IEnumerable<PayloadRef> references;
-                if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record);
+                if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record, contextKeys, outcome);
                 else if (record.Kind == "queue.control")
                 { ValidateControl(db, record.Operation, DecodeControl(record)); references = new PayloadRef[0]; }
                 else if (record.Kind == "run.checkpoint")
@@ -357,8 +359,15 @@ namespace RNAssistant.Core.Storage
             return new PayloadRef[0];
         }
 
-        private static ConversationCallFact DecodeCall(JournalRecord record)
+        private static ConversationCallFact DecodeCall(JournalRecord record, string run = null, string call = null)
         {
+            if (record.Kind == "chat.committed")
+            {
+                var chat = DecodeChatCommit(record);
+                if (chat.Tools?.Kind != AgentRunEventKind.ResponseAccepted) throw new InvalidDataException("Frame has no accepted calls.");
+                var message = chat.Messages.Single(item => item.Header.RunId == run && item.Header.ToolCallId == call && item.Header.AcceptedCallOrigin != null).Header;
+                return new ConversationCallFact(chat.Card.ChatId, message);
+            }
             if (record.Kind != "tool.accepted") throw new InvalidDataException("Unsupported accepted call fact.");
             var fact = record.Data.ToObject<ConversationCallFact>(JsonSerializer.Create(new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error }));
             if (fact?.Call.ToolCallReference?.Kind != ModelReferenceKind.ToolCall || CallFingerprint(fact) != record.Fingerprint)
@@ -393,22 +402,28 @@ namespace RNAssistant.Core.Storage
                 string operation, fingerprint; JournalCursor position;
                 using (var reader = command.ExecuteReader())
                 { if (!reader.Read()) return null; operation = reader.GetString(0); fingerprint = reader.GetString(1); position = JournalIndex.ReadCursor(reader, 2); }
-                var record = Journal.Read(position); var fact = DecodeCall(record);
-                if (record.Operation != operation || record.Fingerprint != fingerprint || fact.ChatId != chat || fact.Call.RunId != run || fact.Call.ToolCallId != call)
+                var record = Journal.Read(position); var fact = DecodeCall(record, run, call);
+                if (record.Operation != operation || CallFingerprint(fact) != fingerprint || fact.ChatId != chat || fact.Call.RunId != run || fact.Call.ToolCallId != call)
                     throw new InvalidDataException("Derived accepted-call locator mismatch.");
                 return new ConversationCallReceipt(fact.Call, operation, fingerprint, position, fact.ResourceBinding);
             }
         }
 
-        private void ValidateCall(SqliteConnection db, ConversationCallFact fact, string operation)
+        private void RequireStandaloneToolCommit(SqliteConnection db, string chat)
         {
+            if (CurrentChat(db, chat) != null) throw new InvalidOperationException("This chat requires an atomic runtime tool commit.");
+        }
+
+        private void ValidateCall(SqliteConnection db, ConversationCallFact fact, string operation, int ordinalOffset = 0, bool chatCommit = false)
+        {
+            if (!chatCommit) RequireStandaloneToolCommit(db, fact.ChatId);
             if (OperationExists(db, operation) || FindCall(db, fact.ChatId, fact.Call.RunId, fact.Call.ToolCallId) != null)
                 throw new InvalidDataException("Operation/call identity was already accepted.");
             if (fact.ResourceBinding != null && !fact.ResourceBinding.BelongsTo(_scope, fact.ChatId, fact.Call.RunId, fact.Call.ToolCallId))
                 throw new InvalidDataException("Foreign resource attempt binding.");
             var next = Scalar(db, "SELECT next_t FROM chat_sequence WHERE stream=$stream AND chat=$chat", fact.ChatId);
             if (fact.Call.ToolCallReference?.Kind != ModelReferenceKind.ToolCall ||
-                fact.Call.ToolCallReference.Ordinal != (next == null ? 1 : Convert.ToInt64(next))) throw new InvalidDataException("Accepted call ordinal mismatch.");
+                fact.Call.ToolCallReference.Ordinal != (next == null ? 1 : Convert.ToInt64(next)) + ordinalOffset) throw new InvalidDataException("Accepted call ordinal mismatch.");
         }
 
         private void ApplyCall(SqliteConnection db, ConversationCallFact fact, string operation, string fingerprint, JournalCursor position, ContextCallKey contextKey)
@@ -420,19 +435,27 @@ namespace RNAssistant.Core.Storage
             }
             ValidateCall(db, fact, operation);
             using (var tx = db.BeginTransaction())
-            using (var command = Command(db, "INSERT INTO call_fact VALUES($stream,$chat,$run,$call,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,NULL,$signature)", tx))
+            {
+                RegisterOperation(db, tx, operation, "tool.accepted");
+                ApplyCallRows(db, tx, fact, operation, fingerprint, position, contextKey);
+                SaveCursor(db, position, tx); tx.Commit();
+            }
+        }
+
+        private void ApplyCallRows(SqliteConnection db, SqliteTransaction tx, ConversationCallFact fact,
+            string operation, string fingerprint, JournalCursor position, ContextCallKey contextKey)
+        {
+            using (var command = Command(db, "INSERT INTO call_fact(stream,chat,run,call,operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence,terminal,signature) VALUES($stream,$chat,$run,$call,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,NULL,$signature)", tx))
             {
                 AddCallKey(command, fact.ChatId, fact.Call.RunId, fact.Call.ToolCallId); JournalIndex.AddPosition(command, position);
                 command.Parameters.AddWithValue("$operation", operation); command.Parameters.AddWithValue("$fingerprint", fingerprint);
                 command.Parameters.AddWithValue("$signature", contextKey.Signature);
-                RegisterOperation(db, tx, operation, "tool.accepted");
                 command.ExecuteNonQuery();
                 using (var counter = Command(db, "INSERT INTO chat_sequence(stream,chat,next_e,next_t) VALUES($stream,$chat,1,$next) ON CONFLICT(stream,chat) DO UPDATE SET next_t=$next", tx))
                 {
                     counter.Parameters.AddWithValue("$chat", fact.ChatId); counter.Parameters.AddWithValue("$next", checked(fact.Call.ToolCallReference.Ordinal + 1));
                     counter.ExecuteNonQuery();
                 }
-                SaveCursor(db, position, tx); tx.Commit();
             }
         }
 
@@ -441,6 +464,7 @@ namespace RNAssistant.Core.Storage
 
         private ConversationResultFact Decode(JournalRecord record)
         {
+            if (record.Kind == "chat.committed") return DecodeChatCommit(record).Tools?.Terminal ?? throw new InvalidDataException("Frame has no terminal result.");
             if (record.Kind != "tool.result") throw new InvalidDataException("Unsupported conversation fact.");
             var fact = record.Data.ToObject<ConversationResultFact>(JsonSerializer.Create(new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error }));
             if (fact == null || fact.Result.ToolCallReference?.Kind != ModelReferenceKind.ToolCall ||
@@ -460,6 +484,7 @@ namespace RNAssistant.Core.Storage
 
         private ConversationResultReceipt Find(SqliteConnection db, string operation)
         {
+            if (operation == null) return null;
             using (var command = Command(db, "SELECT fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM result_fact WHERE stream=$stream AND operation=$operation"))
             {
                 command.Parameters.AddWithValue("$operation", operation);
@@ -473,13 +498,14 @@ namespace RNAssistant.Core.Storage
         private ConversationResultReceipt ReadReceipt(string operation, string fingerprint, JournalCursor position, string chat)
         {
             var record = Journal.Read(position); var fact = Decode(record);
-            if (record.Operation != operation || record.Fingerprint != fingerprint || chat != null && fact.ChatId != chat)
+            if (record.Operation != operation || Fingerprint(fact) != fingerprint || chat != null && fact.ChatId != chat)
                 throw new InvalidDataException("Derived result locator does not identify the requested fact.");
             return new ConversationResultReceipt(fact, operation, fingerprint, position, true);
         }
 
-        private long ValidateResult(SqliteConnection db, ConversationResultFact fact, string operation)
+        private long ValidateResult(SqliteConnection db, ConversationResultFact fact, string operation, bool chatCommit = false)
         {
+            if (!chatCommit) RequireStandaloneToolCommit(db, fact.ChatId);
             var accepted = FindCall(db, fact.ChatId, fact.Result.RunId, fact.Result.ToolCallId);
             if (accepted == null || accepted.Call.ToolName != fact.Result.ToolName ||
                 accepted.Call.AcceptedCallOrigin.StepId != fact.Result.ResultStepId ||
@@ -497,6 +523,16 @@ namespace RNAssistant.Core.Storage
         {
             var next = ValidateResult(db, fact, operation);
             using (var transaction = db.BeginTransaction())
+            {
+                RegisterOperation(db, transaction, operation, "tool.result");
+                ApplyResultRows(db, transaction, fact, operation, fingerprint, position, next);
+                SaveCursor(db, position, transaction); transaction.Commit();
+            }
+        }
+
+        private void ApplyResultRows(SqliteConnection db, SqliteTransaction transaction, ConversationResultFact fact,
+            string operation, string fingerprint, JournalCursor position, long next)
+        {
             using (var command = Command(db, "INSERT INTO result_fact VALUES ($stream,$chat,$operation,$fingerprint,$sequence,$ordinal,$segment,$start,$end,$hash,$first,$run,0); UPDATE chat_sequence SET next_e=$next WHERE stream=$stream AND chat=$chat", transaction))
             {
                 JournalIndex.AddPosition(command, position);
@@ -505,7 +541,6 @@ namespace RNAssistant.Core.Storage
                 command.Parameters.AddWithValue("$ordinal", (object)fact.Result.EvidenceReference?.Ordinal ?? DBNull.Value);
                 command.Parameters.AddWithValue("$run", fact.Result.RunId);
                 command.Parameters.AddWithValue("$next", fact.Result.EvidenceReference == null ? next : checked(next + 1));
-                RegisterOperation(db, transaction, operation, "tool.result");
                 command.ExecuteNonQuery();
                 using (var terminal = Command(db, "UPDATE call_fact SET terminal=$operation WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call AND terminal IS NULL", transaction))
                 {
@@ -514,7 +549,6 @@ namespace RNAssistant.Core.Storage
                     if (terminal.ExecuteNonQuery() != 1) throw new InvalidDataException("Missing or already terminal accepted call.");
                 }
                 ApplyContextIndex(db, transaction, fact, operation, position);
-                SaveCursor(db, position, transaction); transaction.Commit();
             }
         }
 

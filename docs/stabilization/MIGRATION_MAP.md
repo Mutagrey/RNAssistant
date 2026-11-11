@@ -30,6 +30,18 @@ control/recovery operations, then production switch and old backend removal.
 
 Owner: Core persistence/context; Application consumes common contracts.
 
+P1/P2 read-tool runtime (2026-11-11): real Office/Workspace turns now persist
+accepted calls, entry, terminal and checkpoints through that same `CommitRun`.
+Existing call/result/context reducers share its frame/transaction; Office's later
+model presentation does not create a second terminal. Indexed T/E/R and ToolPack
+admissions support exact finish evidence and cross-turn reuse. Lost terminal ack,
+unknown read result, restart/rebuild/restore and citation correction are covered.
+No production constructor or old backend changes. Next dependency: resource
+preparation/outcome must carry exact accepted-call origin before dispatch; writes,
+confirmation/wait and interrupted recovery remain unsupported by this integration.
+The same P7 removal gate applies; no additional adapter was introduced.
+[Contract](../session-events.md#atomic-read-tool-runtime-on-the-journal--2026-11-11).
+
 P1/P2 direct resource ports (2026-11-11): `ResourceJournal` now implements authority,
 revision and mutation ports itself. `WorkspaceFileService` accepts those owners;
 Office mutation observer and Plan/task publication accept the extracted mutation

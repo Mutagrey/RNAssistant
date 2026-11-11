@@ -135,7 +135,13 @@ observer к портам `ResourceJournal`: подготовка/dispatch, ат�
 unknown и явная проверка без replay. Десять адресных checks проходят, включая файловые
 delete/restore/move, lost ack, rebuild и resource/CAS restore. При H=100/1000 capture
 текущего head + поиск mutation receipt читают 5 записей; history загружается отдельно.
-Tool-call/result linkage, остальные resource owners, rewrite/move/delete/recovery, usage, Inbox/control/feed и
+Read-tool runtime теперь проходит через тот же journal в реальных Office/Workspace
+consumers: calls/start/terminal + checkpoint атомарны, T/E/R и admission адресны.
+Неверная citation исправляется без повторного tool; историческая E используется
+после restart в следующем turn. Lost terminal ack, unknown read, rebuild/restore
+проверены; Office сохраняет terminal до подготовки model presentation.
+Связь resource mutation с exact accepted call до dispatch, остальные resource owners,
+rewrite/move/delete/recovery, usage, Inbox/control/feed и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
 Полный restore также должен сохранить Workspace identity locators и move intents.
@@ -144,6 +150,7 @@ production composition остаются открыты. Backup смешанно�
 [Отчёт §12](../audits/storage-context-optimization.md#p1p2--direct-journal-text-store-integration-2026-11-11).
 [Runtime-срез](../audits/storage-context-optimization.md#p1p2--atomic-no-tool-runtime-integration-2026-11-11).
 [Resource-срез](../audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
+[Read-tool-срез](../audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace

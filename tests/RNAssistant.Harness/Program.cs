@@ -673,6 +673,8 @@ namespace RNAssistant.Harness
                 Test("journal resources: Office mutation observer", JournalResourceOffice),
                 Test("journal resources: receipts rebuild and restore", JournalResourcePortRecovery),
                 Test("journal runtime: Office and Workspace dialogue", JournalRuntimeHostParity),
+                Test("journal runtime: Office and Workspace tool evidence", JournalRuntimeToolParity),
+                Test("journal runtime: tool terminal lost acknowledgement and restore", JournalRuntimeToolReceipt),
                 Test("journal runtime: atomic checkpoint and lost acknowledgement", JournalRuntimeAtomicReceipt),
                 Test("journal text: Office and Workspace consumers", JournalTextChatConsumers),
                 Test("journal text: lost acknowledgement rebuild and restore", JournalTextChatRecovery),
