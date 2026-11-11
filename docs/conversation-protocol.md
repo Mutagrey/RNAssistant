@@ -61,6 +61,13 @@ Stop удаляет waiter; pause будит его через существу�
 только при совпадении Run/ревизии, действующем owner и отсутствии cancellation/Stop.
 Продолжается прежний owner; batch из меню по-прежнему принимает только dormant waits.
 
+Browser P6d использует того же live pause owner: trusted manual input создаёт
+pause с `RequiresUserResume`; peer controls возвращают Protected. Явный native resume
+закреплён за exact invocation и PauseId; Stop/newer pause не снимается. Host validation
+проходит без Inbox lock, затем invocation проверяется повторно. Page latch и fresh read
+guard принадлежат Browser, не kernel; нового scheduler/store нет.
+[Контракт Browser](browser/03_CONTRACTS.md#p6d-user-control).
+
 `cancelAgentWait {source,workspaceId?,sessionId,target}` — явная user bridge команда,
 не model tool. Scope проверяется каталогом; отменяется только сохранённый Waiting
 под exact lease/CAS. Она использует прежний `CancelTarget`/CommitRun/read-back без

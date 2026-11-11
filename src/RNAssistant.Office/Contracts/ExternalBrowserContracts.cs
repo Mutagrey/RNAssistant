@@ -7,7 +7,7 @@ using Newtonsoft.Json.Converters;
 namespace RNAssistant.Office.Contracts
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum ExternalBrowserAction { Open, Layout, Navigate, Back, Forward, Reload, Focus, Close }
+    public enum ExternalBrowserAction { Open, Layout, Navigate, Back, Forward, Reload, Focus, Close, ResumeAgent }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum ExternalBrowserStatus { Starting, Ready, Failed, Closed }
 
@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("sessionId")] public string SessionId { get; set; }
         [JsonProperty("url")] public string Url { get; set; }
         [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("controlRevision")] public long? ControlRevision { get; set; }
         [JsonProperty("bounds")] public ExternalBrowserBoundsDto Bounds { get; set; }
     }
 
@@ -36,6 +37,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("sessionId")] public string SessionId { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
         [JsonProperty("layoutRevision")] public long LayoutRevision { get; set; }
+        [JsonProperty("manualControl")] public bool ManualControl { get; set; }
+        [JsonProperty("controlRevision")] public long ControlRevision { get; set; }
         [JsonProperty("status")] public ExternalBrowserStatus Status { get; set; }
         [JsonProperty("url")] public string Url { get; set; }
         [JsonProperty("title")] public string Title { get; set; }

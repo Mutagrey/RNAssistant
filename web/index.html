@@ -644,6 +644,7 @@
                 <details class="product-settings-advanced wide"><summary>Дополнительные параметры</summary><div>
                   <label><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
                   <label><span>HTTP-доступ HTML-превью</span><textarea id="htmlNetworkOriginsInput" rows="3" placeholder="https://api.example.com"></textarea><small>Разрешённые адреса для HTTP-запросов HTML-превью: протокол, домен и порт, по одному на строку. Маски пока не поддерживаются. Открытие сайтов в Browser эта настройка не ограничивает. Удалите строку, чтобы отозвать доступ.</small></label>
+                  <label><span>Сайты, доступные агенту</span><textarea id="browserAgentSitesInput" rows="3" placeholder="https://example.com&#10;https://*.example.org"></textarea><small>По одному адресу на строку. *.example.org включает сам домен и его поддомены. Протокол и порт учитываются; без порта — стандартный для HTTP/HTTPS. Пустой список запрещает доступ агента к внешним страницам. Ручное открытие сайтов не ограничено.</small></label>
                 </div></details>
               </div>
             </section>

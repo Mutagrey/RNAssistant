@@ -1,8 +1,22 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot, P6a/P6b read/local actions и P6c visualization.
+Дата: 2026-11-11. Scope: P0–P3 baseline, P5a native pilot, P6a/P6b read/local actions, P6c visualization и P6d user control/access.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
+
+## P6d: ручное управление и сайты агента — In Review, 2026-11-11
+
+Ручной ввод блокирует mutations страницы и запрашивает паузу exact bound Run через
+existing Inbox; другой агент не может её снять. «Продолжить агентом» инвалидирует
+старые observations/preparations; неизвестный эффект и Stop сохраняют свои guards.
+Отдельный список сайтов принимает exact HTTP(S) origins и `*.domain`; default deny
+для external model reads, свободная ручная навигация, отдельные HTML network grants.
+
+8 Browser Harness checks, existing pause authority/race check и три Chrome fixtures
+проверяют срез; wide/narrow/125% UI просмотрен. Native event/Office/Windows delivery,
+iframe input и визуальное принятие остаются открытыми. External actions всё ещё local
+probe only. Product `16.7.0-dev`, фиксируется по запросу пользователя. [Контракт](03_CONTRACTS.md#p6d-user-control),
+[запуск/ревью](05_TEST_MATRIX.md#p6d). Нового store/scheduler/registry нет.
 
 ## P6c: видимые действия агента — In Review, 2026-11-11
 
@@ -15,7 +29,7 @@ model API, отдельный store, системная мышь и способ
 7 Harness checks и два Chrome fixtures проходят. Просмотрены actual page content
 wide и narrow/125% screenshots; visual acceptance и Windows/WebView2 delivery открыты.
 [Scope](04_MIGRATION_PLAN.md#p6c-action-visualization), [контракт](03_CONTRACTS.md#p6c-action-visualization),
-[запуск/4 действия ревью](05_TEST_MATRIX.md#p6c). Product `16.6.4-dev`, фиксируется по запросу пользователя.
+[запуск/4 действия ревью](05_TEST_MATRIX.md#p6c). Product `16.6.4-dev`, commit `67a45b29`.
 
 ## P6b: local actions — In Review, 2026-11-11
 
@@ -303,7 +317,7 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c). Следующий независимый срез —
+На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c) и [P6d](05_TEST_MATRIX.md#p6d). Следующий независимый срез —
 P4a: bounded source diff выбранной пары existing HTML/plugin versions.
 Первый P6b local workflow реализован; general external actions остаются отдельным scope.
 Отдельный P3c с общим descriptor без consumer не нужен; P4 diff и persistent annotations

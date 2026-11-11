@@ -29,6 +29,13 @@ for the actual local probe and isolated-world element/user/read-back guards. The
 fixture remains relevant because each read now has a distinct runtime observation identity.
 WinForms queue timeout/controller delivery still requires Windows; [scope](../../docs/browser/05_TEST_MATRIX.md#p6b).
 
+P6d adds an eighth `external browser:` check for origin patterns/settings. Pair it
+with `agent pause: authority` for user-only pause, late resume/newer pause and Stop.
+The existing action fixture now installs the real isolated control script before
+navigation; a new read cannot release user control. `external-browser.test.js`
+checks the production manual banner/resume revision at wide/narrow/125%. Windows
+CDP event delivery and Office threading remain separate evidence.
+
 P6c reuses those seven checks and verifies that presentation follows terminal publication,
 including Unknown after channel loss. The action fixture also checks the actual cursor
 motion, idle removal, manual input/late results, capture/focus isolation, narrow/125%

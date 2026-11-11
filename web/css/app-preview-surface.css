@@ -46,6 +46,8 @@
 .browser-object-content iframe { flex:1; width:100%; min-height:0; border:0; background:var(--surface); }
 .browser-object-content [hidden] { display:none; }
 .external-browser-view { container-type:inline-size; }
+.external-browser-control { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--space-2); padding:var(--space-2); font-size:var(--text-sm); }
+.external-browser-control[hidden] { display:none; }
 .external-browser-diagnostics { padding:var(--space-2); font-size:var(--text-sm); }
 .external-browser-diagnostics pre { max-height:160px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
 .browser-document-file { flex:none; margin:var(--space-2); }

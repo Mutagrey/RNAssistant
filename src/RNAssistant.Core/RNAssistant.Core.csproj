@@ -118,6 +118,7 @@
     <Compile Include="Models\ResourceEvidenceModels.cs" />
     <Compile Include="Models\ModelContextModels.cs" />
     <Compile Include="Models\ModelContextSnapshot.cs" />
+    <Compile Include="Services\HttpOriginPattern.cs" />
     <Compile Include="Services\EvidenceStateReducer.cs" />
     <Compile Include="Services\ResourceSchemaValidator.cs" />
     <Compile Include="Services\ResourcePdfPageSelectorContract.cs" />

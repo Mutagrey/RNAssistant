@@ -11,6 +11,16 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.7.0-dev
+
+- Browser manual input blocks agent actions and requests a pause of the bound run.
+  Explicit “Continue with agent” discards old preparations and requires a fresh read;
+  peer agents cannot release this user pause. No action queue or automatic replay.
+- “Sites available to the agent” controls external page reads using exact HTTP(S)
+  origins or domain/subdomain masks. Manual navigation remains unrestricted; HTML
+  preview HTTP permissions remain separate. External fill/click still require the
+  packaged local probe. Windows/WebView2 delivery remains unqualified.
+
 ### 16.6.5-dev
 
 - Runtime checkpoints and result commits read only addressed messages and related

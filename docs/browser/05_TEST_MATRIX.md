@@ -6,6 +6,41 @@
 Выбор проверок — по
 [Harness guide](../../tests/RNAssistant.Harness/README.md).
 
+<a id="p6d"></a>
+## P6d: ручное управление / сайты агента — In Review, 2026-11-11
+
+- `external browser:` — 8 Harness checks: existing admission/read/action/Workspace
+  plus exact origin/mask boundaries, IDN, IPv6, scheme/port, default deny, invalid
+  Save without loss of existing grants and typed settings round-trip.
+- `agent pause: authority` — existing authority/race check extended with user
+  takeover, peer resume refusal, newer pause vs late release and preserved Stop.
+- `external-browser-action.test.js` — actual isolated control installed before the
+  first read; synthetic events cannot impersonate input, main world has no binding,
+  trusted input blocks actions even after a fresh read, stale epoch resume refuses,
+  explicit resume invalidates old observation; existing effect/unknown/cursor checks pass.
+- `external-browser-read.test.js` — semantic/privacy/bounds unchanged.
+- `external-browser.test.js` — production Shell manual banner/typed resume revision,
+  hide/move/restore/close/late replies and narrow/125%; native renderer is synthetic.
+
+Визуально просмотрены [Browser wide](../ui/review/browser-control-wide.png),
+[narrow/125%](../ui/review/browser-control-narrow.png), [настройки wide](../ui/review/browser-sites-wide.png),
+[narrow/125%](../ui/review/browser-sites-narrow.png). Новых эффектов на внешних сайтах
+нет: fill/click всё ещё packaged probe only. Не выдавать Chrome или Harness за WebView2 qualification.
+
+Windows-ревью (Open):
+1. Во время read → fill/click нажать/ввести текст на probe: banner «Вы управляете»,
+   новое действие не выполняется, bound Office/Workspace Run достигает pause без LLM polling.
+2. Нажать «Продолжить агентом»: старый prepared action не replay; новая операция
+   возможна только после нового read. Проверить ввод во время animation/resume,
+   hide/move/navigation и отдельный Stop: поздний release не снимает более новую паузу.
+3. Открыть внешний сайт вручную при пустом списке: страница доступна пользователю,
+   model read отказывает. Добавить exact rule/маску, прочитать; отозвать — следующий
+   read запрещён. Проверить redirect на запрещённый host и revoke во время capture.
+4. Close/rebind/crash очищают native listeners; уже paused Run не стартует сам.
+   In-flight effect получает read-back/Unknown; unknown guard не сбрасывается resume.
+
+Native event ordering/Office locks/COM/threading и ввод внутри iframe остаются Open.
+
 <a id="p6c"></a>
 ## P6c: визуализация действий — In Review, 2026-11-11
 

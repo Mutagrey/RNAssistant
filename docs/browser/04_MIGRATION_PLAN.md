@@ -2,7 +2,7 @@
 
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
 P2c automatic lifecycle — **проверен host-neutral**; P3a/P3b plugin fixes — **In Review**;
-P5a native pilot, P6a/P6b read/local actions и P6c visualization — **реализованы / In Review**;
+P5a native pilot, P6a/P6b read/local actions, P6c visualization и P6d control/access — **реализованы / In Review**;
 P4 и остальная часть P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
@@ -43,7 +43,8 @@ evidence и ровно одним следующим шагом в [Progress](06
 | P6a чтение | Один external target из P5a → bounded semantic observation через existing Resource Gateway; exact runtime binding, document generation и исключение sensitive values | Реализован / In Review; host-neutral Gateway и Chrome capture проверены, WebView2/controller delivery на Windows открыт |
 | P6b действие | Одна локальная fixture: открыть → прочитать → заполнить → нажать → проверить. Existing ToolRuntime/policy/evidence; stale/ambiguous target и unknown effect без replay | Реализован / In Review; Office и bound Workspace, host-neutral/Chrome evidence; Windows qualification открыта |
 | P6c визуализация действий | Анимированный указатель, target highlight, runtime result, idle/input cleanup | Реализован / In Review; после P6b, перед P4a. Windows и визуальное принятие открыты |
-| P4a сравнение | Bounded code/source diff выбранной пары через владельцев HTML/plugin versions; явно отличать code revision от данных preview | После P6c либо раньше при конкретной потребности сравнивать перед apply/restore |
+| P6d ручное управление / доступ | Persistent manual latch, exact run pause/resume, список сайтов агента с масками; ручная навигация свободна | Реализован / In Review по уточнению пользователя после P6c; native Windows evidence открыт |
+| P4a сравнение | Bounded code/source diff выбранной пары через владельцев HTML/plugin versions; явно отличать code revision от данных preview | После P6d либо раньше при конкретной потребности сравнивать перед apply/restore |
 | P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отдельно после P4a или по потребности вести замечания между открытиями; не условие P5/P6a–b |
 | Остальные P5/P6 capabilities | Дополнительные targets/страницы, persistent profiles, разрешённые popup/download, screenshots, shared sessions | Самостоятельные продуктовые срезы после базового workflow; screenshot включается только с privacy gate. Не создавать весь перечень API заранее |
 | P7 qualification | Совместная проверка поддержанных сценариев, Windows/Office, security/performance/cleanup и release evidence | Локальные проверки сопровождают срезы; широкий итоговый прогон — на интеграционной точке/кандидате, а не после каждой правки |
@@ -65,29 +66,23 @@ Windows evidence и независимые domain fixes можно вести п
 одного Shell/native owner выгоднее делать последовательно, без повторного аудита
 одних и тех же файлов в нескольких задачах.
 
-## Уточнения после P6c — Proposed, 2026-11-11
+<a id="p6d-user-control"></a>
+## P6d: ручное управление и сайты агента — In Review, 2026-11-11
 
-Проверка по вопросу пользователя выявила границу P6b: ручной ввод инвалидирует
-прежнее observation, но новое чтение снова разрешает действие. P6c скрывает только
-декорацию; отдельного takeover/resume пока нет.
+Approved scope: пользователь «Коммит и далее давай сделаем» после рекомендации
+отдельного списка сайтов агента при свободной ручной навигации. P6c зафиксирован
+`67a45b29`; этот срез выполнен перед возвращением к P4a.
 
-- Предложение P6d: ручной режим у existing native page owner. Реальный клик/ввод
-  пользователя блокирует новые mutations и инвалидирует preparation; простое
-  движение мыши только скрывает курсор. Возврат управления явный, с новым чтением
-  и preparation. Старые команды не накапливаются и не replay; начавшийся эффект
-  завершается read-back либо Unknown. Для ожидания использовать существующий
-  run pause/resume, без второй очереди и без повторных model calls во время паузы.
-  Этот срез нужен до допуска действий на обычных внешних сайтах; реализация и
-  окончательное поведение UI ещё не согласованы.
-- Настройка `HtmlNetworkAllowedOrigins` относится к HTTP bridge HTML-превью;
-  название уточнено. Назначение нового списка для external Browser уточняется:
-  доступ агента, ручная навигация или полный сетевой фильтр не взаимозаменяемы.
-  Для масок предлагаются явный HTTP(S) scheme и `*.example.com` с проверкой границы
-  домена, без произвольного `*example.com`. Grants для HTML не дают Browser authority.
-  До выбора scope matcher и новая Browser policy не реализуются.
+Результат: sticky manual control у native page, existing exact run pause/resume,
+«Продолжить агентом» с новым read/preparation и без очереди старых команд.
+`BrowserAgentAllowedSites` — отдельные exact HTTP(S) origins / `*.domain` masks;
+HTML network grants остаются прежними. Owner parsing/settings — Core; admission и
+native control — Office Browser; run pause — existing Inbox/endpoint, UI — Browser view.
+Нового scheduler/store/registry нет. General external fill/click не включаются.
 
-Это предложения по новому вопросу пользователя, не отметка о завершённых
-возможностях и не автоматический запуск всего оставшегося P5/P6.
+[Контракт](03_CONTRACTS.md#p6d-user-control), [проверки и визуальное ревью](05_TEST_MATRIX.md#p6d).
+После принятия — P4a; расширение действий на обычные сайты требует отдельного среза
+с action/effect contract, iframe/input и Windows evidence.
 
 ## P6a: чтение одной external page — In Review, 2026-11-11
 

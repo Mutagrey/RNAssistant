@@ -126,7 +126,9 @@ namespace RNAssistant.Office.Tools
                     var verified = native.Effect == ExternalBrowserEffect.VerifiedChange || native.Effect == ExternalBrowserEffect.VerifiedNoChange;
                     var data = Code(ExternalBrowserPolicy.SafeActionCode(native.Code));
                     var result = verified ? RuntimeResult.Ok("The local browser action passed its read-back check. Read the page again before another action.", data)
-                        : native.Effect == ExternalBrowserEffect.Rejected ? RuntimeResult.Error("The element changed or is not actionable. Read the page again; no effect occurred.", data)
+                        : native.Effect == ExternalBrowserEffect.Rejected ? RuntimeResult.Error(native.Code == "browser_user_control"
+                            ? "The user controls this page. Wait for explicit Resume agent; do not retry browser actions."
+                            : "The element changed or is not actionable. Read the page again; no effect occurred.", data)
                         : RuntimeResult.Unknown("The browser effect is unknown. Inspect the page; do not repeat the action. Further mutations require manually closing and reopening the page.", data);
                     var effect = native.Effect == ExternalBrowserEffect.VerifiedChange ? ToolEffectEvidence.VerifiedChange
                         : native.Effect == ExternalBrowserEffect.Unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.VerifiedNoChange;

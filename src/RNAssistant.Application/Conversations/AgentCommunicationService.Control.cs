@@ -30,6 +30,50 @@ namespace RNAssistant.Application.Conversations
 
     internal sealed partial class AgentCommunicationService
     {
+        // A host user gesture addresses the existing Office/Workspace owner, independent of peer grants.
+        // The returned release is bound to this exact live invocation and pause, never to a later run.
+        internal Action PauseForUser(string chatId, string pauseId)
+        {
+            AgentConversationEndpoint endpoint;
+            lock (_sync) endpoint = Find(chatId);
+            if (endpoint == null || endpoint.IsClosing?.Invoke() == true || !endpoint.Inbox.HasActiveWork(chatId)) return null;
+            var session = endpoint.Load();
+            endpoint.Validate(session);
+            var box = endpoint.Inbox.Get(session);
+            ConversationActiveSnapshot live;
+            bool changed;
+            lock (box.Sync)
+            {
+                live = endpoint.Runs?.CaptureCancellation(chatId, box.Session.LastRun?.RunId);
+                if (live?.Cancellation == null || live.Cancellation.IsCancellationRequested) return null;
+                var status = endpoint.Inbox.ControlPause(box.Session, live.RunId, pauseId, false, out changed, userControl: true);
+                if (status != AgentPauseStatus.Requested && status != AgentPauseStatus.Paused) return null;
+                session = box.Session;
+            }
+            if (changed) try { endpoint.Changed?.Invoke(session); } catch { }
+            return () => {
+                if (endpoint.IsClosing?.Invoke() == true) return;
+                lock (box.Sync)
+                {
+                    var current = endpoint.Runs.CaptureCancellation(chatId, live.RunId);
+                    if (current == null || !ReferenceEquals(current.Cancellation, live.Cancellation) ||
+                        live.Cancellation.IsCancellationRequested) return;
+                    session = box.Session;
+                }
+                // Host validation must not hold the Inbox lock across a document/COM gate.
+                endpoint.ValidateResume?.Invoke(session);
+                lock (box.Sync)
+                {
+                    var current = endpoint.Runs.CaptureCancellation(chatId, live.RunId);
+                    if (current == null || !ReferenceEquals(current.Cancellation, live.Cancellation) ||
+                        live.Cancellation.IsCancellationRequested) return;
+                    endpoint.Inbox.ControlPause(box.Session, live.RunId, pauseId, true, out changed, userControl: true);
+                    session = box.Session;
+                }
+                if (changed) try { endpoint.Changed?.Invoke(session); } catch { }
+            };
+        }
+
         internal AgentPauseReceipt Pause(ConversationInboxService sourceInbox, ChatSession source, int limit,
             string operationId, string agentId, bool resume, Action dispatch)
         {

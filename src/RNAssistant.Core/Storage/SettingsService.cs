@@ -76,6 +76,7 @@ namespace RNAssistant.Core.Storage
         public void Save(AppSettings settings, string apiKey, string historySecret)
         {
             var normalized = Normalize((settings ?? new AppSettings()).Clone());
+            normalized.BrowserAgentAllowedSites = RNAssistant.Core.Services.HttpOriginPattern.NormalizeList(normalized.BrowserAgentAllowedSites);
             var current = Load();
             var currentApiKey = LoadApiKey();
             var currentHistorySecret = LoadHistorySecret();
@@ -216,6 +217,7 @@ namespace RNAssistant.Core.Storage
             {
                 settings.HtmlNetworkAllowedOrigins = new List<string>();
             }
+            if (settings.BrowserAgentAllowedSites == null) settings.BrowserAgentAllowedSites = new List<string>();
             settings.BaseUrl = NormalizeBaseUrl(settings.BaseUrl);
             settings.ModelsConfigUrl = string.IsNullOrWhiteSpace(settings.ModelsConfigUrl)
                 ? defaults.ModelsConfigUrl

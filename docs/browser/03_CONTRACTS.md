@@ -116,12 +116,8 @@ Fill использует native DOM value setter и input/change events; read-b
 Автоматического retry/replay нет. Успех потребляет observation, следующий action
 требует нового чтения. Приёмка native WebView2/controller на Windows остаётся открытой.
 
-Граница текущей защиты от ручного ввода: trusted pointerdown/keydown/input/change
-делают observation и подготовленное действие stale. Новое `core.read` принимает
-текущее состояние и снова допускает preparation. Постоянного ручного режима,
-автоматической паузы run и кнопки возврата управления пока нет. Native gate
-сериализует короткие операции, но не является очередью команд на время работы
-пользователя. Уже отправленный эффект нельзя отменить задним числом.
+Прежняя защита P6b инвалидировала только observation, а новое чтение снова допускало
+preparation. P6d ниже добавляет постоянный ручной режим и связанную паузу run.
 
 <a id="p6c-action-visualization"></a>
 ## P6c: визуализация действий — In Review, 2026-11-11
@@ -148,7 +144,37 @@ close/navigation убирают его без replay. Нет фонового po
 Motion и light palette — [Design System](../ui/UI_DESIGN_SYSTEM.md#browser-action-visualization),
 [проверки/ограничения](05_TEST_MATRIX.md#p6c). Windows WebView2 delivery остаётся Open.
 
-Скрытие указателя при ручном вводе — только presentation; оно не ставит run на паузу.
+Само скрытие указателя остаётся presentation; управление и pause принадлежат P6d.
+
+<a id="p6d-user-control"></a>
+## P6d: ручное управление и доступ агента — In Review, 2026-11-11
+
+Owner ручного режима — existing `ExternalBrowserPage`; фиксированный
+`ExternalBrowserControl.js` устанавливается до скриптов top document в isolated world.
+Trusted pointerdown/keydown/input/change/wheel сразу блокируют JS mutations и очищают
+observation/preparation. Pointermove только скрывает декоративный курсор. Native CDP
+binding принимает ограниченный typed сигнал только от текущего top execution context;
+страница не получает Shell bridge или функцию продолжения. Native navigation controls
+тоже включают ручной режим. Hide/move/navigation не возвращают управление автоматически.
+
+Native owner запрашивает паузу текущего Run исходного чата через существующий
+`AgentCommunicationService` endpoint Office/Workspace и `ConversationInboxService`.
+`RequiresUserResume` запрещает peer resume. Kernel достигает прежней безопасной границы,
+не делает новых model calls в ожидании; уже начавшийся model/tool/read-back не откатывается.
+Ошибка записи паузы не открывает mutations: UI показывает необходимость Stop в чате.
+Чтение разрешённой страницы допустимо, но не снимает ручной режим. Новый Browser read
+или action при ручном режиме также запрашивает паузу, если Run появился позже жеста.
+
+Typed `ResumeAgent` требует exact session/control revision и неизменившийся input epoch.
+Кнопка «Продолжить агентом» отпускает только захваченную live invocation/pause; поздний
+resume не снимает более новую паузу или Stop. Старое observation и preparation удалены,
+следующее действие требует нового чтения. Очереди отложенных кликов нет. Close не
+продолжает Run автоматически: прежние chat controls остаются способом его продолжения.
+Unknown effect этим действием не очищается; прежний close/reopen guard сохраняется.
+
+Chrome проверяет actual isolated scripts и Shell; native CDP event delivery, Office
+threading и HWND ещё требуют Windows evidence. Ввод внутри iframe/отдельных окон не
+квалифицирован; general external actions этим срезом не включаются.
 
 ## Сетевой доступ: текущие границы
 
@@ -159,8 +185,20 @@ scheme/host/port, включая повторную проверку каждо�
 на действия агента. Внешний Browser вручную открывает HTTP(S); P6b fill/click
 по-прежнему допускаются только на локальной probe-странице.
 
-Политика доступа агента к сайтам, запрет ручной навигации и фильтрация всех сетевых
-ресурсов страницы — разные scope; существующий HTML-список не расширяет их неявно.
+Отдельный `BrowserAgentAllowedSites` — «Сайты, доступные агенту». Пустой список
+отказывает model-facing чтению внешних страниц; bundled probe остаётся доступной.
+`ExternalBrowserPolicy` проверяет actual URL перед capture и перед выдачей результата,
+а также перед prepare/dispatch. Отзыв действует для последующих обращений, включая
+in-flight capture; уже доставленный модели контекст назад не изымается. Redirect или
+navigation меняют документ/URL и требуют новой проверки. Ручная навигация и сетевые
+подресурсы страницы этим списком не фильтруются. Разрешённый сайт не включает новые tools.
+
+`HttpOriginPattern` допускает точный `https://example.com` или `https://*.example.com`:
+маска включает корневой домен и его поддомены с DNS label boundary. Scheme и port точны;
+без порта используется 80/443. IDN нормализуется, IP допустим только без маски. Пути,
+query/fragment, credentials, `*example.com`, wildcard scheme/port и произвольные glob
+отклоняются при Save, не затирая прежние настройки. На строку одно правило, до 128;
+per-request HTML grant остаётся exact origin и Browser authority не выдаёт.
 
 ## Runtime entities и capability negotiation
 

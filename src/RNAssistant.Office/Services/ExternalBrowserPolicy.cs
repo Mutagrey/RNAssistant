@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -11,12 +14,21 @@ namespace RNAssistant.Office.Services
         {
             switch (code)
             {
+                case "browser_user_control": case "browser_site_denied":
                 case "browser_probe_only": case "browser_effect_unknown": case "browser_observation_stale":
                 case "browser_action_invalid": case "browser_observation_incomplete": case "browser_element_ambiguous":
                 case "browser_element_stale": case "browser_element_not_interactable": case "browser_verification_already_present":
                 case "browser_preparation_stale": case "browser_verification_failed": case "browser_verified": return code;
                 default: return "browser_action_failed";
             }
+        }
+
+        public static void RequireAgentAccess(string url, IEnumerable<string> sites)
+        {
+            var uri = new Uri(NavigationUrl(url));
+            if (uri.AbsoluteUri == ProbeUrl) return; // Packaged fixture, not a network grant.
+            if (sites == null || !sites.Any(pattern => HttpOriginPattern.Matches(pattern, uri)))
+                throw ExternalBrowserResourceProvider.Error("Agent access to this site is disabled. The user can allow it in Settings → Sites available to the agent.", "browser_site_denied");
         }
 
         public static string NavigationUrl(string value)

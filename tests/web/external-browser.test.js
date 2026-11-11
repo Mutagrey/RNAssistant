@@ -22,7 +22,8 @@ const {withPreviewPage} = require('./preview-session');
         if (payload.action === 'Close') { if (p.live?.sessionId === payload.sessionId) p.live = null; return Promise.resolve({sessionId: payload.sessionId, status: 'Closed'}); }
         assertCurrent();
         function assertCurrent() { if (payload.sessionId !== p.live?.sessionId) throw new Error('stale native session'); }
-        if (payload.action === 'Navigate') { p.live.url = payload.url; p.live.revision++; }
+        if (payload.action === 'Navigate') { p.live.url = payload.url; p.live.revision++; p.live.manualControl = true; p.live.controlRevision = 1; }
+        if (payload.action === 'ResumeAgent') { if (payload.controlRevision !== p.live.controlRevision) throw new Error('stale control'); p.live.manualControl = false; p.live.controlRevision++; p.live.revision++; }
         if (payload.action === 'Layout' && p.delayLayout) {
           p.delayLayout = false; const result = {...p.live}; return new Promise(resolve => { p.releaseLayout = () => resolve(result); });
         }
@@ -49,6 +50,13 @@ const {withPreviewPage} = require('./preview-session');
     const address = root.getByRole('textbox', {name: 'Адрес материала'});
     await address.fill('https://example.org/'); await address.press('Enter');
     await page.waitForFunction(() => externalProbe.calls.some(c => c.action === 'Navigate' && c.url === 'https://example.org/'));
+    await root.getByRole('button', {name: 'Продолжить агентом', exact: true}).click();
+    assert.ok(await page.evaluate(() => externalProbe.calls.some(c => c.action === 'ResumeAgent' && c.controlRevision === 1)), 'resume is pinned to the shown control revision');
+    assert.equal(await root.locator('.external-browser-control').isVisible(), false, 'successful resume clears the manual banner');
+    await page.evaluate(() => {
+      Object.assign(externalProbe.live, {manualControl: true, controlRevision: 3, revision: externalProbe.live.revision + 1});
+      RNAssistantExternalBrowser.apply({...externalProbe.live});
+    });
     await root.getByRole('button', {name: 'Сведения о странице', exact: false}).click();
     await page.waitForFunction(() => externalProbe.calls.filter(c => c.action === 'Layout').at(-1).bounds.visible === false);
     await page.keyboard.press('Escape');
@@ -68,6 +76,7 @@ const {withPreviewPage} = require('./preview-session');
       throw new Error(error.message + '; geometry ' + JSON.stringify(await root.evaluate(el => ({rect: el.getBoundingClientRect().toJSON(), content: el.querySelector('.browser-object-content').getBoundingClientRect().toJSON(), calls: externalProbe.calls.slice(-4), active: RNAssistantDockWorkspace.isVisible('external-browser')}))));
     });
     assert.ok(await root.evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'narrow/zoom has no horizontal overflow');
+    assert.ok(await root.getByRole('button', {name: 'Продолжить агентом'}).isVisible(), 'manual control remains available at narrow/zoom');
     if (process.env.BROWSER_P5_SCREENSHOT) await page.screenshot({path: process.env.BROWSER_P5_SCREENSHOT + '-narrow.png'});
     await page.evaluate(() => document.documentElement.classList.add('workspace-dragging'));
     await page.waitForFunction(() => !externalProbe.calls.filter(c => c.action === 'Layout').at(-1).bounds.visible);

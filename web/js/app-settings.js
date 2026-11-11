@@ -392,6 +392,7 @@ function renderSettings(options) {
   }
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
   $("htmlNetworkOriginsInput").value = (s.HtmlNetworkAllowedOrigins || s.htmlNetworkAllowedOrigins || []).join("\n");
+  $("browserAgentSitesInput").value = (s.BrowserAgentAllowedSites || s.browserAgentAllowedSites || []).join("\n");
   var apiKeyStatus = $("apiKeyStatus");
   $("apiKeyInput").placeholder = state.hasApiKey
     ? "Ключ сохранён; оставьте пустым, чтобы не менять"
@@ -458,6 +459,7 @@ function readSettings() {
     ModelCapabilities: modelCapabilitiesForSettings(modelContext),
     AttachmentModelPriority: attachmentModelPriorityForSettings(modelContext),
     HtmlNetworkAllowedOrigins: $("htmlNetworkOriginsInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
+    BrowserAgentAllowedSites: $("browserAgentSitesInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
 }

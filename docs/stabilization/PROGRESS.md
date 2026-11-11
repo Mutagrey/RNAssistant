@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## External Browser P6d — In Review, 2026-11-11
+
+Ручной ввод блокирует page mutations и запрашивает existing exact Run pause;
+explicit resume требует нового read/preparation, peer resume и late release не
+снимают user control/Stop. Отдельные сайты агента поддерживают exact origins и
+DNS masks; manual navigation и прежний HTML HTTP bridge независимы. 9 focused
+Harness checks и 3 Chrome fixtures проходят, wide/narrow/125% просмотрены.
+Product `16.7.0-dev`; Windows/Office/CDP delivery и visual acceptance открыты,
+external fill/click по-прежнему local probe only. [Scope/evidence](../browser/05_TEST_MATRIX.md#p6d).
+
 ## Единое дерево рабочей области — In Review, 2026-11-11
 
 Office и проекты сведены в одну navigation panel с общим поиском и полным меню

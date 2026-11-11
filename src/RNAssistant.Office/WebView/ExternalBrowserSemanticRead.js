@@ -2,7 +2,7 @@
   "use strict";
   // This object exists only in the isolated world; page script cannot obtain its bindings.
   if (globalThis.__rnaBrowser) return globalThis.__rnaBrowser.read();
-  var observation = null, prepared = null, interaction = 0, blocked = false;
+  var observation = null, prepared = null, blocked = false;
   function visual(method) {
     // Decoration cannot confer authority or change a verified operation's outcome.
     try {
@@ -10,9 +10,7 @@
       return view && view[method].apply(view, Array.prototype.slice.call(arguments, 1));
     } catch (error) { return false; }
   }
-  ['pointerdown', 'keydown', 'input', 'change'].forEach(function (type) {
-    document.addEventListener(type, function (event) { if (event.isTrusted) interaction++; }, true);
-  });
+  function control() { return globalThis.__rnaBrowserControl ? globalThis.__rnaBrowserControl.snapshot() : { manual: true, epoch: 0 }; }
   function capture() {
   // Never deliver input values, URLs, HTML or page script state.
   var nodes = [], elements = [], visited = 0, characters = 0, truncated = false, deadline = performance.now() + 100;
@@ -100,7 +98,8 @@
   function check(request) {
     if (location.href !== 'https://rna-browser-probe.invalid/index.html' || window.top !== window) fail('browser_probe_only');
     if (blocked) fail('browser_effect_unknown');
-    if (!observation || observation.used || observation.interaction !== interaction) fail('browser_observation_stale');
+    if (control().manual) fail('browser_user_control');
+    if (!observation || observation.used || observation.interaction !== control().epoch) fail('browser_observation_stale');
     var role = request.action === 'fill' ? 'textbox' : request.action === 'click' ? 'button' : null;
     if (!role || !request.name || request.name.length > 160 ||
         role === 'textbox' && (typeof request.value !== 'string' || request.value.length > 1024) ||
@@ -119,14 +118,16 @@
     return element;
   }
   var api = {
+    invalidate: function () { observation = null; prepared = null; },
     read: function () {
       observation = capture(); observation.observationId = Array.from(crypto.getRandomValues(new Uint8Array(16)),
         function (value) { return value.toString(16).padStart(2, '0'); }).join('');
-      observation.interaction = interaction; observation.used = false; prepared = null;
+      observation.interaction = control().epoch; observation.used = false; prepared = null;
       return { observationId: observation.observationId, nodes: observation.nodes, visited: observation.visited, truncated: observation.truncated };
     },
     prepare: function (id, preparationId, request) {
       try {
+        if (control().manual) fail('browser_user_control');
         if (!observation || observation.observationId !== id) fail('browser_observation_stale');
         var element = check(request);
         prepared = { id: preparationId, request: request, element: element,
@@ -147,6 +148,7 @@
       var plan = prepared; prepared = null;
       function result(effect, code) { return { effect: effect, code: code }; }
       try {
+        if (control().manual) fail('browser_user_control');
         if (!plan || plan.id !== id) fail('browser_preparation_stale');
         var element = check(plan.request);
         if (element !== plan.element || plan.request.action === 'fill' && element.value !== plan.before) fail('browser_element_stale');

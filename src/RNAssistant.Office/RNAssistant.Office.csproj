@@ -435,6 +435,9 @@
     <EmbeddedResource Include="WebView\ExternalBrowserSemanticRead.js">
       <LogicalName>RNAssistant.Office.ExternalBrowserSemanticRead.js</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="WebView\ExternalBrowserControl.js">
+      <LogicalName>RNAssistant.Office.ExternalBrowserControl.js</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="..\..\web\js\app-browser-action-view.js">
       <LogicalName>RNAssistant.Office.ExternalBrowserActionView.js</LogicalName>
     </EmbeddedResource>

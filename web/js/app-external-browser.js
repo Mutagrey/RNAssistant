@@ -5,6 +5,7 @@
   var session = null, opening = false, closed = false, generation = 0, openingRequest;
   var queued = 0, pendingLayout = null, sendingLayout = null, lastLayout = "", pointer = false;
   var resize, overlays, dragging, listeners, nativeState = null;
+  var controlBar, resumeButton, resumePending = false;
   function sendCommand(action, extra) {
     return send("externalBrowserCommand", Object.assign({ action: action, sessionId: session }, extra || {}));
   }
@@ -14,6 +15,8 @@
         value.revision === nativeState.revision && (value.layoutRevision || 0) < (nativeState.layoutRevision || 0))) return;
     if (!nativeState || (value.layoutRevision || 0) > (nativeState.layoutRevision || 0)) lastLayout = "";
     nativeState = value;
+    controlBar.hidden = value.manualControl !== true || value.status !== "Ready";
+    resumeButton.disabled = resumePending;
     diagnostic.textContent = value.diagnostic || "";
     if (value.status === "Closed") { closed = true; session = null; surface.clearDocument(); fail("Страница закрыта вместе с исходным scope. Закройте вкладку и откройте снова."); return; }
     surface.waiting({ title: value.title || "Внешняя страница", storage: { kind: "external" } }, value.message || " ");
@@ -120,10 +123,23 @@
     if (openingRequest) { cancelBridgeRequest(openingRequest).catch(function (error) { notice(error.detail || error.message); }); openingRequest = null; }
     var owner = session; session = null; nativeState = null; pendingLayout = null; sendingLayout = null; closed = false; lastLayout = "";
     surface.clear(); diagnostic.textContent = "";
+    controlBar.hidden = true; resumePending = false;
     if (owner) send("externalBrowserCommand", { action: "Close", sessionId: owner }).catch(function (error) { notice(error.detail || error.message); });
   }
   function register(dock) {
     root = document.createElement("section"); root.className = "browser-object-view browser-view external-browser-view"; root.setAttribute("aria-label", "Внешний браузер");
+    controlBar = document.createElement("div"); controlBar.className = "external-browser-control"; controlBar.hidden = true;
+    var label = document.createElement("span"); label.textContent = "Вы управляете"; label.setAttribute("role", "status");
+    resumeButton = document.createElement("button"); resumeButton.type = "button"; resumeButton.className = "secondary"; resumeButton.textContent = "Продолжить агентом";
+    resumeButton.addEventListener("click", async function () {
+      if (!nativeState || resumePending || !nativeState.manualControl) return;
+      var owner = session, version = generation;
+      resumePending = true; resumeButton.disabled = true;
+      try { await command("ResumeAgent", { controlRevision: nativeState.controlRevision }); }
+      catch (error) { if (owner === session && version === generation) notice(error.detail || error.message); }
+      finally { if (owner === session && version === generation) { resumePending = false; resumeButton.disabled = false; } }
+    });
+    controlBar.append(label, resumeButton); root.appendChild(controlBar);
     content = document.createElement("div"); content.className = "browser-object-content"; content.tabIndex = 0;
     content.setAttribute("aria-label", "Страница WebView2. Enter — передать фокус странице.");
     placeholder = document.createElement("p"); content.appendChild(placeholder); root.appendChild(content);

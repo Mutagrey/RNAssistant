@@ -44,12 +44,21 @@ P6a реализован / In Review: bounded semantic read той же стра
 Gateway, с chat/document ownership и CAS evidence. Пять Harness checks и два Chrome
 fixtures проходят; Windows/controller delivery открыт. [Scope/evidence](../browser/05_TEST_MATRIX.md#p6a).
 
+### Browser P6d: ручное управление / доступ — In Review, 2026-11-11
+
+По «Коммит и далее давай сделаем» реализованы manual latch, exact run pause/resume
+и отдельные сайты агента с масками; P6c зафиксирован `67a45b29`. Scope — existing
+native page + shared Inbox, общий Settings form; external actions не расширены.
+9 focused Harness checks и 3 Chrome fixtures прошли, wide/narrow/125% просмотрены.
+[Запуск и 4 действия ревью](../browser/05_TEST_MATRIX.md#p6d). Визуальное принятие и
+Windows qualification открыты; далее P4a, без автоматического старта общего S2.
+
 ### Browser P6c: визуализация действий — In Review, 2026-11-11
 
 Запрошенный после P6b анимированный указатель, target highlight и runtime result
 реализованы у existing native Browser/presentation. Указатель скрывается при idle
-и ручном вводе. Нового execution path или Shell нет; P4a идёт следующим независимым
-срезом после ревью. Обычное визуальное принятие и Windows WebView2 evidence открыты.
+и ручном вводе. Нового execution path или Shell нет; после P6c добавлен P6d
+по уточнению пользователя, затем P4a. Обычное визуальное принятие и Windows WebView2 evidence открыты.
 [Scope/проверки и 4 действия ревью](../browser/05_TEST_MATRIX.md#p6c),
 [внешний вид/motion](UI_DESIGN_SYSTEM.md#browser-action-visualization).
 Общий S2 и миграция остальных views этим запросом не запускаются.
@@ -121,6 +130,12 @@ Windows/Office/WebView2 и пользовательское визуальное
 Inspector и S2 этим не запускаются.
 
 ### Встроенные диалоги групп — In Review, 2026-11-07
+
+Уточнение 2026-11-11 по замечаниям от 06.11: общий `accept` сохраняет группы при
+ошибке каталога и не снижает generation. Покрыты поздний error, error без generation,
+старый success и успешный пустой snapshot для Office/Workspace/plugin — 13 Node
+guards проходят. Геометрия/подсветка меню уже изменены общим деревом от 11.11;
+новых CSS overrides нет. Визуальное принятие и Windows/WebView2 остаются открытыми.
 
 В create/rename/delete заменены `window.prompt/confirm` на общий `app-dialog` и
 существующие form/button tokens. Scope/revision, `changeChatGroup`, stale guards,

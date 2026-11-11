@@ -163,6 +163,20 @@ namespace RNAssistant.Harness
                 using (var handle = owner.Start(target.Id, "run", target, cancellation))
                 {
                     inbox.Bind(target);
+                    var userResume = service.PauseForUser(target.Id, "browser-user");
+                    AssertTrue(userResume != null && inbox.RunPauseId(target) == "browser-user", "manual control pauses the exact live owner");
+                    var userWait = inbox.WaitForResumeAsync(target, "browser-user", cancellation.Token);
+                    AssertTrue(!userWait.IsCompleted && inbox.Snapshot(target).Paused, "manual control waits without model polling");
+                    AssertEqual(AgentPauseStatus.Protected, service.Pause(inbox, source, 20, "peer-browser-resume", address, true, () => { }).Status, "a peer cannot release manual control");
+                    var newerUserResume = service.PauseForUser(target.Id, "browser-newer");
+                    userResume();
+                    AssertEqual("browser-newer", inbox.RunPauseId(target), "late UI resume does not release a newer user pause");
+                    newerUserResume();
+                    AssertTrue(inbox.RunPauseId(target) == null && userWait.Wait(1000), "explicit user resume releases its exact pause");
+                    userResume = service.PauseForUser(target.Id, "browser-stop");
+                    inbox.Pause(target, "Human Stop"); userResume();
+                    AssertTrue(inbox.Snapshot(target).Paused, "Browser resume cannot undo user Stop");
+                    inbox.Resume(target);
                     var requested = service.Pause(inbox, source, 20, "p1", address, false, () => { });
                     AssertEqual(AgentPauseStatus.Requested, requested.Status, "request is distinct from a reached boundary");
                     AssertTrue(!inbox.Snapshot(target).Paused && !cancellation.IsCancellationRequested, "current tool is allowed to complete");

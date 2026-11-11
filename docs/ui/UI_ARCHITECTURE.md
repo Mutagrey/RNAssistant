@@ -27,6 +27,17 @@ P6a: Open закрепляет chatId; native source отдаёт fixed isolated
 existing ResourceGateway. Controller attachment отзывается до rebind/dispose и
 подключается после native reset. Model не получает IDs/CDP; document guard сохраняется.
 
+### Browser manual control / access — In Review, 2026-11-11
+
+P6d хранит manual latch у `ExternalBrowserPage`; isolated script закрывает mutations
+сразу при trusted input. Existing Inbox/AgentCommunication endpoints приостанавливают
+exact Office/Workspace Run с user-only resume. `app-external-browser` показывает
+native state и отправляет typed ResumeAgent с control revision; собственного scheduler
+или очереди действий нет. Resume сериализуется с короткими Browser operations,
+model/user waits не удерживают native/document gate. Settings остаются у прежнего
+typed DTO/Core owner; `HttpOriginPattern` проверяет отдельный Browser agent allowlist.
+[Контракт](../browser/03_CONTRACTS.md#p6d-user-control).
+
 ### Browser action visualization — In Review, 2026-11-11
 
 P6c — один `app-browser-action-view` внутри closed shadow root native page, загруженный
@@ -247,6 +258,9 @@ Tree node key различает вхождения одного чата по g
 typed domain commands; удаление чата сохраняет existing deletion owner/guards.
 Общий app-chat-groups декорирует прежние nodes Office/Workspace/plugin; кеш ≤256
 областей, collapse ≤512 ключей, stale generations/reset replies отбрасываются.
+Ошибка каталога сохраняет последнюю успешную структуру и монотонную generation;
+неизвестный error с generation=0 не считается пустым authoritative snapshot.
+Выбор чата вне группы не меняет membership. Mutations заблокированы до успешного refresh.
 Цвет точки определяется стабильным ChatId в общем AgentCommunication presentation;
 запись цвета в runtime и отдельный registry не нужны. Group ID не становится ключом Chat View; закрытие вкладки не меняет выполнение.
 

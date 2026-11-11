@@ -26,6 +26,15 @@ Shell 1280/100% и 420/125% просмотрена с synthetic native; реал
 P6a добавляет read binding без изменения presentation/tokens/controls; existing
 External Browser fixture сохраняет narrow/125% coverage. Нового визуального слоя нет.
 
+## Browser: ручное управление — In Review, 2026-11-11
+
+`external-browser-control` использует общий secondary button и existing spacing/type
+tokens; строка flex-wrap переносится при сужении. Текст «Вы управляете» имеет
+`role=status`, действие «Продолжить агентом» доступно с клавиатуры и disabled пока
+ожидает ответ. Никакой блокировки ручного ввода страницы или нового modal overlay.
+Settings используют прежние label/textarea/help/save components, без отдельного
+pattern editor. [Wide/narrow review](../browser/05_TEST_MATRIX.md#p6d).
+
 <a id="browser-action-visualization"></a>
 ### Визуализация действий Browser — In Review, 2026-11-11
 
@@ -234,6 +243,8 @@ Optional reply link появляется только при полезной с
 идентификатор. Группа использует общий значок group (участники), не folder.
 Компонент/размер заданы один раз, без screen overrides и новых карточек/badges.
 Выделено одно выбранное вхождение чата; все вхождения открывают ту же вкладку.
+Ошибка обновления не заменяет группы плоскими строками: сохраняются прежние
+узлы и общие состояния selection/menu, рядом показывается существующая строка ошибки.
 
 ### Встроенные диалоги групп — In Review, 2026-11-07
 

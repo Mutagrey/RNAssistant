@@ -40,6 +40,7 @@ namespace RNAssistant.Core.Models
     {
         public string RunId { get; set; }
         public string PauseId { get; set; }
+        public bool RequiresUserResume { get; set; }
     }
 
     // One immutable event per accepted transition; replay is the queue authority.

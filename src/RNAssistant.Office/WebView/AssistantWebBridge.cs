@@ -42,6 +42,10 @@ namespace RNAssistant.Office.WebView
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
         private IExternalBrowserHost _externalBrowser;
+        internal RNAssistant.Core.Models.AppSettings BrowserSettings()
+        { return new RNAssistant.Core.Storage.SettingsService(_controller.StoragePaths).Load(); }
+        internal Task<Action> PauseBrowserRunAsync(string chatId, string pauseId)
+        { return Task.Run(() => _agentCommunication.PauseForUser(chatId, pauseId)); }
         public IExternalBrowserHost ExternalBrowser
         {
             get { return _externalBrowser; }

@@ -24,6 +24,15 @@ namespace RNAssistant.Office.WebView
         private long _documentGeneration;
         private bool _documentReady;
         private readonly string _chatId;
+        private readonly Func<RNAssistant.Core.Models.AppSettings> _settings;
+        private readonly Func<string, string, Task<Action>> _pauseRun;
+        private Task<Action> _pauseTask;
+        private bool _manualControl, _pauseFailed;
+        private long _controlRevision;
+        private string _pauseId;
+        private int _interactionEpoch;
+        private CoreWebView2DevToolsProtocolEventReceiver _controlEvents;
+        private static readonly string ControlScript = LoadAsset("ExternalBrowserControl.js");
         private static readonly string SemanticScript = LoadAsset("ExternalBrowserSemanticRead.js");
         private static readonly string VisualScript = LoadAsset("ExternalBrowserActionView.js") +
             ";globalThis.__rnaBrowserVisual=globalThis.__rnaBrowserVisual||RNAssistantBrowserActionView.create(" +
@@ -42,9 +51,10 @@ namespace RNAssistant.Office.WebView
         public WebView2 Control { get; }
         public event Action Changed;
 
-        public ExternalBrowserPage(string assets, string chatId)
+        public ExternalBrowserPage(string assets, string chatId, Func<RNAssistant.Core.Models.AppSettings> settings,
+            Func<string, string, Task<Action>> pauseRun)
         {
-            _assets = assets; _chatId = chatId;
+            _assets = assets; _chatId = chatId; _settings = settings; _pauseRun = pauseRun;
             Control = new WebView2 { Visible = false, TabStop = true };
             Control.Enter += FocusChanged; Control.Leave += FocusChanged;
             Control.VisibleChanged += VisibilityChanged;
@@ -65,6 +75,17 @@ namespace RNAssistant.Office.WebView
         private sealed class FrameTree { [JsonProperty("frame")] public Frame Frame { get; set; } }
         private sealed class Frame { [JsonProperty("id")] public string Id { get; set; } }
         private sealed class WorldResponse { [JsonProperty("executionContextId")] public int ContextId { get; set; } }
+        private sealed class ControlBinding
+        {
+            [JsonProperty("name")] public string Name { get; set; }
+            [JsonProperty("executionContextId")] public int ContextId { get; set; }
+            [JsonProperty("payload")] public string Payload { get; set; }
+        }
+        private sealed class ControlState
+        {
+            [JsonProperty("manual")] public bool Manual { get; set; }
+            [JsonProperty("epoch")] public int Epoch { get; set; }
+        }
         private sealed class CaptureResponse<T>
         {
             [JsonProperty("result")] public CaptureValue<T> Result { get; set; }
@@ -88,13 +109,11 @@ namespace RNAssistant.Office.WebView
         public async Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target)
         {
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("Browser document changed before capture.", "browser_document_stale");
-            var tree = await Protocol<FrameResponse>("Page.getFrameTree", new { });
-            if (string.IsNullOrEmpty(tree?.Tree?.Frame?.Id)) throw ExternalBrowserResourceProvider.Error("The top document is unavailable.", "browser_page_unavailable");
-            var world = await Protocol<WorldResponse>("Page.createIsolatedWorld", new { frameId = tree.Tree.Frame.Id, worldName = "rna-semantic-read" });
-            if (world == null || world.ContextId <= 0) throw ExternalBrowserResourceProvider.Error("The isolated capture context is unavailable.", "browser_page_unavailable");
-            _semanticContext = world.ContextId;
+            RequireAgentAccess();
+            if (_manualControl) { EnsureUserPause(); await Evaluate<bool>("globalThis.__rnaBrowserControl.hold()"); }
             var content = await Evaluate<ExternalBrowserSemanticContent>(SemanticScript);
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("Browser document changed during capture.", "browser_document_stale");
+            RequireAgentAccess(); // A revoked permission cannot deliver an in-flight observation.
             if (content == null)
                 throw ExternalBrowserResourceProvider.Error("The bounded semantic capture failed.", "browser_capture_failed");
             _observationRevision = ExternalBrowserResourceProvider.Revision(target, content);
@@ -103,8 +122,105 @@ namespace RNAssistant.Office.WebView
             return content;
         }
 
+        private void RequireAgentAccess()
+        {
+            var actual = Control.CoreWebView2.Source;
+            if (actual != _url) throw ExternalBrowserResourceProvider.Error("Browser navigation changed before admission.", "browser_document_stale");
+            ExternalBrowserPolicy.RequireAgentAccess(actual, _settings().BrowserAgentAllowedSites);
+        }
+
+        private async Task InitializeControlAsync(long generation)
+        {
+            var tree = await Protocol<FrameResponse>("Page.getFrameTree", new { });
+            if (string.IsNullOrEmpty(tree?.Tree?.Frame?.Id)) throw ExternalBrowserResourceProvider.Error("The top document is unavailable.", "browser_page_unavailable");
+            var world = await Protocol<WorldResponse>("Page.createIsolatedWorld", new { frameId = tree.Tree.Frame.Id, worldName = "rna-semantic-read" });
+            if (world == null || world.ContextId <= 0) throw ExternalBrowserResourceProvider.Error("The isolated capture context is unavailable.", "browser_page_unavailable");
+            if (_disposed || generation != _documentGeneration) return;
+            _semanticContext = world.ContextId;
+            var state = await Evaluate<ControlState>("globalThis.__rnaBrowserControl.snapshot()");
+            if (_disposed || generation != _documentGeneration) return;
+            _interactionEpoch = Math.Max(_interactionEpoch, state.Epoch);
+            if (state.Manual) TakeControl();
+            if (_manualControl) await Evaluate<bool>("globalThis.__rnaBrowserControl.hold()");
+        }
+
+        private void ControlEvent(object sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+        {
+            if (_disposed || e.ParameterObjectAsJson.Length > 1024) return;
+            try
+            {
+                var binding = JsonConvert.DeserializeObject<ControlBinding>(e.ParameterObjectAsJson);
+                if (binding?.Name != "__rnaUserControl" || binding.ContextId != _semanticContext || _semanticContext <= 0) return;
+                var state = JsonConvert.DeserializeObject<ControlState>(binding.Payload ?? "");
+                if (state == null || state.Epoch <= _interactionEpoch) return;
+                _interactionEpoch = state.Epoch;
+                TakeControl();
+            }
+            catch (JsonException error) { Diagnostics.RuntimeLog.Error("Browser user-control signal was invalid.", error); }
+        }
+
+        private void TakeControl()
+        {
+            if (!_manualControl) { _pauseId = Guid.NewGuid().ToString("N"); _pauseTask = null; }
+            _manualControl = true; _controlRevision++;
+            _observationTarget = null; _preparationId = null;
+            HideAction();
+            if (_pauseTask == null) EnsureUserPause();
+            Publish();
+        }
+
+        private void EnsureUserPause()
+        {
+            if (_pauseTask == null || _pauseTask.IsCompleted) _pauseTask = CaptureUserPauseAsync();
+        }
+
+        private async Task<Action> CaptureUserPauseAsync()
+        {
+            var pauseId = _pauseId;
+            try
+            {
+                var resume = string.IsNullOrEmpty(_chatId) ? null : await _pauseRun(_chatId, pauseId);
+                if (_disposed || pauseId != _pauseId) return null;
+                _pauseFailed = false; return resume;
+            }
+            catch (Exception error)
+            {
+                if (_disposed || pauseId != _pauseId) return null;
+                _pauseFailed = true;
+                _message = "Управление агента заблокировано; приостановить запуск не удалось. Остановите запуск в чате.";
+                Diagnostics.RuntimeLog.Error("Browser run pause failed.", error); Publish(); return null;
+            }
+        }
+
+        public async Task ResumeAgentAsync(long? revision)
+        {
+            if (!_manualControl || revision != _controlRevision || ReadTarget == null)
+                throw new InvalidOperationException("Управление страницей изменилось. Повторите явное продолжение.");
+            var target = ReadTarget; var epoch = _interactionEpoch;
+            if (_pauseFailed) EnsureUserPause();
+            var resume = _pauseTask == null ? null : await _pauseTask;
+            if (_pauseFailed) throw new InvalidOperationException(_message);
+            if (!target.Matches(ReadTarget) || revision != _controlRevision ||
+                !await Evaluate<bool>("globalThis.__rnaBrowserControl.resume(" + epoch + ")") || revision != _controlRevision)
+                throw new InvalidOperationException("Страница или ручной ввод изменились. Повторите продолжение.");
+            _observationTarget = null; _preparationId = null;
+            _manualControl = false; _controlRevision++; _pauseTask = null; _pauseId = null;
+            var releasedRevision = _controlRevision;
+            try { if (resume != null) await Task.Run(resume); }
+            catch
+            {
+                if (target.Matches(ReadTarget) && releasedRevision == _controlRevision) TakeControl();
+                throw;
+            }
+            if (!target.Matches(ReadTarget) || releasedRevision != _controlRevision) return;
+            _message = "Управление возвращено агенту";
+            Publish();
+        }
+
         private void CheckAction(ExternalBrowserReadTarget target)
         {
+            RequireAgentAccess();
+            if (_manualControl) { EnsureUserPause(); throw ExternalBrowserResourceProvider.Error("The user is controlling this page. Wait for explicit Resume agent; do not retry browser actions.", "browser_user_control"); }
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("The browser document changed. Read it again.", "browser_document_stale");
             if (!target.Matches(_observationTarget)) throw ExternalBrowserResourceProvider.Error("The observation belongs to an earlier document. Read it again.", "browser_observation_stale");
             if (_url != ExternalBrowserPolicy.ProbeUrl || Control.Source?.AbsoluteUri != ExternalBrowserPolicy.ProbeUrl)
@@ -198,6 +314,13 @@ namespace RNAssistant.Office.WebView
             core.DownloadStarting += DownloadStarting;
             core.PermissionRequested += PermissionRequested;
             core.ProcessFailed += ProcessFailed;
+            _controlEvents = core.GetDevToolsProtocolEventReceiver("Runtime.bindingCalled");
+            _controlEvents.DevToolsProtocolEventReceived += ControlEvent;
+            await core.CallDevToolsProtocolMethodAsync("Runtime.enable", "{}");
+            await core.CallDevToolsProtocolMethodAsync("Page.enable", "{}");
+            await core.CallDevToolsProtocolMethodAsync("Runtime.addBinding", JsonConvert.SerializeObject(new { name = "__rnaUserControl", executionContextName = "rna-semantic-read" }));
+            await core.CallDevToolsProtocolMethodAsync("Page.addScriptToEvaluateOnNewDocument", JsonConvert.SerializeObject(new { source = ControlScript, worldName = "rna-semantic-read" }));
+            if (_disposed) throw new ObjectDisposedException(nameof(ExternalBrowserPage));
             core.SetVirtualHostNameToFolderMapping("rna-browser-probe.invalid", _assets, CoreWebView2HostResourceAccessKind.DenyCors);
             core.Navigate(_url);
         }
@@ -207,6 +330,7 @@ namespace RNAssistant.Office.WebView
             return new ExternalBrowserStateDto
             {
                 SessionId = SessionId, Revision = _revision, Status = _status, Url = _url, Title = _title,
+                ManualControl = _manualControl, ControlRevision = _controlRevision,
                 CanGoBack = !_disposed && _canGoBack, CanGoForward = !_disposed && _canGoForward,
                 Message = _message,
                 Diagnostic = "P5a · WinForms child · Runtime " + _runtime +
@@ -219,6 +343,8 @@ namespace RNAssistant.Office.WebView
             if (_disposed || _status == ExternalBrowserStatus.Failed || Control.CoreWebView2 == null)
                 throw new InvalidOperationException("Страница недоступна. Закройте вкладку и откройте её снова.");
             var core = Control.CoreWebView2;
+            if (request.Action == ExternalBrowserAction.Navigate || request.Action == ExternalBrowserAction.Back ||
+                request.Action == ExternalBrowserAction.Forward || request.Action == ExternalBrowserAction.Reload) TakeControl();
             switch (request.Action)
             {
                 case ExternalBrowserAction.Navigate: core.Navigate(ExternalBrowserPolicy.NavigationUrl(request.Url)); break;
@@ -245,15 +371,27 @@ namespace RNAssistant.Office.WebView
         {
             HideAction();
             if (_disposed || _status == ExternalBrowserStatus.Failed) { e.Cancel = true; return; }
+            if (e.IsUserInitiated) TakeControl();
             _navigationId = e.NavigationId; _navigationRefused = false;
-            try { ExternalBrowserPolicy.NavigationUrl(e.Uri); _message = "Загрузка…"; _documentReady = false; _documentGeneration++; }
+            try
+            {
+                ExternalBrowserPolicy.NavigationUrl(e.Uri); _message = "Загрузка…";
+                _documentReady = false; _documentGeneration++; _semanticContext = 0; _visualContext = 0; _interactionEpoch = 0;
+            }
             catch (InvalidOperationException) { e.Cancel = true; _navigationRefused = true; _message = "Переход запрещён: поддерживаются только HTTP(S)-адреса без credentials."; }
             Publish();
         }
-        private void NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
+        private async void NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             if (_disposed || _status == ExternalBrowserStatus.Failed) return;
             if (e.NavigationId != _navigationId || _navigationRefused) return;
+            var generation = _documentGeneration;
+            if (e.IsSuccess)
+            {
+                try { await InitializeControlAsync(generation); }
+                catch (Exception error) { if (!_disposed && generation == _documentGeneration) Fail(error); return; }
+            }
+            if (_disposed || generation != _documentGeneration) return;
             _status = ExternalBrowserStatus.Ready;
             _documentReady = e.IsSuccess;
             _message = e.IsSuccess ? "Экспериментальный браузер · Windows-проверка открыта" : "Ошибка загрузки: " + e.WebErrorStatus;
@@ -300,6 +438,7 @@ namespace RNAssistant.Office.WebView
             Control.VisibleChanged -= VisibilityChanged;
             try
             {
+                if (_controlEvents != null) _controlEvents.DevToolsProtocolEventReceived -= ControlEvent;
                 var core = Control.CoreWebView2;
                 if (core != null)
                 {

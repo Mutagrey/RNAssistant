@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const { chromium } = require('playwright');
 const script = fs.readFileSync(path.join(__dirname, '../../src/RNAssistant.Office/WebView/ExternalBrowserSemanticRead.js'), 'utf8');
+const control = fs.readFileSync(path.join(__dirname, '../../src/RNAssistant.Office/WebView/ExternalBrowserControl.js'), 'utf8');
 const probe = fs.readFileSync(path.join(__dirname, '../../web/browser-probe/index.html'), 'utf8');
 const url = 'https://rna-browser-probe.invalid/index.html';
 const visual = fs.readFileSync(path.join(__dirname, '../../web/js/app-browser-action-view.js'), 'utf8');
@@ -14,17 +15,23 @@ const review = process.env.BROWSER_ACTION_REVIEW;
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.route('**/*', route => route.fulfill({ contentType: 'text/html', body: probe }));
     const cdp = await page.context().newCDPSession(page);
+    const signals = [];
+    await cdp.send('Runtime.enable');
+    await cdp.send('Page.enable');
+    cdp.on('Runtime.bindingCalled', event => signals.push(event));
+    await cdp.send('Runtime.addBinding', { name: '__rnaUserControl', executionContextName: 'rna-semantic-read' });
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: control, worldName: 'rna-semantic-read' });
     let contextId, observed, serial = 0;
     async function evaluate(expression) {
       const result = await cdp.send('Runtime.evaluate', { expression, contextId, returnByValue: true, silent: true, timeout: 1000 });
       assert.ok(!result.exceptionDetails, JSON.stringify(result.exceptionDetails)); return result.result.value;
     }
     async function read() { observed = await evaluate(script); return observed; }
-    async function reset(address = url) {
+    async function reset(address = url, capture = true) {
       await page.goto(address);
       const { frameTree } = await cdp.send('Page.getFrameTree');
       ({ executionContextId: contextId } = await cdp.send('Page.createIsolatedWorld', { frameId: frameTree.frame.id, worldName: 'rna-semantic-read' }));
-      await read();
+      if (capture) await read();
       await evaluate(visual + ';globalThis.__rnaBrowserVisual=RNAssistantBrowserActionView.create(' + JSON.stringify(styles) + ');true');
     }
     const fill = { action: 'fill', name: 'Ввод и Tab', value: 'Пример ввода' };
@@ -53,6 +60,22 @@ const review = process.env.BROWSER_ACTION_REVIEW;
     }
     async function refused(code, request = fill) { assert.equal((await prepare(request)).code, code); }
 
+    await reset(url, false);
+    assert.equal(await page.evaluate(() => typeof window.__rnaUserControl), 'undefined', 'untrusted page has no control binding');
+    await page.evaluate(() => document.querySelector('input').dispatchEvent(new Event('input', {bubbles:true})));
+    assert.equal((await evaluate('globalThis.__rnaBrowserControl.snapshot()')).manual, false, 'synthetic page events cannot impersonate user control');
+    await page.mouse.move(250, 250);
+    assert.equal((await evaluate('globalThis.__rnaBrowserControl.snapshot()')).manual, false, 'pointer motion does not take over');
+    await page.locator('input').click();
+    await page.keyboard.type('manual');
+    const taken = await evaluate('globalThis.__rnaBrowserControl.snapshot()');
+    assert.ok(taken.manual && signals.some(event => event.executionContextId === contextId), 'trusted input signals the exact isolated world');
+    await read(); await refused('browser_user_control');
+    assert.equal(await evaluate('globalThis.__rnaBrowserControl.resume(' + (taken.epoch - 1) + ')'), false, 'stale resume cannot override newer input');
+    assert.equal(await evaluate('globalThis.__rnaBrowserControl.resume(' + taken.epoch + ')'), true);
+    await refused('browser_observation_stale');
+    await read(); assert.equal((await act(await prepare(fill))).effect, 'VerifiedChange', 'resume requires a fresh observation and preparation');
+
     await reset();
     // Page script cannot replace DOM methods in the isolated execution world.
     await page.evaluate(() => { document.createTreeWalker = () => { throw new Error('hostile override'); }; });
@@ -70,10 +93,11 @@ const review = process.env.BROWSER_ACTION_REVIEW;
 
     await reset();
     await page.locator('input').fill('user edit');
-    await refused('browser_observation_stale');
+    await refused('browser_user_control');
+    await evaluate('globalThis.__rnaBrowserControl.resume(globalThis.__rnaBrowserControl.snapshot().epoch)');
     await read(); plan = await prepare(fill);
     await page.locator('input').fill('after preparation');
-    assert.equal((await act(plan)).code, 'browser_observation_stale', 'trusted interaction invalidates pending confirmation');
+    assert.equal((await act(plan)).code, 'browser_user_control', 'trusted interaction invalidates pending confirmation');
     assert.equal(await page.locator('input').inputValue(), 'after preparation');
 
     await reset(); plan = await prepare(fill);

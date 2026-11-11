@@ -495,7 +495,8 @@ namespace RNAssistant.Application.Conversations
         }
 
         // The caller pins the exact live invocation and serializes control with this Inbox.
-        internal AgentPauseStatus ControlPause(ChatSession session, string runId, string pauseId, bool resume, out bool changed)
+        internal AgentPauseStatus ControlPause(ChatSession session, string runId, string pauseId, bool resume, out bool changed,
+            bool userControl = false)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -503,6 +504,7 @@ namespace RNAssistant.Application.Conversations
                 changed = false;
                 if (!box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId) return AgentPauseStatus.Changed;
                 if (box.AgentPause == null && box.Paused) return AgentPauseStatus.Protected;
+                if (box.AgentPause?.RequiresUserResume == true && !userControl) return AgentPauseStatus.Protected;
                 if (resume)
                 {
                     if (box.AgentPause == null) return AgentPauseStatus.NoChange;
@@ -511,8 +513,10 @@ namespace RNAssistant.Application.Conversations
                     changed = true;
                     return AgentPauseStatus.Released;
                 }
-                if (box.AgentPause != null) return box.Paused ? AgentPauseStatus.Paused : AgentPauseStatus.Requested;
-                Write(box, null, agentPause: new ConversationAgentPause { RunId = runId, PauseId = pauseId }, agentControl: true);
+                if (box.AgentPause != null && (!userControl || box.AgentPause.PauseId == pauseId))
+                    return box.Paused ? AgentPauseStatus.Paused : AgentPauseStatus.Requested;
+                Write(box, null, agentPause: new ConversationAgentPause { RunId = runId, PauseId = pauseId,
+                    RequiresUserResume = userControl }, agentControl: true);
                 changed = true;
                 return AgentPauseStatus.Requested;
             }
@@ -528,7 +532,7 @@ namespace RNAssistant.Application.Conversations
         {
             if (box.Running && box.Accepting && box.AgentPause != null && box.AgentPause.RunId == session.LastRun?.RunId &&
                 box.AgentPause.PauseId == pauseId && !box.Paused)
-                Write(box, null, true, "Приостановлено агентом", box.AgentPause, true);
+                Write(box, null, true, box.AgentPause.RequiresUserResume ? "Вы управляете браузером" : "Приостановлено агентом", box.AgentPause, true);
         }
 
         internal async Task WaitForPauseRequestAsync(ChatSession session, CancellationToken token)
