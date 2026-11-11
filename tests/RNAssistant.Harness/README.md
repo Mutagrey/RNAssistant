@@ -1,5 +1,35 @@
 # RNAssistant Harness
 
+Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
+
+## Find a test
+
+Use the registrations in `Program.cs` to choose a filter before running anything.
+Locate the matching fixture, then read its relevant section below.
+
+```bash
+rg -n 'Test\(".*resource' tests/RNAssistant.Harness/Program.cs
+rg -l -F 'TargetMethodOrBehavior' tests/RNAssistant.Harness -g 'Program*.cs'
+```
+
+## Run a focused slice
+
+The trailing argument is a case-insensitive substring matched against category or test name:
+
+```bash
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "resources:"
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "bridge: typed resource"
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "vba: patch"
+```
+
+After an unchanged successful build, `--no-build` avoids recompilation:
+
+```bash
+dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "storage: CAS"
+```
+
+Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
+
 ## Storage/context optimization — 2026-11-10
 
 `storage optimization:` selects isolated rotation/tail/protection tests, common
@@ -1947,8 +1977,6 @@ unavailable, the CLI hides `web.verify`, advertises no Office tools, returns
 `not-run` for explicit verification and rejects required browser acceptance
 before starting a model or session.
 
-Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
-
 `python3 -B tests/cli/mode_questions_smoke.py` checks the production CLI's Chat,
 Plan and Agent catalogs, rejected skill/write intent in Chat, no Plan writes,
 mode pinning, typed question stops, same questions after process restart and
@@ -1972,31 +2000,6 @@ Use the focused `resources: VBA procedure workspace streaming`,
 `resource context: workspace PDF page text` Harness checks for current selector
 admission until that scripted CLI smoke is ported.
 
-## Find a test
-
-```bash
-rg -n 'Test\(".*resource' tests/RNAssistant.Harness/Program.cs
-rg -n 'TargetMethodOrBehavior' tests/RNAssistant.Harness
-dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- --list
-```
-
-## Run a focused slice
-
-The trailing argument is a case-insensitive substring matched against category or test name:
-
-```bash
-dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "resources:"
-dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "bridge: typed resource"
-dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "vba: patch"
-```
-
-After an unchanged successful build, `--no-build` avoids recompilation:
-
-```bash
-dotnet run --no-build --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "storage: CAS"
-```
-
-Filtering limits executed tests. The harness source-links Core and Office-neutral production files, so a normal run still compiles that full linked source set. Compilation does not require reading every test file into agent context.
 
 Conversation v8 has narrow [protocol checks](../RNAssistant.ProtocolTests/README.md)
 and integrated Harness cases under `kernel:`, `context continuity:`, `conversation v8:`,

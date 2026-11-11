@@ -3,6 +3,7 @@ packages/
 vendor/
 web/css/vendor/
 web/js/vendor/
+web/data-templates/vendor/
 docs/audits/evidence/
 docs/stabilization/**/evidence/
 

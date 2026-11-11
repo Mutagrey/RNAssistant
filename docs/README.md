@@ -1,126 +1,29 @@
 # Карта документации RNAssistant
 
-Этот файл — единственная точка входа в документацию. Не загружай весь `docs/`:
-сначала выбери владельца области по таблице ниже, затем читай только нужный раздел.
+Единственная точка входа: выбери владельца области по таблице и читай нужный раздел.
+Текущий статус принадлежит [PROGRESS](stabilization/PROGRESS.md); эта карта не копирует
+ход реализации и результаты проверок.
 
 ## Минимальный контекст задачи
 
-1. Прочитай краткий текущий статус в начале [PROGRESS](stabilization/PROGRESS.md),
-   если задача зависит от приоритета или открытого риска.
-2. По таблице ниже выбери canonical document области и нужный раздел в нём.
-3. [Старый master plan](stabilization/STABILIZATION_MASTER_PLAN.md) и phase reports
-   читай как историю переноса архитектуры, только когда нужна причина решения или
-   точная прежняя проверка. Они не задают очередь обычных изменений.
+1. Определи изменяемое поведение и его владельца по таблице ниже. Начало PROGRESS
+   нужно для приоритета и открытых рисков; историю читай только для конкретного вопроса.
+2. Сначала найди файлы через `rg --files` или `rg -l -F` в каталоге владельца,
+   затем строки через `rg -n -F` и нужный диапазон файла. Для длинного документа
+   сначала найди заголовок через `rg -n '^#{1,3} ' путь`.
+3. Расширяй поиск по consumers и зависимостям по мере необходимости. Перед удалением
+   проверь ссылки по всему проекту, project/import files, регистрацию и динамические
+   имена. Отсутствие совпадения в одном каталоге не доказывает, что код мёртвый.
+4. Найди существующую проверку через [Harness guide](../tests/RNAssistant.Harness/README.md).
+   Если вывод поиска обрезан, сузь каталог, маску или символ; не загружай весь файл.
 
-[Правила разработки](development-rules.md) нужны для cross-cutting responsibility,
-testing или migration; [архитектура](architecture.md) — для изменения layers,
-owners или dependencies. Не читай оба документа автоматически для каждой задачи.
-Старые phase reports и ADR не являются текущим контрактом.
-
-[Resource Fabric](resource-fabric.md) — действующий контракт ресурсов.
-[Resource MASTER](stabilization/resource-cutover/MASTER.md) и три спецификации
-direct cutover объясняют порядок уже выполненной миграции; они не запускают её
-повторно. Текущий режим работы и веток задан в [правилах разработки](development-rules.md).
-Причина перехода к рабочему baseline зафиксирована в
-[ADR-0011](decisions/ADR-0011-working-baseline-and-trunk-development.md).
-
-[Разбор сбоев по десяти фото от 2026-10-26](stabilization/RISK_REGISTER.md#разбор-десяти-фотографий-чат-протокол-и-достоверность--2026-10-26)
-содержит воспроизведения и границы причинности; [очередь восстановления](stabilization/BACKLOG.md#восстановление-рабочих-сценариев-чата--2026-10-26)
-задаёт вертикальные срезы, владельцев и приёмку. Текущий приоритет — в начале PROGRESS;
-это не повторный общий cutover и не закрытая Windows/Office qualification.
-
-[Аудит оставшихся различий Office/workspace](audits/office-workspace-preparation-audit.md)
-разделяет доменные различия и дубли управления разговором; задаёт границу общего
-Application-владельца и срез с переключением обоих потребителей. Исторический аудит
-подготовки контекста и профилей tools сохранён ниже в том же документе.
-
-[Аудит коротких ссылок модели](audits/model-reference-contract-review.md)
-разделяет runtime IDs, finish references, semantic targets и Inspector aliases;
-содержит исходный аудит. Согласованное решение и реализация —
-[ADR-0018: типизированные ссылки](decisions/ADR-0018-typed-model-references.md) и canonical v8 contract.
-
-[Парное сравнение broad/compact профилей](audits/tool-profile-comparison.md)
-фиксирует реальные траектории, размеры запросов и ограничения пилота.
-
-[Исторический срез tools и skills от 2026-10-29](audits/capability-inventory-2026-10-29.md):
-91 → 71 встроенный tool ID, 16 skills, 10 начальных Core tools; сравнение по hosts,
-исправленная чистка инструкций и следующие кандидаты на сокращение.
-[Предыдущий аудит описаний](audits/skills-tools-description-review.md) и
-[матрица результатов tools](audits/tool-result-presentation-matrix.md) сохраняют
-исторический каталог из 91 ID, model/storage/UI paths и прежние gaps.
-
-Согласованный [план Tools](proposals/tools-architecture-plan.md) и
-[аудит встроенного каталога](audits/tools-architecture-current-state.md) описывают
-общий текстовый поиск workspace/Office и сохранение runtime/v8. Текущее поведение
-по-прежнему принадлежит Resource Fabric и Tool Library.
-
-По запросу пользователя выполнен [V8 architecture audit](audits/v8-architecture-drift-2026-10-26.md),
-с [картой владельцев](audits/v8-ownership-dependency-matrix.md) и
-[ограниченным планом реализации](proposals/v8-stabilization-execution-plan.md).
-Owner — Core/Application; после принятия diff это исторический срез, текущие
-контракты остаются в canonical docs, следующие решения — в BACKLOG.
-
-[Text mutations](text-mutations.md) задаёт единые core.write/patch/replace, структурированные пакетные правки подстрок с текстовыми ориентирами,
-маршрутизацию по owner, имена tools/skills и встроенное сравнение в шаге.
-
-По запросу пользователя сохранён [Universal Browser: документы и статус](browser/06_PROGRESS.md):
-[исходная спецификация](browser/00_SOURCE_SPEC.md), [аудит](browser/01_AUDIT.md),
-[ADR](browser/02_ARCHITECTURE_ADR.md), [контракты](browser/03_CONTRACTS.md),
-[план реализации](browser/04_MIGRATION_PLAN.md) и [матрица проверок](browser/05_TEST_MATRIX.md).
-P1 реализовал общую строку Browser с раскрываемым адресом, сведениями, modes и actions;
-исправлено обновление live HTML после изменений агента. P2a копирует exact saved HTML
-в самостоятельный managed workspace с проверкой файлов; перенос зависимостей ещё открыт.
-Focused import и browser checks проходят; pointer-routing gap остаётся открытым.
-Визуальное принятие In Review. Страницы остаются
-вкладками Dockview. Sessions/tools/native runtime ещё Proposed; WebView2 требует
-отдельного Windows spike. Текущие domain contracts остаются у owners ниже.
+[Правила разработки](development-rules.md) нужны для общих границ, testing и migration;
+[архитектура](architecture.md) — для слоёв, owners и dependencies. Не читай оба документа
+автоматически. `AGENTS.md` задаёт обязательные ограничения независимо от выбранного пути.
+`.ignore` исключает vendor, generated output и raw evidence из обычного поиска;
+при работе с ними указывай каталог явно или используй адресный `rg --no-ignore`.
 
 ## Канонические документы
-
-Оптимизация хранения и контекста: [план пользователя](proposals/RNAssistant_Architecture_and_Implementation_Plan.md),
-[решение JSONL/CAS/index](decisions/ADR-0019-bounded-jsonl-storage.md) и
-[baseline / ход реализации](audits/storage-context-optimization.md). Порядок P0 → §8.3 → §8.4;
-новое поколение хранения ещё не включено в production.
-
-[Карта повторов и блокировок](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03)
-содержит матрицы причин, исходные пределы и локальные воспроизведения semantic/inspection
-циклов. [Первый срез](stabilization/RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04)
-исправляет finish feedback и ограничивает одинаковые отказы; текущий контракт —
-[v8 admission/correction](protocols/CONVERSATION_RESPONSE_V8.md#admission-persistence-and-presentation).
-Текущие saved catalog/spawn, корреляция ответов, wait v3/skill v5 и ограничения — в
-[межагентном общении](conversation-protocol.md#межагентное-общение--2026-11-03).
-[План мультиагентного runtime](proposals/multi-agent-runtime-plan.md) отделяет готовые
-срезы catalog/spawn и корреляции от следующих durable wait/control/Collaboration/Inspector этапов;
-там же зафиксирован выбор переиспользуемых ролей через skills вместо преждевременной
-постоянной сущности Agent.
-HTML model operations используют явный document workspace независимо от выбора
-редактора; текущая публикация и recovery — в
-[Artifact Library](artifact-library.md#implemented-shared-html-publication--2026-09-08).
-
-По запросу пользователя сохранены [целевой V8 context/reference contract](proposals/RNAssistant_V8_Context_Protocol_Target.md)
-и [план Diagnostics / Qualification Lab](proposals/RNAssistant_V8_Diagnostics_Qualification_Plan.md)
-от 2026-10-30. Owner — Core ModelProtocol/LLM/context; существующие Office/Workspace
-adapters и Web Inspector остаются consumers. P0/D0 начат; headless P1/D1 расширен
-до 26 scripted A/B/C сценариев (diagnostic revision 5); пять CLI context
-fixtures снимают exact wire чтений, patch, compaction и skills. Текущий production [JSON-профиль](protocols/CONVERSATION_RESPONSE_V8.md)
-не использует native history. Live-model прогоны по указанию пользователя отложены; [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
-[Диагностика](diagnostics.md) — canonical структура экранов, владельцы,
-аудит, ограничения и проверка. Единый вход: Запуски / Лаборатория / Приложение;
-настройки управляют будущими запросами. [Лаборатория](model-endpoint-compatibility.md#diagnostics-ui--2026-10-30)
-использует общие встроенные сценарии и HTTP transport.
-P2 ввёл T/E separation, eligibility и `criterion`. Текущий
-[reference revision 4](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4)
-оставляет T внутренними, связывает JSON-результаты по `call_index` и требует нового чата для старой истории.
-P3 ввёл [компактную сборку запроса](conversation-protocol.md#p3-request-composition--2026-10-30)
-и единственную materialization выбранных skills/схем. P4 сохраняет
-[хронологические пары и единственную копию source body](conversation-protocol.md#p4-chronological-bodies--2026-10-30)
-с явными budget notices. P5 допускает доставленные historical E из того же чата,
-используя canonical JSONL locators в существующей SQLite-проекции. Общий compiler
-нормализует transport после отбора payloads; [аудит сборки](audits/office-workspace-preparation-audit.md#сборка-контекста-и-стоимость-шага--2026-10-30).
-Inspector показывает канонические T/E, доставку и критерии принятого finish;
-request diff, дальнейшая детализация блоков, D4 Scenario Lab и реальная qualification ещё открыты.
-После реализации P0–P6/D0–D5 они остаются историей; нормативное
-поведение переносится в canonical documents ниже.
 
 | Область | Владелец текущего контракта |
 |---|---|
@@ -129,6 +32,8 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Wire JSON v8 | [Conversation response v8](protocols/CONVERSATION_RESPONSE_V8.md); [v7](protocols/CONVERSATION_RESPONSE_V7.md) — исторический формат |
 | Совместимость model endpoint и проверка ролей/формата | [Model endpoint compatibility](model-endpoint-compatibility.md) |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |
+| Общие текстовые изменения | [Text mutations](text-mutations.md) |
+| Диагностика и Inspector | [Diagnostics](diagnostics.md) |
 | Tool catalog, schemas, authoring | [Tool Library](tool-library.md) |
 | Skills | [Skill Library](skills.md) |
 | Durable events, replay, recovery | [Session events](session-events.md) |
@@ -139,87 +44,80 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Data Templates: independent app workspace, export, UI/core and host adapters | [Data Templates](data-templates.md), [ADR-0014](decisions/ADR-0014-data-templates.md) |
 | VBA safety, packages, UserForms | [Mutation journal](vba-mutation-journal.md), [packages](vba-tool-packages.md), [UserForms](vba-userforms.md) |
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
-| UI architecture, аудит и ownership | [UI Architecture](ui/UI_ARCHITECTURE.md) — одна production Shell/Dockview; Shell S1b сохранена, Settings/rail S1c принят пользователем |
-| Экраны, навигация и состояния Office/Workspace | [UI Screen Map](ui/UI_SCREEN_MAP.md) — текущие реализации и целевое размещение |
-| Общие tokens, компоненты и визуальные решения | [UI Design System](ui/UI_DESIGN_SYSTEM.md); сюда перенесён эталон Dockview P1/P2; согласования — [UI Decisions](ui/UI_DECISIONS.md) |
-| Порядок UI-миграции, performance, rollback | [UI Migration Plan](ui/UI_MIGRATION_PLAN.md) — P0–P3, сверка исходных A–H с S1–S5, повторный аудит Shell, согласованный S1c и gates; [исходник v1.0](ui/reference/RNAssistant_UI_Architecture_and_Agent_Rules.md) сохранён как reference, не параллельный нормативный документ |
+| UI architecture, аудит и ownership | [UI Architecture](ui/UI_ARCHITECTURE.md) |
+| Экраны, навигация и состояния Office/Workspace | [UI Screen Map](ui/UI_SCREEN_MAP.md) |
+| Общие tokens, компоненты и визуальные решения | [UI Design System](ui/UI_DESIGN_SYSTEM.md); согласования — [UI Decisions](ui/UI_DECISIONS.md) |
+| Порядок UI-миграции, performance, rollback | [UI Migration Plan](ui/UI_MIGRATION_PLAN.md); [исходник v1.0](ui/reference/RNAssistant_UI_Architecture_and_Agent_Rules.md) сохранён как reference, не параллельный нормативный документ |
 | Исторические UI/UX источники | [Прежний UI design](ui-design.md), [Demo P0–P3](ui/UI_LAYOUT_UX.md), [Prototype Package](ui-prototype/00_START_HERE.md); не параллельные нормативные планы |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Версии завершённых продуктовых изменений и выпуск | [Versioning](operations/VERSIONING.md) — patch/minor/major на завершённый срез; отдельные [release](operations/RELEASE_PROCESS.md) и [build evidence](operations/BUILD_EVIDENCE.md) |
 | Targeted checks | [Harness guide](../tests/RNAssistant.Harness/README.md) |
 | Сравнение моделей и безопасное переключение | [Правила разработки §9](development-rules.md#сравнение-моделей) |
 
-`host-fabric.md` и `local-automation-agent.md` описывают отложенные контуры, а не
-действующий stable-core scope.
+## Планы, решения и история
 
-Причина производной SQLite-проекции чатов —
-[ADR-0012](decisions/ADR-0012-chat-sqlite-projection.md); текущий контракт чтения
-и восстановления остаётся в [Session events](session-events.md).
+Открывай только материалы выбранной области. Планы не запускают следующий этап
+автоматически; ADR и phase reports объясняют решения и прежнее evidence, а текущий
+контракт остаётся у владельца выше. Непроверенные Windows/Office/WebView2 сценарии
+остаются открытыми независимо от локальных проверок.
 
-Workspace-first решение и текущий срез CLI зафиксированы в
-[ADR-0013](decisions/ADR-0013-workspace-first-runtime.md); состояние этапов — в
-[PROGRESS](stabilization/PROGRESS.md). Граница общего Gateway/compiler для CLI
-описана в [Resource Fabric](resource-fabric.md).
-
-По отдельному запросу пользователя сохранены
-[предложение Resource Context](stabilization/resource-context/PLAN.md) и
-[аудит Wave 0](audits/resource-context-current-state.md) от 2026-10-22.
-Owner — model-context/LLM diagnostics. Это проверяемый срез и ограниченный план
-следующей правки, не новый runtime-контракт или повторный cutover. После закрытия
-этапов документы остаются историей; текущие поведение, статус и риски принадлежат
-canonical docs и существующим реестрам.
-
-По спецификации пользователя начат [аудит Conversation v8.1](stabilization/conversation-v8/AUDIT.md)
-и подготовлен [ADR-0016](decisions/ADR-0016-conversation-v8-admission.md).
-Owner — Core ModelProtocol / AgentKernel. [Фаза 1](stabilization/conversation-v8/PHASE1.md)
-проверяет codec, [фаза 2](stabilization/conversation-v8/PHASE2.md) —
-kernel и admission по журналу, [кандидат фазы 3](stabilization/conversation-v8/PHASE3.md) —
-prompts, adapters и CLI, [срез фазы 4](stabilization/conversation-v8/PHASE4.md) —
-format-8 persistence/UI и восстановление в отдельном worktree.
-[Изолированные сравнения фазы 5](stabilization/conversation-v8/PHASE5_PILOT.md)
-сохраняют точные HTTP-запросы, результаты задач, абляции и открытые условия квалификации.
-Код и тесты объединены в `main`; v8 стал текущим контрактом. Полный Harness
-после объединения не запускался, а квалификация Windows/Office/WebView2 и
-формальная оценка реальных моделей остаются открытыми. Аудит и phase reports
-теперь исторические; текущие правила — в canonical protocol docs.
-
-По сохранённым пользовательским планам
-[Unified Shell](proposals/RNAssistant_Unified_Shell_Plan.md) и
-[Visual Annotator](proposals/RNAssistant_Visual_Annotator_Plan.md) подготовлены
-[аудит Unified Shell / Visual Annotator](architecture/visual-annotator-audit.md)
-и [RFC / ADR-0017](decisions/ADR-0017-unified-shell-and-visual-annotations.md).
-Owner — application/chat UI. Фаза 0 завершена, RFC принят; срез 1a общего
-черновика и единый ChatView controller для Office, проекта и плагина в 1b
-реализованы host-neutral. HTML-preview получил инспектор и подготовку выбранного
-элемента как ресурсного чипа общего Office-чата. Workspace backend принимает
-привязанный draft и читает его через общий `core.find/read/search`; plugin-frame
-annotation использует тот же Inspector, защищённый черновик и composer.
-Общая инструкция и статическая правка исходника через существующий patch проверены
-host-neutral; автоматическое сопоставление DOM с исходником и Windows/WebView2
-qualification ещё открыты.
-Общий экран разработки плагина теперь использует дерево проектов и чатов слева,
-тот же ChatView в центре и предпросмотр справа; отправка и история идут через
-контроллер проектного чата, отдельные обработчики плагина удалены. Текущий HTML
-workspace Office-чата теперь можно открыть
-справа от того же ChatView без второго iframe. В нём работает редактор
-аннотаций с номерами и списком общего composer; незавершённый ввод
-восстанавливается из защищённого черновика. Отправленные номера видны в истории
-сообщения и на странице совпадающего HTML revision. Разделы справа выбираются в
-заголовке: для HTML доступны предпросмотр и четыре раздела чата, для плагина —
-предпросмотр и те же четыре раздела чата. Общий маршрут для произвольных ресурсов и история
-браузера ещё не реализованы.
-Оба существующих preview получили общую двухуровневую шапку с выбором раздела
-и строкой ресурса/загрузки/обновления;
-их frame owners и права доступа остаются у HTML и плагина.
-После реализации документы остаются историей решения; текущие контракты переходят в
-UI Architecture / Screen Map, Plugins, Resource Fabric и Session events, статус — в PROGRESS.
-
-[Предложение диагностики](proposals/RNAssistant_Diagnostics_UIUX_Plan.md) сохранено
-по запросу пользователя. После уточнения по фотографиям основой выбрана
-существующая правая панель с четырьмя разделами; отдельный макет отклонён.
-Owner и текущие правила — [Diagnostics](diagnostics.md); размещение — [UI Screen Map](ui/UI_SCREEN_MAP.md).
-Предложение остаётся исходным материалом до переноса согласованных пунктов
-в canonical UI document, а не вторым runtime-контрактом.
+- Режим работы и слои: [master plan](stabilization/STABILIZATION_MASTER_PLAN.md),
+  [рабочий baseline / ADR-0011](decisions/ADR-0011-working-baseline-and-trunk-development.md),
+  [SQLite-проекция / ADR-0012](decisions/ADR-0012-chat-sqlite-projection.md),
+  [workspace-first / ADR-0013](decisions/ADR-0013-workspace-first-runtime.md).
+  `host-fabric.md` и `local-automation-agent.md` описывают отложенные контуры.
+- Хранение и контекст: [план](proposals/RNAssistant_Architecture_and_Implementation_Plan.md),
+  [JSONL/CAS/index / ADR-0019](decisions/ADR-0019-bounded-jsonl-storage.md),
+  [baseline и реализация](audits/storage-context-optimization.md).
+- Resources: [история cutover](stabilization/resource-cutover/MASTER.md),
+  [план Resource Context](stabilization/resource-context/PLAN.md),
+  [аудит Wave 0](audits/resource-context-current-state.md).
+- Общая подготовка Office/Workspace: [аудит owners](audits/office-workspace-preparation-audit.md),
+  [сборка и стоимость шага](audits/office-workspace-preparation-audit.md#сборка-контекста-и-стоимость-шага--2026-10-30).
+- Сборка model context: [целевой план](proposals/RNAssistant_V8_Context_Protocol_Target.md),
+  [request composition](conversation-protocol.md#p3-request-composition--2026-10-30),
+  [хронология и source bodies](conversation-protocol.md#p4-chronological-bodies--2026-10-30),
+  [typed references revision 4](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4),
+  [аудит коротких ссылок](audits/model-reference-contract-review.md),
+  [решение ADR-0018](decisions/ADR-0018-typed-model-references.md).
+- Диагностика и Lab: [план](proposals/RNAssistant_V8_Diagnostics_Qualification_Plan.md),
+  [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30),
+  [Lab UI](model-endpoint-compatibility.md#diagnostics-ui--2026-10-30),
+  [исходное UIUX-предложение](proposals/RNAssistant_Diagnostics_UIUX_Plan.md).
+  Условия real-model проверок принадлежат Model endpoint compatibility.
+- Сбои и повторения: [разбор фото](stabilization/RISK_REGISTER.md#разбор-десяти-фотографий-чат-протокол-и-достоверность--2026-10-26),
+  [очередь восстановления](stabilization/BACKLOG.md#восстановление-рабочих-сценариев-чата--2026-10-26),
+  [карта блокировок](stabilization/RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03),
+  [finish correction](stabilization/RISK_REGISTER.md#finish-коррекция-и-ограничение-цикла--2026-11-04),
+  [текущий admission contract](protocols/CONVERSATION_RESPONSE_V8.md#admission-persistence-and-presentation).
+- Мультиагенты: [план runtime](proposals/multi-agent-runtime-plan.md).
+  Текущий контракт адресов, доставки, ожиданий и участников — в таблице выше.
+- Tools и skills: [план Tools](proposals/tools-architecture-plan.md),
+  [аудит каталога](audits/tools-architecture-current-state.md),
+  [инвентаризация 2026-10-29](audits/capability-inventory-2026-10-29.md),
+  [аудит описаний](audits/skills-tools-description-review.md),
+  [матрица результатов](audits/tool-result-presentation-matrix.md),
+  [broad/compact пилот](audits/tool-profile-comparison.md).
+- V8 architecture: [аудит](audits/v8-architecture-drift-2026-10-26.md),
+  [карта зависимостей](audits/v8-ownership-dependency-matrix.md),
+  [ограниченный план](proposals/v8-stabilization-execution-plan.md).
+- История Conversation v8: [аудит](stabilization/conversation-v8/AUDIT.md),
+  [ADR-0016](decisions/ADR-0016-conversation-v8-admission.md),
+  [фаза 1](stabilization/conversation-v8/PHASE1.md),
+  [фаза 2](stabilization/conversation-v8/PHASE2.md),
+  [фаза 3](stabilization/conversation-v8/PHASE3.md),
+  [фаза 4](stabilization/conversation-v8/PHASE4.md),
+  [пилоты фазы 5](stabilization/conversation-v8/PHASE5_PILOT.md).
+- Universal Browser: [статус](browser/06_PROGRESS.md),
+  [исходная спецификация](browser/00_SOURCE_SPEC.md), [аудит](browser/01_AUDIT.md),
+  [ADR](browser/02_ARCHITECTURE_ADR.md), [контракты](browser/03_CONTRACTS.md),
+  [план](browser/04_MIGRATION_PLAN.md), [проверки](browser/05_TEST_MATRIX.md).
+  Публикация HTML и recovery — [Artifact Library](artifact-library.md#implemented-shared-html-publication--2026-09-08).
+- Shell и аннотации: [Unified Shell](proposals/RNAssistant_Unified_Shell_Plan.md),
+  [Visual Annotator](proposals/RNAssistant_Visual_Annotator_Plan.md),
+  [аудит](architecture/visual-annotator-audit.md),
+  [ADR-0017](decisions/ADR-0017-unified-shell-and-visual-annotations.md).
+  Текущее поведение принадлежит canonical UI docs, Plugins, Resource Fabric и Session events.
 
 ## Куда писать
 
