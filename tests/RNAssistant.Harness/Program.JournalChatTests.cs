@@ -1,4 +1,6 @@
 using System;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using System.IO;
 using System.Linq;
 using System.Globalization;
@@ -69,8 +71,11 @@ namespace RNAssistant.Harness
                     "new Store creates no legacy chat files");
                 var before = StorageJournal.Inventory(paths).SelectMany(stream => stream.Segments).ToDictionary(file => file, File.ReadAllBytes);
                 RuntimeThrows<NotSupportedException>(() => store.Commit(loaded, new ConversationCommit(removed: new[] { user.Id })));
-                var protocol = new ChatMessage { Role = "assistant", ProtocolMessage = true, Content = "runtime protocol" };
-                RuntimeThrows<NotSupportedException>(() => store.Commit(loaded, new ConversationCommit(new[] { protocol })));
+                var protocol = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseModelAttemptId = "unaccepted",
+                    ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                    Content = ModelProtocolWire.WriteAcceptedDecision("finish", "Answer ready.", "Unaccepted runtime message",
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) };
+                RuntimeThrows<InvalidOperationException>(() => store.Commit(loaded, new ConversationCommit(new[] { protocol })));
                 RuntimeThrows<NotSupportedException>(() => store.ListHeaders(true));
                 AssertTrue(before.All(item => item.Value.SequenceEqual(File.ReadAllBytes(item.Key))), "unsupported operations do not append");
                 journal.CreateChat("unconnected", "agent-card", "Agent", ConversationRunPolicy.For(ChatModes.Agent));
@@ -164,6 +169,17 @@ namespace RNAssistant.Harness
                 Console.WriteLine("journal-text H={0}: metadata+header records={1}, bytes={2}, allocated={3}; append records={4}, bytes={5}, allocated={6}; page bodies=8",
                     count, metadataRecords, metadataBytes, metadataAllocation, journal.Journal.ReadRecords - records,
                     journal.Journal.ReadBytes - bytes, GC.GetAllocatedBytesForCurrentThread() - allocated);
+                var initial = CheckpointState("cost-run", RunLifecycle.Running, 0, 0);
+                session.LastRun = new ChatRunRecord { RunId = initial.Summary.RunId, TurnId = initial.Summary.TurnId,
+                    StartedUtc = DateTime.UtcNow, KernelState = initial, ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                records = journal.Journal.ReadRecords; bytes = journal.Journal.ReadBytes; bodies = journal.ChatBodyReads;
+                allocated = GC.GetAllocatedBytesForCurrentThread();
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.Started, initial.Summary, limits: initial.Limits),
+                    new ChatMessage[0]).Persist(store.CommitRun, session);
+                AssertEqual(bodies, journal.ChatBodyReads, "kernel append hydrates no historical bodies");
+                AssertTrue(journal.Journal.ReadRecords - records <= 16, "kernel metadata reads are bounded independently of H");
+                Console.WriteLine("journal-runtime H={0}: records={1}, bytes={2}, allocated={3}, history bodies=0", count,
+                    journal.Journal.ReadRecords - records, journal.Journal.ReadBytes - bytes, GC.GetAllocatedBytesForCurrentThread() - allocated);
             });
         }
     }

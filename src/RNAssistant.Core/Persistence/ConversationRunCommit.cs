@@ -22,7 +22,7 @@ namespace RNAssistant.Core.Persistence
             if (_journalChat != null) return;
             _journalChat = session.Id;
             JournalRevision = session.Revision;
-            JournalMessageCount = session.Messages.Count;
+            JournalMessageCount = this is ConversationRunCommit run ? run.ExpectedMessageCount : session.Messages.Count;
         }
 
         public IReadOnlyList<ConversationMessageWrite> Messages { get; protected set; }
@@ -68,6 +68,7 @@ namespace RNAssistant.Core.Persistence
     public sealed class ConversationRunCommit : ConversationCommit
     {
         public string RunId { get; private set; }
+        internal AgentRunEventKind FactKind { get; private set; }
         public string SessionId { get { return _state.Id; } }
         public string Host { get { return _state.Host; } }
         public string DocumentKey { get { return _state.DocumentKey; } }
@@ -91,7 +92,7 @@ namespace RNAssistant.Core.Persistence
             _state = session.CopyForRunCommit();
             ExpectedMessageCount = expectedMessageCount ?? session.Messages.Count;
             if (ExpectedMessageCount < 0) throw new ArgumentOutOfRangeException(nameof(expectedMessageCount));
-            RunId = fact.Summary.RunId;
+            RunId = fact.Summary.RunId; FactKind = fact.Kind;
             var writes = new List<ConversationMessageWrite>();
             var additions = (appended ?? new ChatMessage[0]).ToArray();
             AppendedOrder = Array.AsReadOnly(additions.Select(message => message.Id).ToArray());

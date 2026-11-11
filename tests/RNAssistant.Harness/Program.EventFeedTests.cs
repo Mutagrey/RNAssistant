@@ -112,6 +112,9 @@ namespace RNAssistant.Harness
 
         private sealed class EventFeedPageStore : IEventStore, ISessionEventReader
         {
+            public IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs)
+            { return Read(session, SessionEventReadMode.Validated).Where(item => item.Type == SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted).Type && runs.Contains(item.RunId)).ToArray(); }
+
             private readonly SessionEvent _fact;
             public EventFeedPageStore(SessionEvent fact) { _fact = fact; }
             public ISessionEventReader OpenReader(ConversationMetadata session) { return this; }

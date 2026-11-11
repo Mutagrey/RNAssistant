@@ -94,11 +94,18 @@ page и explicit load реализованы самим journal owner. `Workspac
 зависит от конкретного `ChatStore`. Семь адресных checks проходят, включая реальные
 Office/Workspace consumers, потерянное подтверждение, rebuild и restore. При
 H=100/1000/10000 metadata+header читают 4 записи, append — 3, без старых тел.
-Это пока plain-text storage, не полный AgentKernel turn. Runtime/protocol, resources,
-rewrite/move/delete/recovery, usage и production composition остаются открыты.
+Следующий runtime-срез уже проходит полный AgentKernel turn без tools через Office
+run service и Workspace runtime ports: reflection → finish, restart и второй запрос
+к локальному HTTP-провайдеру. Ответ и checkpoint фиксируются одним frame; manifest
+и context receipt сохраняются в CAS. Девять адресных checks проходят. При
+H=100/1000/10000 kernel append читает 5 записей и не гидратирует старые тела.
+Resources/mutations, rewrite/move/delete/recovery, usage, Inbox/control/feed и
+production composition остаются открыты. Backup смешанного root закономерно
+запрещён до переноса resource journals; restore нового run проверен в чистом root.
 Старый backend удаляется при переключении целого порта; новые fallback/adapters
 не добавлены. Product version не повышается для этого промежуточного подключения.
 [Отчёт §12](../audits/storage-context-optimization.md#p1p2--direct-journal-text-store-integration-2026-11-11).
+[Runtime-срез](../audits/storage-context-optimization.md#p1p2--atomic-no-tool-runtime-integration-2026-11-11).
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace

@@ -10,10 +10,23 @@ concrete `ChatStore` signatures are removed. Production Workspace composition su
 the already existing `ChatConversationStoreAdapter`; its owner is Core Persistence /
 Application Workspace, removal condition is the complete Store/runtime/resource port
 switch at P7, together with the old backend. This intermediate integration does not
-enable a second production writer. Protocol/runtime, resource, rewrite/move/delete,
+enable a second production writer. Resource, rewrite/move/delete,
 recovery and usage operations explicitly reject unsupported requests. The next storage
 work extends this existing journal owner instead of optimizing the old aggregate path.
 [Contract and limits](../session-events.md#direct-journal-text-store-integration--2026-11-11).
+
+P1/P2 no-tool runtime: `CommitRun` now reuses the existing checkpoint reducer inside
+the chat commit's single frame/transaction. Model event bodies and context receipts
+use existing CAS; metadata headers exclude the kernel body. Office run service and
+Workspace runtime ports exercise real model preparation/HTTP, reflection, finish,
+restart and another turn. WorkspacePorts/Plan/task-list owners no longer depend on
+concrete ChatStore; composition supplies existing Store/events/artifact ports.
+No new adapter is added. Existing ChatConversationStoreAdapter/ChatEventStoreAdapter
+remain production composition only, with the same complete-port P7 removal gate.
+ToolPackAdmissionJournal no longer reads all events to restore callable membership.
+Resource owners still produce legacy journals; mixed-root backup therefore remains
+explicitly blocked. Next: mutation/resource integration, remaining Store and Inbox/
+control/recovery operations, then production switch and old backend removal.
 
 Owner: Core persistence/context; Application consumes common contracts.
 [Plan](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md),

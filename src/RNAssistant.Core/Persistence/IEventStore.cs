@@ -288,6 +288,7 @@ namespace RNAssistant.Core.Persistence
     public interface IEventStore
     {
         SessionEvent Append(ChatSession session, SessionEventWrite write);
+        IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs);
         IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode);
         // Verified canonical boundaries for the current run and selected same-chat
         // aliases. The disposable locator index is never accepted as evidence.

@@ -51,7 +51,7 @@ namespace RNAssistant.Harness
                 }).ToArray();
                 authority.Publish(ResourceAuthorityCommit.Create(scope, 0, null, heads, AuthorityCommitReason.DerivedPublication));
                 var history = System.IO.File.ReadAllBytes(SessionEventFile(paths, session));
-                var consumer = new RNAssistant.Runtime.WorkspacePlanService(paths, chats, new ChatBlobStore(paths), workspace, session);
+                var consumer = new RNAssistant.Runtime.WorkspacePlanService(paths, ConversationStore(chats), new ChatBlobStore(paths), workspace, session, chats.DocumentArtifacts);
                 AssertEqual(artifact.InlineText, consumer.Read("plan: Scoped plan", 1, representation: "text").Result.Text,
                     "Workspace reads the exact published Plan through the scoped resource owner");
                 var foreign = new ConversationMetadata(session.Id, session.Revision, session.Host, session.DocumentKey,

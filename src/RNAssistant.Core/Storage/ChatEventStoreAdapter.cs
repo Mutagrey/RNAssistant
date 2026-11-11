@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -12,6 +13,13 @@ namespace RNAssistant.Core.Storage
         public ChatEventStoreAdapter(ChatStore store)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
+        }
+
+        public IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs)
+        {
+            var selected = new HashSet<string>(runs, StringComparer.OrdinalIgnoreCase);
+            var type = SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted).Type;
+            return Read(session, SessionEventReadMode.Validated).Where(item => item.Type == type && selected.Contains(item.RunId)).ToArray();
         }
 
         public SessionEvent Append(ChatSession session, SessionEventWrite write)

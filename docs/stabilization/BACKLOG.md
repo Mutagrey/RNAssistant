@@ -706,6 +706,12 @@ controller check does not qualify them or real Office delivery.
 
 ## Host-neutral Harness baseline failures — 2026-10-13
 
+2026-11-11, journal runtime integration: `vba: journal records mutation correlation`
+fails at `journaled mutation succeeds` in both the saved `bf6709f9` host-neutral
+baseline and the isolated runtime candidate. Owner: VBA Harness/domain. Localize
+the original admission/result failure separately; no assertion or production VBA
+policy was changed in the no-tool runtime slice. This is not Office qualification.
+
 Owners: Harness fixtures and the corresponding domain owners. The 24 failures at
 `10f78f40` and ten `agent:` failures at `0410126e` are historical counts. Subsequent
 storage/protocol fixes closed part of that set; do not present it as today's list.

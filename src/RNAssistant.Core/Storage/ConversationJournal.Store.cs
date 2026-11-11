@@ -36,8 +36,11 @@ namespace RNAssistant.Core.Storage
             var chat = CurrentChat(db, id);
             if (chat == null && Card(db, id) != null) throw TextStoreScope();
             if (chat != null && (Scalar(db, "SELECT 1 FROM call_fact WHERE stream=$stream AND chat=$chat LIMIT 1", id) != null ||
-                Scalar(db, "SELECT 1 FROM run_current WHERE stream=$stream AND chat=$chat", id) != null ||
                 Scalar(db, "SELECT 1 FROM input_state WHERE stream=$stream AND recipient=$chat LIMIT 1", id) != null))
+                throw TextStoreScope();
+            var run = chat == null ? null : CurrentRun(db, id);
+            if (run != null && (chat.Fact.Run == null || (run.Fact.RunId == chat.Fact.Run.RunId
+                ? run.Fact.Body.Sha256 != chat.Fact.RunState?.Sha256 : !TerminalRun(run.Fact.Lifecycle))))
                 throw TextStoreScope();
             return chat;
         }
@@ -147,7 +150,9 @@ namespace RNAssistant.Core.Storage
                     Title = card.Title, DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath,
                     CreatedUtc = card.CreatedUtc, Model = card.SelectedModel, ReasoningEnabled = card.ReasoningEnabled,
                     Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
-                    Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)) };
+                    Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)),
+                    LastRun = LoadChatRun(receipt.Fact),
+                    LastContextReceipt = receipt.Fact.ContextReceipt == null ? null : JsonConvert.DeserializeObject<ContextReceipt>(ReadChatBody(receipt.Fact.ContextReceipt)) };
                 for (var before = Math.Min(100, receipt.Fact.MessageCount); before > 0; before = Math.Min(before + 100, receipt.Fact.MessageCount))
                 {
                     var start = session.Messages.Count;
@@ -176,7 +181,9 @@ namespace RNAssistant.Core.Storage
                             DocumentPath = card.DocumentPath, Title = card.Title, Model = card.SelectedModel, Mode = card.Policy.Mode,
                             ReasoningEnabled = card.ReasoningEnabled, CreatedUtc = card.CreatedUtc, UpdatedUtc = receipt.Fact.CreatedUtc,
                             LastActivityUtc = new DateTime(Convert.ToInt64(Scalar(db, "SELECT last_activity_ticks FROM chat_state WHERE stream=$stream AND chat=$chat", card.ChatId)), DateTimeKind.Utc),
-                            MessageCount = receipt.Fact.MessageCount };
+                            MessageCount = receipt.Fact.MessageCount, RunId = receipt.Fact.Run?.RunId,
+                            RunRuntimeId = receipt.Fact.Run?.RuntimeId, RunStatus = receipt.Fact.Run?.Status,
+                            RunPhase = receipt.Fact.Run?.Phase, RunStartedUtc = receipt.Fact.Run?.StartedUtc };
                     }).OrderByDescending(header => header.UpdatedUtc).ToArray();
             }, CancellationToken.None);
         }
@@ -217,7 +224,6 @@ namespace RNAssistant.Core.Storage
             return id == null ? store.CreateTransient(host, key, title, "New chat") : store.Load(host, key, id);
         }
 
-        void IConversationStore.CommitRun(ConversationRunCommit commit) { throw TextStoreScope(); }
         ChatSession IConversationStore.Move(ChatSession session, string host, string key, string title) { throw TextStoreScope(); }
         void IConversationStore.MoveDocument(string oldHost, string oldKey, string host, string key, string title, string path) { throw TextStoreScope(); }
         bool IConversationStore.Delete(string host, string key, string id) { throw TextStoreScope(); }

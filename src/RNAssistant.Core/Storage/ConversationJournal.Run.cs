@@ -148,17 +148,25 @@ namespace RNAssistant.Core.Storage
             using (var tx = db.BeginTransaction())
             {
                 RegisterOperation(db, tx, record.Operation, record.Kind);
-                using (var command = Command(db, "INSERT INTO run_fact VALUES($stream,$operation,$chat,$run,$revision,$fingerprint,$segment,$start,$end,$sequence,$hash,$first); INSERT INTO run_current VALUES($stream,$chat,$operation) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation; INSERT OR IGNORE INTO run_identity VALUES($stream,$chat,$run)", tx))
-                {
-                    command.Parameters.AddWithValue("$chat", fact.ChatId); command.Parameters.AddWithValue("$run", fact.RunId);
-                    command.Parameters.AddWithValue("$revision", fact.Revision); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
-                }
+                ApplyRunRows(db, tx, record, position, fact);
                 SaveCursor(db, position, tx); tx.Commit();
+            }
+        }
+
+        private void ApplyRunRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record,
+            JournalCursor position, ConversationRunCheckpoint fact)
+        {
+            using (var command = Command(db, "INSERT INTO run_fact VALUES($stream,$operation,$chat,$run,$revision,$fingerprint,$segment,$start,$end,$sequence,$hash,$first); INSERT INTO run_current VALUES($stream,$chat,$operation) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation; INSERT OR IGNORE INTO run_identity VALUES($stream,$chat,$run)", tx))
+            {
+                command.Parameters.AddWithValue("$chat", fact.ChatId); command.Parameters.AddWithValue("$run", fact.RunId);
+                command.Parameters.AddWithValue("$revision", fact.Revision); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
             }
         }
 
         private static ConversationRunCheckpoint DecodeRun(JournalRecord record)
         {
+            if (record.Kind == "chat.committed")
+                return DecodeChatCommit(record).Checkpoint ?? throw new InvalidDataException("Missing atomic run checkpoint.");
             var fact = DeliveryData<ConversationRunCheckpoint>(record);
             if (record.Kind != "run.checkpoint" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact)))
                 throw new InvalidDataException("Invalid run checkpoint.");

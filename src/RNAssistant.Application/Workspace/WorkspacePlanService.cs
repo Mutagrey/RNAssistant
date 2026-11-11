@@ -11,13 +11,13 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Runtime
 {
-    // Workspace composition for the shared Plan owner. ChatStore retains links
+    // Workspace composition for the shared Plan owner. IConversationStore retains links
     // and selection; immutable records and heads belong to workspace authority.
     internal sealed class WorkspacePlanService : IToolMutationObserver
     {
         private readonly WorkspaceDescriptor _workspace;
         private readonly ChatSession _session;
-        private readonly ChatStore _chats;
+        private readonly IConversationStore _chats;
         private readonly ChatBlobStore _payloads;
         private readonly ResourceAuthorityStore _authority;
         private readonly ResourceMutationJournal _journal;
@@ -29,14 +29,14 @@ namespace RNAssistant.Runtime
         private bool _selectionCaptured;
         internal ResourceAuthorityScopeId Scope { get { return new ResourceAuthorityScopeId("workspace", _workspace.WorkspaceId); } }
 
-        internal WorkspacePlanService(AppDataPaths paths, ChatStore chats, ChatBlobStore payloads,
-            WorkspaceDescriptor workspace, ChatSession session)
+        internal WorkspacePlanService(AppDataPaths paths, IConversationStore chats, ChatBlobStore payloads,
+            WorkspaceDescriptor workspace, ChatSession session, DocumentArtifactStore artifacts)
         {
             if (session != null && (session.WorkspaceId != workspace.WorkspaceId || !string.IsNullOrWhiteSpace(session.DocumentAuthorityId)))
                 throw new InvalidOperationException("Plan access requires this workspace's independent session.");
             _workspace = workspace; _session = session; _chats = chats; _payloads = payloads;
             _authority = new ResourceAuthorityStore(paths); _journal = new ResourceMutationJournal(paths);
-            _owner = chats.DocumentArtifacts;
+            _owner = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
         }
 
         internal void ReconcileInterrupted()

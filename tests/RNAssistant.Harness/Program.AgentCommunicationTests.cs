@@ -803,6 +803,9 @@ namespace RNAssistant.Harness
 
         private sealed class AgentReceiptFailureEvents : IEventStore
         {
+            public System.Collections.Generic.IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> runs)
+            { return Read(session, SessionEventReadMode.Validated).Where(item => item.Type == SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted).Type && runs.Contains(item.RunId)).ToArray(); }
+
             private readonly IEventStore _inner;
             private readonly AgentDeliveryState _state;
             internal AgentReceiptFailureEvents(IEventStore inner, AgentDeliveryState state = AgentDeliveryState.Accepted) { _inner = inner; _state = state; }

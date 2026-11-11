@@ -15,7 +15,7 @@ namespace RNAssistant.Runtime
     internal sealed class WorkspaceTaskListObserver : IToolMutationObserver
     {
         private readonly ChatSession _session;
-        private readonly ChatStore _chats;
+        private readonly IConversationStore _chats;
         private readonly ChatBlobStore _payloads;
         private readonly ResourceAuthorityStore _authority;
         private readonly ResourceMutationJournal _journal;
@@ -23,7 +23,7 @@ namespace RNAssistant.Runtime
         private IDisposable _lease;
         private HashSet<string> _previousArtifacts;
 
-        internal WorkspaceTaskListObserver(AppDataPaths paths, ChatStore chats, ChatBlobStore payloads, ChatSession session)
+        internal WorkspaceTaskListObserver(AppDataPaths paths, IConversationStore chats, ChatBlobStore payloads, ChatSession session)
         {
             _session = session; _chats = chats; _payloads = payloads;
             _authority = new ResourceAuthorityStore(paths); _journal = new ResourceMutationJournal(paths);

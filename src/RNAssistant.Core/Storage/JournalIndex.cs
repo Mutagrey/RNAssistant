@@ -60,14 +60,14 @@ namespace RNAssistant.Core.Storage
                     command.CommandText = "PRAGMA foreign_keys=ON"; command.ExecuteNonQuery();
                     command.CommandText = "PRAGMA user_version";
                     var version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version != 0 && version != 10) throw new IndexVersionMismatch();
-                    if (version == 10) return db;
+                    if (version != 0 && version != 11) throw new IndexVersionMismatch();
+                    if (version == 11) return db;
                     using (var transaction = db.BeginTransaction())
                     {
                     command.Transaction = transaction;
                     command.CommandText = "PRAGMA user_version";
                     version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version == 10) { transaction.Commit(); return db; }
+                    if (version == 11) { transaction.Commit(); return db; }
                     if (version != 0) throw new IndexVersionMismatch();
                     command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1";
                     if (command.ExecuteScalar() != null) throw new IndexVersionMismatch();
@@ -90,8 +90,9 @@ namespace RNAssistant.Core.Storage
                     command.CommandText += "; CREATE TABLE chat_write(stream TEXT,chat TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation))";
                     command.CommandText += "; CREATE TABLE chat_state(stream TEXT,chat TEXT,operation TEXT,message_count INTEGER,last_activity_ticks INTEGER,PRIMARY KEY(stream,chat)); CREATE TABLE chat_message(stream TEXT,chat TEXT,id TEXT,ordinal INTEGER,operation TEXT,PRIMARY KEY(stream,chat,id),UNIQUE(stream,chat,ordinal))";
                     command.CommandText += "; CREATE TABLE chat_selection(stream TEXT PRIMARY KEY,chat TEXT)";
+                    command.CommandText += "; CREATE INDEX chat_write_history ON chat_write(stream,chat,sequence)";
                     command.ExecuteNonQuery();
-                    command.CommandText = "PRAGMA user_version=10"; command.ExecuteNonQuery();
+                    command.CommandText = "PRAGMA user_version=11"; command.ExecuteNonQuery();
                     transaction.Commit();
                     }
                 }

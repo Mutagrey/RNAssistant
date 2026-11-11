@@ -42,7 +42,7 @@ namespace RNAssistant.Core.Services
                     !string.IsNullOrWhiteSpace(message.RunId))
                 .Select(message => message.RunId), StringComparer.OrdinalIgnoreCase);
             var accepted = SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted);
-            var acceptedEvents = _events.Read(ConversationMetadata.From(_session), SessionEventReadMode.Validated)
+            var acceptedEvents = _events.ReadToolPackAdmissions(ConversationMetadata.From(_session), retainedReadRuns.Concat(new[] { _session.LastRun.RunId }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
                 .Where(item => item != null &&
                     string.Equals(item.Type, accepted.Type, StringComparison.Ordinal))
                 .OrderBy(item => item.Sequence)

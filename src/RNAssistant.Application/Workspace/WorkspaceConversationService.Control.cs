@@ -60,7 +60,7 @@ namespace RNAssistant.Runtime
                 var continuation = waiting ? AgentRunContinuation.RestoreWait(session.LastRun.KernelState, 0, history)
                     : AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
-                var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace,
+                var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace,
                     session, settings, apiKeyProvider, progress, acceptance, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),

@@ -1,5 +1,37 @@
 # Session event stream
 
+## Atomic no-tool runtime on the journal — 2026-11-11
+
+`ConversationJournal` now accepts `IConversationStore.CommitRun` directly. One
+`chat.committed` frame combines the existing run checkpoint with the accepted
+response/presentation delta. The same index transaction updates chat/message/run
+locators and the stream cursor; no second runtime history or store is introduced.
+Checkpoint state, context receipts and model manifests live in CAS. Headers retain
+run metadata without the kernel body. A presentation update preserves message
+identity, text/reasoning bodies and protocol origin; new runtime messages require
+the atomic kernel checkpoint. Generic metadata cannot replace accepted state,
+policy or model. A model `finish` alone does not mark the runtime completed.
+
+The existing event port writes typed model manifests/diagnostics to that same
+stream. Full event reads expose native `chat.committed` metadata and model events;
+legacy operation replay is not synthesized. Callable membership uses an addressed
+`ReadToolPackAdmissions` query instead of reading all events. The legacy adapter
+retains its previous internal read until cutover. Admission absence is verified
+against the addressed no-tool integration, which explicitly rejects tool/admission
+writes. Finish admission likewise verifies the exact chat/run checkpoint before
+reporting no tool evidence. Feed/cursor delivery and tool evidence integration remain
+separate work; they do not fall back to the old store.
+
+Office `ConversationRunService` and Workspace runtime ports pass reflection, finish,
+restart and a second turn through AgentKernel and an actual scripted HTTP endpoint.
+Workspace runtime, Plan and task-list composition consume `IConversationStore`;
+the existing artifact owner is supplied explicitly. Production composition still
+uses the old backend until the complete port switch. The new store accepts no-tool
+runs only: mutation/resource, Inbox/control and interrupted-run recovery consumers
+remain open. Rebuild and restore retain an unfinished checkpoint without executing
+it. Backup still refuses roots containing legacy resource journals; full application
+backup requires their migration. No Windows/Office/DPAPI qualification is implied.
+
 ## Direct journal text Store integration — 2026-11-11
 
 The existing `ConversationJournal` directly implements `IConversationStore` in an
@@ -8,7 +40,7 @@ text creation and append, scalar preferences, active selection, metadata, catalo
 headers without storage usage, bounded message windows and explicit full loading.
 `chat.committed` atomically retains address/card, expected revision, append delta and
 CAS body/context references; `chat.selected` retains the active chat. The existing
-shared disposable index (schema 10) holds current locators, message ordinals/counts
+shared disposable index (schema 11) holds current locators, message ordinals/counts
 and activity. Metadata/header/append reads do not hydrate historical bodies; a page
 hydrates only its selected text/reasoning bodies. Full loading remains proportional
 to the requested history. Metadata changes preserve last activity; stale writers and
@@ -22,11 +54,10 @@ ChatStore overloads are removed. Production composition still uses its existing
 `ChatConversationStoreAdapter`. No new adapter, store, flag, import or fallback is
 introduced; this slice does not alter `ChatStore` itself.
 
-Runtime/protocol messages and `CommitRun`, resources/attachments, history rewrites,
-move/delete/recovery and storage-usage reporting are explicitly unsupported in this
-isolated integration. Reading an unconnected runtime/agent chat must not return an
-apparently complete text history. Plain text Store coverage is **not** a completed
-AgentKernel conversation or a production switch. Remaining operations must move to
+No-tool runtime/protocol messages and `CommitRun` are now connected as described
+above. Resources/attachments, history rewrites, move/delete/recovery and storage
+usage remain unsupported in this isolated integration. Reading an unconnected tool/
+agent chat must not return an apparently complete text history. Remaining operations must move to
 the same owner before P7 removes the old backend; verified backup, stopped legacy
 writers and Windows/Office photo evidence still gate that switch. Existing journal
 closure/backup/restore includes the new facts and CAS references.

@@ -29,7 +29,7 @@ namespace RNAssistant.Core.Storage
                     var cursor = journal.Scan((record, position) => {
                         foreach (var reference in stream.Resources ? ResourceJournal.CanonicalReferences(record) : conversation.CanonicalReferences(record))
                             references.AddReference(reference.ToBlobReference(), "storage-journal", stream.Identity, record.Sequence.ToString());
-                        if (record.Kind == "run.checkpoint")
+                        if (record.Kind == "run.checkpoint" || record.Kind == "chat.committed" && ConversationJournal.HasCheckpoint(record))
                         {
                             if (conversation == null) throw new InvalidDataException("Run checkpoint in resource stream.");
                             conversation.ValidateRunClosure(record);

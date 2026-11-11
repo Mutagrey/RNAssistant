@@ -89,12 +89,24 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal runtime:` runs two focused checks: real Office run service and Workspace
+ports through AgentKernel and scripted HTTP (reflection/finish, restart/next turn,
+mandatory manifests, no legacy chat writes), plus atomic checkpoint/answer lost-ack,
+index lag, stale rejection and clean-root restore without replay. Pair with
+`journal text:` for page/metadata and H=100/1000/10000 kernel append counters.
+Relevant regressions: `tool pack: durable admission replays across chat turns`,
+`workspace: accepted call history survives a new turn`, `workspace Plan: scoped
+reads preserve publication barrier`, and `storage optimization: run checkpoints
+and invocation ownership`. Production composition/Inbox/tools and Windows/Office
+qualification remain separate. Resource owners still produce legacy journals, so
+full application backup correctly refuses that mixed root.
+
 `journal text:` runs three focused checks of `ConversationJournal`'s direct
 `IConversationStore` integration: real Office creation/bridge page and Workspace
 Store consumers; lost acknowledgement, stale/reused receipts, rebuild and backup/
 restore with plaintext and synthetic protection; H=100/1000/10000 metadata/header/
-append counters and exact page bodies. Protocol/runtime and resource operations
-remain explicitly unsupported. This is not a full AgentKernel turn, production
+append counters and exact page bodies. No-tool runtime is covered above; tools and
+resource operations remain unsupported. These text-only checks do not cover production
 cutover or Windows/DPAPI qualification. Relevant regressions are `workspace: create
 reopen session and relocate`, `chat sessions: catalog avoids active history`,
 `storage optimization: atomic agent delivery and wait` and

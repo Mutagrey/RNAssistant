@@ -905,3 +905,55 @@ after-state/CAS ownership.
    adapter owner/removal gate is recorded in MIGRATION_MAP: switch the whole port
    and remove the old backend at P7. No product bump or Unreleased behavior claim
    for this intermediate, production-disabled implementation.
+
+## P1/P2 — atomic no-tool runtime integration (2026-11-11)
+
+1. F01/F04, P1/P2: existing `ConversationJournal` implements the runtime Store port
+   and model event port directly. Its chat frame contains the existing bounded run
+   checkpoint and message delta; one transaction projects chat/run/message cursors.
+   Kernel body, context receipt and typed model manifest use existing CAS. Schema 11
+   adds only a chat-history index to the same disposable database.
+2. Actual Office `ConversationRunService` and Workspace runtime ports complete two
+   no-tool turns through AgentKernel and a scripted HTTP endpoint: reflection,
+   finish, restart and retained-history reuse. Model manifests precede HTTP. Accepted
+   answer and checkpoint survive lost acknowledgement atomically; same-command
+   retry appends nothing. A model finish without the final kernel transition remains
+   Running after restart/restore, with no automatic execution. Index lag and stale
+   writers are exercised. Metadata cannot change accepted run state/policy/model;
+   presentation updates preserve text/reasoning and protocol origin.
+3. Removed concrete ChatStore dependencies from WorkspacePorts, Plan and task-list
+   composition; existing artifact ownership is supplied explicitly. Callable-tool
+   restore now uses the addressed event-port admission query, not an all-events read.
+   No new adapter/store/registry, feature flag, legacy backend optimization or
+   dual-write. Production C# +402/−65, net +337; two partials extend the existing owner.
+4. Nine targeted checks pass on macOS/net8/C#7.3 in isolated `bf6709f9` plus this
+   slice: two runtime checks, three text/page/scale checks, and existing tool-pack
+   cross-turn replay, Workspace accepted-call history, scoped Plan reads and run
+   checkpoint/ownership checks. No Office/VSTO validation. An additional broad
+   journal-filter run encountered `vba: journal records mutation correlation`;
+   its identical failure reproduces in the saved pre-slice build and is recorded
+   in Backlog, without changing its assertion or VBA policy.
+5. Same state-only kernel-start append after H plain messages and one fixed tail
+   message; no historical body is hydrated:
+
+   | H | Journal records | Logical journal bytes | Allocated bytes |
+   |---|---|---|---|
+   | 100 | 5 | 9,800 | 3,088,064 |
+   | 1,000 | 5 | 9,820 | 2,066,376 |
+   | 10,000 | 5 | 9,835 | 2,065,728 |
+
+   The first runtime sample includes serializer initialization. Metadata + header
+   remain 4 reads / about 86 KB; an 8-message page reads 8 bodies. Physical I/O,
+   CPU and Windows timings are not measured. The previous new-generation Store
+   rejected CommitRun, so no old/new runtime speedup is claimed. Request preparation
+   and explicit full load still use full history; P3 consumer integration is open.
+6. Mutation/resource owners, Inbox/send/wait/control, interrupted-run recovery,
+   history rewrite/move/delete, usage, feed delivery and stable bridge retry receipts
+   remain open. Real adapter setup still creates legacy resource journals: mixed-root
+   backup correctly refuses them. New run/CAS restore is verified separately in a
+   clean root, not represented as full application backup. Production cutover still
+   requires migrated consumers, verified backup, stopped old writers and Windows/
+   Office photo evidence. P4 stays deferred; unknown/effect mechanisms are unchanged.
+7. Session events, MIGRATION_MAP, PROGRESS, Harness guide and baseline Backlog updated.
+   Existing production Store/events adapters retain the same P7 removal gate. This
+   is an intermediate, production-disabled integration with no product version bump.
