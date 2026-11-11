@@ -5,7 +5,7 @@ const {chromium}=require('playwright');
   const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
   try{
     const page=await browser.newPage();
-    await page.setContent(`<h1>Contact form</h1><label>Name <input value="PRIVATE_INPUT"></label>
+    await page.setContent(`<title>Contact research</title><h1>Contact form</h1><p>${'Useful research fact. '.repeat(30)}</p><label>Name <input value="PRIVATE_INPUT"></label>
       <input type="password" value="PRIVATE_PASSWORD"><textarea>PRIVATE_TEXTAREA</textarea>
       <select><option selected>PRIVATE_OPTION</option></select><div contenteditable>PRIVATE_EDITABLE</div>
       <section data-private>PRIVATE_SECTION<button>PRIVATE_BUTTON</button></section>
@@ -26,6 +26,8 @@ const {chromium}=require('playwright');
       assert.ok(!result.exceptionDetails,JSON.stringify(result.exceptionDetails));return result.result.value;
     }
     const result=await capture(),wire=JSON.stringify(result);
+    assert.equal(result.title,'Contact research');
+    assert.ok(result.nodes.some(n=>n.role==='text'&&n.name.length>160),'research paragraphs retain more than an element name');
     assert.ok(result.nodes.some(n=>n.role==='heading'&&n.name==='Contact form'));
     assert.ok(result.nodes.some(n=>n.role==='textbox'&&n.name==='Name'));
     assert.ok(result.nodes.some(n=>n.role==='button'&&n.name==='Save'&&n.disabled));
@@ -39,7 +41,7 @@ const {chromium}=require('playwright');
     await page.setContent('<p>'+('long text '.repeat(400000))+'</p>'+('<button>Action</button>'.repeat(4000)));
     const bounded=await capture();
     assert.ok(bounded.truncated);assert.ok(bounded.nodes.length<=160&&bounded.visited<=3000);
-    assert.ok(bounded.nodes.every(n=>n.name.length<=160));assert.ok(bounded.nodes.reduce((n,x)=>n+x.name.length,0)<=16000);
+    assert.ok(bounded.nodes.every(n=>n.name.length<=(n.role==='text'?2000:160)));assert.ok(bounded.nodes.reduce((n,x)=>n+x.name.length,0)<=16000);
     console.log('PASS external Browser read: isolated-world semantics, privacy omissions, fresh DOM, bounded capture, no mutation');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

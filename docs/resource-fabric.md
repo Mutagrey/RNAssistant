@@ -1029,13 +1029,26 @@ batch is not a complete source. Core contracts live in `Resource*Models.cs` and
 
 ## Providers
 
-P6a (2026-11-11): `ExternalBrowserResourceProvider` добавляет одну chat-owned page
-в Office Gateway (`scope=browser`), также через bound Workspace `type=office`.
-Metadata discovery не читает DOM; semantic read получает bounded native capture,
-проверяет exact document/session/generation и публикует observed head/body через
-existing authority/CAS. `sourceComplete=false`; page text недоверен, form text values
-не выдаются. Navigation generation не заменяет DOM/element recheck для действий.
-[Контракт и ограничения](browser/03_CONTRACTS.md#p6a-semantic-read).
+`ExternalBrowserResourceProvider` serves one chat-owned live page and its retained
+observations in the Office Gateway (`scope=browser`), also through bound Workspace
+`type=office`. Discovery reads metadata, never the DOM; native capture checks the
+exact owner/document generation and marks `sourceComplete=false`.
+
+External Browser research (P6g, 2026-11-11) uses the existing conversation authority
+and CAS. Each live read publishes an immutable observation with bounded semantic
+text, native capture time, page title and source URL without credentials/query/fragment.
+The live page head remains the action guard; the immutable observation records its
+exact provenance through an `immutable-snapshot` dependency. Navigation and uncertain
+live effects do not discard captured historical facts from model context. Context
+budgeting and CAS validation remain unchanged.
+
+`core.read` returns a semantic `Browser observation: <UTC capture time>` snapshotTarget;
+`core.find` discovers retained source metadata. Exact retained reads work after close
+or restart, fail on missing/corrupt bytes and never recapture a website. A historical
+read is marked `browser-observation`, while only a delivered live `browser-page` read
+can supply native action provenance. Neither source type bypasses exact document,
+element, manual takeover or unknown-effect guards. No second browser store or compiler
+exception is introduced. [Contract and bounds](browser/03_CONTRACTS.md#p6g-research).
 
 Core `ResourceProviderRouter<TProvider>` owns canonical provider registration, selection
 and URI routing for Office and CLI. It is a router, not the common find/read contract.

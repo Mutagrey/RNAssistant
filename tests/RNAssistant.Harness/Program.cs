@@ -1328,6 +1328,7 @@ namespace RNAssistant.Harness
                 Test("external browser: site patterns and settings admission", ExternalBrowserSiteAccess),
                 Test("external browser: typed bridge trust", ExternalBrowserBridgeTrust),
                 Test("external browser: semantic Gateway delivery", ExternalBrowserSemanticGateway),
+                Test("external browser: retained research sources and model context", ExternalBrowserResearchObservations),
                 Test("external browser: read ownership and stale guards", ExternalBrowserReadGuards),
                 Test("external browser: actions require delivered reads and publish effects", ExternalBrowserActionsUseDeliveredRead),
                 Test("external browser: confirmation rechecks exact owner", ExternalBrowserConfirmationRechecksOwner),

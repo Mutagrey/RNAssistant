@@ -72,7 +72,7 @@ namespace RNAssistant.Office.Services
                 providers.Add(new ContextResourceProvider(authority, authority.Payloads));
             }
             if (catalogs != null) providers.Add(new CatalogResourceProvider(catalogs, authority, agentJavaScriptEnabled));
-            if (externalBrowser != null) providers.Add(new ExternalBrowserResourceProvider(externalBrowser, beginLiveOfficeRead));
+            if (externalBrowser != null) providers.Add(new ExternalBrowserResourceProvider(externalBrowser, beginLiveOfficeRead, authority));
             if (adapter != null)
             {
                 providers.Add(new LiveDocumentResourceProvider(adapter, authority?.Payloads,

@@ -12,7 +12,7 @@
   }
   function control() { return globalThis.__rnaBrowserControl ? globalThis.__rnaBrowserControl.snapshot() : { manual: true, epoch: 0 }; }
   function capture() {
-  // Never deliver input values, URLs, HTML or page script state.
+  // Never deliver input values, link destinations, HTML or page script state.
   var nodes = [], elements = [], destinations = [], visited = 0, characters = 0, truncated = false, deadline = performance.now() + 100;
   var privateSelector = 'script,style,template,noscript,iframe,object,embed,canvas,svg,[hidden],[aria-hidden="true"],[inert],[data-private],[data-sensitive],[contenteditable]:not([contenteditable="false"]),input[type="hidden"],input[type="password"]';
   var stop = {};
@@ -42,7 +42,9 @@
     return /^(textbox|checkbox|radio|combobox)$/.test(role) ? "" : smallText(element);
   }
   function add(role, value, element) {
-    value = value.slice(0, 160).replace(/\s+/g, " ").trim();
+    var maximum = role === 'text' ? 2000 : 160;
+    if (value.length > maximum) truncated = true;
+    value = value.slice(0, maximum).replace(/\s+/g, " ").trim();
     if (!value && role === "text") return;
     if (nodes.length >= 160 || characters + value.length > 16000) { truncated = true; throw stop; }
     var entry = { role: role, name: value, disabled: !!element && (element.matches(":disabled") || element.disabled === true || element.getAttribute("aria-disabled") === "true") };
@@ -133,7 +135,8 @@
       observation = capture(); observation.observationId = Array.from(crypto.getRandomValues(new Uint8Array(16)),
         function (value) { return value.toString(16).padStart(2, '0'); }).join('');
       observation.interaction = control().epoch; observation.used = false; prepared = null;
-      return { observationId: observation.observationId, nodes: observation.nodes, visited: observation.visited, truncated: observation.truncated };
+      return { observationId: observation.observationId, title: document.title.slice(0, 160),
+        nodes: observation.nodes, visited: observation.visited, truncated: observation.truncated };
     },
     prepare: function (id, preparationId, request) {
       try {

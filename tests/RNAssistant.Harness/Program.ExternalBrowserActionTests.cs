@@ -85,9 +85,16 @@ namespace RNAssistant.Harness
                 var missing = execute(ExternalBrowserToolHandler.Fill, args, null);
                 AssertEqual(ToolExecutionOutcome.Error, missing.Outcome, "a successful but undelivered read cannot authorize an action");
                 AssertEqual(0, source.Preparations, "omitted evidence does not reach the native preparation");
+                var snapshotTarget = (string)Newtonsoft.Json.Linq.JObject.Parse(read.Result.DataJson)["snapshotTarget"];
+                var historical = execute(ResourceToolCatalog.ReadToolId, new { target = snapshotTarget }, null);
+                AssertEqual(ToolExecutionOutcome.Ok, historical.Outcome, "captured facts can be reread");
+                AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Fill, args, historical.ResourceEvidence).Outcome,
+                    "historical reads cannot authorize live actions, even while that observation is still the latest");
+                AssertEqual(0, source.Preparations, "a historical read cannot reach native preparation");
                 source.BeforeDispatch = () => {
                     AssertEqual(MutationAttemptState.Prepared, journal.Unresolved().Single().State, "prepared fact exists before effects");
-                    AssertEqual(read.ResourceEvidence.Single().Resource.Revision, journal.Unresolved().Single().ExpectedRevision, "journal pins delivered observation");
+                    AssertEqual(read.ResourceEvidence.Single().Dependencies.Single().Resource.Revision,
+                        journal.Unresolved().Single().ExpectedRevision, "journal pins the live provenance of the delivered observation");
                 };
                 source.AfterDispatch = () => AssertEqual(MutationAttemptState.DispatchMayHaveOccurred,
                     journal.Unresolved().Single().State, "dispatch boundary is durable before native effect");

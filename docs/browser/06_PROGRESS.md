@@ -1,7 +1,18 @@
 # Universal Browser: статус
 
 Дата: 2026-11-11. Scope: P0–P3 baseline, P4a source diff baseline, P5a native pilot,
-P6a/P6b read/local actions, P6c visualization, P6d user control/access, P6e navigation и P6f external actions.
+P6a/P6b read/local actions, P6c visualization, P6d user control/access, P6e navigation,
+P6f external actions и P6g retained research observations.
+
+## P6g: исследование нескольких страниц — In Review
+
+`16.12.0-dev`: source URL/title/time и immutable snapshotTarget через existing
+ResourceAuthority/CAS/context. Facts A/B остаются доступны после navigation,
+compaction и close/restart; historical read не даёт live action authority.
+Text node расширен до 2000 символов при прежнем total budget; полного DOM/image
+capture нет. 10 Harness + 3 Chrome fixtures проходят; [evidence](05_TEST_MATRIX.md#p6g).
+Windows native compilation/delivery Open. P6f закоммичен `c75218b2`.
+Далее P6h safe screenshots/image delivery; дальнейший diff/P4b остаются отложенными.
 
 ## P6f: external actions и link navigation — In Review
 
@@ -10,12 +21,12 @@ P6a/P6b read/local actions, P6c visualization, P6d user control/access, P6e navi
 проверяется повторно, затем используются existing site/redirect/load guards. Cursor и
 manual takeover сохранены. 9 Harness + 3 Chrome fixtures проходят; [evidence](05_TEST_MATRIX.md#p6f).
 Windows compilation/delivery Open. Предыдущие срезы закоммичены отдельно:
-P4a `95b40bc5`, P6e `38959ae6`; текущий product `16.11.0-dev`, не release.
+P4a `95b40bc5`, P6e `38959ae6`; P6f product `16.11.0-dev`, не release.
 
 По вопросу пользователя сверены [model results и image snapshots](03_CONTRACTS.md#model-results):
 сейчас есть bounded semantic view и отдельные dev web.verify PNG/trace; external image
 delivery модели нет. Старое mutable Browser observation может выпасть из context.
-Следующий P6g — retained research results/источники, затем P6h safe screenshots.
+P6g выше добавляет retained research results/источники; P6h safe screenshots ещё Planned.
 
 ## P6e: agent navigation — In Review
 
@@ -351,11 +362,11 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c), [P6d](05_TEST_MATRIX.md#p6d) и
 [P4a baseline](05_TEST_MATRIX.md#p4a); P6e navigation реализован, [Windows evidence открыт](05_TEST_MATRIX.md#p6e).
-P6f реализован; следующий срез — P6g: исследование A → B → сравнение retained фактов
-с источниками, без смешения с fresh action authority и без нового Browser store.
-P6h — screenshots/privacy/image delivery. Select/scroll/key/wait и model open/focus/close
+P6f/P6g реализованы: A → B → сравнение retained фактов с источниками, отдельно от live
+action authority. Следующий срез P6h — screenshots/privacy/image delivery.
+Select/scroll/key/wait и model open/focus/close
 остаются отдельными сценариями, не завершённым универсальным API.
-Первый P6b local workflow реализован; general external actions остаются отдельным scope.
+Полнота iframe/shadow DOM, pagination и другие внешние действия остаются отдельным scope.
 Отдельный P3c с общим descriptor без consumer не нужен; доработка diff и persistent
 annotations отложены пользователем. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
 Native Windows evidence P5a, визуальное принятие внутренних views и известный

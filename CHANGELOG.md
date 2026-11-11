@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.12.0-dev
+
+- Browser reads retain observations with source address, title and capture time.
+  Agents can compare facts across navigation and context compaction, or reread a
+  saved observation after closing the page. Historical reads grant no live action
+  authority. Research text uses larger bounded excerpts; native Windows delivery is open.
+
 ### 16.11.0-dev
 
 - Browser agents can fill ordinary text controls, verify in-page button clicks on

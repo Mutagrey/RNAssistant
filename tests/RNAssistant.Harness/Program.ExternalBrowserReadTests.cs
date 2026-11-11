@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office;
 using RNAssistant.Office.Contracts;
@@ -24,6 +25,7 @@ namespace RNAssistant.Harness
             internal Action DuringRead;
             internal ExternalBrowserSemanticContent Content = new ExternalBrowserSemanticContent {
                 ObservationId = Guid.NewGuid().ToString("N"),
+                SourceUrl = "https://example.test/form", Title = "Contact form", CapturedUtc = DateTime.UtcNow,
                 Nodes = new[] { new ExternalBrowserSemanticNode { Role = "heading", Name = "Local form" },
                     new ExternalBrowserSemanticNode { Role = "button", Name = "Save", Disabled = true } }, Visited = 4 };
             public ExternalBrowserReadTarget TargetFor(string chatId) { return Target?.ChatId == chatId ? Target : null; }
@@ -31,7 +33,8 @@ namespace RNAssistant.Harness
             {
                 cancellationToken.ThrowIfCancellationRequested(); Captures++; ReadThread = Thread.CurrentThread.ManagedThreadId;
                 AssertTrue(target.Matches(Target), "capture uses the exact runtime binding");
-                DuringRead?.Invoke(); Content.ObservationId = Guid.NewGuid().ToString("N"); return Task.FromResult(Content);
+                DuringRead?.Invoke(); Content.ObservationId = Guid.NewGuid().ToString("N"); Content.CapturedUtc = DateTime.UtcNow;
+                return Task.FromResult(Content);
             }
         }
 
@@ -99,6 +102,81 @@ namespace RNAssistant.Harness
                 RuntimeThrows<OperationCanceledException>(() => provider.Read(session, request(), cancel.Token));
                 AssertEqual(before, source.Captures, "cancelled read never reaches the renderer");
             }
+        }
+
+        private static void ExternalBrowserResearchObservations()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var source = new HarnessBrowserReadSource { Target = new ExternalBrowserReadTarget(session.Id, "research", 1) };
+                executor.ExternalBrowserReadSource = source;
+                var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToArray(), new AppSettings(), ChatModes.Agent, false);
+                Func<string, ToolExecutionRecord> read = target => {
+                    var call = new ToolCall(Guid.NewGuid().ToString("N"), ResourceToolCatalog.ReadToolId,
+                        JsonConvert.SerializeObject(new { target }));
+                    var record = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "research", "turn", "step",
+                        DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, record.Message);
+                    return record;
+                };
+                source.Content.SourceUrl = ExternalBrowserResourceProvider.SourceAddress("https://user:password@example.test/article-a?token=SECRET#PRIVATE");
+                AssertEqual("https://example.test/article-a", source.Content.SourceUrl, "source attribution removes credentials, query and fragment");
+                source.Content.Title = "Research A"; source.Content.Nodes[0].Name = "Fact from page A";
+                var first = read(ExternalBrowserResourceProvider.Target);
+                var firstData = JObject.Parse(first.Result.DataJson);
+                var savedTarget = (string)firstData["snapshotTarget"];
+                AssertTrue(savedTarget.StartsWith(ExternalBrowserResourceProvider.ObservationPrefix), "fresh read returns a semantic retained target");
+                AssertTrue(!first.Result.DataJson.Contains("rna://") && !first.Result.DataJson.Contains("SECRET"), "projection excludes handles and URL secrets");
+                var evidence = first.ResourceEvidence.Single();
+                var scope = executor.ResourceAuthority.Scope(session, false);
+                executor.ResourceAuthority.ReportExternalDrift(scope, evidence.Dependencies.Single().Resource.Identity);
+                source.Target = new ExternalBrowserReadTarget(session.Id, "research", 2);
+                source.Content.SourceUrl = "https://example.test/article-b";
+                source.Content.Title = "Research B"; source.Content.Nodes[0].Name = "Fact from page B";
+                var second = read(ExternalBrowserResourceProvider.Target);
+                AssertTrue(second.ResourceEvidence.Single().Resource.Uri != evidence.Resource.Uri, "each captured observation has an immutable identity");
+                var authority = new ModelAuthoritySnapshot(executor.ResourceAuthority.CaptureMany(new[] { scope }),
+                    "pack", new SkillCatalogSnapshot(null), null, 1);
+                AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(evidence, authority.Resources).State,
+                    "changing the live head preserves the earlier observation");
+                foreach (var record in new[] { first, second })
+                {
+                    var result = ContinuityResult(Guid.NewGuid().ToString("N"), "core.read", record.Result, "user");
+                    result.ResourceEvidence = record.ResourceEvidence.ToList();
+                    session.Messages.Add(ContinuityCall(result)); session.Messages.Add(result);
+                }
+                var compiler = new ModelContextCompiler(executor.Payloads, projection: ModelToolResultProjection.Instance);
+                Func<System.Collections.Generic.IReadOnlyList<ChatMessage>, ContextWorkingSet, string> compile = (active, working) =>
+                    string.Join("\n", compiler.Compile(authority, new ChatMessage[0], active, null,
+                        new ToolCatalogEntry[0], new AppSettings(), 10000, workingSet: working).Messages.Select(message => message.Content));
+                var model = compile(session.Messages, null);
+                AssertContains(model, "Fact from page A", "page A reaches the model after navigation");
+                AssertContains(model, "Fact from page B", "page B reaches the same model request");
+                AssertContains(model, "article-a", "the original page source reaches the model");
+                SetContinuityCheckpoint(session, session.Messages.Last());
+                var compacted = compile(new ChatMessage[0], ContextWorkingSet.Restore(session, new ChatMessage[0], 6000));
+                AssertContains(compacted, "Fact from page A", "archived research survives context compaction");
+                AssertContains(compacted, "Fact from page B", "archived observations retain separate facts");
+                source.Target = null;
+                AssertEqual((string)firstData["text"], (string)JObject.Parse(read(savedTarget).Result.DataJson)["text"],
+                    "closing the Browser leaves exact captured facts readable");
+                AssertEqual(2, source.Captures, "historical reading never recaptures the live page");
+                var store = new ResourceAuthorityStore(FixturePaths.Value);
+                var restartedAuthority = new ResourceAuthorityService(store, store, payloads: executor.Payloads);
+                var provider = new ExternalBrowserResourceProvider(() => null, authority: restartedAuthority);
+                var restored = provider.ResolveSemanticTarget(new ChatSession { Id = session.Id }, savedTarget);
+                AssertEqual(evidence.Resource.Uri, restored.Reference.Uri, "discovery after restart uses existing persisted authority");
+                AssertEqual(2, provider.List(session, ExternalBrowserResourceProvider.ObservationKind, null, 10).Total, "bounded discovery exposes both sources after close");
+                AssertEqual(1, provider.Search(session, "article-a", ExternalBrowserResourceProvider.ObservationKind, 10, 100).Matches.Count,
+                    "source address is searchable without opening the page");
+                var foreign = new ChatSession { Id = "foreign" };
+                RuntimeThrows<ResourceRequestException>(() => provider.ResolveSemanticTarget(foreign, savedTarget));
+                System.IO.File.Delete(executor.Payloads.PathFor(evidence.Payload.Sha256));
+                RuntimeThrows<ResourceRequestException>(() => provider.Read(session, new ResourceReadRequest {
+                    Reference = restored.Reference, Representation = "text" }));
+                AssertEqual(2, source.Captures, "missing captured bytes never fall back to a live page");
+            });
         }
     }
 }

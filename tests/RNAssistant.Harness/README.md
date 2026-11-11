@@ -29,6 +29,12 @@ for the actual local probe and isolated-world element/user/read-back guards. The
 fixture remains relevant because each read now has a distinct runtime observation identity.
 WinForms queue timeout/controller delivery still requires Windows; [scope](../../docs/browser/05_TEST_MATRIX.md#p6b).
 
+P6g adds a tenth `external browser:` check: A/B facts in actual compiled model context,
+archive restoration after compaction, retained discovery/read after close/restart,
+foreign/missing payload rejection. The action fixture rejects authority from a
+historical read, including the latest snapshot. Pair with the read/sites/action
+Chrome fixtures; native Windows source binding remains open. [Evidence](../../docs/browser/05_TEST_MATRIX.md#p6g).
+
 P6f keeps the nine `external browser:` checks and extends action coverage to semantic
 linkName routing/XOR admission. Pair `tests/web/external-browser-sites.test.js` with
 the existing read/action fixtures for async click, takeover and hidden-href binding.

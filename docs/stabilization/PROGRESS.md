@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Browser P6g retained research — In Review, 2026-11-11
+
+`16.12.0-dev`: immutable observations с источником/временем и snapshotTarget через
+existing ResourceAuthority/CAS/context. Facts A/B переживают navigation/compaction;
+saved read работает после close/restart и не даёт action authority. 10 Harness
+проходят изолированно и в общей копии после storage change `4da2af9a`;
+3 Chrome fixtures проходят. Windows compilation/delivery Open.
+[Evidence](../browser/05_TEST_MATRIX.md#p6g). P6f закоммичен `c75218b2`.
+Далее P6h image delivery; diff/P4b отложены. Новых store/kernel/context-compiler paths нет.
+
 ## Browser P6f external actions / research gap — In Review, 2026-11-11
 
 `16.11.0-dev`: allowed-site fill/in-page click и navigate по observed linkName;

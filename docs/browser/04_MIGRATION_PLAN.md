@@ -6,7 +6,8 @@ P5a native pilot, P6a/P6b read/local actions, P6c visualization и P6d control/a
 P4a bounded source diff — **baseline / In Review**, дальнейшая доработка и P4b
 **отложены пользователем 2026-11-11**. P6e external navigation — **реализован / In Review**;
 P6f bounded external-site actions — **реализован / In Review**;
-следующий приоритет — P6g research observations/result delivery;
+P6g retained research observations — **реализован / In Review**;
+следующий приоритет — P6h safe screenshots/image delivery;
 остальные capabilities P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
@@ -52,7 +53,7 @@ evidence и ровно одним следующим шагом в [Progress](06
 | P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отложено пользователем вместе с доработкой diff; вернуться по конкретной потребности |
 | P6e external navigation | Агент открывает разрешённый HTTP(S) адрес в существующей external session и читает новую страницу; exact owner/generation/manual control/access guards | Реализован / In Review; redirects/terminal tested host-neutral, Windows delivery Open |
 | P6f external actions | Fill/in-page click и navigate по linkName на разрешённых страницах; fresh exact observation, pointer/control guards, async read-back | Реализован / In Review; 9 Harness + 3 Chrome fixtures. Native Windows delivery Open |
-| P6g research observations | Retained immutable facts нескольких страниц с источником/временем; bounded richer read и доставка через existing context/CAS. Исторические факты не дают fresh action authority | Следующий приоритет по проверке результатов web research; текущий mutable read может выпадать из контекста после перехода. Сначала один сценарий A → B → сравнение источников, без нового store |
+| P6g research observations | Immutable facts A/B с source URL/title/time и semantic snapshotTarget; existing context/CAS, сохранность после navigation/compaction/close, bounded text до 2000 на node. Исторический read не даёт action authority | Реализован / In Review; 10 Harness + 3 Chrome fixtures. Native URL/time binding и Windows delivery Open. Полная DOM pagination остаётся отдельным расширением по workflow |
 | P6h image snapshots | Безопасный screenshot external page с redaction/completeness, existing CAS/media и фактической image delivery модели | После P6g либо по отдельному image-first workflow; PNG dev web.verify не заменяет эту capability |
 | Остальные P5/P6 capabilities | Model open/focus/close; select/scroll/key/wait по нужному workflow; затем дополнительные targets/frames, persistent profiles, разрешённые popup/download/shared sessions | Отдельные продуктовые срезы. Базовый Browser ещё открывается вручную; generic internet search и arbitrary JS не реализованы. Не создавать весь перечень API заранее |
 | P7 qualification | Совместная проверка поддержанных сценариев, Windows/Office, security/performance/cleanup и release evidence | Локальные проверки сопровождают срезы; широкий итоговый прогон — на интеграционной точке/кандидате, а не после каждой правки |
@@ -87,7 +88,8 @@ links отклоняются. Probe-only ветка удалена; v2 bindings 
 9 Harness и 3 Chrome fixtures проходят в общей рабочей копии; Windows delivery Open.
 [Evidence](05_TEST_MATRIX.md#p6f). Проверка вопроса пользователя про image snapshots и
 web results показала отдельный research/context gap: [что получает модель](03_CONTRACTS.md#model-results).
-Очередь P6g/P6h уточнена как план, не как готовые tools; P4a/P4b не возвращаются в приоритет.
+P6g выше закрывает этот research/context gap; P6h image delivery ещё Planned.
+P4a/P4b не возвращаются в приоритет.
 
 ## P6e: external navigation — In Review, 2026-11-11
 
@@ -144,7 +146,8 @@ Owner: Office ResourceGateway/ResourceAuthority и существующий nati
 Close/rebind/navigation и cancellation не позволяют принять поздний снимок.
 
 Фиксированный script выполняется в isolated world: bounded role/name/state/text,
-без текстовых значений controls, URL/title, private regions, frames и shadow DOM.
+без текстовых значений controls, href, private regions, frames и shadow DOM.
+P6g добавляет source URL/time/title и immutable research identity.
 Existing Gateway публикует capture в CAS/authority; model не получает runtime IDs.
 Навигационное поколение не является revision изменяемого DOM: новое чтение получает
 новые capture identity/content hash; element binding/action verification реализованы в P6b.

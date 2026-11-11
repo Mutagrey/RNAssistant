@@ -1,5 +1,28 @@
 # Universal Browser: матрица проверок
 
+<a id="p6g"></a>
+## P6g research observations — 2026-11-11
+
+- `external browser:` — 10/10 в отдельной копии `c75218b2` + P6g и перед commit
+  в общей копии после storage change `4da2af9a`. Реальные tool results A/B доставляются
+  одним model request после live head advance; archived bodies переживают compaction.
+  Semantic snapshotTarget читает те же CAS bytes после close, новый authority/provider
+  восстанавливает target из существующего store. Discovery по source metadata, foreign
+  chat и missing payload проверены; live recapture/fallback не происходит.
+- Action fixture: historical read последнего снимка не даёт preparation; fresh read
+  продолжает exact journal/dispatch/terminal путь, включая bound Workspace.
+- `external-browser-read.test.js` — bounded title, исследовательский paragraph >160
+  символов, 2000/text node, partial marker и прежние privacy/time/node bounds.
+  Existing sites/action Chrome fixtures проходят: async effects, stale/href/manual
+  guards, cursor и unknown/no replay сохранены.
+- **Open Windows:** compilation, actual native URL/time binding и same-document
+  address change во время capture, WebView2 read/action delivery. Реальный Office
+  lifecycle не квалифицирован host-neutral/Chrome проверками; evidence только фото.
+
+Сценарий: открыть разрешённую A → core.read → navigate B → core.read → сравнить facts
+с источниками → закрыть Browser → прочитать snapshotTarget A. Историческое чтение
+не открывает сайт и не разрешает следующий click. Image snapshot delivery — ещё P6h.
+
 <a id="p6f"></a>
 ## P6f external actions — 2026-11-11
 

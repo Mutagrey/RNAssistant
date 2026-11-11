@@ -214,7 +214,7 @@ namespace RNAssistant.Office.Tools
                 projection.StartLine = ToolArgumentReader.Int32(context.Arguments, "startLine", 1);
                 projection.RequestedLines = ToolArgumentReader.Int32(context.Arguments, "lineCount", 100);
             }
-            projection.SnapshotTarget = selected.Descriptor.SnapshotTarget;
+            projection.SnapshotTarget = observation.Result.Resource.SnapshotTarget ?? selected.Descriptor.SnapshotTarget;
             if (tree && Serialize(projection).Length > _maximumTextCharacters)
                 throw new ResourceRequestException("Selected tree exceeds the model read budget; narrow pointer, depth or limit.",
                     "resource_tree_view_too_large", false);

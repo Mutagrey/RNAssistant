@@ -83,6 +83,10 @@ namespace RNAssistant.Office.Contracts
     public sealed class ExternalBrowserSemanticContent
     {
         [JsonProperty("observationId")] public string ObservationId { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        // Address/time are assigned by the native owner, not page script.
+        [JsonProperty("sourceUrl")] public string SourceUrl { get; set; }
+        [JsonProperty("capturedUtc")] public DateTime CapturedUtc { get; set; }
         [JsonProperty("nodes")] public ExternalBrowserSemanticNode[] Nodes { get; set; }
         [JsonProperty("truncated")] public bool Truncated { get; set; }
         [JsonProperty("visited")] public int Visited { get; set; }

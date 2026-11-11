@@ -357,6 +357,14 @@ namespace RNAssistant.Office.Services
                     "resource_target_runtime_owned",
                     true);
             }
+            if (target == ExternalBrowserResourceProvider.Target || target.StartsWith(ExternalBrowserResourceProvider.ObservationPrefix, StringComparison.Ordinal))
+            {
+                var provider = _registry.All().OfType<ExternalBrowserResourceProvider>().SingleOrDefault();
+                if (provider == null) throw new ResourceRequestException("Browser provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = provider.ResolveSemanticTarget(session, target);
+                return new ResourceIntentTarget { Target = target, Type = IntentType(descriptor), Scope = "browser",
+                    Descriptor = descriptor, Reference = descriptor.Reference.Copy() };
+            }
             if (target.StartsWith(ChatResourceReferenceService.MessageAttachmentPrefix, StringComparison.Ordinal))
             {
                 var provider = _registry.All().OfType<ChatArtifactResourceProvider>().SingleOrDefault();
@@ -782,6 +790,7 @@ namespace RNAssistant.Office.Services
                 else if (provider is ExternalBrowserResourceProvider)
                 {
                     yield return new ResourceIntentPlan(provider, ExternalBrowserResourceProvider.Kind, "browser");
+                    yield return new ResourceIntentPlan(provider, ExternalBrowserResourceProvider.ObservationKind, "browser");
                 }
                 else
                 {
@@ -1023,6 +1032,7 @@ namespace RNAssistant.Office.Services
 
         internal static string IntentTarget(ResourceDescriptor descriptor)
         {
+            if (descriptor?.Kind == ExternalBrowserResourceProvider.ObservationKind) return descriptor.SnapshotTarget;
             if (!string.IsNullOrWhiteSpace(descriptor?.CurrentTarget)) return descriptor.CurrentTarget;
             var value = IntentBaseTarget(descriptor);
             value = descriptor != null && descriptor.CreatedUtc.HasValue
@@ -1124,7 +1134,8 @@ namespace RNAssistant.Office.Services
             var type = separator < 0 ? string.Empty : target.Substring(0, separator);
             switch (type)
             {
-                case "Browser page": return "browser";
+                case "Browser page":
+                case "Browser observation": return "browser";
                 case "document": return "document";
                 case "Excel range": return "document";
                 case "Excel table": return "document";
@@ -1168,6 +1179,7 @@ namespace RNAssistant.Office.Services
             switch (kind)
             {
                 case ExternalBrowserResourceProvider.Kind: return "Browser page";
+                case ExternalBrowserResourceProvider.ObservationKind: return "Browser observation";
                 case RNAssistant.Core.Storage.DocumentArtifactStore.SharedContextKind: return "shared context";
                 case ContextResourceProvider.DataKind: return "context data";
                 case ContextResourceProvider.ObservationKind: return "Office observation";

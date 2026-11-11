@@ -6,11 +6,47 @@ Web и native host — consumers. Это минимальные границы �
 статус In Review; P2a import и P2b HTML resolver реализованы ниже.
 Автоматический lifetime вкладки Approved 2026-11-11; новые session APIs и P3–P6
 остаются Proposed за исключением реализованных ниже P4a baseline, P6a read,
-P6b local actions, P6c presentation, P6d control/access, P6e navigation и P6f external actions.
+P6b local actions, P6c presentation, P6d control/access, P6e navigation, P6f external actions и P6g research observations.
 P2c не добавляет UI/bridge управления detached sessions.
 Действующие [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
+
+<a id="p6g-research"></a>
+## P6g: сохранённые наблюдения для исследования — In Review, 2026-11-11
+
+`core.read {target:"Browser page: external"}` сохраняет immutable observation и
+возвращает `snapshotTarget: "Browser observation: <UTC capture time>"`. Native owner
+фиксирует адрес и время, isolated capture — bounded title/text. В результате есть
+source URL без credentials/query/fragment; это адрес источника с явно указанными
+пропусками, не обещание canonical URL. Title и содержимое страницы недоверенные.
+
+`ExternalBrowserResourceProvider` использует существующие scoped ResourceAuthority/
+revision views/CAS: mutable page head нужен guards действий, отдельная immutable
+identity — фактам исследования. Текст один в CAS; маленький typed source metadata
+view даёт discovery без DOM capture. Provenance — `immutable-snapshot` dependency
+на exact live observation; переход/unknown live effect её не актуализирует и не
+удаляет исторические факты. ModelContextCompiler и storage protocol не изменены.
+
+`core.find {scope:"browser"}` показывает сохранённые наблюдения; query ищет их
+metadata, `core.search` — текст выбранного наблюдения. `core.read` по snapshotTarget
+читает exact CAS после закрытия/перезапуска без открытия сайта. Discovery paged/bounded;
+точный semantic target разрешается по времени в существующем head index, без полного
+сканирования истории. Чужой chat, ambiguous time, missing/corrupt payload дают отказ,
+без подмены текущей страницей. Восстановление в контексте подчиняется общему budget;
+сохранённый target позволяет явно перечитать пропущенное наблюдение. Close по-прежнему
+освобождает renderer/session; сохраняются факты чата, а не скрытая открытая страница.
+
+Только evidence свежего live read имеет descriptor-at-read `browser-page`; архивный
+read имеет `browser-observation`. Action handler v3 извлекает live provenance только
+из первого, затем native повторно проверяет exact latest observation, document,
+element и manual/unknown guards. Исторический read, даже последнего снимка, не даёт
+action authority. Старый mutable read без этого provenance действие не разрешает.
+
+Research text расширен до 2000 UTF-16 символов на text node при прежних общих limits
+160 nodes / 16 000 символов / 3000 visits / 100 ms. Element names остаются до 160;
+обрезанный text node явно помечает capture partial. Полная DOM pagination, iframe/
+shadow capture и screenshots сюда не входят. [Evidence](05_TEST_MATRIX.md#p6g).
 
 ## P6f: external actions и переход по ссылке — In Review, 2026-11-11
 
@@ -132,19 +168,19 @@ WebView2 await. Provider проверяет owner/session/navigation generation 
 close/reopen/navigation/host replacement/cancel дают отказ без принятия позднего body.
 
 Capture — fixed script в isolated world верхнего документа. До 160 nodes, 160 UTF-16
-символов на name, 16 000 суммарных символов names и 3000 посещённых nodes; scanning
-budget 100 ms, native read timeout 3 s. Text values controls, URL/title, private/hidden
-regions, frames и shadow DOM исключены; доступны role/name, disabled/checked и text.
+символов на element name (с P6g до 2000 на text node), 16 000 суммарных символов names
+и 3000 посещённых nodes; scanning budget 100 ms, native read timeout 3 s. Text values
+controls, href, private/hidden regions, frames и shadow DOM исключены; доступны
+role/name, disabled/checked и text. P6g добавляет native source URL/time и bounded title.
 SourceComplete=false: это ограниченный semantic view, не full DOM. Повторное чтение
 обновляет capture, а не продолжает DOM pagination. Model scripts/evaluate и screenshots
 не предоставляются. P6f расширяет прежние probe-only actions на разрешённые страницы;
 semantic labels/text остаются недоверенными данными.
 
-Existing ResourceAuthority/CAS сохраняют exact body; новая observation обновляет
-observed head той же page identity. Revision включает navigation generation, уникальную
-capture identity и hash body: одинаковый текст не подменяет exact DOM binding.
-Это evidence чтения, не доказательство актуального DOM для будущего действия.
-Второго journal/store нет.
+Existing ResourceAuthority/CAS сохраняют exact body. P6g разделяет immutable research
+identity и mutable observed page head для действий. Live revision включает navigation
+generation, уникальную capture identity и hash body: одинаковый текст не подменяет
+exact DOM binding. Это evidence чтения, не доказательство будущего DOM. Второго store нет.
 
 <a id="p6b-local-actions"></a>
 ## P6b: действия на локальной probe-странице — In Review, 2026-11-11
@@ -341,7 +377,7 @@ Shared session задаётся явно, без фиксированных agen
 
 <a id="model-api"></a>
 <a id="model-results"></a>
-## Что получает модель: текущий путь и research gap — 2026-11-11
+## Что получает модель: чтение и исследование — 2026-11-11
 
 Внешний Browser должен быть уже открыт пользователем из нужного чата. Пример
 реального последовательного маршрута (каждый read доставляется модели до действия):
@@ -349,11 +385,15 @@ Shared session задаётся явно, без фиксированных agen
 ```text
 core.find {scope:"browser"}
 core.read {target:"Browser page: external"}
-  text: "heading: …\nlink: Подробнее\nbutton: Найти…"
+  text: source URL/time/title + "heading: …\nlink: Подробнее\nbutton: Найти…"
+  snapshotTarget: "Browser observation: <UTC capture time A>"
 browser.navigate {target:"Browser page: external", linkName:"Подробнее"}
   result: подтверждённый переход / отказ / unknown; не текст новой страницы
 core.read {target:"Browser page: external"}
   text: новое bounded semantic наблюдение; sourceComplete:false
+  snapshotTarget: "Browser observation: <UTC capture time B>"
+core.read {target:"Browser observation: <UTC capture time A>"}
+  text: сохранённое наблюдение A; не открывает страницу, не разрешает действие
 ```
 
 ExternalBrowserResourceProvider → Resource Gateway/ToolRuntime → existing typed tool
@@ -363,18 +403,16 @@ model projection, точный body и ResourceEvidence сохраняются �
 `ExternalBrowserSemanticGateway`: model text совпадает с сохранённым CAS body.
 Eligible E citations используют текущий общий protocol, не отдельные browser IDs.
 
-Модель сейчас получает role/name, disabled/checked и ограниченные text excerpts.
-Href, page URL/title, input values, full DOM, iframe/shadow DOM и image bytes в этой
-projection отсутствуют. `core.find/search` здесь ищут browser resource, не весь интернет.
+Модель получает role/name, disabled/checked, bounded text, source URL/time и title.
+Href, credentials/query/fragment URL, input values, full DOM, iframe/shadow DOM и
+image bytes в этой projection отсутствуют. `core.find/search` здесь ищут browser
+resources/retained text, не весь интернет.
 Переход не выполняет скрытый дополнительный model call или автоматическую доставку DOM.
 
-**Research gap (P6g):** Browser descriptor — Mutable/observed, одна текущая page identity.
-Последующие read/mutation меняют её evidence; ModelContextCompiler.Mark убирает body
-устаревшего read, сохраняя факт вызова. Наличие старого body в CAS не гарантирует его
-доступность модели для исследования нескольких страниц. Нужен consumer retained
-immutable observations через existing resources/context, с источником/временем и
-bounded чтением; отделить исследовательские факты от fresh authority для действий.
-Новый Browser store/journal для этого не вводится. Это план, не реализованная capability.
+**P6g реализован:** immutable observations сохраняют факты A/B после перехода и
+compaction через existing context/CAS. `snapshotTarget` позволяет перечитать их после
+закрытия страницы или при исключении из model budget. Только live read с exact native
+binding разрешает подготовку действия. [Контракт выше](#p6g-research).
 
 **Image/web snapshots:** P6a semantic snapshot внешней страницы уже есть. CLI
 `web.verify` сохраняет исходники локального web-проекта, viewport PNG и CDP trace
@@ -400,7 +438,7 @@ bounded image delivery модели. Они составляют P6h; повто
 | open / focus / close | Сейчас ручной UI; model commands Planned | Application/Dock/native lifetime; не отдельный session-close UI |
 | select / scroll / keypress / wait | Planned, по конкретным workflows | Semantic actions; reuse admission/effect owners, не список API заранее |
 | screenshot / image observation | P6h Planned для external Browser | Privacy capture → existing CAS/media → model delivery; без inline base64 в Tool Result |
-| retained research observations | P6g Planned | Existing Resource Gateway/CAS/context; источник, историческая читаемость, bounds |
+| retained research observations | P6g реализован | Existing Resource Gateway/CAS/context; source/time и semantic snapshotTarget, historical read без live action authority |
 | annotate / persistent annotations | Existing visual selection; P4b отложен | Общий annotation owner, не Browser Annotation DB |
 | compare | P4a UI baseline; model compare Planned, доработка отложена | Existing saved HTML/plugin owners, не новый browser version store |
 | checkout / restore / apply / publish | Existing domain commands | Owner tools; не универсальная запись по browser URL |

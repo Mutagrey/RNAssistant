@@ -27,7 +27,7 @@ namespace RNAssistant.Office.Tools
     {
         internal const string Fill = "browser.fill", Click = "browser.click", Navigate = "browser.navigate";
         internal static bool Owns(string id) { return id == Fill || id == Click || id == Navigate; }
-        internal static ToolBinding BindingFor(string id) { return new ToolBinding(id + ".v2"); }
+        internal static ToolBinding BindingFor(string id) { return new ToolBinding(id + ".v3"); }
         private readonly ChatSession _session;
         private readonly Func<IExternalBrowserReadSource> _source;
         private readonly Func<ChatSession, IDisposable> _documentAccess;
@@ -86,11 +86,15 @@ namespace RNAssistant.Office.Tools
                         message.ToolCallId == context.Execution.Call.Id && message.RunId == context.Execution.RunId &&
                         message.AcceptedCallOrigin?.StepId == context.Execution.StepId);
                     var uri = ResourceUri.Create("browser", target.ChatId, target.SessionId);
-                    var observation = accepted?.ResourceEvidence?.LastOrDefault(evidence => evidence.Resource?.Uri == uri &&
+                    var observation = accepted?.ResourceEvidence?.Where(evidence => evidence.Immutable &&
+                        evidence.ReadMetadata?.DescriptorAtRead?.Kind == ExternalBrowserResourceProvider.Kind &&
                         evidence.Resource.IsExact && evidence.View == "text" && evidence.Payload != null &&
                         evidence.Payload.Sha256 == evidence.ContentSha256 && evidence.Coverage?.Start == 0 &&
                         evidence.ReadMetadata?.RepresentationComplete == true &&
-                        evidence.ReadMetadata.RequestedCoverage?.Kind == ResourceCoverageKinds.Whole)?.Resource;
+                        evidence.ReadMetadata.RequestedCoverage?.Kind == ResourceCoverageKinds.Whole)
+                        .SelectMany(evidence => evidence.Dependencies).LastOrDefault(dependency =>
+                            dependency.Kind == "immutable-snapshot" && dependency.View == "text" &&
+                            dependency.Resource.Uri == uri && dependency.Resource.IsExact)?.Resource;
                     if (observation == null) throw Error("Read the current browser page in this conversation before acting; an omitted read does not authorize an action.", "browser_observation_required");
                     using (DocumentAccessGate.BeginOperation()) using (_documentAccess(_session)) { }
                     var prepared = new ExternalBrowserPrepared { Target = target, Observation = observation,

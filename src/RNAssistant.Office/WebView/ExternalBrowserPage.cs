@@ -113,12 +113,17 @@ namespace RNAssistant.Office.WebView
         {
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("Browser document changed before capture.", "browser_document_stale");
             RequireAgentAccess();
+            var sourceUrl = Control.CoreWebView2.Source;
             if (_manualControl) { EnsureUserPause(); await Evaluate<bool>("globalThis.__rnaBrowserControl.hold()"); }
             var content = await Evaluate<ExternalBrowserSemanticContent>(SemanticScript);
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("Browser document changed during capture.", "browser_document_stale");
             RequireAgentAccess(); // A revoked permission cannot deliver an in-flight observation.
+            if (sourceUrl != Control.CoreWebView2.Source)
+                throw ExternalBrowserResourceProvider.Error("Browser address changed during capture.", "browser_document_stale");
             if (content == null)
                 throw ExternalBrowserResourceProvider.Error("The bounded semantic capture failed.", "browser_capture_failed");
+            content.SourceUrl = ExternalBrowserResourceProvider.SourceAddress(sourceUrl);
+            content.CapturedUtc = DateTime.UtcNow;
             _observationRevision = ExternalBrowserResourceProvider.Revision(target, content);
             _observationTarget = target;
             _observationId = content.ObservationId; _preparationId = null; _preparedNavigationUrl = null;
