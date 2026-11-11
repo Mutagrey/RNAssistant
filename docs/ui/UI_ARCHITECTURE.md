@@ -156,6 +156,13 @@ activate; событие во время чтения требует свеже�
 buffer сохраняется, смена исходника блокирует устаревшую запись. Runtime уже разрешает
 актуальный logical head через RefreshSelected; новый bridge/storage не понадобился.
 
+P4a baseline (2026-11-11): BrowserObjectView владеет lifecycle общего SourceDiff view;
+ArtifactCatalogService/PluginApplicationService разрешают immutable source pair,
+SourceComparisonService ограничивает чтение, existing TextDiff рисует результат.
+Выбор baseline использует existing paged history + ActionMenu, нового store нет.
+Hide/close отменяют pending reads и отсеивают late responses; смена режима сохраняет
+iframe. Diff и P4b отложены в дальнейшей очереди; [контракт](../browser/03_CONTRACTS.md).
+
 Saved HTML history (2026-11-10) использует typed getSavedHtmlHistory: ArtifactCatalogService
 разрешает текущую публикацию документа по exact target и читает метаданные прежнего
 DocumentArtifactStore. Порции по 50 формирует существующий ArtifactLibraryProjectionService.

@@ -155,8 +155,12 @@ folder для файлов. Все кнопки используют общую 
 не меняя геометрию iframe. Уход фокуса за пределы controls или Escape сворачивает поле;
 меню сохраняет фокус и доступность своего trigger. До 600 px ширины surface правая
 группа доступна через ⋯. File picker/source остаются у provider.
-Diff пока скрыт: для будущего реального сравнения выбран знак двух колонок с +/−,
-без неработающей кнопки в текущей панели.
+P4a baseline: saved HTML/plugin release показывает «Сравнение» знаком двух колонок
+с +/−. Выбор baseline — общий text button/ActionMenu, файл — compact select;
+existing TextDiff с line numbers и add/remove цветами прокручивается внутри view.
+Пара версий и подпись отделяют исходники от данных preview. Общие tokens/controls;
+на узкой панели controls переносятся, diff не расширяет Shell. Доработка отложена,
+визуальное принятие открыто: [evidence](../browser/05_TEST_MATRIX.md#p4a).
 
 P2a (2026-11-10) добавляет строку «Создать проект из снимка» в существующее меню
 сохранения. Общие ActionMenu rows/status/disabled и compact trigger остаются владельцами

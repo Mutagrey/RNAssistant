@@ -10,6 +10,26 @@ Web и native host — consumers. Это минимальные границы �
 [Resource Fabric](../resource-fabric.md), [Tools](../tool-library.md),
 [events](../session-events.md), [Plugins](../plugins.md) сохраняются.
 
+## P4a: сравнение сохранённых исходников — baseline / In Review, 2026-11-11
+
+Typed UI reads `compareHtmlSources` (`chatId`, `documentId`) и `comparePluginSources`
+(`pluginId`) принимают exact `beforeId`, `afterId`, optional `path`. HTML owner разрешает
+два снимка одного logical project в указанном документе; plugin owner — две опубликованные
+версии одного плагина. Candidate, dirty source, current selection и preview data не
+подменяют пару. Новый model tool/store не вводится; строка будущего Model API compare
+ниже этим UI-срезом не реализована.
+
+`SourceComparisonDto` возвращает exact IDs/labels, список `path/change`
+(`Added/Removed/Changed/Unchanged`), выбранные before/after text и `complete/message`.
+Список не читает plugin payloads; читается только выбранная пара файлов. HTML snapshot
+ограничен 16 МиБ/100 файлами, объединённый список — 1024 файлами. Один текст ≤256000
+символов, plugin payload также ≤256000 байт; invalid UTF-8/binary/oversize обозначаются
+явно без частичного diff. TextDiff сохраняет свои ограничения работы/строк/вывода.
+HTML DataSources не разрешаются. Чтение не переключает head и не запускает экземпляр
+плагина; ошибка preview не закрывает явный доступ к сравнению.
+
+Пользователь отложил дальнейшую доработку diff и P4b; они не блокируют P6.
+
 ## P2a: реализованный import contract — In Review, 2026-11-10
 
 `createHtmlProjectFromArtifact` принимает typed `HtmlProjectImportRequest`:

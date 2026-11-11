@@ -1,5 +1,13 @@
 # План модернизации production UI
 
+## Browser P4a — baseline / In Review, дальнейшая доработка отложена
+
+2026-11-11: общий режим сравнения saved HTML/plugin release, owner-validated immutable
+pair, paged history/file selection и existing TextDiff. Preview/input сохранены,
+late responses и bounds проверены: 3 Harness cases + 2 Chrome fixtures;
+[визуальное evidence](../browser/05_TEST_MATRIX.md#p4a). Windows/acceptance открыты.
+Пользователь снял diff и P4b с ближайшего приоритета; далее P6 browser automation.
+
 ## Рабочая область: единая навигация — In Review, 2026-11-11
 
 Scope: запрос пользователя по двум фото и уточнение полного меню под «+» рядом

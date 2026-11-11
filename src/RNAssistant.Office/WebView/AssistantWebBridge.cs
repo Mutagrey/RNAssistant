@@ -255,7 +255,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.DeletePluginIcon: case BridgeOperationId.DrawPluginIcon: case BridgeOperationId.UpdatePluginAppearance:
                     case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
                     case BridgeOperationId.GetPluginSourceState: case BridgeOperationId.CheckPlugin: case BridgeOperationId.ApplyPlugin:
-                    case BridgeOperationId.GetPluginVersions: case BridgeOperationId.RestorePluginVersion: case BridgeOperationId.OpenPlugin:
+                    case BridgeOperationId.GetPluginVersions: case BridgeOperationId.ComparePluginSources: case BridgeOperationId.RestorePluginVersion: case BridgeOperationId.OpenPlugin:
                     case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin: case BridgeOperationId.StagePluginVisualSelection:
                     case BridgeOperationId.DiscardPluginVisualSelection:
                     case BridgeOperationId.GetRemovedPlugins: case BridgeOperationId.RemovePlugin: case BridgeOperationId.RestorePlugin:
@@ -860,6 +860,11 @@ namespace RNAssistant.Office.WebView
                         var savedHtmlHistory = Payload<SavedHtmlHistoryRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetSavedHtmlHistory(savedHtmlHistory), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.CompareHtmlSources:
+                        var htmlComparison = Payload<RNAssistant.Application.Contracts.HtmlSourceComparisonRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.CompareHtmlSources(htmlComparison), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ExportArtifact:
                         responsePayload = _controller.ExportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);

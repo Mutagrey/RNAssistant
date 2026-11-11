@@ -676,6 +676,8 @@ namespace RNAssistant.Office
         public SavedHtmlHistoryResponse GetSavedHtmlHistory(SavedHtmlHistoryRequest request)
         { LastChatId = request.ChatId; LastArtifactViewerDocumentId = request.DocumentId; LastArtifactViewerResourceUri = request.ResourceUri;
             return new SavedHtmlHistoryResponse { ChatId = request.ChatId, DocumentId = request.DocumentId, ResourceUri = request.ResourceUri }; }
+        public RNAssistant.Application.Contracts.SourceComparisonDto CompareHtmlSources(RNAssistant.Application.Contracts.HtmlSourceComparisonRequest request)
+        { return new RNAssistant.Application.Contracts.SourceComparisonDto { BeforeId = request.BeforeId, AfterId = request.AfterId }; }
         public ArtifactTransferDownload ExportArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
         { LastChatId = request.ChatId; return new ArtifactTransferDownload(); }
         public RNAssistant.Application.Contracts.HtmlProjectImportResult CreateHtmlProjectFromArtifact(

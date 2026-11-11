@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.9.0-dev
+
+- Saved HTML and published plugin versions offer bounded source comparison using
+  their existing history. Preview data and unsaved edits are excluded; comparison
+  preserves page input and does not restore or publish. Baseline is In Review;
+  further diff work and persistent annotations are deferred in favor of browser automation.
+
 ### 16.7.0-dev
 
 - Browser manual input blocks agent actions and requests a pause of the bound run.

@@ -57,6 +57,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CheckPlugin: return Plugins.Check(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.ApplyPlugin: return Plugins.Apply(Payload<PluginApplyRequest>(payload));
                     case BridgeOperationId.GetPluginVersions: return Plugins.ReleaseHistory(Payload<PluginReleaseHistoryRequest>(payload));
+                    case BridgeOperationId.ComparePluginSources: return Plugins.CompareSources(Payload<PluginSourceComparisonRequest>(payload));
                     case BridgeOperationId.RestorePluginVersion: return Plugins.RestoreVersion(Payload<PluginRestoreVersionRequest>(payload));
                     case BridgeOperationId.OpenPlugin:
                         if(Plugins.Executor==null)throw new PluginException("plugins_unavailable",Plugins.StartupError ?? "Plugin browser host is unavailable.");

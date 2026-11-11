@@ -355,6 +355,29 @@ namespace RNAssistant.Application
             }
         }
 
+        public SourceComparisonDto CompareSources(PluginSourceComparisonRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen(); SourceComparisonService.Validate(request);
+                if (string.IsNullOrWhiteSpace(request.PluginId) || _store.Get(request.PluginId) == null)
+                    throw new PluginException("plugin_missing", "Плагин недоступен.");
+                var before = _store.ReadPublishedRelease(request.PluginId, request.BeforeId);
+                var after = _store.ReadPublishedRelease(request.PluginId, request.AfterId);
+                return SourceComparisonService.Read(request,
+                    "v" + JsonConvert.DeserializeObject<PluginManifestV1>(before.ManifestJson).Version + " · " + before.ReleaseId,
+                    "v" + JsonConvert.DeserializeObject<PluginManifestV1>(after.ManifestJson).Version + " · " + after.ReleaseId,
+                    PluginComparisonMembers(before), PluginComparisonMembers(after));
+            }
+        }
+
+        private IEnumerable<SourceComparisonMember> PluginComparisonMembers(PluginReleaseRecord release)
+        {
+            return release.Files.Select(file => new SourceComparisonMember { Path = file.Path,
+                Fingerprint = file.Payload.Sha256, Length = file.Payload.ByteLength,
+                Read = () => SourceComparisonService.Utf8(_store.ReadFile(release, file.Path)) });
+        }
+
         public PluginItemDto RestoreVersion(PluginRestoreVersionRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)

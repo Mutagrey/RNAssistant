@@ -52,3 +52,10 @@
 .external-browser-diagnostics pre { max-height:160px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
 .browser-document-file { flex:none; margin:var(--space-2); }
 .browser-document-source { flex:1; min-height:0; overflow:hidden; }
+.browser-object-content[hidden], .browser-source-diff[hidden] { display:none; }
+.browser-source-diff { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; padding:var(--space-2); gap:var(--space-2); }
+.browser-source-diff-controls { display:flex; flex-wrap:wrap; gap:var(--space-2); }
+.browser-source-diff-controls select { flex:1 1 50%; min-width:0; max-width:100%; }
+.browser-source-diff-pair, .browser-source-diff-note, .browser-source-diff-status { font-size:var(--text-sm); overflow-wrap:anywhere; }
+.browser-source-diff-note { margin:0; color:var(--ink-muted); }
+.browser-source-diff-output { flex:1; min-height:0; overflow:auto; }

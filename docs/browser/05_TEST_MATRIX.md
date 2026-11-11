@@ -1,5 +1,26 @@
 # Universal Browser: матрица проверок
 
+<a id="p4a"></a>
+## P4a source comparison baseline — 2026-11-11
+
+- Harness filter `source comparison:` — 3/3: immutable HTML same-project/doc pair,
+  unavailable preview data, plugin published-only/dirty-source isolation, bounded
+  selected payload, binary/large/empty files, unchanged selection/source.
+- `tests/web/browser-source-diff.test.js` — production Chrome: paging/exact pair,
+  inert diff, bounds/empty file, preserved iframe input, stale hide/close, comparison
+  after preview failure, narrow/125%/keyboard. Existing `browser-saved-views.test.js`
+  проходит: 2 reads на 5 выборов, input retained, late cleanup, restore и source limits.
+- Визуально просмотрены [1280](../ui/review/browser-source-comparison-diff1280.png),
+  [400/125% dark](../ui/review/browser-source-comparison-diff400-125.png),
+  [plugin preview error](../ui/review/browser-source-comparison-plugin1280.png);
+  [тот же saved view до выбора diff](../ui/review/browser-source-comparison-before1280.png).
+  Это synthetic host-neutral evidence. Windows bridge delivery и пользовательское
+  визуальное принятие открыты. Дальнейшая доработка diff отложена; эти прогоны не
+  повторять для независимых P6-изменений.
+
+Для ревью: saved HTML или Plugin → Версии → открыть версию → «Сравнение» → выбрать
+вторую версию/файл → «Страница» (ввод сохранён). Никакого apply/restore от сравнения.
+
 Дата: 2026-11-11. Owner: владелец изменяемого среза; Windows — Office/WebView owner.
 В P0 был только статический просмотр fixtures. В P1 три browser fixtures выполнены
 на baseline и final; результаты ниже. Наличие теста не означает qualification.

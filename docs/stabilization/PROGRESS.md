@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Browser P4a baseline и смена приоритета — 2026-11-11
+
+`16.9.0-dev`: сравнение saved HTML/plugin source pair реализовано без нового store;
+3 host-neutral cases и 2 Chrome fixtures проходят. Визуально просмотрено, принятие
+пользователем/Windows delivery открыты. [Evidence](../browser/05_TEST_MATRIX.md#p4a).
+Пользователь отложил дальнейший diff и P4b; далее P6 browser automation, начиная
+с переходов на разрешённые сайты. Предыдущий P6d закоммичен `de343788`.
+
 ## External Browser P6d — In Review, 2026-11-11
 
 Ручной ввод блокирует page mutations и запрашивает existing exact Run pause;

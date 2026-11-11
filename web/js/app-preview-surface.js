@@ -97,9 +97,9 @@
     function setDocument(value, onModeChange) {
       presentation = value; modeChange = onModeChange;
       if (value.supportedModes && value.supportedModes.length && !modes) {
-        modes = document.createElement("div"); modes.className = "view-switch"; modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление HTML");
-        ["preview", "source"].forEach(function (mode) {
-          var button = iconButton(mode === "preview" ? "play" : "code", mode === "preview" ? "Страница" : "Исходник");
+        modes = document.createElement("div"); modes.className = "view-switch"; modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление страницы");
+        ["preview", "source", "diff"].forEach(function (mode) {
+          var button = iconButton(mode === "preview" ? "play" : mode === "source" ? "code" : "diff", mode === "preview" ? "Страница" : mode === "source" ? "Исходник" : "Сравнение");
           button.onclick = function () { if (modeChange) modeChange(mode); }; modeButtons[mode] = button; modes.appendChild(button);
         });
         actions.prepend(modes);

@@ -1713,6 +1713,12 @@ heads or resource authority. Scope, source fidelity and limits are defined in
 
 ### Saved HTML Browser limits — 2026-11-02
 
+P4a (2026-11-11) adds explicit saved-source comparison via `compareHtmlSources`:
+two exact snapshots of the same document project; bindings and preview values are
+not resolved. Comparison cannot restore/select a head. Bounds, typed contracts and
+the parallel plugin release reader are in [Browser contracts](browser/03_CONTRACTS.md).
+The baseline is In Review; further diff work is deferred by the user.
+
 S3b.3b uses the existing exportArtifact preview package and standalone builder,
 without live Office authority. Code is pinned by exact project URI. Dynamic-head
 bindings still capture current retained data at opening/reload; the UI labels this

@@ -127,7 +127,7 @@ const {chromium}=require('playwright');
       if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-focused1280.png'});
       await address.press('Escape');assert.equal(await a.locator('.is-address-focused').count(),0);
       assert.equal(await page.evaluate(()=>savedTest.reads),htmlReads,'read-only address does not navigate/reload');
-      assert.equal(await a.getByRole('group',{name:'Представление HTML',exact:true}).count(),1);
+      assert.equal(await a.getByRole('group',{name:'Представление страницы',exact:true}).count(),1);
       assert.equal(await a.locator('iframe').count(),1);
       assert.equal(await a.getByRole('button',{name:/^(Diff|Сравнить)$/}).count(),0);assert.ok(await button(a,'Назад').isDisabled());assert.ok(await button(a,'Вперёд').isDisabled());
       assert.ok(await button(a,'Аннотировать').isDisabled());assert.equal(await a.locator('.browser-object-note').count(),0);
@@ -246,7 +246,7 @@ const {chromium}=require('playwright');
       await page.evaluate(()=>{savedTest.sourceOnly=false;});
       await page.evaluate(()=>{savedTest.large=true;});await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await a.getByRole('alert').filter({hasText:'16 МиБ'}).waitFor();
       assert.equal(await address.count(),1,'failed reload keeps the addressed location');assert.equal(await address.inputValue(),exactAddress);
-      assert.equal(await a.getByRole('group',{name:'Представление HTML',exact:true}).count(),0);
+      assert.equal(await a.getByRole('group',{name:'Представление страницы',exact:true}).count(),0);
       for(const [width,theme] of [[1280,'light'],[420,'dark']]){
         await page.setViewportSize({width,height:900});await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;document.documentElement.style.zoom='1.25';},theme);
         await page.waitForTimeout(150);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));

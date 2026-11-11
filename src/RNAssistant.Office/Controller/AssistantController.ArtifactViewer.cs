@@ -20,6 +20,9 @@ namespace RNAssistant.Office
         public SavedHtmlHistoryResponse GetSavedHtmlHistory(SavedHtmlHistoryRequest request)
         { return ArtifactCatalog().SavedHtmlHistory(LoadArtifactViewerSession(request?.ChatId), request); }
 
+        public RNAssistant.Application.Contracts.SourceComparisonDto CompareHtmlSources(RNAssistant.Application.Contracts.HtmlSourceComparisonRequest request)
+        { return ArtifactCatalog().CompareHtmlSources(LoadArtifactViewerSession(request?.ChatId), request); }
+
         public RNAssistant.Application.Contracts.HtmlProjectImportResult CreateHtmlProjectFromArtifact(
             HtmlProjectImportRequest request, CancellationToken token)
         {

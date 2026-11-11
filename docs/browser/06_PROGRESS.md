@@ -4,6 +4,16 @@
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
 
+## P4a: baseline завершён; дальнейшая доработка отложена
+
+Режим «Сравнение» читает выбранную immutable пару HTML/plugin versions через existing
+owners; bounded text, файл/статус, без preview data и изменений публикации. 3 Harness
+cases и 2 production Chrome fixtures проходят; wide/narrow/125% просмотрены.
+[Evidence](05_TEST_MATRIX.md#p4a). Visual acceptance/Windows delivery открыты.
+По уточнению пользователя diff и P4b не в приоритете; продолжение — P6e navigation.
+Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
+Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
+
 ## P6d: ручное управление и сайты агента — In Review, 2026-11-11
 
 Ручной ввод блокирует mutations страницы и запрашивает паузу exact bound Run через
@@ -318,10 +328,10 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 ## Ровно следующий шаг
 
 На визуальном ревью [P6c](05_TEST_MATRIX.md#p6c) и [P6d](05_TEST_MATRIX.md#p6d). Следующий независимый срез —
-P4a: bounded source diff выбранной пары existing HTML/plugin versions.
+P6e: переходы агента на разрешённые сайты; P4a baseline завершён, доработка отложена.
 Первый P6b local workflow реализован; general external actions остаются отдельным scope.
-Отдельный P3c с общим descriptor без consumer не нужен; P4 diff и persistent annotations
-идут после первого рабочего P6 workflow. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
+Отдельный P3c с общим descriptor без consumer не нужен; доработка diff и persistent annotations
+отложена пользователем. [Принятая очередь](04_MIGRATION_PLAN.md#порядок-оставшейся-работы--2026-11-11).
 Native Windows evidence P5a, визуальное принятие внутренних views и известный
 focus/pointer gap остаются отдельными открытыми задачами, а не поводом повторять
 все проверки при каждом срезе. Instance/grant/publication owners сохраняются.

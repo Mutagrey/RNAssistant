@@ -130,6 +130,37 @@ namespace RNAssistant.Office.Services
                 TotalCount = history.TotalCount, Items = history.Items, NextCursor = history.NextCursor };
         }
 
+        internal RNAssistant.Application.Contracts.SourceComparisonDto CompareHtmlSources(ChatSession actor,
+            RNAssistant.Application.Contracts.HtmlSourceComparisonRequest request)
+        {
+            RNAssistant.Application.SourceComparisonService.Validate(request);
+            if (actor == null || request.ChatId != actor.Id || string.IsNullOrWhiteSpace(request.DocumentId))
+                throw new InvalidOperationException("Требуется исходный чат и документ HTML-проекта.");
+            var before = ReadTransferArtifact(actor, request.DocumentId, request.BeforeId, out var source, out var beforeRef);
+            var after = ReadTransferArtifact(actor, request.DocumentId, request.AfterId, out var afterSource, out var afterRef);
+            var logicalId = HtmlWorkspaceIdentity.LogicalId(before.Id);
+            if (before.Kind != ChatArtifactKinds.HtmlWorkspace || after.Kind != ChatArtifactKinds.HtmlWorkspace ||
+                logicalId == null || logicalId != HtmlWorkspaceIdentity.LogicalId(after.Id))
+                throw new InvalidOperationException("Выберите две версии одного HTML-проекта.");
+            if (before.ContentByteLength > 16 * 1024 * 1024 || after.ContentByteLength > 16 * 1024 * 1024)
+                throw new InvalidOperationException("Снимок превышает лимит просмотра 16 МиБ.");
+            var a = _artifacts.Read(ConversationMetadata.From(source), beforeRef);
+            var b = _artifacts.Read(ConversationMetadata.From(afterSource), afterRef);
+            return RNAssistant.Application.SourceComparisonService.Read(request, "v" + a.Revision, "v" + b.Revision,
+                HtmlComparisonMembers(a), HtmlComparisonMembers(b));
+        }
+
+        private static IEnumerable<RNAssistant.Application.SourceComparisonMember> HtmlComparisonMembers(ChatArtifact artifact)
+        {
+            var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText ?? "null");
+            if (snapshot?.Files == null || snapshot.Files.Count > 100)
+                throw new InvalidDataException("Исходники HTML-снимка недоступны.");
+            // Deliberately do not resolve DataSources, current heads or preview values.
+            return snapshot.Files.Select(file => new RNAssistant.Application.SourceComparisonMember {
+                Path = file.Path, Fingerprint = TextPatternEngine.Sha256(file.Content ?? ""),
+                Length = (file.Content ?? "").Length, Read = () => file.Content ?? "" });
+        }
+
         private static bool CanTransfer(ChatArtifact item)
         { return string.IsNullOrEmpty(item.AvailabilityIssue) && (item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.File || item.OriginalAttachment != null); }
 

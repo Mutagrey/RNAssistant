@@ -65,6 +65,8 @@
     }
     picker.onchange = renderSource; mode(preview ? "preview" : "source"); resolved(browserTarget);
     return { element: root, frame: frame, presentation: presentation, selectMode: mode,
+      comparison: browserTarget.capabilities.versions ? { kind: "html", afterId: browserTarget.resourceUri,
+        chatId: target.chatId, documentId: browserTarget.documentId } : null,
       dispose: function () { RNAssistantViewerRegistry.unmount(source); if (frame) frame.remove(); root.replaceChildren(); } };
   }
   function create(target) {
@@ -73,6 +75,7 @@
     return RNAssistantBrowserObjectView.create({
       label: { title: target.title, address: target.resourceUri, path: [target.documentTitle, target.chatTitle, target.revision ? "Версия " + target.revision : "Сохранённая версия"].filter(Boolean).join(" · ") },
       storage: { kind: "managed" },
+      comparison: target.documentId ? { kind: "html", afterId: target.resourceUri, chatId: target.chatId, documentId: target.documentId } : null,
       details: [{ label: "Просмотр снимка", status: "Исходники и данные выбранной версии", icon: "clock", disabled: true }],
       annotationUnavailable: "Аннотации доступны в живом редакторе проекта. Здесь открыта сохранённая версия.",
       load: function (context) { return load(target, context, resolved); },

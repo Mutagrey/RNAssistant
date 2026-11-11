@@ -7,8 +7,10 @@
   }
   function key(target) { return "plugin-release:" + encodeURIComponent(JSON.stringify([target.pluginId, target.releaseId])); }
   function create(target) {
+    var comparison = { kind: "plugin", afterId: target.releaseId, pluginId: target.pluginId };
     return RNAssistantBrowserObjectView.create({ label: { title: target.title, path: target.pluginId + " · " + target.releaseId },
       storage: { kind: "managed", detail: "CAS · опубликованная версия плагина" },
+      comparison: comparison,
       details: [{ label: "Просмотр версии", status: "Пробная копия данных; публикация не меняется", icon: "clock", disabled: true }],
       annotationUnavailable: "Аннотации доступны в живом предпросмотре плагина.",
       discuss: function (context) {
@@ -26,7 +28,8 @@
         var theme = new MutationObserver(appearance);
         theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent"] });
         frame.addEventListener("load", appearance); frame.src = value.entryUrl;
-        return { element: frame, frame: frame, presentation: { address: value.entryUrl }, dispose: function () { theme.disconnect(); frame.remove(); close(); } };
+        return { element: frame, frame: frame, presentation: { address: value.entryUrl }, comparison: comparison,
+          dispose: function () { theme.disconnect(); frame.remove(); close(); } };
       },
       actions: function (root, context) {
         var more = RNAssistantActionMenu.createTrigger("Действия с версией"); more.classList.add("compact"); root.appendChild(more);
