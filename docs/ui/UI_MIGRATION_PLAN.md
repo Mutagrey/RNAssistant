@@ -252,7 +252,12 @@ P3a реализован / In Review: failed initial plugin source check не о
 release; existing error, watcher, explicit retry/release и retained previous frame
 сохранены. Исправлена ветка PluginView, без новых компонентов/контрактов.
 [Проверки и ревью](../browser/05_TEST_MATRIX.md#результаты-p3a--2026-11-11).
-Остаток P3 — target/capability projection и presentation plugin source/release.
+P3b реализован / In Review: restore получает свежий head при открытии меню сохранённой
+версии; stale guard удалён из Dock route. Catalog error/late response не разрешают
+действие; existing runtime conflict и pinned iframe сохранены.
+[Проверки и ревью](../browser/05_TEST_MATRIX.md#результаты-p3b--2026-11-11).
+Остаток P3 — presentation plugin source/release и сверка нужных capabilities у
+существующих consumers, без общего descriptor ради самого плана.
 [Scope и порядок](../browser/04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
 Preview standalone source, перенос зависимостей, настоящий diff и external native browser остаются в плане. Концепция
 Approved; визуальное принятие production и Windows/Office evidence остаются Open.

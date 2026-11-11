@@ -1,8 +1,18 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets + P2c lifecycle checks + P3a source failure.
+Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets + P2c lifecycle checks + P3a source failure + P3b restore freshness.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — будущий native adapter. P1, P2a и P2b реализованы, **In Review**.
+
+## P3b: актуальность восстановления release — In Review, 2026-11-11
+
+P3a закоммичен `8d337666` (`16.3.2-dev`). В следующем срезе исправлен stale restore
+сохранённой plugin-вкладки: current head читается при открытии меню, guard больше
+не хранится в Dock route. Поздний ответ/ошибка каталога не разрешают действие;
+конфликт после чтения не повторяется автоматически. Instance и iframe сохранены.
+Existing `browser-saved-views` red → green, включая 1280/100% и 420/125%; новых API
+или stores нет. [Evidence/ревью](05_TEST_MATRIX.md#результаты-p3b--2026-11-11).
+Код и локальная проверка завершены; visual acceptance и Windows/WebView2 evidence открыты.
 
 ## P3a: ошибка исходников без подмены release — In Review, 2026-11-11
 
@@ -237,8 +247,8 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Далее остаток P3: plugin target/capability projection и source/release presentation;
-нужный consumer/расхождение определить в существующих DTO/views до кодирования.
+Далее остаток P3: source/release presentation и сверка существующих capabilities;
+новый descriptor добавлять только при конкретном consumer/расхождении.
 Instance owner, grants, публикация и данные остаются у прежних owners.
 [План](04_MIGRATION_PLAN.md#развитие-после-p1). Отдельный session слой не нужен заранее.
 Визуальное ревью P1/P2a/P2b, pointer routing и Windows evidence — отдельные открытые gates.

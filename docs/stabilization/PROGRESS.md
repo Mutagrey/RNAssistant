@@ -265,6 +265,15 @@ restart. 4 cancel + 25 communication + 12 Inbox + 6 policy + core pack/kernel wa
 control, terminal Run wait/dependencies, лимиты и Inspector ещё
 не реализованы; управление owner другого процесса этим tool не добавлено.
 
+## Universal Browser P3b: restore freshness — In Review, 2026-11-11
+
+Сохранённая plugin-вкладка читает active release при открытии меню действий; stale
+guard больше не хранится в Dock route. Existing runtime conflict не повторяется;
+catalog error/late response не разрешают restore. Iframe сохраняется. Regression
+red → green в existing browser-saved-views, включая narrow/zoom; новых API/stores нет.
+[Evidence/ревью](../browser/05_TEST_MATRIX.md#результаты-p3b--2026-11-11).
+Visual acceptance, Windows/WebView2 и остаток P3 остаются открыты.
+
 ## Universal Browser P3a: failed source check — In Review, 2026-11-11
 
 PluginView при первом failed source check больше не открывает active release

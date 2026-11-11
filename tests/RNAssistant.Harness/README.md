@@ -2105,6 +2105,14 @@ is closed even when the synthetic transport ignores abort. Live dirty guards rem
 All four passed sequentially without production changes or a C# build.
 [Evidence and limits](../../docs/browser/05_TEST_MATRIX.md#результаты-p2c--2026-11-11).
 
+## Plugin restore freshness (P3b, 2026-11-11)
+
+`node tests/web/browser-saved-views.test.js` also covers a retained release becoming
+restorable after a new publication, menu-scoped head guards, conflict without retry,
+catalog error/loading, stale menu responses and the retained iframe after restore.
+`RNA_PLUGIN_RESTORE_SCREENSHOTS=/tmp/plugin-restore` saves wide/narrow error menus.
+No C# build is needed for this UI-only slice; Windows/WebView2 evidence stays open.
+
 ## Plugin source failure (P3a, 2026-11-11)
 
 `node tests/web/plugin-source-failure.test.js` covers initial failed check

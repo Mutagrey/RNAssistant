@@ -132,6 +132,9 @@ reopen загружает страницу заново. Run и сохранён
 P3a (2026-11-11): PluginView.ready не открывает active release после failed source
 check. Existing Browser/PreviewSurface показывает ошибку; explicit active command,
 candidate watcher, instance/grant owners сохранены. Нового слоя/bridge API нет.
+P3b: PluginReleaseView получает active head через existing `getPlugins` при открытии
+действий; guard живёт в меню, не в Dock route. Runtime restore guard и instance owner
+сохранены. Catalog error и stale menu/view response не разрешают действие.
 
 «Обсудить» вызывает существующий ConversationPanel.open; DockWorkspace размещает
 тот же exact Chat View рядом. На узком экране остаётся одна группа вкладок.

@@ -185,9 +185,20 @@ preview и ранее явно выбранную публикацию разн�
 Focused regression red → green и `plugin-view-selection` прошли; общий `browser-views`
 остановился до нового сценария на focus assertion и не засчитан как pass.
 [Evidence и ревью](05_TEST_MATRIX.md#результаты-p3a--2026-11-11).
-Остаток P3 — plugin target/capability projection и source/release presentation:
-сначала определить нужный consumer/расхождение в существующих DTO/views, без
-предварительного нового session слоя. Native renderer/agent automation отдельно.
+## P3b: актуальность восстановления release — In Review, 2026-11-11
+
+В сохранённой вкладке доступность restore зависела от active release на момент её
+создания. `PluginReleaseView` теперь читает текущую публикацию через existing
+`getPlugins` при открытии меню. Guard принадлежит команде этого меню, а Dock route
+содержит только identity сохранённой версии и title. Loading/error/missing head
+не разрешают restore; late response не меняет новое меню. Runtime conflict между
+чтением и действием остаётся отказом без retry. Pinned iframe не перезагружается.
+Новых contracts/services/controls нет. Existing `browser-saved-views` прошёл после
+воспроизведения старого дефекта. [Evidence/ревью](05_TEST_MATRIX.md#результаты-p3b--2026-11-11).
+
+Остаток P3 — source/release presentation и нужный consumer plugin capabilities:
+сначала сверить существующие DTO/views. Общий descriptor без конкретного потребителя
+и новый session слой не требуются. Native renderer/agent automation отдельно.
 
 ## Развитие после P1
 

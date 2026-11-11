@@ -122,6 +122,9 @@ P2c не меняет геометрию/tokens и проверяет lifecycle 
 P3a использует прежний PreviewSurface error/status без новых controls/CSS: при первом
 failed source check нет iframe и сообщения о якобы открытой странице.
 [1280 px](review/browser-p3a-error-1280.png), [420 px / 125%](review/browser-p3a-error-420.png).
+P3b использует existing ActionMenu disabled/detail для проверки active release и
+ошибки каталога; новых tokens/CSS нет. [1280 px](review/browser-p3b-restore-1280.png),
+[420 px / 125%](review/browser-p3b-restore-420.png) — без overflow.
 
 [Замеры](review/browser-toolbar.json) сравнивают production и frozen Demo при одинаковых
 viewport/zoom/theme. Production controls используют общий compact token 30 CSS px,

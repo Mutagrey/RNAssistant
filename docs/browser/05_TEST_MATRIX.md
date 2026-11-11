@@ -44,6 +44,23 @@ bounded source, поздний transfer cleanup, exact chat/document/URI и plug
 descriptor, вместо проверки пользовательского поведения. C#/VSTO tests для P1 не нужны.
 При изменении только docs эти команды не выполнять.
 
+## Результаты P3b — 2026-11-11
+
+Existing `browser-saved-views.test.js` воспроизвёл на baseline `8d337666`: у вкладки
+текущего release после новой публикации restore оставался disabled. После исправления
+проверены fresh head на каждом открытии меню, отказ при смене head до click без retry,
+успешное явное восстановление с новым guard, loading/error без действия и late response
+старого меню. Pinned iframe и existing lifecycle/late instance cleanup сохраняются.
+Это Chrome с synthetic bridge; runtime restore guard не изменялся. C#/Office build
+не запускался. Меню укладывается в 1280/100% и 420/125%, overflow отсутствует.
+
+Для ревью: 1) открыть текущую сохранённую версию; 2) опубликовать другую; 3) вернуться
+в прежнюю вкладку и открыть действия — restore доступен; 4) восстановить явно либо
+проверить отказ после ещё одной публикации. Ошибка чтения head показана в существующей
+строке меню: [1280 px](../ui/review/browser-p3b-restore-1280.png),
+[420 px / 125%](../ui/review/browser-p3b-restore-420.png).
+Visual acceptance и Windows/WebView2 evidence остаются Open.
+
 ## Результаты P3a — 2026-11-11
 
 `plugin-source-failure.test.js` на прежнем production-коде воспроизвёл один

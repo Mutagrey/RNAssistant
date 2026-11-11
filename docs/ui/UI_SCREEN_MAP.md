@@ -141,6 +141,9 @@ Dirty source editor сохраняет свой guard. Import добавляет
 P3a (2026-11-11): первое открытие plugin source с failed check показывает ошибку без
 подмены опубликованной страницей. Reload проверяет исходники снова; «Открыть активную
 версию» остаётся явной командой. Уже открытый preview при failed refresh сохраняется.
+P3b: действия сохранённой plugin-вкладки проверяют текущую публикацию при каждом
+открытии меню. До ответа/при ошибке restore недоступен; публикация, изменившаяся после
+проверки, даёт conflict без retry. Перезагрузка pinned страницы не требуется.
 [Широкий вид](review/browser-address-wide.png),
 [420 px / 125%](review/browser-address-narrow.png); [процедура ревью](../browser/05_TEST_MATRIX.md#toolbar-review).
 

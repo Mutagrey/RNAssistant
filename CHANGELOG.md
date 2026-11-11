@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.3.3-dev
+
+- Saved plugin tabs check the current publication when opening restore actions.
+  A newer publication no longer leaves restoration permanently disabled or bound
+  to an outdated head. Conflicts require an explicit retry; the open preview stays intact.
+
 ### 16.3.2-dev
 
 - A failed plugin source check on first opening now leaves a visible error instead

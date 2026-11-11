@@ -34,7 +34,7 @@ const {chromium}=require('playwright');
     page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
     await page.goto(url+'preview/web/?scenario=ready');await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise,null,{timeout:15000}).catch(error=>{throw new Error(error.message+'; page errors: '+errors.join(' | '));});
     await page.evaluate(()=>{
-      window.savedTest={calls:[],reads:0,nextLease:0,loads:0};
+      window.savedTest={calls:[],reads:0,nextLease:0,loads:0,activeRelease:'saved-release-1'};
       const original=send,read=RNAssistantResourceDownload.read;
       const uri=id=>'rna://chat/preview-chat/artifact/saved-'+id+'/revision/1';
       savedTest.items=['A','B'].map(id=>({title:'Сохранённый HTML '+id,kind:'html_workspace',resourceUri:uri(id),revision:1,
@@ -47,6 +47,13 @@ const {chromium}=require('playwright');
         if(savedTest.delayRead){savedTest.delayRead=false;savedTest.lateReadLease=data.leaseId;savedTest.lateReadSignal=options.signal;
           return new Promise(resolve=>{savedTest.releaseRead=()=>resolve(savedTest.bytes);});}return savedTest.bytes;};
       send=function(command,payload){savedTest.calls.push({command,payload});
+        if(command==='getPlugins'){
+          const activeRelease=savedTest.activeRelease,delayed=savedTest.delayCatalog;savedTest.delayCatalog=false;
+          return original(command,payload).then(value=>{
+            const result=Object.assign({},value,{error:savedTest.catalogError,items:value.items.map(item=>item.pluginId==='data-templates'?Object.assign({},item,{releaseId:activeRelease}):item)});
+            if(delayed)return new Promise(resolve=>{savedTest.releaseCatalog=()=>resolve(result);});return result;
+          });
+        }
         if(command==='listArtifactCatalog')return Promise.resolve({chatId:state.activeChatId,sessionRevision:1,documentId:'preview-document',items:savedTest.items,documents:[]});
         if(command==='exportArtifact'&&payload.resourceUri.includes('/saved-')){
           const browserTarget={kind:'HtmlArtifact',state:'Ready',chatId:payload.chatId,documentId:payload.documentId,resourceUri:payload.resourceUri,artifactId:'saved',revision:1,capabilities:{preview:true,source:true,edit:false,versions:true,restore:false,exportProject:true,createProject:true,annotations:false}};
@@ -70,7 +77,8 @@ const {chromium}=require('playwright');
           if(savedTest.delayPlugin)return new Promise(resolve=>{savedTest.lateInstance=value.instanceId;savedTest.releasePlugin=()=>resolve(value);});return Promise.resolve(value);
         }
         if(command==='restorePluginVersion'){savedTest.restored=payload;
-          if(!savedTest.restoreAllowed)return Promise.reject(new Error('Активная версия изменилась. Обновите список версий.'));
+          if(payload.expectedActiveReleaseId!==savedTest.activeRelease)return Promise.reject(new Error('Активная версия изменилась. Обновите список версий.'));
+          savedTest.activeRelease=payload.releaseId;
           return original('getPlugins',{}).then(value=>Object.assign({},value.items.find(item=>item.pluginId===payload.pluginId),{releaseId:payload.releaseId}));}
 
         return original(command,payload);
@@ -277,7 +285,7 @@ const {chromium}=require('playwright');
       await page.evaluate(()=>{RNAssistantDockWorkspace.close(RNAssistantMaterialView.key(savedTest.readTarget));delete savedTest.releaseRead;delete savedTest.lateReadSignal;});
     }
     await page.setViewportSize({width:1280,height:900});
-    await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));await page.locator('[data-plugin-node="PreviewFrameHost"] iframe').waitFor();
+    await page.evaluate(async()=>{await RNAssistantPlugins.refresh();RNAssistantPlugins.select('data-templates');});await page.locator('[data-plugin-node="PreviewFrameHost"] iframe').waitFor();
     if(!baseline){
       await page.setViewportSize({width:420,height:900});await page.evaluate(()=>{document.documentElement.style.zoom='1.25';});
       await (await action(page.locator('[data-plugin-node="Workbench"]'),'Версии плагина')).click();await page.getByRole('menuitem',{name:'v1',exact:true}).waitFor();
@@ -297,16 +305,44 @@ const {chromium}=require('playwright');
     const opens=await page.evaluate(()=>savedTest.calls.filter(c=>c.command==='openPlugin'&&c.payload.releaseId).length);assert.equal(opens,baseline?5:2);
     if(!baseline){
       const release=page.locator('.browser-object-view').filter({has:page.locator('iframe[src*="saved-release-1"]')});
-      await (await action(release,'Действия с версией')).click();await page.getByRole('menuitem',{name:'Восстановить эту версию',exact:true}).click();
+      const restore=()=>page.getByRole('menuitem',{name:'Восстановить эту версию',exact:true});
+      await (await action(release,'Действия с версией')).click();await page.getByText('Проверяю активную версию…',{exact:true}).waitFor({state:'hidden'});
+      assert.ok(await restore().isDisabled(),'current release cannot restore itself');await page.keyboard.press('Escape');
+      await page.evaluate(()=>{savedTest.activeRelease='saved-release-2';savedTest.pinnedFrame=document.querySelector('.browser-object-view iframe[src*="saved-release-1"]');});
+      await (await action(release,'Действия с версией')).click();
+      await page.waitForFunction(()=>!document.querySelector('.rna-action-menu-popup [aria-label="Восстановить эту версию"]').disabled);
+      await page.evaluate(()=>{savedTest.activeRelease='saved-release-3';});await restore().click();
       await release.getByRole('alert').filter({hasText:'Активная версия изменилась'}).waitFor();
-      assert.ok(await page.evaluate(()=>savedTest.restored.releaseId==='saved-release-1'&&!!savedTest.restored.expectedActiveReleaseId));
-      await page.evaluate(()=>{savedTest.restoreAllowed=true;savedTest.pinnedFrame=document.querySelector('.browser-object-view iframe[src*="saved-release-1"]');});
-      await (await action(release,'Действия с версией')).click();await page.getByRole('menuitem',{name:'Восстановить эту версию',exact:true}).click();
+      assert.ok(await page.evaluate(()=>savedTest.restored.releaseId==='saved-release-1'&&savedTest.restored.expectedActiveReleaseId==='saved-release-2'));
+      assert.equal(await page.evaluate(()=>savedTest.calls.filter(c=>c.command==='restorePluginVersion').length),1,'conflict never retries automatically');
+      await (await action(release,'Действия с версией')).click();await restore().click();
       await release.getByRole('status').filter({hasText:'Версия восстановлена.'}).waitFor();
+      assert.equal(await page.evaluate(()=>savedTest.restored.expectedActiveReleaseId),'saved-release-3','new menu gets the current head');
       assert.ok(await page.evaluate(()=>savedTest.pinnedFrame===document.querySelector('.browser-object-view iframe[src*="saved-release-1"]')),'restoration does not replace the saved preview');
       assert.ok(await page.evaluate(()=>savedTest.calls.some(c=>c.command==='closePlugin'&&c.payload.instanceId.startsWith('preview-plugin-instance'))),'restoration invalidates the old mutable development instance');
 
-      await page.evaluate(()=>{savedTest.delayPlugin=true;savedTest.pluginTarget={view:'plugin-release',pluginId:'data-templates',releaseId:'saved-release-late',expectedActiveReleaseId:'active',title:'Поздний релиз'};RNAssistantDockWorkspace.openTarget(savedTest.pluginTarget);});
+      await page.evaluate(()=>{savedTest.activeRelease='saved-release-4';savedTest.delayCatalog=true;});
+      await (await action(release,'Действия с версией')).click();await page.waitForFunction(()=>savedTest.releaseCatalog);
+      assert.ok(await restore().isDisabled(),'loading does not reuse a previous guard');await page.keyboard.press('Escape');
+      await page.evaluate(()=>{savedTest.activeRelease='saved-release-1';});
+      await (await action(release,'Действия с версией')).click();
+      await page.evaluate(()=>savedTest.releaseCatalog());
+      await page.getByText('Проверяю активную версию…',{exact:true}).waitFor({state:'hidden'});
+      assert.ok(await restore().isDisabled(),'late response cannot enable a newer menu');await page.keyboard.press('Escape');
+      await page.evaluate(()=>{savedTest.activeRelease='saved-release-4';savedTest.catalogError='Каталог недоступен';});
+      for(const width of [1280,420]){
+        await page.setViewportSize({width,height:900});await page.evaluate(zoom=>{document.documentElement.style.zoom=zoom;},width===420?'1.25':'');
+        await (await action(release,'Действия с версией')).click();await page.getByText('Каталог недоступен',{exact:true}).waitFor();
+        assert.ok(await restore().isDisabled(),'catalog error cannot authorize restoration from cached metadata');
+        assert.ok(await page.locator('.rna-action-menu-popup').evaluate(menu=>{const r=menu.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&document.documentElement.scrollWidth<=innerWidth+1;}));
+        if(process.env.RNA_PLUGIN_RESTORE_SCREENSHOTS){fs.mkdirSync(process.env.RNA_PLUGIN_RESTORE_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.RNA_PLUGIN_RESTORE_SCREENSHOTS,'browser-p3b-restore-'+width+'.png')});}
+        await page.keyboard.press('Escape');
+      }
+      await page.setViewportSize({width:1280,height:900});await page.evaluate(()=>{document.documentElement.style.zoom='';});
+      assert.equal(await page.evaluate(()=>savedTest.calls.filter(c=>c.command==='restorePluginVersion').length),2);
+      assert.ok(await page.evaluate(()=>savedTest.pinnedFrame===document.querySelector('.browser-object-view iframe[src*="saved-release-1"]')),'menu checks retain the pinned iframe');
+
+      await page.evaluate(()=>{savedTest.delayPlugin=true;savedTest.pluginTarget={view:'plugin-release',pluginId:'data-templates',releaseId:'saved-release-late',title:'Поздний релиз'};RNAssistantDockWorkspace.openTarget(savedTest.pluginTarget);});
       await page.waitForFunction(()=>savedTest.releasePlugin);
       await page.evaluate(()=>{RNAssistantDockWorkspace.close(RNAssistantPluginReleaseView.key(savedTest.pluginTarget));savedTest.releasePlugin();});
       await page.waitForFunction(()=>savedTest.calls.some(c=>c.command==='closePlugin'&&c.payload.instanceId===savedTest.lateInstance));
