@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Tools;
@@ -42,7 +43,7 @@ namespace RNAssistant.Office.Services
                 return new HtmlWorkspaceMutation(actor, LogicalId, Title, null, new HtmlWorkspace());
             }
             if (current == null || !DocumentArtifactStore.Owns(actor, Snapshot)) throw Conflict();
-            var artifact = owner.Read(actor, current);
+            var artifact = owner.Read(ConversationMetadata.From(actor), current);
             var body = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText ?? "null");
             if (body == null) throw new InvalidDataException("HTML snapshot body is unavailable.");
             var workspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(body);

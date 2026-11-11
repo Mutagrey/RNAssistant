@@ -68,7 +68,7 @@ namespace RNAssistant.Harness
                 AssertTrue(updated.Success, "second chat edits the same MD: " + updated.Message);
                 var currentTarget = (string)JObject.Parse(updated.DataJson)["target"];
                 AssertTrue(!save(a, target, "# Must not overwrite").Success, "an old semantic snapshot target is rejected");
-                AssertEqual(body, store.DocumentArtifacts.Read(b, exact).InlineText, "first revision remains exact");
+                AssertEqual(body, store.DocumentArtifacts.Read(ConversationMetadata.From(b), exact).InlineText, "first revision remains exact");
                 AssertContains(executor.ResourceGateway.Read(b, new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 128 }).Result.Text,
                     "# Архитектура", "common Gateway still reads historical Markdown after logical-head drift");
                 var head = store.DocumentArtifacts.CurrentSnapshot(b, logical);
@@ -78,14 +78,14 @@ namespace RNAssistant.Harness
                 var writers = new[] { b, c }.Select((chat, index) => Task.Run(() => save(chat, currentTarget, "# Writer " + index))).ToArray();
                 Task.WaitAll(writers);
                 AssertEqual(1, writers.Count(task => task.Result.Success), "competing MD writers publish one child");
-                AssertEqual(3, store.DocumentArtifacts.SnapshotHistory(b, MarkdownDocumentIdentity.LogicalId(first.Id)).Count, "stale refusal adds no revision");
-                var current = store.DocumentArtifacts.Read(b, store.DocumentArtifacts.CurrentSnapshot(b, logical));
+                AssertEqual(3, store.DocumentArtifacts.SnapshotHistory(ConversationMetadata.From(b), MarkdownDocumentIdentity.LogicalId(first.Id)).Count, "stale refusal adds no revision");
+                var current = store.DocumentArtifacts.Read(ConversationMetadata.From(b), store.DocumentArtifacts.CurrentSnapshot(b, logical));
                 currentTarget = ResourceGatewayService.IntentTarget(new ResourceDescriptor { Kind = current.Kind, Title = current.Title, CreatedUtc = current.CreatedUtc });
                 var restored = executor.ExecuteManual(Command(MarkdownDocumentToolCatalog.RestoreToolId, "target", currentTarget, "version", 1),
                     catalog, new AppSettings(), false, false, b);
                 AssertTrue(restored.Success, "restore through the same document authority: " + restored.Message);
                 var restoredRef = store.DocumentArtifacts.CurrentSnapshot(b, logical);
-                var restoredArtifact = store.DocumentArtifacts.Read(b, restoredRef);
+                var restoredArtifact = store.DocumentArtifacts.Read(ConversationMetadata.From(b), restoredRef);
                 AssertEqual(body, restoredArtifact.InlineText, "restore preserves every source character");
                 AssertEqual(current.Id, restoredArtifact.ParentArtifactId, "restore advances causal parent");
                 AssertEqual(exact.Uri, executor.ResourceAuthority.Revisions.GetRevision(executor.ResourceAuthority.Scope(b, true), restoredRef).RestoredFrom.Uri,
@@ -112,12 +112,12 @@ namespace RNAssistant.Harness
                 store.Delete(a.Host, a.DocumentKey, a.Id);
                 var gc = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "origin deletion and GC preserve document bytes");
-                AssertEqual(body, new ChatStore(paths).DocumentArtifacts.Read(b, exact).InlineText, "history survives a fresh store");
+                AssertEqual(body, new ChatStore(paths).DocumentArtifacts.Read(ConversationMetadata.From(b), exact).InlineText, "history survives a fresh store");
                 var foreign = NewSession(adapter); foreign.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
-                RuntimeThrows<System.IO.InvalidDataException>(() => store.DocumentArtifacts.Read(foreign, exact));
+                RuntimeThrows<System.IO.InvalidDataException>(() => store.DocumentArtifacts.Read(ConversationMetadata.From(foreign), exact));
                 links.Change(c, LinkRequest(c, restoredRef.Uri, false), store.Save);
                 System.IO.File.Delete(executor.Payloads.PathFor(restoredArtifact.ContentSha256));
-                RuntimeThrows<System.IO.InvalidDataException>(() => store.DocumentArtifacts.Read(c, restoredRef));
+                RuntimeThrows<System.IO.InvalidDataException>(() => store.DocumentArtifacts.Read(ConversationMetadata.From(c), restoredRef));
                 links.Change(c, LinkRequest(c, restoredRef.Uri, true), store.Save);
                 AssertTrue(ArtifactWorkingSet.IsDetached(c, restoredArtifact), "missing MD bytes never prevent unlinking the chat reference");
                 AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "all MD effects and refusals are terminal");
@@ -152,7 +152,7 @@ namespace RNAssistant.Harness
                 var replayed = AssertKernelReplay(session);
                 var artifact = replayed.Artifacts.Single(item => item.Kind == ChatArtifactKinds.Markdown);
                 AssertTrue(artifact.InlineText == null, "replay remains metadata-only for Markdown");
-                AssertEqual(body, new ChatStore(FixturePaths.Value).DocumentArtifacts.Read(replayed, ChatResourceUri.CreateArtifactRevision(replayed, artifact)).InlineText,
+                AssertEqual(body, new ChatStore(FixturePaths.Value).DocumentArtifacts.Read(ConversationMetadata.From(replayed), ChatResourceUri.CreateArtifactRevision(replayed, artifact)).InlineText,
                     "large accepted-call text survives publication, event replay and exact CAS read");
                 AssertTrue(replayed.ArtifactLinks.Any(link => !link.Detached && link.Reference.Uri == ChatResourceUri.CreateArtifactRevisionUri(replayed, artifact)),
                     "the agent persists a document link without duplicate body ownership");
@@ -217,8 +217,8 @@ namespace RNAssistant.Harness
                 AssertContains(retry.Result.DataJson, "markdown_attempt_already_published", "lost chat link cannot replay a published operation");
                 AssertEqual(ToolDispatchEvidence.NotDispatched, retry.Evidence.Dispatch, "duplicate creation rejected before dispatch");
                 var owner = new ChatStore(paths).DocumentArtifacts;
-                AssertEqual(1, owner.List(session).Count, "one publication only");
-                AssertContains(owner.Read(session, ChatResourceUri.CreateArtifactRevision(session, owner.List(session).Single())).InlineText, "Retained", "body survives failed actor save");
+                AssertEqual(1, owner.List(ConversationMetadata.From(session)).Count, "one publication only");
+                AssertContains(owner.Read(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, owner.List(ConversationMetadata.From(session)).Single())).InlineText, "Retained", "body survives failed actor save");
             });
         }
     }

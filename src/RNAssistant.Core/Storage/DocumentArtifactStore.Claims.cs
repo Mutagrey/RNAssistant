@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
@@ -73,7 +74,7 @@ namespace RNAssistant.Core.Storage
             if (payloads.Any(p => !_payloads.HasVerifiedReference(p.ToBlobReference())))
                 throw new InvalidDataException("An exact claim source payload is unavailable.");
             var parent = CurrentSnapshot(session, identity);
-            var previous = parent == null ? null : Read(session, parent, false);
+            var previous = parent == null ? null : Read(ConversationMetadata.From(session), parent, false);
             var revision = checked((previous?.Revision ?? 0) + 1);
             var title = session.Title ?? "Conversation";
             if (title.Length > 180) title = title.Substring(0, 180);

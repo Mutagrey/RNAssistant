@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
@@ -23,7 +24,7 @@ namespace RNAssistant.Core.Storage
         {
             if (string.IsNullOrWhiteSpace(section) || section.Length > 200 || maxCharacters < 1 || maxCharacters > ResourceReadRequest.MaximumCharacters)
                 throw new MarkdownSectionException("Use a complete heading title of at most 200 characters.", "resource_section_invalid");
-            var artifact = Read(session, reference, false);
+            var artifact = Read(ConversationMetadata.From(session), reference, false);
             var original = artifact.OriginalAttachment;
             if (original == null ? artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument : !IsMarkdownOriginal(original))
                 throw new MarkdownSectionException("Section reads require document Markdown or a Plan. Read this resource's advertised representation instead.", "resource_section_unsupported");
@@ -76,7 +77,7 @@ namespace RNAssistant.Core.Storage
             if (string.IsNullOrEmpty(query) || characterBudget < 1 || characterBudget > MaximumIndexedCharacters ||
                 snippetCharacters < 1 || snippetCharacters > 2000)
                 throw new ArgumentException("A bounded text search is required.");
-            var artifact = Read(session, reference, false);
+            var artifact = Read(ConversationMetadata.From(session), reference, false);
             var original = artifact.OriginalAttachment;
             if (original == null && artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument &&
                 !(artifact.Kind == ChatArtifactKinds.File && FileEncoding(artifact) != null))
@@ -121,7 +122,7 @@ namespace RNAssistant.Core.Storage
         public ResourceReadResult ReadIndexedTextPart(ChatSession session, ResourceRef reference, int partNumber)
         {
             if (partNumber < 1) throw new ArgumentOutOfRangeException(nameof(partNumber));
-            var artifact = Read(session, reference, false);
+            var artifact = Read(ConversationMetadata.From(session), reference, false);
             var original = artifact.OriginalAttachment;
             if (original == null && artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument &&
                 !(artifact.Kind == ChatArtifactKinds.File && FileEncoding(artifact) != null))
@@ -253,7 +254,7 @@ namespace RNAssistant.Core.Storage
             if (fromPart < 1 || limit < 1 || limit > 50)
                 throw new ArgumentException("Select a positive part and at most 50 outline entries.");
             var verified = ReadIndexedTextPart(session, reference, 1);
-            var artifact = Read(session, reference, false);
+            var artifact = Read(ConversationMetadata.From(session), reference, false);
             var view = artifact.OriginalAttachment == null ? TextIndexView : ExtractedTextIndexView;
             var captured = _revisions.GetView(Scope(session), reference, view);
             var manifest = captured?.Payload == null ? null : _payloads.ReadText(captured.Payload.ToBlobReference());
@@ -301,7 +302,7 @@ namespace RNAssistant.Core.Storage
             if (member?.Reference == null || member.Parent == null || text == null || string.IsNullOrEmpty(query) ||
                 characterBudget < 1 || snippetCharacters < 1 || snippetCharacters > 2000)
                 throw new ArgumentException("An exact member and bounded search are required.");
-            var artifact = Read(session, member.Parent, false);
+            var artifact = Read(ConversationMetadata.From(session), member.Parent, false);
             var parent = ResourceUri.Parse(member.Parent.Uri);
             var address = ResourceUri.Parse(member.Reference.Uri);
             if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace || parent.Segments.Count != 5 || address.Provider != parent.Provider ||

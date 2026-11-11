@@ -72,7 +72,7 @@ namespace RNAssistant.Harness
                 AssertTrue(catalog.Items.Count == 2 && catalog.Items.Any(item => item.Title == "Healthy original.md" && item.AvailabilityIssue == null),
                     "one unavailable Plan does not block other document picker entries");
                 RuntimeThrows<InvalidDataException>(() => links.Change(b, LinkRequest(b, exact.Uri, false), chats.Save));
-                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(a, exact));
+                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(ConversationMetadata.From(a), exact));
                 var unchangedHead = authority.Capture(scope).Generation;
                 links.Change(b, LinkRequest(b, exact.Uri, true), chats.Save);
                 AssertEqual(unchangedHead, authority.Capture(scope).Generation, "unlink does not repair or replace resource authority");
@@ -96,7 +96,7 @@ namespace RNAssistant.Harness
                 AssertEqual(2, unknown.Items.Count, "unknown head does not prevent listing unrelated originals");
                 RuntimeThrows<InvalidDataException>(() => links.Change(a, LinkRequest(a, exact.Uri, false), chats.Save));
                 links.Change(a, LinkRequest(a, exact.Uri, true), chats.Save);
-                AssertEqual("# Exact retained body", chats.DocumentArtifacts.Read(a, exact).InlineText, "unknown currentness preserves exact historical reads");
+                AssertEqual("# Exact retained body", chats.DocumentArtifacts.Read(ConversationMetadata.From(a), exact).InlineText, "unknown currentness preserves exact historical reads");
 
                 var originalMetadata = authority.GetView(scope, original, "artifact-original-record").Payload;
                 File.WriteAllText(blobs.PathFor(originalMetadata.Sha256), "corrupt metadata");
@@ -163,7 +163,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!ChatResourcePromptIndex.Build(b, 1000).Contains("Working set Plan"), "next prompt manifest excludes detached Plan");
                 ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(b);
                 AssertTrue(b.ActivePlanDocumentArtifactId == null, "old messages cannot reactivate a detached Plan");
-                AssertEqual("# First body", chats.DocumentArtifacts.Read(a, ChatResourceUri.CreateArtifactRevision(a, first)).InlineText,
+                AssertEqual("# First body", chats.DocumentArtifacts.Read(ConversationMetadata.From(a), ChatResourceUri.CreateArtifactRevision(a, first)).InlineText,
                     "other chat's exact historical revision survives");
                 var fork = NewSession(adapter);
                 fork.DocumentAuthorityId = b.DocumentAuthorityId;
@@ -178,7 +178,7 @@ namespace RNAssistant.Harness
                 b = new ChatStore(FixturePaths.Value).Load(b.Id);
                 links.Change(b, LinkRequest(b, exact.Uri, true), chats.Save);
                 AssertTrue(b.ActivePlanDocumentArtifactId == null, "missing body does not block unlinking metadata");
-                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(b, exact));
+                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(ConversationMetadata.From(b), exact));
             });
         }
 
@@ -304,7 +304,7 @@ namespace RNAssistant.Harness
                             "stale writer cannot recreate a removed logical resource");
                         AssertEqual(generation, authority.Capture(scope).Generation, "stale editor cannot republish removal");
                     }
-                    AssertTrue(chats.DocumentArtifacts.Read(a, exact, false) != null, "historical record remains exact");
+                    AssertTrue(chats.DocumentArtifacts.Read(ConversationMetadata.From(a), exact, false) != null, "historical record remains exact");
                     AssertTrue(!chats.DocumentArtifacts.InspectCurrentMetadata(a).Items.Any(item => item.Id == artifact.Id), "model discovery omits removal");
                 }
                 a = new ChatStore(paths).Load(a.Id); b = new ChatStore(paths).Load(b.Id);
@@ -317,7 +317,7 @@ namespace RNAssistant.Harness
                     "CAS collection accepts the removal journal");
                 AssertEqual(subjects.Count, ArtifactLibraryProjectionService.Project(a).RemovedResourceUris.Count,
                     "historical cards explicitly project removed resources");
-                AssertEqual("# First", chats.DocumentArtifacts.Read(a, ChatResourceUri.CreateArtifactRevision(a, oldPlan)).InlineText,
+                AssertEqual("# First", chats.DocumentArtifacts.Read(ConversationMetadata.From(a), ChatResourceUri.CreateArtifactRevision(a, oldPlan)).InlineText,
                     "old exact Plan bytes remain retained");
                 AssertTrue(!ChatResourcePromptIndex.Build(b, 2000).Contains("Delete plan"), "prompt does not advertise removed targets");
 
@@ -325,7 +325,7 @@ namespace RNAssistant.Harness
                 var orphan = catalog.Import(a, Encoding.UTF8.GetBytes("retained"), "save-failure.bin", "application/octet-stream", Guid.NewGuid().ToString("N"));
                 var orphanRef = ChatResourceUri.CreateArtifactRevision(a, orphan);
                 RuntimeThrows<IOException>(() => links.Delete(a, DeleteRequest(a, orphanRef.Uri), _ => { throw new IOException("save failed"); }));
-                AssertTrue(new ChatStore(paths).DocumentArtifacts.IsRemoved(a, orphan), "document tombstone survives failed chat save");
+                AssertTrue(new ChatStore(paths).DocumentArtifacts.IsRemoved(ConversationMetadata.From(a), orphan), "document tombstone survives failed chat save");
             });
         }
 
@@ -367,7 +367,7 @@ namespace RNAssistant.Harness
                 clearer.Clear(b, new DocumentContext());
                 chats.Save(b);
                 AssertEqual(0, new ChatStore(paths).Load(b.Id).Artifacts.Count, "clear resets memberships as well as messages");
-                AssertEqual(1, chats.DocumentArtifacts.List(a).Count, "clear/unlink never deletes a document resource");
+                AssertEqual(1, chats.DocumentArtifacts.List(ConversationMetadata.From(a)).Count, "clear/unlink never deletes a document resource");
                 for (var index = 0; index < 50; index++)
                 {
                     var title = index == 1 ? "A checklist.md" : index == 25 ? "Z summary.md" : "Shared specification.md";

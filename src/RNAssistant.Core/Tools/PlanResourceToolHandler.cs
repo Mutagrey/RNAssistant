@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools.Contracts;
@@ -99,7 +100,7 @@ namespace RNAssistant.Core.Tools
                     command.PlanId = PlanDocumentService.PlanId(current);
                     command.ArtifactId = current.Id;
                     RequireHead(command);
-                    current = _owner.Read(_session, command.Source);
+                    current = _owner.Read(ConversationMetadata.From(_session), command.Source);
                     before = PlanSourceDocument.Serialize(current);
                     if (context.Execution.ExpectedContentSha256 != null &&
                         context.Execution.ExpectedContentSha256 != TextPatternEngine.Sha256(before))
@@ -132,7 +133,7 @@ namespace RNAssistant.Core.Tools
                         .SingleOrDefault(item => item.Revision == command.RestoreVersion && !PlanDocumentService.IsTombstone(item));
                     if (restored == null) throw new InvalidDataException("That Plan version is unavailable.");
                     // Ensure the complete immutable body is available before any target writes.
-                    command.RestoreTitle = _owner.Read(_session, ChatResourceUri.CreateArtifactRevision(_session, restored)).Title;
+                    command.RestoreTitle = _owner.Read(ConversationMetadata.From(_session), ChatResourceUri.CreateArtifactRevision(_session, restored)).Title;
                     var collision = _resolve(PlanSourceDocument.Target(command.RestoreTitle));
                     if (collision != null && PlanDocumentService.PlanId(collision) != command.PlanId)
                         throw new InvalidDataException("Another Plan already uses the restored title.");
@@ -169,7 +170,7 @@ namespace RNAssistant.Core.Tools
             {
                 if (current == null || current.Id != prepared.Command.ArtifactId) throw new ResourceRequestException("Plan source changed.", "source_changed", false);
                 RequireHead(prepared.Command);
-                if (TextPatternEngine.Sha256(PlanSourceDocument.Serialize(_owner.Read(_session, prepared.Command.Source))) != prepared.SourceHash)
+                if (TextPatternEngine.Sha256(PlanSourceDocument.Serialize(_owner.Read(ConversationMetadata.From(_session), prepared.Command.Source))) != prepared.SourceHash)
                     throw new ResourceRequestException("Plan source changed.", "source_changed", false);
                 if (prepared.Command.Content != null && TextPatternEngine.Sha256(PlanSourceDocument.Serialize(prepared.Command.Content)) == prepared.SourceHash)
                     return Task.FromResult(context.Complete(new ToolHandlerResult(ToolResult.Ok("Plan already matches."), ToolEffectEvidence.VerifiedNoChange)));

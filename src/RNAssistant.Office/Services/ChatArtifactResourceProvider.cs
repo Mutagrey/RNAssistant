@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -1081,7 +1082,7 @@ namespace RNAssistant.Office.Services
                 {
                     var reference = _documentArtifacts.ResolveSnapshotIdentity(session,
                         new ResourceIdentity(ResourceUri.Create(ProviderName, session.DocumentAuthorityId, "artifact", address.Segments[2])));
-                    session = ProjectDocumentSession(session, null, new[] { _documentArtifacts.Read(session, reference, false) });
+                    session = ProjectDocumentSession(session, null, new[] { _documentArtifacts.Read(ConversationMetadata.From(session), reference, false) });
                 }
                 catch (System.IO.InvalidDataException ex)
                 { throw new ResourceRequestException(ex.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
@@ -1185,7 +1186,7 @@ namespace RNAssistant.Office.Services
             {
                 try
                 {
-                    if (_documentArtifacts?.IsRemoved(result.Session, artifact) == true) continue;
+                    if (_documentArtifacts?.IsRemoved(ConversationMetadata.From(result.Session), artifact) == true) continue;
                     if (artifact.AvailabilityIssue != null || !_htmlResources.IsReadableRevision(result.Session, artifact))
                     { result.UnavailableResources++; continue; }
                     healthy.Add(artifact);
@@ -1231,7 +1232,7 @@ namespace RNAssistant.Office.Services
 
         private ChatArtifact ReadDocumentArtifact(ChatSession session, ResourceRef exact)
         {
-            try { return _documentArtifacts.Read(session, exact); }
+            try { return _documentArtifacts.Read(ConversationMetadata.From(session), exact); }
             catch (System.IO.InvalidDataException ex)
             { throw new ResourceRequestException(ex.Message, "RESOURCE_SNAPSHOT_UNAVAILABLE", false); }
         }
@@ -1247,7 +1248,7 @@ namespace RNAssistant.Office.Services
                 int revision;
                 originals = ChatResourceUri.TryParseArtifactRevision(new ResourceRef(exactUri), out owner, out id, out revision) &&
                     owner == session.DocumentAuthorityId
-                    ? new[] { _documentArtifacts.Read(session, ChatResourceUri.ArtifactSnapshot(new ResourceRef(exactUri)), false) }
+                    ? new[] { _documentArtifacts.Read(ConversationMetadata.From(session), ChatResourceUri.ArtifactSnapshot(new ResourceRef(exactUri)), false) }
                     : new ChatArtifact[0];
             }
             return new ChatSession
@@ -1354,7 +1355,7 @@ namespace RNAssistant.Office.Services
 
         private void EnsureNotRemoved(ChatSession session, ChatArtifact artifact, string resourceUri)
         {
-            if (!PlanDocumentService.IsRemoved(session, artifact) && _documentArtifacts?.IsRemoved(session, artifact) != true) return;
+            if (!PlanDocumentService.IsRemoved(session, artifact) && _documentArtifacts?.IsRemoved(ConversationMetadata.From(session), artifact) != true) return;
             throw new ResourceRequestException(
                 "Resource was removed from the document: " + resourceUri,
                 "resource_removed",

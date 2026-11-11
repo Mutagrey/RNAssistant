@@ -405,7 +405,10 @@ Missing/corrupt execution evidence does not hide older messages. The canonical r
 is unchanged; full session loading still requires its exact body and fails explicitly
 when unavailable. The legacy backend still uses a temporary session for resource
 projection and enumerates artifact metadata. That internal dependency must be removed
-with resource-owner/journal integration.
+with resource-owner/journal integration. Generic `DocumentArtifactStore` reads now
+accept the same immutable metadata; resource materialization reuses a captured scope
+across its reads. Local HTML/context/chart projection and specialized Plan/text
+operations still use the aggregate and are not claimed to be bounded by this change.
 
 Office navigation serializes selection and drains already admitted catalog and
 preference requests before a possible host switch. This prevents an old controller

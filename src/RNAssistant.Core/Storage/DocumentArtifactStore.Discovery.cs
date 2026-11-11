@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -68,7 +69,7 @@ namespace RNAssistant.Core.Storage
                             throw new InvalidDataException("The artifact head points to a different lineage.");
                     }
                     if (!IsSnapshotReference(reference)) continue;
-                    var artifact = InspectMetadata(session, reference);
+                    var artifact = InspectMetadata(ConversationMetadata.From(session), reference);
                     if (artifact.AvailabilityIssue != null) unavailable++;
                     else items.Add(artifact);
                 }
@@ -93,7 +94,7 @@ namespace RNAssistant.Core.Storage
                 if (ResourceUri.Parse(head.Identity.Uri).Segments.Count != 3) continue;
                 if (head.Knowledge == HeadKnowledge.Removed) continue;
                 if (head.Knowledge != HeadKnowledge.Known) { unavailable++; continue; }
-                var artifact = InspectMetadata(session, head.Revision);
+                var artifact = InspectMetadata(ConversationMetadata.From(session), head.Revision);
                 if (artifact.RemovedFromDocument) continue;
                 if (artifact.AvailabilityIssue != null) unavailable++;
                 else items.Add(artifact);

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -24,8 +25,18 @@ namespace RNAssistant.Core.Storage
 
         public static bool IsAuthored(ChatSession session, ResourceRef reference)
         {
+            return IsAuthored(session?.DocumentAuthorityId, session?.WorkspaceId, reference);
+        }
+
+        private static bool IsAuthored(ConversationMetadata session, ResourceRef reference)
+        {
+            return IsAuthored(session?.DocumentAuthorityId, session?.WorkspaceId, reference);
+        }
+
+        private static bool IsAuthored(string documentAuthorityId, string workspaceId, ResourceRef reference)
+        {
             string owner, id; int revision;
-            return Owns(session, reference) && ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
+            return Owns(documentAuthorityId, workspaceId, reference) && ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
                 (HtmlWorkspaceIdentity.LogicalId(id) != null || id.StartsWith("artifact_", StringComparison.Ordinal));
         }
 
@@ -80,10 +91,10 @@ namespace RNAssistant.Core.Storage
             } while (offset.HasValue);
             if (roots.Count != 1 || roots[0].Knowledge != HeadKnowledge.Known)
                 throw new InvalidDataException("The HTML workspace origin is missing or ambiguous.");
-            return Read(session, roots[0].Revision, false);
+            return Read(ConversationMetadata.From(session), roots[0].Revision, false);
         }
 
-        public IReadOnlyList<ChatArtifact> SnapshotHistory(ChatSession session, string logicalId)
+        public IReadOnlyList<ChatArtifact> SnapshotHistory(ConversationMetadata session, string logicalId)
         {
             return _authority.Capture(Scope(session)).Heads.Values.Where(head => head.Knowledge == HeadKnowledge.Known && Owns(session, head.Revision) && IsSnapshotReference(head.Revision))
                 .Where(head => { string owner, id; int revision;
@@ -136,7 +147,7 @@ namespace RNAssistant.Core.Storage
                 revision: exact, restoredFrom: restoredFrom, dependencies: dependencies);
         }
 
-        private ChatArtifact ReadRecordSnapshot(ChatSession session, ResourceRef reference, string recordView,
+        private ChatArtifact ReadRecordSnapshot(ConversationMetadata session, ResourceRef reference, string recordView,
             string expectedKind, bool includeBody, ResourceAuthorityScopeId ownerScope = null)
         {
             var scope = ownerScope ?? Scope(session);
@@ -151,7 +162,7 @@ namespace RNAssistant.Core.Storage
             var body = _revisions.GetRevision(scope, reference)?.Payload;
             if (item == null || string.IsNullOrWhiteSpace(record.SourceChatId) || string.IsNullOrWhiteSpace(record.MutationAttemptId) ||
                 string.IsNullOrWhiteSpace(record.OperationKey) || body == null || item.Revision < 1 || !MatchesOwner(item, scope) ||
-                item.Kind != expectedKind || ChatResourceUri.CreateArtifactRevision(session, item).Uri != reference.Uri ||
+                item.Kind != expectedKind || ChatResourceUri.CreateArtifactRevision(session.Id, item).Uri != reference.Uri ||
                 item.ContentSha256 != body.Sha256 || item.ContentByteLength != body.ByteLength)
                 throw new InvalidDataException("The retained artifact does not match its exact snapshot.");
             if (includeBody)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -346,7 +347,7 @@ namespace RNAssistant.Office.Services
             {
                 if (DocumentArtifactStore.IsPlan(session, exact) && _payloads != null)
                 {
-                    var plan = new DocumentArtifactStore(_authority, _revisions, _payloads).Read(session, exact);
+                    var plan = new DocumentArtifactStore(_authority, _revisions, _payloads).Read(ConversationMetadata.From(session), exact);
                     var logical = snapshot.GetHead(DocumentArtifactStore.PlanIdentity(session, PlanDocumentService.PlanId(plan)));
                     if (logical?.Knowledge == HeadKnowledge.Known && _revisions.GetRevision(scope, logical.Revision)?.Dependencies
                         .Any(dependency => dependency.Kind == "immutable-snapshot" && dependency.Resource.Uri == exact.Uri && dependency.Resource.Revision == exact.Revision) == true)

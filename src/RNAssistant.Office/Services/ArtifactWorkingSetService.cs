@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -22,13 +23,13 @@ namespace RNAssistant.Office.Services
 
         internal IEnumerable<ChatArtifact> CurrentItems(ChatSession session)
         {
-            foreach (var group in _artifacts.InspectMetadataList(session)
+            foreach (var group in _artifacts.InspectMetadataList(ConversationMetadata.From(session))
                 .Concat((session.Artifacts ?? new List<ChatArtifact>()).Where(item => !string.IsNullOrEmpty(item.AvailabilityIssue)))
                 .GroupBy(item => item.Id, StringComparer.Ordinal).Select(items => items.First())
                 .GroupBy(item => ArtifactWorkingSet.Identity(session, item)))
             {
                 var first = group.First();
-                if (_artifacts.IsRemoved(session, first)) continue;
+                if (_artifacts.IsRemoved(ConversationMetadata.From(session), first)) continue;
                 if (first.Kind != ChatArtifactKinds.PlanDocument && first.Kind != ChatArtifactKinds.HtmlWorkspace && MarkdownDocumentIdentity.LogicalId(first.Id) == null && DocumentArtifactStore.ContextLogicalId(first.Id) == null) { yield return group.Single(); continue; }
                 ResourceRef current = null;
                 var unavailableHead = false;
@@ -47,7 +48,7 @@ namespace RNAssistant.Office.Services
                     continue;
                 }
                 var currentItem = group.SingleOrDefault(candidate => ChatResourceUri.CreateArtifactRevisionUri(session, candidate) == current.Uri)
-                    ?? _artifacts.InspectMetadata(session, current);
+                    ?? _artifacts.InspectMetadata(ConversationMetadata.From(session), current);
                 if (currentItem != null && !PlanDocumentService.IsTombstone(currentItem)) yield return currentItem;
             }
         }
@@ -70,8 +71,8 @@ namespace RNAssistant.Office.Services
             using (_mutations.AcquireScope(Scope(session)))
             {
                 var artifact = request.Detached.Value
-                    ? _artifacts.InspectMetadata(session, reference) : _artifacts.Read(session, reference, false);
-                if (!request.Detached.Value && _artifacts.IsRemoved(session, artifact))
+                    ? _artifacts.InspectMetadata(ConversationMetadata.From(session), reference) : _artifacts.Read(ConversationMetadata.From(session), reference, false);
+                if (!request.Detached.Value && _artifacts.IsRemoved(ConversationMetadata.From(session), artifact))
                     throw new InvalidOperationException("Артефакт удалён из документа. Обновите дерево.");
                 if (request.Detached.Value && !ArtifactWorkingSet.IsLinked(session, artifact))
                     throw new InvalidOperationException("В этом чате нет такой подключённой ссылки.");
@@ -88,8 +89,8 @@ namespace RNAssistant.Office.Services
                     // Validate the complete selected aggregate before changing chat membership.
                     selectedHtml = new ChatSession { Id = session.Id, DocumentAuthorityId = session.DocumentAuthorityId,
                         ActiveHtmlArtifactId = artifact.Id,
-                        Artifacts = _artifacts.SnapshotHistory(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id))
-                            .Select(item => item.Id == artifact.Id ? _artifacts.Read(session, reference) : item).ToList() };
+                        Artifacts = _artifacts.SnapshotHistory(ConversationMetadata.From(session), HtmlWorkspaceIdentity.LogicalId(artifact.Id))
+                            .Select(item => item.Id == artifact.Id ? _artifacts.Read(ConversationMetadata.From(session), reference) : item).ToList() };
                     if (!HtmlWorkspaceArtifactService.Restore(selectedHtml, artifact.Id))
                         throw new InvalidDataException("Выбранная версия HTML недоступна. Ссылка чата не изменена.");
                 }

@@ -602,7 +602,7 @@ namespace RNAssistant.Office.Services
             {
                 var published = htmlOwner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logicalId));
                 if (published == null) continue;
-                var current = htmlOwner.Read(session, published, false);
+                var current = htmlOwner.Read(ConversationMetadata.From(session), published, false);
                 var artifactRef = ChatResourceUri.CreateArtifactRevision(session, current);
                 var documentScope = authority.ScopeFor(session, artifactRef, false);
                 var frozenDocument = authority.Store.Capture(documentScope);

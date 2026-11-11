@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
@@ -36,7 +37,7 @@ namespace RNAssistant.Office.Tools
         { return command.Load(actor, DocumentOwner, _resources.Authority); }
 
         internal string WorkspaceTarget(ChatSession actor, ResourceRef member)
-        { return HtmlWorkspaceTargets.Workspace(DocumentOwner, actor, DocumentOwner.Read(actor, ChatResourceUri.ArtifactSnapshot(member), false)); }
+        { return HtmlWorkspaceTargets.Workspace(DocumentOwner, actor, DocumentOwner.Read(ConversationMetadata.From(actor), ChatResourceUri.ArtifactSnapshot(member), false)); }
 
         internal HtmlWorkspaceCommand PrepareCommand(ChatSession actor, string operation, IDictionary<string, object> arguments)
         {

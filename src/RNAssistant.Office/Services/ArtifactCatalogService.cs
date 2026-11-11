@@ -9,6 +9,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -106,17 +107,17 @@ namespace RNAssistant.Office.Services
             var source = Source(actor, request.DocumentId);
             var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(request.ResourceUri));
             if (reference.Uri != request.ResourceUri) throw new InvalidOperationException("Требуется ссылка проекта, а не его файла.");
-            var selected = _artifacts.Read(source, reference, false);
+            var selected = _artifacts.Read(ConversationMetadata.From(source), reference, false);
             var logicalId = HtmlWorkspaceIdentity.LogicalId(selected.Id);
-            if (selected.Kind != ChatArtifactKinds.HtmlWorkspace || logicalId == null || _artifacts.IsRemoved(source, selected))
+            if (selected.Kind != ChatArtifactKinds.HtmlWorkspace || logicalId == null || _artifacts.IsRemoved(ConversationMetadata.From(source), selected))
                 throw new InvalidOperationException("История сохранённого HTML недоступна.");
             var identity = HtmlWorkspaceIdentity.Identity(source, logicalId);
             var current = _artifacts.CurrentSnapshot(source, identity);
             if (current == null) throw new InvalidOperationException("Текущая версия проекта недоступна.");
-            var head = _artifacts.Read(source, current, false);
+            var head = _artifacts.Read(ConversationMetadata.From(source), current, false);
             // A read-only projection of existing document metadata; never change the actor's selection or links.
             var projection = new ChatSession { Id = actor.Id, DocumentAuthorityId = source.DocumentAuthorityId,
-                ActiveHtmlArtifactId = head.Id, Artifacts = _artifacts.SnapshotHistory(source, logicalId).ToList() };
+                ActiveHtmlArtifactId = head.Id, Artifacts = _artifacts.SnapshotHistory(ConversationMetadata.From(source), logicalId).ToList() };
             if (!projection.Artifacts.Any(item => item.Id == selected.Id))
                 throw new InvalidOperationException("Выбранный снимок отсутствует в истории проекта.");
             var history = ArtifactLibraryProjectionService.History(projection, new ArtifactLibraryHistoryRequest {
@@ -161,7 +162,7 @@ namespace RNAssistant.Office.Services
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {
                 var browserTarget = RNAssistant.Application.BrowserTargetResolver.Saved(source, artifact, reference.Uri);
-                artifact = _artifacts.Read(source, reference);
+                artifact = _artifacts.Read(ConversationMetadata.From(source), reference);
                 var project = CaptureProject(source, artifact);
                 project.Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 };
                 return new ArtifactTransferContent { Kind = "html_workspace", FileName = SafeName(artifact.Title + ".rna-html.zip"),
@@ -181,8 +182,8 @@ namespace RNAssistant.Office.Services
             source = Source(actor, documentId);
             reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(resourceUri));
             if (reference.Uri != resourceUri) throw new InvalidDataException("Требуется точная ссылка артефакта.");
-            var artifact = _artifacts.Read(source, reference, false);
-            if (_artifacts.IsRemoved(source, artifact)) throw new InvalidOperationException("Артефакт удалён из документа.");
+            var artifact = _artifacts.Read(ConversationMetadata.From(source), reference, false);
+            if (_artifacts.IsRemoved(ConversationMetadata.From(source), artifact)) throw new InvalidOperationException("Артефакт удалён из документа.");
             return artifact;
         }
 
@@ -194,7 +195,7 @@ namespace RNAssistant.Office.Services
                 throw new InvalidDataException("Для создания проекта выберите сохранённый HTML.");
             if (artifact.ContentByteLength > 2L * RNAssistant.Application.HtmlProjectImportService.MaximumSourceBytes)
                 throw new InvalidDataException("Снимок проекта превышает лимит переноса.");
-            artifact = _artifacts.Read(source, reference);
+            artifact = _artifacts.Read(ConversationMetadata.From(source), reference);
             var project = CaptureProject(source, artifact, true);
             project.Origin = new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 };
             return project;

@@ -8,6 +8,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -97,7 +98,7 @@ namespace RNAssistant.Harness
                     "target", executor.ResourceGateway.ResolveIntentTarget(reader, target("index.html"), true).Descriptor.CurrentTarget, "view", "source", "policy", "head"));
                 run(reader, Command("html.data.freeze", "workspace", workspace, "name", "markup"));
                 var boundRoot = executor.ResourceGateway.ResolveIntentTarget(reader, workspace, true).Reference;
-                var boundBody = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(chats.DocumentArtifacts.Read(reader, boundRoot).InlineText);
+                var boundBody = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(chats.DocumentArtifacts.Read(ConversationMetadata.From(reader), boundRoot).InlineText);
                 AssertEqual("exact", boundBody.DataSources.Single(item => item.Name == "markup").Binding.Policy, "freeze uses explicit workspace");
                 run(reader, Command("html.assets.publish", "workspace", workspace, "id", "chess-assets", "version", "1.0.0",
                     "title", "Chess assets", "description", "Shared chess source", "files", new JArray("index.html")));
@@ -378,7 +379,7 @@ namespace RNAssistant.Harness
                     Reference = afterCss, Representation = "source", Cursor = firstPage.NextCursor, MaxChars = 100 }));
                 var current = store.DocumentArtifacts.CurrentSnapshot(session,
                     HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId)));
-                AssertEqual(session.ActiveHtmlArtifactId, store.DocumentArtifacts.Read(session, current, false).Id, "selected snapshot equals the document's published head");
+                AssertEqual(session.ActiveHtmlArtifactId, store.DocumentArtifacts.Read(ConversationMetadata.From(session), current, false).Id, "selected snapshot equals the document's published head");
                 AssertEqual(baseline, session.Artifacts.Single(item => item.Id == authored[0]).ParentArtifactId, "first edit retains the exact original baseline");
                 AssertEqual(authored[0], session.Artifacts.Single(item => item.Id == authored[1]).ParentArtifactId, "second edit advances the first snapshot");
             });
@@ -445,7 +446,7 @@ namespace RNAssistant.Harness
                     "HTML member references cannot cross document authority");
                 AssertEqual(2, activities.Length, "both patch activities are retained: " + string.Join("; ", session.Messages
                     .Where(message => message.Activity != null).Select(message => message.RunId + "/" + message.Activity.ToolId + "/" + message.Activity.ResultMessage)));
-                Func<RunChangesService> changes = () => new RunChangesService(artifact => store.DocumentArtifacts.Read(session,
+                Func<RunChangesService> changes = () => new RunChangesService(artifact => store.DocumentArtifacts.Read(ConversationMetadata.From(session),
                     ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText, null, null, executor.ResourceAuthority);
                 AssertEqual(2, changes().Read(session, runId).Items.Count, "sequential publication preserves both run changes before relinking");
                 foreach (var activity in activities)
@@ -472,7 +473,7 @@ namespace RNAssistant.Harness
                     AssertEqual(1, perCall.Items.Count, "each call retains only its own file change");
                     AssertEqual(targets[index == 0 ? "styles.css" : "index.html"], perCall.Items.Single().Title, "call attribution is exact");
                     var artifact = session.Artifacts.Single(item => item.SourceMessageId == activity.Id && item.Kind == ChatArtifactKinds.HtmlWorkspace);
-                    var retained = store.DocumentArtifacts.Read(session, ChatResourceUri.CreateArtifactRevision(session, artifact), false);
+                    var retained = store.DocumentArtifacts.Read(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, artifact), false);
                     AssertEqual(runId, retained.RunId, "run identity is retained in the immutable publication");
                     AssertEqual(activity.Id, retained.SourceMessageId, "activity identity is retained before result archival");
                 }
@@ -513,13 +514,13 @@ namespace RNAssistant.Harness
                     "{\"title\":\"Retained\"}");
                 RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, call, runtime.Describe(call)));
                 var owner = new ChatStore(paths).DocumentArtifacts;
-                var artifact = owner.List(session).Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
+                var artifact = owner.List(ConversationMetadata.From(session)).Single(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
                 AssertEqual("Retained", artifact.Title, "HTML remains discoverable after failed actor-link save");
                 session.ActiveHtmlArtifactId = null; session.Artifacts.Clear(); session.HtmlWorkspace = new HtmlWorkspace();
                 var retry = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertContains(retry.Result.DataJson, "html_attempt_already_published", "same operation cannot become a second workspace after selection loss");
                 AssertEqual(RNAssistant.Core.Tools.ToolDispatchEvidence.NotDispatched, retry.Evidence.Dispatch, "recovery never replays the mutation");
-                AssertEqual(1, owner.List(session).Count, "one retained workspace revision only");
+                AssertEqual(1, owner.List(ConversationMetadata.From(session)).Count, "one retained workspace revision only");
             });
         }
 
@@ -559,7 +560,7 @@ namespace RNAssistant.Harness
                 AssertEqual(selected.Id, b.ActiveHtmlArtifactId, "selection survives restart from exact document references");
                 AssertEqual("<main>first</main>", b.HtmlWorkspace.Files.Single().Content, "second chat reconstructs selected HTML from CAS");
                 var dataRef = b.HtmlWorkspace.DataSources.Single().Binding.Resource;
-                AssertEqual("{\"total\":42}", chats.DocumentArtifacts.Read(b, dataRef).InlineText, "JSON binding survives the actor change");
+                AssertEqual("{\"total\":42}", chats.DocumentArtifacts.Read(ConversationMetadata.From(b), dataRef).InlineText, "JSON binding survives the actor change");
                 var provider = new ChatArtifactResourceProvider(payloads: new ChatBlobStore(paths), documentArtifacts: chats.DocumentArtifacts);
                 var member = provider.List(b, ChatHtmlResourceCatalog.FileKind, null, 20).Items.Single().Reference;
                 var resolved = provider.ResolveIdentity(b, member.Identity);
@@ -574,8 +575,8 @@ namespace RNAssistant.Harness
                 AssertTrue(!rejected.Success, "old source chat cannot overwrite the shared head");
                 AssertEqual(head.Id, b.ActiveHtmlArtifactId, "stale mutation changes no selected snapshot");
                 var headRef = chats.DocumentArtifacts.CurrentSnapshot(b, logical);
-                AssertEqual(head.Id, chats.DocumentArtifacts.Read(b, headRef).Id, "current document head survives stale writer");
-                AssertEqual("<main>first</main>", JObject.Parse(chats.DocumentArtifacts.Read(b, firstRef).InlineText)["Files"][0]["Content"].Value<string>(),
+                AssertEqual(head.Id, chats.DocumentArtifacts.Read(ConversationMetadata.From(b), headRef).Id, "current document head survives stale writer");
+                AssertEqual("<main>first</main>", JObject.Parse(chats.DocumentArtifacts.Read(ConversationMetadata.From(b), firstRef).InlineText)["Files"][0]["Content"].Value<string>(),
                     "historical snapshot remains immutable after the cross-chat write");
                 var fork = NewSession(adapter); fork.DocumentAuthorityId = a.DocumentAuthorityId; fork.ParentSessionId = b.Id;
                 fork.Messages = ChatCloneService.CloneMessages(a.Messages);
@@ -584,7 +585,7 @@ namespace RNAssistant.Harness
                 AssertEqual(firstRef.Uri, fork.Messages.Single().HtmlWorkspaceCheckpoint.Uri, "fork keeps old message evidence exact");
                 AssertEqual(headRef.Uri, chats.DocumentArtifacts.CurrentSnapshot(b, logical).Uri, "fork never publishes a shared rollback");
                 chats.Delete(a.Host, a.DocumentKey, a.Id);
-                AssertEqual("{\"total\":42}", chats.DocumentArtifacts.Read(b, dataRef).InlineText, "origin chat deletion does not remove shared binding bytes");
+                AssertEqual("{\"total\":42}", chats.DocumentArtifacts.Read(ConversationMetadata.From(b), dataRef).InlineText, "origin chat deletion does not remove shared binding bytes");
                 var prior = head.Id;
                 executor.MutateLocalResources(b, "html.workspace.restore", new Dictionary<string, object> { ["snapshotId"] = first.Id }, () => {
                     HtmlWorkspaceArtifactService.RestoreAsRevision(b, first.Id); return true;
@@ -636,7 +637,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, writers.Count(task => !task.Result.Success && task.Result.Message.Contains("changed after preparation")), "loser is rejected before dispatch");
                 var gc = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "shared HTML and JSON survive origin deletion and CAS collection");
-                AssertContains(chats.DocumentArtifacts.Read(b, firstRef).InlineText, "first", "historical HTML remains readable after GC");
+                AssertContains(chats.DocumentArtifacts.Read(ConversationMetadata.From(b), firstRef).InlineText, "first", "historical HTML remains readable after GC");
                 var winner = new[] { b, c }.Single(chat => chat.Artifacts.Single(item => item.Id == chat.ActiveHtmlArtifactId).Revision == 2);
                 var missing = winner.Artifacts.Single(item => item.Id == winner.ActiveHtmlArtifactId);
                 System.IO.File.Delete(executor.Payloads.PathFor(missing.ContentSha256));

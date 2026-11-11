@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 
@@ -23,7 +24,7 @@ namespace RNAssistant.Core.Services
                 var operationKey = PlanDocumentService.CreationId(session, context);
                 if (owner.FindPlanOperation(session, operationKey) != null)
                     throw new ToolMutationPreparationException("plan_attempt_already_published", "This Plan operation is already published; recover its exact result without replay.");
-                var selected = command.Source == null ? null : owner.Read(session, command.Source, false);
+                var selected = command.Source == null ? null : owner.Read(ConversationMetadata.From(session), command.Source, false);
                 string planId;
                 if (command.Source == null)
                 {
@@ -46,7 +47,7 @@ namespace RNAssistant.Core.Services
                     var bodyVersion = operation == PlanDocumentToolCatalog.RestoreToolId ? command.RestoreVersion : selected.Revision;
                     for (var index = 0; index < history.Count; index++)
                         if (history[index].Revision == bodyVersion)
-                            history[index] = owner.Read(session, ChatResourceUri.CreateArtifactRevision(session, history[index]));
+                            history[index] = owner.Read(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, history[index]));
                     session.Artifacts.RemoveAll(item => PlanDocumentService.PlanId(item) == planId);
                     session.Artifacts.AddRange(history);
                 }

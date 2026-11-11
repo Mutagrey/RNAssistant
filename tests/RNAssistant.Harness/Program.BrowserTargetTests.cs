@@ -4,6 +4,7 @@ using System.Linq;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -27,7 +28,7 @@ namespace RNAssistant.Harness
                 var exact = ChatResourceUri.CreateArtifactRevisionUri(source, original);
                 AssertTrue(WriteSharedHtmlFixture(executor, source, "<h1>two</h1>").Success, "advance head");
                 var selected = source.ActiveHtmlArtifactId;
-                var metadata = chats.DocumentArtifacts.Read(source, ChatResourceUri.ArtifactSnapshot(new ResourceRef(exact)), false);
+                var metadata = chats.DocumentArtifacts.Read(ConversationMetadata.From(source), ChatResourceUri.ArtifactSnapshot(new ResourceRef(exact)), false);
                 AssertTrue(string.IsNullOrEmpty(metadata.InlineText), "resolver needs metadata only");
                 var target = BrowserTargetResolver.Saved(source, metadata, exact);
                 AssertEqual(exact, target.ResourceUri, "saved target remains exact after head advances");

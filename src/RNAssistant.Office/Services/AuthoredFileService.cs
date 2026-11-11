@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -44,7 +45,7 @@ namespace RNAssistant.Office.Services
             if (operation == AuthoredFileToolCatalog.PatchToolId || operation == AuthoredFileToolCatalog.UpdateToolId)
             {
                 intent.Base = _gateway.ResolveIntentTarget(session, ToolArgumentReader.String(context.Arguments, "target", "")).Reference;
-                var artifact = _artifacts.Read(session, intent.Base, false);
+                var artifact = _artifacts.Read(ConversationMetadata.From(session), intent.Base, false);
                 intent.LogicalId = SnapshotLogicalId(artifact.Id);
                 if (artifact.Kind != ChatArtifactKinds.File || intent.LogicalId == null || DocumentArtifactStore.FileEncoding(artifact) == null)
                     throw new InvalidDataException("Select a current authored text file, not an uploaded original.");
@@ -60,7 +61,7 @@ namespace RNAssistant.Office.Services
             else if (operation == AuthoredFileToolCatalog.CopyToolId)
             {
                 intent.Source = _gateway.ResolveIntentTarget(session, ToolArgumentReader.String(context.Arguments, "source", "")).Reference;
-                var source = _artifacts.Read(session, intent.Source, false);
+                var source = _artifacts.Read(ConversationMetadata.From(session), intent.Source, false);
                 if (source.OriginalAttachment?.Kind != "text" &&
                     !(source.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(source) != null))
                     throw new InvalidDataException("Copy requires a complete original or authored text file.");
@@ -93,8 +94,8 @@ namespace RNAssistant.Office.Services
                 throw new ToolMutationPreparationException("file_attempt_already_published", "This file operation is already published.");
             try { RequireCurrentBase(session, intent, artifacts); }
             catch (ResourceRequestException ex) { throw new ToolMutationPreparationException(ex.ErrorCode, ex.Message); }
-            if (intent.Base != null) artifacts.Read(session, intent.Base, false);
-            if (intent.Source != null) artifacts.Read(session, intent.Source, false);
+            if (intent.Base != null) artifacts.Read(ConversationMetadata.From(session), intent.Base, false);
+            if (intent.Source != null) artifacts.Read(ConversationMetadata.From(session), intent.Source, false);
             return new[] { new ResourceImpact(identity, ResourceImpactRelation.Exact) };
         }
 
@@ -119,7 +120,7 @@ namespace RNAssistant.Office.Services
             var changes = new List<AuthoredFileChange>();
             if (operation == AuthoredFileToolCatalog.PatchToolId)
             {
-                parent = _artifacts.Read(session, intent.Base, false);
+                parent = _artifacts.Read(ConversationMetadata.From(session), intent.Base, false);
                 RequireCurrentBase(session, intent, _artifacts);
                 // Reconstruct from the same immutable source, including after a pending
                 // confirmation/restart. Preparation is not a retained second store.
@@ -139,7 +140,7 @@ namespace RNAssistant.Office.Services
             }
             else if (operation == AuthoredFileToolCatalog.UpdateToolId)
             {
-                parent = _artifacts.Read(session, intent.Base, false);
+                parent = _artifacts.Read(ConversationMetadata.From(session), intent.Base, false);
                 var previous = DocumentArtifactStore.DecodeFileText(_artifacts.ExportBytes(session, intent.Base), out encoding);
                 var content = ToolArgumentReader.String(context.Arguments, "content", "");
                 bytes = DocumentArtifactStore.EncodeFileText(content, encoding);
@@ -154,7 +155,7 @@ namespace RNAssistant.Office.Services
             }
             else if (operation == AuthoredFileToolCatalog.CopyToolId)
             {
-                source = _artifacts.Read(session, intent.Source, false);
+                source = _artifacts.Read(ConversationMetadata.From(session), intent.Source, false);
                 bytes = _artifacts.ExportBytes(session, intent.Source);
                 DocumentArtifactStore.DecodeFileText(bytes, out encoding);
                 name = intent.Name;
@@ -180,7 +181,7 @@ namespace RNAssistant.Office.Services
                     Changes = changes }), RunId = context.Execution.RunId
             };
             if (parent != null && artifact.CreatedUtc <= parent.CreatedUtc) artifact.CreatedUtc = parent.CreatedUtc.AddTicks(1);
-            var history = parent == null ? new ChatArtifact[0] : _artifacts.SnapshotHistory(session, intent.LogicalId);
+            var history = parent == null ? new ChatArtifact[0] : _artifacts.SnapshotHistory(ConversationMetadata.From(session), intent.LogicalId);
             context.MarkDispatchPossible();
             session.Artifacts.RemoveAll(item => SnapshotLogicalId(item.Id) == intent.LogicalId);
             session.Artifacts.AddRange(history);

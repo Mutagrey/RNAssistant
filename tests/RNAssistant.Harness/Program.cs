@@ -1062,6 +1062,7 @@ namespace RNAssistant.Harness
                 Test("plan mode: question presentation survives storage", ToolPresentationQuestionsSurviveStorage),
                 Test("plan document: verified native runtime", PlanDocumentUsesVerifiedNativeRuntime),
                 Test("document Plan: shared publication and competing writers", DocumentPlanSharedPublication),
+                Test("workspace Plan: scoped reads preserve publication barrier", WorkspacePlanScopedReads),
                 Test("document Plan: publication survives failed chat link", DocumentPlanFailedChatLink),
                 Test("plan document: exact whole-content guard and linear revisions", PlanDocumentPreservesExactMarkdownAndLinearHead),
                 Test("plan document: restore and removal stay append-only", PlanDocumentRestoreAndRemovalStayAppendOnly),

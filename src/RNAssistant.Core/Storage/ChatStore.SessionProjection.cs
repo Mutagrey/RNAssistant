@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -145,6 +146,7 @@ namespace RNAssistant.Core.Storage
             session.StorageTailByteOffset = tailByteOffset;
             session.StorageByteLength = byteLength;
             session.StorageLastWriteUtcTicks = lastWriteUtcTicks;
+            var metadata = rebuildDerivedProjections ? ConversationMetadata.From(session) : null;
             if (rebuildDerivedProjections && (!string.IsNullOrWhiteSpace(session.DocumentAuthorityId) || !string.IsNullOrWhiteSpace(session.WorkspaceId)))
             {
                 var references = (session.Messages ?? new List<ChatMessage>()).Where(message => message != null)
@@ -154,11 +156,11 @@ namespace RNAssistant.Core.Storage
                     .Select(ChatResourceUri.ArtifactSnapshot)
                     .GroupBy(reference => reference.Uri, StringComparer.Ordinal).Select(group => group.First());
                 foreach (var reference in references)
-                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(session, reference));
+                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(metadata, reference));
                 if (!string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId) &&
                     !session.Artifacts.Any(item => item.Id == session.ActivePlanDocumentArtifactId))
                 {
-                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(session, DocumentArtifactStore.PlanSelectionReference(session, session.ActivePlanDocumentArtifactId)));
+                    session.Artifacts.Add(DocumentArtifacts.InspectMetadata(metadata, DocumentArtifactStore.PlanSelectionReference(session, session.ActivePlanDocumentArtifactId)));
                 }
             }
             if (rebuildDerivedProjections && !string.IsNullOrEmpty(session.DocumentAuthorityId))
@@ -166,7 +168,7 @@ namespace RNAssistant.Core.Storage
                 var logicalIds = session.Artifacts.Select(item => MarkdownDocumentIdentity.LogicalId(item.Id))
                     .Concat(new[] { HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId) }).Where(id => id != null).Distinct().ToArray();
                 foreach (var logicalId in logicalIds)
-                    foreach (var artifact in DocumentArtifacts.SnapshotHistory(session, logicalId))
+                    foreach (var artifact in DocumentArtifacts.SnapshotHistory(metadata, logicalId))
                         if (!session.Artifacts.Any(item => item.Id == artifact.Id)) session.Artifacts.Add(artifact);
             }
             var documentMs = timer.ElapsedMilliseconds - sessionMs;

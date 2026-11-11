@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -33,7 +34,7 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(target))
             {
                 intent.Base = _gateway.ResolveIntentTarget(session, target).Reference;
-                var artifact = _artifacts.Read(session, intent.Base, false);
+                var artifact = _artifacts.Read(ConversationMetadata.From(session), intent.Base, false);
                 intent.LogicalId = MarkdownDocumentIdentity.LogicalId(artifact.Id);
                 if (artifact.Kind != ChatArtifactKinds.Markdown || intent.LogicalId == null)
                     throw new InvalidDataException("This target is not an authored Markdown document. Uploaded originals are immutable; create a new document explicitly.");
@@ -43,7 +44,7 @@ namespace RNAssistant.Office.Services
             {
                 if (intent.Base == null) throw new InvalidDataException("Restore requires an explicit Markdown target.");
                 var version = ToolArgumentReader.Int32(context.Arguments, "version");
-                var sources = _artifacts.SnapshotHistory(session, intent.LogicalId).Where(item => item.Revision == version).ToArray();
+                var sources = _artifacts.SnapshotHistory(ConversationMetadata.From(session), intent.LogicalId).Where(item => item.Revision == version).ToArray();
                 if (sources.Length != 1) throw new InvalidDataException("The Markdown restore version is missing or ambiguous.");
                 intent.RestoreFrom = ChatResourceUri.CreateArtifactRevision(session, sources[0]);
             }
@@ -69,10 +70,10 @@ namespace RNAssistant.Office.Services
                 if (authority.Store.GetHead(authority.Scope(session, true), OperationIdentity(session, OperationKey(session, context))) != null)
                     throw new ToolMutationPreparationException("markdown_attempt_already_published", "This Markdown operation is already published. Recover the retained result without replaying the write.");
                 RequireCurrentBase(session, intent, artifacts);
-                if (intent.Base != null) artifacts.Read(session, intent.Base);
+                if (intent.Base != null) artifacts.Read(ConversationMetadata.From(session), intent.Base);
                 if (intent.RestoreFrom != null)
                 {
-                    var source = artifacts.Read(session, intent.RestoreFrom);
+                    var source = artifacts.Read(ConversationMetadata.From(session), intent.RestoreFrom);
                     if (MarkdownDocumentIdentity.LogicalId(source.Id) != intent.LogicalId)
                         throw new InvalidDataException("Restore source belongs to another Markdown document.");
                 }
@@ -92,8 +93,8 @@ namespace RNAssistant.Office.Services
         internal ChatArtifact Save(ChatSession session, ToolHandlerContext context)
         {
             var intent = Intent(context.PreparedStateJson);
-            var parent = intent.Base == null ? null : _artifacts.Read(session, intent.Base, false);
-            var source = intent.RestoreFrom == null ? null : _artifacts.Read(session, intent.RestoreFrom);
+            var parent = intent.Base == null ? null : _artifacts.Read(ConversationMetadata.From(session), intent.Base, false);
+            var source = intent.RestoreFrom == null ? null : _artifacts.Read(ConversationMetadata.From(session), intent.RestoreFrom);
             if (source == null) ValidateText(context.Arguments);
             var revision = checked((parent?.Revision ?? 0) + 1);
             var created = DateTime.UtcNow;
@@ -109,7 +110,7 @@ namespace RNAssistant.Office.Services
                     ["description"] = source == null ? ToolArgumentReader.String(context.Arguments, "description", "") : (string)JObject.Parse(source.MetadataJson)["description"] }.ToString(Formatting.None),
                 CreatedUtc = created, RunId = context.Execution.RunId
             };
-            var history = parent == null ? new ChatArtifact[0] : _artifacts.SnapshotHistory(session, intent.LogicalId);
+            var history = parent == null ? new ChatArtifact[0] : _artifacts.SnapshotHistory(ConversationMetadata.From(session), intent.LogicalId);
             context.MarkDispatchPossible();
             session.Artifacts.RemoveAll(item => MarkdownDocumentIdentity.LogicalId(item.Id) == intent.LogicalId);
             session.Artifacts.AddRange(history);

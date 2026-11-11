@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using System.Text.RegularExpressions;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -31,8 +32,18 @@ namespace RNAssistant.Core.Storage
 
         public static ResourceAuthorityScopeId PlanScope(ChatSession session)
         {
-            if (!string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)) return Scope(session);
-            if (!string.IsNullOrWhiteSpace(session?.WorkspaceId)) return new ResourceAuthorityScopeId("workspace", session.WorkspaceId);
+            return PlanScope(session?.DocumentAuthorityId, session?.WorkspaceId);
+        }
+
+        private static ResourceAuthorityScopeId PlanScope(ConversationMetadata session)
+        {
+            return PlanScope(session?.DocumentAuthorityId, session?.WorkspaceId);
+        }
+
+        private static ResourceAuthorityScopeId PlanScope(string documentAuthorityId, string workspaceId)
+        {
+            if (!string.IsNullOrWhiteSpace(documentAuthorityId)) return Scope(documentAuthorityId);
+            if (!string.IsNullOrWhiteSpace(workspaceId)) return new ResourceAuthorityScopeId("workspace", workspaceId);
             throw new InvalidOperationException("A bound document or workspace identity is required for Plan access.");
         }
 
@@ -83,7 +94,12 @@ namespace RNAssistant.Core.Storage
 
         public static ResourceIdentity PlanIdentity(ChatSession session, string planId)
         {
-            var scope = PlanScope(session);
+            return PlanIdentity(session?.DocumentAuthorityId, session?.WorkspaceId, planId);
+        }
+
+        public static ResourceIdentity PlanIdentity(string documentAuthorityId, string workspaceId, string planId)
+        {
+            var scope = PlanScope(documentAuthorityId, workspaceId);
             if (string.IsNullOrWhiteSpace(planId) || !planId.StartsWith("plan_doc_", StringComparison.Ordinal))
                 throw new InvalidDataException("A logical Plan identity is required.");
             return new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, planId));
@@ -91,9 +107,19 @@ namespace RNAssistant.Core.Storage
 
         public static bool IsPlan(ChatSession session, ResourceRef reference)
         {
+            return IsPlan(session?.DocumentAuthorityId, session?.WorkspaceId, reference);
+        }
+
+        private static bool IsPlan(ConversationMetadata session, ResourceRef reference)
+        {
+            return IsPlan(session?.DocumentAuthorityId, session?.WorkspaceId, reference);
+        }
+
+        private static bool IsPlan(string documentAuthorityId, string workspaceId, ResourceRef reference)
+        {
             string owner, id;
             int revision;
-            return Owns(session, reference) && ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
+            return Owns(documentAuthorityId, workspaceId, reference) && ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
                 id.StartsWith("plan_doc_", StringComparison.Ordinal);
         }
 
@@ -111,7 +137,7 @@ namespace RNAssistant.Core.Storage
             ResourceRef logicalRestore = null;
             if (restoredFrom != null)
             {
-                if (!IsPlan(session, restoredFrom) || !ReadPlan(session, restoredFrom, false).Id.StartsWith(planId + "_r", StringComparison.Ordinal))
+                if (!IsPlan(session, restoredFrom) || !ReadPlan(ConversationMetadata.From(session), restoredFrom, false).Id.StartsWith(planId + "_r", StringComparison.Ordinal))
                     throw new InvalidDataException("The Plan restore source belongs to another lineage.");
                 logicalRestore = LogicalRevisionForSnapshot(session, identity, restoredFrom);
             }
@@ -160,7 +186,7 @@ namespace RNAssistant.Core.Storage
             if (current == null) return result;
             // Follow only the committed head's parent chain, never speculative CAS
             // registrations or all chats. Each parent is an immutable exact snapshot.
-            var item = ReadPlan(session, current, includeBodies);
+            var item = ReadPlan(ConversationMetadata.From(session), current, includeBodies);
             while (item != null)
             {
                 if (!item.Id.StartsWith(planId + "_r", StringComparison.Ordinal)) throw new InvalidDataException("The Plan parent belongs to another lineage.");
@@ -173,7 +199,7 @@ namespace RNAssistant.Core.Storage
                 }
                 if (string.IsNullOrEmpty(item.ParentArtifactId)) throw new InvalidDataException("Missing Plan parent.");
                 var parent = PlanSnapshot(session, item.ParentArtifactId, item.Revision - 1);
-                item = ReadPlan(session, ChatResourceUri.CreateArtifactRevision(session, parent), includeBodies);
+                item = ReadPlan(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, parent), includeBodies);
             }
             return result.OrderBy(value => value.Revision).ToArray();
         }
@@ -192,7 +218,7 @@ namespace RNAssistant.Core.Storage
 
         public ChatArtifact ReadPlanSelection(ChatSession session, string artifactId, bool includeBody = true)
         {
-            return ReadPlan(session, PlanSelectionReference(session, artifactId), includeBody);
+            return ReadPlan(ConversationMetadata.From(session), PlanSelectionReference(session, artifactId), includeBody);
         }
 
         private static ResourceIdentity PlanOperationIdentity(ChatSession session, string operationKey)
@@ -202,7 +228,7 @@ namespace RNAssistant.Core.Storage
             return new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "plan-operation-" + operationKey));
         }
 
-        private ChatArtifact ReadPlan(ChatSession session, ResourceRef reference, bool includeBody)
+        private ChatArtifact ReadPlan(ConversationMetadata session, ResourceRef reference, bool includeBody)
         {
             if (!IsPlan(session, reference)) throw new InvalidDataException("The Plan belongs to another document.");
             return ReadRecordSnapshot(session, reference, PlanRecordView, ChatArtifactKinds.PlanDocument, includeBody, PlanScope(session));

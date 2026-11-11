@@ -762,3 +762,32 @@ after-state/CAS ownership.
 7. Session events, MIGRATION_MAP, PROGRESS, Harness guide and Unreleased updated.
    The existing resource projection dependency keeps its prior owner/removal gate;
    no new adapter. P4 stays deferred and cutover retains the backup/writer-stop gates.
+
+## P1 — scoped resource reads (2026-11-11)
+
+1. F04 / P1 read-owner subset: six generic `DocumentArtifactStore` read APIs now
+   accept existing immutable `ConversationMetadata`; private Plan/record readers
+   use it too. No conversation archive or execution state crosses this boundary.
+2. Office/Workspace, resource providers and storage projections capture scalar scope
+   explicitly. Materialization reuses captured scope; identity helpers share scalar validation
+   without per-artifact metadata copies. Publication/body/owner/removal guards remain.
+3. Removed aggregate signatures of `Read`, `List`, `InspectMetadata`,
+   `InspectMetadataList`, `SnapshotHistory` and `IsRemoved`; no compatibility read
+   overload, store, adapter or new production file. Production C# +203/−106, net +97
+   across 30 files, mostly caller migration. Behavior-preserving: no version bump.
+4. Seven checks pass on macOS/net8/C#7.3, isolated `478edb71` plus owned changes:
+   real Office Plan publication/competing writers, new Workspace Plan historical
+   read with pre-publication and foreign-scope refusals, originals restart/GC,
+   partial discovery, shared HTML metadata, removal/restart and tombstone pages.
+   No new-journal mechanisms or platform qualification were rerun.
+5. Generic resource read parameters carrying the aggregate: 6 → 0. They carry six
+   scalars through the existing scope DTO; no new CPU/allocation/I/O benchmark or
+   speedup claim. Workspace fixture preserves canonical chat bytes after reading.
+6. The old shared Markdown lifecycle check fails on removed `markdown.save` in both
+   candidate and saved pre-slice build (`ae730868` + `478edb71` page fix); tracked in
+   Backlog without weakening assertions. Temporary page projection, specialized
+   Plan/text APIs, ordinary Store writes and journal cutover remain open. Actual
+   controller/Office delivery still needs Windows evidence.
+7. Resource Fabric, Session events, MIGRATION_MAP, PROGRESS, Harness guide and
+   Backlog updated. Existing resource-projection owner/removal gate retained;
+   no new adapter/import/dual-write/fallback. P4 remains deferred.

@@ -539,10 +539,10 @@ namespace RNAssistant.Harness
                 AssertTrue(chats.Delete(source.Host, source.DocumentKey, source.Id), "originating chat deleted");
                 var gc = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "authority-owned original and extraction remain CAS roots after chat deletion");
-                var after = new ChatStore(paths).DocumentArtifacts.Read(other, reference);
+                var after = new ChatStore(paths).DocumentArtifacts.Read(ConversationMetadata.From(other), reference);
                 AssertContains(attachments.ReadExtractedText(after.OriginalAttachment), "shared original needle", "original remains readable after restart and collection");
                 var foreign = new ChatSession { DocumentAuthorityId = DocumentAuthorityId.Create().Id };
-                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(foreign, reference));
+                RuntimeThrows<InvalidDataException>(() => chats.DocumentArtifacts.Read(ConversationMetadata.From(foreign), reference));
                 RuntimeThrows<ResourceRequestException>(() => gateway.Resolve(foreign, reference.Uri));
                 File.Delete(blobs.PathFor(after.OriginalAttachment.ExtractedTextSha256));
                 AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
@@ -589,7 +589,7 @@ namespace RNAssistant.Harness
                     return owner.PublishOriginal(session, session.Artifacts.Single(), next);
                 })).ToArray();
                 Task.WhenAll(pending).GetAwaiter().GetResult();
-                AssertEqual(5, new ChatStore(paths).DocumentArtifacts.List(source).Count, "independent originals survive competing document-generation advances");
+                AssertEqual(5, new ChatStore(paths).DocumentArtifacts.List(ConversationMetadata.From(source)).Count, "independent originals survive competing document-generation advances");
             });
         }
 

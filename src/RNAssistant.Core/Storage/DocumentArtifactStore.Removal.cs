@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -20,10 +21,10 @@ namespace RNAssistant.Core.Storage
                     change.After.Revision.Uri == reference.Uri && change.After.Revision.Revision == reference.Revision);
         }
 
-        public bool IsRemoved(ChatSession session, ChatArtifact artifact)
+        public bool IsRemoved(ConversationMetadata session, ChatArtifact artifact)
         {
             if (artifact == null || string.IsNullOrEmpty(session?.DocumentAuthorityId) ||
-                !Owns(session, ChatResourceUri.CreateArtifactRevision(session, artifact))) return false;
+                !Owns(session, ChatResourceUri.CreateArtifactRevision(session.Id, artifact))) return false;
             return _authority.GetHead(Scope(session), ArtifactWorkingSet.Identity(session, artifact))?.Knowledge == HeadKnowledge.Removed;
         }
 
@@ -34,7 +35,7 @@ namespace RNAssistant.Core.Storage
             var scope = Scope(session);
             if (!Owns(session, reference) || !IsSnapshotReference(reference))
                 throw new InvalidDataException("Требуется точный артефакт текущего документа.");
-            var artifact = InspectMetadata(session, reference);
+            var artifact = InspectMetadata(ConversationMetadata.From(session), reference);
             if (artifact.Kind == SharedContextKind) throw new InvalidOperationException("Служебный ресурс нельзя удалить из библиотеки.");
             var identity = ArtifactWorkingSet.Identity(session, artifact);
             var before = _authority.Capture(scope);
@@ -64,7 +65,8 @@ namespace RNAssistant.Core.Storage
         public void ProjectRemovals(ChatSession session)
         {
             if (session?.Artifacts == null || string.IsNullOrEmpty(session.DocumentAuthorityId)) return;
-            foreach (var artifact in session.Artifacts.Where(item => IsRemoved(session, item)))
+            var metadata = ConversationMetadata.From(session);
+            foreach (var artifact in session.Artifacts.Where(item => IsRemoved(metadata, item)))
             {
                 artifact.RemovedFromDocument = true;
                 if (artifact.Id == session.ActiveHtmlArtifactId)

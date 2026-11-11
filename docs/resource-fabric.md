@@ -982,6 +982,12 @@ in the URI provider namespace does not imply conversation ownership: these refs
 carry `DocumentAuthorityId` as owner, and descriptors expose document scope.
 Original and extracted payloads must pass CAS integrity verification before any
 revision or head is published; availability metadata alone is insufficient.
+`DocumentArtifactStore.Read/List/InspectMetadata/InspectMetadataList/SnapshotHistory/IsRemoved`
+accept immutable `ConversationMetadata`, not a conversation aggregate. Exact ownership,
+publication barriers, revision/body matching, removal and unavailable-record behavior
+remain with this owner. Office/Workspace callers capture the existing six scalar
+values; neither history nor run state enters these reads. Identity helpers share
+their validation with live callers. This metadata does not grant mutation authority.
 New Plan snapshots and per-Plan logical heads are also document-owned (2026-09-08).
 The existing mutation observer prepares the selected exact base and publishes
 snapshot/head read-backs together; chat persistence follows publication and keeps

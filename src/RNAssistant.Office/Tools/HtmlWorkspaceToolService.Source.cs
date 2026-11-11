@@ -5,6 +5,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
@@ -38,7 +39,7 @@ namespace RNAssistant.Office.Tools
             var current = DocumentOwner.CurrentSnapshot(actor, HtmlWorkspaceIdentity.Identity(actor, logical));
             if (current?.Uri != exact.Uri || current.Revision != exact.Revision || selected.Target.Contains("HTML snapshot: "))
                 throw new ResourceRequestException("Historical HTML cannot be edited. Read its working target.", "source_changed", false);
-            return DocumentOwner.Read(actor, current);
+            return DocumentOwner.Read(ConversationMetadata.From(actor), current);
         }
 
         internal ResourceHeadState PrepareSourceMutation(ChatSession actor, ResourceIntentTarget selected, string before, string candidate)

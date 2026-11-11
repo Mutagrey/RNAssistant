@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 
 namespace RNAssistant.Core.Storage
 {
@@ -122,10 +123,10 @@ namespace RNAssistant.Core.Storage
                 // scalar chat metadata. Only the existing published resource head is read.
                 var reference = DocumentArtifacts.PublishedContext(overview.Source);
                 if (reference == null) return;
-                var artifact = DocumentArtifacts.Read(overview.Source, reference, includeBody: false);
+                var artifact = DocumentArtifacts.Read(ConversationMetadata.From(overview.Source), reference, includeBody: false);
                 if (!artifact.ContentByteLength.HasValue || artifact.ContentByteLength > 2097152)
                 { overview.SummaryStatus = "size_unavailable_or_too_large"; return; }
-                artifact = DocumentArtifacts.Read(overview.Source, reference, includeBody: true);
+                artifact = DocumentArtifacts.Read(ConversationMetadata.From(overview.Source), reference, includeBody: true);
                 var published = JsonConvert.DeserializeObject<SharedContextDocument>(artifact.InlineText);
                 if (published?.SourceChatId != overview.Source.Id || published.Version != ContextCheckpoint.CurrentPromptVersion)
                 { overview.SummaryStatus = "unavailable"; return; }

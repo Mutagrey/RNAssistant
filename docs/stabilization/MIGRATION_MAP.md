@@ -125,6 +125,14 @@ Page reads now exclude `LastRun` before copying the projection root, removing th
 execution-CAS hydration dependency. Full load/recovery keeps its exact-body check;
 unavailable evidence is not reset, substituted or retried by a history read.
 
+P1 resource read scopes: `DocumentArtifactStore.Read/List/InspectMetadata/InspectMetadataList/
+SnapshotHistory/IsRemoved` no longer accept `ChatSession`. Office/Workspace and storage
+projection consumers pass existing `ConversationMetadata` directly; internal Plan/record
+readers use that scope too. Pure identity helpers share scalar validation with live
+callers. No read compatibility overload, new owner/store or session reconstruction.
+Specialized Plan/text operations and the temporary page/resource projection remain
+under the previous removal gate; ordinary Store operations and journal cutover are open.
+
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 
 Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.

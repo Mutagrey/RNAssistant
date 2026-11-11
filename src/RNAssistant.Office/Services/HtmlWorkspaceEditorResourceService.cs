@@ -39,7 +39,7 @@ namespace RNAssistant.Office.Services
                 if (!ChatResourceUri.TryParseArtifactRevision(current, out _, out id, out _))
                     throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The selected HTML publication has no exact snapshot.");
                 if (id == session.ActiveHtmlArtifactId && session.HtmlWorkspaceRecovery?.Issue != PublicationUnavailable) return;
-                var artifact = owner.Read(session, current);
+                var artifact = owner.Read(ConversationMetadata.From(session), current);
                 var body = Newtonsoft.Json.JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
                 if (body == null) throw Error("RESOURCE_SNAPSHOT_UNAVAILABLE", "The current HTML body is unavailable.");
                 session.Artifacts.RemoveAll(item => item.Id == artifact.Id);

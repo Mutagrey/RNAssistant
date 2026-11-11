@@ -1985,7 +1985,7 @@ namespace RNAssistant.Harness
                 AssertEqual(sourceGeneration, store.Capture(scope).Generation, "fork and clear cannot change source chat heads");
                 AssertEqual(retained.Sha256, store.GetRevision(htmlScope, forkHead).Payload.Sha256, "clear retains immutable revision and CAS");
                 var snapshotRef = store.GetRevision(htmlScope, forkHead).Dependencies.Single(item => item.Kind == "immutable-snapshot").Resource;
-                var historical = chats.DocumentArtifacts.Read(fork, snapshotRef);
+                var historical = chats.DocumentArtifacts.Read(ConversationMetadata.From(fork), snapshotRef);
                 AssertTrue(historical.InlineText.Contains("<p>two</p>"), "exact shared snapshot stays readable after clear");
                 AssertEqual(HeadKnowledge.Known, store.GetHead(htmlScope, forkHead.Identity).Knowledge, "clear and historical reads leave the document head intact");
             });

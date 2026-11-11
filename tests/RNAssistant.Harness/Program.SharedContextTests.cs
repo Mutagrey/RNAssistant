@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -164,10 +165,10 @@ namespace RNAssistant.Harness
                 chats.Save(a); chats.Delete(a.Host, a.DocumentKey, a.Id);
                 var gc = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "document roots retain source revisions and bodies through GC: " + Newtonsoft.Json.JsonConvert.SerializeObject(gc));
-                var retained = new ChatStore(paths).DocumentArtifacts.Read(b, exact);
+                var retained = new ChatStore(paths).DocumentArtifacts.Read(ConversationMetadata.From(b), exact);
                 AssertContains(retained.InlineText, "Keep the original layout", "source transcript survives origin deletion and CAS collection");
                 AssertTrue(executor.Payloads.HasVerifiedReference(body.ToBlobReference()), "exact source evidence payload remains retained");
-                AssertContains(chats.DocumentArtifacts.Read(b, ChatResourceUri.CreateArtifactRevision(b, copied)).InlineText, "Keep the original layout", "republication preserves inherited source transcript");
+                AssertContains(chats.DocumentArtifacts.Read(ConversationMetadata.From(b), ChatResourceUri.CreateArtifactRevision(b, copied)).InlineText, "Keep the original layout", "republication preserves inherited source transcript");
             });
         }
     }

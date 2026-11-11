@@ -9,6 +9,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -22,6 +23,45 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspacePlanScopedReads()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspaces = new WorkspaceStore(paths);
+                var workspace = workspaces.Open(System.IO.Path.Combine(paths.Root, "plans"));
+                var chats = new ChatStore(paths);
+                var session = workspaces.CreateSession(chats, workspace, "Scoped read");
+                var metadata = ConversationStore(chats).ReadMetadata(session.Id);
+                var planId = "plan_doc_" + new string('a', 64);
+                var artifact = new ChatArtifact { Id = ChatResourceUri.CreateSnapshotId(planId, 1),
+                    Kind = ChatArtifactKinds.PlanDocument, Revision = 1, Title = "Scoped plan",
+                    InlineText = "# Workspace plan", MetadataJson = "{\"status\":\"draft\"}" };
+                var retained = chats.DocumentArtifacts.RetainPlan(session, planId, artifact, "attempt", "operation", false);
+                var exact = retained[0].Revision;
+                RuntimeThrows<System.IO.InvalidDataException>(() => chats.DocumentArtifacts.Read(metadata, exact));
+                var authority = new ResourceAuthorityStore(paths);
+                var scope = DocumentArtifactStore.PlanScope(session);
+                var heads = retained.Select(item =>
+                {
+                    var revision = item.Revision ?? new ResourceRef(item.Identity.Uri, item.ContentSha256);
+                    if (item.Revision == null)
+                        authority.RegisterRevision(scope, new ResourceRevisionMetadata(revision, item.ContentSha256,
+                            item.Payload, dependencies: item.Dependencies));
+                    return new ResourceHeadChange(item.Identity, null, ResourceHeadState.Known(revision, 1, "fixture"));
+                }).ToArray();
+                authority.Publish(ResourceAuthorityCommit.Create(scope, 0, null, heads, AuthorityCommitReason.DerivedPublication));
+                var history = System.IO.File.ReadAllBytes(SessionEventFile(paths, session));
+                var consumer = new RNAssistant.Runtime.WorkspacePlanService(paths, chats, new ChatBlobStore(paths), workspace, session);
+                AssertEqual(artifact.InlineText, consumer.Read("plan: Scoped plan", 1, representation: "text").Result.Text,
+                    "Workspace reads the exact published Plan through the scoped resource owner");
+                var foreign = new ConversationMetadata(session.Id, session.Revision, session.Host, session.DocumentKey,
+                    workspaceId: Guid.NewGuid().ToString("N"));
+                RuntimeThrows<System.IO.InvalidDataException>(() => chats.DocumentArtifacts.InspectMetadata(foreign, exact));
+                AssertTrue(history.SequenceEqual(System.IO.File.ReadAllBytes(SessionEventFile(paths, session))),
+                    "historical resource reading does not save a partial conversation");
+            });
+        }
+
         private static ToolInvocation PlanWriteCommand(params object[] fields)
         {
             var input = new JObject();
@@ -117,10 +157,10 @@ namespace RNAssistant.Harness
                     () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "document Plan metadata and bodies survive GC");
                 var fresh = new ChatStore(FixturePaths.Value);
-                AssertEqual(first.InlineText, fresh.DocumentArtifacts.Read(empty, exact).InlineText, "origin deletion and a fresh store preserve historical Plan bytes");
+                AssertEqual(first.InlineText, fresh.DocumentArtifacts.Read(ConversationMetadata.From(empty), exact).InlineText, "origin deletion and a fresh store preserve historical Plan bytes");
                 var foreign = NewSession(adapter);
                 foreign.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
-                RuntimeThrows<System.IO.InvalidDataException>(() => fresh.DocumentArtifacts.Read(foreign, exact));
+                RuntimeThrows<System.IO.InvalidDataException>(() => fresh.DocumentArtifacts.Read(ConversationMetadata.From(foreign), exact));
                 System.IO.File.Delete(executor.Payloads.PathFor(first.ContentSha256));
                 AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
                     executor.ResourceGateway.Read(empty, new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 32000 })).ErrorCode,
@@ -142,8 +182,8 @@ namespace RNAssistant.Harness
                 var call = PlanSourceCall("plan-link-failure", "Retained plan", "# Retained", "draft");
                 RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, call, runtime.Describe(call)));
                 var fresh = new ChatStore(paths);
-                var artifact = fresh.DocumentArtifacts.List(session).Single(item => item.Kind == ChatArtifactKinds.PlanDocument);
-                AssertEqual("# Retained", fresh.DocumentArtifacts.Read(session, ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText,
+                var artifact = fresh.DocumentArtifacts.List(ConversationMetadata.From(session)).Single(item => item.Kind == ChatArtifactKinds.PlanDocument);
+                AssertEqual("# Retained", fresh.DocumentArtifacts.Read(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText,
                     "resource publication survives a subsequent failed chat save");
                 var linkedRetry = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertTrue(linkedRetry.Outcome != ToolExecutionOutcome.Ok && !linkedRetry.MayHaveDispatched, "retained selection cannot turn a replayed create into an update");
@@ -152,8 +192,8 @@ namespace RNAssistant.Harness
                 var retry = ExecuteNative(runtime, call, runtime.Describe(call));
                 AssertEqual(ToolDispatchEvidence.NotDispatched, retry.Evidence.Dispatch, "same creation attempt is not replayed");
                 AssertTrue(retry.Outcome != ToolExecutionOutcome.Ok, "recovery identifies the retained publication");
-                AssertEqual(1, fresh.DocumentArtifacts.List(session).Count, "failed chat-link recovery creates no duplicate Plan");
-                session.Artifacts.Add(fresh.DocumentArtifacts.Read(session, ChatResourceUri.CreateArtifactRevision(session, artifact)));
+                AssertEqual(1, fresh.DocumentArtifacts.List(ConversationMetadata.From(session)).Count, "failed chat-link recovery creates no duplicate Plan");
+                session.Artifacts.Add(fresh.DocumentArtifacts.Read(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, artifact)));
                 session.ActivePlanDocumentArtifactId = artifact.Id;
                 var update = PlanSourceCall("plan-update-link-failure", "Retained plan", "# Updated", "ready");
                 RuntimeThrows<System.IO.IOException>(() => ExecuteNative(runtime, update, runtime.Describe(update)));
@@ -161,7 +201,7 @@ namespace RNAssistant.Harness
                 session.ActivePlanDocumentArtifactId = null;
                 var updateRetry = ExecuteNative(runtime, update, runtime.Describe(update));
                 AssertTrue(updateRetry.Outcome != ToolExecutionOutcome.Ok, "a failed update cannot replay as creation after selection is lost");
-                AssertEqual(2, fresh.DocumentArtifacts.List(session).Count, "only the two committed snapshots remain");
+                AssertEqual(2, fresh.DocumentArtifacts.List(ConversationMetadata.From(session)).Count, "only the two committed snapshots remain");
             });
         }
 

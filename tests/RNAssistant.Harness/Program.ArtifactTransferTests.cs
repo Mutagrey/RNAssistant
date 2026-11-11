@@ -75,10 +75,10 @@ namespace RNAssistant.Harness
                     AssertEqual(12, (int)batch["rows"][0]["amount"], "saved records binding still reads transferred data");
                     plane.Close(loaded.Id, "workspace", opened.LeaseId);
                 }
-                var before = chats.DocumentArtifacts.List(target).Count;
+                var before = chats.DocumentArtifacts.List(ConversationMetadata.From(target)).Count;
                 var rejected = false;
                 try { catalog.Import(target, export.Bytes, export.FileName, export.ContentType, operation); } catch (InvalidOperationException) { rejected = true; }
-                AssertTrue(rejected && chats.DocumentArtifacts.List(target).Count == before, "repeated transfer does not create a duplicate");
+                AssertTrue(rejected && chats.DocumentArtifacts.List(ConversationMetadata.From(target)).Count == before, "repeated transfer does not create a duplicate");
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 AssertTrue(executor.ExecuteManual(Command("html.source.write", "path", "continued.css", "content", "h1 { color: green; }"),
                     tools, new AppSettings(), false, false, loaded).Success, "imported project can be continued through normal tools");
@@ -206,14 +206,14 @@ namespace RNAssistant.Harness
                     var draft = ingestion.Stage(ConversationMetadata.From(source), fixture.Key, fixture.Key.EndsWith(".txt") ? "text/plain" : "application/octet-stream", fixture.Value);
                     var message = new ChatMessage { Role = "user", Content = "Original", Attachments = ingestion.LoadDrafts(source, new[] { draft.Id }).ToList() };
                     source.Messages.Add(message); ingestion.CommitAndLink(source, message, source.Messages.Count - 1);
-                    var original = chats.DocumentArtifacts.Read(source, message.ResourceRefs.Single());
+                    var original = chats.DocumentArtifacts.Read(ConversationMetadata.From(source), message.ResourceRefs.Single());
                     var exported = catalog.Export(source, new ArtifactTransferRequest { ChatId = source.Id, DocumentId = source.DocumentAuthorityId, ResourceUri = message.ResourceRefs.Single().Uri });
                     var copied = catalog.Import(target, exported.Bytes, exported.FileName, exported.ContentType, Guid.NewGuid().ToString("N"), exported.Origin);
                     links.Change(target, LinkRequest(target, ChatResourceUri.CreateArtifactRevisionUri(target, copied), false), chats.Save);
                     target = new ChatStore(paths).Load(target.Id);
                     AssertTrue(target.Artifacts.All(item => item.InlineText == null), "opening the chat does not hydrate original bytes as UTF-8");
                     var exact = ChatResourceUri.CreateArtifactRevision(target, copied);
-                    var retained = new ChatStore(paths).DocumentArtifacts.Read(target, exact);
+                    var retained = new ChatStore(paths).DocumentArtifacts.Read(ConversationMetadata.From(target), exact);
                     AssertTrue(copied.Id != original.Id, "copy has independent identity: " + fixture.Key);
                     AssertTrue(fixture.Value.SequenceEqual(chats.DocumentArtifacts.ExportBytes(target, exact)), "copy preserves original bytes: " + fixture.Key);
                     var expected = original.OriginalAttachment; var actual = retained.OriginalAttachment;

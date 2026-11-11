@@ -15,10 +15,15 @@ namespace RNAssistant.Core.Services
 
         public static ResourceIdentity Identity(ChatSession session, string logicalId)
         {
-            if (string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) ||
+            return Identity(session?.DocumentAuthorityId, logicalId);
+        }
+
+        public static ResourceIdentity Identity(string documentAuthorityId, string logicalId)
+        {
+            if (string.IsNullOrWhiteSpace(documentAuthorityId) ||
                 !Regex.IsMatch(logicalId ?? "", @"^artifact_md_[0-9a-f]{64}$", RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100)))
                 throw new InvalidOperationException("A document-owned Markdown identity is required.");
-            return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, logicalId));
+            return new ResourceIdentity(ResourceUri.Create("state", "document", documentAuthorityId, logicalId));
         }
     }
 }

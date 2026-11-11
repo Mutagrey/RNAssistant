@@ -327,9 +327,9 @@ namespace RNAssistant.Office.Tools
                     {
                         var owner = new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads);
                         var sourceId = ResourceMutationDomains.Argument(arguments, "snapshotId");
-                        var source = owner.SnapshotHistory(session, htmlCommand.LogicalId).SingleOrDefault(item => item.Id == sourceId);
+                        var source = owner.SnapshotHistory(ConversationMetadata.From(session), htmlCommand.LogicalId).SingleOrDefault(item => item.Id == sourceId);
                         if (source == null) { observer.AbandonBeforeDispatch(attempt); throw new InvalidOperationException("The restore source is not published in this workspace."); }
-                        source = owner.Read(session, ChatResourceUri.CreateArtifactRevision(session, source));
+                        source = owner.Read(ConversationMetadata.From(session), ChatResourceUri.CreateArtifactRevision(session, source));
                         session.Artifacts.RemoveAll(item => item.Id == source.Id);
                         session.Artifacts.Add(source);
                     }

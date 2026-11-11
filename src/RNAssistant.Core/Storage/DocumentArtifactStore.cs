@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -87,7 +88,7 @@ namespace RNAssistant.Core.Storage
                     if (before.Knowledge != HeadKnowledge.Known || before.Revision.Uri != reference.Uri ||
                         before.Revision.Revision != reference.Revision)
                         throw new ResourceAuthorityConflictException("The original is no longer available for publication.");
-                    return Read(session, reference);
+                    return Read(ConversationMetadata.From(session), reference);
                 }
                 try
                 {
@@ -95,7 +96,7 @@ namespace RNAssistant.Core.Storage
                         new[] { new ResourceHeadChange(reference.Identity, null,
                             ResourceHeadState.Known(reference, snapshot.Generation + 1, "original-publication")) },
                         AuthorityCommitReason.DerivedPublication));
-                    return Read(session, reference);
+                    return Read(ConversationMetadata.From(session), reference);
                 }
                 catch (ResourceAuthorityConflictException) when (retry < 7)
                 { /* Recheck only metadata publication; no external effect is replayed. */ }
@@ -103,7 +104,7 @@ namespace RNAssistant.Core.Storage
             throw new ResourceAuthorityConflictException("The document publication is busy; retry linking the retained original.");
         }
 
-        public IReadOnlyList<ChatArtifact> List(ChatSession session)
+        public IReadOnlyList<ChatArtifact> List(ConversationMetadata session)
         {
             var scope = Scope(session);
             var snapshot = _authority.Capture(scope);
@@ -113,7 +114,7 @@ namespace RNAssistant.Core.Storage
                 .OrderBy(item => item.CreatedUtc).ThenBy(item => item.Id, StringComparer.Ordinal).ToArray();
         }
 
-        public IReadOnlyList<ChatArtifact> InspectMetadataList(ChatSession session)
+        public IReadOnlyList<ChatArtifact> InspectMetadataList(ConversationMetadata session)
         {
             // Failure to capture the authority itself is not a per-resource issue.
             var snapshot = _authority.Capture(Scope(session));
@@ -121,7 +122,7 @@ namespace RNAssistant.Core.Storage
                 .Select(head => InspectMetadata(session, head.Revision)).ToArray();
         }
 
-        public ChatArtifact InspectMetadata(ChatSession session, ResourceRef reference)
+        public ChatArtifact InspectMetadata(ConversationMetadata session, ResourceRef reference)
         {
             if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
             string owner, id;
@@ -153,7 +154,7 @@ namespace RNAssistant.Core.Storage
             return unavailable;
         }
 
-        public ChatArtifact Read(ChatSession session, ResourceRef reference, bool includeBody = true)
+        public ChatArtifact Read(ConversationMetadata session, ResourceRef reference, bool includeBody = true)
         {
             if (IsPlan(session, reference)) return ReadPlan(session, reference, includeBody);
             if (IsAuthored(session, reference))
@@ -171,7 +172,7 @@ namespace RNAssistant.Core.Storage
             var record = ReadRecord(_revisions.GetView(scope, reference, RecordView));
             var revision = _revisions.GetRevision(scope, reference);
             if (record.Artifact.DocumentAuthorityId != scope.Id ||
-                ChatResourceUri.CreateArtifactRevision(session, record.Artifact).Uri != reference.Uri ||
+                ChatResourceUri.CreateArtifactRevision(session.Id, record.Artifact).Uri != reference.Uri ||
                 record.Artifact.ContentSha256 != record.Original.ContentSha256 ||
                 record.Artifact.ContentByteLength != record.Original.ContentByteLength ||
                 revision?.Payload == null || revision.Payload.Sha256 != record.Original.ContentSha256 ||
@@ -183,6 +184,11 @@ namespace RNAssistant.Core.Storage
         }
 
         public static bool Owns(ChatSession session, ResourceRef reference)
+        {
+            return Owns(session?.DocumentAuthorityId, session?.WorkspaceId, reference);
+        }
+
+        public static bool Owns(ConversationMetadata session, ResourceRef reference)
         {
             return Owns(session?.DocumentAuthorityId, session?.WorkspaceId, reference);
         }
@@ -219,9 +225,19 @@ namespace RNAssistant.Core.Storage
 
         private static ResourceAuthorityScopeId Scope(ChatSession session)
         {
-            if (string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
+            return Scope(session?.DocumentAuthorityId);
+        }
+
+        private static ResourceAuthorityScopeId Scope(ConversationMetadata session)
+        {
+            return Scope(session?.DocumentAuthorityId);
+        }
+
+        private static ResourceAuthorityScopeId Scope(string documentAuthorityId)
+        {
+            if (string.IsNullOrWhiteSpace(documentAuthorityId))
                 throw new InvalidOperationException("A bound logical document identity is required for artifact access.");
-            return ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
+            return ResourceAuthorityScopeId.Document(new DocumentAuthorityId(documentAuthorityId));
         }
 
         private static T Clone<T>(T value) { return JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(value)); }

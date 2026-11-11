@@ -11,6 +11,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
@@ -2557,11 +2558,11 @@ namespace RNAssistant.Harness
                 {
                     var encoded = row.Substring(9, row.IndexOf(" | type=", StringComparison.Ordinal) - 9);
                     var resolved = executor.ResourceGateway.ResolveIntentTarget(session, JsonConvert.DeserializeObject<string>(encoded));
-                    var artifact = chats.DocumentArtifacts.Read(session, resolved.Reference);
+                    var artifact = chats.DocumentArtifacts.Read(ConversationMetadata.From(session), resolved.Reference);
                     AssertTrue(artifact.Revision == 14 || artifact.InlineText == "# Independent", "every advertised target resolves to an observed head");
                 }
-                AssertEqual("# Revision 1", chats.DocumentArtifacts.Read(session, first).InlineText, "historical exact access is preserved");
-                var current = chats.DocumentArtifacts.Read(session, executor.ResourceGateway.ResolveIntentTarget(session, target).Reference);
+                AssertEqual("# Revision 1", chats.DocumentArtifacts.Read(ConversationMetadata.From(session), first).InlineText, "historical exact access is preserved");
+                var current = chats.DocumentArtifacts.Read(ConversationMetadata.From(session), executor.ResourceGateway.ResolveIntentTarget(session, target).Reference);
                 var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value));
                 links.Change(session, LinkRequest(session, ChatResourceUri.CreateArtifactRevisionUri(session, current), true), chats.Save);
                 AssertContains(ChatResourcePromptIndex.Build(session, 5000), "showing=2/2", "detaching a lineage leaves its same-title peer and Plan visible");

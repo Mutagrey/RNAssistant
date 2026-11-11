@@ -89,7 +89,7 @@ namespace RNAssistant.Runtime
                 if (changed)
                 {
                     var exact = _owner.FindPlanOperation(_session, _operationKey);
-                    var artifact = _owner.Read(_session, exact, false);
+                    var artifact = _owner.Read(ConversationMetadata.From(_session), exact, false);
                     ArtifactWorkingSet.Set(_session, artifact, false);
                     _chats.Commit(_session, new ConversationCommit());
                 }
@@ -174,7 +174,7 @@ namespace RNAssistant.Runtime
                     if (string.IsNullOrWhiteSpace(_readSelection)) throw Error("plan_not_found", "There is no selected Plan. Find a unique title first.");
                     var selected = _owner.ReadPlanSelection(_session, _readSelection, false);
                     var exact = _owner.CurrentPlan(_session, DocumentArtifactStore.PlanIdFromArtifact(selected));
-                    current = _owner.Read(_session, exact, false);
+                    current = _owner.Read(ConversationMetadata.From(_session), exact, false);
                 }
                 else
                 {
@@ -191,7 +191,7 @@ namespace RNAssistant.Runtime
                     .SingleOrDefault(item => item.Revision == version.Value && !PlanDocumentService.IsTombstone(item)) : current;
                 if (artifact == null) throw Error("plan_revision_not_found", "That Plan version is unavailable.");
                 var reference = ChatResourceUri.CreateArtifactRevision(_session, artifact);
-                artifact = _owner.Read(_session, reference);
+                artifact = _owner.Read(ConversationMetadata.From(_session), reference);
                 if (artifact.InlineText.Length > PlanDocumentService.MaximumMarkdownCharacters)
                     throw Error("read_too_large", "The Plan exceeds the complete read bound.");
                 var frozen = _authority.Capture(Scope);

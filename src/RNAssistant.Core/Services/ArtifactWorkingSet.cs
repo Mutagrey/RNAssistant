@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Core.Services
@@ -21,20 +22,31 @@ namespace RNAssistant.Core.Services
 
         public static ResourceIdentity Identity(ChatSession session, ChatArtifact artifact)
         {
+            return Identity(session?.Id, session?.DocumentAuthorityId, session?.WorkspaceId, artifact);
+        }
+
+        public static ResourceIdentity Identity(ConversationMetadata session, ChatArtifact artifact)
+        {
+            return Identity(session?.Id, session?.DocumentAuthorityId, session?.WorkspaceId, artifact);
+        }
+
+        private static ResourceIdentity Identity(string chatId, string documentAuthorityId,
+            string workspaceId, ChatArtifact artifact)
+        {
             if (artifact?.Kind == ChatArtifactKinds.PlanDocument &&
-                DocumentArtifactStore.Owns(session, ChatResourceUri.CreateArtifactRevision(session, artifact)))
-                return DocumentArtifactStore.PlanIdentity(session, DocumentArtifactStore.PlanIdFromArtifact(artifact));
-            if (artifact == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId) || artifact.DocumentAuthorityId != session.DocumentAuthorityId)
+                DocumentArtifactStore.Owns(documentAuthorityId, workspaceId, ChatResourceUri.CreateArtifactRevision(chatId, artifact)))
+                return DocumentArtifactStore.PlanIdentity(documentAuthorityId, workspaceId, DocumentArtifactStore.PlanIdFromArtifact(artifact));
+            if (artifact == null || string.IsNullOrWhiteSpace(documentAuthorityId) || artifact.DocumentAuthorityId != documentAuthorityId)
                 throw new InvalidDataException("The artifact is not owned by this document.");
             if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)
-                return MarkdownDocumentIdentity.Identity(session, MarkdownDocumentIdentity.LogicalId(artifact.Id));
+                return MarkdownDocumentIdentity.Identity(documentAuthorityId, MarkdownDocumentIdentity.LogicalId(artifact.Id));
             if (DocumentArtifactStore.ContextLogicalId(artifact.Id) != null)
-                return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, DocumentArtifactStore.ContextLogicalId(artifact.Id)));
+                return new ResourceIdentity(ResourceUri.Create("state", "document", documentAuthorityId, DocumentArtifactStore.ContextLogicalId(artifact.Id)));
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
-                return HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(artifact.Id));
+                return HtmlWorkspaceIdentity.Identity(documentAuthorityId, HtmlWorkspaceIdentity.LogicalId(artifact.Id));
             if (!artifact.Id.StartsWith("attachment_", StringComparison.Ordinal) && !artifact.Id.StartsWith("artifact_", StringComparison.Ordinal))
                 throw new InvalidDataException("This artifact has no document working-set owner yet.");
-            return ChatResourceUri.CreateArtifactRevision(session, artifact).Identity;
+            return ChatResourceUri.CreateArtifactRevision(chatId, artifact).Identity;
         }
 
         public static string PlanId(ChatArtifact artifact)

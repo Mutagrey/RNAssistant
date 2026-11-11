@@ -712,6 +712,13 @@ storage/protocol fixes closed part of that set; do not present it as today's lis
 The [2026-10-15 correction](RISK_REGISTER.md#baseline-test-failures-during-architecture-follow-through--2026-10-15)
 also does not establish that later changes remain green.
 
+2026-11-11, scoped resource reads: `shared Markdown: lifecycle and competing chats`
+fails on removed `markdown.save` before reaching its lifecycle assertions. Identical
+failure in the saved pre-slice build (`ae730868` + the page-read fix from `478edb71`)
+and the scoped-read candidate based on `478edb71`. Owner: Harness shared Markdown
+fixture. Migrate its invocation to current semantic `core.write`, retaining exact
+revision, foreign-scope and stale-writer assertions; do not restore the removed tool.
+
 2026-11-11, P1 common projection: eight selected failures reproduce with and without
 the shared projection on isolated e8d719b6 + owned changes through `5b0df48c`, with
 only the chronological-result correction applied to both. They are not a current

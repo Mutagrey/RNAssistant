@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Services;
 
@@ -14,7 +15,7 @@ namespace RNAssistant.Core.Storage
     {
         public byte[] ExportBytes(ChatSession session, ResourceRef reference)
         {
-            var item = Read(session, reference, false);
+            var item = Read(ConversationMetadata.From(session), reference, false);
             if (!item.ContentByteLength.HasValue || item.ContentByteLength > ArtifactTransferPackage.MaximumBytes)
                 throw new InvalidDataException("Содержимое недоступно или превышает 20 МиБ.");
             var bytes = _payloads.ReadBytes(new ChatBlobReference { Sha256 = item.ContentSha256,
@@ -84,7 +85,7 @@ namespace RNAssistant.Core.Storage
                 changes.Add(new ResourceHeadChange(identity, null, ResourceHeadState.Known(logical, before.Generation + 1, "artifact-import")));
             }
             _authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null, changes, AuthorityCommitReason.DerivedPublication));
-            return Read(session, savedRoot.Revision);
+            return Read(ConversationMetadata.From(session), savedRoot.Revision);
         }
 
         private ResourceRef ImportAuxiliary(ChatSession session, string json, string seed, string operationId,

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
@@ -23,7 +24,7 @@ namespace RNAssistant.Core.Storage
         public FilePatchPreparation PrepareFilePatch(ChatSession session, ResourceRef reference, TextPatch patch,
             CancellationToken token = default(CancellationToken))
         {
-            var artifact = Read(session, reference, false);
+            var artifact = Read(ConversationMetadata.From(session), reference, false);
             var encoding = FileEncoding(artifact);
             if (encoding == null) throw new InvalidDataException("Select an authored text file.");
             var source = FilePayload(artifact);

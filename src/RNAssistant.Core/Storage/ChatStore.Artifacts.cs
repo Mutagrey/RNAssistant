@@ -5,6 +5,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
@@ -257,7 +258,7 @@ namespace RNAssistant.Core.Storage
             {
                 try
                 {
-                    artifact.InlineText = DocumentArtifacts.Read(session,
+                    artifact.InlineText = DocumentArtifacts.Read(ConversationMetadata.From(session),
                         ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText;
                 }
                 catch (System.IO.InvalidDataException) { return false; }

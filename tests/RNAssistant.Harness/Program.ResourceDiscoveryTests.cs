@@ -159,7 +159,7 @@ namespace RNAssistant.Harness
                 var drift = RuntimeThrows<ResourceRequestException>(() => guarded.Read(session, new ResourceReadRequest {
                     Reference = complete.Reference, Representation = "text", Section = "Small" }));
                 AssertEqual("resource_revision_changed", drift.ErrorCode, "writer drift during section reading is refused");
-                var original = chats.DocumentArtifacts.Read(session, complete.Reference, false).OriginalAttachment;
+                var original = chats.DocumentArtifacts.Read(ConversationMetadata.From(session), complete.Reference, false).OriginalAttachment;
                 File.Delete(executor.Payloads.PathFor(original.ExtractedTextSha256));
                 RuntimeThrows<ResourceRequestException>(() => provider.Read(session, new ResourceReadRequest { Reference = complete.Reference, Representation = "text", Section = "Small" }));
             });
@@ -265,7 +265,7 @@ namespace RNAssistant.Harness
                 AssertTrue(absent.ScanComplete && absent.TotalMatches == 0,
                     "a complete negative scan establishes absence in the exact text representation");
                 var view = authority.GetView(scope, markdown.Reference, "artifact-extracted-text-index-v3");
-                var original = owner.Read(other, markdown.Reference, false).OriginalAttachment;
+                var original = owner.Read(ConversationMetadata.From(other), markdown.Reference, false).OriginalAttachment;
                 AssertEqual(original.ExtractedTextSha256, view.ContentSha256, "index binds the retained extracted representation");
                 File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
                 AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived manifest repair uses original extraction");
@@ -680,7 +680,7 @@ namespace RNAssistant.Harness
                 File.WriteAllText(currentPath, "corrupt");
                 found = executor.ResourceGateway.List(session, "chat", "document-artifact", null, 50);
                 AssertTrue(found.Items.Count == 1 && found.UnavailableResources == 1 && found.Items.Single().Title == "Independent.md", "corrupt current metadata cannot fall back to an older healthy revision");
-                AssertEqual("# Earlier", owner.Read(session, firstRef).InlineText, "historical exact reads still work");
+                AssertEqual("# Earlier", owner.Read(ConversationMetadata.From(session), firstRef).InlineText, "historical exact reads still work");
                 File.WriteAllBytes(currentPath, currentBytes);
                 var page = executor.ResourceGateway.List(session, "chat", "document-artifact", null, 1);
                 var unrelated = new ResourceIdentity(ResourceUri.Create("state", scope.Kind, scope.Id, "test-discovery-generation"));
@@ -690,14 +690,14 @@ namespace RNAssistant.Harness
                 RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.List(session, "chat", "document-artifact", page.NextCursor, 1));
                 AssertEqual(2, executor.ResourceGateway.List(session, "chat", "document-artifact", null, 50).Items.Count, "generation-only drift leaves descriptors intact but invalidates continuation");
                 page = executor.ResourceGateway.List(session, "chat", "document-artifact", null, 1);
-                var logical = MarkdownDocumentIdentity.Identity(session, MarkdownDocumentIdentity.LogicalId(owner.Read(session, secondRef, false).Id));
+                var logical = MarkdownDocumentIdentity.Identity(session, MarkdownDocumentIdentity.LogicalId(owner.Read(ConversationMetadata.From(session), secondRef, false).Id));
                 var before = authority.Capture(scope);
                 authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
                     new[] { new ResourceHeadChange(logical, before.GetHead(logical), ResourceHeadState.Unknown(logical, before.Generation + 1, "test-unknown-head")) }, AuthorityCommitReason.DerivedPublication));
                 RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.List(session, "chat", "document-artifact", page.NextCursor, 1));
                 found = executor.ResourceGateway.List(session, "chat", "document-artifact", null, 50);
                 AssertTrue(found.Items.Count == 1 && found.UnavailableResources == 1, "unknown logical head is isolated without selecting latest retained snapshot");
-                AssertEqual("# Current", owner.Read(session, secondRef).InlineText, "unknown currentness does not destroy exact history");
+                AssertEqual("# Current", owner.Read(ConversationMetadata.From(session), secondRef).InlineText, "unknown currentness does not destroy exact history");
             });
         }
 
@@ -720,7 +720,7 @@ namespace RNAssistant.Harness
                     ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
                 var otherChat = NewSession(adapter); otherChat.DocumentAuthorityId = session.DocumentAuthorityId;
-                var exact = store.DocumentArtifacts.List(session).Single(item => item.Title == "Damaged.md");
+                var exact = store.DocumentArtifacts.List(ConversationMetadata.From(session)).Single(item => item.Title == "Damaged.md");
                 var reference = ChatResourceUri.CreateArtifactRevision(session, exact);
                 var view = authority.GetView(scope, reference, "artifact-original-record");
                 var path = executor.Payloads.PathFor(view.Payload.Sha256);
@@ -745,8 +745,8 @@ namespace RNAssistant.Harness
                 var target = found.Items.Single(item => item.Title == "Healthy.md").Target;
                 var rejected = RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.ResolveIntentTarget(otherChat, target));
                 AssertEqual("resource_scope_incomplete", rejected.ErrorCode, "partial catalog cannot establish target uniqueness");
-                RuntimeThrows<InvalidDataException>(() => store.DocumentArtifacts.List(session));
-                var healthy = store.DocumentArtifacts.InspectMetadataList(session).Single(item => item.Title == "Healthy.md");
+                RuntimeThrows<InvalidDataException>(() => store.DocumentArtifacts.List(ConversationMetadata.From(session)));
+                var healthy = store.DocumentArtifacts.InspectMetadataList(ConversationMetadata.From(session)).Single(item => item.Title == "Healthy.md");
                 var healthyRef = ChatResourceUri.CreateArtifactRevision(session, healthy);
                 AssertTrue(executor.ResourceGateway.Resolve(otherChat, healthyRef.Uri).Resource.Title == "Healthy.md", "exact reference ignores unrelated metadata loss");
                 var generation = authority.Capture(scope).Generation;

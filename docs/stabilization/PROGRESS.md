@@ -177,6 +177,15 @@ P1 page execution isolation: `LastRun` исключается до копиро�
 checks прошли host-neutral. Production C# — net +3 строки; версия `16.5.1-dev`.
 Внутренняя resource projection, обычные Store-операции и journal cutover ещё открыты.
 
+P1 resource read scopes: шесть общих read API `DocumentArtifactStore` переведены на
+`ConversationMetadata`; Office/Workspace и storage consumers переключены без нового
+owner/store/adapter. Проверки exact ownership, publication, revision и tombstones
+сохранены. Семь адресных проверок проходят, включая новый реальный Workspace Plan read;
+устаревший Markdown-тест с `markdown.save` падает также до среза и внесён в Backlog.
+Production C# — net +97 строк; версия не меняется: внутренний рефакторинг.
+Aggregate page projection, специализированные Plan/text API и подключение journal
+остаются открытыми; host-neutral evidence не заменяет Windows/Office qualification.
+
 Маршрут до переключения сужен по [уточнению пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md#84-порядок-небольших-срезов):
 реальные consumers и короткие сквозные проверки каждого среза; финально — чат,
 mutation, unknown, restart, lost acknowledgement, rebuild и restore. До cutover
