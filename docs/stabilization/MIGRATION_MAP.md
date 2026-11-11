@@ -110,8 +110,17 @@ for identity-only reads, event readers and payload access. Office/Workspace
 diagnostics, download/upload leases and draft staging consume that DTO; live callers
 capture six scalars without history. Diagnostic lease checks no longer load the full
 chat. No adapter or new owner/store; exact scopes and existing publication guards
-remain. Message windows, full load/ordinary commit and new-journal consumer integration
+remain. Full load/ordinary commit and new-journal consumer integration
 are still open; this DTO alone does not make the backend bounded.
+
+P1 message windows: removed `ConversationMessageWindow.Session`; Office/Workspace
+now consume metadata, page messages and resolved artifact presentation data. Shared
+URI/card/library helpers take explicit read inputs, preserving the same implementation
+for full live sessions. No new adapter, store or resource owner. The existing temporary
+`ChatStore.ReadMessageWindowAtPath` → `ProjectSqliteSession` aggregate remains inside
+the backend only. Owner: Core Storage/resource projection; removal gate: scoped
+resource materialization during new-journal consumer integration. No fallback or
+aggregate reconstruction was added to the callers.
 
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 

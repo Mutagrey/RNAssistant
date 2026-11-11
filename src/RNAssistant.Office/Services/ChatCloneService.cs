@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
@@ -115,31 +116,37 @@ namespace RNAssistant.Office.Services
         public static IReadOnlyList<ChatMessageViewDto> CloneMessagesForBridge(ChatSession session,
             IEnumerable<ChatMessage> messages, AttachmentStore attachments = null)
         {
+            return CloneMessagesForBridge(ConversationMetadata.From(session), session?.Artifacts, messages, attachments);
+        }
+
+        public static IReadOnlyList<ChatMessageViewDto> CloneMessagesForBridge(ConversationMetadata metadata,
+            IEnumerable<ChatArtifact> artifacts, IEnumerable<ChatMessage> messages, AttachmentStore attachments = null)
+        {
             return (messages ?? new ChatMessage[0])
                 .Select(message =>
                 {
                     var view = ChatMessageViewDto.From(message);
                     if (view == null || view.ProtocolMessage) return view;
-                    var ids = ChatResourceUri.CurrentArtifactIds(session,
+                    var ids = ChatResourceUri.CurrentArtifactIds(metadata?.Id, metadata?.DocumentAuthorityId, artifacts,
                         (message.ResourceRefs ?? new List<ResourceRef>()).Concat(new[] { message.HtmlWorkspaceCheckpoint }));
                     view.ArtifactIds = ids.Count == 0 ? null : ids;
                     if (attachments != null && view.Attachments != null)
                     {
                         for (var index = 0; index < view.Attachments.Count; index++)
-                            ProjectVisualAnnotation(session, message.Attachments[index], view.Attachments[index], attachments);
+                            ProjectVisualAnnotation(metadata, message.Attachments[index], view.Attachments[index], attachments);
                     }
                     return view;
                 })
                 .ToList();
         }
 
-        private static void ProjectVisualAnnotation(ChatSession session, ChatAttachment attachment,
+        private static void ProjectVisualAnnotation(ConversationMetadata metadata, ChatAttachment attachment,
             ChatAttachmentViewDto view, AttachmentStore attachments)
         {
             if (attachment?.VisualSelectionSource == null || view == null) return;
             string owner, artifactId; int revision;
             var source = ChatResourceUri.TryParseArtifactRevision(attachment.VisualSelectionSource,
-                out owner, out artifactId, out revision) && owner == session.DocumentAuthorityId
+                out owner, out artifactId, out revision) && owner == metadata?.DocumentAuthorityId
                 ? attachment.VisualSelectionSource : null;
             ChatVisualAnnotationProjection.Apply(attachment, view, attachments, source, artifactId, revision);
         }

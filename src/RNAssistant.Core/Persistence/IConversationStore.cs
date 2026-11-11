@@ -66,8 +66,14 @@ namespace RNAssistant.Core.Persistence
 
     public sealed class ConversationMessageWindow
     {
-        public ChatSession Session { get; set; }
+        public ConversationMetadata Metadata { get; set; }
         public IReadOnlyList<ChatMessage> PageMessages { get; set; }
+        public IReadOnlyList<ChatArtifact> Artifacts { get; set; }
+        public ISet<string> DetachedArtifactIds { get; set; }
+        public ISet<string> ApplicableTombstoneIds { get; set; }
+        public string ActiveHtmlArtifactId { get; set; }
+        public string ActivePlanDocumentArtifactId { get; set; }
+        public string ActiveTaskListArtifactId { get; set; }
         public int StartIndex { get; set; }
         public int TotalCount { get; set; }
     }

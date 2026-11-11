@@ -706,3 +706,33 @@ after-state/CAS ownership.
 7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. No adapter,
    store, import, dual-write or fallback added. P4 remains deferred and the existing
    backup/stop-writers/Windows gates still precede the new-history switch.
+
+## P1 — typed message windows (2026-11-11)
+
+1. F04 / P1 read-contract subset. `ConversationMessageWindow` now carries metadata,
+   page messages and artifact presentation data through the existing Store port.
+2. Office/Workspace consumers no longer receive a partial writable `ChatSession`.
+   Existing owners resolve detached membership, tombstones and selected heads;
+   off-page source existence becomes applicable tombstone IDs, not synthetic messages.
+   URI/card/library projection shares the same helpers for live and paged inputs.
+3. Removed the window's `Session` property and every consumer's dependency on it.
+   No new owner, store, facade, compile item or fallback. Production C# +167/−61,
+   net +106 across ten files; external UI/storage behavior and product version unchanged.
+4. Eleven targeted checks pass on macOS/net8/C#7.3 in an isolated source archive of
+   `b61515b2` plus this slice: two page fixtures, real Workspace history consumer,
+   five artifact-library checks, corrupt-row repair, damaged-metadata repair and
+   catalog/page locking. Office page presentation uses the production services;
+   the controller callsite is reviewed separately, not Office-qualified.
+5. The existing H=190/page=80 fixture still materializes exactly 80 messages; no
+   off-page bodies are hydrated and canonical JSONL bytes remain unchanged. Resource
+   cards match full-session presentation, including an explicitly selected older
+   head and a later branch. No CPU/allocation/timing benchmark or read speedup claimed.
+6. `ChatStore` still constructs a temporary session internally for its existing
+   resource projection. Runtime checkpoint hydration, artifact enumeration, ordinary
+   commit/load and new-journal integration remain open. The window no longer retains
+   or exposes that aggregate. Actual Windows/Office paging needs photo evidence.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. Existing
+   internal aggregate owner: Core Storage/resource projection; remove it when scoped
+   resource materialization joins the journal consumers. No new adapter, import or
+   dual-write. P4 remains deferred; backup/stop-writers/Windows gates still precede
+   the new-history cutover.

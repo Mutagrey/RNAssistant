@@ -391,7 +391,17 @@ Exact owner/workspace checks, byte limits, cancellation and publication at the r
 boundary are unchanged. Diagnostic lease liveness now uses this metadata route
 instead of loading the full addressed chat. Metadata is not live document authority;
 actual viewers, editor mutations and attachment linking retain their existing full
-domain context. Message-window DTOs and aggregate commit/load remain separate P1 work.
+domain context. Aggregate commit/load remain separate P1 work.
+
+`ConversationMessageWindow` returns metadata, the requested messages and artifact
+presentation data; it no longer exposes a writable partial `ChatSession`. Office
+and Workspace consume this contract directly. Existing resource owners resolve
+detached membership, applicable tombstones and selected heads. Off-page source
+existence is retained as tombstone IDs, without sending synthetic messages to the
+consumer. Exact resource cards, raw message indexes and workspace scope are unchanged.
+The legacy backend still uses a temporary session internally for resource projection;
+its execution hydration and artifact enumeration are not made bounded by this DTO.
+That internal dependency must be removed with resource-owner/journal integration.
 
 Office navigation serializes selection and drains already admitted catalog and
 preference requests before a possible host switch. This prevents an old controller

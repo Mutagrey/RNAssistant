@@ -136,8 +136,17 @@ P1 read metadata: диагностика Office/Workspace, event reads, upload/d
 lease также идёт через metadata, без полной загрузки чата. 14 адресных host-neutral
 checks проходят, включая реальные run consumers обоих hosts, restart/Inbox и
 отмену upload. Production C# — net +29 строк; без новых owners/stores/adapters.
-Message windows, обычные commit/load и подключение нового journal остаются открытыми;
+Обычные commit/load и подключение нового journal остаются открытыми;
 controller delivery на Windows/Office этим не квалифицирована.
+
+P1 message windows: частичный `ChatSession` удалён из результата чтения страницы;
+Office/Workspace используют metadata, bounded messages и данные карточек ресурсов.
+Сохранены off-page tombstones, выбранные heads, exact revision/lineage и scope.
+11 адресных checks проходят на изолированной базе `b61515b2` с этим срезом;
+190-message fixture материализует прежние 80 сообщений, canonical bytes неизменны.
+Production C# — net +106 строк. Внутренняя временная проекция старого backend,
+полный обход artifact metadata и execution hydration ещё остаются; ускорение всего
+read path не заявляется. Windows controller/Office evidence открыто.
 
 Маршрут до переключения сужен по [уточнению пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md#84-порядок-небольших-срезов):
 реальные consumers и короткие сквозные проверки каждого среза; финально — чат,

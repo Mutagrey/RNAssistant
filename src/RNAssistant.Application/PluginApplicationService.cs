@@ -718,7 +718,7 @@ namespace RNAssistant.Application
         private ChatMessageWindowViewDto PresentWorkspaceWindow(WorkspaceDescriptor workspace, ConversationMessageWindow window)
         {
             return new ChatMessageWindowViewDto {
-                ChatId = window.Session.Id, SessionRevision = window.Session.Revision,
+                ChatId = window.Metadata.Id, SessionRevision = window.Metadata.Revision,
                 StartIndex = window.StartIndex, TotalCount = window.TotalCount,
                 Messages = PresentWorkspaceMessages(workspace, window.PageMessages)
             };

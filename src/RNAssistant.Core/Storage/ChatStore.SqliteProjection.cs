@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
@@ -790,10 +791,24 @@ namespace RNAssistant.Core.Storage
                     // exists. Keep ID-only context for presentation without reading bodies.
                     foreach (var id in retainedSourceIds)
                         session.Messages.Add(new ChatMessage { Id = id });
+                    var artifacts = (session.Artifacts ?? new List<ChatArtifact>()).ToArray();
+                    var uniqueArtifacts = artifacts.Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+                        .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                        .Where(group => group.Count() == 1).Select(group => group.Single()).ToArray();
                     return new ConversationMessageWindow
                     {
-                        Session = session,
+                        Metadata = ConversationMetadata.From(session),
                         PageMessages = pageMessages,
+                        Artifacts = artifacts,
+                        DetachedArtifactIds = new HashSet<string>(uniqueArtifacts
+                            .Where(item => ArtifactWorkingSet.IsDetached(session, item)).Select(item => item.Id),
+                            StringComparer.OrdinalIgnoreCase),
+                        ApplicableTombstoneIds = new HashSet<string>(uniqueArtifacts
+                            .Where(item => PlanDocumentService.IsApplicableTombstone(session, item)).Select(item => item.Id),
+                            StringComparer.OrdinalIgnoreCase),
+                        ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
+                        ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId,
+                        ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
                         StartIndex = start,
                         TotalCount = total
                     };

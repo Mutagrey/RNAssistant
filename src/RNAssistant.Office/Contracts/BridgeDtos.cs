@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Services;
 using RNAssistant.Runtime.Contracts;
@@ -684,8 +685,14 @@ namespace RNAssistant.Office.Contracts
 
         public static IReadOnlyList<ChatArtifactDto> From(ChatSession session, ISet<string> selectedIds)
         {
-            if (session == null) return From((IEnumerable<ChatArtifact>)null);
-            var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+            return From(ConversationMetadata.From(session), session?.Artifacts, selectedIds);
+        }
+
+        public static IReadOnlyList<ChatArtifactDto> From(ConversationMetadata metadata,
+            IEnumerable<ChatArtifact> source, ISet<string> selectedIds)
+        {
+            if (metadata == null) return From((IEnumerable<ChatArtifact>)null);
+            var artifacts = (source ?? new ChatArtifact[0])
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .Where(item => selectedIds == null || selectedIds.Contains(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
@@ -698,8 +705,8 @@ namespace RNAssistant.Office.Contracts
                 ChatArtifact artifact;
                 if (item != null && artifacts.TryGetValue(item.Id ?? string.Empty, out artifact))
                 {
-                    item.ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
-                    item.DocumentId = artifact.DocumentAuthorityId ?? session.DocumentAuthorityId;
+                    item.ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, artifact);
+                    item.DocumentId = artifact.DocumentAuthorityId ?? metadata.DocumentAuthorityId;
                 }
             }
             return result;

@@ -1054,22 +1054,28 @@ namespace RNAssistant.Harness
                     chat.Messages.Add(new ChatMessage { Id = Guid.NewGuid().ToString("N"),
                         Role = "user", Content = "message-" + index });
                 writer.Save(chat);
+                var canonical = File.ReadAllBytes(SessionEventFile(paths, chat));
 
                 var reader = new ChatStore(paths);
                 AssertTrue(reader.Load("Word", "indexed-pages", "missing") == null,
                     "a missing chat does not create an orphan SQLite index");
                 var page = reader.ReadMessageWindow(chat.Id, 190, 80);
                 AssertTrue(page != null, "persisted chat has an indexed message page");
+                AssertEqual(chat.Id, page.Metadata.Id, "page carries the exact chat address");
+                AssertEqual(chat.Revision, page.Metadata.Revision, "page carries the observed durable revision");
                 AssertEqual(110, page.StartIndex, "page starts at the requested bounded window");
                 AssertEqual(190, page.TotalCount, "page reports complete transcript count");
-                AssertEqual(80, page.Session.Messages.Count, "page materializes only requested messages");
-                AssertEqual("message-110", page.Session.Messages[0].Content, "first row matches storage order");
-                AssertEqual("message-189", page.Session.Messages[79].Content, "last row matches storage order");
+                AssertEqual(80, page.PageMessages.Count, "page materializes only requested messages");
+                AssertEqual("message-110", page.PageMessages[0].Content, "first row matches storage order");
+                AssertEqual("message-189", page.PageMessages[79].Content, "last row matches storage order");
+                AssertEqual(80L, reader.MaterializedMessageCount, "no off-page messages are hydrated");
                 AssertEqual(0L, reader.ProjectionFullReplayCount, "indexed page does not replay the JSONL prefix");
 
                 page = reader.ReadMessageWindow(chat.Id, page.StartIndex, 80);
                 AssertEqual(30, page.StartIndex, "previous page uses logical transcript positions");
-                AssertEqual("message-30", page.Session.Messages[0].Content, "older page stays ordered");
+                AssertEqual("message-30", page.PageMessages[0].Content, "older page stays ordered");
+                AssertTrue(File.ReadAllBytes(SessionEventFile(paths, chat)).SequenceEqual(canonical),
+                    "page reads leave the canonical stream unchanged");
             });
         }
 
@@ -1093,6 +1099,13 @@ namespace RNAssistant.Harness
                 };
                 chat.Artifacts.Add(tombstone);
                 chat.Messages[189].ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(chat, tombstone));
+                var selected = new ChatArtifact { Id = "task-r1", Kind = ChatArtifactKinds.TaskList,
+                    Title = "Selected tasks", Revision = 1, MetadataJson = "{\"taskListId\":\"tasks\"}" };
+                var branch = new ChatArtifact { Id = "task-r2", Kind = ChatArtifactKinds.TaskList,
+                    Title = "Later tasks", Revision = 2, ParentArtifactId = selected.Id, MetadataJson = selected.MetadataJson };
+                chat.Artifacts.AddRange(new[] { selected, branch });
+                chat.ActiveTaskListArtifactId = selected.Id;
+                chat.Messages[189].ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(chat, branch));
                 store.Save(chat);
 
                 var reader = new ChatStore(paths);
@@ -1100,14 +1113,20 @@ namespace RNAssistant.Harness
                 var page = reader.ReadMessageWindow(chat.Id, 190, 80);
                 var expected = ArtifactLibraryProjectionService.ProjectMessagePage(full,
                     ChatCloneService.CloneMessagesForBridge(full, full.Messages.Skip(110)));
-                var actual = ArtifactLibraryProjectionService.ProjectMessagePage(page.Session,
-                    ChatCloneService.CloneMessagesForBridge(page.Session, page.PageMessages));
+                var actual = ArtifactLibraryProjectionService.ProjectMessagePage(page,
+                    ChatCloneService.CloneMessagesForBridge(page.Metadata, page.Artifacts, page.PageMessages));
                 AssertEqual(80, page.PageMessages.Count, "the bridge page stays bounded");
+                AssertTrue(page.ApplicableTombstoneIds.Contains(tombstone.Id),
+                    "off-page source existence is retained without exposing ID-only messages");
                 AssertTrue(expected.Library.RemovedResourceUris.Count > 0,
                     "the fixture exposes a removed resource on the requested page");
                 AssertEqual(JsonConvert.SerializeObject(expected.Library.RemovedResourceUris),
                     JsonConvert.SerializeObject(actual.Library.RemovedResourceUris),
                     "indexed page retains the old source-message existence needed by tombstones");
+                AssertEqual(selected.Id, actual.Artifacts.Single(item => item.Id == branch.Id).LibraryHead.ArtifactId,
+                    "page retains the selected head even when a newer branch is visible");
+                AssertEqual(JsonConvert.SerializeObject(expected.Artifacts), JsonConvert.SerializeObject(actual.Artifacts),
+                    "page resource cards preserve exact revision, lineage and ownership");
             });
         }
 
@@ -1203,7 +1222,7 @@ namespace RNAssistant.Harness
                 };
                 damage();
                 var reader = new ChatStore(paths);
-                AssertEqual("canonical body", reader.ReadMessageWindow(chat.Id, 1, 80).Session.Messages[0].Content,
+                AssertEqual("canonical body", reader.ReadMessageWindow(chat.Id, 1, 80).PageMessages[0].Content,
                     "a damaged indexed page is rebuilt from the event stream");
                 damage();
                 reader = new ChatStore(paths);
@@ -1255,9 +1274,9 @@ namespace RNAssistant.Harness
                         if (surface == "headers")
                             AssertEqual("Canonical title", reader.ListHeaders().Single().Title,
                                 "startup catalog rebuilds disposable metadata");
-                        var loaded = surface == "page" ? reader.ReadMessageWindow(chat.Id, 1, 80).Session : reader.Load(chat.Id);
-                        AssertTrue(loaded != null, "damaged index cannot hide the chat");
-                        AssertEqual("canonical history", loaded.Messages.Single().Content,
+                        var messages = surface == "page" ? reader.ReadMessageWindow(chat.Id, 1, 80)?.PageMessages : reader.Load(chat.Id)?.Messages;
+                        AssertTrue(messages != null, "damaged index cannot hide the chat");
+                        AssertEqual("canonical history", messages.Single().Content,
                             "damaged metadata cannot hide canonical messages");
                     }
                     catch (Exception ex) { throw new InvalidOperationException(surface + ": " + sql, ex); }

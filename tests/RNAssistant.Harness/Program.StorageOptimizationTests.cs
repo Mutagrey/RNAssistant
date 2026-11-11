@@ -624,7 +624,7 @@ namespace RNAssistant.Harness
                 timer.Restart();
                 var page = new ChatStore(paths).ReadMessageWindow(session.Id, history + 1, 20);
                 var pageMs = timer.Elapsed.TotalMilliseconds;
-                AssertEqual(20, page.Session.Messages.Count, "fixed history window");
+                AssertEqual(20, page.PageMessages.Count, "fixed history window");
                 AssertTrue(materialized >= history, "baseline exposes aggregate materialization on a small commit");
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = session.Messages[history - 21].Id,
                     Claims = new List<StructuredContextClaim> { new StructuredContextClaim { ClaimId = "baseline",

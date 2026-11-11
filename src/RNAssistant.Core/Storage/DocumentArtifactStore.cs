@@ -184,13 +184,18 @@ namespace RNAssistant.Core.Storage
 
         public static bool Owns(ChatSession session, ResourceRef reference)
         {
+            return Owns(session?.DocumentAuthorityId, session?.WorkspaceId, reference);
+        }
+
+        public static bool Owns(string documentAuthorityId, string workspaceId, ResourceRef reference)
+        {
             string owner, id;
             int revision;
             if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision)) return false;
-            if (string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
-                return !string.IsNullOrWhiteSpace(session?.WorkspaceId) && owner == session.WorkspaceId &&
+            if (string.IsNullOrWhiteSpace(documentAuthorityId))
+                return !string.IsNullOrWhiteSpace(workspaceId) && owner == workspaceId &&
                     id.StartsWith("plan_doc_", StringComparison.Ordinal);
-            return owner == session.DocumentAuthorityId && (id.StartsWith("attachment_", StringComparison.Ordinal) ||
+            return owner == documentAuthorityId && (id.StartsWith("attachment_", StringComparison.Ordinal) ||
                     id.StartsWith("plan_doc_", StringComparison.Ordinal) || HtmlWorkspaceIdentity.LogicalId(id) != null ||
                     id.StartsWith("artifact_", StringComparison.Ordinal));
         }

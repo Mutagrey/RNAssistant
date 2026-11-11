@@ -530,6 +530,14 @@ and a 23 MiB journal, reporting catalog, load, reference full scan and indexed i
 times; it has no machine-dependent time gate. Actual Office host-switch delivery
 and Windows timings remain separate qualification.
 
+For the typed message-window boundary select `storage: sqlite projection pages
+messages`, `storage: sqlite page preserves tombstone context`, `plugins: project
+chat history uses shared pages` and `artifact library:`. These retain 80-message
+hydration, canonical bytes, off-page tombstones, selected heads/lineage, protocol
+visibility and workspace isolation. The existing corrupt-row, damaged-metadata and
+catalog/page document-boundary checks cover the changed read result through repair
+and locking. No new-journal or Office qualification is implied.
+
 `chat sessions: diagnostics do not hydrate or recover history` forbids catalog/full
 loads and verifies typed immutable metadata, unchanged history/selection and an
 unsaved draft. `storage: busy chat stays visible` checks the short validated/complete

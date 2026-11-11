@@ -389,12 +389,12 @@ namespace RNAssistant.Office
                 var window = _conversationStore.ReadMessageWindow(chatId, beforeIndex, ChatMessageWindowViewDto.PageSize);
                 if (window != null)
                 {
-                    var visible = ChatCloneService.CloneMessagesForBridge(window.Session, window.PageMessages, _attachmentStore);
-                    var presentation = ArtifactLibraryProjectionService.ProjectMessagePage(window.Session, visible);
+                    var visible = ChatCloneService.CloneMessagesForBridge(window.Metadata, window.Artifacts, window.PageMessages, _attachmentStore);
+                    var presentation = ArtifactLibraryProjectionService.ProjectMessagePage(window, visible);
                     return new ChatMessagePageDto
                     {
-                        ChatId = window.Session.Id,
-                        SessionRevision = window.Session.Revision,
+                        ChatId = window.Metadata.Id,
+                        SessionRevision = window.Metadata.Revision,
                         StartIndex = window.StartIndex,
                         TotalCount = window.TotalCount,
                         Messages = visible,

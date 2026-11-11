@@ -226,7 +226,7 @@ namespace RNAssistant.Core.Storage
             ValidateDescriptor(workspace);
             var window = chats.ReadMessageWindow("Workspace", workspace.WorkspaceId,
                 sessionId, beforeIndex, pageSize);
-            if (window != null && window.Session.WorkspaceId != workspace.WorkspaceId)
+            if (window != null && window.Metadata.WorkspaceId != workspace.WorkspaceId)
                 throw new InvalidDataException("The session is not associated with this workspace.");
             return window;
         }

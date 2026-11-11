@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -49,11 +50,35 @@ namespace RNAssistant.Office.Services
             return ProjectState(session, messages, false);
         }
 
+        public static Presentation ProjectMessagePage(ConversationMessageWindow window, IReadOnlyList<ChatMessageViewDto> messages)
+        {
+            var visibleIds = VisibleArtifactIds(messages);
+            var build = Build(window.Metadata, window.Artifacts, visibleIds,
+                item => item.RemovedFromDocument || !window.DetachedArtifactIds.Contains(item.Id),
+                item => window.ApplicableTombstoneIds.Contains(item.Id),
+                revisions => SelectHead(revisions, window.ActiveHtmlArtifactId,
+                    window.ActivePlanDocumentArtifactId, window.ActiveTaskListArtifactId));
+            var artifacts = ChatArtifactDto.From(window.Metadata, window.Artifacts, visibleIds);
+            AttachExactDetails(window.Metadata, build, artifacts);
+            return new Presentation
+            {
+                Library = new ArtifactLibraryProjectionDto { SessionRevision = window.Metadata.Revision,
+                    Heads = new ArtifactLibraryHeadDto[0], RemovedResourceUris = build.RemovedResourceUris },
+                Artifacts = artifacts
+            };
+        }
+
+        private static HashSet<string> VisibleArtifactIds(IReadOnlyList<ChatMessageViewDto> messages)
+        {
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var message in messages ?? new ChatMessageViewDto[0])
+                if (message != null) ids.UnionWith(message.ArtifactIds ?? new string[0]);
+            return ids;
+        }
+
         private static Presentation ProjectState(ChatSession session, IReadOnlyList<ChatMessageViewDto> visibleMessages, bool includeHeads)
         {
-            var visibleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var message in visibleMessages ?? new ChatMessageViewDto[0])
-                if (message != null) visibleIds.UnionWith(message.ArtifactIds ?? new string[0]);
+            var visibleIds = VisibleArtifactIds(visibleMessages);
             var build = Build(session, visibleIds);
             var library = includeHeads ? InitialPage(session, build) : new ArtifactLibraryProjectionDto
             {
@@ -71,7 +96,7 @@ namespace RNAssistant.Office.Services
                 }
             }
             var artifacts = ChatArtifactDto.From(session, visibleIds);
-            AttachExactDetails(session, build, artifacts);
+            AttachExactDetails(ConversationMetadata.From(session), build, artifacts);
             return new Presentation { Library = library, Artifacts = artifacts };
         }
 
@@ -85,7 +110,7 @@ namespace RNAssistant.Office.Services
             var heads = build.Heads.Skip(offset).Take(PageSize).ToArray();
             var ids = new HashSet<string>(heads.Select(item => item.ArtifactId), StringComparer.OrdinalIgnoreCase);
             var artifacts = ChatArtifactDto.From(session, ids);
-            AttachExactDetails(session, build, artifacts);
+            AttachExactDetails(ConversationMetadata.From(session), build, artifacts);
             return new ArtifactLibraryPageResponse
             {
                 ChatId = session.Id, SessionRevision = session.Revision, Heads = heads, Artifacts = artifacts,
@@ -94,7 +119,7 @@ namespace RNAssistant.Office.Services
             };
         }
 
-        private static void AttachExactDetails(ChatSession session, BuildResult build, IReadOnlyList<ChatArtifactDto> artifacts)
+        private static void AttachExactDetails(ConversationMetadata metadata, BuildResult build, IReadOnlyList<ChatArtifactDto> artifacts)
         {
             var branches = new Dictionary<string, ISet<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (var card in artifacts)
@@ -114,7 +139,7 @@ namespace RNAssistant.Office.Services
                     branch = ActiveBranch(build.ArtifactsById[head.ArtifactId], revisions, build.ArtifactsById);
                     branches[head.ArtifactId] = branch;
                 }
-                card.LibraryRevision = CreateRevision(session, exact, build.ArtifactsById[head.ArtifactId], branch, build.ArtifactsById);
+                card.LibraryRevision = CreateRevision(metadata, exact, build.ArtifactsById[head.ArtifactId], branch, build.ArtifactsById);
             }
         }
 
@@ -149,12 +174,13 @@ namespace RNAssistant.Office.Services
                 if (exact == null) throw new InvalidOperationException("Точная ревизия не принадлежит ресурсу.");
                 ordered = new List<ChatArtifact> { exact };
             }
+            var metadata = ConversationMetadata.From(session);
             return new ArtifactLibraryHistoryResponse
             {
                 ChatId = session.Id, SessionRevision = session.Revision, HeadArtifactId = head.ArtifactId,
                 TotalCount = revisions.Count,
                 Items = ordered.Skip(offset).Take(PageSize)
-                    .Select(item => CreateRevision(session, item, build.ArtifactsById[head.ArtifactId], activeBranch, build.ArtifactsById)).ToArray(),
+                    .Select(item => CreateRevision(metadata, item, build.ArtifactsById[head.ArtifactId], activeBranch, build.ArtifactsById)).ToArray(),
                 NextCursor = string.IsNullOrEmpty(request.TargetArtifactId) && offset + PageSize < ordered.Count
                     ? Cursor(session, "history", head.ArtifactId, historyStamp, offset + PageSize) : null
             };
@@ -183,6 +209,17 @@ namespace RNAssistant.Office.Services
 
         private static BuildResult Build(ChatSession session, ISet<string> visibleIds)
         {
+            return Build(ConversationMetadata.From(session), session?.Artifacts, visibleIds,
+                item => item.RemovedFromDocument || !ArtifactWorkingSet.IsDetached(session, item),
+                item => PlanDocumentService.IsApplicableTombstone(session, item),
+                revisions => SelectHead(revisions, session.ActiveHtmlArtifactId,
+                    session.ActivePlanDocumentArtifactId, session.ActiveTaskListArtifactId));
+        }
+
+        private static BuildResult Build(ConversationMetadata metadata, IEnumerable<ChatArtifact> source,
+            ISet<string> visibleIds, Func<ChatArtifact, bool> includeArtifact,
+            Func<ChatArtifact, bool> isApplicableTombstone, Func<IList<ChatArtifact>, ChatArtifact> selectHead)
+        {
             var empty = new BuildResult
             {
                 Heads = new List<ArtifactLibraryHeadDto>(),
@@ -192,14 +229,14 @@ namespace RNAssistant.Office.Services
                 ArtifactsById = new Dictionary<string, ChatArtifact>(StringComparer.OrdinalIgnoreCase),
                 HeadStamp = string.Empty
             };
-            if (session == null || string.IsNullOrWhiteSpace(session.Id)) return empty;
+            if (metadata == null || string.IsNullOrWhiteSpace(metadata.Id)) return empty;
 
-            var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+            var artifacts = (source ?? new ChatArtifact[0])
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() == 1)
                 .Select(group => group.Single())
-                .Where(item => item.RemovedFromDocument || !ArtifactWorkingSet.IsDetached(session, item))
+                .Where(includeArtifact)
                 .ToList();
             var byId = artifacts.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
             var heads = new List<ArtifactLibraryHeadDto>();
@@ -211,7 +248,7 @@ namespace RNAssistant.Office.Services
                 if (artifact.RemovedFromDocument)
                 {
                     if (visibleIds != null && visibleIds.Contains(artifact.Id))
-                        removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(session, artifact));
+                        removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, artifact));
                     continue;
                 }
                 var resourceClass = ResourceClass(artifact);
@@ -228,7 +265,7 @@ namespace RNAssistant.Office.Services
                 }
                 else
                 {
-                    var head = CreateHead(session, artifact, artifact.Id, resourceClass, 1, byId);
+                    var head = CreateHead(metadata, artifact, artifact.Id, resourceClass, 1, byId);
                     heads.Add(head);
                     empty.HeadByArtifactId[artifact.Id] = head;
                     empty.RevisionsByHeadId[artifact.Id] = new List<ChatArtifact> { artifact };
@@ -238,18 +275,18 @@ namespace RNAssistant.Office.Services
             foreach (var pair in versioned)
             {
                 var revisions = pair.Value;
-                if (revisions.Any(item => PlanDocumentService.IsApplicableTombstone(session, item)))
+                if (revisions.Any(isApplicableTombstone))
                 {
                     foreach (var revision in revisions)
                     {
                         if (visibleIds != null && visibleIds.Contains(revision.Id))
-                            removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(session, revision));
+                            removedResourceUris.Add(ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, revision));
                     }
                     continue;
                 }
-                var head = SelectHead(session, revisions);
+                var head = selectHead(revisions);
                 if (head == null) continue;
-                var projected = CreateHead(session, head, LogicalId(head, byId),
+                var projected = CreateHead(metadata, head, LogicalId(head, byId),
                     ResourceClass(head), revisions.Count, byId);
                 heads.Add(projected);
                 empty.RevisionsByHeadId[head.Id] = revisions;
@@ -271,7 +308,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static ArtifactLibraryHeadDto CreateHead(
-            ChatSession session,
+            ConversationMetadata metadata,
             ChatArtifact head,
             string logicalId,
             string resourceClass,
@@ -280,7 +317,8 @@ namespace RNAssistant.Office.Services
         {
             return new ArtifactLibraryHeadDto
             {
-                CanDetach = RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, ChatResourceUri.CreateArtifactRevision(session, head)),
+                CanDetach = DocumentArtifactStore.Owns(metadata.DocumentAuthorityId, metadata.WorkspaceId,
+                    ChatResourceUri.CreateArtifactRevision(metadata.Id, head)),
                 AvailabilityIssue = head.AvailabilityIssue,
                 ArtifactId = head.Id,
                 LogicalId = logicalId,
@@ -294,8 +332,8 @@ namespace RNAssistant.Office.Services
                 Revision = Math.Max(1, head.Revision),
                 VersionLabel = VersionLabel(resourceClass, head.Revision),
                 Status = MetadataText(head, "status"),
-                ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, head),
-                DerivedFromResourceUri = DerivedFromResourceUri(session, head, byId),
+                ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, head),
+                DerivedFromResourceUri = DerivedFromResourceUri(metadata, head, byId),
                 SourceMessageId = head.SourceMessageId,
                 RunId = head.RunId,
                 CreatedUtc = head.CreatedUtc,
@@ -330,7 +368,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static ArtifactLibraryRevisionDto CreateRevision(
-            ChatSession session,
+            ConversationMetadata metadata,
             ChatArtifact artifact,
             ChatArtifact head,
             ISet<string> activeBranch,
@@ -357,11 +395,11 @@ namespace RNAssistant.Office.Services
                 ArtifactId = artifact.Id,
                 Revision = Math.Max(1, artifact.Revision),
                 Title = artifact.Title,
-                ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact),
+                ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, artifact),
                 ParentArtifactId = artifact.ParentArtifactId,
-                ParentResourceUri = parent == null ? null : ChatResourceUri.CreateArtifactRevisionUri(session, parent),
+                ParentResourceUri = parent == null ? null : ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, parent),
                 RestoredFromArtifactId = restoredFrom,
-                RestoredFromResourceUri = restored == null ? restoredFromUri : ChatResourceUri.CreateArtifactRevisionUri(session, restored),
+                RestoredFromResourceUri = restored == null ? restoredFromUri : ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, restored),
                 SourceMessageId = artifact.SourceMessageId,
                 RunId = artifact.RunId,
                 CreatedUtc = artifact.CreatedUtc,
@@ -389,16 +427,17 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private static ChatArtifact SelectHead(ChatSession session, IList<ChatArtifact> revisions)
+        private static ChatArtifact SelectHead(IList<ChatArtifact> revisions, string activeHtmlId,
+            string activePlanId, string activeTaskListId)
         {
-            if (session == null || revisions == null || revisions.Count == 0) return null;
+            if (revisions == null || revisions.Count == 0) return null;
             var kind = NormalizeKind(revisions[0].Kind);
             var preferredId = string.Equals(kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)
-                ? session.ActiveHtmlArtifactId
+                ? activeHtmlId
                 : string.Equals(kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase)
-                    ? session.ActivePlanDocumentArtifactId
+                    ? activePlanId
                     : string.Equals(kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase)
-                        ? session.ActiveTaskListArtifactId
+                        ? activeTaskListId
                         : null;
             var preferred = revisions.FirstOrDefault(item =>
                 string.Equals(item.Id, preferredId, StringComparison.OrdinalIgnoreCase));
@@ -506,7 +545,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static string DerivedFromResourceUri(
-            ChatSession session,
+            ConversationMetadata metadata,
             ChatArtifact artifact,
             IReadOnlyDictionary<string, ChatArtifact> byId)
         {
@@ -515,7 +554,7 @@ namespace RNAssistant.Office.Services
             var id = MetadataText(artifact, "derivedFromArtifactId");
             ChatArtifact source;
             return byId.TryGetValue(id ?? string.Empty, out source)
-                ? ChatResourceUri.CreateArtifactRevisionUri(session, source)
+                ? ChatResourceUri.CreateArtifactRevisionUri(metadata.Id, source)
                 : null;
         }
 

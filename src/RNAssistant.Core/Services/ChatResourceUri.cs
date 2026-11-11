@@ -12,7 +12,12 @@ namespace RNAssistant.Core.Services
 
         public static ResourceRef CreateArtifactRevision(ChatSession session, ChatArtifact artifact)
         {
-            if (session == null || string.IsNullOrWhiteSpace(session.Id) || artifact == null ||
+            return CreateArtifactRevision(session?.Id, artifact);
+        }
+
+        public static ResourceRef CreateArtifactRevision(string chatId, ChatArtifact artifact)
+        {
+            if (string.IsNullOrWhiteSpace(chatId) || artifact == null ||
                 string.IsNullOrWhiteSpace(artifact.Id))
             {
                 throw new InvalidOperationException("A persisted chat and artifact are required to create a resource reference.");
@@ -23,7 +28,7 @@ namespace RNAssistant.Core.Services
                 throw new InvalidOperationException("Workspace artifact ownership is supported only for unambiguous Plan snapshots.");
             return new ResourceRef(
                 ResourceUri.Create(ProviderName, string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
-                    ? (string.IsNullOrWhiteSpace(artifact.WorkspaceId) ? session.Id : artifact.WorkspaceId)
+                    ? (string.IsNullOrWhiteSpace(artifact.WorkspaceId) ? chatId : artifact.WorkspaceId)
                     : artifact.DocumentAuthorityId, "artifact", artifact.Id, "revision", revision),
                 revision);
         }
@@ -45,7 +50,12 @@ namespace RNAssistant.Core.Services
 
         public static string CreateArtifactRevisionUri(ChatSession session, ChatArtifact artifact)
         {
-            return CreateArtifactRevision(session, artifact).Uri;
+            return CreateArtifactRevisionUri(session?.Id, artifact);
+        }
+
+        public static string CreateArtifactRevisionUri(string chatId, ChatArtifact artifact)
+        {
+            return CreateArtifactRevision(chatId, artifact).Uri;
         }
 
         public static ResourceRef ResolveArtifactRevision(ChatSession session, string artifactId)
@@ -123,18 +133,24 @@ namespace RNAssistant.Core.Services
 
         public static bool TryGetCurrentArtifactId(ChatSession session, ResourceRef reference, out string artifactId)
         {
+            return TryGetCurrentArtifactId(session?.Id, session?.DocumentAuthorityId, session?.Artifacts, reference, out artifactId);
+        }
+
+        private static bool TryGetCurrentArtifactId(string chatId, string documentAuthorityId,
+            IEnumerable<ChatArtifact> artifacts, ResourceRef reference, out string artifactId)
+        {
             artifactId = null;
             int revision;
             string ownerId;
-            if (session == null || !TryParseArtifactRevision(reference, out ownerId, out artifactId, out revision) ||
-                ownerId != session.Id && ownerId != session.DocumentAuthorityId)
+            if (chatId == null || !TryParseArtifactRevision(reference, out ownerId, out artifactId, out revision) ||
+                ownerId != chatId && ownerId != documentAuthorityId)
             {
                 return false;
             }
             var parsedArtifactId = artifactId;
-            var artifact = FindUniqueArtifact(session, parsedArtifactId);
+            var artifact = FindUniqueArtifact(artifacts, parsedArtifactId);
             if (artifact != null && Math.Max(1, artifact.Revision) == revision &&
-                (string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ? session.Id : artifact.DocumentAuthorityId) == ownerId) return true;
+                (string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) ? chatId : artifact.DocumentAuthorityId) == ownerId) return true;
             artifactId = null;
             return false;
         }
@@ -157,11 +173,17 @@ namespace RNAssistant.Core.Services
 
         public static List<string> CurrentArtifactIds(ChatSession session, IEnumerable<ResourceRef> references)
         {
+            return CurrentArtifactIds(session?.Id, session?.DocumentAuthorityId, session?.Artifacts, references);
+        }
+
+        public static List<string> CurrentArtifactIds(string chatId, string documentAuthorityId,
+            IEnumerable<ChatArtifact> artifacts, IEnumerable<ResourceRef> references)
+        {
             var result = new List<string>();
             foreach (var reference in references ?? new ResourceRef[0])
             {
                 string artifactId;
-                if (TryGetCurrentArtifactId(session, reference, out artifactId) &&
+                if (TryGetCurrentArtifactId(chatId, documentAuthorityId, artifacts, reference, out artifactId) &&
                     !result.Contains(artifactId, StringComparer.OrdinalIgnoreCase))
                 {
                     result.Add(artifactId);
@@ -172,8 +194,13 @@ namespace RNAssistant.Core.Services
 
         private static ChatArtifact FindUniqueArtifact(ChatSession session, string artifactId)
         {
-            if (session == null || string.IsNullOrWhiteSpace(artifactId)) return null;
-            var matches = (session.Artifacts ?? new List<ChatArtifact>())
+            return FindUniqueArtifact(session?.Artifacts, artifactId);
+        }
+
+        private static ChatArtifact FindUniqueArtifact(IEnumerable<ChatArtifact> artifacts, string artifactId)
+        {
+            if (string.IsNullOrWhiteSpace(artifactId)) return null;
+            var matches = (artifacts ?? new ChatArtifact[0])
                 .Where(item => item != null && string.Equals(
                     item.Id,
                     artifactId,
