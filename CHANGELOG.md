@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.3.0-dev
+
+- NativeHostCli gains integrated window controls, Compact/Companion modes, pin and
+  saved window placement. Closing hides the window while retaining the session;
+  opening from another Office window preserves the current chat and running work.
+  Native Windows/Office qualification and visual acceptance remain open.
+
 ### 16.2.5-dev
 
 - Saved HTML, raw HTML and the live editor use verified source capabilities.

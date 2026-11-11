@@ -29,6 +29,7 @@ namespace RNAssistant.Office
         public AssistantController Controller { get; private set; }
         public Task ShutdownCompletion { get; private set; } = Task.FromResult(true);
         public string RootPath { get; private set; }
+        public IAssistantWindowHost WindowHost { get; set; }
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
@@ -105,7 +106,7 @@ namespace RNAssistant.Office
                 return _paneControl;
             }
 
-            _paneControl = new AssistantPaneControl(Controller, ResolveWebRoot(RootPath));
+            _paneControl = new AssistantPaneControl(Controller, ResolveWebRoot(RootPath), WindowHost);
             _paneControl.MailboxNavigationRequested = MailboxNavigationRequested;
             _paneControl.OfficeHostChatRequested = OfficeHostChatRequested;
             _paneControl.OfficeChatSelectionRequested = OfficeChatSelectionRequested;

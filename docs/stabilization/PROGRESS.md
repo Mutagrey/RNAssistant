@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Native window / Compact / Companion — In Review, 2026-11-11
+
+NativeHostCli переведён на один managed window owner. Dismiss сохраняет session,
+повторный launch HWND не уничтожает run; separate Full/Compact/Companion placement,
+pin, custom web chrome с native recovery caption и typed bridge подключены к прежней
+Shell/Chat View. Три host-neutral checks и scoped browser fixture проходят; Full
+layout, composer/edit, retained iframe и native-hidden lifecycle проверены локально.
+[Scope, ревью и Windows gaps](../ui/UI_MIGRATION_PLAN.md#native-window--in-review-2026-11-11).
+Windows/Office/VSTO validation не запускалась; visual acceptance/release остаются
+открытыми. Прежние singleton/bootstrap web fixtures имеют отдельный baseline gap.
+
 ## Версии завершённых изменений — 2026-11-11
 
 Пользователь выбрал одно повышение product version на завершённый продуктовый срез:

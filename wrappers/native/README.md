@@ -39,7 +39,7 @@ Each publish replaces current product files and removes stale files recorded in
 including user-created add-ins and `logs`. On the first migration from the old
 flat layout, named product DLLs and worker files are removed from the root after
 their new copies reach `lib`; unrelated root files remain. The existing
-`panel-owner-mode.txt` setting is preserved. Close Office before rebuilding
+obsolete `panel-owner-mode.txt` is left untouched but is no longer read. Close Office before rebuilding
 because loaded DLLs cannot be replaced.
 
 Expected layout:
@@ -51,7 +51,6 @@ artifacts\portable\Release\x64\
   RNAssistantExcel.xlam      # if a compiled add-in was supplied
   RNAssistantWord.dotm       # if supplied
   RNAssistantPowerPoint.ppam # if supplied
-  panel-owner-mode.txt
   lib\
     RNAssistant.NativeHostCli.dll
     RNAssistant.Core.dll
@@ -74,9 +73,17 @@ artifacts\portable\Release\x64\
   logs\
 ```
 
-`panel-owner-mode.txt` accepts `OwnerWindow` (default), `None`, or
-`TopMostDebug`. Environment variable `RNASSISTANT_PANEL_OWNER_MODE` overrides the
-file.
+The managed `InProcessWindowHost` owns the window and retained session. The main
+window is unowned, uses ordinary z-order and appears in the taskbar. Pin prevents
+automatic collapse; it does not mean TopMost. The former owner-mode file and
+environment override are no longer used.
+
+Closing the window (× / Alt+F4) dismisses its UI and leaves runs alive. Launching
+again resumes the same session, including when the invocation comes from another
+workbook HWND; it does not silently rebind the run. `Host_ClosePanel` remains an
+explicit session shutdown. Compact and the native companion share the retained
+pane; only one WebView is created. Windows/Office visual qualification remains open;
+see [window review](../../docs/ui/UI_MIGRATION_PLAN.md#native-window--in-review-2026-11-11).
 
 ## Native API
 

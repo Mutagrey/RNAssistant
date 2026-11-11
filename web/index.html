@@ -76,6 +76,13 @@
           <button type="button" class="workspace-menu-button" id="workspacePanels" aria-label="Панели" title="Панели" aria-haspopup="menu"><svg data-rna-icon="layers" aria-hidden="true"></svg><span>Панели</span></button>
           <button type="button" class="workspace-menu-button" id="workspaceLayout" aria-label="Компоновка" title="Компоновка" aria-haspopup="menu"><svg data-rna-icon="panel" aria-hidden="true"></svg><span>Компоновка</span></button>
         </div>
+        <div class="host-window-controls" id="hostWindowControls" hidden role="group" aria-label="Управление окном">
+          <button type="button" class="icon-btn" id="hostWindowMenu" aria-label="Действия с окном" title="Действия с окном" aria-haspopup="menu"></button>
+          <button type="button" class="icon-btn" id="hostWindowPin" aria-label="Не сворачивать автоматически" aria-pressed="false"></button>
+          <button type="button" class="icon-btn" id="hostWindowPresentation" aria-label="Компактная панель"></button>
+          <button type="button" class="icon-btn" id="hostWindowMaximize" aria-label="Развернуть окно"></button>
+          <button type="button" class="icon-btn" id="hostWindowDismiss" aria-label="Закрыть окно — работа продолжится"></button>
+        </div>
       </div>
     </header>
     <nav class="section-rail" aria-label="Разделы ассистента">
@@ -1098,6 +1105,7 @@
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
   <script src="js/app-layout.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
+  <script src="js/app-window.js?v=20261111"></script>
   <script src="js/app-chat-inspector.js?v=chat-views-20261103"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>

@@ -1,0 +1,11 @@
+{
+  "viewport": "1280x900 / 100%",
+  "reference": {
+    "header": 40,
+    "control": 28
+  },
+  "measured": {
+    "header": 40,
+    "control": 28
+  }
+}

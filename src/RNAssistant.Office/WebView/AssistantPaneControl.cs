@@ -59,11 +59,15 @@ namespace RNAssistant.Office.WebView
             set { _bridge.OfficeChatSelectionRequested = value; }
         }
 
-        public AssistantPaneControl(AssistantController controller, string webRoot)
+        public HostWindowActivity WindowActivity { get { return _bridge.WindowActivity; } }
+        public bool CanShutdownWindow { get { return _bridge.CanShutdownWindow; } }
+
+        public AssistantPaneControl(AssistantController controller, string webRoot, IAssistantWindowHost windowHost = null)
         {
             _controller = controller;
             _webRoot = webRoot;
             _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
+            _bridge.WindowHost = windowHost;
             _plugins = new RNAssistant.Application.PluginApplicationService(controller.StoragePaths, webRoot,
                 officeCapabilities: new WorkspaceOfficeCapabilities(() => _controller));
             _bridge.Plugins = _plugins;
@@ -215,6 +219,20 @@ namespace RNAssistant.Office.WebView
                 : string.Empty;
 
             var core = _webView.CoreWebView2;
+            if (_bridge.WindowHost != null)
+            {
+                try
+                {
+                    core.Settings.IsNonClientRegionSupportEnabled = true;
+                    _bridge.WindowHost.ConfigureChrome(core.Settings.IsNonClientRegionSupportEnabled);
+                }
+                catch (Exception error)
+                {
+                    RuntimeLog.Error("Integrated window chrome unavailable; retaining native caption.", error);
+                    _bridge.WindowHost.ConfigureChrome(false);
+                }
+                core.ProcessFailed += OnRootProcessFailed;
+            }
             if (TabularExecutor != null) TabularExecutor.Dispose();
             TabularExecutor = new TabularWebViewExecutor(core.Environment, Handle);
             try { _pluginHost = new PluginWebViewHost(_plugins, core, Handle, _webRoot); _plugins.EnsureDataTemplates(); }
@@ -250,6 +268,11 @@ namespace RNAssistant.Office.WebView
             RuntimeLog.Info("WebView navigating to " + indexPath);
             _initialNavigationTimer = Stopwatch.StartNew();
             _webView.Source = new Uri(indexPath);
+        }
+
+        private void OnRootProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs e)
+        {
+            _bridge.WindowHost?.InvalidateChrome();
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -353,6 +376,7 @@ namespace RNAssistant.Office.WebView
 
         private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
+            if (WebViewSecurityPolicy.CanNavigateTopLevel(e.Uri, _trustedDocumentUri)) _bridge.WindowHost?.InvalidateChrome();
             if (WebViewSecurityPolicy.CanNavigateTopLevel(e.Uri, _trustedDocumentUri))
             {
                 return;
@@ -529,6 +553,7 @@ namespace RNAssistant.Office.WebView
 
                 var responseJson = await _bridge.HandleMessageAsync(request).ConfigureAwait(true);
                 PostBridgeMessage(responseJson);
+                _bridge.WindowHost?.ResponsePosted(request.Id);
             }
             catch (Exception ex)
             {
@@ -666,12 +691,14 @@ namespace RNAssistant.Office.WebView
 
         private void DetachInitializedWebView()
         {
+            _bridge.WindowHost?.InvalidateChrome();
             try
             {
                 var core = _webView == null || _webView.IsDisposed ? null : _webView.CoreWebView2;
                 if (core != null)
                 {
                     core.WebMessageReceived -= OnWebMessageReceived;
+                    core.ProcessFailed -= OnRootProcessFailed;
                     core.NavigationStarting -= OnNavigationStarting;
                     core.NavigationCompleted -= OnNavigationCompleted;
                     core.FrameNavigationStarting -= OnFrameNavigationStarting;

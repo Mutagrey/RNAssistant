@@ -1,5 +1,41 @@
 # Карта экранов, навигации и состояний
 
+## Native window — In Review, 2026-11-11
+
+Первый native pilot — launcher Excel → NativeHostCli. Верхний header содержит
+меню окна, pin, уменьшение представления, native maximize/restore и закрытие.
+Существующий «Развернуть группу» остаётся командой Dockview. На узкой ширине и в
+Compact navigation/Inspector/Панели/Компоновка доступны через меню окна.
+
+| Действие | Результат |
+|---|---|
+| Full → «Компактная панель» | Тот же выбранный Chat View; прежние draft/edit/scroll/composer, скрытые views сохраняются |
+| Compact → уменьшение | Companion; основная форма убрана с рабочего стола, WebView/runtime и taskbar entry для возврата сохраняются |
+| Меню → «Полное окно» | FullNormal с прежними bounds и Full placement |
+| Native maximize/restore | FullMaximized в work area; Restore возвращает FullNormal либо Compact до максимизации |
+| Открыть Companion | Последнее интерактивное представление, включая FullMaximized; точка Restore не теряется |
+| Pin | Запрет auto-collapse; обычный z-order, без TopMost и Excel Win32 owner |
+| Уход фокуса без pin | После debounce Companion; капсула видна только у связанного активного Office HWND |
+| × / Alt+F4 / системный Close | Dismiss обеих форм; работа и черновик сохраняются, возврат Excel сам UI не показывает |
+| Системное Minimize | Настоящая минимизация; Companion не появляется; Restore возвращает прежнее представление |
+| «Завершить сеанс…» | Общий dialog + guards редакторов/edit; подтверждённое сохранение drafts; active requests/операции требуют сначала остановки/завершения |
+| Повторный launcher из другой книги | Восстановление существующей сессии и видимого прежнего target; нет Dispose/rebind по новому HWND |
+| «Вернуть окно на экран» | Сброс только native placement; чаты/Dock layout/models не меняются |
+
+Companion: click открывает, native drag перемещает без click-open и сохраняет точку;
+основная форма при парковке минимизирована без изменения policy на SystemMinimized.
+Это сохраняет стандартный taskbar/Alt+Tab возврат; explicit SystemMinimize запрещает
+капсулу. Dismiss скрывает также основную форму/taskbar entry.
+контекстное меню даёт Full/Compact/Dismiss/Shutdown/reset. Статус — краткая сводка
+существующих live run snapshots; завершение не открывает окно. При исчезновении
+anchor капсула скрывается; target выполняющегося run не меняется. Новый профиль или
+host kind получает явный отказ без уничтожения прежнего сеанса. `Host_ClosePanel`
+сохраняет прежний смысл настоящего shutdown, включая штатную отмену/cleanup.
+
+Без selected Chat View Compact показывает переход в Full, не создаёт чат.
+Полезная native диагностика видна в меню/tooltip: presentation, visibility, pin,
+готовность chrome, anchor и ошибка persistence. Windows evidence открыто.
+
 ## Очередь выполнения — In Review, 2026-11-05
 
 Настройки → Агент: «Одновременно выполняемых шагов (0 — без ограничения)», default 4,

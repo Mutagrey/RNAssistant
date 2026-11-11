@@ -1,5 +1,34 @@
 # Архитектура UI RNAssistant
 
+## Native window — In Review, 2026-11-11
+
+NativeHostCli теперь только экспортный ABI/reflection loader. Один
+`OfficeHosts.Windows.InProcessWindowHost` владеет формами, HWND, геометрией, STA и
+retained `InProcessPanelSession`. `AssistantHostForm` обрабатывает frame/system
+commands/DPI; `CompanionForm` не содержит WebView. `Office.Services.AssistantWindowPolicy`
+владеет host-neutral переходами; typed `IAssistantWindowHost` не содержит HWND/COM.
+Office → OfficeHosts обратной зависимости нет. Desktop/VSTO этот owner не используют.
+
+`GetHostWindowState` / `HostWindowCommand` входят в существующий catalog/envelope v2;
+optional `hostWindow` bootstrap сообщает capabilities. Это additive capability,
+не второй протокол. Token проверяется до domain switch gate; presentation обходится
+без document maintenance и не входит в счётчик exclusive rebind. Root source check
+сохранён; plugin/preview не получает native authority. Shutdown/Dismiss из Web
+исполняются после публикации ACK; Shutdown закрывает admission до cleanup.
+
+`app-window` отображает revisioned native snapshot, а Shell/DockWorkspace владеют
+presentation. Compact временно максимизирует группу выбранного exact Chat View;
+возврат восстанавливает Full placement штатным `fromJSON` с retained view instances,
+актуальными metadata и исключением удалённых identities. Это не layout из одного чата.
+Сохранённая Full-раскладка остаётся единственной durable раскладкой. Начальный выбор
+чата заканчивается до применения сохранённого Compact; complex views сначала
+возвращают Full. Native visibility участвует в existing activate/deactivate; run не
+отменяется и WebView не suspend/reload. Геометрия/pin хранятся отдельно от SaveSettings
+в `AppDataPaths.NativeWindowStateFile`: schema 1, DIP относительно monitor work area,
+atomic read-merge-write по host profile под коротким межпроцессным lock вне STA.
+
+Ограничения: [проверка и ревью](UI_MIGRATION_PLAN.md#native-window--in-review-2026-11-11).
+
 ## Очередь активных шагов — In Review, 2026-11-05
 
 Core settings/typed SettingsControlsDto передают `MaxConcurrentAgentSteps` в прежнюю

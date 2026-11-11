@@ -1287,6 +1287,9 @@ namespace RNAssistant.Harness
                 Test("chart: requested type truncates", ChartArtifactHonorsRequestedTypeAndTruncates),
 
                 Test("bridge: init returns token", BridgeInitReturnsToken),
+                Test("host window: return points and focus policy", HostWindowTransitions),
+                Test("host window: preference profile isolation", HostWindowPreferenceIsolation),
+                Test("host window: typed bridge trust and exclusive switch", HostWindowBridgeTrustAndSwitch),
                 Test("bridge: Office chat creation accepts only supported hosts", BridgeOfficeChatUsesTypedHost),
                 Test("bridge: typed transport failure preserves correlation", BridgeTransportFailureIsTypedAndCorrelated),
                 Test("bridge: chat list is catalog-only", BridgeListChatsIsCatalogOnly),

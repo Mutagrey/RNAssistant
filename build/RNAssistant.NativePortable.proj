@@ -103,7 +103,6 @@
     <Copy SourceFiles="@(AddInBinary)" DestinationFolder="$(PublishRoot)" Condition="'@(AddInBinary)' != ''" />
     <Delete Files="@(StaleOwnedFile->'$(PublishRoot)%(Identity)')" Condition="'@(StaleOwnedFile)' != ''" />
     <Delete Files="@(LegacyRootLibrary)" Condition="'@(LegacyRootLibrary)' != ''" />
-    <WriteLinesToFile File="$(PublishRoot)panel-owner-mode.txt" Lines="OwnerWindow" Encoding="ASCII" Overwrite="true" Condition="!Exists('$(PublishRoot)panel-owner-mode.txt')" />
     <WriteLinesToFile File="$(OwnedFileManifest)" Lines="@(CurrentOwnedFile)" Encoding="UTF-8" Overwrite="true" />
     <WriteLinesToFile File="$(DestinationMarker)" Lines="RNAssistant.NativePortable.v2" Encoding="ASCII" Overwrite="true" />
 

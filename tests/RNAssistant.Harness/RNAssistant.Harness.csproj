@@ -149,4 +149,7 @@
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Targets\OfficeTargetDescriptor.cs" Link="OfficeHosts\Targets\OfficeTargetDescriptor.cs" />
   </ItemGroup>
   <Import Project="..\..\src\RNAssistant.Application\RNAssistant.Application.projitems" />
+  <ItemGroup>
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Window.cs" Link="Office\WebView\AssistantWebBridge.Window.cs" />
+  </ItemGroup>
 </Project>

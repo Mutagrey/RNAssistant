@@ -178,15 +178,20 @@ namespace RNAssistant.Office.WebView
                         "The UI and host must use the same bridge contract.", "bridge_contract_mismatch", false);
                 var operation = BridgeOperationCatalog.Resolve(request.Type);
                 var type = operation.Id;
+                if (type != BridgeOperationId.Init && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Invalid WebView bridge token.");
                 lock (_hostSwitchSync)
                 {
                     if (_disposed) throw new OperationCanceledException("Bridge is closing.");
-                    var telemetry = type == BridgeOperationId.ReportClientTiming;
+                    if (WindowHost?.Snapshot.State.Visibility == HostWindowVisibility.ShuttingDown && type != BridgeOperationId.GetHostWindowState)
+                        throw new OperationCanceledException("Window session is closing.");
+                    var independentOfBinding = type == BridgeOperationId.ReportClientTiming ||
+                        type == BridgeOperationId.GetHostWindowState || type == BridgeOperationId.HostWindowCommand;
                     var needsExclusiveBinding = type == BridgeOperationId.CreateOfficeHostChat ||
                         type == BridgeOperationId.ClearRuntimeData;
-                    if (!telemetry && (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0)))
+                    if (!independentOfBinding && (_hostSwitchPending || (needsExclusiveBinding && _requestsInFlight != 0)))
                         throw new BridgeSwitchBusyException();
-                    if (!telemetry)
+                    if (!independentOfBinding)
                     {
                         _requestsInFlight++;
                         registered = true;
@@ -198,10 +203,6 @@ namespace RNAssistant.Office.WebView
                 Action<string, long> reportStage = (name, elapsedMs) =>
                     stageTimings.Add(new BridgeStageTimingDto { Name = name, ElapsedMs = elapsedMs });
                 var payload = request.Payload ?? JValue.CreateNull();
-                if (type != BridgeOperationId.Init && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException("Invalid WebView bridge token.");
-                }
                 object responsePayload;
                 if (type == BridgeOperationId.CancelRequest)
                 {
@@ -227,6 +228,14 @@ namespace RNAssistant.Office.WebView
 
                 switch (type)
                 {
+                    case BridgeOperationId.GetHostWindowState:
+                        if (WindowHost == null) throw new InvalidOperationException("This host does not support window commands.");
+                        responsePayload = WindowHost.Snapshot;
+                        break;
+                    case BridgeOperationId.HostWindowCommand:
+                        if (WindowHost == null) throw new InvalidOperationException("This host does not support window commands.");
+                        responsePayload = await WindowHost.ExecuteAsync(Payload<HostWindowCommandPayload>(payload), id).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetPlugins: case BridgeOperationId.GetPluginIcons: case BridgeOperationId.SavePluginIcon:
                     case BridgeOperationId.DeletePluginIcon: case BridgeOperationId.DrawPluginIcon: case BridgeOperationId.UpdatePluginAppearance:
                     case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
@@ -1078,11 +1087,12 @@ namespace RNAssistant.Office.WebView
         {
             if (response == null) throw new InvalidOperationException("Application initialization returned no state.");
             response.OfficeHostChatAvailable = OfficeHostChatRequested != null;
-            return new BridgeBootstrapResponse { BridgeToken = _bridgeToken, Init = response };
+            return new BridgeBootstrapResponse { BridgeToken = _bridgeToken, Init = response, HostWindow = WindowHost?.Snapshot };
         }
 
         public void Dispose()
         {
+            WindowHost = null;
             _agentCommunication.Clear();
             lock (_hostSwitchSync)
             {

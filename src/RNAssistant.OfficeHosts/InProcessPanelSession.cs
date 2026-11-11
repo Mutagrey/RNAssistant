@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using RNAssistant.Core.Models;
 using RNAssistant.Office;
 using RNAssistant.Office.Diagnostics;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.OfficeHosts
 {
@@ -67,7 +68,7 @@ namespace RNAssistant.OfficeHosts
         public event Action<bool> ScreenCaptureProtectionChanged;
         public event Action<int> PanelWindowWidthChanged;
 
-        public static InProcessPanelSession Create(int hostKind, long officeHwnd, string rootPath)
+        public static InProcessPanelSession Create(int hostKind, long officeHwnd, string rootPath, IAssistantWindowHost windowHost = null)
         {
             var kind = (OfficeHostKind)hostKind;
             var host = HostName(kind);
@@ -107,6 +108,7 @@ namespace RNAssistant.OfficeHosts
                 innerAdapter = new OfficeComAdapterProvider().Create(host, target, officeDispatcher);
                 var adapter = new UiThreadOfficeApplicationAdapter(innerAdapter, officeDispatcher);
                 runtime = new AssistantRuntime(adapter, rootPath);
+                runtime.WindowHost = windowHost;
                 runtime.OfficeHostChatRequested = requestedHost => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, requestedHost);
                 runtime.OfficeChatSelectionRequested = chatId => OfficeHostChatCoordinator.SelectFromPanelAsync(runtime, chatId);
                 var control = runtime.CreatePaneControl();

@@ -4,6 +4,7 @@
   var api, host, parking, roots = {}, owner = "office", section = "chat";
   var saveTimer, restoring = false;
   var compact = false, wideLayout = null, settingsVisible = false;
+  var nativeVisible = true, hostCompact = false, compactChat = null, fullPresentation = null, compactEmpty;
   var tabFrame;
   var objectViews = Object.create(null);
   var inspectorWidth;
@@ -28,6 +29,7 @@
     views[id] = descriptor;
   }
   function openTarget(target, options) {
+    if (target && target.view !== "conversation" && window.RNAssistantWindow && RNAssistantWindow.inFull(function () { openTarget(target, options); })) return true;
     var descriptor = target && views[target.view];
     if (!descriptor || !descriptor.accepts || !descriptor.accepts(target)) return false;
     target = Object.freeze(Object.assign({}, target));
@@ -37,6 +39,7 @@
     var id = descriptor.key(target), item = panel(id);
     var reference = options && panel(options.referencePanel);
     var direction = options && options.beside ? (compact || host.clientWidth < 560 ? "within" : "right") : options && options.direction || "within";
+    if (hostCompact) direction = "within";
     if (item && options && options.group && item.group !== options.group) item.api.moveTo({ group: options.group, position: "center" });
     if (item && reference && options.beside && direction === "right" && item.group === reference.group)
       item.api.moveTo({ group: reference.group, position: "right" });
@@ -52,16 +55,35 @@
     var record = objectViews[id]; if (record && record.view.focus) record.view.focus();
     if (target.view === "conversation" && target.sessionId && panel("conversation")) panel("conversation").api.close();
     if (chooser && panel(chooser.id)) chooser.api.close();
+    if (hostCompact && target.view === "conversation") {
+      compactChat = item.id; compactEmpty.hidden = !!target.sessionId; host.classList.toggle("host-compact-no-chat", !target.sessionId);
+      // Preserve synchronous selected-chat delivery, including a newly loaded exact chat.
+      // Only extend the existing Full placement; do not create another layout store.
+      if (fullPresentation && !fullPresentation.layout.panels[item.id]) {
+        var saved = fullPresentation.layout, leaf = null;
+        function findGroup(node) {
+          if (node.type === "branch") node.data.forEach(findGroup);
+          else if (node.data.id === item.group.id) leaf = node;
+        }
+        findGroup(saved.grid.root);
+        if (!leaf) { leaf = { type: "leaf", data: { id: item.group.id, views: [], activeView: item.id }, size: saved.grid.width }; saved.grid.root.data.push(leaf); }
+        saved.panels[item.id] = api.toJSON().panels[item.id]; leaf.data.views.push(item.id);
+        if (!panel(leaf.data.activeView)) leaf.data.activeView = item.id;
+        if (!panel(fullPresentation.active)) fullPresentation.active = item.id;
+      }
+      item.api.maximize(); sync();
+    }
     return true;
   }
   function sectionView(name) {
     return Object.keys(views).find(function (id) { return views[id].section === name; }) || null;
   }
-  function workspaceActive() { return section === "chat" || !!sectionView(section); }
+  function workspaceActive() { return hostCompact || section === "chat" || !!sectionView(section); }
   function placeHost() {
     if (!host) return;
     var source = views[sectionView(section)], target = source && source.layout && source.layout();
     target = target || document.getElementById(owner === "office" ? "chatLayout" : "projectChatLayout");
+    if (hostCompact) target = document.querySelector(".shell > .content");
     if (host.parentElement !== target) target.appendChild(host);
   }
   function syncObjectViews() {
@@ -114,6 +136,8 @@
   }
   function panel(id) { return api && api.getPanel(id); }
   function visible(id) {
+    if (!nativeVisible || hostCompact && id !== compactChat && id !== "conversation") return false;
+    if (hostCompact && !compactChat) return false;
     if (!workspaceActive()) return false;
     var item = panel(id);
     if (id === "conversation" && !item) return Object.keys(objectViews).some(function (key) {
@@ -170,6 +194,7 @@
     });
   }
   function persist() {
+    if (hostCompact) return; // transient group maximize never replaces the durable Full layout
     try { localStorage.setItem(storageKey, JSON.stringify({ version: 1, layout: compact && wideLayout || api.toJSON() })); }
     catch (error) { notice("Компоновка не сохранена: хранилище недоступно"); }
   }
@@ -208,6 +233,7 @@
       renderer: views[id].renderer || "always", minimumWidth: 150, minimumHeight: 120, position: position });
   }
   function show(id, group, direction) {
+    if (id !== "conversation" && window.RNAssistantWindow && RNAssistantWindow.inFull(function () { show(id, group, direction); })) return;
     if (!api || !views[id] || views[id].targetRoute) return;
     if (id === "conversation" && views[id].perObject) {
       var selected = RNAssistantConversationPanel.selected();
@@ -241,6 +267,7 @@
     return groups.some(function (group) { return group.api.isVisible; }) ? "Свернуть инструменты" : "Развернуть инструменты";
   }
   function toggleTools() {
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(toggleTools)) return;
     if (!api) return;
     var groups = toolGroups();
     if (compact || !groups.length) { show("inspector"); return; }
@@ -264,7 +291,10 @@
     var item = panel(id); if (!item) return;
     if (!canClose([item])) return;
     wideLayout = null;
-    api.exitMaximizedGroup(); item.api.close(); changed();
+    if (!hostCompact) api.exitMaximizedGroup();
+    item.api.close();
+    if (hostCompact && compactChat === id) { compactChat = null; compactEmpty.hidden = false; host.classList.add("host-compact-no-chat"); }
+    changed();
   }
   function createTab(options) {
     // Keep the pinned vendor tab renderer; route its close action through view guards.
@@ -309,6 +339,7 @@
     return { element: root, init: function () {}, focus: function () { input.focus({ preventScroll: true }); } };
   }
   function openChooser(group, direction) {
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { openChooser(group, direction); })) return;
     RNAssistantActionMenu.closeAll(); wideLayout = null; api.exitMaximizedGroup();
     while (panel("choose-" + nextChooser)) ++nextChooser;
     var item = api.addPanel({ id: "choose-" + nextChooser++, component: "chooser", title: "Выберите экран",
@@ -332,6 +363,7 @@
     });
     var names = { settings: "Настройки", diagnostics: "Диагностика", artifacts: "Материалы", instructions: "Библиотека", vba: "VBA", plugins: "Плагины" };
     var context = names[section];
+    if (hostCompact) context = compactChat && panel(compactChat) ? panel(compactChat).title : "Чат не выбран";
     var activeOfficeChat = owner === "office" ? activeChatSummary() : null;
     var officeHost = activeOfficeChat && chatHost(activeOfficeChat) || state.host || "";
     if (!context) context = owner === "office" ? (activeOfficeChat ? chatDocumentTitle(activeOfficeChat) : "") : "Проект";
@@ -376,6 +408,7 @@
     });
   }
   function reset() {
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(reset)) return;
     if (!canClose(api.panels)) return;
     restoring = true; wideLayout = null; api.clear();
     var chat = api.addPanel({ id: "conversation", component: "conversation", title: "Чат", renderer: views.conversation.renderer,
@@ -384,6 +417,7 @@
     chat.api.setActive(); restoring = false; changed();
   }
   function join() {
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(join)) return;
     wideLayout = null; api.exitMaximizedGroup();
     var group = api.activeGroup || api.groups[0], active = api.activePanel;
     api.panels.slice().forEach(function (item) { if (item.group !== group) item.api.moveTo({ group: group, position: "center" }); });
@@ -406,6 +440,7 @@
     sync();
   }
   function resize(width) {
+    if (hostCompact) return; // host presentation is independent of responsive wide/compact
     if (!width) return;
     var next = RNAssistantShellLayout.mode() === "single" || width < 560;
     if (next === compact) return;
@@ -450,6 +485,10 @@
     host.setAttribute("aria-description", "Размер группы: Alt+Shift+стрелки при фокусе во вкладке.");
     document.getElementById("chatLayout").appendChild(host);
     var dock = element("div", "chat-dock"); host.appendChild(dock);
+    compactEmpty = element("div", "host-compact-empty"); compactEmpty.hidden = true;
+    compactEmpty.appendChild(element("p", "", "Выберите чат в полном окне"));
+    var returnFull = button("Полное окно", "fit", function () { RNAssistantWindow.command("ShowFull").catch(notice); });
+    returnFull.appendChild(element("span", "", "Полное окно")); compactEmpty.appendChild(returnFull); host.appendChild(compactEmpty);
     api = window["dockview-core"].createDockview(dock, {
       theme: { name: "rnassistant", className: "rna-product-dock", gap: Number.parseFloat(tokens.getPropertyValue("--shell-dock-gap")), dndOverlayMounting: "absolute", dndPanelOverlay: "content" },
       disableFloatingGroups: true, disableAutoResizing: true, dndStrategy: "pointer",
@@ -513,7 +552,7 @@
           event.preventDefault(); changed(); return;
         }
       }
-      if (event.key === "Escape" && api.hasMaximizedGroup()) { api.exitMaximizedGroup(); event.preventDefault(); }
+      if (!hostCompact && event.key === "Escape" && api.hasMaximizedGroup()) { api.exitMaximizedGroup(); event.preventDefault(); }
     });
     // Dockview's default bounding rect uses scaled pixels under CSS zoom. Layout accepts CSS pixels.
     var observer = new ResizeObserver(function (entries) {
@@ -523,7 +562,66 @@
     window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { dragListeners.abort(); endDrag(); observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
     sync();
   }
+  function setHostWindow(presentation, shown) {
+    nativeVisible = shown;
+    // Companion retains the previous interactive placement while the whole native window is hidden.
+    var nextCompact = presentation === "Compact" || presentation === "Companion" && hostCompact;
+    if (!api) return;
+    if (nextCompact !== hostCompact) {
+      RNAssistantActionMenu.closeAll();
+      if (nextCompact) {
+        clearTimeout(saveTimer); persist();
+        var selected = RNAssistantConversationPanel.selected(), active = api.activePanel;
+        var selectedPanel = selected && panel(views.conversation.key(selected.route));
+        var chat = active && active.params && active.params.target && active.params.target.view === "conversation" ? active : selectedPanel;
+        if (chat && !(chat.params && chat.params.target && chat.params.target.sessionId)) chat = null;
+        fullPresentation = { active: active && active.id, layout: compact && wideLayout || api.toJSON() };
+        hostCompact = true; compactChat = chat && chat.id;
+        api.updateOptions({ disableDnd: true });
+        if (chat) { api.exitMaximizedGroup(); chat.api.setActive(); chat.api.maximize(); }
+        compactEmpty.hidden = !!chat; host.classList.toggle("host-compact-no-chat", !chat);
+      } else {
+        hostCompact = false; compactChat = null; compactEmpty.hidden = true; host.classList.remove("host-compact-no-chat");
+        restoring = true; api.exitMaximizedGroup();
+        var previous = fullPresentation; fullPresentation = null;
+        if (previous) {
+          // Restore only live identities. A domain deletion during Compact must not resurrect a view.
+          var live = new Set(api.panels.map(function (item) { return item.id; })), specs = api.toJSON().panels, groupIds = [];
+          var saved = JSON.parse(JSON.stringify(previous.layout));
+          Object.keys(saved.panels).forEach(function (id) { if (!live.has(id)) delete saved.panels[id]; else saved.panels[id] = specs[id]; });
+          function prune(node) {
+            if (node.type === "branch") { node.data = node.data.filter(prune); return node.data.length > 0; }
+            node.data.views = node.data.views.filter(function (id) { return live.has(id); });
+            if (!node.data.views.includes(node.data.activeView)) node.data.activeView = node.data.views[0];
+            if (node.data.views.length) groupIds.push(node.data.id);
+            return node.data.views.length > 0;
+          }
+          prune(saved.grid.root);
+          if (!groupIds.includes(saved.activeGroup)) saved.activeGroup = groupIds[0];
+        }
+      }
+      placeHost();
+      if (!hostCompact) {
+        // If native bounds arrive after this state push, responsive owns the interim narrow layout
+        // and keeps the exact Full snapshot for its next wide restore.
+        var width = host.clientWidth;
+        var narrow = RNAssistantShellLayout.mode() === "single" || width < 560;
+        if (previous && Object.keys(saved.panels).length) {
+          api.layout(width, host.clientHeight); restoreLayout(saved);
+          if (panel(previous.active)) panel(previous.active).api.setActive();
+        }
+        restoring = false;
+        if (narrow && previous) {
+          compact = false; resize(width); wideLayout = saved;
+        } else { compact = false; wideLayout = null; }
+        api.updateOptions({ disableDnd: compact });
+      }
+    }
+    sync();
+  }
   window.RNAssistantDockWorkspace = {
+    setHostWindow: setHostWindow,
+    canCloseAll: function () { return !api || canClose(api.panels); },
     registerConversation: function (descriptor) { views.conversation = descriptor; },
     getView: function (id) { return objectViews[id] && objectViews[id].view || null; },
     activeTarget: function () { return workspaceActive() && api && api.activePanel && api.activePanel.params && api.activePanel.params.target || null; },

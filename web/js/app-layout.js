@@ -72,6 +72,7 @@
   }
 
   function navigationIsOpen() {
+    if (window.RNAssistantWindow && RNAssistantWindow.isCompact()) return false;
     return productLayoutMode === "wide" ? productNavigationPreference : compactNavigationOpen;
   }
 

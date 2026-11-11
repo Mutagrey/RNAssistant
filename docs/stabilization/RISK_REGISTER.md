@@ -1,5 +1,22 @@
 # Stabilization risk register
 
+## Native window qualification — 2026-11-11
+
+Window slice In Review. Host-neutral policy/bridge и synthetic browser проверены;
+C++/CLI/WinForms/WebView2 child HWND delivery на Windows не запускались. До заявления
+о qualification нужны реальные drag/resize/system commands, DPI/monitor restore,
+unowned taskbar/z-order, busy STA, собственные modal/DevTools, non-activating capsule
+и capture protection. Без hooks anchor проверяется конкретным HWND/thread/PID;
+после обнаруженного уничтожения он больше не привязывается. Уничтожение и мгновенное
+повторное использование того же HWND между ticks остаётся отдельным native gap;
+провайдер exact document target от UI anchor не зависит.
+
+Owner: OfficeHosts Windows / Web Shell. Проверка и rollback —
+[Migration Plan](../ui/UI_MIGRATION_PLAN.md#native-window--in-review-2026-11-11).
+Старые fixtures `dock-workspace.test.js` (`#chatInput`) и `bridge-bootstrap.test.js`
+(`RNAssistantChatGroups` отсутствует в VM) требуют отдельного обновления. Второй сбой
+воспроизведён на f918a56f. Новая проверка окна использует текущие scoped Chat Views.
+
 ## Storage optimization qualification — 2026-11-10
 
 Owner: Core persistence/context. Isolated append/query/repair, single-resource

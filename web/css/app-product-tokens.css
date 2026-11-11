@@ -40,6 +40,7 @@
   --focus: var(--accent);
 }
 :root {
+  --shell-window-drag-width: 40px;
   --focus-ring-tight: var(--focus);
   --actionbar-bg: var(--surface);
   --scrollbar-thumb: color-mix(in srgb, var(--ink-muted) 42%, transparent);

@@ -12,6 +12,19 @@ rg -n 'Test\(".*resource' tests/RNAssistant.Harness/Program.cs
 rg -l -F 'TargetMethodOrBehavior' tests/RNAssistant.Harness -g 'Program*.cs'
 ```
 
+## Native window presentation — 2026-11-11
+
+`host window:` runs three focused host-neutral checks: return points, minimize,
+focus generations/pin/shutdown, preference merge/schema, and typed bridge trust
+while an exclusive target switch is pending. No native HWND/Office build is used.
+`tests/web/host-window.test.js` (Playwright, optional `BROWSER_EXECUTABLE`) checks
+production Shell/Dockview with synthetic native snapshots: retained chat/edit/iframe,
+Full placement across Compact and both state/resize orders, native visibility,
+deleted identities, initial bootstrap, dirty/failed-draft shutdown guards,
+keyboard/narrow/zoom and Demo geometry.
+`RNA_WINDOW_REVIEW=/tmp/window` optionally writes two screenshots and measurements.
+Native frame/DPI/focus/capture and Windows compilation remain separate evidence.
+
 ## Run a focused slice
 
 The trailing argument is a case-insensitive substring matched against category or test name:

@@ -1,5 +1,29 @@
 # Desktop runtime
 
+## NativeHostCli: retained window session — In Review, 2026-11-11
+
+In-process launcher использует `OfficeHosts.Windows.InProcessWindowHost`, а C++/CLI
+сохраняет exports/loading/error boundary. Повторное открытие не позиционирует окно
+заново и не заменяет session из-за другого launch HWND. Основная форма — unowned,
+ShowInTaskbar, без TopMost; pin означает только запрет auto-collapse. ×/Alt+F4
+скрывает UI, сохраняя работу; явный `Host_ClosePanel`/Shutdown освобождает runtime
+через existing asynchronous RequestsDrained/ShutdownCompletion без Office UI wait.
+
+FullNormal/FullMaximized/Compact/Companion, независимые return points, focus и
+геометрия описаны в [Screen Map](ui/UI_SCREEN_MAP.md#native-window--in-review-2026-11-11).
+Native UI preferences не используют SaveSettings/maintenance и доступны во время
+run. Для Full первоначально используется DesktopWindowWidth; сохранённое пользователем
+размещение имеет приоритет. Compact/Companion имеют независимые bounds. Существующий
+Desktop.exe и встроенные VSTO task panes сохраняют прежнее оконное поведение.
+
+Custom frame и non-client regions сверены с Microsoft
+[WebView2 settings](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2settings9),
+[custom frame](https://learn.microsoft.com/en-us/windows/win32/dwm/customframe),
+[system commands](https://learn.microsoft.com/en-us/windows/win32/menurc/wm-syscommand) и
+[DPI](https://learn.microsoft.com/en-us/windows/win32/hidpi/wm-dpichanged);
+background parking использует [ShowWindow/SW_SHOWMINNOACTIVE](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow).
+Это исходные API-контракты; Windows/Office/WebView2 квалификация среза открыта.
+
 Статус: канонический контракт standalone WinForms/WebView2 shell. Отложенные
 продуктовые улучшения находятся в
 [BACKLOG](stabilization/BACKLOG.md#deferred-product-decisions), а Windows gates —
@@ -130,8 +154,9 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
 В «Настройки → Интерфейс» задаётся ширина отдельных окон Desktop и NativeHostCli
 в пикселях.
 По умолчанию 1600; сохранённое значение ограничено диапазоном 900–3840 и
-доступной шириной экрана. Изменение сразу применяется к обычному окну; для
-развёрнутого или полноэкранного окна — при возврате к обычному размеру.
+доступной шириной экрана. В Desktop изменение сразу применяется к обычному окну;
+для развёрнутого/полноэкранного — при возврате. В NativeHostCli это начальная ширина:
+сохранённые пользовательские bounds имеют приоритет, Compact/Companion не меняются.
 Размер VSTO-панелей внутри Office этой настройкой не меняется.
 
 ## Safety and runtime limits

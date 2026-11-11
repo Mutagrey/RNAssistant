@@ -1,5 +1,48 @@
 # План модернизации production UI
 
+## Native window — In Review, 2026-11-11
+
+По приложенному пользователем плану управления окнами реализован scoped native
+window slice; общий S2/редизайн других экранов не запускается. Owners: OfficeHosts —
+формы/STA/native effects; Office Services — state/preferences; Office WebView —
+trusted typed transport; existing Shell/DockWorkspace — presentation/lifecycle.
+Заменённый C++ Form/ownership/positioning path и его Drawing/WinForms references
+удалены. Старый owner-mode config больше не читается/не создаётся publish; существующий
+пользовательский файл не удаляется. Новый EXE, server, global hooks и второй WebView
+не добавляются.
+
+Проверено на macOS: три `host window:` checks (две точки возврата, system minimize,
+pin/explicit park, stale/unknown focus, shutdown, profile merge/schema, typed bridge
+без token/unsupported command и во время exclusive switch). `host-window.test.js`
+использует production Shell/Dockview: same chat/composer/edit, retained Browser iframe,
+Full placement при обоих порядках native state/resize, hidden view lifecycle,
+удаление identity, initial Compact/bootstrap, stale revisions, keyboard/narrow/zoom,
+отказ Shutdown при незавершённом edit или ошибке записи draft.
+Header/control измерены рядом с frozen Demo при одинаковом viewport. Browser status
+не означает native qualification. Старый `dock-workspace.test.js` остановился на
+удалённом singleton `#chatInput`; `bridge-bootstrap.test.js` падает также на исходном
+f918a56f из-за отсутствующего stub RNAssistantChatGroups. Эти fixtures требуют
+отдельного обновления; они не выданы за успешные проверки этого среза.
+
+Windows x64 + Office x64 + VS 2022 compile/delivery и пользовательское визуальное
+принятие остаются открыты. Особые native gaps: WebView child-HWND drag/resize,
+restore-and-move, Alt+Space/Alt+F4, taskbar/Alt+Tab, mixed DPI/отключение монитора,
+file picker/DevTools/modal focus, non-activating companion drag и capture protection.
+Hover Snap — отдельное улучшение, не gate базового chrome. Статус companion отражает
+живые snapshots, не восстановленные после restart ожидания.
+
+Для ревью: открыть из Excel; изменить Full placement и перейти в Compact во время
+ответа; Compact → Maximize → Companion → Open → Restore; включить pin и перейти в
+Excel; закрыть × и повторно открыть из другой книги. Проверить draft/edit/scroll и
+прежний target. Нужное Windows evidence — только фотографии экрана; не запрашивать
+логи/выгрузки. Два native окна должны сохранять capture-protection setting.
+
+Rollback — revert только оконного среза; `native-window-state.json` можно оставить,
+старый код его не читает. Runtime/storage/tool protocol не мигрируются. По запросу
+пользователя «Коммит» технический срез фиксируется с minor bump `16.3.0-dev`.
+Визуальное принятие остаётся In Review; commit не означает Windows qualification
+или выпуск.
+
 ## Группы чатов — In Review, 2026-11-05
 
 Срез 4a.1: группы + creator nesting, agents.group/list paging; owners Application

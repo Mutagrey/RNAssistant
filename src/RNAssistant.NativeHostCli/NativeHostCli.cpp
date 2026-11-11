@@ -4,62 +4,26 @@
 #include <string>
 #include <msclr/marshal_cppstd.h>
 
-#ifndef WDA_EXCLUDEFROMCAPTURE
-#define WDA_EXCLUDEFROMCAPTURE 0x00000011
-#endif
-
 using namespace System;
-using namespace System::Drawing;
 using namespace System::IO;
 using namespace System::Reflection;
-using namespace System::Windows::Forms;
 using namespace msclr::interop;
 
-public enum class PanelOwnerMode
-{
-    None = 0,
-    OwnerWindow = 1,
-    TopMostDebug = 2
-};
-
-public ref class Win32WindowWrapper sealed : public IWin32Window
-{
-private:
-    IntPtr _handle;
-
-public:
-    explicit Win32WindowWrapper(IntPtr handle)
-        : _handle(handle)
-    {
-    }
-
-    virtual property IntPtr Handle
-    {
-        IntPtr get()
-        {
-            return _handle;
-        }
-    }
-};
-
+// Export/assembly-loading shim only. Managed OfficeHosts owns all HWND/session policy.
 public ref class ManagedPanelHost abstract sealed
 {
 private:
-    static Form^ _form = nullptr;
-    static Object^ _session = nullptr;
+    static Object^ _host = nullptr;
     static String^ _rootPath = nullptr;
     static IntPtr _officeHwnd = IntPtr::Zero;
-    static int _hostKind = 0;
-    static PanelOwnerMode _ownerMode = PanelOwnerMode::OwnerWindow;
     static String^ _lastError = String::Empty;
     static bool _resolverInstalled = false;
-    static bool _screenCaptureProtectionEnabled = true;
-    static EventInfo^ _screenCaptureProtectionChangedEvent = nullptr;
-    static Action<bool>^ _screenCaptureProtectionChangedHandler = nullptr;
-    static int _panelWindowWidth = 0;
-    static bool _applyWidthOnRestore = false;
-    static EventInfo^ _panelWindowWidthChangedEvent = nullptr;
-    static Action<int>^ _panelWindowWidthChangedHandler = nullptr;
+
+    static Object^ Invoke(String^ name, array<Object^>^ arguments)
+    {
+        try { return _host->GetType()->GetMethod(name)->Invoke(_host, arguments); }
+        catch (TargetInvocationException^ ex) { throw ex->InnerException == nullptr ? ex : ex->InnerException; }
+    }
 
 public:
     static int ShowPanel(IntPtr officeHwnd, String^ rootPath, int hostKind)
@@ -68,103 +32,46 @@ public:
         {
             ValidateShowArguments(officeHwnd, rootPath, hostKind);
             rootPath = Path::GetFullPath(rootPath);
-            ConfigureAssemblyResolution(rootPath);
-            Log(String::Format(
-                "Host_ShowPanelEx: hostKind={0}, hwnd={1}, root={2}",
-                hostKind,
-                officeHwnd.ToInt64(),
-                rootPath));
-
-            PanelOwnerMode requestedMode = ReadOwnerMode(rootPath);
-            bool mustRecreate = _form == nullptr
-                || _form->IsDisposed
-                || _hostKind != hostKind
-                || _officeHwnd != officeHwnd
-                || !String::Equals(_rootPath, rootPath, StringComparison::OrdinalIgnoreCase);
-
-            if (mustRecreate)
+            bool alive = _host != nullptr && !safe_cast<bool>(_host->GetType()->GetProperty("IsDisposed")->GetValue(_host, nullptr));
+            array<Object^>^ arguments = gcnew array<Object^>(3);
+            arguments[0] = hostKind; arguments[1] = officeHwnd.ToInt64(); arguments[2] = rootPath;
+            if (!alive)
             {
-                if (ClosePanel() != 0)
-                {
-                    throw gcnew InvalidOperationException("Existing panel could not be closed.");
-                }
-                CreatePanel(officeHwnd, rootPath, hostKind, requestedMode);
+                ConfigureAssemblyResolution(rootPath);
+                String^ path = Path::Combine(Path::Combine(rootPath, "lib"), "RNAssistant.OfficeHosts.dll");
+                Type^ type = Assembly::LoadFrom(path)->GetType("RNAssistant.OfficeHosts.Windows.InProcessWindowHost", true);
+                _host = type->GetMethod("Create", BindingFlags::Public | BindingFlags::Static)->Invoke(nullptr, arguments);
             }
-            else
-            {
-                _ownerMode = requestedMode;
-                ApplyOwnerMode();
-            }
-
-            PositionNearOffice(_form, officeHwnd);
-            ShowForm();
-            ClearError();
-            return 0;
+            // Validate profile in the managed owner before changing resolver/root or target.
+            Invoke("Show", arguments);
+            _officeHwnd = officeHwnd;
+            Log("Panel resumed by launcher.");
+            ClearError(); return 0;
         }
-        catch (Exception^ ex)
-        {
-            return Fail(-1, "Could not show RN Assistant panel.", ex, officeHwnd);
-        }
+        catch (Exception^ ex) { return Fail(-1, "Could not show RN Assistant panel.", ex, officeHwnd); }
     }
-
     static int ClosePanel()
     {
         try
         {
-            if (_form != nullptr && !_form->IsDisposed)
-            {
-                Log("Closing panel.");
-                _form->Close();
-            }
-            else
-            {
-                DisposeSession();
-                _form = nullptr;
-            }
-
-            ClearError();
-            return 0;
+            if (_host != nullptr) Invoke("Shutdown", nullptr);
+            _host = nullptr; ClearError(); return 0;
         }
-        catch (Exception^ ex)
-        {
-            return Fail(-1, "Could not close RN Assistant panel.", ex, _officeHwnd);
-        }
+        catch (Exception^ ex) { return Fail(-1, "Could not close RN Assistant panel.", ex, _officeHwnd); }
     }
-
     static int SetVisible(bool visible)
     {
         try
         {
-            if (_form == nullptr || _form->IsDisposed)
-            {
-                SetError("Panel has not been created.");
-                return -3;
-            }
-
-            if (visible)
-            {
-                PositionNearOffice(_form, _officeHwnd);
-                ShowForm();
-            }
-            else
-            {
-                _form->Hide();
-            }
-
-            ClearError();
-            return 0;
+            if (_host == nullptr || safe_cast<bool>(_host->GetType()->GetProperty("IsDisposed")->GetValue(_host, nullptr)))
+            { SetError("Panel has not been created."); return -3; }
+            array<Object^>^ arguments = gcnew array<Object^>(1); arguments[0] = visible;
+            Invoke("SetVisible", arguments);
+            ClearError(); return 0;
         }
-        catch (Exception^ ex)
-        {
-            return Fail(-1, "Could not change panel visibility.", ex, _officeHwnd);
-        }
+        catch (Exception^ ex) { return Fail(-1, "Could not change panel visibility.", ex, _officeHwnd); }
     }
-
-    static String^ LastError()
-    {
-        return _lastError == nullptr ? String::Empty : _lastError;
-    }
-
+    static String^ LastError() { return _lastError == nullptr ? String::Empty : _lastError; }
 private:
     static void ValidateShowArguments(IntPtr officeHwnd, String^ rootPath, int hostKind)
     {
@@ -197,6 +104,12 @@ private:
 
     static void ConfigureAssemblyResolution(String^ rootPath)
     {
+        array<Char>^ separators = gcnew array<Char>(2);
+        separators[0] = Path::DirectorySeparatorChar;
+        separators[1] = Path::AltDirectorySeparatorChar;
+        if (_resolverInstalled && !String::Equals(
+            _rootPath->TrimEnd(separators), rootPath->TrimEnd(separators), StringComparison::OrdinalIgnoreCase))
+            throw gcnew InvalidOperationException("Restart Office to use another RNAssistant portable root; loaded assemblies cannot be replaced in this process.");
         _rootPath = rootPath;
         if (!_resolverInstalled)
         {
@@ -220,357 +133,6 @@ private:
             SetError("Managed assembly resolution failed: " + ex);
             return nullptr;
         }
-    }
-
-    static void CreatePanel(IntPtr officeHwnd, String^ rootPath, int hostKind, PanelOwnerMode ownerMode)
-    {
-        try
-        {
-            String^ assemblyPath = Path::Combine(Path::Combine(rootPath, "lib"), "RNAssistant.OfficeHosts.dll");
-            if (!File::Exists(assemblyPath))
-            {
-                throw gcnew FileNotFoundException("RNAssistant.OfficeHosts.dll was not found.", assemblyPath);
-            }
-
-            Assembly^ assembly = Assembly::LoadFrom(assemblyPath);
-            Type^ sessionType = assembly->GetType("RNAssistant.OfficeHosts.InProcessPanelSession", true);
-            MethodInfo^ createMethod = sessionType->GetMethod(
-                "Create",
-                BindingFlags::Public | BindingFlags::Static);
-            if (createMethod == nullptr)
-            {
-                throw gcnew MissingMethodException(sessionType->FullName, "Create");
-            }
-
-            array<Object^>^ arguments = gcnew array<Object^>(3);
-            arguments[0] = hostKind;
-            arguments[1] = officeHwnd.ToInt64();
-            arguments[2] = rootPath;
-            _session = createMethod->Invoke(nullptr, arguments);
-
-            PropertyInfo^ captureProtectionProperty = sessionType->GetProperty("ScreenCaptureProtectionEnabled");
-            if (captureProtectionProperty == nullptr)
-            {
-                throw gcnew MissingMemberException(
-                    sessionType->FullName + ".ScreenCaptureProtectionEnabled was not found.");
-            }
-            _screenCaptureProtectionEnabled = safe_cast<bool>(
-                captureProtectionProperty->GetValue(_session, nullptr));
-
-            _screenCaptureProtectionChangedEvent = sessionType->GetEvent("ScreenCaptureProtectionChanged");
-            if (_screenCaptureProtectionChangedEvent == nullptr)
-            {
-                throw gcnew MissingMemberException(
-                    sessionType->FullName + ".ScreenCaptureProtectionChanged was not found.");
-            }
-            _screenCaptureProtectionChangedHandler =
-                gcnew Action<bool>(&ManagedPanelHost::OnScreenCaptureProtectionChanged);
-            _screenCaptureProtectionChangedEvent->AddEventHandler(
-                _session,
-                _screenCaptureProtectionChangedHandler);
-
-            PropertyInfo^ panelWindowWidthProperty = sessionType->GetProperty("PanelWindowWidth");
-            if (panelWindowWidthProperty == nullptr)
-            {
-                throw gcnew MissingMemberException(
-                    sessionType->FullName + ".PanelWindowWidth was not found.");
-            }
-            _panelWindowWidth = safe_cast<int>(panelWindowWidthProperty->GetValue(_session, nullptr));
-            if (_panelWindowWidth <= 0)
-            {
-                throw gcnew InvalidOperationException("PanelWindowWidth must be positive.");
-            }
-            _panelWindowWidthChangedEvent = sessionType->GetEvent("PanelWindowWidthChanged");
-            if (_panelWindowWidthChangedEvent == nullptr)
-            {
-                throw gcnew MissingMemberException(
-                    sessionType->FullName + ".PanelWindowWidthChanged was not found.");
-            }
-            _panelWindowWidthChangedHandler =
-                gcnew Action<int>(&ManagedPanelHost::OnPanelWindowWidthChanged);
-            _panelWindowWidthChangedEvent->AddEventHandler(
-                _session,
-                _panelWindowWidthChangedHandler);
-
-            PropertyInfo^ panelProperty = sessionType->GetProperty("PanelControl");
-            Control^ panel = panelProperty == nullptr
-                ? nullptr
-                : dynamic_cast<Control^>(panelProperty->GetValue(_session, nullptr));
-            if (panel == nullptr)
-            {
-                throw gcnew InvalidOperationException("Managed panel factory did not return a WinForms control.");
-            }
-
-            _form = gcnew Form();
-            _form->Text = "RN Assistant";
-            _form->Width = _panelWindowWidth;
-            _form->Height = 720;
-            _form->MinimumSize = System::Drawing::Size(420, 300);
-            _form->StartPosition = FormStartPosition::Manual;
-            _form->ShowInTaskbar = false;
-            _form->FormBorderStyle = FormBorderStyle::Sizable;
-            _form->MaximizeBox = true;
-            _form->MinimizeBox = false;
-            _form->Controls->Add(panel);
-            _form->HandleCreated += gcnew EventHandler(&ManagedPanelHost::OnFormHandleCreated);
-            _form->Resize += gcnew EventHandler(&ManagedPanelHost::OnFormResize);
-            _form->FormClosed += gcnew FormClosedEventHandler(&ManagedPanelHost::OnFormClosed);
-
-            _officeHwnd = officeHwnd;
-            _hostKind = hostKind;
-            _rootPath = rootPath;
-            _ownerMode = ownerMode;
-            ApplyOwnerMode();
-        }
-        catch (Exception^)
-        {
-            if (_form != nullptr && !_form->IsDisposed)
-            {
-                delete _form;
-            }
-            _form = nullptr;
-            DisposeSession();
-            throw;
-        }
-    }
-
-    static void ApplyOwnerMode()
-    {
-        if (_form == nullptr || _form->IsDisposed)
-        {
-            return;
-        }
-
-        _form->TopMost = _ownerMode == PanelOwnerMode::TopMostDebug;
-    }
-
-    static void ShowForm()
-    {
-        if (_form->Visible)
-        {
-            _form->WindowState = FormWindowState::Normal;
-        }
-        else if (_ownerMode == PanelOwnerMode::OwnerWindow)
-        {
-            _form->Show(gcnew Win32WindowWrapper(_officeHwnd));
-        }
-        else
-        {
-            _form->Show();
-        }
-
-        _form->BringToFront();
-        _form->Activate();
-    }
-
-    static void OnFormHandleCreated(Object^ sender, EventArgs^)
-    {
-        Form^ form = dynamic_cast<Form^>(sender);
-        if (form == nullptr || form->IsDisposed)
-        {
-            return;
-        }
-
-        ApplyScreenCaptureProtection(form);
-    }
-
-    static void OnScreenCaptureProtectionChanged(bool enabled)
-    {
-        _screenCaptureProtectionEnabled = enabled;
-        Form^ form = _form;
-        if (form == nullptr || form->IsDisposed || !form->IsHandleCreated)
-        {
-            return;
-        }
-
-        if (form->InvokeRequired)
-        {
-            array<Object^>^ arguments = gcnew array<Object^>(1);
-            arguments[0] = enabled;
-            form->BeginInvoke(_screenCaptureProtectionChangedHandler, arguments);
-            return;
-        }
-
-        ApplyScreenCaptureProtection(form);
-    }
-
-    static void OnPanelWindowWidthChanged(int width)
-    {
-        _panelWindowWidth = width;
-        Form^ form = _form;
-        if (form == nullptr || form->IsDisposed || !form->IsHandleCreated)
-        {
-            return;
-        }
-
-        if (form->InvokeRequired)
-        {
-            array<Object^>^ arguments = gcnew array<Object^>(1);
-            arguments[0] = width;
-            form->BeginInvoke(gcnew Action<int>(&ManagedPanelHost::ApplyPanelWindowWidthChange), arguments);
-            return;
-        }
-
-        ApplyPanelWindowWidthChange(width);
-    }
-
-    static void ApplyPanelWindowWidthChange(int width)
-    {
-        Form^ form = _form;
-        if (width != _panelWindowWidth || form == nullptr || form->IsDisposed)
-        {
-            return;
-        }
-        if (form->WindowState != FormWindowState::Normal)
-        {
-            _applyWidthOnRestore = true;
-            return;
-        }
-
-        System::Drawing::Rectangle workingArea = Screen::FromControl(form)->WorkingArea;
-        int boundedWidth = Math::Min(width, workingArea.Width);
-        int left = Math::Max(workingArea.Left,
-            Math::Min(form->Right - boundedWidth, workingArea.Right - boundedWidth));
-        _applyWidthOnRestore = false;
-        form->SetBounds(left, form->Top, boundedWidth, form->Height);
-    }
-
-    static void OnFormResize(Object^, EventArgs^)
-    {
-        if (_applyWidthOnRestore && _form != nullptr && !_form->IsDisposed &&
-            _form->WindowState == FormWindowState::Normal)
-        {
-            ApplyPanelWindowWidthChange(_panelWindowWidth);
-        }
-    }
-
-    static void ApplyScreenCaptureProtection(Form^ form)
-    {
-        HWND hwnd = static_cast<HWND>(form->Handle.ToPointer());
-        DWORD affinity = _screenCaptureProtectionEnabled
-            ? WDA_EXCLUDEFROMCAPTURE
-            : WDA_NONE;
-        String^ affinityName = _screenCaptureProtectionEnabled
-            ? "WDA_EXCLUDEFROMCAPTURE"
-            : "WDA_NONE";
-        SetLastError(ERROR_SUCCESS);
-        if (SetWindowDisplayAffinity(hwnd, affinity))
-        {
-            Log(String::Format(
-                "Screen capture protection updated. hwnd={0}, affinity={1}.",
-                form->Handle.ToInt64(),
-                affinityName));
-            return;
-        }
-
-        DWORD error = GetLastError();
-        Log(String::Format(
-            "WARNING: Screen capture protection could not be updated. hwnd={0}, affinity={1}, win32Error={2}.",
-            form->Handle.ToInt64(),
-            affinityName,
-            error));
-    }
-
-    static PanelOwnerMode ReadOwnerMode(String^ rootPath)
-    {
-        String^ value = Environment::GetEnvironmentVariable("RNASSISTANT_PANEL_OWNER_MODE");
-        String^ configPath = Path::Combine(rootPath, "panel-owner-mode.txt");
-        if (String::IsNullOrWhiteSpace(value) && File::Exists(configPath))
-        {
-            value = File::ReadAllText(configPath);
-        }
-
-        value = String::IsNullOrWhiteSpace(value) ? "OwnerWindow" : value->Trim();
-        if (String::Equals(value, "None", StringComparison::OrdinalIgnoreCase))
-        {
-            return PanelOwnerMode::None;
-        }
-
-        if (String::Equals(value, "TopMostDebug", StringComparison::OrdinalIgnoreCase))
-        {
-            return PanelOwnerMode::TopMostDebug;
-        }
-
-        return PanelOwnerMode::OwnerWindow;
-    }
-
-    static void PositionNearOffice(Form^ form, IntPtr officeHwnd)
-    {
-        RECT rect = {};
-        HWND hwnd = static_cast<HWND>(officeHwnd.ToPointer());
-        if (!GetWindowRect(hwnd, &rect))
-        {
-            throw gcnew InvalidOperationException("GetWindowRect failed for Office HWND.");
-        }
-
-        System::Drawing::Rectangle workingArea =
-            Screen::FromHandle(officeHwnd)->WorkingArea;
-        const int topOffset = 120;
-        const int rightMargin = 20;
-        const int bottomMargin = 40;
-
-        int width = Math::Min(_panelWindowWidth, workingArea.Width);
-        int desiredHeight = (rect.bottom - rect.top) - topOffset - bottomMargin;
-        int height = Math::Max(300, Math::Min(desiredHeight, workingArea.Height));
-        int left = rect.right - width - rightMargin;
-        int top = rect.top + topOffset;
-        left = Math::Max(workingArea.Left, Math::Min(left, workingArea.Right - width));
-        top = Math::Max(workingArea.Top, Math::Min(top, workingArea.Bottom - height));
-
-        form->Bounds = System::Drawing::Rectangle(left, top, width, height);
-    }
-
-    static void OnFormClosed(Object^, FormClosedEventArgs^)
-    {
-        DisposeSession();
-        _form = nullptr;
-        _officeHwnd = IntPtr::Zero;
-        _hostKind = 0;
-    }
-
-    static void DisposeSession()
-    {
-        if (_session != nullptr &&
-            _screenCaptureProtectionChangedEvent != nullptr &&
-            _screenCaptureProtectionChangedHandler != nullptr)
-        {
-            try
-            {
-                _screenCaptureProtectionChangedEvent->RemoveEventHandler(
-                    _session,
-                    _screenCaptureProtectionChangedHandler);
-            }
-            catch (Exception^)
-            {
-            }
-        }
-        if (_session != nullptr &&
-            _panelWindowWidthChangedEvent != nullptr &&
-            _panelWindowWidthChangedHandler != nullptr)
-        {
-            try
-            {
-                _panelWindowWidthChangedEvent->RemoveEventHandler(
-                    _session,
-                    _panelWindowWidthChangedHandler);
-            }
-            catch (Exception^)
-            {
-            }
-        }
-        IDisposable^ disposable = dynamic_cast<IDisposable^>(_session);
-        if (disposable != nullptr)
-        {
-            delete disposable;
-        }
-        _session = nullptr;
-        _screenCaptureProtectionChangedEvent = nullptr;
-        _screenCaptureProtectionChangedHandler = nullptr;
-        _screenCaptureProtectionEnabled = true;
-        _panelWindowWidthChangedEvent = nullptr;
-        _panelWindowWidthChangedHandler = nullptr;
-        _panelWindowWidth = 0;
-        _applyWidthOnRestore = false;
     }
 
     static int Fail(int result, String^ message, Exception^ exception, IntPtr owner)

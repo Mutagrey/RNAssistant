@@ -32,6 +32,7 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
@@ -124,6 +125,12 @@
     <Compile Include="Word\WordInteropBackend.cs" />
     <Compile Include="WordAdapter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Windows\WindowNative.cs" />
+    <Compile Include="Windows\AssistantHostForm.cs" />
+    <Compile Include="Windows\CompanionForm.cs" />
+    <Compile Include="Windows\InProcessWindowHost.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

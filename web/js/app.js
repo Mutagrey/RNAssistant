@@ -3,6 +3,7 @@ function setMobileNavigationOpen(open) {
 }
 
 function switchTab(name, options) {
+  if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { switchTab(name, options); })) return;
   var workspaceView = RNAssistantDockWorkspace.sectionView(name) || (["settings", "request", "diagnostics"].indexOf(name) >= 0 ? name : null);
   if (["settings", "request", "diagnostics"].indexOf(name) >= 0) {
     // These are workspace views. Keep existing callers, with one placement path.
