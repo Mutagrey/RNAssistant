@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>P5a · проверка WebView2</title>
+<style>body{font:16px system-ui;margin:24px;line-height:1.6}input,textarea,button{font:inherit;max-width:100%;box-sizing:border-box}label{display:block;margin:12px 0}textarea{width:100%;height:100px}output{display:block}a{margin-right:16px}</style>
+<h1>P5a · WinForms WebView2 в Dockview</h1>
+<p>Локальная страница без секретов. Результат проверок ниже отмечается вручную по наблюдению.</p>
+<label>Ввод и Tab <input placeholder="Введите текст, затем скройте/переместите вкладку"></label>
+<label>Русский текст / IME <textarea></textarea></label>
+<button id="count">Нажатия: 0</button>
+<p><a href="https://example.com">Обычный HTTPS-переход</a>
+<a href="https://example.com" target="_blank">Новое окно: ожидается отказ</a>
+<a href="data:text/plain,P5a" download="p5a.txt">Загрузка: ожидается отказ</a></p>
+<p>Проверьте меню Shell над страницей, split/resize, скрытие и возврат с сохранением ввода.
+После закрытия и повторного открытия вкладки ввод должен сброситься.</p>
+<output id="environment"></output>
+<script>let clicks=0;document.getElementById('count').onclick=function(){this.textContent='Нажатия: '+(++clicks)};function show(){document.getElementById('environment').textContent='Страница: '+innerWidth+' × '+innerHeight+' CSS px; DPR '+devicePixelRatio+'; focus '+document.hasFocus()};addEventListener('resize',show);addEventListener('focus',show);addEventListener('blur',show);show();</script>
+</html>

@@ -2,7 +2,22 @@
 
 Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets + P2c lifecycle checks + P3a source failure + P3b restore freshness.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
-Office/WebView — будущий native adapter. P1, P2a и P2b реализованы, **In Review**.
+Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализованы, **In Review**.
+
+## P5a: WinForms в Dockview — In Review, 2026-11-11
+
+По выбору пользователя начинаем с целевого Dockview, без предварительного отдельного
+окна. Под `RNA_BROWSER_PILOT=1` готова одна ручная внешняя вкладка с общим toolbar,
+HTTP(S), назад/вперёд/reload, временным InPrivate-профилем и экранной диагностикой.
+Page/policy отделены от native placement; fallback-окно появится только при выявленном
+блокере. Agent tools, persistent profiles и второй session store не вводятся.
+
+Два host-neutral Harness checks и новый browser fixture проходят; existing Browser
+lifetime также проходит. Wide/narrow Shell screenshots просмотрены с synthetic native.
+Windows compilation, фактические HWND/DPI/focus/IME/overlays/process cleanup и
+визуальное принятие открыты. P5 целиком не закрыт. Следующий шаг P5a — native evidence
+при первом доступном Windows-запуске; P3/P4 продолжаются независимо.
+[Запуск и точные границы проверки](05_TEST_MATRIX.md#p5a).
 
 ## P3b: актуальность восстановления release — In Review, 2026-11-11
 

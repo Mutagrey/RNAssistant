@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## External Browser P5a — In Review, 2026-11-11
+
+Добавлен opt-in WinForms WebView2 в existing Dockview: одна внешняя страница,
+общий toolbar, отдельный временный профиль и экранная диагностика. Page/navigation
+отделены от native placement для возможного последующего отдельного окна.
+Два host-neutral checks и synthetic browser fixture проходят; Windows compilation,
+HWND/DPI/focus/IME/overlays/cleanup и визуальное принятие открыты. P5 не закрыт;
+остальные срезы независимы. [Scope и запуск](../browser/05_TEST_MATRIX.md#p5a).
+
 ## Native window / Compact / Companion — In Review, 2026-11-11
 
 NativeHostCli переведён на один managed window owner. Dismiss сохраняет session,

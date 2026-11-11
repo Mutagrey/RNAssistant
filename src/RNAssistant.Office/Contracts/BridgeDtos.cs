@@ -883,6 +883,9 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class BridgeBootstrapResponse
     {
+        [JsonProperty("externalBrowserAvailable")]
+        public bool ExternalBrowserAvailable { get; set; }
+
         [JsonProperty("hostWindow", NullValueHandling = NullValueHandling.Ignore)]
         public HostWindowBootstrapDto HostWindow { get; set; }
 

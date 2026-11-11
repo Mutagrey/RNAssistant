@@ -246,6 +246,7 @@ function acceptBridgeBootstrap(bootstrap) {
   acceptBridgeContract(bootstrap.bridgeContract);
   state.bridgeToken = bootstrap.bridgeToken;
   if (bootstrap.hostWindow && window.RNAssistantWindow) window.RNAssistantWindow.bootstrap(bootstrap.hostWindow);
+  if (window.RNAssistantExternalBrowser) window.RNAssistantExternalBrowser.bootstrap(bootstrap.externalBrowserAvailable);
   return bootstrap.init;
 }
 
@@ -439,6 +440,10 @@ if (window.chrome && window.chrome.webview) {
     }
     if (response && response.transportFailure && !response.id) {
       failBridgeTransport(response, null);
+      return;
+    }
+    if (response.type === "externalBrowserState") {
+      if (window.RNAssistantExternalBrowser) window.RNAssistantExternalBrowser.apply(response.payload);
       return;
     }
     if (response.type === "hostWindowState") {

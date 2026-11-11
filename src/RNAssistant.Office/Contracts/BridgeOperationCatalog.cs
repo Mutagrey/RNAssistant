@@ -12,6 +12,7 @@ namespace RNAssistant.Office.Contracts
         ReportClientTiming,
         [BridgeOperationPolicy(false, 30)] Init,
         GetHostWindowState, HostWindowCommand,
+        [BridgeOperationPolicy(true, 60)] ExternalBrowserCommand,
         GetPlugins, GetPluginIcons, SavePluginIcon, DeletePluginIcon, UpdatePluginAppearance, [BridgeOperationPolicy(true, 360)] DrawPluginIcon,
         CreatePlugin, ConnectPlugin, GetPluginSourceState, CheckPlugin, ApplyPlugin, GetPluginVersions, RestorePluginVersion, OpenPlugin, ClosePlugin, DisablePlugin,
         StagePluginVisualSelection, DiscardPluginVisualSelection,

@@ -1304,6 +1304,8 @@ namespace RNAssistant.Harness
                 Test("bridge: message projection omits hidden bodies", BridgeMessageProjectionOmitsHiddenBodies),
                 Test("bridge: tool completion log omits result body", BridgeToolCompletionLogOmitsResultBody),
                 Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
+                Test("external browser: navigation and bounds admission", ExternalBrowserAdmission),
+                Test("external browser: typed bridge trust", ExternalBrowserBridgeTrust),
                 Test("bridge: rejects missing token", BridgeRejectsMissingToken),
                 Test("bridge: long tool keeps controls responsive", BridgeLongToolKeepsControlsResponsive),
                 Test("bridge: agent run keeps controls responsive", BridgeAgentRunKeepsControlsResponsive),

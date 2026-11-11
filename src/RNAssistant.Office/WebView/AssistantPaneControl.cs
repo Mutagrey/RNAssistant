@@ -30,6 +30,7 @@ namespace RNAssistant.Office.WebView
         private CoreWebView2Controller _webViewController;
         private RNAssistant.Application.PluginApplicationService _plugins;
         private PluginWebViewHost _pluginHost;
+        private ExternalBrowserDockHost _externalBrowser;
         public TabularWebViewExecutor TabularExecutor { get; private set; }
         private Stopwatch _initialNavigationTimer;
         private DateTime _lastSlowPostReportUtc;
@@ -81,14 +82,20 @@ namespace RNAssistant.Office.WebView
             if (controller == null) throw new ArgumentNullException("controller");
             for (var attempt = 0; attempt < 200; attempt++)
             {
+                var rebound = false;
                 lock (_resourceRequestSync)
                 {
                     if (_resourceRequestsInFlight == 0)
                     {
                         _bridge.RebindController(controller);
                         _controller = controller;
-                        return;
+                        rebound = true;
                     }
+                }
+                if (rebound)
+                {
+                    if (_externalBrowser != null) await _externalBrowser.ResetAsync().ConfigureAwait(true);
+                    return;
                 }
                 await Task.Delay(25).ConfigureAwait(false);
             }
@@ -219,6 +226,12 @@ namespace RNAssistant.Office.WebView
                 : string.Empty;
 
             var core = _webView.CoreWebView2;
+            if (string.Equals(Environment.GetEnvironmentVariable("RNA_BROWSER_PILOT"), "1", StringComparison.Ordinal))
+            {
+                _externalBrowser = new ExternalBrowserDockHost(this, _webView, Path.Combine(_webRoot, "browser-probe"),
+                    value => PostBridgeMessage(JsonConvert.SerializeObject(new ExternalBrowserStateMessage { Payload = value })));
+                _bridge.ExternalBrowser = _externalBrowser;
+            }
             if (_bridge.WindowHost != null)
             {
                 try
@@ -379,6 +392,7 @@ namespace RNAssistant.Office.WebView
             if (WebViewSecurityPolicy.CanNavigateTopLevel(e.Uri, _trustedDocumentUri)) _bridge.WindowHost?.InvalidateChrome();
             if (WebViewSecurityPolicy.CanNavigateTopLevel(e.Uri, _trustedDocumentUri))
             {
+                _externalBrowser?.Reset();
                 return;
             }
 
@@ -691,6 +705,8 @@ namespace RNAssistant.Office.WebView
 
         private void DetachInitializedWebView()
         {
+            _bridge.ExternalBrowser = null;
+            _externalBrowser?.Dispose(); _externalBrowser = null;
             _bridge.WindowHost?.InvalidateChrome();
             try
             {

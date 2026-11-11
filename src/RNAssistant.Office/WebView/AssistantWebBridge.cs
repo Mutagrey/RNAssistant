@@ -41,6 +41,7 @@ namespace RNAssistant.Office.WebView
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
+        public IExternalBrowserHost ExternalBrowser { get; set; }
 
         public bool HostSwitchPending
         {
@@ -228,6 +229,10 @@ namespace RNAssistant.Office.WebView
 
                 switch (type)
                 {
+                    case BridgeOperationId.ExternalBrowserCommand:
+                        if (ExternalBrowser == null) throw new InvalidOperationException("External Browser pilot is disabled on this host.");
+                        responsePayload = await ExternalBrowser.ExecuteAsync(Payload<ExternalBrowserCommandPayload>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetHostWindowState:
                         if (WindowHost == null) throw new InvalidOperationException("This host does not support window commands.");
                         responsePayload = WindowHost.Snapshot;
@@ -1087,7 +1092,8 @@ namespace RNAssistant.Office.WebView
         {
             if (response == null) throw new InvalidOperationException("Application initialization returned no state.");
             response.OfficeHostChatAvailable = OfficeHostChatRequested != null;
-            return new BridgeBootstrapResponse { BridgeToken = _bridgeToken, Init = response, HostWindow = WindowHost?.Snapshot };
+            return new BridgeBootstrapResponse { BridgeToken = _bridgeToken, Init = response, HostWindow = WindowHost?.Snapshot,
+                ExternalBrowserAvailable = ExternalBrowser != null };
         }
 
         public void Dispose()

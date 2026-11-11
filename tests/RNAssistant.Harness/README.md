@@ -2,6 +2,15 @@
 
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 
+## External Browser P5a — 2026-11-11
+
+External Browser P5a: `external browser:` runs two focused host-neutral checks for
+navigation/bounds admission and typed bridge trust. `tests/web/external-browser.test.js`
+uses production Shell/Dockview with synthetic native responses for split/restore,
+hide/close/reopen, overlays, focus dispatch, narrow/zoom and stale/late cleanup.
+`BROWSER_P5_SCREENSHOT` optionally sets a wide/narrow screenshot path prefix.
+Neither test builds or qualifies WinForms/Office; [Windows gate](../../docs/browser/05_TEST_MATRIX.md#p5a).
+
 ## Find a test
 
 Use the registrations in `Program.cs` to choose a filter before running anything.

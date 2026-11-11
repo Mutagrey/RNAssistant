@@ -169,11 +169,14 @@ Screenshot capability включается только после провер�
 ## Windows spike: renderer внутри Dock
 
 Owner: Office/WebView adapter; status **Open**, запуск на этой машине не выполняется.
-Исследуем WinForms child control как ближайший существующей композиции вариант,
-WPF child hosting как сравнительный вариант, CompositionController — как отдельный
-кандидат с собственным visual/input integration. При равной корректности предпочесть
-WinForms child: новый UI stack не нужен. Если оба класса embedding ненадёжны —
-явное отдельное непривилегированное WebView2 окно с тем же Session API.
+2026-11-11 пользователь выбрал начинать непосредственно с WinForms child в Dockview,
+поскольку это конечное размещение. Реализован opt-in P5a; выбор кандидата не означает
+проверенную корректность Windows. WPF/CompositionController заранее не реализуются.
+`ExternalBrowserPage` владеет WebView2, навигацией и временным InPrivate-профилем;
+`ExternalBrowserDockHost` — HWND placement, UI thread и привязкой к текущей панели.
+При подтверждённом блокере embedding заменяем владельца размещения на явное отдельное
+непривилегированное WinForms-окно с тем же компонентом и typed командами. В P5a такой
+fallback не написан и автоматически при ошибке не включается.
 OS browser, запускаемый сейчас Shell, не является этим управляемым fallback.
 
 Microsoft документирует у CompositionController visual target, bounds и mouse/pointer
@@ -201,6 +204,18 @@ session/document generation, число живых controls/listeners и пам�
 | 1/4/6 tabs, idle и повторные циклы | Зафиксировать память/latency baseline и после закрытия; необъяснённый рост остаётся блокером embedding |
 
 Результаты записываются здесь по каждому кандидату: окружение, фото/evidence, ограничения,
-вердикт. До этого выбран только критерий решения, не победивший renderer. Отдельный
+вердикт. WinForms выбран для первого внедрения; итоговая qualification остаётся Open. Отдельный
 fallback при введении регистрируется в MIGRATION_MAP с owner и removal gate:
 успешная та же матрица native embedding. В docs-only P0 такого adapter ещё нет.
+
+P5a ограничен одной ручной внешней страницей: HTTP(S), назад/вперёд/reload, временный
+профиль в отдельном GUID-каталоге, без Shell bridge/host objects, autofill и password
+autosave. Новые окна, downloads и permissions явно отклоняются. Неудача Runtime
+остаётся ошибкой с ручным close/reopen; после ProcessFailed нет automatic reload.
+Open возвращает runtime ID до ожидания Runtime; поздняя инициализация не оживляет
+закрытую страницу. Hide удерживает control, close/rebind/root reload освобождают его.
+Удаление собственного временного каталога — best effort после завершения браузера;
+реальные counters/memory/process exit ещё не измерены. DOM menu/drag скрывает HWND;
+асинхронная доставка скрытия и произвольные overlapping overlays требуют Windows evidence.
+Новый Application session/agent registry не вводится в этом ручном пилоте. P5b/P6
+расширяют owner только вместе с конкретным multi-page/agent consumer.

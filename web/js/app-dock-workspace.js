@@ -17,7 +17,7 @@
       onClose: function () { RNAssistantDiagnostics.onClose(); } },
     settings: { title: "Настройки", icon: "settings", renderer: "onlyWhenVisible", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
-  function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && (!views[id].perObject || views[id].menu); }); }
+  function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && (!views[id].perObject || views[id].menu) && (!views[id].available || views[id].available()); }); }
   // Temporary section adapters live in this catalog, not a second navigation registry.
   // S3b.2/S4 replace their delivery with independently mounted object views.
   function registerTargetRoute(id, route) {

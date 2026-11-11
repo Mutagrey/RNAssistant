@@ -1,5 +1,14 @@
 # Архитектура UI RNAssistant
 
+## External Browser P5a — In Review, 2026-11-11
+
+Одна experimental external-browser view использует existing Dockview/PreviewSurface.
+`ExternalBrowserPage` владеет непривилегированным WebView2 и навигацией,
+`ExternalBrowserDockHost` — placement/UI thread. Typed `ExternalBrowserCommand`
+проходит existing source/token/binding gate; IDs назначает native owner.
+Hide удерживает страницу, close/rebind/root reload освобождают её. Без нового store,
+Application registry или Dockview. [Флаг и native gates](../browser/02_ARCHITECTURE_ADR.md#native-spike).
+
 ## Native window — In Review, 2026-11-11
 
 NativeHostCli теперь только экспортный ABI/reflection loader. Один

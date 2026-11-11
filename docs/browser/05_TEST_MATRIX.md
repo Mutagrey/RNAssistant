@@ -6,6 +6,38 @@
 Выбор проверок — по
 [Harness guide](../../tests/RNAssistant.Harness/README.md).
 
+<a id="p5a"></a>
+## P5a: экспериментальный WinForms child — 2026-11-11
+
+На macOS прошли два Harness checks `external browser:` (HTTP(S)/credentials/bounds,
+disabled host/token/typed dispatch) и `tests/web/external-browser.test.js` в Chrome.
+Browser fixture использует production Shell/toolbar/Dockview и synthetic native:
+chooser → split/move/restore, address/Enter, focus command, menu/drag/hide, 420 px/125%,
+fresh close/reopen, stale native state, late layout и late open cleanup. Существующий
+`browser-lifetime.test.js` прошёл: пять restore удерживают один iframe и его input.
+Это не запуск WebView2, не Windows compilation и не Office qualification.
+
+Пилот по умолчанию выключен. На будущей Windows-машине после обычной сборки задайте
+`RNA_BROWSER_PILOT=1` в окружении **нового процесса** RNAssistant/Office (например,
+`$env:RNA_BROWSER_PILOT='1'` в PowerShell и запуск из неё). Уже работающий процесс
+новое окружение не получает. В Shell: «+» → «Внешний браузер · эксперимент».
+
+1. На локальной P5a-странице ввести текст и нажать счётчик; hide/split/move/restore
+   должны удержать ввод. Close/reopen должен открыть чистую контрольную страницу.
+2. Открыть menu над страницей, сменить размер, Tab/Shift+Tab/Enter и IME; перенести
+   окно между DPI 100/125/150/200%. Скрытый HWND не должен принимать ввод.
+3. В адресе проверить HTTP(S), назад/вперёд/reload; popup/download в этом пилоте
+   должны дать явный отказ. Раскрыть «Диагностика встраивания · P5a» для фотографии.
+4. Закрыть вкладку/исходный документ, повторить открытие; проверить фактическое
+   освобождение control/process/profile. ProcessFailed не должен повторять навигацию.
+
+На экране есть Runtime, parent HWND, native bounds/scale/DPI, owned control count и
+focus. Office build/version, IME, реальные native clicks/overlays, memory/process/profile
+cleanup и multi-page 1/4/6 остаются Open; последний сценарий требует расширения P5a.
+Только фотографии экрана, без запроса logs/files/dumps. Визуальное принятие — Open.
+
+## Матрица по этапам
+
 | Область | Existing coverage / начальная точка | Что добавить при реализации | Gate |
 |---|---|---|---|
 | Saved HTML/plugin views | [browser-saved-views](../../tests/web/browser-saved-views.test.js): retained input/mode, 32K source, exact owner, late leases, restore guard, narrow/zoom | Общий read-only address, единственный mode switch, unavailable actions | P1 |

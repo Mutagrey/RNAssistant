@@ -1,5 +1,14 @@
 # Карта экранов, навигации и состояний
 
+## External Browser P5a — In Review, 2026-11-11
+
+Host с `RNA_BROWSER_PILOT=1` добавляет во вкладку выбора «+» пункт
+«Внешний браузер · эксперимент». Одна вкладка: editable HTTP(S) address,
+назад/вперёд/reload, локальная контрольная страница и экранная диагностика.
+Hide/move/split/restore сохраняют page; close/reopen создают новую. Popup/download
+и permissions отклоняются явно. Без native capability пункта нет; восстановленная
+вкладка показывает недоступность. [Ревью](../browser/05_TEST_MATRIX.md#p5a).
+
 ## Native window — In Review, 2026-11-11
 
 Первый native pilot — launcher Excel → NativeHostCli. Верхний header содержит

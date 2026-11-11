@@ -1,5 +1,15 @@
 # План модернизации production UI
 
+## External Browser P5a — In Review, 2026-11-11
+
+Пользователь выбрал сразу WinForms WebView2 в целевом Dockview; отдельное окно —
+последующий явный вариант при конкретном native блокере. Scope: одна opt-in external
+view, общий toolbar, временный профиль и диагностика. Page отделена от placement;
+WPF/Composition и отдельное окно заранее не вводятся. P3/P4 не блокируются Windows.
+Host-neutral admission и synthetic Shell lifecycle проходят. Windows compilation,
+HWND focus/DPI/overlays/process exit и визуальное принятие — Open.
+[Запуск, 4 действия ревью и ограничения](../browser/05_TEST_MATRIX.md#p5a).
+
 ## Native window — In Review, 2026-11-11
 
 По приложенному пользователем плану управления окнами реализован scoped native

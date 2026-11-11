@@ -23,8 +23,9 @@ docs-only P0; реализованы описанные ниже срезы. О�
 | P6 Agent automation | Application/ToolRuntime/Resource Gateway: semantic reads/actions/verify и evidence | Local fixture workflow, stale/unknown/user conflict/shared sessions, bounded output/redaction; без второго kernel/agent roles |
 | P7 Qualification | Владельцы затронутых контуров: stress/security/performance/recovery | Host-neutral + отдельные Windows/Office results, визуальное принятие, закрытые removal gates; release решается отдельно |
 
-Native spike подготовлен P0 и может выполняться независимо от P1–P4. P5 зависит от
-его evidence; внутренние UI-срезы не ждут Windows. Не начинать одновременно миграцию
+Native spike подготовлен P0 и может выполняться независимо от P1–P4. P5a по решению
+2026-11-11 начинает WinForms embedding до доступности Windows; его qualification
+зависит от native evidence. Внутренние UI-срезы не ждут Windows. Не начинать одновременно миграцию
 всех viewers. Каждый этап заканчивается обновлением canonical docs, фактическим
 evidence и ровно одним следующим шагом в [Progress](06_PROGRESS.md).
 
@@ -199,6 +200,21 @@ Focused regression red → green и `plugin-view-selection` прошли; общ
 Остаток P3 — source/release presentation и нужный consumer plugin capabilities:
 сначала сверить существующие DTO/views. Общий descriptor без конкретного потребителя
 и новый session слой не требуются. Native renderer/agent automation отдельно.
+
+## P5a: WinForms сразу внутри Dockview — In Review, 2026-11-11
+
+Owner: Office/WebView — непривилегированная страница и отдельный владелец размещения;
+Web — existing Dockview/PreviewSurface. Пилот включается `RNA_BROWSER_PILOT=1`,
+использует одну внешнюю вкладку с HTTP(S), навигацией, локальной контрольной страницей
+и экранной диагностикой. Separate-window реализация появится только при конкретном
+блокере embedding; общие browser policy/navigation/profile не копируются.
+
+Локально проверены typed admission и Shell lifecycle с synthetic native responses.
+Следующий gate этого среза — первая Windows compilation и проверка настоящего HWND:
+focus/IME, DPI, overlays, close/process exit. До неё P5 целиком не закрыт. Multi-tab,
+persistent profiles, разрешённые popup/download и agent actions в P5a не входят.
+Rollback — отключить флаг и закрыть экспериментальную вкладку; внутренних viewers
+и пользовательских данных этот путь не заменяет. [Запуск/проверки](05_TEST_MATRIX.md#p5a).
 
 ## Развитие после P1
 

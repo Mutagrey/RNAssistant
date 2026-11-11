@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## External Browser P5a — In Review, 2026-11-11
+
+External view использует PreviewSurface, address/navigation, compact controls и tokens.
+Диагностика — disclosure с shared summary; нового toolbar/theme нет.
+`onlyWhenVisible` удерживает DOM в existing parking и избегает повторного scale в Dock
+при 125%. Над menu/drag нативная страница временно скрывается, её состояние сохраняется.
+Shell 1280/100% и 420/125% просмотрена с synthetic native; реальные HWND overlays и
+визуальное принятие открыты. [Проверка](../browser/05_TEST_MATRIX.md#p5a).
+
 ## Native window — In Review, 2026-11-11
 
 Используется существующий `workspace-topbar`, без нового бренда и второго header.

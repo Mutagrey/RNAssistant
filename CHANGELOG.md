@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.4.0-dev
+
+- Opt-in External Browser pilot embeds one unprivileged WinForms WebView2 page in
+  the existing Dockview/Browser toolbar, with HTTP(S) navigation, a temporary
+  InPrivate profile and on-screen diagnostics. Enable with `RNA_BROWSER_PILOT=1`.
+  Popup/download/permission policies currently refuse requests. Native Windows
+  compilation, Office integration and visual acceptance remain open.
+
 ### 16.3.3-dev
 
 - Saved plugin tabs check the current publication when opening restore actions.
