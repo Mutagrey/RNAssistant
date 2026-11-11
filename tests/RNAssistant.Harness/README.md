@@ -551,7 +551,10 @@ and locking. No new-journal or Office qualification is implied.
 loads and verifies typed immutable metadata, unchanged history/selection and an
 unsaved draft. `storage: busy chat stays visible` checks the short validated/complete
 event-read timeout and named holder diagnostics. `storage: CAS missing runtime body`
-keeps diagnostics addressable without execution hydration. `model context: workspace
+keeps diagnostics and Office history pages addressable with missing/corrupt execution
+bodies; full run loading still fails explicitly and canonical bytes stay unchanged.
+`plugins: project chat history uses shared pages` covers the same missing-body case
+through the real Workspace consumer. `model context: workspace
 exchange and scope` checks the same identity-only workspace route; `bridge: typed
 trajectory query` checks `chat_storage_busy` instead of generic failure/empty success.
 These do not qualify the real Office controller or Windows lock durations.

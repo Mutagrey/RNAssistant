@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.5.1-dev
+
+- Older Office/Workspace chat pages remain readable when an unfinished operation's
+  execution body is missing or corrupt. History reads leave the operation unchanged;
+  full run loading still reports the missing evidence explicitly.
+
 ### 16.5.0-dev
 
 - The opt-in External Browser pilot exposes a chat-bound, bounded semantic page

@@ -399,9 +399,13 @@ and Workspace consume this contract directly. Existing resource owners resolve
 detached membership, applicable tombstones and selected heads. Off-page source
 existence is retained as tombstone IDs, without sending synthetic messages to the
 consumer. Exact resource cards, raw message indexes and workspace scope are unchanged.
-The legacy backend still uses a temporary session internally for resource projection;
-its execution hydration and artifact enumeration are not made bounded by this DTO.
-That internal dependency must be removed with resource-owner/journal integration.
+The page excludes `LastRun` before cloning its projection root, so neither the
+checkpoint nor its opaque execution CAS bodies are hydrated for history display.
+Missing/corrupt execution evidence does not hide older messages. The canonical run
+is unchanged; full session loading still requires its exact body and fails explicitly
+when unavailable. The legacy backend still uses a temporary session for resource
+projection and enumerates artifact metadata. That internal dependency must be removed
+with resource-owner/journal integration.
 
 Office navigation serializes selection and drains already admitted catalog and
 preference requests before a possible host switch. This prevents an old controller

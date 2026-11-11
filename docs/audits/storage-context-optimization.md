@@ -736,3 +736,29 @@ after-state/CAS ownership.
    resource materialization joins the journal consumers. No new adapter, import or
    dual-write. P4 remains deferred; backup/stop-writers/Windows gates still precede
    the new-history cutover.
+
+## P1 — history pages without execution hydration (2026-11-11)
+
+1. F04 / P1 read boundary; existing `ChatStore.ReadMessageWindowAtPath` excludes
+   `LastRun` before copying the page projection root.
+2. Office/Workspace can read older messages despite an absent/corrupt opaque body
+   of an unfinished tool operation. Full run loading still fails explicitly; no
+   recovery, replay, state reset or canonical rewrite occurs during the page read.
+3. Removed the page's checkpoint-copy/execution-CAS dependency. No new API, store,
+   adapter or fallback; production C# +4/−1, net +3. Patch version `16.5.1-dev`.
+4. Two existing fixtures extended through production Office presentation and the
+   real Workspace consumer fail with `RUNTIME_PAYLOAD_UNAVAILABLE` on `ae730868`.
+   Both pass with this change on macOS/net8/C#7.3. Three selected regressions also
+   pass: bounded message rows, exact resource/tombstone presentation and corrupt-row
+   index repair. Five checks total; no new-journal/restore requalification.
+5. Baseline/candidate page success in the two regression fixtures: 0/2 → 2/2.
+   The Office fixture also checks corrupt bodies. Execution bodies required by these
+   page reads: one → zero; the existing H=190/page=80 check still hydrates 80 messages.
+   Canonical bytes stay identical and full run loading still rejects unavailable
+   evidence after paging. No CPU/allocation/latency benchmark or total speedup claim.
+6. The temporary internal session and artifact/context projection remain; ordinary
+   Store operations and new-journal consumers are still open. Native Office delivery
+   and DPAPI remain separate Windows evidence; no COM/VSTO validation was run.
+7. Session events, MIGRATION_MAP, PROGRESS, Harness guide and Unreleased updated.
+   The existing resource projection dependency keeps its prior owner/removal gate;
+   no new adapter. P4 stays deferred and cutover retains the backup/writer-stop gates.

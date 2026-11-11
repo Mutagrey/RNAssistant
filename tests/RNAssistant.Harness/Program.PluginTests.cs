@@ -1139,6 +1139,20 @@ namespace RNAssistant.Harness
                         RootPath = Path.Combine(paths.Root, "foreign-project") }).SelectedWorkspaceId;
                     PluginFailure(() => service.ProjectChatMessages(new ProjectChatHistoryRequest {
                         WorkspaceId = other, SessionId = created.SessionId, BeforeIndex = 91 }), "project_chat_missing");
+
+                    session = service.Conversations.GetSession(workspace, created.SessionId);
+                    session.LastRun = LargePendingRuntimeRun();
+                    new ChatStore(paths).Save(session);
+                    File.Delete(Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Single());
+                    var eventPath = SessionEventFile(paths, session);
+                    var canonical = File.ReadAllBytes(eventPath);
+                    var retained = service.ProjectChatMessages(new ProjectChatHistoryRequest {
+                        WorkspaceId = workspaceId, SessionId = created.SessionId, BeforeIndex = 1 });
+                    AssertEqual("Message 0", retained.Messages.Single().Content,
+                        "Workspace history pages do not require the unavailable execution body");
+                    RuntimeThrows<RuntimePayloadUnavailableException>(() => service.Conversations.GetSession(workspace, session.Id));
+                    AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(eventPath)),
+                        "page inspection preserves the unresolved operation and history");
                 }
             });
         }

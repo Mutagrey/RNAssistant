@@ -121,6 +121,9 @@ for full live sessions. No new adapter, store or resource owner. The existing te
 the backend only. Owner: Core Storage/resource projection; removal gate: scoped
 resource materialization during new-journal consumer integration. No fallback or
 aggregate reconstruction was added to the callers.
+Page reads now exclude `LastRun` before copying the projection root, removing their
+execution-CAS hydration dependency. Full load/recovery keeps its exact-body check;
+unavailable evidence is not reset, substituted or retried by a history read.
 
 ## Общие вложения, очередь и активные запросы — 2026-11-03
 

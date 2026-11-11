@@ -770,7 +770,10 @@ namespace RNAssistant.Core.Storage
                         if (beforeIndex < 0 || beforeIndex > total)
                             throw new ArgumentOutOfRangeException(nameof(beforeIndex));
                         start = Math.Max(0, beforeIndex - pageSize);
-                        root = (JObject)cursor.Root.DeepClone();
+                        // A page cannot resume a run. Leave its checkpoint in the
+                        // canonical projection without copying or hydrating its CAS.
+                        root = new JObject(cursor.Root.Properties().Where(property => property.Name != "LastRun")
+                            .Select(property => new JProperty(property.Name, property.Value.DeepClone())));
                         root["Messages"] = ReadSqliteMessageWindow(connection, transaction,
                             cursor.SessionId, start, beforeIndex - start);
                         root["Artifacts"] = ReadSqliteList(connection, transaction, "artifacts", cursor.SessionId);

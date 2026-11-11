@@ -1013,15 +1013,8 @@ namespace RNAssistant.Harness
                 healthy.LastRun = new ChatRunRecord { RunId = "healthy-run", RuntimeId = "previous", Status = "running" };
                 writer.Save(healthy);
                 var broken = writer.Create("Word", "missing-runtime", "Broken.docx", "Unavailable");
-                var call = new RNAssistant.Core.Agent.ToolCall("broken-call", "tools.upsert",
-                    "{\"source\":\"" + new string('x', 9000) + "\"}");
-                var running = new RunSummary("broken-run", "broken-turn", RunLifecycle.Running,
-                    new ToolCounts(), 1, 0, string.Empty, null, null);
-                var execution = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "catalog-r1", true, true),
-                    running.RunId, running.TurnId, "step", DateTime.UtcNow, false, 16);
-                broken.LastRun = new ChatRunRecord { RunId = running.RunId, TurnId = running.TurnId,
-                    RuntimeId = "previous", Status = "running", KernelState = new AgentRunState(running,
-                        new AgentRunLimits(8, 16), execution) };
+                broken.Messages.Add(new ChatMessage { Role = "user", Content = "Retained history" });
+                broken.LastRun = LargePendingRuntimeRun();
                 writer.Save(broken);
                 var bodyPath = Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
                 if (corrupt) File.WriteAllText(bodyPath, "damaged CAS body");
@@ -1034,6 +1027,11 @@ namespace RNAssistant.Harness
                 AssertEqual("interrupted", reader.Load(healthy.Id).LastRun.Status,
                     "an unavailable runtime body does not block recovery of another chat");
                 AssertEqual(2, reader.ListHeaders().Count, "unavailable chat remains listed");
+                var page = ConversationStore(reader).ReadMessageWindow(broken.Id, 1, 80);
+                AssertEqual("Retained history", ChatCloneService.CloneMessagesForBridge(
+                    page.Metadata, page.Artifacts, page.PageMessages).Single().Content,
+                    "Office history pages do not require the unavailable execution body");
+                AssertEqual(broken.Revision, page.Metadata.Revision, "paging does not recover or reset the unfinished run");
                 RuntimeThrows<RuntimePayloadUnavailableException>(() => service.LoadAddressedSession(broken.Id));
                 AssertEqual(broken.Id, service.LoadDiagnosticsMetadata(broken.Id).Id,
                     "diagnostics remain addressable without hydrating unavailable execution bodies");
@@ -1042,6 +1040,19 @@ namespace RNAssistant.Harness
                     "missing evidence cannot rewrite the run or mark an unobserved tool as completed");
                 AssertEqual(0L, reader.HeaderFullReplayCount, "recovery does not discard a healthy header index");
             });
+        }
+
+        private static ChatRunRecord LargePendingRuntimeRun()
+        {
+            var call = new RNAssistant.Core.Agent.ToolCall("broken-call", "tools.upsert",
+                "{\"source\":\"" + new string('x', 9000) + "\"}");
+            var running = new RunSummary("broken-run", "broken-turn", RunLifecycle.Running,
+                new ToolCounts(), 1, 0, string.Empty, null, null);
+            var execution = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "catalog-r1", true, true),
+                running.RunId, running.TurnId, "step", DateTime.UtcNow, false, 16);
+            return new ChatRunRecord { RunId = running.RunId, TurnId = running.TurnId,
+                RuntimeId = "previous", Status = "running", KernelState = new AgentRunState(running,
+                    new AgentRunLimits(8, 16), execution) };
         }
 
         private static void SqliteProjectionPagesMessages()

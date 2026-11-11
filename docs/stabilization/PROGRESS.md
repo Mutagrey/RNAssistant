@@ -154,9 +154,16 @@ Office/Workspace используют metadata, bounded messages и данные
 Сохранены off-page tombstones, выбранные heads, exact revision/lineage и scope.
 11 адресных checks проходят на изолированной базе `b61515b2` с этим срезом;
 190-message fixture материализует прежние 80 сообщений, canonical bytes неизменны.
-Production C# — net +106 строк. Внутренняя временная проекция старого backend,
-полный обход artifact metadata и execution hydration ещё остаются; ускорение всего
+Production C# — net +106 строк. Внутренняя временная проекция старого backend и
+полный обход artifact metadata ещё остаются; ускорение всего
 read path не заявляется. Windows controller/Office evidence открыто.
+
+P1 page execution isolation: `LastRun` исключается до копирования root страницы;
+потерянное/повреждённое CAS-тело операции больше не блокирует историю Office/Workspace.
+Полная загрузка run по-прежнему явно отказывает, canonical bytes не меняются.
+Две регрессии падают на `ae730868` и проходят после исправления; всего пять адресных
+checks прошли host-neutral. Production C# — net +3 строки; версия `16.5.1-dev`.
+Внутренняя resource projection, обычные Store-операции и journal cutover ещё открыты.
 
 Маршрут до переключения сужен по [уточнению пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md#84-порядок-небольших-срезов):
 реальные consumers и короткие сквозные проверки каждого среза; финально — чат,
