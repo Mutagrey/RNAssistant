@@ -244,9 +244,11 @@ live сохраняет preview. Старый native HTML classifier удалё�
 
 P2c уточнён пользователем 2026-11-11: automatic lifecycle, без списка sessions,
 отдельного завершения и нового registry. Hide/move/split/restore сохраняют страницу;
-close вкладки освобождает её, reopen загружает заново. Следующий шаг — existing
-saved HTML coverage и готовая страница close/reopen/late cleanup; затем live dirty
-guards. Исправления только по подтверждённым gaps у текущих owners.
+close вкладки освобождает её, reopen загружает заново. Проверка завершена host-neutral:
+четыре browser fixtures проходят; добавлены только saved/editor close/reopen и
+late-body assertions. Production-код/UI не менялись; dirty guards и existing portal
+сохранены. [Evidence](../browser/05_TEST_MATRIX.md#результаты-p2c--2026-11-11).
+Далее P3 — сверка existing plugin views и выбор конкретного расхождения до реализации.
 [Scope и порядок](../browser/04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
 Preview standalone source, перенос зависимостей, настоящий diff и external native browser остаются в плане. Концепция
 Approved; визуальное принятие production и Windows/Office evidence остаются Open.

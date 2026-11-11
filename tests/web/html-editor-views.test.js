@@ -148,7 +148,23 @@ const { chromium } = require('playwright');
     assert.equal(await page.evaluate(async()=>{htmlTest.wrongDocument=true;htmlTest.contents['html-a']='<h1>FOREIGN</h1>';return editorView('html-a').ready(true);}),false,'foreign response is rejected');
     await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
     assert.equal(await a.getByRole('heading',{name:'FOREIGN',exact:true}).count(),0,'foreign source never replaces the retained preview');
+    const beforeReopenReads=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length);
+    await page.evaluate(()=>{htmlTest.closedView=editorView('html-a');
+      htmlTest.closedFrame=document.querySelector('[data-html-node="htmlWorkspacePreviewFrame"][data-chat-id="html-a"]');
+      RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key({chatId:'html-a'}));});
+    await page.waitForFunction(()=>!editorView('html-a')&&!htmlTest.closedFrame.isConnected);
+    assert.equal(await root('html-a').count(),0,'clean close releases the editor and its preview');
+    await page.evaluate(()=>{htmlTest.wrongDocument=false;htmlTest.contents['html-a']='<h1>agent v6</h1>';
+      RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'preview'});});
+    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>editorView('html-a')!==htmlTest.closedView&&
+      document.querySelector('[data-html-node="htmlWorkspacePreviewFrame"][data-chat-id="html-a"]')!==htmlTest.closedFrame),true,'reopen creates a new editor and iframe');
+    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length),beforeReopenReads+1,'reopen reads the addressed source once');
+    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-b',{mode:'edit'}));
+    assert.equal(await root('html-b').locator('.CodeMirror').evaluate(node=>node.CodeMirror.getValue()),'unsaved B','closing another editor preserves the dirty buffer');
+    assert.equal(await page.evaluate(()=>htmlTest.calls.some(c=>/^(cancelChatRun|cancelProjectChat|stopActiveChatRun|stopChatInbox|cancelAgentWait)$/.test(c.command))),false,'editor close never sends Run cancellation');
+    await page.evaluate(()=>{delete htmlTest.closedView;delete htmlTest.closedFrame;});
     assert.deepEqual(errors, []);
-    console.log('HTML editor views: buffers, scoped annotation, reload/current publication, hidden and concurrent refresh, dirty guards, restore, narrow/zoom and late close OK');
+    console.log('HTML editor views: buffers, scoped annotation, reload/current publication, hidden and concurrent refresh, dirty guards, restore, narrow/zoom, late close and clean close/reopen OK');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

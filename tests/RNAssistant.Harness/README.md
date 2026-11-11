@@ -2084,6 +2084,18 @@ pass is reusable only when its relevant sources/tests, dependencies, build setti
 and environment are unchanged. Explicit phase/release gates and the pre-commit
 version check still apply.
 
+## Browser automatic lifetime (P2c, 2026-11-11)
+
+Use existing `browser-saved-views.test.js` and `html-editor-views.test.js` for ready
+close/reopen: old iframe/editor removed, one fresh source read, preview input reset,
+exact owner preserved and no Run cancellation sent. Saved views also cover a body
+response that arrives after close/reopen without replacing the new page; its lease
+is closed even when the synthetic transport ignores abort. Live dirty guards remain.
+`browser-lifetime.test.js` covers five restores with one frame load;
+`html-project-import.test.js` covers late Created after close without replay/navigation.
+All four passed sequentially without production changes or a C# build.
+[Evidence and limits](../../docs/browser/05_TEST_MATRIX.md#результаты-p2c--2026-11-11).
+
 ## Browser target resolution (P2b, 2026-11-11)
 
 `browser target:` covers exact source/kind/scope, head drift without selection,

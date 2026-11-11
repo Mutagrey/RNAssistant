@@ -1,10 +1,10 @@
 # Universal Browser: статус
 
-Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets.
+Дата: 2026-11-11. Scope: P0/P1 + Browser controls/freshness + P2a import + P2b targets + P2c lifecycle checks.
 Owner: Web Browser/PreviewSurface; Application/Core — sessions/contracts/evidence;
 Office/WebView — будущий native adapter. P1, P2a и P2b реализованы, **In Review**.
 
-## P2c: пересмотр lifetime — Approved, 2026-11-11
+## P2c: автоматический lifetime — проверен host-neutral, 2026-11-11
 
 Пользователь утвердил автоматическое управление: switch/hide/move/split сохраняют
 страницу и ввод; close вкладки освобождает renderer/leases; reopen загружает target
@@ -12,9 +12,12 @@ Office/WebView — будущий native adapter. P1, P2a и P2b реализо�
 не нужны. Run, сохранённые данные и dirty source guards остаются у прежних owners.
 Начатый незавершённый код detached sessions удалён; P2b закоммичен `36a44073`.
 План/контракты и canonical UI docs приведены к [решению](02_ARCHITECTURE_ADR.md#lifetime-authority-и-восстановление).
-P2c теперь проверяет existing lifecycle и устраняет только подтверждённые gaps;
-новая Application session инфраструктура не является deliverable этого среза.
-Полная P2c qualification не заявлена; visual/Windows evidence остаётся открытым.
+P2c проверил existing lifecycle: четыре browser fixtures прошли, production-правки
+не понадобились. В existing saved/editor fixtures добавлены close/reopen готовой
+страницы и поздний body после повторного открытия. Новый iframe, одно source read,
+сброс preview-ввода, dirty guards и отсутствие Run cancellation подтверждены.
+[Evidence и границы](05_TEST_MATRIX.md#результаты-p2c--2026-11-11). Изменены tests/docs,
+без нового runtime/UI и bump версии. Windows/Office и прежнее визуальное принятие открыты.
 
 ## P2b: цели и возможности HTML — In Review, 2026-11-11
 
@@ -224,7 +227,8 @@ raw HTML/plugin authority. Windows evidence только по фотографи
 
 ## Ровно следующий шаг
 
-Следующий шаг P2c — сверить coverage saved HTML и проверить close готовой страницы /
-reopen, отсутствие утечек и позднего resurrection, сохранив hide/move/restore и ввод.
-[План](04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
+Следующий срез P3 — сверить existing plugin source/candidate/release views с общими
+Browser controls и target/capability контрактом; выбрать конкретное расхождение до
+кодирования. Instance owner, grants, публикация и данные остаются у прежних owners.
+[План](04_MIGRATION_PLAN.md#развитие-после-p1). Отдельный session слой не нужен заранее.
 Визуальное ревью P1/P2a/P2b, pointer routing и Windows evidence — отдельные открытые gates.

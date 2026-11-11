@@ -10,7 +10,7 @@
 |---|---|---|---|
 | Saved HTML/plugin views | [browser-saved-views](../../tests/web/browser-saved-views.test.js): retained input/mode, 32K source, exact owner, late leases, restore guard, narrow/zoom | Общий read-only address, единственный mode switch, unavailable actions | P1 |
 | Browser portal lifetime | [browser-lifetime](../../tests/web/browser-lifetime.test.js): одинаковый iframe, пять Dock restores, сохранённый input/load count | Только новые случаи при изменении placement; тест не доказывает native HWND | P1/P2 |
-| Automatic lifetime, решение 2026-11-11 | Existing saved/portal/editor fixtures: hide/move/restore, retained input, late lease cleanup и dirty guards | Сверить coverage готовой страницы close/reopen: прежний iframe удалён, новое открытие грузит source заново, ввод сброшен; Run не отменён, поздний reply не возвращает страницу. Без session list/API | P2c Planned; не qualification |
+| Automatic lifetime, решение 2026-11-11 | Saved/portal/editor/import fixtures: hide/move/restore, close/reopen, late cleanup и dirty guards | Готовый iframe удалён; reopen читает source один раз, ввод сброшен; нет Run cancellation, поздний body не заменяет новую view. Без session list/API | P2c host-neutral passed; Windows Open |
 | Live HTML/plugin Browser | [browser-views](../../tests/web/browser-views.test.js): scoped annotation, frame lifetime и actions | Hide/move/restore сохраняют renderer; close освобождает его, reopen загружает заново; dirty source guard | P1/P2c/P3 |
 | Source/editor | [html-editor-views](../../tests/web/html-editor-views.test.js), [html-workspace-source](../../tests/web/html-workspace-source.test.js), [html-workspace-write](../../tests/web/html-workspace-write.test.js) | Session ownership, dirty buffers при закрытии, stale source и поздний write ack | P2 |
 | Typed application contracts | `browser target:` + existing HTML/resource checks; saved/editor browser fixtures | Exact kind/scope, head drift, ambiguous/missing selected source, read-only capabilities, rejected response/lease cleanup | P2b host-neutral passed; sessions/Windows Open |
@@ -43,6 +43,33 @@ bounded source, поздний transfer cleanup, exact chat/document/URI и plug
 Дополнить только assertions нового общего UI. Не заводить тест, повторяющий устройство
 descriptor, вместо проверки пользовательского поведения. C#/VSTO tests для P1 не нужны.
 При изменении только docs эти команды не выполнять.
+
+## Результаты P2c — 2026-11-11
+
+Production baseline `a7254360`; код приложения не менялся. Последовательно прошли:
+`browser-saved-views`, `html-editor-views`, `browser-lifetime`, `html-project-import`.
+Использованы локальный Chrome и существующий synthetic bridge, без сборок/Harness/Office.
+
+- Saved HTML: после close iframe и portal surface отсутствуют; повторное открытие
+  создаёт новый iframe, возвращает исходный ввод и делает ровно одно body read.
+  Смена активного чата не меняет chat/document/URI открываемого source.
+- Закрытие во время body read отменяет reader signal. Даже если транспорт вернул
+  body позднее, отправляется `closeArtifactTransfer`, новая view того же source
+  сохраняет свой ввод; прежняя view не возвращается. Late export cleanup уже покрыт.
+- Live editor: dirty close отклонён; clean close удаляет editor/iframe, reopen
+  создаёт новые и читает source один раз. Несохранённый буфер другого editor сохранён.
+- Portal: пять Dock restores — один iframe load и сохранённый ввод. Existing checks
+  сохраняют hide/switch, narrow/zoom, exact scope и read-only guards.
+- Browser close не отправляет Run cancellation. Existing import fixture подтверждает
+  late Created после close, отсутствие повторного import и автоматического запуска чата.
+
+Добавлены только недостающие assertions в два existing fixtures. В новой проверке
+другого dirty editor сначала исправлен locator: скрытый `onlyWhenVisible` editor
+нужно активировать перед чтением DOM. Это ошибка проверки, не дефект приложения.
+Проверены Web cleanup/команды освобождения и DOM lifetime, без heap/native handle
+профилирования и реального Office Run. Windows/WebView2, pointer routing и прежнее
+визуальное принятие остаются Open; новый UI не вводился. Версия не повышается:
+изменены только tests/docs.
 
 ## Результаты P2b — 2026-11-11
 

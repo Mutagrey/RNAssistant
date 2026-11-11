@@ -43,7 +43,9 @@ const {chromium}=require('playwright');
       const html='<h1>Точная версия</h1><label>Ввод <input value="initial"></label>';
       const source='/* сохранённый большой исходник */\n'.repeat(64000);
       savedTest.bytes=new TextEncoder().encode(JSON.stringify({Project:{EntryPath:'index.html',Files:[{Path:'index.html',Kind:'html',Content:html},{Path:'styles.css',Kind:'css',Content:source}],Data:[{Name:'saved'}],ExternalDependencies:[]},Views:[{Name:'saved',Reference:{uri:'rna://chat/preview-chat/snapshot/saved',revision:'r1'},View:'text',Path:'',Text:'Точные сохранённые данные </script>'}]}));
-      RNAssistantResourceDownload.read=async function(data,options){if(!data.synthetic)return read(data,options);savedTest.reads++;return savedTest.bytes;};
+      RNAssistantResourceDownload.read=async function(data,options){if(!data.synthetic)return read(data,options);savedTest.reads++;
+        if(savedTest.delayRead){savedTest.delayRead=false;savedTest.lateReadLease=data.leaseId;savedTest.lateReadSignal=options.signal;
+          return new Promise(resolve=>{savedTest.releaseRead=()=>resolve(savedTest.bytes);});}return savedTest.bytes;};
       send=function(command,payload){savedTest.calls.push({command,payload});
         if(command==='listArtifactCatalog')return Promise.resolve({chatId:state.activeChatId,sessionRevision:1,documentId:'preview-document',items:savedTest.items,documents:[]});
         if(command==='exportArtifact'&&payload.resourceUri.includes('/saved-')){
@@ -95,7 +97,7 @@ const {chromium}=require('playwright');
     const htmlReads=await page.evaluate(()=>savedTest.reads);
     assert.equal(htmlReads,baseline?5:2);assert.equal(retained,baseline?'initial':'retained');
     const packageBytes=await page.evaluate(()=>savedTest.bytes.byteLength);
-    let sourceCharacters,sourceMs;
+    let sourceCharacters,sourceMs,lifecycle;
     const documentGeometry=[];
     if(baseline){
       const start=performance.now();await page.locator('#artifactCatalogPreviewBody').getByRole('button',{name:'Код',exact:true}).click();
@@ -201,6 +203,19 @@ const {chromium}=require('playwright');
         const chat=savedTest.chat.element.closest('.dv-groupview'),browser=anchor?.closest('.dv-groupview');return chat&&browser&&chat!==browser;}),'chat and Browser occupy separate Dock groups');
       assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'retained');
       if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-discussion1280.png'});
+      const beforeReopenReads=await page.evaluate(()=>savedTest.reads);
+      await page.evaluate(selector=>{savedTest.closedFrame=document.querySelector(selector);
+        savedTest.closedTarget=RNAssistantMaterialView.target(savedTest.items[0],{chatId:'preview-chat'});
+        RNAssistantDockWorkspace.close(RNAssistantMaterialView.key(savedTest.closedTarget));},htmlSelector('A'));
+      await page.waitForFunction(()=>!savedTest.closedFrame.isConnected);
+      assert.equal(await a.count(),0,'closing a ready tab removes its portal surface');
+      await page.evaluate(()=>{state.activeChatId='unrelated-chat';state.chatNavigationVersion++;RNAssistantDockWorkspace.openTarget(savedTest.closedTarget);});
+      await page.frameLocator(htmlSelector('A')).getByRole('heading',{name:'Точная версия'}).waitFor();
+      assert.equal(await page.frameLocator(htmlSelector('A')).getByRole('textbox').inputValue(),'initial','reopen loads the original page without replaying input');
+      assert.equal(await page.evaluate(selector=>document.querySelector(selector)!==savedTest.closedFrame,htmlSelector('A')),true,'reopen creates a new iframe');
+      lifecycle={reopenReads:await page.evaluate(()=>savedTest.reads)-beforeReopenReads};assert.equal(lifecycle.reopenReads,1);
+      assert.deepEqual(await page.evaluate(()=>{const p=savedTest.calls.filter(c=>c.command==='exportArtifact').at(-1).payload;delete savedTest.closedFrame;return [p.chatId,p.documentId,p.resourceUri];}),
+        ['preview-chat','preview-document',await page.evaluate(()=>savedTest.items[0].resourceUri)],'reopen keeps the source owner after active chat changes');
       await page.evaluate(()=>{state.activeChatId='another-chat';state.chatNavigationVersion++;});
       await a.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await page.frameLocator(htmlSelector('A')).getByRole('heading',{name:'Точная версия'}).waitFor();
       assert.deepEqual(await page.evaluate(()=>{const p=savedTest.calls.filter(c=>c.command==='exportArtifact').at(-1).payload;return [p.chatId,p.documentId];}),['preview-chat','preview-document']);
@@ -243,6 +258,23 @@ const {chromium}=require('playwright');
       await page.evaluate(()=>{RNAssistantDockWorkspace.close(RNAssistantMaterialView.key(savedTest.lateTarget));savedTest.releaseExport();savedTest.delayExport=false;});
       await page.waitForFunction(()=>savedTest.calls.some(c=>c.command==='closeArtifactTransfer'&&c.payload.leaseId===savedTest.lateLease));
       assert.equal(await surface('Поздняя версия').count(),0);
+
+      // An unabortable body response from a closed view must not replace a new view of the same source.
+      await page.evaluate(()=>{savedTest.delayRead=true;
+        savedTest.readTarget=RNAssistantMaterialView.target(Object.assign({},savedTest.items[0],{title:'Позднее чтение',resourceUri:savedTest.items[0].resourceUri+'-read'}),{chatId:'preview-chat'});
+        RNAssistantDockWorkspace.openTarget(savedTest.readTarget);});
+      await page.waitForFunction(()=>!!savedTest.releaseRead);
+      await page.evaluate(()=>RNAssistantDockWorkspace.close(RNAssistantMaterialView.key(savedTest.readTarget)));
+      await page.waitForFunction(()=>savedTest.lateReadSignal.aborted);
+      await page.evaluate(()=>RNAssistantDockWorkspace.openTarget(savedTest.readTarget));
+      const reopened=page.frameLocator('.browser-object-view[aria-label="Позднее чтение"] iframe');
+      await reopened.getByRole('textbox').fill('new page input');
+      await page.evaluate(()=>savedTest.releaseRead());
+      await page.waitForFunction(()=>savedTest.calls.some(c=>c.command==='closeArtifactTransfer'&&c.payload.leaseId===savedTest.lateReadLease));
+      assert.equal(await surface('Позднее чтение').count(),1,'late body does not resurrect the closed view');
+      assert.equal(await reopened.getByRole('textbox').inputValue(),'new page input','late body leaves the reopened page intact');
+      lifecycle.lateReadDiscarded=true;
+      await page.evaluate(()=>{RNAssistantDockWorkspace.close(RNAssistantMaterialView.key(savedTest.readTarget));delete savedTest.releaseRead;delete savedTest.lateReadSignal;});
     }
     await page.setViewportSize({width:1280,height:900});
     await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));await page.locator('[data-plugin-node="PreviewFrameHost"] iframe').waitFor();
@@ -280,10 +312,11 @@ const {chromium}=require('playwright');
       await page.waitForFunction(()=>savedTest.calls.some(c=>c.command==='closePlugin'&&c.payload.instanceId===savedTest.lateInstance));
       assert.equal(await surface('Поздний релиз').count(),0);
       assert.equal(await page.evaluate(()=>savedTest.calls.some(c=>/sendMessage|startAgent|runModelDiagnostic/.test(c.command))),false);
+      assert.equal(await page.evaluate(()=>savedTest.calls.some(c=>/^(cancelChatRun|cancelProjectChat|stopActiveChatRun|stopChatInbox|cancelAgentWait)$/.test(c.command))),false,'Browser close never sends Run cancellation');
       assert.equal(await page.evaluate(()=>RNAssistantWorkspaceChat.owner()),'office');
     }
     assert.deepEqual(errors,[]);
-    const result={mode:baseline?'before':'after',fixture:{packageBytes,selections:5},html:{reads:htmlReads,returnInput:retained,actionMs:times,sourceCharacters,sourceMs,documentGeometry},plugin:{opens,actionMs:pluginTimes}};
+    const result={mode:baseline?'before':'after',fixture:{packageBytes,selections:5},html:{reads:htmlReads,returnInput:retained,actionMs:times,sourceCharacters,sourceMs,documentGeometry,lifecycle},plugin:{opens,actionMs:pluginTimes}};
     if(process.env.BROWSER_RESULT)fs.writeFileSync(process.env.BROWSER_RESULT,JSON.stringify(result,null,2)+'\n');
     console.log(JSON.stringify(result));
   }finally{if(browser)await browser.close();server.kill('SIGTERM');}

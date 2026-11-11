@@ -268,7 +268,11 @@ read counts, iframe/drafts и geometry сохранены. Старый raw impo
 P2b закоммичен `36a44073`. Решением пользователя 2026-11-11 P2c изменён на проверку
 automatic lifecycle existing views: hide/move сохраняют страницу, close освобождает,
 reopen загружает заново. Незавершённый код detached sessions удалён; список/отдельное
-завершение и новый registry не вводятся. [Следующий scope](../browser/04_MIGRATION_PLAN.md#p2c-автоматический-lifecycle--scope-approved-2026-11-11).
+завершение и новый registry не вводятся. P2c проверен host-neutral: четыре browser
+fixtures проходят, ready close/reopen и late-body assertions добавлены в existing
+saved/editor checks. Production-правки не понадобились; версия не меняется.
+[Evidence](../browser/05_TEST_MATRIX.md#результаты-p2c--2026-11-11).
+Далее P3 — сверка existing plugin views перед выбором конкретного изменения.
 Visual acceptance и Windows/controller qualification открыты.
 
 ## Universal Browser P2a: копия исходников — In Review, 2026-11-10

@@ -1,7 +1,7 @@
 # Universal Browser: план реализации
 
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
-P2c automatic lifecycle — scope **Approved**, проверка **Planned**; P3–P7 **Planned / Proposed**.
+P2c automatic lifecycle — **проверен host-neutral**; P3–P7 **Planned / Proposed**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
 [исходник](00_SOURCE_SPEC.md), [аудит](01_AUDIT.md), [ADR](02_ARCHITECTURE_ADR.md),
@@ -15,7 +15,7 @@ docs-only P0; реализованы описанные ниже срезы. О�
 |---|---|---|
 | P0 Audit/ADR | Web/Application: реальная source/authority map, reuse/remove, contracts, Windows spike protocol | Docs-only diff/links/source integrity; native и runtime evidence остаются открыты |
 | P1 HTML Artifact | Web: address/modes в общем PreviewSurface, один saved HTML consumer | Сохранены current features/limits; browser baseline + визуальное ревью; локальный mode toolbar удалён |
-| P2 Targets/Lifecycle | P2a import и P2b HTML target/capabilities реализованы; P2c проверяет automatic lifetime existing views | Hide/move сохраняют страницу; close освобождает ресурсы; reopen загружает заново; dirty/late/Run guards сохранены |
+| P2 Targets/Lifecycle | P2a import и P2b HTML target/capabilities реализованы; P2c existing lifecycle проверен host-neutral без production-правок | Hide/move/restore, close/reopen и late cleanup проходят; dirty guards сохранены, Run cancellation не вызывается; Windows отдельно |
 | P3 Plugin | Plugin Application + Web: source/candidate/release adapters, общий navigation/modes UI | Grants/revoke/check/publish/restore неизменны; удалены переведённые provider UI controls, instance ownership остаётся |
 | P4 Versions/Annotations | Domain owners + Web: bounded diff, version semantics, events-backed annotations и anchors | Branch/active pointer, unresolved/verified resolution, view-close retention; нет BrowserRevisionStore/Annotation DB |
 | P5 External WebView2 | Native adapter + Application: renderer по результату spike, profiles/navigation/popup/download policy | Windows embedding matrix либо явный управляемый separate-window fallback; привилегированный Shell control не используется |
@@ -115,7 +115,7 @@ CAS-only source store. Owner — Application Workspace + существующи�
    новый browser flow и saved Browser fixture проходят. Старый transfer roundtrip падает
    также на чистом baseline при следующем HTML-tool вызове; риск записан отдельно.
 
-P2b реализован ниже. P2c проверяет автоматический lifetime существующих views:
+P2b реализован ниже. P2c проверил автоматический lifetime существующих views:
 закрытие вкладки завершает страницу; detached sessions и новый UI не вводятся.
 Runtime ID не записывается в Dock layout.
 Pointer-routing/Windows evidence остаются открытыми и не блокируют domain-срез P2a.
@@ -139,7 +139,7 @@ data/revision owners, bindings, caches или operation guards. Классифи
 saved reads 2 при пяти выборах, source 32K, controls 30 px, overflow 0 на 1280/100%
 и 420/125%; retained draft/frame и late cleanup сохранены. Отдельный raw import
 fixture падает также без P2b: [evidence](05_TEST_MATRIX.md#результаты-p2b--2026-11-11).
-UI/Windows acceptance остаются открытыми. Далее P2c: проверка automatic lifecycle;
+UI/Windows acceptance остаются открытыми. Проверка P2c завершена ниже;
 plugin/semantic tools/native URL не входят в P2b.
 
 ## P2c: автоматический lifecycle — scope Approved, 2026-11-11
@@ -148,6 +148,12 @@ Owner: Web BrowserObjectView/BrowserViewer, DockWorkspace placement и суще�
 domain owners. Решение пользователя заменяет прежний план detach/reattach, списка
 сессий и отдельного завершения. Начатый незавершённый код этого варианта удалён;
 P2b (`36a44073`) сохранён. Нового registry, bridge API или UI для sessions нет.
+
+Проверка **завершена host-neutral 2026-11-11**: четыре адресных browser fixtures
+прошли на текущем production-коде. Добавлены только отсутствующие close/reopen и
+late-body assertions в существующие saved/editor fixtures; дефектов, требующих
+production-правок, не обнаружено. [Evidence и границы](05_TEST_MATRIX.md#результаты-p2c--2026-11-11).
+Ниже — выполненный scope проверки, не очередь повторных прогонов.
 
 1. Сначала saved HTML: сверить existing coverage и проверить готовую страницу при
    switch/hide/move/split/restore, затем close → удаление iframe → reopen с новой
@@ -164,6 +170,11 @@ P2b (`36a44073`) сохранён. Нового registry, bridge API или UI �
 
 Независимая фоновая browser session возможна позднее только с явным сценарием,
 owner и правилами завершения в P5/P6. Она не является условием текущего P2c/P3.
+
+Следующий срез — P3: сначала сверить existing plugin source/candidate/release views
+с target/capability контрактом и общими controls, затем выбрать конкретный пробел.
+Существующий instance owner, grants, check/publish/restore и source/data storage
+сохраняются. Заранее вводить новый session слой или переписывать plugin runtime не нужно.
 
 ## Развитие после P1
 
