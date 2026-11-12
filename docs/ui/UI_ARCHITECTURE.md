@@ -6,7 +6,8 @@
 `DeploymentConfigurationStore` в Core владеет проверкой подписи, версии, пароля,
 сессией редактора и разрешениями. Typed Bridge отдаёт список/пути только unlock-сессии;
 обычный status содержит лишь Applied/Absent/Rejected. Пароль открывает редактор,
-private key требуется при подписи. Manual-any не расширяет доступ агента.
+private key требуется при подписи; путь по умолчанию приходит из build metadata
+и может быть изменён в редакторе. Manual-any не расширяет доступ агента.
 Retained DOM переживает Dock placement; deactivate очищает editor, late responses
 не восстанавливают доступ. UI не хранит ключ/пароль в settings/history.
 Разовые Mac/Windows utilities разделяют C# crypto и запись issuer files;

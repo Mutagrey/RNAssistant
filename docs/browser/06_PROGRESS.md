@@ -6,10 +6,18 @@
 sites/manual-any, save/folder/lock. Старые версии политики не применяются даже с
 корректной подписью; агент не получает manual-any authority. PFX/PowerShell path удалён.
 Разовые Mac C# и Windows GUI utilities используют общую генерацию encrypted .bin;
-public trust embedded, private key gitignored. Реальный пароль владелец задаёт локально.
+public trust embedded после генерации, private key gitignored. Реальный пароль владелец задаёт локально.
 11 Harness + production Settings fixture проходят; Mac utility generation/rotation
 проверены с temporary issuer. Windows GUI/Office/WebView2 compile/delivery Open.
 [Контракт/настройка](03_CONTRACTS.md#signed-access), [evidence](05_TEST_MATRIX.md#signed-access).
+Windows utility теперь собирается отдельным `build-deployment-keys.cmd`. Public trust
+пока отсутствует, поэтому сборка предупреждает о закрытом Developer/external Browser;
+после генерации ключей нужен reload проекта и rebuild. Путь private .bin становится
+default редактора из build metadata. Ошибки Office из фото исправлены в исходниках;
+повторная Windows compilation остаётся открытой.
+Первый запуск Windows key utility показал общий отказ самопроверки до записи файлов.
+Генерация .NET Framework переведена на CNG RSA 3072, этап ошибки теперь виден в GUI;
+формат BIN сохранён. Повторный Windows запуск остаётся открытым.
 Далее P6h image delivery; diff/P4b отложены. P6g отправлен в origin: `d1e7b4a2`.
 
 

@@ -468,7 +468,7 @@ namespace RNAssistant.Office.WebView
             try
             {
                 _requireAccess(e.Uri, _agentNetwork ? BrowserAccessKind.Agent : BrowserAccessKind.Manual);
-                _navigation?.Starting(e.NavigationId, e.Uri, e.IsRedirect);
+                _navigation?.Starting(e.NavigationId, e.Uri, e.IsRedirected);
                 _message = "Загрузка…";
                 _documentReady = false; _documentGeneration++; _semanticContext = 0; _visualContext = 0; _interactionEpoch = 0;
             }

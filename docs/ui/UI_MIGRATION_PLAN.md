@@ -3,7 +3,7 @@
 ## Developer: подписанная конфигурация — In Review, 2026-11-12
 
 По уточнению пользователя: обычный status, Developer password unlock, sites/manual-any,
-путь к private .bin, sign/save/open-directory/close; exact policy-version gate.
+путь к private .bin с build-time default, sign/save/open-directory/close; exact policy-version gate.
 Генерация issuer — общая C# реализация для Mac и Windows GUI, без сертификатов/скриптов.
 Scope/owner — [контракт](../browser/03_CONTRACTS.md#signed-access).
 11 Harness и production Settings Chrome fixture проходят, wide/narrow/125% просмотрены;

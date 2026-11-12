@@ -5,7 +5,7 @@
 Общие product-settings-section, form-grid, advanced details, label/input/textarea,
 checkline, status и action-group; дополнительных CSS размеров/overrides нет.
 После раскрытия Developer до входа показывает пароль; после unlock — список сайтов, manual checkbox,
-путь private key, readonly путь конфига и версия политики, save/folder/close.
+путь private key (default из сборки, редактируемый), readonly путь конфига и версия политики, save/folder/close.
 Обычный индикатор не раскрывает адреса/пути. Ошибка остаётся рядом с редактором;
 закрытие очищает поля. Shared metrics и wide/narrow/125% проверены в
 `deployment-config.test.js`; Windows/визуальное принятие открыты.

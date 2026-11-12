@@ -25,10 +25,10 @@ namespace RNAssistant.Core.Services
         public static DeploymentTrust CreateIssuer(string password, out byte[] encryptedKey)
         {
             CheckPassword(password);
-            using (var rsa = RSA.Create())
+            using (var rsa = CreateRsa(3072))
             {
-                rsa.KeySize = 3072;
                 var publicKey = rsa.ExportParameters(false); var salt = RandomBytes(32);
+                if (publicKey.Modulus?.Length != 384) throw new CryptographicException("RSA issuer must use a 3072-bit key.");
                 byte[] verifier;
                 using (var derive = new Rfc2898DeriveBytes(password, salt, PasswordIterations, HashAlgorithmName.SHA256)) verifier = derive.GetBytes(32);
                 var privateParameters = rsa.ExportParameters(true);
@@ -61,7 +61,7 @@ namespace RNAssistant.Core.Services
             {
                 parameters = JsonConvert.DeserializeObject<RSAParameters>(new UTF8Encoding(false, true).GetString(secret), Json);
                 if (parameters.D == null || !Equal(parameters.Modulus, trust.PublicKey.Modulus) || !Equal(parameters.Exponent, trust.PublicKey.Exponent)) throw Invalid();
-                using (var rsa = RSA.Create())
+                using (var rsa = CreateRsa())
                 {
                     rsa.ImportParameters(parameters);
                     var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(configuration));
@@ -87,9 +87,21 @@ namespace RNAssistant.Core.Services
         }
         private static RSA PublicRsa(DeploymentTrust trust)
         {
-            var rsa = RSA.Create();
+            var rsa = CreateRsa();
             try { rsa.ImportParameters(new RSAParameters { Modulus = trust.PublicKey.Modulus, Exponent = trust.PublicKey.Exponent }); return rsa; }
             catch { rsa.Dispose(); throw; }
+        }
+        private static RSA CreateRsa(int keySize = 0)
+        {
+#if NET8_0_OR_GREATER
+            var rsa = RSA.Create();
+            if (keySize > 0) rsa.KeySize = keySize;
+            return rsa;
+#else
+            // .NET Framework's default RSA provider may ignore a later KeySize assignment.
+            // CNG keeps generation, import, signing and verification on one provider.
+            return keySize > 0 ? (RSA)new RSACng(keySize) : new RSACng();
+#endif
         }
         // v1: header + random salt (32) + IV (16) + AES-256-CBC ciphertext + HMAC-SHA256 (32).
         // Authenticate before decryption; independent derived encryption/MAC keys.

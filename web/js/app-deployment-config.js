@@ -38,6 +38,7 @@ var RNAssistantDeploymentConfig = (function () {
     session = value.sessionToken;
     el("Sites").value = value.sites.join("\n");
     el("Manual").checked = value.allowAnyManualSite;
+    el("KeyPath").value = value.privateKeyPath || "";
     el("Path").value = value.filePath;
     el("Version").textContent = "Версия политики: " + value.policyVersion;
     status(value.status);

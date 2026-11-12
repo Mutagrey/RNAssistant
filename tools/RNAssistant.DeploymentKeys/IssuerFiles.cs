@@ -30,9 +30,22 @@ namespace RNAssistant.DeploymentKeys
             var root = Path.GetFullPath(repository); var trustPath = PublicPath(root); var keyPath = PrivatePath(root);
             var replacing = File.Exists(trustPath) || File.Exists(keyPath);
             byte[] key;
-            var trust = DeploymentConfigurationCrypto.CreateIssuer(password, out key);
+            DeploymentTrust trust;
+            try
+            {
+                trust = DeploymentConfigurationCrypto.CreateIssuer(password, out key);
+                DeploymentConfigurationCrypto.ValidateTrust(trust);
+            }
+            catch (System.Security.Cryptography.CryptographicException error)
+            { throw new InvalidOperationException("Создание RSA-ключа: " + error.Message, error); }
             var probe = new DeploymentConfiguration { FormatVersion = 1, PolicyVersion = 1, IssuedUtc = DateTime.UtcNow, Browser = new DeploymentBrowserSettings() };
-            DeploymentConfigurationCrypto.Verify(DeploymentConfigurationCrypto.Sign(probe, key, password, trust), trust);
+            byte[] signed;
+            try { signed = DeploymentConfigurationCrypto.Sign(probe, key, password, trust); }
+            catch (System.Security.Cryptography.CryptographicException error)
+            { throw new InvalidOperationException("Самопроверка подписи: " + error.Message, error); }
+            try { DeploymentConfigurationCrypto.Verify(signed, trust); }
+            catch (System.Security.Cryptography.CryptographicException error)
+            { throw new InvalidOperationException("Самопроверка открытого ключа: " + error.Message, error); }
             Directory.CreateDirectory(Path.GetDirectoryName(trustPath));
             Directory.CreateDirectory(Path.GetDirectoryName(keyPath));
             if (replacing)

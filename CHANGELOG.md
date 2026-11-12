@@ -11,6 +11,15 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.14.1-dev
+
+- Fixed Office compilation errors in Browser navigation and model context inspection.
+  MockDemo now compiles the current bridge parts and embeds deployment trust when
+  configured. A separate Windows script builds the key utility; missing trust is
+  reported during builds. The Developer editor defaults to the signing key path
+  captured at build time. The Windows key utility uses CNG for RSA 3072 generation
+  and shows the failing self-check stage. Windows/Office delivery remains unqualified.
+
 ### 16.14.0-dev
 
 - Independent reads, skill selections and managed edits can share an ordered tool

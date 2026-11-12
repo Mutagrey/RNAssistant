@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Сборочные исправления — In Review, 2026-11-12
+
+`16.14.1-dev`: по фото Windows исправлены `IsRedirected` WebView2 и тип
+`ConversationMetadata` для ContextInspector; MockDemo включает новые partial bridge
+files и условный public deployment trust. Host-neutral MockDemo build и 11 Browser
+Harness cases проходят; JS syntax check проходит, Chrome fixture требует локальный Playwright.
+Отдельный `build-deployment-keys.cmd` собирает GUI utility без генерации ключей;
+путь private .bin по умолчанию записывается в build metadata и показывается после unlock.
+Public trust ещё не создан, поэтому Developer/external Browser остаются закрыты;
+Windows Office/GUI rebuild и delivery открыты. Первый запуск GUI показал отказ
+самопроверки ключа до записи файлов; .NET Framework RSA 3072 переведён на CNG,
+формат BIN сохранён, повторный Windows запуск открыт.
+
 ## Подписанная конфигурация приложения — In Review, 2026-11-12
 
 `16.13.0-dev`: deployment-config.bin рядом с secret.bin, парольный Developer UI,

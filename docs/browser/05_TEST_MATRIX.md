@@ -16,12 +16,24 @@ utilities. Прежний PFX-прототип удалён. Более ранн
 - `tests/web/deployment-config.test.js`: actual production Settings с synthetic Bridge,
   маленький normal indicator, скрытые поля/путь, manual/key/folder commands, generic
   settings dirty isolation, detached Dock cleanup и late unlock; wide/narrow/125%.
+  Текущий повтор после build-time default не запустился: локально нет пакета Playwright;
+  syntax check JS проходит, default path проверен host-neutral Harness.
 - Mac C# utility: build pass; temporary issuer через interactive PTY, no-echo password,
   generation/read-back, private mode 0600, отказ неявной замене и explicit rotation
   с сохранением encrypted backup. Test secrets удалены, реальный issuer не создан.
+- После фото первого запуска Windows utility генерация RSA 3072 на .NET Framework
+  переведена на CNG; прежняя запись `RSA.Create().KeySize = 3072` не гарантировала
+  смены размера ключа. Утилита теперь помечает этап самопроверки в видимой ошибке.
+  BIN/header/AES/HMAC и подпись конфигурации не менялись; повторная Windows проверка открыта.
 - Windows GUI sharing того же IssuerFiles/crypto проверен по коду/project includes.
-  Реальная .NET 4.8 GUI compilation/execution, Office/WebView2 routing и events Open.
+  Для него добавлен отдельный `build-deployment-keys.cmd`. Реальная .NET 4.8 GUI
+  compilation/execution, Office/WebView2 routing и events Open.
   VSTO/Office validation на macOS не запускалась.
+- Фото Windows показало ошибки сборки Office (`IsRedirect`, два неверных типа для
+  ContextInspector) и MockDemo (пропущенные partial bridge files). Исходники и
+  project includes исправлены; MockDemo и 11 Browser Harness cases проходят на macOS. Повторная сборка
+  Office/GUI на Windows остаётся открытой. Public trust в текущем дереве отсутствует:
+  без разовой генерации issuer внешние grants и Developer unlock закрыты.
 
 Ревью Windows (evidence — только фотографии экрана):
 1. Создать issuer любой [утилитой](03_CONTRACTS.md#issuer-setup), пересобрать приложение,

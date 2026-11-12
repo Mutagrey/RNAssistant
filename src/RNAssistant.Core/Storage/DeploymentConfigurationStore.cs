@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,16 +21,18 @@ namespace RNAssistant.Core.Storage
         private readonly object _sync = new object();
         private readonly AppDataPaths _paths;
         private readonly DeploymentTrust _trust;
+        private readonly string _defaultSigningKeyPath;
         private DeploymentBrowserSettings _browser = new DeploymentBrowserSettings();
         private DeploymentConfigState _state;
-        private string _contentHash, _session;
+        private string _contentHash, _session, _signingKeyPath;
         private SecureString _password;
         private DateTime _expiresUtc, _retryAfterUtc;
         private bool _disposed;
 
-        public DeploymentConfigurationStore(AppDataPaths paths, DeploymentTrust trust = null)
+        public DeploymentConfigurationStore(AppDataPaths paths, DeploymentTrust trust = null, string defaultSigningKeyPath = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            _defaultSigningKeyPath = defaultSigningKeyPath ?? BuildSigningKeyPath();
             try
             {
                 var candidate = trust ?? EmbeddedTrust();
@@ -47,6 +50,13 @@ namespace RNAssistant.Core.Storage
                 using (var reader = new StreamReader(stream, Encoding.UTF8))
                     return JsonConvert.DeserializeObject<DeploymentTrust>(reader.ReadToEnd());
             }
+        }
+        private static string BuildSigningKeyPath()
+        {
+            return typeof(DeploymentConfigurationStore).Assembly
+                .GetCustomAttributes(typeof(AssemblyMetadataAttribute), false)
+                .OfType<AssemblyMetadataAttribute>()
+                .FirstOrDefault(item => item.Key == "DeploymentSigningKeyDefaultPath")?.Value ?? string.Empty;
         }
         public bool Allows(Uri address, BrowserAccessKind kind)
         {
@@ -95,6 +105,7 @@ namespace RNAssistant.Core.Storage
                     _password = new SecureString();
                     foreach (var character in password) _password.AppendChar(character);
                     _password.MakeReadOnly();
+                    _signingKeyPath = _defaultSigningKeyPath;
                     _session = Guid.NewGuid().ToString("N"); _expiresUtc = DateTime.UtcNow.AddMinutes(10);
                     Refresh(); return Editor();
                 }
@@ -122,6 +133,7 @@ namespace RNAssistant.Core.Storage
                 Refresh();
                 if (_state != DeploymentConfigState.Applied || !_browser.AllowedSites.SequenceEqual(normalized) || _browser.AllowAnyManualSite != allowAnyManualSite)
                     throw new IOException("Не удалось подтвердить сохранённую конфигурацию.");
+                _signingKeyPath = privateKeyPath;
                 return Editor();
             }
         }
@@ -135,9 +147,10 @@ namespace RNAssistant.Core.Storage
         }
         private DeploymentConfigEditor Editor()
         { return new DeploymentConfigEditor { SessionToken = _session, ExpiresUtc = _expiresUtc, Sites = new List<string>(_browser.AllowedSites),
-            AllowAnyManualSite = _browser.AllowAnyManualSite, PolicyVersion = RequiredPolicyVersion, FilePath = _paths.DeploymentConfigFile, Status = StatusCore() }; }
+            AllowAnyManualSite = _browser.AllowAnyManualSite, PolicyVersion = RequiredPolicyVersion, FilePath = _paths.DeploymentConfigFile,
+            PrivateKeyPath = _signingKeyPath, Status = StatusCore() }; }
         public void Lock() { lock (_sync) LockCore(); }
-        private void LockCore() { _password?.Dispose(); _password = null; _session = null; _expiresUtc = default(DateTime); }
+        private void LockCore() { _password?.Dispose(); _password = null; _session = null; _signingKeyPath = null; _expiresUtc = default(DateTime); }
         private void Reset(DeploymentConfigState state) { _browser = new DeploymentBrowserSettings(); _contentHash = null; _state = state; }
         private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(nameof(DeploymentConfigurationStore)); }
         public void Dispose() { lock (_sync) { _disposed = true; LockCore(); } }

@@ -16,7 +16,7 @@ const {withPreviewPage} = require('./preview-session');
         if (type === 'getDeploymentConfigStatus') return Promise.resolve({...status});
         if (type === 'lockDeveloperMode') return Promise.resolve({locked:true});
         if (type === 'openDeploymentConfigDirectory') return Promise.resolve({opened:true});
-        const editor = {sessionToken:'runtime-token', expiresUtc:new Date(Date.now() + 600000).toISOString(), sites:payload.sites || ['https://*.example.com'], allowAnyManualSite:!!payload.allowAnyManualSite, policyVersion:1, filePath:'C:\\Users\\Developer\\AppData\\Roaming\\RNAssistant\\deployment-config.bin', status};
+        const editor = {sessionToken:'runtime-token', expiresUtc:new Date(Date.now() + 600000).toISOString(), sites:payload.sites || ['https://*.example.com'], allowAnyManualSite:!!payload.allowAnyManualSite, policyVersion:1, filePath:'C:\\Users\\Developer\\AppData\\Roaming\\RNAssistant\\deployment-config.bin', privateKeyPath:payload.privateKeyPath || 'C:\\repo\\.local\\deployment\\signing-key.bin', status};
         if (deploymentFixture.delay) { deploymentFixture.delay = false; return new Promise(resolve => { deploymentFixture.release = () => resolve(editor); }); }
         return Promise.resolve(editor);
       };
@@ -33,6 +33,7 @@ const {withPreviewPage} = require('./preview-session');
     await page.locator('#deploymentConfigPassword').press('Enter');
     await page.locator('#deploymentConfigSites').waitFor({state:'visible'});
     assert.equal(await page.locator('#deploymentConfigPassword').inputValue(), '', 'code cleared after submission');
+    assert.equal(await page.locator('#deploymentConfigKeyPath').inputValue(), 'C:\\repo\\.local\\deployment\\signing-key.bin', 'editor starts with the build-time key path');
     await page.locator('#deploymentConfigSites').fill('https://example.org\n\n https://*.example.com ');
     await page.locator('#deploymentConfigKeyPath').fill('C:\\private\\signing-key.bin');
     await page.locator('#deploymentConfigManual').check();

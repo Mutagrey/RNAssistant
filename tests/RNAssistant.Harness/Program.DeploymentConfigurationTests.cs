@@ -23,13 +23,14 @@ namespace RNAssistant.Harness
                 const string password = "only-a-test-passphrase";
                 byte[] privateKey;
                 var trust = DeploymentConfigurationCrypto.CreateIssuer(password, out privateKey);
+                AssertEqual(384, trust.PublicKey.Modulus.Length, "issuer uses exactly RSA 3072");
                 var keyPath = Path.Combine(owner.Root, "signing-key.bin");
                 File.WriteAllBytes(keyPath, privateKey);
                 AssertTrue(!Encoding.UTF8.GetString(privateKey).Contains("Modulus"), "private parameters are encrypted, without a certificate container");
                 AssertTrue(!JsonConvert.SerializeObject(trust).Contains(password), "public build metadata contains no plaintext password");
                 using (var wrong = new DeploymentConfigurationStore(owner, trust))
                     RuntimeThrows<InvalidOperationException>(() => wrong.Unlock("incorrect"));
-                using (var author = new DeploymentConfigurationStore(owner, trust))
+                using (var author = new DeploymentConfigurationStore(owner, trust, keyPath))
                 using (var recipient = new DeploymentConfigurationStore(user, trust))
                 {
                     var address = new Uri("https://sub.example.com/path");
@@ -40,8 +41,10 @@ namespace RNAssistant.Harness
                     AssertEqual(0, recipientEditor.Sites.Count, "password unlock does not require a key");
                     RuntimeThrows<FileNotFoundException>(() => recipient.Save(recipientEditor.SessionToken, new string[0], true, Path.Combine(user.Root, "missing.bin")));
                     var editor = author.Unlock(password);
+                    AssertEqual(keyPath, editor.PrivateKeyPath, "developer editor starts with the build-time key path");
                     AssertEqual(owner.Root, author.ConfigurationDirectory(editor.SessionToken), "folder access is developer-session guarded");
                     editor = author.Save(editor.SessionToken, new[] { "HTTPS://*.Example.COM:443/" }, false, keyPath);
+                    AssertEqual(keyPath, editor.PrivateKeyPath, "successful save retains the selected key path for this session");
                     var signed = File.ReadAllBytes(owner.DeploymentConfigFile);
                     AssertTrue(!Encoding.ASCII.GetString(signed).Contains("example.com"), "base64 obscures casual viewing");
                     File.WriteAllBytes(user.DeploymentConfigFile, signed);

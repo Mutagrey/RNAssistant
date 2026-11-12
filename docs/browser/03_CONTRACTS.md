@@ -305,6 +305,10 @@ Controller/typed Bridge обслуживают редактор, `ExternalBrowse
 - `.local/deployment/signing-key.bin` — зашифрованные закрытые параметры RSA,
   gitignored, не embedded/publish asset. Путь выбирается разработчиком при подписании.
   Реальные ключ/пароль не поставляются по умолчанию: до разовой настройки доступ закрыт.
+  Если файл есть при сборке, его абсолютный путь записывается как default редактора
+  через assembly metadata `DeploymentSigningKeyDefaultPath`; байты ключа не входят в сборку.
+  При другом расположении путь можно изменить в редакторе или задать сборочным свойством
+  `RNAssistantDeploymentSigningKeyDefaultPath` в локальном `Directory.Build.local.props`.
 
 RSA 3072 создаётся штатным C#, без сертификатов, PFX/CRT и certificate store.
 Закрытый .bin: fixed header RNAKEY01, random salt32, IV16, AES-256-CBC/PKCS7 ciphertext,
@@ -345,7 +349,9 @@ RequiredPolicyVersion закрывает предыдущие версии то�
 Настройки → Подключение: маленький индикатор конфигурации и свёрнутый «Разработчик».
 До входа — только пароль и «Войти». Успешный native unlock выдаёт runtime token на
 10 минут и открывает сайты, manual-any checkbox, путь к закрытому ключу и пути/версию
-конфига. Private key не нужен для входа. При подписании он расшифровывается в памяти,
+конфига. Путь к закрытому ключу по умолчанию берётся из сборки и остаётся редактируемым;
+после выхода очищается вместе с остальными полями. Private key не нужен для входа.
+При подписании он расшифровывается в памяти,
 сверяется с embedded public key и не попадает в выданный конфиг. Неверный пароль/ключ
 или невалидные маски не заменяют прежний файл. Backend защищает Save и OpenDirectory
 той же сессией; UI-hidden само по себе не даёт authority.
@@ -393,14 +399,17 @@ firewall: WebSocket/WebRTC/DNS и полнота interception требуют о�
 dotnet run --project tools/RNAssistant.DeploymentKeys/RNAssistant.DeploymentKeys.csproj -- .
 ```
 
-**Windows:** открыть `tools/RNAssistant.DeploymentKeys.Windows/RNAssistant.DeploymentKeys.Windows.csproj`
-в VS 2022 и собрать. Запустить `bin/Debug/RNAssistant.DeploymentKeys.Windows.exe`
-(или Release): обычное WinForms-окно .NET Framework 4.8 без консоли. Выбрать папку
-исходников, ввести и повторить пароль, нажать «Создать ключи».
+**Windows:** из корня исходников запустить `build-deployment-keys.cmd`. Скрипт отдельно
+собирает `tools/RNAssistant.DeploymentKeys.Windows/RNAssistant.DeploymentKeys.Windows.csproj`
+через VS 2022 MSBuild; в основной проект утилита не добавляется. Затем запустить
+`tools/RNAssistant.DeploymentKeys.Windows/bin/Release/RNAssistant.DeploymentKeys.Windows.exe`:
+обычное WinForms-окно .NET Framework 4.8 без консоли. Выбрать папку исходников,
+ввести и повторить пароль, нажать «Создать ключи». Сам скрипт ключи не создаёт.
 
 1. Получить public trust и encrypted private .bin по указанным выше путям; приватную
    резервную копию хранит владелец. Public trust можно закоммитить, private key — нет.
-2. Пересобрать RNAssistant с этим public trust. Без него приложение штатно запускается
+2. Перезагрузить проект в VS, если он уже был открыт, и пересобрать RNAssistant с этим
+   public trust. Без него приложение штатно запускается
    с default deny и недоступным входом в developer mode.
 3. На Windows в Developer ввести пароль и путь к .bin, задать sites/manual flag,
    подписать, открыть каталог и передать пользователям только deployment-config.bin.

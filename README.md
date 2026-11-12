@@ -259,6 +259,10 @@ network or terminate Office. Outputs are written both to
 `artifacts\build-local.log`. Close Office before building because the native DLL
 remains loaded in the Office process and cannot be replaced.
 
+To build the separate Windows deployment key utility, run
+`build-deployment-keys.cmd`. It only builds the GUI; creating an issuer requires
+running it and choosing a password. See [signed access](docs/browser/03_CONTRACTS.md#signed-access).
+
 Portable DLLs and the JavaScript worker are placed in `lib\`. The publisher
 overwrites product files and removes only files listed in its previous ownership
 manifest; other files in the destination remain. Ready-made Excel, Word and

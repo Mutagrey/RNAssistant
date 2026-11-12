@@ -123,7 +123,9 @@
       Link="Office\Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Tools\*.cs" Link="Office\Tools\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.AgentCommunication.cs" Link="Office\WebView\AssistantWebBridge.AgentCommunication.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Plugins.cs" Link="Office\WebView\AssistantWebBridge.Plugins.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Window.cs" Link="Office\WebView\AssistantWebBridge.Window.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\tests\RNAssistant.Harness\ProtectedSecretStoreHarnessStub.cs" Link="Testing\ProtectedSecretStoreHarnessStub.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
@@ -141,6 +143,7 @@
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.Vba.cs" Link="Testing\FakeOfficeAdapter.Vba.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="..\..\config\deployment-trust.json" Condition="Exists('..\..\config\deployment-trust.json')" LogicalName="RNAssistant.DeploymentTrust" />
     <None Include="..\..\vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll"
           Link="pdfium.dll"
           CopyToOutputDirectory="PreserveNewest" />
@@ -148,5 +151,8 @@
           Link="libSkiaSharp.dll"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="ReportMissingDeploymentTrust" BeforeTargets="CoreCompile" Condition="!Exists('..\..\config\deployment-trust.json')">
+    <Warning Text="Deployment trust is absent: Developer unlock and external Browser grants are disabled. Run the standalone deployment keys utility, then rebuild." />
+  </Target>
   <Import Project="..\..\src\RNAssistant.Application\RNAssistant.Application.projitems" />
 </Project>

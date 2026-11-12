@@ -45,6 +45,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty("allowAnyManualSite")] public bool AllowAnyManualSite { get; set; }
         [JsonProperty("policyVersion")] public int PolicyVersion { get; set; }
         [JsonProperty("filePath")] public string FilePath { get; set; }
+        [JsonProperty("privateKeyPath")] public string PrivateKeyPath { get; set; }
         [JsonProperty("status")] public DeploymentConfigStatus Status { get; set; }
     }
 }

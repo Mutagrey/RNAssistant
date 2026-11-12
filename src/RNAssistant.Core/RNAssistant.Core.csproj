@@ -425,5 +425,8 @@
       <LogicalName>RNAssistant.DeploymentTrust</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+  <Target Name="ReportMissingDeploymentTrust" BeforeTargets="CoreCompile" Condition="!Exists('..\..\config\deployment-trust.json')">
+    <Warning Text="Deployment trust is absent: Developer unlock and external Browser grants are disabled. Generate the issuer with RNAssistant.DeploymentKeys, then reload the project and rebuild. The private signing key must remain outside the build." />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

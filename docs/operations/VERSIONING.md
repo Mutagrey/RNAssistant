@@ -97,6 +97,7 @@ It blocks releasing another version with that script, not development bumps.
 | File / VSTO Application | `<RNAssistantVersionPrefix>.<RNAssistantBuildNumber>` | Default build number 0; CI/release passes it without a commit |
 | Informational | `<Version>+g<12-char-sha>` | Add `.dirty` when tracked/index/untracked changes exist; archives without SHA use `+source-archive`, unknown tree state adds `.unknown` |
 | Assembly metadata | ProductVersion, CommitSha, BuildUtc, Branch, Channel, WorkingTreeState, Configuration, RuntimePlatform, BuildEvidenceSignerSha256 | Full SHA; UTC timestamp; exact candidate configuration/platform; signer is `unavailable` outside an evidence-bearing candidate |
+| Developer signing path | Optional `DeploymentSigningKeyDefaultPath` in Core/MockDemo assembly metadata | Build-time absolute path only, when a local signing key exists or `RNAssistantDeploymentSigningKeyDefaultPath` is set; no key bytes are embedded |
 | Protocol | Defined by each existing contract | Never inferred from product/assembly version |
 
 Numeric version components must be 0–65534. Build number changes do not change
