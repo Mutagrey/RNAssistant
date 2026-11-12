@@ -115,7 +115,7 @@ namespace RNAssistant.Core.Agent
             state.PendingWait = pending;
             // Claim under CAS while retaining a recoverable wait if the process exits here.
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
-                state.Summary(RunLifecycle.Waiting, "waiting_agents"))).ConfigureAwait(false);
+                state.Summary(RunLifecycle.Waiting, "waiting_agents"), claimsContinuation: true)).ConfigureAwait(false);
             ToolExecutionRecord record;
             try
             {
@@ -157,7 +157,7 @@ namespace RNAssistant.Core.Agent
             if (control == null) throw new InvalidOperationException("Paused run requires its input control owner.");
             // Claim the checkpoint under CAS, preserving it through runtime shutdown.
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
-                state.Summary(RunLifecycle.Waiting, "paused"))).ConfigureAwait(false);
+                state.Summary(RunLifecycle.Waiting, "paused"), claimsContinuation: true)).ConfigureAwait(false);
             try
             {
                 token.ThrowIfCancellationRequested();

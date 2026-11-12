@@ -93,16 +93,25 @@ namespace RNAssistant.Core.Storage
         {
             var fact = DecodeControl(record); ValidateControl(db, record.Operation, fact);
             using (var tx = db.BeginTransaction())
-            using (var command = Command(db, "INSERT INTO control_fact VALUES($stream,$operation,$chat,$fingerprint,$segment,$start,$end,$sequence,$hash,$first); INSERT INTO control_current VALUES($stream,$chat,$operation) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation", tx))
             {
                 RegisterOperation(db, tx, record.Operation, record.Kind);
-                command.Parameters.AddWithValue("$chat", fact.ChatId); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
+                ApplyControlRows(db, tx, record, position, fact);
                 SaveCursor(db, position, tx); tx.Commit();
+            }
+        }
+
+        private void ApplyControlRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record,
+            JournalCursor position, ConversationQueueControl fact)
+        {
+            using (var command = Command(db, "INSERT INTO control_fact VALUES($stream,$operation,$chat,$fingerprint,$segment,$start,$end,$sequence,$hash,$first); INSERT INTO control_current VALUES($stream,$chat,$operation) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation", tx))
+            {
+                command.Parameters.AddWithValue("$chat", fact.ChatId); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
             }
         }
 
         private static ConversationQueueControl DecodeControl(JournalRecord record)
         {
+            if (record.Kind == "chat.committed") return DecodeChatCommit(record).Control ?? throw new InvalidDataException("Missing queue control.");
             var fact = DeliveryData<ConversationQueueControl>(record);
             if (record.Kind != "queue.control" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact)))
                 throw new InvalidDataException("Invalid queue control fact.");
@@ -122,13 +131,14 @@ namespace RNAssistant.Core.Storage
         public string InvocationId { get; private set; }
         public string PauseId { get; private set; }
         public string RunHash { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string Reason { get; private set; }
         [JsonIgnore] internal bool Paused { get { return Action != QueueControlAction.UserResume && Action != QueueControlAction.AgentPauseReleased; } }
         [JsonIgnore] internal bool PeerControl { get { return Action == QueueControlAction.AgentPauseRequested || Action == QueueControlAction.AgentPauseAcknowledged || Action == QueueControlAction.AgentPauseReleased; } }
         [JsonConstructor]
         internal ConversationQueueControl(string chatId, long revision, string previousHash, QueueControlAction action,
-            string runId, string invocationId, string pauseId, string runHash)
+            string runId, string invocationId, string pauseId, string runHash, string reason = null)
         {
-            Action = action;
+            Action = action; Reason = reason;
             if (string.IsNullOrWhiteSpace(chatId) || revision < 1 || !Enum.IsDefined(typeof(QueueControlAction), action) ||
                 (revision == 1 ? previousHash != null : string.IsNullOrWhiteSpace(previousHash)) ||
                 (PeerControl ? string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(invocationId) || string.IsNullOrWhiteSpace(pauseId) || string.IsNullOrWhiteSpace(runHash)

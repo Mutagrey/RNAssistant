@@ -69,6 +69,7 @@ namespace RNAssistant.Core.Persistence
     {
         public string RunId { get; private set; }
         internal AgentRunEventKind FactKind { get; private set; }
+        internal bool ClaimsContinuation { get; private set; }
         internal RNAssistant.Core.Tools.ToolExecutionContext ToolContext { get; private set; }
         internal RNAssistant.Core.Tools.ToolExecutionRecord Execution { get; private set; }
         internal bool ResultProjection { get; private set; }
@@ -125,7 +126,7 @@ namespace RNAssistant.Core.Persistence
             _state = session.CopyForRunCommit();
             ExpectedMessageCount = expectedMessageCount ?? session.Messages.Count;
             if (ExpectedMessageCount < 0) throw new ArgumentOutOfRangeException(nameof(expectedMessageCount));
-            RunId = fact.Summary.RunId; FactKind = fact.Kind;
+            RunId = fact.Summary.RunId; FactKind = fact.Kind; ClaimsContinuation = fact.ClaimsContinuation;
             ToolContext = fact.ToolContext ?? fact.Execution?.Context; Execution = fact.Execution;
             ResultProjection = resultProjection; ActivityId = activity?.Id;
             var writes = new List<ConversationMessageWrite>();

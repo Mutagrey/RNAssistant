@@ -19,6 +19,16 @@ namespace RNAssistant.Core.Storage
         {
             if (write == null) throw new ArgumentNullException(nameof(write));
             SessionEventDescriptors.EnsureEventPortWritable(write.Descriptor);
+            if (write.Descriptor.Kind == SessionEventKind.ConversationInputChanged)
+            {
+                var change = write.Data as ConversationInputEvent;
+                if (change == null || change.Input != null || change.AgentPause != null || write.Payload != null || write.Correlation != null)
+                    throw TextStoreScope();
+                RequireTextRoot();
+                var receipt = CommitChat(session, new ConversationCommit(), queueControl: change);
+                ApplyChatReceipt(session, receipt);
+                return ProjectChatEvent(receipt);
+            }
             var trace = write.Data as LlmTraceRecord;
             var admission = write.Data as ToolPackExtensionEventData;
             var admissionKind = write.Descriptor.Kind == SessionEventKind.ToolPackExtensionAccepted ||
@@ -51,6 +61,11 @@ namespace RNAssistant.Core.Storage
         private SessionEvent ProjectChatEvent(ConversationChatReceipt receipt)
         {
             var item = receipt.Fact.ModelEvent;
+            if (receipt.Fact.Control != null) return new SessionEvent {
+                SessionId = receipt.Fact.Card.ChatId, Sequence = receipt.Position.Sequence,
+                EventId = receipt.Operation, CreatedUtc = receipt.Fact.CreatedUtc, Hash = receipt.Position.Hash,
+                Type = SessionEventTypes.ConversationInputChanged,
+                Data = JObject.FromObject(new ConversationInputEvent { Paused = receipt.Fact.Control.Paused, PauseReason = receipt.Fact.Control.Reason }) };
             return new SessionEvent { SessionId = receipt.Fact.Card.ChatId, Sequence = receipt.Position.Sequence,
                 EventId = receipt.Operation, CreatedUtc = receipt.Fact.CreatedUtc, Hash = receipt.Position.Hash,
                 Type = item == null ? "chat.committed" : SessionEventDescriptors.For(item.Kind).Type,
@@ -154,19 +169,21 @@ namespace RNAssistant.Core.Storage
 
         IReadOnlyList<SessionEvent> IEventStore.Read(ConversationMetadata session, SessionEventReadMode mode)
         {
-            if (mode != SessionEventReadMode.Validated && mode != SessionEventReadMode.RequireComplete) throw TextStoreScope();
+            if (mode != SessionEventReadMode.Validated && mode != SessionEventReadMode.RequireComplete && mode != SessionEventReadMode.RequireCompleteInputJournal) throw TextStoreScope();
             RequireTextRoot();
             using (RuntimeStorageActivity.Acquire(_paths))
             {
                 var receipts = Access((db, cursor) => {
                     var current = TextChat(db, session.Id); RequireChatRevision(session, current);
                     var operations = new List<string>();
-                    using (var command = Command(db, "SELECT operation FROM chat_write WHERE stream=$stream AND chat=$chat ORDER BY sequence"))
+                    using (var command = Command(db, mode == SessionEventReadMode.RequireCompleteInputJournal
+                        ? "SELECT operation FROM control_fact WHERE stream=$stream AND chat=$chat ORDER BY sequence"
+                        : "SELECT operation FROM chat_write WHERE stream=$stream AND chat=$chat ORDER BY sequence"))
                     {
                         command.Parameters.AddWithValue("$chat", session.Id);
                         using (var reader = command.ExecuteReader()) while (reader.Read()) operations.Add(reader.GetString(0));
                     }
-                    return operations.Select(operation => FindChatWrite(db, operation)).ToArray();
+                    return operations.Select(operation => FindChatWrite(db, operation) ?? throw TextStoreScope()).ToArray();
                 }, CancellationToken.None);
                 return receipts.Select(ProjectChatEvent).ToArray();
             }

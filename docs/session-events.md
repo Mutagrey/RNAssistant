@@ -1,5 +1,28 @@
 # Session event stream
 
+## Journal saved waits and queue control — 2026-11-12
+
+Unfiltered `agents.wait` now runs through the real Office/Workspace consumers on the
+isolated journal. ToolWaiting retains the exact context/condition/deadline in checkpoint
+CAS and a locator in the existing call index; it creates no terminal/E. An explicit
+kernel continuation claim changes invocation under CAS while retaining Waiting. It
+cannot replace the saved deadline/budget or bypass a paused queue. Timeout and cancel
+resolve the original call once; shutdown and lost claim acknowledgement retain the wait.
+
+Inbox user pause/resume now shares a chat frame with the existing queue-control fact
+and index. Input replay reads that chat's indexed control records, without scanning
+message bodies. Schema 16 adds the control-page index; no new durable owner or table.
+Cold Inbox still pauses a saved wait until explicit user resume, even if an earlier
+Resume receipt survived an acknowledgement loss. Actual incoming inputs, correlated
+reply/completion waits, peer controls and the remaining Inbox/feed integration stay
+unsupported explicitly; this slice does not qualify message delivery.
+
+Five Office/Workspace checks cover timeout, cancellation, claim/control acknowledgement
+loss, changed deadline and pause fencing; rebuild and clean Workspace journal/CAS
+restore retain the facts. Office backup still requires its remaining resource owners.
+Default production composition is unchanged; Windows/Office qualification remains open.
+[Evidence](audits/storage-context-optimization.md#p1p2--journal-saved-waits-and-queue-control-2026-11-12).
+
 ## Journal interrupted-run recovery — 2026-11-12
 
 Office and Workspace retain the existing lease and exact run/cursor fence. Recovery
@@ -15,7 +38,7 @@ Journal recovery preparation validates the observed revision; its model/tool bou
 closes with the recovery checkpoint, without a preliminary journal write. Existing
 resource receipts may be linked but cannot promote an Unknown execution to Ok.
 Restart, lost recovery acknowledgement, repeat recovery, rebuild and clean journal/CAS
-restore retain the result. Full application restore, agent waits, remaining owners/
+restore retain the result. Full application restore, correlated wait delivery, remaining owners/
 Store/control consumers, P3 and production cutover remain open. Windows/Office is
 unqualified. [Evidence](audits/storage-context-optimization.md#p1p2--journal-interrupted-run-recovery-2026-11-12).
 
@@ -38,7 +61,7 @@ Workspace denial records NotDispatched, clears approval and cancels the run. Its
 terminal receipt can describe rejection but cannot prove a successful write.
 
 Checked scope is single-call file/VBA `core.write`, including later journal/CAS
-restore. Other mutation owners, agent waits, remaining control/Store ports
+restore. Other mutation owners, correlated wait delivery, remaining control/Store ports
 and production cutover remain open; Windows/Office evidence is separate.
 [Report](audits/storage-context-optimization.md#p1p2--journal-mutation-confirmation-2026-11-11).
 
@@ -61,8 +84,8 @@ remains available; unsafe writes to the unresolved target remain blocked.
 
 Office and Workspace catalog publications use the injected resource ports in this
 composition. Unsupported mutation commands and unconnected `core.write` owners
-reject before invocation. Confirmation is connected above; agent waits, remaining semantic owners, interrupted
-run reconciliation, other Store/Inbox/control/feed operations and P3 request
+reject before invocation. Confirmation, saved waits and interrupted-run reconciliation are connected above;
+remaining semantic owners, other Store/Inbox/control/feed operations and P3 request
 preparation still need integration. Default production composition is unchanged;
 there is no import, fallback, dual-write or additional store. Full backup/root switch
 and Windows/Office qualification remain open.
@@ -91,7 +114,7 @@ these projections from journals/CAS.
 
 This remains an isolated integration, not the production switch. The mutation slice
 above adds the first bound write and confirmation; interrupted-run recovery is now connected.
-Agent waits still reject unsupported paths explicitly. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
+Saved waits are connected above; correlated input delivery still rejects unsupported paths explicitly. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
 full backup/cutover gates stay open. No ChatStore optimization, adapter, dual-write
 or fallback is added. [Evidence](audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
 

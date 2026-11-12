@@ -81,6 +81,7 @@ namespace RNAssistant.Core.Agent
     public sealed class AgentRunEvent
     {
         public AgentRunEventKind Kind { get; private set; }
+        internal bool ClaimsContinuation { get; private set; }
         public RunSummary Summary { get; private set; }
         public AgentRunLimits Limits { get; private set; }
         public string StepId { get; private set; }
@@ -96,8 +97,9 @@ namespace RNAssistant.Core.Agent
         internal AgentRunEvent(AgentRunEventKind kind, RunSummary summary, string stepId = null,
             AgentRunLimits limits = null, AgentMessage userMessage = null, AgentResponse response = null,
             ToolExecutionContext toolContext = null, ToolExecutionRecord execution = null,
-            string sourceModelAttemptId = null)
+            string sourceModelAttemptId = null, bool claimsContinuation = false)
         {
+            ClaimsContinuation = claimsContinuation;
             Kind = kind;
             Summary = summary;
             Limits = limits;

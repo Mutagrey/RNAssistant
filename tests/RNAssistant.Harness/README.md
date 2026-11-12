@@ -123,6 +123,14 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal wait:` covers five scenarios through real Office/Workspace consumers and
+scripted HTTP: timeout/restart, cancellation, lost queue Resume acknowledgement,
+lost continuation claim, changed deadline/paused-queue rejection. No terminal/E
+while waiting; original call/run/budget survive. Checks include stale continuation,
+rebuild and clean Workspace journal/CAS restore. Delivery/filtered reply waits and
+Windows/Office remain separate. Pair with `journal confirmation:`, native run
+checkpoints/queue controls and the two kernel durable/timed wait checks.
+
 `journal recovery:` checks accepted input before kernel start, entered reads through
 both recovery consumers and real
 Workspace writes stopped before the terminal append. It covers Unknown/Error counts,

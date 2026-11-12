@@ -179,8 +179,14 @@ terminal не заменяется. Потеря recovery ack, повтор, reb
 restore не повторяют действие. 14 адресных checks проходят; два старых confirmation
 fixtures падают до recovery на удалённом `skills.upsert` — [backlog](BACKLOG.md#confirmation-recovery-fixture-drift--2026-11-12).
 Patch `16.12.1-dev` относится к общему recovery; production journal ещё не переключён.
-Остальные mutation/resource owners, wait,
-rewrite/move/delete, usage, Inbox/control/feed и
+Подключены сохранённые `agents.wait` и user pause/resume (2026-11-12): исходные
+call/run/deadline сохраняются; continuation явно получает invocation, timeout и
+отмена завершают один call без повтора. Queue control атомарен с chat cursor;
+используется прежний index, schema 16. Пять Office/Workspace scenarios проходят,
+включая оба lost ack, stale/deadline/pause guards, rebuild и чистый Workspace restore.
+Новые writers не включены; промежуточный срез без version bump.
+Остальные mutation/resource owners, correlated wait delivery,
+rewrite/move/delete, usage, Inbox/peer control/feed и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
 Полный restore также должен сохранить Workspace identity locators и move intents.
@@ -193,6 +199,7 @@ production composition остаются открыты. Backup смешанно�
 [Mutation-срез](../audits/storage-context-optimization.md#p1p2--bound-mutation-calls-2026-11-11).
 [Confirmation-срез](../audits/storage-context-optimization.md#p1p2--journal-mutation-confirmation-2026-11-11).
 [Recovery-срез](../audits/storage-context-optimization.md#p1p2--journal-interrupted-run-recovery-2026-11-12).
+[Wait/control-срез](../audits/storage-context-optimization.md#p1p2--journal-saved-waits-and-queue-control-2026-11-12).
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace

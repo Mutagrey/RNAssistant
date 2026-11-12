@@ -36,8 +36,7 @@ namespace RNAssistant.Core.Storage
             if (run == null) return;
             var state = run.KernelState; var summary = state?.Summary;
             if ((run.SelectedSkills?.Count ?? 0) != 0 ||
-                summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId ||
-                summary.Lifecycle == RunLifecycle.Waiting)) throw TextStoreScope();
+                summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId)) throw TextStoreScope();
         }
 
         private string ChatMessageOperation(SqliteConnection db, string chat, string id)
@@ -62,14 +61,24 @@ namespace RNAssistant.Core.Storage
             ChatSession session, PayloadRef body, ConversationRunCheckpoint retry)
         {
             var run = session.LastRun; var state = run?.KernelState;
-            if (state == null || body == null || commit.FactKind == AgentRunEventKind.ToolWaiting)
+            if (state == null || body == null)
                 throw TextStoreScope();
             var prior = CurrentRun(db, session.Id);
             var summary = state.Summary;
-            var resume = retry?.Resume ?? (prior?.Fact.RunId == run.RunId &&
+            if (commit.ClaimsContinuation && retry == null)
+            {
+                if (prior?.Fact.RunId != run.RunId || prior.Fact.Lifecycle != RunLifecycle.Waiting ||
+                    summary.Lifecycle != RunLifecycle.Waiting || commit.FactKind != AgentRunEventKind.SummaryChanged)
+                    throw new InvalidOperationException("Continuation requires its saved waiting run.");
+                var saved = JsonConvert.DeserializeObject<AgentRunState>(ReadChatBody(prior.Fact.Body));
+                if (!SameRunValue(saved.Summary.PendingWait, summary.PendingWait) || saved.Summary.PauseId != summary.PauseId ||
+                    saved.Summary.IterationsUsed != summary.IterationsUsed || saved.Summary.ToolStepsUsed != summary.ToolStepsUsed)
+                    throw new InvalidOperationException("Continuation cannot replace its saved condition, deadline or budget.");
+            }
+            var resume = retry?.Resume ?? (commit.ClaimsContinuation || prior?.Fact.RunId == run.RunId &&
                 prior.Fact.Lifecycle == RunLifecycle.AwaitingConfirmation && summary.Lifecycle == RunLifecycle.Running);
             if (resume && commit.FactKind != AgentRunEventKind.SummaryChanged)
-                throw new InvalidOperationException("Confirmation must claim its saved run before entering the runtime.");
+                throw new InvalidOperationException("Continuation must claim its saved run before entering the runtime.");
             var invocation = retry?.InvocationId ?? (resume || prior?.Fact.RunId != run.RunId ? commit.OperationId : prior.Fact.InvocationId);
             return new ConversationRunCheckpoint(session.Id, run.RunId, run.TurnId, invocation,
                 retry?.Revision ?? (prior?.Fact.Revision ?? 0) + 1, retry == null ? prior?.Position.Hash : retry.PreviousHash,

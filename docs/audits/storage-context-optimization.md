@@ -1173,3 +1173,35 @@ after-state/CAS ownership.
    production recovery gets patch `16.12.1-dev`; the unrelated pending `16.13.0-dev`
    working-tree version is preserved. Journal production composition remains off.
    Version-format and diff checks pass; no VSTO/Office build, tag, push or release.
+
+## P1/P2 — journal saved waits and queue control (2026-11-12)
+
+1. Connects unfiltered `agents.wait` through actual Office/Workspace runtime and
+   existing Inbox. ToolWaiting retains its exact context/condition/deadline in CAS
+   with one locator in the existing call index; no terminal/E or effect is invented.
+2. The kernel marks explicit continuation claims. Journal claims a new invocation
+   under the chat cursor while retaining Waiting; deadline/budget changes and a
+   paused queue fail before continuation. Timeout/cancel resolve the original call
+   once. Shutdown, lost claim acknowledgement and stale requests cannot replay it.
+3. User pause/resume shares the chat frame and existing queue-control reducer/index.
+   Schema 16 adds only a control-page index. Input replay reads those indexed facts,
+   not chat bodies. No new store, scheduler, adapter, imported history or dual-write.
+   Retiring backends keep the full-port P7 removal condition. Production C# net +69.
+4. Thirteen focused checks pass in isolated `ca48ef64` + this slice on macOS/net8/
+   C#7.3: five `journal wait:` cases (both consumers), four confirmation cases,
+   native run checkpoints/queue controls and two kernel durable/timed wait cases.
+   Coverage includes both lost acknowledgements, stale continuation, changed deadline,
+   pause fencing, cancellation, exact budgets, rebuild and clean Workspace journal/CAS
+   restore. Office mixed-root backup remains refused; no Windows/Office qualification.
+5. Wait creates no result row until its terminal; timeout/cancel do not repeat the
+   accepted call or recharge tool steps. Controls update cursor and index in one
+   canonical frame. Input control replay is indexed per chat and hydrates no message
+   bodies. No CPU/allocation/Windows latency measurement or full-Inbox boundedness claim.
+6. Incoming input delivery, filtered reply/assignment waits, peer controls/feed,
+   other resource/mutation owners, remaining Store operations and P3 metadata/header
+   costs remain open. P4 stays deferred. Full history/CAS/key/Workspace-locator backup,
+   stopped old writers and Windows/Office photo evidence still gate production cutover.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. This is an
+   intermediate journal integration; the new claim marker does not change the
+   production backend's behavior. No product bump, production switch, tag or push.
+   Version-format/diff/link checks pass; unrelated working-tree changes are excluded.

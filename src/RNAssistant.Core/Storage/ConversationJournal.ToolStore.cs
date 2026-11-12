@@ -26,9 +26,16 @@ namespace RNAssistant.Core.Storage
                 !SameRunValue(context, session.LastRun.KernelState.InFlightTool))
                 throw new InvalidOperationException("Dispatch requires its exact in-flight checkpoint.");
             if (context?.Policy.MayHaveSideEffects == true && (context.Call.Name != ResourceMutationToolCatalog.Write ||
-                context.Policy.Policy?.ExecutionClass != ToolExecutionClass.ManagedMutation) ||
-                execution?.Outcome == ToolExecutionOutcome.Waiting)
+                context.Policy.Policy?.ExecutionClass != ToolExecutionClass.ManagedMutation))
                 throw TextStoreScope();
+            if (command.FactKind == AgentRunEventKind.ToolWaiting)
+            {
+                var waiting = session.LastRun.KernelState.Summary.PendingWait;
+                if (waiting == null || execution?.Outcome != ToolExecutionOutcome.Waiting || execution.MayHaveDispatched ||
+                    execution.Evidence.Effect != ToolEffectEvidence.None || !SameRunValue(waiting.Context, context) ||
+                    !SameRunValue(waiting.Condition, execution.WaitCondition))
+                    throw new InvalidDataException("Waiting requires its exact observation without dispatch or terminal.");
+            }
             var awaiting = execution?.Outcome == ToolExecutionOutcome.AwaitingConfirmation;
             if (awaiting)
             {
@@ -132,12 +139,19 @@ namespace RNAssistant.Core.Storage
                 {
                     if (terminal != null || start == null && tools.Confirmed)
                         throw new InvalidOperationException("A terminal or unprepared call cannot be confirmed.");
-                    if (start != null && (!tools.Confirmed || pending == null ||
+                    if (start != null && (!tools.Confirmed || pending?.Fact.Tools.PendingId == null ||
                         pending.Position.Sequence <= FindChatWrite(db, start).Position.Sequence ||
                         pending.Fact.Checkpoint.InvocationId == fact.Checkpoint.InvocationId ||
                         pending.Fact.Tools.PreparationHash != tools.PreparationHash))
                         throw new InvalidOperationException("Runtime re-entry requires an unconsumed approval and its claimed invocation.");
                 }
+                if (pending?.Fact.Tools.Kind == AgentRunEventKind.ToolWaiting && tools.Terminal != null &&
+                    tools.Terminal.Result.ExecutionProgress.Outcome != ToolExecutionOutcome.NotDispatched &&
+                    pending.Fact.Checkpoint.InvocationId == fact.Checkpoint.InvocationId)
+                    throw new InvalidDataException("Wait completion requires a claimed continuation.");
+                if (tools.Kind == AgentRunEventKind.ToolWaiting && (terminal != null || start == null || pending != null ||
+                    !tools.NoEffect || tools.MayHaveSideEffects || fact.Checkpoint.Lifecycle != RunLifecycle.Waiting))
+                    throw new InvalidDataException("Waiting must follow its sole accepted runtime entry.");
                 if (tools.PendingId != null && (terminal != null || start == null || !tools.NoEffect ||
                     (tools.ResultProjection ? pending?.Fact.Tools.PendingId != tools.PendingId ||
                         pending.Fact.Tools.PreparationHash != tools.PreparationHash : pending != null)))
@@ -176,7 +190,7 @@ namespace RNAssistant.Core.Storage
                     var terminal = tools?.Terminal?.Result.ToolCallId == callId ? tools.Terminal :
                         Find(db, TerminalOperation(db, fact.Card.ChatId, message.RunId, callId) as string)?.Fact;
                     var pendingProgress = terminal != null || message.Activity == null || message.ExecutionProgress == null ? null :
-                        message.Id == tools?.ActivityId && tools.PendingId != null ? message.ExecutionProgress :
+                        message.Id == tools?.ActivityId && (tools.PendingId != null || tools.Kind == AgentRunEventKind.ToolWaiting) ? message.ExecutionProgress :
                         PendingTool(db, fact.Card.ChatId, message.RunId, callId)?.Fact.Messages
                             .Single(item => item.Header.Activity?.ToolCallId == callId).Header.ExecutionProgress;
                     if (message.EvidenceReference?.Alias != terminal?.Result.EvidenceReference?.Alias ||
@@ -205,7 +219,7 @@ namespace RNAssistant.Core.Storage
                 if (operation == null) return null;
                 var pending = FindChatWrite(db, operation);
                 if (pending?.Fact.Card.ChatId != chat || pending.Fact.Run.RunId != run ||
-                    pending.Fact.Tools?.CallId != call || pending.Fact.Tools.PendingId == null || pending.Fact.Tools.ResultProjection)
+                    pending.Fact.Tools?.CallId != call || (pending.Fact.Tools.PendingId == null && pending.Fact.Tools.Kind != AgentRunEventKind.ToolWaiting) || pending.Fact.Tools.ResultProjection)
                     throw new InvalidDataException("Foreign pending approval locator.");
                 return pending;
             }
@@ -223,10 +237,10 @@ namespace RNAssistant.Core.Storage
             if (fact.Tools?.Kind == AgentRunEventKind.ToolStarted)
                 using (var command = Command(db, "UPDATE call_fact SET started=$operation,pending=NULL WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call", tx))
                 { AddCallKey(command, fact.Card.ChatId, fact.Run.RunId, fact.Tools.CallId); command.Parameters.AddWithValue("$operation", record.Operation); command.ExecuteNonQuery(); }
-            if (fact.Tools?.PendingId != null && !fact.Tools.ResultProjection || fact.Tools?.Terminal != null)
+            if (fact.Tools?.PendingId != null && !fact.Tools.ResultProjection || fact.Tools?.Kind == AgentRunEventKind.ToolWaiting || fact.Tools?.Terminal != null)
                 using (var command = Command(db, "UPDATE call_fact SET pending=$pending WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call", tx))
                 { AddCallKey(command, fact.Card.ChatId, fact.Run.RunId, fact.Tools.CallId);
-                    command.Parameters.AddWithValue("$pending", fact.Tools.PendingId == null ? (object)DBNull.Value : record.Operation); command.ExecuteNonQuery(); }
+                    command.Parameters.AddWithValue("$pending", fact.Tools.Terminal != null ? (object)DBNull.Value : record.Operation); command.ExecuteNonQuery(); }
             if (fact.Tools?.Terminal != null)
                 ApplyResultRows(db, tx, fact.Tools.Terminal, record.Operation, Fingerprint(fact.Tools.Terminal), position, nextEvidence);
             foreach (var reference in fact.References ?? new ModelResourceReference[0])
@@ -273,7 +287,7 @@ namespace RNAssistant.Core.Storage
             string activityId, bool resultProjection, bool mayHaveSideEffects, ConversationResultFact terminal, bool noEffect = false,
             string pendingId = null, bool confirmed = false, string preparationHash = null)
         {
-            var toolEvent = kind == AgentRunEventKind.ToolStarted || kind == AgentRunEventKind.ToolCompleted;
+            var toolEvent = kind == AgentRunEventKind.ToolStarted || kind == AgentRunEventKind.ToolCompleted || kind == AgentRunEventKind.ToolWaiting;
             if (!Enum.IsDefined(typeof(AgentRunEventKind), kind) || toolEvent &&
                 (string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(toolName) || string.IsNullOrWhiteSpace(stepId) || string.IsNullOrWhiteSpace(activityId)) ||
                 !toolEvent && (callId != null || toolName != null || stepId != null || activityId != null || mayHaveSideEffects) ||

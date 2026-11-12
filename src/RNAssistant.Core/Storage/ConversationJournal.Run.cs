@@ -113,8 +113,8 @@ namespace RNAssistant.Core.Storage
             var prior = CurrentRun(db, fact.ChatId);
             if (fact.PreviousHash != prior?.Position.Hash || fact.Revision != (prior?.Fact.Revision ?? 0) + 1)
                 throw new InvalidOperationException("Run checkpoint guard is stale.");
-            if (fact.Lifecycle == RunLifecycle.Running && (prior == null || prior.Fact.RunId != fact.RunId ||
-                prior.Fact.Lifecycle != RunLifecycle.Running) && QueueControl(db, fact.ChatId)?.Fact.Paused == true)
+            if ((fact.Resume || fact.Lifecycle == RunLifecycle.Running && (prior == null || prior.Fact.RunId != fact.RunId ||
+                prior.Fact.Lifecycle != RunLifecycle.Running)) && QueueControl(db, fact.ChatId)?.Fact.Paused == true)
                 throw new InvalidOperationException("The paused queue requires an explicit matching release before continuation.");
             if (prior != null && prior.Fact.RunId == fact.RunId)
             {
@@ -125,7 +125,9 @@ namespace RNAssistant.Core.Storage
                     fact.Counts.ReadOk < old.Counts.ReadOk || fact.Counts.ReadError < old.Counts.ReadError ||
                     fact.Counts.WriteOk < old.Counts.WriteOk || fact.Counts.WriteError < old.Counts.WriteError || fact.Counts.WriteUnknown < old.Counts.WriteUnknown)
                     throw new InvalidOperationException("Run checkpoint cannot reset terminal state, budget, policy or effect counts.");
-                if (fact.Resume ? fact.InvocationId == old.InvocationId || fact.Lifecycle != RunLifecycle.Running ||
+                if (fact.Resume ? fact.InvocationId == old.InvocationId ||
+                    (fact.Lifecycle != RunLifecycle.Running && (old.Lifecycle != RunLifecycle.Waiting ||
+                        fact.Lifecycle != RunLifecycle.Waiting || fact.PauseId != old.PauseId)) ||
                     old.Lifecycle != RunLifecycle.Waiting && old.Lifecycle != RunLifecycle.AwaitingConfirmation : fact.InvocationId != old.InvocationId)
                     throw new InvalidOperationException("Run invocation changed without an explicit saved continuation.");
             }
