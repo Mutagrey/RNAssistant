@@ -86,6 +86,34 @@ namespace RNAssistant.Core.Persistence
         private bool _submitted;
         private bool _referenceDelta;
 
+        // Recovery uses the kernel interruption decision and the same atomic commit
+        // as execution. A persisted terminal has no InFlightTool and is never replaced.
+        public static ConversationRunCommit Interrupted(ChatSession session, ChatMessage diagnostic,
+            IEnumerable<ChatMessage> updated)
+        {
+            var run = session?.LastRun;
+            var previous = run?.KernelState;
+            if (previous?.Summary.Lifecycle != RunLifecycle.Running)
+                throw new InvalidOperationException("Only an abandoned running checkpoint can be interrupted.");
+            var execution = previous.InterruptedExecution(run.CurrentAction);
+            run.KernelState = previous.Interrupt(false, run.CurrentAction);
+            RNAssistant.Core.Services.RunViewStateProjector.StampCurrentRun(session);
+            var activity = execution == null ? null : session.Messages.Single(item =>
+                item.RunId == run.RunId && item.Activity?.ToolCallId == execution.Context.Call.Id);
+            if (activity != null)
+            {
+                activity.Activity.Status = "failed";
+                activity.Activity.ExecutionStatus = execution.Context.Policy.MayHaveSideEffects ? "interrupted_unknown" : "interrupted";
+                activity.Activity.Retryable = false;
+                activity.Activity.PendingId = null;
+                activity.Activity.ConfirmationCatalogSha256 = null;
+                activity.Activity.ResultMessage = run.CurrentAction;
+            }
+            var fact = new AgentRunEvent(execution == null ? AgentRunEventKind.SummaryChanged : AgentRunEventKind.ToolCompleted,
+                run.KernelState.Summary, execution: execution);
+            return new ConversationRunCommit(session, fact, new[] { diagnostic }, activity, updated: updated);
+        }
+
         public ConversationRunCommit(ChatSession session, AgentRunEvent fact, IEnumerable<ChatMessage> appended,
             ChatMessage activity = null, bool resultProjection = false, IEnumerable<ChatMessage> updated = null,
             int? expectedMessageCount = null)

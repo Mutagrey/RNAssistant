@@ -51,18 +51,22 @@ namespace RNAssistant.Core.Persistence
         public AgentRunState Interrupt(bool cancelled, string message, string interruptedRunId = null)
         {
             var counts = Summary.ToolCounts;
-            if (InFlightTool != null)
-            {
-                var completed = DateTime.UtcNow;
-                if (completed < InFlightTool.StartedUtc) completed = InFlightTool.StartedUtc;
-                counts = counts.Add(new ToolExecutionRecord(InFlightTool,
-                    InFlightTool.Policy.MayHaveSideEffects ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
-                    completed, message));
-            }
+            var execution = InterruptedExecution(message);
+            if (execution != null) counts = counts.Add(execution);
             return new AgentRunState(new RunSummary(interruptedRunId ?? Summary.RunId, Summary.TurnId,
                 cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed, counts, Summary.IterationsUsed,
                 Summary.ToolStepsUsed, message, "runtime_interrupted", null), Limits, null,
                 ConsecutiveReflections, ReflectionFeedbackIssued, FinishCorrection);
+        }
+
+        internal ToolExecutionRecord InterruptedExecution(string message)
+        {
+            if (InFlightTool == null) return null;
+            var completed = DateTime.UtcNow;
+            if (completed < InFlightTool.StartedUtc) completed = InFlightTool.StartedUtc;
+            return new ToolExecutionRecord(InFlightTool,
+                InFlightTool.Policy.MayHaveSideEffects ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error,
+                completed, message);
         }
     }
 }

@@ -1137,3 +1137,39 @@ after-state/CAS ownership.
    Existing adapters/backends retain their complete-port P7 removal condition;
    temporary semantic-owner restrictions remain until those owners are connected.
    No product bump for this intermediate integration, production switch or push.
+
+## P1/P2 — journal interrupted-run recovery (2026-11-12)
+
+1. Advances F01/F04: existing Office/Workspace recovery now writes the same typed
+   kernel commit as runtime execution. Existing lease and exact cursor/run fencing
+   remain; no recovery service/store/registry is added.
+2. Kernel interruption supplies the synthetic terminal: entered reads become Error,
+   possible writes Unknown. Checkpoint, counters, activity and diagnostic share one
+   frame. A known terminal is preserved before optional result presentation. An
+   abandoned approval claim without runtime entry closes without an invented effect;
+   pending approval is not interrupted. Resource proof cannot promote Unknown to Ok.
+3. Removed the unsupported journal recovery port and Workspace recovery's direct
+   ChatStore write. The old generic kernel-recovery commit is replaced in both consumers;
+   inputs preceding any kernel checkpoint retain their non-tool path with a plain
+   diagnostic, without inventing an execution activity.
+   Production C# net +59 lines. No import, dual-write, retry or new fallback.
+   Old backend deletion remains at P7.
+4. Fourteen checks pass on macOS/net8/C#7.3 in isolated `d5aa1e12` + this slice:
+   three `journal recovery:`, four confirmation, four mutation, shared recovery/cursor,
+   known unprojected terminal recovery and interrupted-write replay. Scenarios include
+   actual Workspace dispatch, Office/Workspace recovery consumers, lost recovery ack,
+   repeated recovery, rebuild and clean journal/CAS restore. Two old `kernel recovery:`
+   tests fail at line 486 before recovery: retired `skills.upsert` creates no pending
+   confirmation. The fixture gap is in BACKLOG; no claim that the full suite is green.
+5. Recovery adds one atomic chat frame and uses the existing indexed run/call/result
+   lookups. Tests assert no additional model request or write, and no second frame on
+   repeated recovery. Recovery still explicitly loads the chat; no bounded-history,
+   CPU/allocation or Windows-latency improvement is claimed.
+6. Agent waits, other mutation/resource owners, rewrite/move/delete/usage,
+   Inbox/control/feed and P3 (including metadata/header overhead) remain open. P4
+   remains deferred. Full backup including keys/Workspace locators/move intents,
+   stopped legacy writers and Windows/Office photo evidence still gate P7.
+7. Canonical session events, migration/progress and Harness guide updated. Common
+   production recovery gets patch `16.12.1-dev`; the unrelated pending `16.13.0-dev`
+   working-tree version is preserved. Journal production composition remains off.
+   Version-format and diff checks pass; no VSTO/Office build, tag, push or release.

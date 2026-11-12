@@ -35,7 +35,7 @@ namespace RNAssistant.Core.Storage
         {
             if (run == null) return;
             var state = run.KernelState; var summary = state?.Summary;
-            if ((run.SelectedSkills?.Count ?? 0) != 0 || run.InterruptedEffectPossible || run.InterruptedToolId != null ||
+            if ((run.SelectedSkills?.Count ?? 0) != 0 ||
                 summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId ||
                 summary.Lifecycle == RunLifecycle.Waiting)) throw TextStoreScope();
         }

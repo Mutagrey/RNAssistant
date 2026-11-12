@@ -235,6 +235,17 @@ namespace RNAssistant.Core.Storage
         void IConversationStore.MoveDocument(string oldHost, string oldKey, string host, string key, string title, string path) { throw TextStoreScope(); }
         bool IConversationStore.Delete(string host, string key, string id) { throw TextStoreScope(); }
         bool IConversationStore.DeleteDocument(string host, string key) { throw TextStoreScope(); }
-        bool IConversationStore.PrepareInterruptedRunRecovery(ChatSession session, string runId) { throw TextStoreScope(); }
+        bool IConversationStore.PrepareInterruptedRunRecovery(ChatSession session, string runId)
+        {
+            RequireTextRoot();
+            return Access((db, cursor) => {
+                var current = TextChat(db, session.Id);
+                RequireChatRevision(ConversationMetadata.From(session), current);
+                if (current.Fact.Run?.RunId != runId || session.LastRun?.RunId != runId)
+                    throw new ChatConcurrencyException("Recovery requires the observed run.");
+                // Model/tool boundaries close with the atomic interruption checkpoint.
+                return session.LastRun.KernelState?.InFlightTool != null;
+            }, CancellationToken.None);
+        }
     }
 }

@@ -1,5 +1,14 @@
 # RNAssistant backlog
 
+## Confirmation recovery fixture drift — 2026-11-12
+
+Owner: Harness (`Program.SessionEventStoreTests.cs`, `KernelConfirmationResponses`).
+Two `kernel recovery:` cases still invoke retired `skills.upsert`; they fail at
+`PendingConfirmation.PendingId` before calling recovery. Observed in isolated
+`d5aa1e12` + journal recovery. Update this fixture to the supported semantic skill
+mutation; do not restore the retired tool. Current `journal confirmation:` checks
+pass; the old pair is not claimed as recovery coverage.
+
 ## Release script version range — 2026-11-11
 
 Owner: release tooling (`tools/Prepare-Release.ps1`). Параметр `Version` жёстко

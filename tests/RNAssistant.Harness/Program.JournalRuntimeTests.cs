@@ -206,9 +206,14 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void JournalRuntimeToolReceipt()
+        private static void JournalRuntimeToolReceipt() { JournalRuntimeToolReceipt(false, true); }
+
+        private static void JournalRecoveryRead()
+        { JournalRuntimeToolReceipt(true, true); JournalRuntimeToolReceipt(true, false); }
+
+        private static void JournalRuntimeToolReceipt(bool recover, bool office)
         {
-            foreach (var unknown in new[] { false, true }) WithTempPaths(paths => {
+            foreach (var unknown in recover ? new[] { false } : new[] { false, true }) WithTempPaths(paths => {
                 var journal = new ConversationJournal(paths, "document:tool-receipt"); IConversationStore store = journal;
                 var chat = store.CreateTransient("Word", "doc", "Document", "Tool receipt"); store.Commit(chat, new ConversationCommit());
                 var initial = CheckpointState("run", RunLifecycle.Running, 0, 0);
@@ -234,6 +239,18 @@ namespace RNAssistant.Harness
                 prepare(new AgentRunEvent(AgentRunEventKind.ToolStarted, summary, toolContext: context), new[] { activity }, activity).Persist(store.CommitRun, chat);
                 var interrupted = store.Load(chat.Id);
                 AssertEqual(call.Id, interrupted.LastRun.KernelState.InFlightTool.Call.Id, "restart retains an entered call without replaying it");
+                if (recover)
+                {
+                    var recovered = RecoverJournalRun(store, interrupted, office);
+                    AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "abandoned read closes");
+                    AssertEqual(1, recovered.LastRun.KernelState.Summary.ToolCounts.ReadError, "read interruption counts one error");
+                    AssertEqual(0, recovered.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "read interruption invents no possible write");
+                    AssertEqual(ToolExecutionOutcome.Error, journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Fact.Result.ExecutionProgress.Outcome, "read has an error terminal");
+                    AssertEqual(recovered.Revision, RecoverJournalRun(store, recovered, office).Revision, "read recovery is idempotent");
+                    journal.Rebuild();
+                    AssertEqual(recovered.Revision, store.Load(chat.Id).Revision, "rebuild retains read recovery");
+                    return;
+                }
                 RuntimeThrows<InvalidOperationException>(() => journal.CommitCall(chat.Id, "standalone",
                     JournalReadCall("other", "run", "other-step")));
                 var execution = new ToolExecutionRecord(context, unknown ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok,

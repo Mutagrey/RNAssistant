@@ -188,7 +188,7 @@ namespace RNAssistant.Office.Services
                 _conversations.PrepareInterruptedRunRecovery(session, run.RunId);
             var effectMayBeUnknown = run.KernelState == null
                 ? storedOpenToolExecution
-                : run.KernelState.InFlightTool != null;
+                : run.KernelState.InFlightTool?.Policy.MayHaveSideEffects == true;
             MarkInterruptedActivities(session, run, effectMayBeUnknown);
             // A terminal effect can precede its optional result projection.
             // Suppress open exchanges only; completed evidence remains usable.
@@ -199,9 +199,7 @@ namespace RNAssistant.Office.Services
             run.CurrentAction = effectMayBeUnknown
                 ? "Предыдущий процесс завершился во время выполнения действия."
                 : "Предыдущий процесс завершился после сохранённой границы.";
-            if (run.KernelState != null)
-                run.KernelState = run.KernelState.Interrupt(false, run.CurrentAction);
-            session.Messages.Add(new ChatMessage
+            var diagnostic = new ChatMessage
             {
                 Role = "assistant",
                 RunId = run.RunId,
@@ -220,11 +218,12 @@ namespace RNAssistant.Office.Services
                         ? "Процесс завершился до сохранения окончательного результата. Автоматический повтор отключён."
                         : "Запуск завершился до финального ответа. Сохранённые результаты не повторялись автоматически."
                 }
-            });
+            };
+            session.Messages.Add(diagnostic);
             try
             {
-                RunViewStateProjector.StampCurrentRun(session);
-                _conversations.Commit(session, new ConversationCommit(session.Messages.Where(message => BelongsToRun(message, run))));
+                ConversationRecoveryService.CommitInterruption(_conversations, session, diagnostic,
+                    session.Messages.Where(message => BelongsToRun(message, run)));
                 return session;
             }
             catch (ChatConcurrencyException)

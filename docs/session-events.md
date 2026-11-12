@@ -1,5 +1,24 @@
 # Session event stream
 
+## Journal interrupted-run recovery — 2026-11-12
+
+Office and Workspace retain the existing lease and exact run/cursor fence. Recovery
+now submits the kernel interruption through `ConversationRunCommit`: an entered read
+gets Error, a possible write gets Unknown, and its terminal/counts/diagnostic are
+committed atomically. A saved terminal is retained even before result presentation.
+An abandoned approval claim before runtime entry closes without inventing a tool
+terminal; an unclaimed approval stays pending. Input saved before the first kernel checkpoint gets a plain interruption
+diagnostic, without inventing a runtime or tool result. No recovery path invokes a tool/model.
+
+The same persistence boundary serves the current backend and the isolated journal.
+Journal recovery preparation validates the observed revision; its model/tool boundary
+closes with the recovery checkpoint, without a preliminary journal write. Existing
+resource receipts may be linked but cannot promote an Unknown execution to Ok.
+Restart, lost recovery acknowledgement, repeat recovery, rebuild and clean journal/CAS
+restore retain the result. Full application restore, agent waits, remaining owners/
+Store/control consumers, P3 and production cutover remain open. Windows/Office is
+unqualified. [Evidence](audits/storage-context-optimization.md#p1p2--journal-interrupted-run-recovery-2026-11-12).
+
 ## Journal mutation confirmation — 2026-11-11
 
 The isolated `core.write` integration now supports explicit approval through the
@@ -13,13 +32,13 @@ Resume first commits a new invocation claim in the original run. Only the exact
 unconsumed preparation may re-enter the runtime; its new start consumes the pending
 locator atomically. A stale approval or changed prepared state fails before source
 dispatch. Lost claim acknowledgement leaves the durable claim intact and does not
-automatically execute or recreate approval. Existing interrupted-run reconciliation
-still needs integration; this slice does not qualify automatic recovery of that gap.
+automatically execute or recreate approval. The recovery integration above closes that
+abandoned claim without dispatch.
 Workspace denial records NotDispatched, clears approval and cancels the run. Its
 terminal receipt can describe rejection but cannot prove a successful write.
 
 Checked scope is single-call file/VBA `core.write`, including later journal/CAS
-restore. Other mutation owners, agent waits, remaining recovery/control/Store ports
+restore. Other mutation owners, agent waits, remaining control/Store ports
 and production cutover remain open; Windows/Office evidence is separate.
 [Report](audits/storage-context-optimization.md#p1p2--journal-mutation-confirmation-2026-11-11).
 
@@ -71,8 +90,8 @@ next turn. Admission bodies are read outside the append lock. Schema 13 rebuilds
 these projections from journals/CAS.
 
 This remains an isolated integration, not the production switch. The mutation slice
-above adds the first bound write and confirmation; agent waits and interrupted-run recovery
-still reject unsupported paths explicitly. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
+above adds the first bound write and confirmation; interrupted-run recovery is now connected.
+Agent waits still reject unsupported paths explicitly. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
 full backup/cutover gates stay open. No ChatStore optimization, adapter, dual-write
 or fallback is added. [Evidence](audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
 
@@ -101,8 +120,7 @@ restart and a second turn through AgentKernel and an actual scripted HTTP endpoi
 Workspace runtime, Plan and task-list composition consume `IConversationStore`;
 the existing artifact owner is supplied explicitly. Production composition still
 uses the old backend until the complete port switch. Remaining mutation/resource owners,
-Inbox/control and interrupted-run recovery consumers
-remain open. Rebuild and restore retain an unfinished checkpoint without executing
+Inbox/control consumers remain open. Rebuild and restore retain an unfinished checkpoint without executing
 it. Backup still refuses roots containing legacy resource journals; full application
 backup requires their migration. No Windows/Office/DPAPI qualification is implied.
 
@@ -129,7 +147,7 @@ ChatStore overloads are removed. Production composition still uses its existing
 introduced; this slice does not alter `ChatStore` itself.
 
 No-tool runtime/protocol messages and `CommitRun` are now connected as described
-above. Resources/attachments, history rewrites, move/delete/recovery and storage
+above. Resources/attachments, history rewrites, move/delete and storage
 usage remain unsupported in this isolated integration. Reading an unconnected tool/
 agent chat must not return an apparently complete text history. Remaining operations must move to
 the same owner before P7 removes the old backend; verified backup, stopped legacy

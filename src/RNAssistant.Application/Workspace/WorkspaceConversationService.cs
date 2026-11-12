@@ -157,7 +157,7 @@ namespace RNAssistant.Runtime
                     current.LastRun?.RunId == observed.LastRun.RunId &&
                     ConversationEventFeed.Cursor(current) == ConversationEventFeed.Cursor(observed))
                 {
-                    current = ConversationRecoveryService.ReconcileFenced(observed, current, InterruptAbandonedRun);
+                    current = ConversationRecoveryService.ReconcileFenced(observed, current, currentRun => InterruptAbandonedRun(currentRun, _conversationStore));
                     _conversationInbox.ReconcileAcceptedDelivery(current);
                 }
                 return current;
@@ -174,7 +174,7 @@ namespace RNAssistant.Runtime
                 if (session == null) throw new InvalidOperationException("Workspace session was not found.");
                 if (session.UsesCurrentProtocol)
                 {
-                    session = ConversationRecoveryService.ReconcileFenced(session, session, InterruptAbandonedRun);
+                    session = ConversationRecoveryService.ReconcileFenced(session, session, currentRun => InterruptAbandonedRun(currentRun, _conversationStore));
                     _conversationInbox.ReconcileAcceptedDelivery(session);
                 }
                 return session;
@@ -564,7 +564,7 @@ namespace RNAssistant.Runtime
                 var drafts = queuedInput?.Attachments ?? LoadResourceDrafts(workspace, session,
                     request.ResourceDraftIds ?? new List<string>(), attachmentStore);
                 message = VisualAnnotationSourceWorkflow.UserText(message, drafts);
-                session = ConversationRecoveryService.ReconcileFenced(session, session, InterruptAbandonedRun);
+                session = ConversationRecoveryService.ReconcileFenced(session, session, currentRun => InterruptAbandonedRun(currentRun, _conversationStore));
 
                 string[] editedPreviousIds = null;
                 var selectedSkills = SkillTaskService.CopySelections(session.LastRun);
@@ -1003,7 +1003,7 @@ namespace RNAssistant.Runtime
             catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
         }
 
-        private ChatSession InterruptAbandonedRun(ChatSession session)
+        internal static ChatSession InterruptAbandonedRun(ChatSession session, IConversationStore conversations)
         {
             var run = session.LastRun;
             var active = run.KernelState?.InFlightTool;
@@ -1024,7 +1024,6 @@ namespace RNAssistant.Runtime
             var message = run.InterruptedEffectPossible
                 ? "Previous run stopped with a possible effect; inspect the affected resource and reconcile an unresolved attempt before a new edit. No call was replayed."
                 : "Previous run stopped before a terminal result. No call was replayed; submit explicit new input to continue.";
-            if (run.KernelState != null) run.KernelState = run.KernelState.Interrupt(false, message);
             run.Status = "interrupted";
             run.Phase = "interrupted";
             run.CurrentAction = message;
@@ -1033,8 +1032,10 @@ namespace RNAssistant.Runtime
                 run.WorkspaceAcceptance.State = WorkspaceAcceptanceState.Unknown;
                 run.WorkspaceAcceptance.Error = "Run interrupted before acceptance could be assessed.";
             }
-            session.Messages.Add(new ChatMessage { Role = "assistant", RunId = run.RunId, Content = message });
-            _chats.Commit(session, new ConversationCommit(session.Messages.Where(item => item.RunId == run.RunId)));
+            var diagnostic = new ChatMessage { Role = "assistant", RunId = run.RunId, Content = message };
+            session.Messages.Add(diagnostic);
+            ConversationRecoveryService.CommitInterruption(conversations, session, diagnostic,
+                session.Messages.Where(item => item.RunId == run.RunId));
             return session;
         }
 

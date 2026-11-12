@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Application.Conversations
@@ -10,6 +12,20 @@ namespace RNAssistant.Application.Conversations
     // an interrupted transition is needed. No run or tool is replayed here.
     internal static class ConversationRecoveryService
     {
+        internal static void CommitInterruption(IConversationStore store, ChatSession session,
+            ChatMessage diagnostic, IEnumerable<ChatMessage> updated)
+        {
+            if (session.LastRun.KernelState != null)
+                ConversationRunCommit.Interrupted(session, diagnostic, updated).Persist(store.CommitRun, session);
+            else
+            {
+                // An input accepted before the first kernel checkpoint has no tool outcome.
+                diagnostic.Activity = null;
+                RunViewStateProjector.StampCurrentRun(session);
+                store.Commit(session, new ConversationCommit(updated));
+            }
+        }
+
         internal static bool NeedsInterruption(ChatRunRecord run)
         {
             if (run == null || string.IsNullOrWhiteSpace(run.RunId)) return false;

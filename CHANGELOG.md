@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.12.1-dev
+
+- Interrupted runs retain one canonical tool outcome and their counters. Reads fail;
+  possible writes remain unknown and are never replayed. Recovery preserves a saved
+  terminal across a missing result projection. Windows/Office qualification is open.
+
 ### 16.12.0-dev
 
 - Browser reads retain observations with source address, title and capture time.

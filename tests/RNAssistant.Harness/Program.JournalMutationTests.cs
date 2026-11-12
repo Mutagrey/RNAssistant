@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -46,6 +47,37 @@ namespace RNAssistant.Harness
         private static void JournalConfirmationPreparation()
         { foreach (var office in new[] { true, false }) JournalMutationTurn(office, "confirm-preparation"); }
 
+        private static void JournalRecoveryWrite()
+        { JournalMutationTurn(false, "recovery-open"); JournalMutationTurn(false, "recovery-ack"); }
+
+        private static void JournalRecoveryBeforeKernel()
+        {
+            foreach (var office in new[] { true, false }) WithTempPaths(paths => {
+                var journal = new ConversationJournal(paths, "document:before-kernel"); IConversationStore store = journal;
+                var chat = store.CreateTransient("Word", "doc", "Document", "Accepted input");
+                var user = new ChatMessage { Role = "user", Content = "Start", RunId = "accepted" };
+                chat.LastRun = new ChatRunRecord { RunId = "accepted", TurnId = "accepted", Status = "running" };
+                chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
+                var recovered = RecoverJournalRun(store, store.Load(chat.Id), office);
+                AssertEqual("interrupted", recovered.LastRun.Status, "accepted input closes before kernel start");
+                AssertTrue(recovered.LastRun.KernelState == null && journal.CurrentRun(chat.Id) == null,
+                    "recovery cannot invent a kernel execution");
+                AssertEqual(2, recovered.Messages.Count, "input and diagnostic survive");
+                AssertEqual(0, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "no tool evidence before kernel start");
+                AssertEqual(recovered.Revision, RecoverJournalRun(store, recovered, office).Revision, "pre-kernel recovery is idempotent");
+                journal.Rebuild();
+                AssertEqual(recovered.Revision, store.Load(chat.Id).Revision, "rebuild retains pre-kernel interruption");
+            });
+        }
+
+        private static ChatSession RecoverJournalRun(IConversationStore store, ChatSession session, bool office)
+        {
+            if (office) return new ChatSessionService(new FakeOfficeAdapter(), store)
+                .ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
+            return ConversationRecoveryService.ReconcileFenced(session, store.Load(session.Id),
+                current => WorkspaceConversationService.InterruptAbandonedRun(current, store));
+        }
+
         private static void JournalMutationTurn(bool office, string fault)
         {
             WithTempPaths(paths => {
@@ -69,6 +101,7 @@ namespace RNAssistant.Harness
                 var content = office ? "Sub Main()\nDebug.Print 17\nEnd Sub" : "Written exactly once.";
                 var uncertain = fault == "unknown" || fault == "resource-ack";
                 var unsupported = fault == "unsupported-owner";
+                var recover = fault?.StartsWith("recovery-", StringComparison.Ordinal) == true;
                 if (unsupported)
                 {
                     target = "plan: Journal Plan";
@@ -78,6 +111,9 @@ namespace RNAssistant.Harness
                 files.FaultPoint = point => {
                     if (point != "after-dispatch") return;
                     dispatched++;
+                    if (recover) journal.Journal.Fault = stage => {
+                        if (stage == "before_append") throw new IOException("process stopped before terminal commit");
+                    };
                     if (fault == "unknown") throw new IOException("lost read-back");
                     if (fault == "terminal-ack") journal.Journal.Fault = stage => {
                         if (stage != "after_flush") return;
@@ -150,7 +186,7 @@ namespace RNAssistant.Harness
                                     ports, ports.Tools, ports, CancellationToken.None).GetAwaiter().GetResult();
                             }
                         };
-                        if (fault == "terminal-ack") RuntimeThrows<RunStoreException>(run); else run();
+                        if (fault == "terminal-ack" || recover) RuntimeThrows<RunStoreException>(run); else run();
                         if (confirmation)
                         {
                             journal.Rebuild(); chat = store.Load(chat.Id);
@@ -204,9 +240,53 @@ namespace RNAssistant.Harness
                 {
                     AssertEqual(0, dispatched, "no invocation after uncertain claim acknowledgement");
                     if (!office) AssertTrue(!File.Exists(Path.Combine(workspace.RootPath, target)), "no file after lost claim acknowledgement");
+                    var claimed = RecoverJournalRun(store, store.Load(chat.Id), office);
+                    AssertEqual(RunLifecycle.Failed, claimed.LastRun.KernelState.Summary.Lifecycle, "abandoned claim closes without execution");
+                    AssertEqual(0, claimed.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "no entered call means no invented effect");
+                    AssertEqual(0, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "claim recovery invents no terminal");
+                    AssertEqual(claimed.Revision, RecoverJournalRun(store, claimed, office).Revision, "claim recovery is idempotent");
+                    journal.Rebuild();
+                    AssertEqual(claimed.Revision, store.Load(chat.Id).Revision, "rebuild retains recovered claim");
                     return;
                 }
                 var restored = store.Load(chat.Id);
+                if (recover)
+                {
+                    AssertTrue(restored.LastRun.KernelState.InFlightTool != null, "lost terminal retains entered call");
+                    AssertEqual(0, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "no terminal before recovery");
+                    if (fault == "recovery-ack")
+                    {
+                        journal.Journal.Fault = stage => { if (stage == "after_flush") throw new IOException("lost recovery acknowledgement"); };
+                        RuntimeThrows<IOException>(() => RecoverJournalRun(store, restored, office));
+                        journal.Journal.Fault = null;
+                    }
+                    restored = RecoverJournalRun(store, store.Load(chat.Id), office);
+                    AssertEqual(RunLifecycle.Failed, restored.LastRun.KernelState.Summary.Lifecycle, "recovery closes abandoned run");
+                    AssertEqual(1, restored.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "possible write is counted once as unknown");
+                    AssertEqual(1, dispatched, "recovery cannot repeat the write");
+                    AssertEqual(1, calls, "recovery cannot request a model response");
+                    AssertEqual(content, File.ReadAllText(Path.Combine(workspace.RootPath, target)), "written source survives recovery");
+                    var recoveredTerminal = journal.ReadWindow(chat.Id, long.MaxValue, 8).Single();
+                    AssertEqual(ToolExecutionOutcome.Unknown, recoveredTerminal.Fact.Result.ExecutionProgress.Outcome, "late resource proof cannot promote interrupted execution");
+                    AssertTrue(journal.RestoreContext(chat.Id, restored.LastRun.RunId, 0, 8192).WorkingSet.Requirements.UnknownEffects, "unknown remains in addressed context");
+                    AssertEqual(restored.Revision, RecoverJournalRun(store, restored, office).Revision, "repeated recovery does not append");
+                    journal.Rebuild();
+                    AssertEqual(recoveredTerminal.Position.Hash, journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash, "rebuild preserves the exact unknown receipt");
+                    var backup = Path.Combine(paths.Root, "recovery-backup");
+                    JournalCasService(paths, StorageProtector.None).BackupJournals(backup);
+                    var restoredPaths = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "recovery-restore"), _ => StorageProtector.None);
+                    IConversationStore copied = new ConversationJournal(restoredPaths, scope);
+                    AssertEqual(restored.Revision, RecoverJournalRun(copied, copied.Load(chat.Id), false).Revision, "restore never replays recovered work");
+                    return;
+                }
+                if (fault == "terminal-ack")
+                {
+                    var savedHash = journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash;
+                    restored = RecoverJournalRun(store, restored, office);
+                    AssertEqual(RunLifecycle.Failed, restored.LastRun.KernelState.Summary.Lifecycle, "unfinished run closes after known terminal");
+                    AssertEqual(savedHash, journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash, "recovery never replaces a known terminal");
+                    AssertEqual(0, restored.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "known effect stays known");
+                }
                 var call = restored.Messages.Single(item => item.AcceptedCallOrigin != null);
                 var origin = new ResourceMutationOrigin(scope, chat.Id, call.RunId, call.ToolCallId, call.AcceptedCallOrigin.StepId);
                 var terminal = journal.ReadWindow(chat.Id, long.MaxValue, 8).Single();

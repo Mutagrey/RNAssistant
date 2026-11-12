@@ -159,19 +159,26 @@ inspection добавляет proof без переписывания terminal; 
 resume фиксирует новую invocation до записи. Повторное подтверждение, изменённая
 подготовка и потеря квитанции claim не исполняют mutation; отказ Workspace сохраняет
 NotDispatched. Проверены 13 адресных checks в изолированном срезе.
+Подключено восстановление прерванного run (2026-11-12): общий recovery сохраняет
+checkpoint и terminal атомарно; read → Error, possible write → Unknown, известный
+terminal не заменяется. Потеря recovery ack, повтор, rebuild и чистый journal/CAS
+restore не повторяют действие. 14 адресных checks проходят; два старых confirmation
+fixtures падают до recovery на удалённом `skills.upsert` — [backlog](BACKLOG.md#confirmation-recovery-fixture-drift--2026-11-12).
+Patch `16.12.1-dev` относится к общему recovery; production journal ещё не переключён.
 Остальные mutation/resource owners, wait,
-rewrite/move/delete/recovery, usage, Inbox/control/feed и
+rewrite/move/delete, usage, Inbox/control/feed и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
 Полный restore также должен сохранить Workspace identity locators и move intents.
 Старый backend удаляется при переключении целого порта; новые fallback/adapters
-не добавлены. Product version не повышается для этого промежуточного подключения.
+не добавлены. Предыдущие изолированные подключения не повышали product version.
 [Отчёт §12](../audits/storage-context-optimization.md#p1p2--direct-journal-text-store-integration-2026-11-11).
 [Runtime-срез](../audits/storage-context-optimization.md#p1p2--atomic-no-tool-runtime-integration-2026-11-11).
 [Resource-срез](../audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
 [Read-tool-срез](../audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
 [Mutation-срез](../audits/storage-context-optimization.md#p1p2--bound-mutation-calls-2026-11-11).
 [Confirmation-срез](../audits/storage-context-optimization.md#p1p2--journal-mutation-confirmation-2026-11-11).
+[Recovery-срез](../audits/storage-context-optimization.md#p1p2--journal-interrupted-run-recovery-2026-11-12).
 
 По [плану пользователя](../proposals/RNAssistant_Architecture_and_Implementation_Plan.md)
 зафиксирован [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md). Office/Workspace

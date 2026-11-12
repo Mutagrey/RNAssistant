@@ -111,14 +111,24 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal recovery:` checks accepted input before kernel start, entered reads through
+both recovery consumers and real
+Workspace writes stopped before the terminal append. It covers Unknown/Error counts,
+lost recovery acknowledgement, repeat recovery, rebuild and clean journal/CAS restore.
+The existing confirmation claim-loss and mutation terminal-ack cases also recover:
+no invented effect after claim loss, no replacement of an already known terminal.
+Pair with `journal confirmation:`, `journal mutation:`, shared recovery/cursor and
+`kernel replay: known unprojected effect survives recovery` / `interrupted write remains unknown`.
+The old `kernel recovery:` pair fails before recovery on retired `skills.upsert`;
+see [fixture backlog](../../docs/stabilization/BACKLOG.md#confirmation-recovery-fixture-drift--2026-11-12).
+
 `journal confirmation:` runs four focused checks: real Office/Workspace approval
 after restart/rebuild, lost invocation-claim acknowledgement, Workspace denial and
 changed preparation. Checks enforce one accepted call/write, no E or resource
 attempt while pending, stale approval rejection, preserved budgets and a denial
 receipt that cannot prove success. Approved Workspace turns also exercise clean
 journal/CAS restore. Pair with `journal mutation:`, `journal runtime:` and
-`storage optimization: run checkpoints and invocation ownership`. Interrupted-run
-reconciliation, other mutation owners and Windows/Office qualification remain open.
+`storage optimization: run checkpoints and invocation ownership`. Agent waits, other mutation owners and Windows/Office qualification remain open.
 
 `journal mutation:` runs four focused checks through the real Office/Workspace
 runtime and scripted HTTP: VBA/file `core.write`, unknown and lost authority ack,

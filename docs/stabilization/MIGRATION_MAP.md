@@ -2,13 +2,22 @@
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 interrupted-run recovery (2026-11-12): existing Office/Workspace recovery uses
+one typed kernel commit for the checkpoint, diagnostic and any synthetic terminal.
+Reads become Error; possible writes remain Unknown. Known terminals, pending approval
+and consumed claims retain distinct outcomes. Repeated recovery/ack loss/rebuild do
+not replay. Workspace recovery no longer writes directly to ChatStore. Owner: existing
+Application recovery / Core persistence. Agent waits, other mutation/Store/control
+ports and P7 composition remain open; same old-backend removal condition, no new
+adapter. [Contract](../session-events.md#journal-interrupted-run-recovery--2026-11-12).
+
 P1/P2 mutation confirmation (2026-11-11): existing Office/Workspace consumers now
 resume the saved file/VBA `core.write` through ConversationJournal. Pending has no
 terminal/E; preparation remains in checkpoint CAS, with one disposable call locator.
 Resume claims a new invocation before dispatch and consumes that locator on exact
 runtime entry. Repeated approval, preparation mismatch and lost claim acknowledgement
 cannot repeat the effect. Workspace denial retains NotDispatched. Owner: Core
-journal / existing kernel consumers. Wait/recovery, other mutation/Store ports and
+journal / existing kernel consumers. Agent waits, other mutation/Store ports and
 P7 composition remain open; no new adapter. [Contract](../session-events.md#journal-mutation-confirmation--2026-11-11).
 
 P1/P2 bound mutation calls (2026-11-11): `core.write` now uses existing Workspace
@@ -19,7 +28,7 @@ promoting Unknown or replaying work. Office/Workspace catalogs accept the same
 injected ports. Scope guards in the existing mutation owners reject unconnected
 targets; remove those restrictions as their owners join the journal composition.
 Owner: Core journal / Office resource authority / Workspace file owner. Remaining
-mutations, wait/recovery and full production composition retain the
+mutations, agent waits and full production composition retain the
 same P7 gate; no additional store/adapter or legacy optimization.
 [Contract](../session-events.md#bound-mutation-calls-on-the-journal--2026-11-11).
 
@@ -31,8 +40,8 @@ concrete `ChatStore` signatures are removed. Production Workspace composition su
 the already existing `ChatConversationStoreAdapter`; its owner is Core Persistence /
 Application Workspace, removal condition is the complete Store/runtime/resource port
 switch at P7, together with the old backend. This intermediate integration does not
-enable a second production writer. Resource, rewrite/move/delete,
-recovery and usage operations explicitly reject unsupported requests. The next storage
+enable a second production writer. Resource, rewrite/move/delete
+and usage operations explicitly reject unsupported requests. The next storage
 work extends this existing journal owner instead of optimizing the old aggregate path.
 [Contract and limits](../session-events.md#direct-journal-text-store-integration--2026-11-11).
 
@@ -47,7 +56,7 @@ remain production composition only, with the same complete-port P7 removal gate.
 ToolPackAdmissionJournal no longer reads all events to restore callable membership.
 Resource owners still produce legacy journals; mixed-root backup therefore remains
 explicitly blocked. Next: mutation/resource integration, remaining Store and Inbox/
-control/recovery operations, then production switch and old backend removal.
+control operations, then production switch and old backend removal.
 
 Owner: Core persistence/context; Application consumes common contracts.
 
@@ -58,8 +67,7 @@ model presentation does not create a second terminal. Indexed T/E/R and ToolPack
 admissions support exact finish evidence and cross-turn reuse. Lost terminal ack,
 unknown read result, restart/rebuild/restore and citation correction are covered.
 Default production composition remains unchanged. The bound-mutation slice above
-connects the first write and confirmation; other mutations, agent waits and interrupted
-recovery remain unsupported by this integration.
+connects the first write and confirmation; other mutations and agent waits remain unsupported by this integration.
 The same P7 removal gate applies; no additional adapter was introduced.
 [Contract](../session-events.md#atomic-read-tool-runtime-on-the-journal--2026-11-11).
 
