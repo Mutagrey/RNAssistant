@@ -42,8 +42,7 @@ namespace RNAssistant.Office.WebView
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
         private IExternalBrowserHost _externalBrowser;
-        internal RNAssistant.Core.Models.AppSettings BrowserSettings()
-        { return new RNAssistant.Core.Storage.SettingsService(_controller.StoragePaths).Load(); }
+        internal void RequireBrowserAccess(string url, RNAssistant.Core.Models.BrowserAccessKind kind) { _controller.RequireBrowserAccess(url, kind); }
         internal Task<Action> PauseBrowserRunAsync(string chatId, string pauseId)
         { return Task.Run(() => _agentCommunication.PauseForUser(chatId, pauseId)); }
         public IExternalBrowserHost ExternalBrowser
@@ -650,6 +649,23 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.GetSettings:
                         responsePayload = _controller.GetSettings();
+                        break;
+                    case BridgeOperationId.GetDeploymentConfigStatus:
+                        responsePayload = await Task.Run(() => _controller.GetDeploymentConfigStatus(), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.UnlockDeveloperMode:
+                        var browserUnlock = Payload<DeveloperUnlockRequest>(payload);
+                        responsePayload = await Task.Run(() => _controller.UnlockDeveloperMode(browserUnlock), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.SaveDeploymentConfig:
+                        var deploymentConfig = Payload<DeploymentConfigSaveRequest>(payload);
+                        responsePayload = await Task.Run(() => _controller.SaveDeploymentConfig(deploymentConfig), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.LockDeveloperMode:
+                        responsePayload = _controller.LockDeveloperMode();
+                        break;
+                    case BridgeOperationId.OpenDeploymentConfigDirectory:
+                        responsePayload = _controller.OpenDeploymentConfigDirectory(Payload<DeveloperSessionRequest>(payload));
                         break;
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = _controller.GetCasHealth();

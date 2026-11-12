@@ -9,6 +9,33 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class DeveloperUnlockRequest
+    {
+        [JsonProperty("password")] public string Password { get; set; }
+    }
+
+    public sealed class DeploymentConfigSaveRequest
+    {
+        [JsonProperty("sessionToken")] public string SessionToken { get; set; }
+        [JsonProperty("sites")] public List<string> Sites { get; set; }
+        [JsonProperty("allowAnyManualSite")] public bool AllowAnyManualSite { get; set; }
+        [JsonProperty("privateKeyPath")] public string PrivateKeyPath { get; set; }
+    }
+
+    public sealed class DeveloperSessionRequest
+    {
+        [JsonProperty("sessionToken")] public string SessionToken { get; set; }
+    }
+    public sealed class DeploymentDirectoryResponse
+    {
+        [JsonProperty("opened")] public bool Opened { get; set; }
+    }
+
+    public sealed class DeveloperLockResponse
+    {
+        [JsonProperty("locked")] public bool Locked { get; set; }
+    }
+
     public class ModelCatalogPayload
     {
         [JsonProperty("settings")]

@@ -110,6 +110,7 @@
     <Compile Include="Models\ConversationInput.cs" />
     <Compile Include="Models\AgentCommunication.cs" />
     <Compile Include="Models\AppSettings.cs" />
+    <Compile Include="Models\DeploymentConfiguration.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\ResourceModels.cs" />
     <Compile Include="Models\ResourceArchitectureModels.cs" />
@@ -382,6 +383,8 @@
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\ProtectedChatDraftStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
+    <Compile Include="Storage\DeploymentConfigurationStore.cs" />
+    <Compile Include="Services\DeploymentConfigurationCrypto.cs" />
     <Compile Include="Storage\StorageProtection.cs" />
     <Compile Include="Storage\SkillStore.cs" />
     <Compile Include="Storage\StorageFileSystem.cs" />
@@ -417,6 +420,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <EmbeddedResource Include="..\..\config\deployment-trust.json" Condition="Exists('..\..\config\deployment-trust.json')">
+      <LogicalName>RNAssistant.DeploymentTrust</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

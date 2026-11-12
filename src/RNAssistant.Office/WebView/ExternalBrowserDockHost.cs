@@ -1,3 +1,4 @@
+using RNAssistant.Core.Models;
 using System;
 using System.Drawing;
 using System.Threading;
@@ -16,7 +17,7 @@ namespace RNAssistant.Office.WebView
         private readonly WebView2 _shell;
         private readonly string _assets;
         private readonly Action<ExternalBrowserStateDto> _publish;
-        private readonly Func<RNAssistant.Core.Models.AppSettings> _settings;
+        private readonly Action<string, BrowserAccessKind> _requireAccess;
         private readonly Func<string, string, Task<Action>> _pauseRun;
         private ExternalBrowserPage _page;
         private Task _initializing = Task.CompletedTask;
@@ -117,9 +118,9 @@ namespace RNAssistant.Office.WebView
         }
 
         public ExternalBrowserDockHost(Control parent, WebView2 shell, string assets, Action<ExternalBrowserStateDto> publish,
-            Func<RNAssistant.Core.Models.AppSettings> settings, Func<string, string, Task<Action>> pauseRun)
+            Action<string, BrowserAccessKind> requireAccess, Func<string, string, Task<Action>> pauseRun)
         {
-            _parent = parent; _shell = shell; _assets = assets; _publish = publish; _settings = settings; _pauseRun = pauseRun;
+            _parent = parent; _shell = shell; _assets = assets; _publish = publish; _requireAccess = requireAccess; _pauseRun = pauseRun;
             _shell.SizeChanged += InvalidatePlacement;
             _shell.LocationChanged += InvalidatePlacement;
             _shell.ZoomFactorChanged += InvalidatePlacement;
@@ -149,7 +150,7 @@ namespace RNAssistant.Office.WebView
                 if (_page != null) throw new InvalidOperationException("Пилот поддерживает одну Browser-вкладку.");
                 if (!_initializing.IsCompleted) throw new InvalidOperationException("Предыдущий WebView2 ещё завершает запуск. Повторите открытие через несколько секунд.");
                 if (request.ChatId != null && request.ChatId.Length > 256) throw new InvalidOperationException("Некорректный владелец Browser-вкладки.");
-                var page = new ExternalBrowserPage(_assets, request.ChatId, _settings, _pauseRun);
+                var page = new ExternalBrowserPage(_assets, request.ChatId, _requireAccess, _pauseRun);
                 _semanticGate = new SemaphoreSlim(1, 1);
                 _page = page; page.Control.Bounds = new Rectangle(0, 0, 1, 1);
                 _parent.Controls.Add(page.Control); page.Control.BringToFront();

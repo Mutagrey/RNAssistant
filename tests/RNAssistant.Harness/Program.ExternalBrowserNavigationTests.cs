@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
@@ -13,7 +15,7 @@ namespace RNAssistant.Harness
             var after = new ExternalBrowserReadTarget("chat", "page", 3);
             var allowed = new[] { "https://*.example.com" };
             Func<ExternalBrowserNavigation> create = () => new ExternalBrowserNavigation(before, "https://example.com/start",
-                url => ExternalBrowserPolicy.RequireAgentAccess(url, allowed));
+                url => ExternalBrowserPolicy.RequireAccess(url, uri => allowed.Any(rule => HttpOriginPattern.Matches(rule, uri))));
             var navigation = create();
             navigation.Starting(8, "https://example.com/start", false);
             navigation.Starting(8, "https://sub.example.com/final", true);
@@ -45,7 +47,7 @@ namespace RNAssistant.Harness
             navigation.Completed(15, false, null, "https://example.com/start");
             AssertEqual(ExternalBrowserEffect.Unknown, navigation.Completion.Result.Effect, "failed load has no verified effect claim");
             navigation = new ExternalBrowserNavigation(before, "https://пример.рф/path", url =>
-                ExternalBrowserPolicy.RequireAgentAccess(url, new[] { "https://пример.рф" }));
+                ExternalBrowserPolicy.RequireAccess(url, uri => HttpOriginPattern.Matches("https://пример.рф", uri)));
             navigation.Starting(16, "https://xn--e1afmkfd.xn--p1ai/path", false);
             navigation.Completed(16, true, after, "https://xn--e1afmkfd.xn--p1ai/path");
             AssertEqual(ExternalBrowserEffect.VerifiedChange, navigation.Completion.Result.Effect, "IDN spelling and Chromium punycode identify the same destination");

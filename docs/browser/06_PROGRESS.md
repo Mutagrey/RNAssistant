@@ -1,5 +1,18 @@
 # Universal Browser: статус
 
+## Подписанная конфигурация — In Review, 2026-11-12
+
+`16.13.0-dev`: generic deployment-config.bin; Developer password unlock, key path,
+sites/manual-any, save/folder/lock. Старые версии политики не применяются даже с
+корректной подписью; агент не получает manual-any authority. PFX/PowerShell path удалён.
+Разовые Mac C# и Windows GUI utilities используют общую генерацию encrypted .bin;
+public trust embedded, private key gitignored. Реальный пароль владелец задаёт локально.
+11 Harness + production Settings fixture проходят; Mac utility generation/rotation
+проверены с temporary issuer. Windows GUI/Office/WebView2 compile/delivery Open.
+[Контракт/настройка](03_CONTRACTS.md#signed-access), [evidence](05_TEST_MATRIX.md#signed-access).
+Далее P6h image delivery; diff/P4b отложены. P6g отправлен в origin: `d1e7b4a2`.
+
+
 Дата: 2026-11-11. Scope: P0–P3 baseline, P4a source diff baseline, P5a native pilot,
 P6a/P6b read/local actions, P6c visualization, P6d user control/access, P6e navigation,
 P6f external actions и P6g retained research observations.

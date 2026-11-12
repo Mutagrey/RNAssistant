@@ -1,5 +1,17 @@
 # RNAssistant Harness
 
+## Deployment configuration — 2026-11-12
+
+`external browser:` includes 11 focused cases; signed configuration covers actual
+RSA/encrypted BIN, password-only unlock, private key admission on save, portable
+import, manual-any vs agent rules, tamper/delete/revoke, exact policy-version and
+format-version rejection, bounded input, invalid save preservation and editor lock.
+Pair with `tests/web/deployment-config.test.js` for production Settings lifecycle;
+optional `DEPLOYMENT_CONFIG_REVIEW` saves snapshots. Shared Mac C# issuer generation
+and explicit replacement tested in a temporary repository. Windows GUI/Office/WebView2
+compilation and execution remain [open](../../docs/browser/05_TEST_MATRIX.md#signed-access).
+
+
 Host-neutral tests run on this machine without Office COM. Locate the relevant test first; do not read or execute the full suite by default.
 
 ## External Browser P5a — 2026-11-11

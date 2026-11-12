@@ -1,5 +1,19 @@
 # Решения по UI RNAssistant
 
+## 2026-11-12 — Developer configuration: scope Approved, UI In Review
+
+Пользователь уточнил Developer внутри Settings: пароль открывает скрытые настройки;
+private key по пути нужен при подписи. Один deployment-config.bin для всех, base64
+допустим как сокрытие от случайного просмотра; основная защита — RSA signature.
+Manual Browser default deny; подписанный checkbox разрешает любые HTTP(S)-сайты
+только пользователю. Policy version в приложении должна точно совпадать с подписанной;
+это отдельная версия политики, не автоматическая привязка к каждому product patch.
+Ключи — обычный encrypted .bin, без сертификатов, PFX/CRT и certificate store.
+Разовые C# utilities для Mac и по запросу Windows GUI используют общий код;
+public trust включается в сборку, private key не попадает в Git/поставку приложения.
+[Настройка и ограничения](../browser/03_CONTRACTS.md#signed-access).
+
+
 Owner: Web presentation; утверждает пользователь.
 Общий журнал UI-решений: Demo P0–P3 и переход к модернизации production.
 Нормативные границы — в [UI Architecture](UI_ARCHITECTURE.md); здесь история согласований.

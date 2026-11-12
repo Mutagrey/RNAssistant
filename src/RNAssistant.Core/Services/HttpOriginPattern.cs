@@ -40,7 +40,7 @@ namespace RNAssistant.Core.Services
         public static List<string> NormalizeList(IEnumerable<string> values)
         {
             var list = (values ?? Enumerable.Empty<string>()).ToList();
-            if (list.Count > 128) throw new InvalidOperationException("Список сайтов агента ограничен 128 правилами.");
+            if (list.Count > 128) throw new InvalidOperationException("Список сайтов Browser ограничен 128 правилами.");
             return list.Select(Normalize).Distinct(StringComparer.Ordinal).ToList();
         }
 

@@ -7,7 +7,8 @@ P4a bounded source diff — **baseline / In Review**, дальнейшая до�
 **отложены пользователем 2026-11-11**. P6e external navigation — **реализован / In Review**;
 P6f bounded external-site actions — **реализован / In Review**;
 P6g retained research observations — **реализован / In Review**;
-следующий приоритет — P6h safe screenshots/image delivery;
+по запросу пользователя перед P6h добавлена подписанная политика доступа;
+далее P6h safe screenshots/image delivery;
 остальные capabilities P5–P7 — **Planned**.
 Дата: 2026-11-11. Пользователь продолжил работу после
 docs-only P0; реализованы описанные ниже срезы. Основание:
@@ -48,13 +49,14 @@ evidence и ровно одним следующим шагом в [Progress](06
 | P6a чтение | Один external target из P5a → bounded semantic observation через existing Resource Gateway; exact runtime binding, document generation и исключение sensitive values | Реализован / In Review; host-neutral Gateway и Chrome capture проверены, WebView2/controller delivery на Windows открыт |
 | P6b действие | Одна локальная fixture: открыть → прочитать → заполнить → нажать → проверить. Existing ToolRuntime/policy/evidence; stale/ambiguous target и unknown effect без replay | Реализован / In Review; Office и bound Workspace, host-neutral/Chrome evidence; Windows qualification открыта |
 | P6c визуализация действий | Анимированный указатель, target highlight, runtime result, idle/input cleanup | Реализован / In Review; после P6b, перед P4a. Windows и визуальное принятие открыты |
-| P6d ручное управление / доступ | Persistent manual latch, exact run pause/resume, список сайтов агента с масками; ручная навигация свободна | Реализован / In Review по уточнению пользователя после P6c; native Windows evidence открыт |
+| P6d ручное управление / доступ | Persistent manual latch, exact run pause/resume, manual latch и исходный список масок; доступ заменён общей подписанной политикой | Реализован / In Review по уточнению пользователя после P6c; native Windows evidence открыт |
 | P4a сравнение | Базовый bounded source diff двух saved HTML/plugin versions реализован; preview data исключены | Доработка отложена по запросу пользователя; не приоритет и не блокер P6 |
 | P4b аннотации | Persistent lifecycle/reanchoring/verified resolution поверх existing events/CAS/attachments | Отложено пользователем вместе с доработкой diff; вернуться по конкретной потребности |
 | P6e external navigation | Агент открывает разрешённый HTTP(S) адрес в существующей external session и читает новую страницу; exact owner/generation/manual control/access guards | Реализован / In Review; redirects/terminal tested host-neutral, Windows delivery Open |
 | P6f external actions | Fill/in-page click и navigate по linkName на разрешённых страницах; fresh exact observation, pointer/control guards, async read-back | Реализован / In Review; 9 Harness + 3 Chrome fixtures. Native Windows delivery Open |
 | P6g research observations | Immutable facts A/B с source URL/title/time и semantic snapshotTarget; existing context/CAS, сохранность после navigation/compaction/close, bounded text до 2000 на node. Исторический read не даёт action authority | Реализован / In Review; 10 Harness + 3 Chrome fixtures. Native URL/time binding и Windows delivery Open. Полная DOM pagination остаётся отдельным расширением по workflow |
-| P6h image snapshots | Безопасный screenshot external page с redaction/completeness, existing CAS/media и фактической image delivery модели | После P6g либо по отдельному image-first workflow; PNG dev web.verify не заменяет эту capability |
+| Подписанная конфигурация | Developer password UI, sites/manual-any, private BIN path, sign/save/folder/close; exact policy version, default deny; Mac и Windows GUI issuer utilities | Реализовано / In Review перед P6h; 11 Harness + Settings Chrome + Mac utility generation/rotation, Windows GUI/Office/native evidence Open |
+| P6h image snapshots | Безопасный screenshot external page с redaction/completeness, existing CAS/media и фактической image delivery модели | После подписанной политики доступа; PNG dev web.verify не заменяет эту capability |
 | Остальные P5/P6 capabilities | Model open/focus/close; select/scroll/key/wait по нужному workflow; затем дополнительные targets/frames, persistent profiles, разрешённые popup/download/shared sessions | Отдельные продуктовые срезы. Базовый Browser ещё открывается вручную; generic internet search и arbitrary JS не реализованы. Не создавать весь перечень API заранее |
 | P7 qualification | Совместная проверка поддержанных сценариев, Windows/Office, security/performance/cleanup и release evidence | Локальные проверки сопровождают срезы; широкий итоговый прогон — на интеграционной точке/кандидате, а не после каждой правки |
 

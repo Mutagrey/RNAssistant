@@ -1,5 +1,17 @@
 # План модернизации production UI
 
+## Developer: подписанная конфигурация — In Review, 2026-11-12
+
+По уточнению пользователя: обычный status, Developer password unlock, sites/manual-any,
+путь к private .bin, sign/save/open-directory/close; exact policy-version gate.
+Генерация issuer — общая C# реализация для Mac и Windows GUI, без сертификатов/скриптов.
+Scope/owner — [контракт](../browser/03_CONTRACTS.md#signed-access).
+11 Harness и production Settings Chrome fixture проходят, wide/narrow/125% просмотрены;
+Mac utility generation/rotation проверены. Windows GUI/native/Office evidence и
+визуальное принятие открыты; [5 действий ревью](../browser/05_TEST_MATRIX.md#signed-access).
+Следующий Browser этап P6h; diff/P4b по-прежнему отложены. Общий S2 не запускается.
+
+
 ## Browser P4a — baseline / In Review, дальнейшая доработка отложена
 
 2026-11-11: общий режим сравнения saved HTML/plugin release, owner-validated immutable

@@ -1,5 +1,46 @@
 # Universal Browser: матрица проверок
 
+<a id="signed-access"></a>
+## Подписанная конфигурация — 2026-11-12
+
+Scope: уточнённый Developer UI, переносимый deployment-config.bin, manual-any только
+для пользователя, exact policy-version gate, certificate-free RSA и Mac/Windows key
+utilities. Прежний PFX-прототип удалён. Более ранние agent-only P6d–g проверки ниже —
+история; текущий access contract находится в [контрактах](03_CONTRACTS.md#signed-access).
+
+- `external browser:` — 11 checks pass. Реальная криптография: password-only unlock,
+  key-on-save, portable import, изменённый payload/key, чужой issuer, missing/oversized
+  config, atomic invalid-save preservation, directory/session guards, default deny,
+  manual-any не разрешает agent access, старые/future PolicyVersion и unknown format
+  отвергаются при **валидной RSA-подписи**. Harness controller — stub, не native proof.
+- `tests/web/deployment-config.test.js`: actual production Settings с synthetic Bridge,
+  маленький normal indicator, скрытые поля/путь, manual/key/folder commands, generic
+  settings dirty isolation, detached Dock cleanup и late unlock; wide/narrow/125%.
+- Mac C# utility: build pass; temporary issuer через interactive PTY, no-echo password,
+  generation/read-back, private mode 0600, отказ неявной замене и explicit rotation
+  с сохранением encrypted backup. Test secrets удалены, реальный issuer не создан.
+- Windows GUI sharing того же IssuerFiles/crypto проверен по коду/project includes.
+  Реальная .NET 4.8 GUI compilation/execution, Office/WebView2 routing и events Open.
+  VSTO/Office validation на macOS не запускалась.
+
+Ревью Windows (evidence — только фотографии экрана):
+1. Создать issuer любой [утилитой](03_CONTRACTS.md#issuer-setup), пересобрать приложение,
+   включить native pilot через пользовательскую переменную RNA_BROWSER_PILOT=1 и новый
+   процесс Office/app. Без конфига внешние страницы закрыты, local probe работает.
+2. Developer: пароль → masks/manual flag/key path → подписать → открыть каталог.
+   У получателя только deployment-config.bin: индикатор Applied, скрытых полей нет.
+3. Manual-any позволяет toolbar navigation/redirect/resources вне списка, но model
+   read/actions/Resume на такой странице запрещены. После agent action сеть снова
+   ограничена rules; проверить redirects/CDN/frames и поздние события после unknown.
+4. Повысить RequiredPolicyVersion в тестовой сборке: прежний правильно подписанный
+   конфиг даёт Rejected/default deny; новый работает. Неверный файл/issuer тоже
+   отклоняется без блокировки приложения. Проверить UI hide/close во время unlock/save.
+5. Windows utility: создание без консоли, неверная папка/разные пароли, explicit
+   replacement с backup, narrow/DPI и повторная подпись новым ключом после rebuild.
+
+Подпись не отзывается онлайн; откат самой программы и старый конфиг той же policy
+version вне гарантий. WebSocket/WebRTC/DNS firewall не заявлен. P6h — следующий срез.
+
 <a id="p6g"></a>
 ## P6g research observations — 2026-11-11
 

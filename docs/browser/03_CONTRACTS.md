@@ -51,7 +51,7 @@ shadow capture и screenshots сюда не входят. [Evidence](05_TEST_MAT
 ## P6f: external actions и переход по ссылке — In Review, 2026-11-11
 
 `browser.fill` и `browser.click` используют те же semantic target/name и fresh delivered
-whole read на сайтах из BrowserAgentAllowedSites. Native проверяет доступ до prepare,
+whole read на сайтах из подписанной политики Browser. Native проверяет доступ до prepare,
 dispatch и после read-back. Fill поддерживает обычные text/search/email/url/tel inputs
 и textarea; sensitive/read-only/private поля не становятся доступными. In-page button
 click ожидает единственное новое `expectedText` до 1 s; это проверка наблюдаемого DOM,
@@ -67,9 +67,8 @@ download/javascript/mailto и нестандартные JS-only links не по
 показывается existing cursor. URL/redirect/loading проверяются как в P6e. У всех трёх
 handlers новые v2 bindings; старый probe-only path удалён.
 
-Agent navigation guard также действует на автоматическую навигацию из обработчиков
-fill/click и остаётся до явной ручной навигации. Subresource/XHR network этим списком
-не фильтруется. Model open/focus/close, select/scroll/key/wait и screenshots этот срез
+Общий access guard действует на ручную и автоматическую навигацию, включая
+обработчики fill/click. Актуальная подписанная политика ниже заменяет прежний agent-only список. Model open/focus/close, select/scroll/key/wait и screenshots этот срез
 не добавляет. [Проверки](05_TEST_MATRIX.md#p6f); native Windows delivery Open.
 
 ## P6e: navigation tool — In Review, 2026-11-11
@@ -83,7 +82,7 @@ mutation admission перепроверяет document binding и manual latch �
 Fixed isolated script проверяет trusted-input epoch и однократно запускает navigation;
 модель не получает JS/selector/native IDs. Native `ExternalBrowserNavigation` связывает
 initial URL, NavigationId/redirects и final loaded URL/new document generation. Каждый
-HTTP(S) redirect и итоговый адрес проверяются по текущему BrowserAgentAllowedSites.
+HTTP(S) redirect и итоговый адрес проверяются по текущей подписанной политике Browser.
 Same-document fragment имеет отдельный SourceChanged read-back; IDN нормализуется
 до Chromium punycode. Тот же адрес даёт verified no-change, не принудительный reload.
 
@@ -91,7 +90,7 @@ Terminal VerifiedChange требует успешной загрузки/isolate
 generation той же session; runtime сверяет binding перед terminal. Timeout (12 s
 loading / 15 s native envelope), ошибка, смена владельца, takeover или revoke после
 dispatch — unknown, без replay. Redirect gate сохраняется после unknown до явной
-ручной навигации/close. Ручной Browser не ограничивается agent allowlist. После
+ручной навигации/close. Ручные переходы также требуют подписанной политики. После
 успеха нужна новая observation; ограниченный external fill/click добавлен P6f выше.
 
 Порядок и корреляция событий сверены с [WebView2 navigation events](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/navigation-events);
@@ -287,29 +286,140 @@ Chrome проверяет actual isolated scripts и Shell; native CDP event del
 threading и HWND ещё требуют Windows evidence. Ввод внутри iframe/отдельных окон не
 квалифицирован; general external actions этим срезом не включаются.
 
-## Сетевой доступ: текущие границы
+<a id="signed-access"></a>
+## Подписанная конфигурация приложения — In Review, 2026-11-12
 
-Настройка «HTTP-доступ HTML-превью» (`HtmlNetworkAllowedOrigins`) принадлежит
-`HtmlNetworkService`: разрешает HTTP-запросы preview bridge к точным
-scheme/host/port, включая повторную проверку каждого redirect. Маски пока не
-поддерживаются. Это не список разрешённых сайтов external Browser и не разрешение
-на действия агента. Внешний Browser вручную открывает HTTP(S); P6b fill/click
-по-прежнему допускаются только на локальной probe-странице.
+Scope Approved пользователем: скрытый режим разработчика внутри RNAssistant,
+один переносимый конфиг, отдельный manual-any флаг и проверка версии политики.
+Owner — `DeploymentConfigurationStore`/`DeploymentConfigurationCrypto` в Core;
+Controller/typed Bridge обслуживают редактор, `ExternalBrowserPage` применяет правила.
+Прежний BrowserAgentAllowedSites/PFX-прототип и PowerShell setup удалены без fallback.
 
-Отдельный `BrowserAgentAllowedSites` — «Сайты, доступные агенту». Пустой список
-отказывает model-facing чтению и agent navigation внешних страниц; bundled probe остаётся доступной.
-`ExternalBrowserPolicy` проверяет actual URL перед capture и перед выдачей результата,
-а также перед prepare/dispatch. Отзыв действует для последующих обращений, включая
-in-flight capture; уже доставленный модели контекст назад не изымается. Redirect или
-navigation меняют документ/URL и требуют новой проверки. Ручная навигация и сетевые
-подресурсы страницы этим списком не фильтруются. Разрешённый сайт не включает новые tools.
+### Файлы и доверие
 
-`HttpOriginPattern` допускает точный `https://example.com` или `https://*.example.com`:
-маска включает корневой домен и его поддомены с DNS label boundary. Scheme и port точны;
-без порта используется 80/443. IDN нормализуется, IP допустим только без маски. Пути,
-query/fragment, credentials, `*example.com`, wildcard scheme/port и произвольные glob
-отклоняются при Save, не затирая прежние настройки. На строку одно правило, до 128;
-per-request HTML grant остаётся exact origin и Browser authority не выдаёт.
+- `%APPDATA%\RNAssistant\deployment-config.bin` — общий файл рядом с secret.bin,
+  который передаётся пользователям. Один файл для всех установок доверенной сборки.
+- `config/deployment-trust.json` в исходниках — публичные параметры RSA и verifier
+  пароля (salt/hash/iterations); csproj встраивает его как `RNAssistant.DeploymentTrust`.
+  Допускается в Git. Замена файла рядом с готовым exe не меняет доверие приложения.
+- `.local/deployment/signing-key.bin` — зашифрованные закрытые параметры RSA,
+  gitignored, не embedded/publish asset. Путь выбирается разработчиком при подписании.
+  Реальные ключ/пароль не поставляются по умолчанию: до разовой настройки доступ закрыт.
+
+RSA 3072 создаётся штатным C#, без сертификатов, PFX/CRT и certificate store.
+Закрытый .bin: fixed header RNAKEY01, random salt32, IV16, AES-256-CBC/PKCS7 ciphertext,
+HMAC-SHA256 над header/salt/IV/ciphertext; проверка MAC до расшифровки. Ключи AES/HMAC
+раздельно получены PBKDF2-HMAC-SHA256 (600000 итераций, 64 bytes). Verifier пароля
+использует другую salt32 и 32-byte PBKDF2 output. Один введённый владельцем пароль
+открывает режим и его зашифрованный ключ; пароль/ключи истории CAS не используются.
+
+Конфиг: base64 JSON envelope `FormatVersion=1`, `Payload`, `Signature`.
+RSA/SHA-256 PKCS#1 подписывает UTF-8 `RNAssistant.DeploymentConfig.v1\n` + исходные
+payload bytes. В payload входят `FormatVersion`, `PolicyVersion`, UTC `IssuedUtc`,
+`Browser { AllowedSites, AllowAnyManualSite }`; подписаны все поля. Открытый ключ
+берётся только из embedded trust, не из конфигурации. Base64 — сокрытие при обычном
+просмотре, **не шифрование**. Конфиг ограничен 128 KiB, неизвестные поля/формат
+отклоняются; новых скрытых возможностей через произвольный JSON добавить нельзя.
+
+### Версия политики и загрузка
+
+`DeploymentConfigurationStore.RequiredPolicyVersion` — единственное место задания
+версии политики в приложении (сейчас 1). При повышении и пересборке ранее подписанные
+конфиги отклоняются. Требуется точное совпадение: future version тоже не принимается.
+Это отдельная версия от product version и FormatVersion: обычный patch/minor продукта
+сам по себе не требует перевыпуска конфигов. Save всегда ставит версию текущей сборки;
+поле не вводится пользователем/моделью. Смена RSA issuer тоже требует новой сборки.
+Утилиты не могут подменить trust уже установленного приложения.
+
+Файл применяется на старте, после сохранения и при последующем обращении к политике.
+Bounded read + hash cache не вводят watcher/второй store; подпись проверяется при
+смене bytes. Нет файла, неверная подпись/версия, unknown format или повреждение —
+все grants выключены, без last-good fallback и без блокировки запуска приложения.
+Normal status содержит только `Absent`/`Applied`/`Rejected`: ни masks, ни пути, ни
+количества правил. Старый конфиг той же версии всё ещё можно вернуть; повышение
+RequiredPolicyVersion закрывает предыдущие версии только в обновлённом приложении.
+Это защита штатной сборки, не от патча программы или администратора ПК.
+
+### Режим разработчика
+
+Настройки → Подключение: маленький индикатор конфигурации и свёрнутый «Разработчик».
+До входа — только пароль и «Войти». Успешный native unlock выдаёт runtime token на
+10 минут и открывает сайты, manual-any checkbox, путь к закрытому ключу и пути/версию
+конфига. Private key не нужен для входа. При подписании он расшифровывается в памяти,
+сверяется с embedded public key и не попадает в выданный конфиг. Неверный пароль/ключ
+или невалидные маски не заменяют прежний файл. Backend защищает Save и OpenDirectory
+той же сессией; UI-hidden само по себе не даёт authority.
+
+«Подписать и сохранить» атомарно записывает deployment-config.bin и перечитывает
+результат; «Открыть каталог» открывает фиксированный AppData directory через Windows
+Shell, без командной строки; «Закрыть режим» отзывает session. Уход/закрытие Settings
+и UI timeout очищают code/sites/path/token; late unlock не восстанавливает поля.
+Native expiry проверяется независимо от UI. Session password хранится в SecureString,
+ключ расшифровывается только на Save; из файлов plaintext password не читается.
+Обычные getSettings/status не получают скрытые настройки.
+
+### Browser: пользователь и агент
+
+`AllowedSites`: exact `https://example.com` или `https://*.example.com`; маска включает
+домен и поддомены по DNS boundary, scheme/port точны, IDN нормализуется. До 128 правил,
+IP только без маски. Пути/query/fragment/credentials, *example.com и arbitrary glob
+отклоняются; пустой список не даёт agent access. Bundled local probe доступна всегда.
+
+По умолчанию список действует и вручную. `AllowAnyManualSite=true` разрешает любые
+HTTP(S) страницы при explicit native toolbar navigation (Navigate/back/forward/reload)
+и последующие redirects/resources в этом ручном контексте. Agent capture/prepare/
+dispatch/read-back всегда проверяют список; Resume запрещён на странице вне списка.
+До dispatch агента network context становится Agent и сохраняет ограничения, включая
+late redirects после unknown. Только новое явное ручное navigation command может
+снова расширить его; модель не передаёт флаг «это пользователь».
+
+Native NavigationStarting, FrameNavigationStarting и WebResourceRequested all source
+kinds используют текущий context. Для agent-owned CDN/API нужны отдельные rules.
+Уже полученные данные/открытые соединения не отзываются задним числом. Это не системный
+firewall: WebSocket/WebRTC/DNS и полнота interception требуют отдельного Windows
+исследования; real WebView2/Office delivery пока Open.
+
+<a id="issuer-setup"></a>
+### Разовая настройка на Mac или Windows
+
+Обе утилиты используют один C# owner `tools/RNAssistant.DeploymentKeys/IssuerFiles.cs`
+и production crypto; никогда не запускаются автоматически при сборке. Новые пакеты,
+скрипты, сертификаты и shell signing на Windows не нужны.
+
+**Mac:** .NET 8 C# utility, пароль вводится скрыто в локальном терминале; не аргумент
+команды и не сообщение в чат. Из корня исходников:
+
+```sh
+dotnet run --project tools/RNAssistant.DeploymentKeys/RNAssistant.DeploymentKeys.csproj -- .
+```
+
+**Windows:** открыть `tools/RNAssistant.DeploymentKeys.Windows/RNAssistant.DeploymentKeys.Windows.csproj`
+в VS 2022 и собрать. Запустить `bin/Debug/RNAssistant.DeploymentKeys.Windows.exe`
+(или Release): обычное WinForms-окно .NET Framework 4.8 без консоли. Выбрать папку
+исходников, ввести и повторить пароль, нажать «Создать ключи».
+
+1. Получить public trust и encrypted private .bin по указанным выше путям; приватную
+   резервную копию хранит владелец. Public trust можно закоммитить, private key — нет.
+2. Пересобрать RNAssistant с этим public trust. Без него приложение штатно запускается
+   с default deny и недоступным входом в developer mode.
+3. На Windows в Developer ввести пароль и путь к .bin, задать sites/manual flag,
+   подписать, открыть каталог и передать пользователям только deployment-config.bin.
+4. Получатель кладёт файл рядом со своим secret.bin и запускает приложение; пароль
+   и закрытый ключ ему не нужны. Browser пока opt-in: RNA_BROWSER_PILOT=1 можно задать
+   через пользовательские переменные среды Windows; затем новый процесс Office/app.
+
+Замена ключей — только явный `--replace` на Mac или checkbox в Windows. Старые файлы
+сначала копируются в gitignored backup directory; новые проверяются подписью/read-back.
+После замены нужна новая сборка и новые конфиги. Для отзыва старых конфигов без смены
+ключей достаточно повысить RequiredPolicyVersion и пересобрать/перевыпустить конфиг.
+Windows GUI/WinForms/WebView2 qualification Open; [evidence](05_TEST_MATRIX.md#signed-access).
+
+### Отдельный HTTP-доступ HTML-превью
+
+`HtmlNetworkAllowedOrigins` принадлежит `HtmlNetworkService` и разрешает exact
+HTTP origins для preview bridge с проверкой redirect. Эта прежняя настройка не
+выдаёт Browser authority и не меняет подписанную политику. Модельные endpoints,
+preview bridge и external Browser — разные владельцы сетевого доступа.
 
 ## Runtime entities и capability negotiation
 

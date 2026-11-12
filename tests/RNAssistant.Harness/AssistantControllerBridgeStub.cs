@@ -289,6 +289,12 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(id, chatId));
         }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
+        public DeploymentConfigStatus GetDeploymentConfigStatus() { return new DeploymentConfigStatus { State = DeploymentConfigState.Absent }; }
+        public DeploymentConfigEditor UnlockDeveloperMode(DeveloperUnlockRequest request) { throw new InvalidOperationException("Not configured"); }
+        public DeploymentConfigEditor SaveDeploymentConfig(DeploymentConfigSaveRequest request) { throw new InvalidOperationException("Not configured"); }
+        public DeploymentDirectoryResponse OpenDeploymentConfigDirectory(DeveloperSessionRequest request) { throw new InvalidOperationException("Not configured"); }
+        public DeveloperLockResponse LockDeveloperMode() { return new DeveloperLockResponse { Locked = true }; }
+        internal void RequireBrowserAccess(string url, BrowserAccessKind kind) { Services.ExternalBrowserPolicy.RequireAccess(url, uri => false); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
         public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }

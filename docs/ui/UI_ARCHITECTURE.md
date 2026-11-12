@@ -1,5 +1,19 @@
 # Архитектура UI RNAssistant
 
+## Подписанная конфигурация — In Review, 2026-11-12
+
+`app-deployment-config` — presentation в существующем Settings;
+`DeploymentConfigurationStore` в Core владеет проверкой подписи, версии, пароля,
+сессией редактора и разрешениями. Typed Bridge отдаёт список/пути только unlock-сессии;
+обычный status содержит лишь Applied/Absent/Rejected. Пароль открывает редактор,
+private key требуется при подписи. Manual-any не расширяет доступ агента.
+Retained DOM переживает Dock placement; deactivate очищает editor, late responses
+не восстанавливают доступ. UI не хранит ключ/пароль в settings/history.
+Разовые Mac/Windows utilities разделяют C# crypto и запись issuer files;
+нового application store/registry/модельного инструмента нет.
+[Контракт](../browser/03_CONTRACTS.md#signed-access).
+
+
 ## Единое дерево рабочей области — In Review, 2026-11-11
 
 `app-workspace-navigation` соединяет presentation nodes Office и проектов в одном
@@ -43,8 +57,7 @@ P6d хранит manual latch у `ExternalBrowserPage`; isolated script закр
 exact Office/Workspace Run с user-only resume. `app-external-browser` показывает
 native state и отправляет typed ResumeAgent с control revision; собственного scheduler
 или очереди действий нет. Resume сериализуется с короткими Browser operations,
-model/user waits не удерживают native/document gate. Settings остаются у прежнего
-typed DTO/Core owner; `HttpOriginPattern` проверяет отдельный Browser agent allowlist.
+model/user waits не удерживают native/document gate. Подписанная политика ниже заменяет прежний Browser agent allowlist.
 [Контракт](../browser/03_CONTRACTS.md#p6d-user-control).
 
 ### Browser action visualization — In Review, 2026-11-11

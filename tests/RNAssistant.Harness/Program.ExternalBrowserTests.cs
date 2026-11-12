@@ -28,22 +28,12 @@ namespace RNAssistant.Harness
             AssertEqual("http://[::1]:8080", HttpOriginPattern.Normalize("http://[::1]:8080/"), "explicit IPv6 origin");
             foreach (var invalid in new[] { "*example.com", "https://*example.com", "https://*", "*://example.com", "https://*.127.0.0.1", "https://*.com", "https://example.com/path", "https://example.com/a/..", "https://example.com?x", "https://example.com#x", "https://u@example.com", "https://example.com:*", "https://example.com//", "" })
                 RuntimeThrows<InvalidOperationException>(() => HttpOriginPattern.Normalize(invalid));
-            ExternalBrowserPolicy.RequireAgentAccess(ExternalBrowserPolicy.ProbeUrl, new string[0]);
-            ExternalBrowserPolicy.RequireAgentAccess("https://sub.example.com/any/path", new[] { rule });
-            RuntimeThrows<ResourceRequestException>(() => ExternalBrowserPolicy.RequireAgentAccess("https://example.com", new string[0]));
-            AssertEqual("https://example.com/", ExternalBrowserPolicy.NavigationUrl("https://example.com"), "manual navigation does not consult agent grants");
-            WithTempExecutor((executor, adapter) => {
-                var service = new SettingsService(FixturePaths.Value);
-                var settings = service.Load(); settings.BrowserAgentAllowedSites.Add("https://*.Example.COM:443/");
-                var roundTrip = SettingsControlsDto.From(settings).ApplyTo(new AppSettings());
-                service.Save(roundTrip);
-                AssertEqual(rule, service.Load().BrowserAgentAllowedSites[0], "typed settings persist the normalized rule");
-                var clone = settings.Clone(); clone.BrowserAgentAllowedSites.Clear();
-                AssertEqual(1, settings.BrowserAgentAllowedSites.Count, "cloning does not share the list");
-                roundTrip.BrowserAgentAllowedSites.Add("*example.com");
-                RuntimeThrows<InvalidOperationException>(() => service.Save(roundTrip));
-                AssertEqual(1, service.Load().BrowserAgentAllowedSites.Count, "invalid save preserves previous grants");
-            });
+            ExternalBrowserPolicy.RequireAccess(ExternalBrowserPolicy.ProbeUrl, uri => false);
+            ExternalBrowserPolicy.RequireAccess("https://sub.example.com/any/path", uri => HttpOriginPattern.Matches(rule, uri));
+            RuntimeThrows<ResourceRequestException>(() => ExternalBrowserPolicy.RequireAccess("https://example.com", uri => false));
+            AssertEqual("https://example.com/", ExternalBrowserPolicy.NavigationUrl("https://example.com"), "URL validation is separate from signed admission");
+            AssertTrue(!JsonConvert.SerializeObject(SettingsControlsDto.From(new AppSettings())).Contains("BrowserAgentAllowedSites"),
+                "ordinary settings cannot expose or change browser policy");
         }
 
         private static void ExternalBrowserAdmission()

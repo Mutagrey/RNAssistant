@@ -17,6 +17,7 @@ TestResults/
 /artifacts/
 Directory.Build.local.props
 certs/local/
+/.local/deployment/
 packages/PDFtoImage.*/
 packages/SkiaSharp.3.*/
 packages/SkiaSharp.NativeAssets.Win32.*/

@@ -231,7 +231,7 @@ namespace RNAssistant.Office.WebView
             {
                 _externalBrowser = new ExternalBrowserDockHost(this, _webView, Path.Combine(_webRoot, "browser-probe"),
                     value => PostBridgeMessage(JsonConvert.SerializeObject(new ExternalBrowserStateMessage { Payload = value })),
-                    () => _bridge.BrowserSettings(), (chat, pause) => _bridge.PauseBrowserRunAsync(chat, pause));
+                    (url, kind) => _bridge.RequireBrowserAccess(url, kind), (chat, pause) => _bridge.PauseBrowserRunAsync(chat, pause));
                 _bridge.ExternalBrowser = _externalBrowser;
             }
             if (_bridge.WindowHost != null)

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Подписанная конфигурация приложения — In Review, 2026-11-12
+
+`16.13.0-dev`: deployment-config.bin рядом с secret.bin, парольный Developer UI,
+список сайтов, отдельное разрешение ручной навигации на любые HTTP(S)-сайты и подпись
+по пути к encrypted .bin key. Exact policy-version gate отклоняет устаревший конфиг;
+агент всегда ограничен списком. Прежний mutable allowlist/PFX path удалён.
+Mac C# и Windows GUI utilities разделяют генерацию без сертификатов/скриптов;
+публичные данные в сборке, private key gitignored. Реального издателя владелец создаёт
+локально. 11 Harness + production Settings fixture и Mac utility generation/rotation
+проходят. Windows GUI/Office/WebView2 compilation/delivery и визуальное принятие Open.
+[Контракт/установка](../browser/03_CONTRACTS.md#signed-access), [evidence](../browser/05_TEST_MATRIX.md#signed-access).
+Далее P6h; diff/P4b отложены. P6g `d1e7b4a2` отправлен в origin/main.
+
+
 ## Browser P6g retained research — In Review, 2026-11-11
 
 `16.12.0-dev`: immutable observations с источником/временем и snapshotTarget через

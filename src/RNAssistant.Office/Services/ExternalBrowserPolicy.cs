@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -23,12 +20,12 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        public static void RequireAgentAccess(string url, IEnumerable<string> sites)
+        public static void RequireAccess(string url, Func<Uri, bool> allowed)
         {
             var uri = new Uri(NavigationUrl(url));
             if (uri.AbsoluteUri == ProbeUrl) return; // Packaged fixture, not a network grant.
-            if (sites == null || !sites.Any(pattern => HttpOriginPattern.Matches(pattern, uri)))
-                throw ExternalBrowserResourceProvider.Error("Agent access to this site is disabled. The user can allow it in Settings → Sites available to the agent.", "browser_site_denied");
+            if (allowed == null || !allowed(uri))
+                throw ExternalBrowserResourceProvider.Error("Сайт запрещён политикой Browser. Требуется подписанный файл доступа от разработчика.", "browser_site_denied");
         }
 
         public static string NavigationUrl(string value)

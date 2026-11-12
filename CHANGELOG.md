@@ -11,6 +11,16 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.13.0-dev
+
+- Added a password-protected Developer section for one portable, signed
+  deployment-config.bin: allowed sites, optional unrestricted manual browsing,
+  private key path, sign/save and open-directory actions. Agents remain limited to
+  the site list. Invalid signatures or policy versions apply no permissions.
+  Mac C# and Windows GUI utilities generate password-protected BIN keys without
+  certificates. Base64 conceals casual viewing only; native Windows qualification
+  remains open.
+
 ### 16.12.1-dev
 
 - Interrupted runs retain one canonical tool outcome and their counters. Reads fail;

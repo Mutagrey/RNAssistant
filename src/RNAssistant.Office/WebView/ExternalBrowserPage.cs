@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 
@@ -24,7 +25,8 @@ namespace RNAssistant.Office.WebView
         private long _documentGeneration;
         private bool _documentReady;
         private readonly string _chatId;
-        private readonly Func<RNAssistant.Core.Models.AppSettings> _settings;
+        private readonly Action<string, BrowserAccessKind> _requireAccess;
+        private bool _agentNetwork; // Only explicit native manual navigation can widen network admission again.
         private readonly Func<string, string, Task<Action>> _pauseRun;
         private Task<Action> _pauseTask;
         private bool _manualControl, _pauseFailed;
@@ -41,7 +43,7 @@ namespace RNAssistant.Office.WebView
         private int _visualContext;
         private string _observationRevision, _observationId, _preparationId;
         private string _preparedNavigationUrl;
-        private bool _preparedLink, _agentNavigationRestricted;
+        private bool _preparedLink;
         private ExternalBrowserNavigation _navigation;
         private ExternalBrowserReadTarget _observationTarget;
         private bool _actionUnknown;
@@ -54,10 +56,10 @@ namespace RNAssistant.Office.WebView
         public WebView2 Control { get; }
         public event Action Changed;
 
-        public ExternalBrowserPage(string assets, string chatId, Func<RNAssistant.Core.Models.AppSettings> settings,
+        public ExternalBrowserPage(string assets, string chatId, Action<string, BrowserAccessKind> requireAccess,
             Func<string, string, Task<Action>> pauseRun)
         {
-            _assets = assets; _chatId = chatId; _settings = settings; _pauseRun = pauseRun;
+            _assets = assets; _chatId = chatId; _requireAccess = requireAccess; _pauseRun = pauseRun;
             Control = new WebView2 { Visible = false, TabStop = true };
             Control.Enter += FocusChanged; Control.Leave += FocusChanged;
             Control.VisibleChanged += VisibilityChanged;
@@ -134,7 +136,7 @@ namespace RNAssistant.Office.WebView
         {
             var actual = Control.CoreWebView2.Source;
             if (actual != _url) throw ExternalBrowserResourceProvider.Error("Browser navigation changed before admission.", "browser_document_stale");
-            ExternalBrowserPolicy.RequireAgentAccess(actual, _settings().BrowserAgentAllowedSites);
+            _requireAccess(actual, BrowserAccessKind.Agent);
         }
 
         private async Task InitializeControlAsync(long generation)
@@ -205,14 +207,17 @@ namespace RNAssistant.Office.WebView
         {
             if (!_manualControl || revision != _controlRevision || ReadTarget == null)
                 throw new InvalidOperationException("Управление страницей изменилось. Повторите явное продолжение.");
+            RequireAgentAccess();
             var target = ReadTarget; var epoch = _interactionEpoch;
             if (_pauseFailed) EnsureUserPause();
             var resume = _pauseTask == null ? null : await _pauseTask;
             if (_pauseFailed) throw new InvalidOperationException(_message);
+            RequireAgentAccess();
             if (!target.Matches(ReadTarget) || revision != _controlRevision ||
                 !await Evaluate<bool>("globalThis.__rnaBrowserControl.resume(" + epoch + ")") || revision != _controlRevision)
                 throw new InvalidOperationException("Страница или ручной ввод изменились. Повторите продолжение.");
             _observationTarget = null; _preparationId = null;
+            _agentNetwork = true;
             _manualControl = false; _controlRevision++; _pauseTask = null; _pauseId = null;
             var releasedRevision = _controlRevision;
             try { if (resume != null) await Task.Run(resume); }
@@ -256,7 +261,7 @@ namespace RNAssistant.Office.WebView
                     url = link.Url; _preparedLink = true;
                 }
                 else url = ExternalBrowserPolicy.NavigationUrl(request.Url);
-                ExternalBrowserPolicy.RequireAgentAccess(url, _settings().BrowserAgentAllowedSites);
+                _requireAccess(url, BrowserAccessKind.Agent);
                 var control = await Evaluate<ControlState>("globalThis.__rnaBrowserControl.snapshot()");
                 if (control.Manual) TakeControl();
                 CheckAction(target);
@@ -289,7 +294,8 @@ namespace RNAssistant.Office.WebView
             CheckAction(target); // The animation grants no authority; act() also rechecks the exact element/user epoch.
             if (_preparedNavigationUrl != null) return await NavigateAgentAsync(target, preparationId, beforeDispatch);
             beforeDispatch();
-            _agentNavigationRestricted = true; _actionUnknown = true; _preparationId = null;
+            _agentNetwork = true;
+            _actionUnknown = true; _preparationId = null;
             var result = await Evaluate<ExternalBrowserActionResult>("globalThis.__rnaBrowser.act(" + JsonConvert.SerializeObject(preparationId) + ")", true);
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("The page changed after dispatch; its effect is unknown.", "browser_effect_unknown");
             RequireAgentAccess();
@@ -306,9 +312,9 @@ namespace RNAssistant.Office.WebView
         {
             var url = _preparedNavigationUrl;
             var pending = new ExternalBrowserNavigation(target, url,
-                address => ExternalBrowserPolicy.RequireAgentAccess(address, _settings().BrowserAgentAllowedSites));
+                address => _requireAccess(address, BrowserAccessKind.Agent));
             var follow = _preparedLink;
-            beforeDispatch(); _agentNavigationRestricted = true; _actionUnknown = true; _preparationId = null; _preparedNavigationUrl = null; _preparedLink = false; _navigation = pending;
+            beforeDispatch(); _agentNetwork = true; _actionUnknown = true; _preparationId = null; _preparedNavigationUrl = null; _preparedLink = false; _navigation = pending;
             try
             {
                 // The fixed isolated script checks trusted input and starts navigation atomically.
@@ -385,6 +391,9 @@ namespace RNAssistant.Office.WebView
             core.Settings.IsPasswordAutosaveEnabled = false;
             core.Settings.IsGeneralAutofillEnabled = false;
             core.NavigationStarting += NavigationStarting;
+            core.FrameNavigationStarting += FrameNavigationStarting;
+            core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
+            core.WebResourceRequested += WebResourceRequested;
             core.NavigationCompleted += NavigationCompleted;
             core.SourceChanged += SourceChanged;
             core.HistoryChanged += HistoryChanged;
@@ -424,10 +433,12 @@ namespace RNAssistant.Office.WebView
             var core = Control.CoreWebView2;
             if (request.Action == ExternalBrowserAction.Navigate || request.Action == ExternalBrowserAction.Back ||
                 request.Action == ExternalBrowserAction.Forward || request.Action == ExternalBrowserAction.Reload)
-            { _agentNavigationRestricted = false; AbandonNavigation("browser_user_control"); TakeControl(); }
+            { _agentNetwork = false; AbandonNavigation("browser_user_control"); TakeControl(); }
             switch (request.Action)
             {
-                case ExternalBrowserAction.Navigate: core.Navigate(ExternalBrowserPolicy.NavigationUrl(request.Url)); break;
+                case ExternalBrowserAction.Navigate:
+                    _requireAccess(request.Url, BrowserAccessKind.Manual);
+                    core.Navigate(ExternalBrowserPolicy.NavigationUrl(request.Url)); break;
                 case ExternalBrowserAction.Back: if (core.CanGoBack) core.GoBack(); break;
                 case ExternalBrowserAction.Forward: if (core.CanGoForward) core.GoForward(); break;
                 case ExternalBrowserAction.Reload: core.Reload(); break;
@@ -452,12 +463,11 @@ namespace RNAssistant.Office.WebView
         {
             HideAction();
             if (_disposed || _status == ExternalBrowserStatus.Failed) { e.Cancel = true; return; }
-            if (e.IsUserInitiated) { _agentNavigationRestricted = false; AbandonNavigation("browser_user_control"); TakeControl(); }
+            if (e.IsUserInitiated) { AbandonNavigation("browser_user_control"); TakeControl(); }
             _navigationId = e.NavigationId; _navigationRefused = false;
             try
             {
-                ExternalBrowserPolicy.NavigationUrl(e.Uri);
-                if (_agentNavigationRestricted) ExternalBrowserPolicy.RequireAgentAccess(e.Uri, _settings().BrowserAgentAllowedSites);
+                _requireAccess(e.Uri, _agentNetwork ? BrowserAccessKind.Agent : BrowserAccessKind.Manual);
                 _navigation?.Starting(e.NavigationId, e.Uri, e.IsRedirect);
                 _message = "Загрузка…";
                 _documentReady = false; _documentGeneration++; _semanticContext = 0; _visualContext = 0; _interactionEpoch = 0;
@@ -469,6 +479,22 @@ namespace RNAssistant.Office.WebView
                 _message = "Переход запрещён: " + error.Message;
             }
             Publish();
+        }
+        private void FrameNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            try { if (_disposed) e.Cancel = true; else _requireAccess(e.Uri, _agentNetwork ? BrowserAccessKind.Agent : BrowserAccessKind.Manual); }
+            catch (Exception error) when (error is InvalidOperationException || error is ResourceRequestException)
+            { e.Cancel = true; }
+        }
+        private void WebResourceRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
+        {
+            try
+            {
+                if (_disposed) throw new InvalidOperationException();
+                _requireAccess(e.Request.Uri, _agentNetwork ? BrowserAccessKind.Agent : BrowserAccessKind.Manual);
+            }
+            catch (Exception error) when (error is InvalidOperationException || error is ResourceRequestException)
+            { e.Response = _environment.CreateWebResourceResponse(null, 403, "Forbidden", "Content-Type: text/plain\r\nCache-Control: no-store"); }
         }
         private async void NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
@@ -538,6 +564,7 @@ namespace RNAssistant.Office.WebView
                 if (core != null)
                 {
                     core.NavigationStarting -= NavigationStarting; core.NavigationCompleted -= NavigationCompleted;
+                    core.FrameNavigationStarting -= FrameNavigationStarting; core.WebResourceRequested -= WebResourceRequested;
                     core.SourceChanged -= SourceChanged; core.HistoryChanged -= HistoryChanged; core.DocumentTitleChanged -= TitleChanged;
                     core.NewWindowRequested -= NewWindowRequested; core.DownloadStarting -= DownloadStarting;
                     core.PermissionRequested -= PermissionRequested; core.ProcessFailed -= ProcessFailed;

@@ -52,7 +52,6 @@ namespace RNAssistant.Office.Contracts
         public int AttachmentEvidenceMaxTokens { get; set; }
         public Dictionary<string, TokenEstimateCalibrationSettings> TokenEstimateCalibrations { get; set; }
         public List<string> HtmlNetworkAllowedOrigins { get; set; }
-        public List<string> BrowserAgentAllowedSites { get; set; }
 
         public static SettingsControlsDto From(AppSettings settings)
         {
@@ -104,7 +103,6 @@ namespace RNAssistant.Office.Contracts
                 AttachmentEvidenceMaxTokens = settings.AttachmentEvidenceMaxTokens,
                 TokenEstimateCalibrations = settings.TokenEstimateCalibrations,
                 HtmlNetworkAllowedOrigins = settings.HtmlNetworkAllowedOrigins,
-                BrowserAgentAllowedSites = settings.BrowserAgentAllowedSites,
             };
         }
 
@@ -161,7 +159,6 @@ namespace RNAssistant.Office.Contracts
             result.AttachmentEvidenceMaxTokens = AttachmentEvidenceMaxTokens;
             result.TokenEstimateCalibrations = TokenEstimateCalibrations;
             result.HtmlNetworkAllowedOrigins = HtmlNetworkAllowedOrigins;
-            result.BrowserAgentAllowedSites = BrowserAgentAllowedSites;
             return result;
         }
     }

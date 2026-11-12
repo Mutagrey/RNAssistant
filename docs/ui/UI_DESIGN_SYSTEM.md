@@ -1,5 +1,18 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Developer settings — In Review, 2026-11-12
+
+Общие product-settings-section, form-grid, advanced details, label/input/textarea,
+checkline, status и action-group; дополнительных CSS размеров/overrides нет.
+После раскрытия Developer до входа показывает пароль; после unlock — список сайтов, manual checkbox,
+путь private key, readonly путь конфига и версия политики, save/folder/close.
+Обычный индикатор не раскрывает адреса/пути. Ошибка остаётся рядом с редактором;
+закрытие очищает поля. Shared metrics и wide/narrow/125% проверены в
+`deployment-config.test.js`; Windows/визуальное принятие открыты.
+Отдельная Windows key utility использует стандартные WinForms controls;
+её DPI/layout acceptance требует запуска на Windows.
+
+
 ## Общее дерево и меню добавления — In Review, 2026-11-11
 
 Заголовки навигации и документа/проекта — обычное начертание 400. Секции Office и

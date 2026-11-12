@@ -84,6 +84,7 @@ namespace RNAssistant.Office.Contracts
         [BridgeOperationPolicy(true, 300)] EditMessage,
         UpdateMessageActivityData,
         GetSettings,
+        GetDeploymentConfigStatus, UnlockDeveloperMode, SaveDeploymentConfig, LockDeveloperMode, OpenDeploymentConfigDirectory,
         GetCasHealth,
         CollectCasGarbage,
         [BridgeOperationPolicy(true, 300)] GetModelCatalog,

@@ -26,6 +26,7 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         internal AppDataPaths StoragePaths { get { return _paths; } }
         private readonly SettingsService _settingsService;
+        private readonly DeploymentConfigurationStore _deploymentConfig;
         private readonly ChatStore _chatStore;
         private readonly ArtifactWorkingSetService _artifactWorkingSet;
         private readonly IConversationStore _conversationStore;
@@ -89,6 +90,7 @@ namespace RNAssistant.Office
             _paths = paths ?? AppDataPaths.CreateDefault();
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
+            _deploymentConfig = new DeploymentConfigurationStore(_paths);
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatStore.PerformanceLog = RuntimeLog.Info;
             _artifactWorkingSet = new ArtifactWorkingSetService(_chatStore.DocumentArtifacts, new ResourceMutationJournal(_paths));
