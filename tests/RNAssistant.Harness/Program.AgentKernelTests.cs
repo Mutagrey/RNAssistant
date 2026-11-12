@@ -56,7 +56,8 @@ namespace RNAssistant.Harness
             var f = new KernelFixture(KernelResponse(KernelCall(tool)), KernelResponse());
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcome));
             var result = await f.RunAsync(limits: new AgentRunLimits(2, 10));
-            AssertEqual(outcome == ToolExecutionOutcome.Unknown ? RunLifecycle.Failed : RunLifecycle.Completed,
+            var needsInspection = outcome == ToolExecutionOutcome.Unknown && f.Tools.Policies[tool].Policy.ExecutionClass != ToolExecutionClass.OpaqueAction;
+            AssertEqual(needsInspection ? RunLifecycle.Failed : RunLifecycle.Completed,
                 result.Summary.Lifecycle, "unknown effect requires inspection before finish");
             AssertEqual(health, result.Summary.ExecutionHealth, "runtime evidence owns health");
             AssertEqual(counts, KernelCounts(result.Summary), "actual tool counts");
@@ -70,7 +71,7 @@ namespace RNAssistant.Harness
                     ConversationAssessment.NotSatisfied, finish.Results.Single().Assessment,
                     "fixture assessment follows runtime outcome");
             }
-            else
+            else if (needsInspection)
                 AssertEqual("iteration_limit", result.Summary.Reason, "unknown effect cannot be narrated into success");
             AssertEqual(1, f.Tools.Calls.Count, "no tool retry");
             AssertEqual(AgentRunEventKind.SummaryChanged, f.Store.Events.Last().Kind, "terminal summary is last");
@@ -630,8 +631,9 @@ namespace RNAssistant.Harness
 
         private static void KernelInspectionCanRefreshRepeatedRead()
         {
-            foreach (var opaque in new[] { false, true })
+            foreach (var scenario in new[] { "unknown", "opaque", "refresh" })
             {
+                var opaque = scenario == "opaque";
                 var tracker = new AgentProgressTracker();
                 var read = new ToolCall("read", "read", "{}");
                 var immutableRead = new ToolCall("archive", "read", "{\"archive\":true}");
@@ -659,8 +661,11 @@ namespace RNAssistant.Harness
                 string reason, message; int delay;
                 AssertTrue(!tracker.CanDispatch(read, out reason, out message, out delay), "three unchanged reads reach the repeat guard");
                 var write = new ToolCall("write", "write", "{}");
-                observe(write, new ToolExecutionProgress(ToolExecutionOutcome.Unknown, completedUtc: when, opaqueAction: opaque), null,
-                    opaque ? null : new ResourceEffect("unknown", "write", ResourceEffectOutcome.UnknownAfterDispatch,
+                observe(write, scenario == "refresh" ? new ToolExecutionProgress(ToolExecutionOutcome.Error,
+                        new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
+                            InspectionTarget, "text", "test source", readScope: ToolRecoveryReadScope.Whole)) :
+                    new ToolExecutionProgress(ToolExecutionOutcome.Unknown, completedUtc: when, opaqueAction: opaque), null,
+                    opaque || scenario == "refresh" ? null : new ResourceEffect("unknown", "write", ResourceEffectOutcome.UnknownAfterDispatch,
                         new[] { new ResourceImpact(InspectionTarget, ResourceImpactRelation.Exact) }));
                 var replay = new AgentProgressTracker(); replay.Restore(history);
                 foreach (var state in new[] { tracker, replay })
@@ -878,25 +883,18 @@ namespace RNAssistant.Harness
             f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
                 f.Tools.Calls.Count == 1 ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok));
             var result = await f.RunAsync(limits: new AgentRunLimits(1, 10));
-            AssertEqual(2, f.Tools.Calls.Count, "uncertain send is not repeated; independent recipient still gets its message");
+            AssertEqual(1, f.Tools.Calls.Count, "uncertain send stops the accepted batch without replay");
             var outcomes = f.Store.Events.Where(e => e.Kind == AgentRunEventKind.ToolCompleted).Select(e => e.Execution.Outcome);
-            AssertEqual("Unknown,NotDispatched,Ok", string.Join(",", outcomes), "separate results retain uncertainty and rejected retry");
+            AssertEqual("Unknown,NotDispatched,NotDispatched", string.Join(",", outcomes), "separate results retain uncertainty and the unstarted tail");
             AssertEqual(1, result.Summary.ToolCounts.WriteUnknown, "unknown delivery remains unknown");
         }
 
-        private static async Task KernelRejectsManagedMutationBatches()
+        private static async Task KernelManagedBatchesKeepLocalGuards()
         {
             foreach (var calls in new[]
             {
-                new[] { KernelCall("write", "{\"order\":1}"), KernelCall("write", "{\"order\":2}") },
-                new[] { KernelCall("read"), KernelCall("write") },
-                new[] { KernelCall("write"), KernelCall("read") },
                 new[] { KernelCall("read"), KernelCall("external") },
-                new[] { KernelCall("read"), KernelCall("confirm") },
-                new[] { KernelCall("read"), KernelCall("unclassified") },
-                new[] { KernelCall("agents.send"), KernelCall("read") },
-                new[] { KernelCall("read"), KernelCall("agents.send") },
-                new[] { KernelCall("agents.send"), KernelCall("write") }
+                new[] { KernelCall("read"), KernelCall("unclassified") }
             })
             {
                 var f = new KernelFixture(KernelResponse(calls));
@@ -907,15 +905,67 @@ namespace RNAssistant.Harness
                 AssertTrue(!f.Store.Events.Any(e => e.Kind == AgentRunEventKind.ResponseAccepted), "no rejected durable response");
             }
 
-            var sequential = new KernelFixture(KernelResponse(KernelCall("write", "{\"order\":1}")),
-                KernelResponse(KernelCall("write", "{\"order\":2}")), KernelResponse());
+            var sequential = new KernelFixture(KernelResponse(KernelCall("write", "{\"order\":1}"),
+                KernelCall("write", "{\"order\":2}"), KernelCall("read"), KernelCall("agents.send")), KernelResponse());
             var completed = await sequential.RunAsync();
             AssertEqual(RunLifecycle.Completed, completed.Summary.Lifecycle,
-                "separate model responses can complete two mutations");
-            AssertEqual("1,2", string.Join(",", sequential.Tools.Calls.Select(call =>
+                "independent managed operations share a response");
+            AssertEqual("1,2", string.Join(",", sequential.Tools.Calls.Where(call => call.Call.Name == "write").Select(call =>
                 JObject.Parse(call.Call.ArgumentsJson).Value<int>("order"))),
-                "the next mutation dispatches after the previous result reaches the model");
-            AssertEqual(3, sequential.Model.Requests.Count, "each mutation gets its own model response");
+                "managed operations dispatch in accepted order");
+            AssertEqual(2, sequential.Model.Requests.Count, "one model response runs the independent batch");
+            foreach (var outcome in new[] { ToolExecutionOutcome.Error, ToolExecutionOutcome.Unknown })
+            {
+                var stopped = new KernelFixture(KernelResponse(KernelCall("write"), KernelCall("read"), KernelCall("write")));
+                stopped.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, outcome));
+                var result = await stopped.RunAsync(limits: new AgentRunLimits(1, 10));
+                AssertEqual(1, stopped.Tools.Calls.Count, "failure stops later calls: " + outcome);
+                AssertEqual(2, result.AcceptedMessages.Count(m => m.Progress?.Outcome == ToolExecutionOutcome.NotDispatched),
+                    "each unstarted call has a terminal result");
+            }
+        }
+
+        private static async Task KernelBatchConfirmationRetainsTail()
+        {
+            foreach (var action in new[] { "approve", "deny", "cancel", "supersede", "policy-change" })
+            {
+                var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall("confirm"),
+                    KernelCall("confirm", "{\"second\":true}"), KernelCall("write")), KernelResponse());
+                f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context,
+                    context.Call.Name == "confirm" && !context.IsConfirmed ? ToolExecutionOutcome.AwaitingConfirmation : ToolExecutionOutcome.Ok));
+                var first = await f.RunAsync();
+                var checkpointJson = Newtonsoft.Json.JsonConvert.SerializeObject(new AgentRunState(first.Summary, first.Continuation.Limits));
+                AssertTrue(!checkpointJson.Contains("second"), "pending tail references accepted arguments without duplicating their bodies");
+                var checkpoint = Newtonsoft.Json.JsonConvert.DeserializeObject<AgentRunState>(checkpointJson);
+                var restored = AgentRunContinuation.Restore(checkpoint, first.Continuation.Revision, first.AcceptedMessages);
+                var pending = restored.Summary.PendingConfirmation;
+                var corrupt = JObject.Parse(checkpointJson);
+                corrupt["Summary"]["PendingConfirmation"]["RemainingCalls"][0]["CallId"] = "call_4";
+                corrupt["Summary"]["PendingConfirmation"]["RemainingCalls"][1]["CallId"] = "call_3";
+                RuntimeThrows<InvalidOperationException>(() => AgentRunContinuation.Restore(corrupt.ToObject<AgentRunState>(),
+                    first.Continuation.Revision, first.AcceptedMessages));
+                AssertEqual("call_3,call_4", string.Join(",", pending.RemainingCalls.Select(item => item.CallId)), "durable ordered tail");
+                AssertEqual(1, first.AcceptedMessages.Count(m => m.Kind == AgentMessageKind.ToolResult), "pending batch is not prematurely closed");
+                if (action == "policy-change")
+                    f.Tools.Policies["confirm"] = new ToolPolicySnapshot("confirm", "r2", f.Tools.Policies["confirm"].Policy);
+                var resumeToken = action == "cancel" ? new CancellationToken(true) : CancellationToken.None;
+                var next = await f.Kernel.ResumeAsync("run", pending.PendingId, restored, resumeToken,
+                    supersedePending: action == "supersede", rejectPending: action == "deny");
+                if (action == "approve")
+                {
+                    AssertEqual(RunLifecycle.AwaitingConfirmation, next.Summary.Lifecycle, "second mutation asks for its own confirmation");
+                    AssertEqual(1, f.Model.Requests.Count, "no model call while accepted batch remains pending");
+                    AssertEqual("call_4", next.Summary.PendingConfirmation.RemainingCalls.Single().CallId, "tail advances without replay");
+                    next = await f.Kernel.ResumeAsync("run", next.Summary.PendingConfirmation.PendingId, next.Continuation, CancellationToken.None);
+                    AssertEqual(RunLifecycle.Completed, next.Summary.Lifecycle, "batch completes after both confirmations");
+                    AssertEqual("call_1,call_2,call_2,call_3,call_3,call_4", string.Join(",", f.Tools.Calls.Select(c => c.Call.Id)), "only pending call resumes, earlier effects never repeat");
+                    AssertEqual(4, next.Summary.ToolStepsUsed, "each call is charged once");
+                }
+                else AssertEqual(2, f.Tools.Calls.Count, "tail never dispatches after " + action);
+                AssertEqual(4, next.AcceptedMessages.Count(m => m.Kind == AgentMessageKind.ToolResult), "all accepted calls close exactly once");
+                AssertTrue(next.AcceptedMessages.Where(m => m.Kind == AgentMessageKind.ToolResult).Select(m => m.ToolCallId).Distinct().Count() == 4,
+                    "no duplicate terminal results");
+            }
         }
 
         private static async Task KernelRejectsAllocationCollisions(bool acrossSteps)

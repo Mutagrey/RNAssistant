@@ -104,7 +104,7 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Tool parameters are not valid JSON: " + ex.Message, nameof(descriptor));
             }
 
-            return Hash(new JObject
+            var identity = new JObject
             {
                 ["descriptor"] = new JObject
                 {
@@ -134,7 +134,9 @@ namespace RNAssistant.Core.Tools
                     ["host"] = Value(binding.Host)
                 },
                 ["package"] = PackageFingerprint(packageMetadata)
-            }.ToString(Formatting.None));
+            };
+            if (policy.AllowSequentialBatch) identity["policy"]["allowSequentialBatch"] = true;
+            return Hash(identity.ToString(Formatting.None));
         }
 
         private static ToolRegistration CopyAndValidate(ToolRegistration source)
@@ -149,7 +151,8 @@ namespace RNAssistant.Core.Tools
                 source.Policy.RequiresConfirmation,
                 source.Policy.IndependentLocalRead,
                 source.Policy.AllowedModes,
-                source.Policy.RiskLevel, source.Policy.ExecutesCode, source.Policy.EvidenceEligibility, source.Policy.IndependentAgentMessage);
+                source.Policy.RiskLevel, source.Policy.ExecutesCode, source.Policy.EvidenceEligibility, source.Policy.IndependentAgentMessage,
+                source.Policy.AllowSequentialBatch);
             var binding = new ToolBinding(
                 source.Binding.HandlerId,
                 source.Binding.EntryPoint,

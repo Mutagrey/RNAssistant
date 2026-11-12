@@ -207,6 +207,19 @@ the same owner before P7 removes the old backend; verified backup, stopped legac
 writers and Windows/Office photo evidence still gate that switch. Existing journal
 closure/backup/restore includes the new facts and CAS references.
 
+## Ordered tool batch confirmation — 2026-11-11
+
+`PendingConfirmation.RemainingCalls` retains the unstarted suffix as call IDs and
+captured local policies. Arguments remain in the original accepted event; no second
+copy of tail bodies or separate queue/store is introduced. Restore requires an
+exact suffix of the latest accepted batch, without duplicate/resolved/foreign IDs.
+The shared history reader reconstructs that batch from per-call occurrences in both
+Office and Workspace, rejecting gaps, changed origin/count and premature results.
+Explicit confirmation resumes only its pending call and then the retained suffix;
+every subsequent call rechecks its live policy and prepares against current state.
+Error/Unknown/Stop/denial/supersession closes each remaining call as NotDispatched.
+Completed effects never replay automatically. No event schema migration is needed.
+
 ## Retained result bodies — 2026-11-10
 
 Office and Workspace terminal messages use Core `ToolResultPersistence`. A typed

@@ -258,7 +258,7 @@ namespace RNAssistant.Harness
                                         .GetAwaiter().GetResult();
                                 }
                                 catch (InvalidOperationException error) { rejected = error; }
-                                AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace batch"),
+                                AssertTrue(rejected != null && rejected.Message.Contains("Stored batch"),
                                     "calls from a broken v8 batch sequence cannot be rejoined");
                                 AssertTrue(batchService.FindAcceptedInput(workspace, invalidBatch) == null,
                                     "bad v8 batch origin does not accept a new input");

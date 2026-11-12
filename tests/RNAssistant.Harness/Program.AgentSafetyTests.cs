@@ -31,10 +31,12 @@ namespace RNAssistant.Harness
         private static ChatMessage ContextAcceptedCall(string id, string role = ToolResultRoles.User,
             AcceptedToolCallOrigin origin = null)
         {
-            return ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
+            var message = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall
             {
                 Id = id, Name = "excel.inspect", Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
-            }, "Read.", "Inspect the requested sheets.", null, role, origin ?? FixtureCallOrigin());
+            }, origin?.CallIndex > 0 ? "" : "Read.", "Inspect the requested sheets.", null, role, origin ?? FixtureCallOrigin());
+            message.RunId = "fixture-run";
+            return message;
         }
 
         private static ChatSession ContextContinuationSession()
@@ -378,10 +380,11 @@ namespace RNAssistant.Harness
                 ToolCallId = "diagnostic_id", Activity = new ChatActivity { Kind = "model_response" } });
             var batchAttempt = Guid.NewGuid().ToString("N");
             var batchIds = new[] { "batch_1", "batch_2" };
+            var insertAt = session.Messages.FindIndex(message => message.ToolCallId == "pending_id");
             for (var index = 0; index < batchIds.Length; index++)
-                session.Messages.Add(ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index, batchIds.Length)));
+                session.Messages.Insert(insertAt++, ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index, batchIds.Length)));
             foreach (var id in batchIds)
-                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = id, ToolId = "excel.inspect" }, TerminalToolResult.Ok("read")));
+                session.Messages.Insert(insertAt++, AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = id, ToolId = "excel.inspect" }, TerminalToolResult.Ok("read")));
             foreach (var result in session.Messages.Where(m => m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
                 result.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
             var before = JsonConvert.SerializeObject(session);
@@ -393,6 +396,33 @@ namespace RNAssistant.Harness
             AssertEqual(4, continuation.AcceptedCallIds.Count, "detached continuation contains the whole accepted turn");
             AssertEqual("before_compaction", ConversationResponseHistoryReader.Read(session.Messages[3]).Response.ToolCalls.Single().Id,
                 "compacted-away call restores its persisted runtime id without regeneration");
+        }
+
+        private static void ProtocolContextRestoresOfficeBatchConfirmation()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var session = NewSession(adapter);
+                var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
+                    Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write(new ConversationResponse(
+                        ConversationResponse.ExecuteAction, "Create two independent notes.", "Создаю заметки.", calls: new[] {
+                            new ConversationToolCall { Name = "core.write", Arguments = new JObject { ["target"] = "note: first.md", ["content"] = "First" } },
+                            new ConversationToolCall { Name = "core.write", Arguments = new JObject { ["target"] = "note: second.md", ["content"] = "Second" } }
+                        })) }));
+                var result = service.ExecuteAsync(ChatModes.Agent, "Создай две заметки.", session, NewContext(adapter),
+                    new AppSettings { AutoConfirmToolActions = false }, executor.GetControllerTools().ToList(), null,
+                    (pendingSession, call, registration) => "batch-confirmation").GetAwaiter().GetResult();
+                AssertTrue(result.WaitingForConfirmation, "real Office orchestration pauses the first write: " + result.AssistantText);
+                var saved = JsonConvert.DeserializeObject<ChatSession>(JsonConvert.SerializeObject(session));
+                var pending = saved.LastRun.KernelState.Summary.PendingConfirmation;
+                var command = new ToolInvocation { ToolCallId = pending.Call.Id, ToolId = pending.Call.Name,
+                    Arguments = JObject.Parse(pending.Call.ArgumentsJson).ToObject<Dictionary<string, object>>() };
+                var restored = ConversationProtocolContext.RestoreContinuation(saved, command, executor.Payloads);
+                AssertEqual(2, restored.AcceptedMessages.Single(message => message.ToolCalls.Count > 0).ToolCalls.Count,
+                    "stored per-call occurrences reconstruct one accepted decision");
+                AssertEqual(1, restored.Summary.PendingConfirmation.RemainingCalls.Count, "unstarted write survives restoration");
+                saved.Messages.Remove(saved.Messages.Single(message => message.AcceptedCallOrigin?.CallIndex == 1));
+                RuntimeThrows<InvalidOperationException>(() => ConversationProtocolContext.RestoreContinuation(saved, command, executor.Payloads));
+            });
         }
 
         private static void ProtocolContextRejectsIncompleteContinuation()
@@ -454,8 +484,8 @@ namespace RNAssistant.Harness
             var external = new ToolCatalogEntry { Id = "external.lookup", BuiltIn = true };
             var pipeline = new ToolCatalogEntry { Id = "pipeline.read", Executor = "pipeline" };
             var scope = ConversationProtocolContext.SequentialBatchIds(new[] { read, write, external, pipeline });
-            AssertTrue(scope.SequenceEqual(new[] { "excel.inspect" }),
-                "only audited independent local reads can batch; mutations and other calls stay singleton");
+            AssertTrue(scope.SequenceEqual(new[] { "excel.inspect", "excel.sheet.add" }),
+                "typed local reads and managed mutations can batch; missing policies and pipelines cannot");
             var renamedRead = read.Clone();
             renamedRead.Id = "fixture.explicit_read";
             AssertTrue(ConversationProtocolContext.SequentialBatchIds(new[] { renamedRead }).SequenceEqual(new[] { renamedRead.Id }),
@@ -482,7 +512,7 @@ namespace RNAssistant.Harness
                 changed.RequiresConfirmation = kind == "confirmation";
                 changed.RiskLevel = kind == "risk" ? 3 : changed.RiskLevel;
                 var context = ConversationProtocolContext.SequentialBatchIds(new[] { changed, write });
-                AssertTrue(context.SequenceEqual(new[] { changed.Id }),
+                AssertTrue(context.SequenceEqual(new[] { changed.Id, write.Id }),
                     "catalog projection cannot override source-owned policy: " + kind);
             }
             read.RequiresConfirmation = true;
@@ -648,7 +678,7 @@ namespace RNAssistant.Harness
                     "confirmation preserves accepted raw-attempt provenance");
                 AssertEqual(1, session.Messages.Count(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == skillId),
                     "confirmed result references the same runtime call exactly once");
-                AssertTrue(!continuation.CallContext.SequentialBatchToolIds.Contains("skills.upsert"), "confirmation tool is never batch-safe");
+                AssertTrue(continuation.CallContext.SequentialBatchToolIds.Contains("skills.upsert"), "managed authoring keeps its own confirmation within a batch");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, last.ResponseProtocolVersion, "confirmation writes the active v8 protocol: " + role);
             });
         }
@@ -1438,9 +1468,12 @@ namespace RNAssistant.Harness
             var response = JObject.Parse(json);
             foreach (var call in response["tool_calls"]?.OfType<JObject>() ?? Enumerable.Empty<JObject>())
             {
-                // Strict transport represents the fixture's optional fields as null.
-                call["arguments"]["limit"] = JValue.CreateNull();
-                call["arguments"]["at"] = JValue.CreateNull();
+                // Strict transport represents only this tool's omitted optional fields as null.
+                var parameters = JObject.Parse(tools.Single(tool => tool.Id == (string)call["name"]).ArgumentSchemaJson);
+                var required = new HashSet<string>((parameters["required"] as JArray ?? new JArray()).Values<string>());
+                foreach (var property in ((JObject)parameters["properties"]).Properties())
+                    if (!required.Contains(property.Name) && call["arguments"][property.Name] == null)
+                        call["arguments"][property.Name] = JValue.CreateNull();
             }
             string error;
             AssertEqual(accepted, ToolSchemaSupport.ValidateArguments(SchemaTransport(response), ExpandResponseSchema(schema), false, out error),

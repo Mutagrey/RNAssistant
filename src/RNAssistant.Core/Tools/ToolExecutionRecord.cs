@@ -16,6 +16,8 @@ namespace RNAssistant.Core.Tools
         public bool IndependentLocalRead { get; private set; }
         public ToolPolicy Policy { get; private set; }
         public string AdmissionRevision { get; private set; }
+        [JsonIgnore]
+        public bool AllowsSequentialBatch { get { return Policy?.AllowsSequentialBatch ?? IndependentLocalRead; } }
 
         [JsonConstructor]
         public ToolPolicySnapshot(string toolId, string revision, bool mayHaveSideEffects,

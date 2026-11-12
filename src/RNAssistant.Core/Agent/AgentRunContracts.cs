@@ -184,9 +184,16 @@ namespace RNAssistant.Core.Agent
                 if (!ids.Contains(message.ToolCallId) || !completed.Add(message.ToolCallId))
                     throw new InvalidOperationException("Orphan or duplicate accepted tool result in continuation history.");
             var pending = waiting ? summary.PendingWait.Context.Call : summary.PendingConfirmation.Call;
-            var original = calls.SingleOrDefault(call => string.Equals(call.Id, pending.Id, StringComparison.OrdinalIgnoreCase));
-            if (original == null || original.Name != pending.Name || original.ArgumentsJson != pending.ArgumentsJson ||
-                completed.Contains(pending.Id) || calls.Any(call => call.Id != pending.Id && !completed.Contains(call.Id)))
+            var tail = waiting ? new PendingBatchCall[0] : summary.PendingConfirmation.RemainingCalls.ToArray();
+            var unresolved = new[] { pending.Id }.Concat(tail.Select(item => item.CallId)).ToArray();
+            var acceptedBatch = messages.LastOrDefault(message => message.ToolCalls.Count > 0)?.ToolCalls;
+            var start = acceptedBatch == null ? -1 : acceptedBatch.ToList().FindIndex(call => call.Id == pending.Id);
+            var suffix = start < 0 ? new ToolCall[0] : acceptedBatch.Skip(start).ToArray();
+            if (suffix.Length != unresolved.Length || !suffix.Select(call => call.Id).SequenceEqual(unresolved) ||
+                suffix[0].Name != pending.Name || suffix[0].ArgumentsJson != pending.ArgumentsJson ||
+                tail.Where((item, index) => item.Policy.ToolId != suffix[index + 1].Name).Any() ||
+                unresolved.Any(id => completed.Contains(id)) ||
+                calls.Any(call => !completed.Contains(call.Id) && !unresolved.Contains(call.Id)))
                 throw new InvalidOperationException("Pending call differs from accepted history or is already resolved.");
             return new AgentRunContinuation(summary, limits, revision, messages, ids,
                 checkpoint.ConsecutiveReflections, checkpoint.ReflectionFeedbackIssued, checkpoint.FinishCorrection);

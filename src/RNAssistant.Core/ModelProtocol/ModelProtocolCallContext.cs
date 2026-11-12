@@ -26,9 +26,7 @@ namespace RNAssistant.Core.ModelProtocol
         internal bool AllowsSequentialBatch(ToolCatalogEntry tool)
         {
             return IsComplete && tool != null && SequentialBatchToolIds.Contains(tool.Id, StringComparer.Ordinal) &&
-                !tool.MutatesDocument && !tool.RequiresConfirmation &&
-                ((!tool.MutatesLocalState && (tool.Policy == null || tool.Policy.IndependentLocalRead)) ||
-                    tool.Policy?.IndependentAgentMessage == true);
+                (tool.Policy?.AllowsSequentialBatch ?? (!tool.MutatesDocument && !tool.RequiresConfirmation && !tool.MutatesLocalState));
         }
 
         private static IReadOnlyList<string> Snapshot(IEnumerable<string> values)

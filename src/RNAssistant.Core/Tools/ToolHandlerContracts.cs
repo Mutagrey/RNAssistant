@@ -264,6 +264,7 @@ namespace RNAssistant.Core.Tools
 
     public sealed class ToolPreparationResult
     {
+        public IReadOnlyList<ResourceEvidence> ResourceEvidence { get; private set; }
         public PatchTargetPlan PatchTarget { get; private set; }
         public PatchDiagnostic PatchDiagnostic { get; private set; }
         public const int MaxPreparedStateChars = 131072;
@@ -274,8 +275,10 @@ namespace RNAssistant.Core.Tools
         public ToolRecoveryContract Recovery { get; private set; }
 
         public ToolPreparationResult(ToolResult result, string preparedStateJson = null,
-            ToolRecoveryContract recovery = null, PatchTargetPlan patchTarget = null, PatchDiagnostic patchDiagnostic = null)
+            ToolRecoveryContract recovery = null, PatchTargetPlan patchTarget = null, PatchDiagnostic patchDiagnostic = null,
+            IEnumerable<ResourceEvidence> resourceEvidence = null)
         {
+            ResourceEvidence = Array.AsReadOnly((resourceEvidence ?? new ResourceEvidence[0]).ToArray());
             PatchTarget = patchTarget; PatchDiagnostic = patchDiagnostic;
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (result.Status == ToolResultStatus.Ok && string.IsNullOrWhiteSpace(preparedStateJson))

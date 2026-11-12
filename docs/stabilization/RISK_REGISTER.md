@@ -1,5 +1,26 @@
 # Stabilization risk register
 
+## Замечания от 06.11 — повторная проверка 2026-11-11
+
+Исходная сборка: `16.1.0-alpha.1-12fddb7`; её ошибки не считаются автоматически
+воспроизводимыми на текущем baseline. Owners: общий NavigationTree, AgentKernel /
+ToolRuntime / context compiler, SkillAuthoringService и прежние resource owners.
+
+| Замечание | Результат / оставшееся evidence |
+| --- | --- |
+| Группы исчезают, меню, два вида вложенности | Исправлен воспроизводимый сброс groups/generation на error DTO. Меню уже переведено на общий tree component в срезе 11.11. Named group и creator nesting — разные намеренные связи; обычное переключение чата membership не меняет. Визуальное принятие и WebView2 открыты. |
+| Запрет нескольких tools | Разрешены последовательные независимые reads, skill loads, messages и managed mutations; каждый call сохраняет guards/confirmation. Tail переживает подтверждение, при Error/Unknown/Stop закрывается NotDispatched. Opaque/code/wait остаются singleton. |
+| Повторные чтения/записи, потеря состояния | RefreshRequired снимает устаревший лимит чтения нужной mutable цели; owner прикладывает bounded current source без автоматического повтора записи. Compiler/retention доставляет его отдельно от Error. Это не закрывает все причины повторов модели. |
+| История, JSONL/CAS, забывание | Использованы текущие append-only events/CAS/retention, без нового store и копирования аргументов batch tail. Общий storage cutover/P7 остаётся отдельным scope; полный пользовательский сценарий забывания не воспроизведён. |
+| `json_schema`: HTTP 500 | Provider/model и точная причина неизвестны. Локальная schema/parser/transport проверка проходит; 500 не доказывает ошибку параметров клиента. Нужен повтор на текущей сборке; доступное Windows evidence — только фото экрана. |
+| `core.patch`: resource owner doesn't support | Добавлен patch body пользовательского skill через существующий authoring owner; metadata/references и package guards сохраняются. Built-ins по-прежнему read-only. |
+| Skill: resource target is no longer available | Не воспроизведён; `core.skills.load` выбирает инструкции, `core.read` читает исходник — это разные операции. Устаревшие runtime URI не должны предлагаться модели. При повторе нужен видимый target/error на фото текущей сборки. |
+| VBA: регистр и имена | Canonicalizer/read-back и built-in VBA guidance уже учитывают VBE casing, case-insensitive symbols и ограничения имён. Переписывание регистра не добавлено. Fake-host checks не заменяют проверку реального VBE/COM. |
+
+Источники текущего поведения: [batch и recovery](../conversation-protocol.md),
+[текстовые изменения](../text-mutations.md), [skills](../skills.md),
+[группы](../ui/UI_SCREEN_MAP.md#группы-в-дереве-чатов--in-review-2026-11-05).
+
 ## Native window qualification — 2026-11-11
 
 Window slice In Review. Host-neutral policy/bridge и synthetic browser проверены;

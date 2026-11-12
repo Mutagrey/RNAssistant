@@ -11,7 +11,7 @@ using RNAssistant.Core.Tools;
 internal static class Program
 {
     private static readonly ToolCatalogEntry[] Tools = CreateTools();
-    private static readonly ModelProtocolCallContext Context = new ModelProtocolCallContext(new[] { "probe.read" });
+    private static readonly ModelProtocolCallContext Context = new ModelProtocolCallContext(new[] { "probe.read", "probe.write", "probe.load" });
     private static readonly List<JObject> Cases = new List<JObject>();
     private static int _assertions;
 
@@ -155,8 +155,10 @@ internal static class Program
         foreach (var count in new[] { 2, 32, 33 })
             Case(count + " reads", Change(execute, "tool_calls", new JArray(Enumerable.Range(0, count).Select(i => Call("probe.read")))), count > 32 ? "too_many_calls" : null);
         Case("single mutation", Change(execute, "tool_calls", new JArray(Call("probe.write"))));
-        Case("mutation batch", Change(execute, "tool_calls", new JArray(Call("probe.write"), Call("probe.write"))), "invalid_batch");
-        Case("mixed batch", Change(execute, "tool_calls", new JArray(Call("probe.read"), Call("probe.write"))), "invalid_batch");
+        Case("mutation batch", Change(execute, "tool_calls", new JArray(Call("probe.write"), Call("probe.write"))));
+        Case("mixed batch", Change(execute, "tool_calls", new JArray(Call("probe.read"), Call("probe.write"))));
+        Case("selection batch", Change(execute, "tool_calls", new JArray(Call("probe.load"), Call("probe.load"), Call("probe.read"))));
+        Case("opaque batch rejected", Change(execute, "tool_calls", new JArray(Call("probe.read"), Call("probe.external"))), "invalid_batch");
         foreach (var field in new[] { "id", "tool_call_id", "status" })
             Case("call extra " + field, Change(execute, "tool_calls", new JArray(Change(Call("probe.read"), field, "model-id"))), "invalid_tool_call");
         foreach (var field in new[] { "name", "arguments" })
@@ -332,7 +334,12 @@ internal static class Program
         return new[]
         {
             new ToolCatalogEntry { Id = "probe.read", ArgumentSchemaJson = schema.ToString(Formatting.None) },
-            new ToolCatalogEntry { Id = "probe.write", MutatesDocument = true, ArgumentSchemaJson = schema.ToString(Formatting.None) },
+            new ToolCatalogEntry { Id = "probe.write", MutatesDocument = true, ArgumentSchemaJson = schema.ToString(Formatting.None),
+                Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }) },
+            new ToolCatalogEntry { Id = "probe.load", ArgumentSchemaJson = schema.ToString(Formatting.None),
+                Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" }, allowSequentialBatch: true) },
+            new ToolCatalogEntry { Id = "probe.external", ArgumentSchemaJson = schema.ToString(Formatting.None),
+                Policy = new ToolPolicy(ToolEffect.External, ToolVerification.None, false, false, new[] { "agent" }) },
             new ToolCatalogEntry { Id = "probe.optional", ArgumentSchemaJson = optionalSchema.ToString(Formatting.None) }
         };
     }

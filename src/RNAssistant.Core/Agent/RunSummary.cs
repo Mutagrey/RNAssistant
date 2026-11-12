@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using RNAssistant.Core.Tools;
@@ -64,6 +66,20 @@ namespace RNAssistant.Core.Agent
         }
     }
 
+    public sealed class PendingBatchCall
+    {
+        public string CallId { get; private set; }
+        public ToolPolicySnapshot Policy { get; private set; }
+
+        [JsonConstructor]
+        public PendingBatchCall(string callId, ToolPolicySnapshot policy)
+        {
+            if (string.IsNullOrWhiteSpace(callId) || policy == null)
+                throw new ArgumentException("A pending call requires its exact local policy.");
+            CallId = callId; Policy = policy;
+        }
+    }
+
     public sealed class PendingConfirmation
     {
         public string PendingId { get; private set; }
@@ -73,6 +89,7 @@ namespace RNAssistant.Core.Agent
         public int ChargedToolSteps { get; private set; }
         public string PreparedStateJson { get; private set; }
         public RNAssistant.Core.Tools.PatchBatchResult PatchPreview { get; private set; }
+        public IReadOnlyList<PendingBatchCall> RemainingCalls { get; private set; }
 
         internal PendingConfirmation(ToolExecutionRecord record)
             : this(record.PendingId, record.Context.Call, record.Context.Policy, record.Context.StepId,
@@ -83,7 +100,8 @@ namespace RNAssistant.Core.Agent
 
         [JsonConstructor]
         internal PendingConfirmation(string pendingId, ToolCall call, ToolPolicySnapshot policy, string stepId,
-            int chargedToolSteps, string preparedStateJson = null, RNAssistant.Core.Tools.PatchBatchResult patchPreview = null)
+            int chargedToolSteps, string preparedStateJson = null, RNAssistant.Core.Tools.PatchBatchResult patchPreview = null,
+            IEnumerable<PendingBatchCall> remainingCalls = null)
         {
             if (string.IsNullOrWhiteSpace(pendingId) || string.IsNullOrWhiteSpace(stepId) || call == null || policy == null ||
                 !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) || chargedToolSteps < 1)
@@ -98,7 +116,16 @@ namespace RNAssistant.Core.Agent
             ChargedToolSteps = chargedToolSteps;
             PreparedStateJson = preparedStateJson;
             PatchPreview = patchPreview;
+            var tail = (remainingCalls ?? new PendingBatchCall[0]).Take(32).ToArray();
+            if (tail.Length > 31 || tail.Any(item => item == null || !item.Policy.AllowsSequentialBatch) ||
+                tail.Length > 0 && !policy.AllowsSequentialBatch ||
+                tail.Select(item => item.CallId).Concat(new[] { call.Id }).Distinct(StringComparer.OrdinalIgnoreCase).Count() != tail.Length + 1)
+                throw new ArgumentException("Invalid pending sequential batch.");
+            RemainingCalls = Array.AsReadOnly(tail);
         }
+
+        internal PendingConfirmation WithRemainingCalls(IEnumerable<PendingBatchCall> calls)
+        { return new PendingConfirmation(PendingId, Call, Policy, StepId, ChargedToolSteps, PreparedStateJson, PatchPreview, calls); }
     }
 
     // Runtime authority: narrative cannot set health. DTOs are immutable; storage

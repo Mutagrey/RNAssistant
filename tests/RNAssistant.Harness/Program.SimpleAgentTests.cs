@@ -564,7 +564,7 @@ namespace RNAssistant.Harness
             AssertTrue(!rejected.Success && rejected.Response == null, "invalid complete response yields no partial accepted calls");
         }
 
-        private static void ConversationV8BatchesOnlyExplicitReadOnlyCalls()
+        private static void ConversationV8BatchesUseLocalPolicy()
         {
             var read = V8ReadTool();
             var parser = new ConversationResponseParser();
@@ -591,14 +591,15 @@ namespace RNAssistant.Harness
                         : kind == "external"
                             ? new ToolPolicy(ToolEffect.External, ToolVerification.None, false, false, new[] { "agent" })
                             : new ToolPolicy(ToolEffect.Unclassified, ToolVerification.None, false, false, new[] { "agent" });
-                // Explicit IDs cannot override contradictory flags or policy.
+                // The explicit context and typed local policy must both permit batching.
+                var allowed = kind == "document" || kind == "local" || kind == "confirmation";
                 var batchSafe = new[] { read.Id, tool.Id };
                 var context = new ModelProtocolCallContext(batchSafe);
                 var catalog = new[] { read, tool };
                 AssertResponseBatchSchema(true, calls, catalog, context);
                 AssertResponseBatchSchema(true, V8Envelope(), catalog, context);
                 AssertResponseBatchSchema(true, V8Envelope(V8Call(tool.Id)), catalog, context);
-                AssertResponseBatchSchema(false, V8Envelope(V8Call(tool.Id), V8Call(tool.Id)), catalog, context);
+                AssertResponseBatchSchema(allowed, V8Envelope(V8Call(tool.Id), V8Call(tool.Id)), catalog, context);
                 foreach (var batch in new[]
                 {
                     V8Envelope(V8Call(tool.Id), V8Call(read.Id)),
@@ -606,31 +607,31 @@ namespace RNAssistant.Harness
                 })
                 {
                     var result = parser.Parse(batch, new[] { read, tool }, new[] { read, tool }, new ModelProtocolCallContext(batchSafe));
-                    AssertTrue(!result.Success, kind + " cannot be batched, regardless of position");
-                    AssertContains(result.Error, "one at a time", "singleton diagnosis");
-                    AssertContains(result.Error, tool.Id, "repair names the singleton tool");
-                    AssertContains(result.Error, "No calls from this response were executed", "rejected batch grants no partial progress");
-                    AssertResponseBatchSchema(false, batch, catalog, context);
+                    AssertEqual(allowed, result.Success, kind + " batch follows typed local policy");
+                    if (!allowed)
+                    {
+                        AssertContains(result.Error, "one at a time", "singleton diagnosis");
+                        AssertContains(result.Error, tool.Id, "repair names the singleton tool");
+                        AssertContains(result.Error, "No calls from this response were executed", "rejected batch grants no partial progress");
+                    }
+                    AssertResponseBatchSchema(allowed, batch, catalog, context);
                 }
-                if (kind == "document" || kind == "local")
+                if (allowed)
                     AssertTrue(!parser.Parse(V8Envelope(V8Call(tool.Id), V8Call(tool.Id)),
-                        new[] { tool }, new[] { tool }, new ModelProtocolCallContext(new[] { tool.Id })).Success,
-                        kind + " cannot batch two mutations even with forged batch context");
+                        new[] { tool }, new[] { tool }, new ModelProtocolCallContext(new string[0])).Success,
+                        kind + " still requires explicit admission to the batch context");
                 AssertTrue(parser.Parse(V8Envelope(V8Call(name: tool.Id)), new[] { tool }, new[] { tool }, new ModelProtocolCallContext(batchSafe)).Success,
                     kind + " singleton is valid protocol, not execution permission");
             }
             var loader = SkillLoadToolHandler.Entry();
-            var load = V8Call(loader.Id, new JObject { ["id"] = "skills.html.workspace.authoring" });
-            var loadVba = V8Call(loader.Id, new JObject { ["id"] = "skills.vba.code.editing" });
-            var selectionContext = new ModelProtocolCallContext(new[] { read.Id });
+            var load = V8Call(loader.Id, new JObject { ["id"] = "skills.html.workspace.authoring", ["action"] = "load" });
+            var loadVba = V8Call(loader.Id, new JObject { ["id"] = "skills.vba.code.editing", ["action"] = "load" });
+            var selectionContext = new ModelProtocolCallContext(new[] { read.Id, loader.Id });
             var selectionTools = new[] { loader, read };
             foreach (var batch in new[] { V8Envelope(load, loadVba), V8Envelope(V8Call(), load) })
             {
-                var rejected = parser.Parse(batch, selectionTools, selectionTools, selectionContext);
-                AssertTrue(!rejected.Success && rejected.Response == null, "skill batch is rejected as a whole");
-                AssertContains(rejected.Error, "No calls from this response were executed", "repair does not imply admission");
-                AssertContains(rejected.Error, "one at a time", "repair preserves the prerequisite load");
-                AssertResponseBatchSchema(false, batch, selectionTools, selectionContext);
+                AssertTrue(parser.Parse(batch, selectionTools, selectionTools, selectionContext).Success, "independent skill selections may share a batch");
+                AssertResponseBatchSchema(true, batch, selectionTools, selectionContext);
             }
             AssertTrue(parser.Parse(V8Envelope(load), selectionTools, selectionTools, selectionContext).Success,
                 "the same skill selection is valid when returned alone");
@@ -2751,7 +2752,7 @@ namespace RNAssistant.Harness
                         new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
                             ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
                     ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
-                        "Try an invalid mixed read/write batch.", "Добавляю диагностику и обновляю заголовок.",
+                        "Try a dependent overwrite in a mixed batch.", "Добавляю диагностику и обновляю заголовок.",
                         calls: new[] {
                             new ConversationToolCall { Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Edit("End Sub", "Debug.Print \"started\"\nEnd Sub", new[] { "Sub Main()" }, null))) },
                             new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
@@ -2759,13 +2760,6 @@ namespace RNAssistant.Harness
                             new ConversationToolCall { Name = ResourceMutationToolCatalog.Write, Arguments = new JObject {
                                 ["target"] = "VBA module: Module1", ["content"] = "' Version 2\n" + before } }
                         })),
-                    ModelProtocolWire.WriteAcceptedCall("Apply the source patch separately.",
-                        "Добавляю диагностику отдельным действием.", new ConversationToolCall {
-                            Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Edit("End Sub", "Debug.Print \"started\"\nEnd Sub", new[] { "Sub Main()" }, null))) }),
-                    ModelProtocolWire.WriteAcceptedCall("Read current source after the patch.",
-                        "Читаю текущий модуль после записи.", new ConversationToolCall {
-                            Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
-                                ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
                     ModelProtocolWire.WriteAcceptedCall("Write the title against the fresh source.",
                         "Сохраняю заголовок вместе с прочитанной диагностикой.", new ConversationToolCall {
                             Name = ResourceMutationToolCatalog.Write, Arguments = new JObject {
@@ -2780,20 +2774,19 @@ namespace RNAssistant.Harness
                     sourceRequests.Add(messages.ToList());
                     if (modelRequests == 4)
                     {
-                        AssertEqual(before, adapter.VbaModuleCode, "rejected batch performs no VBA mutation");
-                        AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
-                            "protocol repair precedes every dispatch");
-                    }
-                    if (modelRequests == 5)
-                    {
-                        AssertEqual(patched, adapter.VbaModuleCode, "first singleton patch is applied before read");
+                        AssertEqual(patched, adapter.VbaModuleCode, "first batch patch applies, stale dependent overwrite is rejected");
                         AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the patch dispatched");
                         AssertEqual(1, journal.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
-                            "rejected batch creates no VBA preparation");
+                            "the stale write creates no prepared mutation");
                     }
-                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
-                        "Both VBA mutations have terminal results.", "Проверка завершена.",
-                        "The patch and module write completed.", "core.patch", ResourceMutationToolCatalog.Write);
+                    var response = responses.Dequeue() ?? ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Both VBA mutations have successful terminal results after source recovery.", "Проверка завершена.",
+                        results: new[] { new ConversationResultClaim("The patch and recovered module write completed.",
+                            session.Messages.Where(item => item.RunId == session.LastRun.RunId &&
+                                (item.ToolName == "core.patch" || item.ToolName == ResourceMutationToolCatalog.Write) &&
+                                item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok && item.EvidenceReference != null)
+                                .Select(item => item.EvidenceReference.Alias).Distinct(StringComparer.Ordinal), ConversationAssessment.Satisfied) },
+                        outcome: ConversationOutcome.Completed);
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
@@ -2801,17 +2794,18 @@ namespace RNAssistant.Harness
                     session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
-                AssertEqual(7, modelRequests, "both mutations reach their next model decision");
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completes after both writes");
+                AssertEqual(5, modelRequests, "runtime source recovery needs no extra model read or format repair");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completes after both writes: " + result.AssistantText);
                 AssertEqual(patched,
-                    (string)LastToolResult(sourceRequests[5], ResourceToolCatalog.ReadToolId)["data"]["text"],
+                    (string)LastToolResult(sourceRequests[3], ResourceToolCatalog.ReadToolId)["data"]["text"],
                     "next model decision sees the changed VBA source through its exact read");
                 AssertEqual("ok", (string)LastToolResult(sourceRequests.Last(), ResourceMutationToolCatalog.Write)["status"],
                     "the write's superseded input observation cannot turn its verified result into an error");
                 var writes = result.ToolResults.Select(item => JObject.FromObject(item))
                     .Where(item => (string)item["toolId"] == "core.write").ToList();
-                AssertEqual(1, writes.Count, "rejected batch contributes no accepted write result");
-                AssertEqual("ok", (string)writes[0]["status"], "fresh response can use delivered source evidence");
+                AssertEqual(2, writes.Count, "stale refusal and later successful write both remain visible");
+                AssertEqual("error", (string)writes[0]["status"], "same-batch read grants no undelivered source authority");
+                AssertEqual("ok", (string)writes[1]["status"], "fresh response can use delivered source evidence");
                 AssertEqual("' Version 2\n" + patched, adapter.VbaModuleCode, "new write retains diagnostic code");
                 AssertEqual(2, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only patch and fresh write dispatch");
                 var mutations = journal.ListMutations(adapter.HostName, adapter.DocumentKey);

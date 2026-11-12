@@ -806,7 +806,8 @@ namespace RNAssistant.Core.Services
             // Currentness applies to observations, never to its terminal outcome.
             atom.Evidence.Clear();
             atom.Messages.Add(result);
-            if (result.ResourceEffect == null) atom.Evidence.AddRange(result.ResourceEvidence ?? new List<ResourceEvidence>());
+            if (result.ResourceEffect == null && !CurrentMutationEvidence(result).Any())
+                atom.Evidence.AddRange(result.ResourceEvidence ?? new List<ResourceEvidence>());
             atom.CausalFrameId = call.ToolCallId;
             return atom;
         }
@@ -819,6 +820,14 @@ namespace RNAssistant.Core.Services
 
         private static IEnumerable<ResourceEvidence> CurrentMutationEvidence(ChatMessage source)
         {
+            // A rejected write may carry a bounded, freshly captured source. It
+            // remains a failed operation; only the separately delivered body can
+            // grant observation authority for the next model-proposed operation.
+            var recovery = source.ExecutionProgress?.Recovery;
+            if (source.ExecutionProgress?.Outcome == ToolExecutionOutcome.Error && recovery?.RetryPolicy == ToolRetryPolicy.RefreshRequired)
+                foreach (var evidence in (source.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
+                    if (recovery.ResourceIdentity?.Equals(evidence.Resource.Identity) == true && recovery.View == evidence.View)
+                        yield return evidence;
             var effect = source.ResourceEffect;
             if (effect == null) yield break;
             if (effect.Targets != null)
@@ -868,7 +877,8 @@ namespace RNAssistant.Core.Services
         private static ContextAtom ArchivedBody(ContextWorkingSet.Candidate candidate)
         {
             var source = candidate.Source;
-            var evidence = source.ResourceEffect == null ? source.ResourceEvidence : CurrentMutationEvidence(source).ToList();
+            var separateSource = CurrentMutationEvidence(source).ToList();
+            var evidence = source.ResourceEffect == null && separateSource.Count == 0 ? source.ResourceEvidence : separateSource;
             if (!ExposesBody(source) || evidence == null || evidence.Count == 0 ||
                 evidence.Any(item => item == null || !new[] { "text", "source", "structure", "formulas", "metadata", "records", "table" }
                     .Contains(item.View, StringComparer.Ordinal))) return null;
@@ -877,7 +887,7 @@ namespace RNAssistant.Core.Services
             var data = wire?.Data as JObject;
             ContextAtom atom;
             if (source.SyntheticResourceObservation) atom = Atom("current-source", Clone(source), false);
-            else if (source.ResourceEffect == null && candidate.Call != null &&
+            else if (source.ResourceEffect == null && separateSource.Count == 0 && candidate.Call != null &&
                 (source.ToolName == "core.tools.read" || (string)data?["type"] == "skill" || evidence.Any(item =>
                     !item.Complete || item.View != ResourceRepresentations.Text && item.View != ResourceRepresentations.Source ||
                     item.Coverage.Kind != ResourceCoverageKinds.Whole)))
@@ -903,7 +913,7 @@ namespace RNAssistant.Core.Services
             ToolResultWireReadResult wire; string error;
             if (!ToolResultHistoryReader.TryRead(message, out wire, out error)) return false;
             if (message.ResourceEffect != null) return CurrentMutationEvidence(message).Any();
-            if (wire.Result.Status != ToolResultStatus.Ok) return false;
+            if (wire.Result.Status != ToolResultStatus.Ok) return CurrentMutationEvidence(message).Any();
             var data = wire.Data as JObject;
             if (message.ToolName == "core.read")
                 return (string)data?["type"] != "shared context" && (string)data?["type"] != "HTML data" &&
@@ -920,6 +930,8 @@ namespace RNAssistant.Core.Services
 
         public static string CurrentSourceLabel(ChatMessage result, ResourceEvidence evidence)
         {
+            if (result.ExecutionProgress?.Recovery?.ResourceIdentity?.Equals(evidence?.Resource?.Identity) == true)
+                return result.ExecutionProgress.Recovery.SemanticTarget;
             ToolResultWireReadResult wire;
             string error;
             if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) return null;

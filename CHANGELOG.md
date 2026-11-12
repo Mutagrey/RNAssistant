@@ -11,6 +11,18 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.14.0-dev
+
+- Independent reads, skill selections and managed edits can share an ordered tool
+  batch. Each call keeps its guards and confirmation; pending tails survive resume,
+  and failure/unknown/Stop closes unstarted calls without replaying prior effects.
+- Rejected edits can return bounded current source through the existing context/CAS
+  path. Targeted refresh releases stale read limits without automatically retrying writes.
+- `core.patch` edits custom skill bodies through the existing authoring owner,
+  preserving metadata, references and package revision checks.
+- A failed group refresh preserves the last known tree and generation watermark.
+  Windows/Office qualification and the reported provider HTTP 500 remain open.
+
 ### 16.13.0-dev
 
 - Added a password-protected Developer section for one portable, signed

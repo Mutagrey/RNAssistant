@@ -53,6 +53,8 @@ namespace RNAssistant.Core.Tools
         public bool IndependentLocalRead { get; private set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public bool IndependentAgentMessage { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate)]
+        public bool AllowSequentialBatch { get; private set; }
         [JsonProperty(Required = Required.Always)]
         public IReadOnlyList<string> AllowedModes { get; private set; }
         [JsonProperty(Required = Required.Always)]
@@ -64,17 +66,24 @@ namespace RNAssistant.Core.Tools
         public EvidenceEligibility EvidenceEligibility { get; private set; }
         [JsonIgnore]
         public bool MayHaveSideEffects { get { return Effect != ToolEffect.Read; } }
+        [JsonIgnore]
+        public bool AllowsSequentialBatch { get { return !ExecutesCode &&
+            (IndependentLocalRead || AllowSequentialBatch || ExecutionClass == ToolExecutionClass.ManagedMutation); } }
 
         [JsonConstructor]
         public ToolPolicy(ToolEffect effect, ToolVerification verification, bool requiresConfirmation,
             bool independentLocalRead, IEnumerable<string> allowedModes, int riskLevel = 0, bool executesCode = false,
-            EvidenceEligibility evidenceEligibility = EvidenceEligibility.Eligible, bool independentAgentMessage = false)
+            EvidenceEligibility evidenceEligibility = EvidenceEligibility.Eligible, bool independentAgentMessage = false,
+            bool allowSequentialBatch = false)
         {
             if (!Enum.IsDefined(typeof(ToolEffect), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
             if (!Enum.IsDefined(typeof(ToolVerification), verification)) throw new ArgumentOutOfRangeException(nameof(verification));
             if (riskLevel < 0) throw new ArgumentOutOfRangeException(nameof(riskLevel));
             if (independentLocalRead && (effect != ToolEffect.Read || requiresConfirmation))
                 throw new ArgumentException("Only an unconfirmed read can be an independent local read.");
+            if (allowSequentialBatch && (executesCode || Classify(effect, verification) == ToolExecutionClass.OpaqueAction ||
+                effect == ToolEffect.Read && requiresConfirmation))
+                throw new ArgumentException("Sequential batches require local reads or verified managed mutations.");
             if (independentAgentMessage && (effect != ToolEffect.Write || verification != ToolVerification.Tool ||
                 requiresConfirmation || executesCode))
                 throw new ArgumentException("An independent agent message requires a verified local write without confirmation or code execution.");
@@ -88,6 +97,7 @@ namespace RNAssistant.Core.Tools
             RequiresConfirmation = requiresConfirmation;
             IndependentLocalRead = independentLocalRead;
             IndependentAgentMessage = independentAgentMessage;
+            AllowSequentialBatch = allowSequentialBatch;
             AllowedModes = Array.AsReadOnly(modes.Distinct(StringComparer.Ordinal).OrderBy(mode => mode, StringComparer.Ordinal).ToArray());
             RiskLevel = riskLevel;
             ExecutesCode = executesCode;
@@ -106,7 +116,7 @@ namespace RNAssistant.Core.Tools
         {
             return other != null && Effect == other.Effect && Verification == other.Verification &&
                 RequiresConfirmation == other.RequiresConfirmation && IndependentLocalRead == other.IndependentLocalRead &&
-                IndependentAgentMessage == other.IndependentAgentMessage &&
+                IndependentAgentMessage == other.IndependentAgentMessage && AllowSequentialBatch == other.AllowSequentialBatch &&
                 EvidenceEligibility == other.EvidenceEligibility && RiskLevel == other.RiskLevel && ExecutesCode == other.ExecutesCode && ExecutionClass == other.ExecutionClass &&
                 AllowedModes.SequenceEqual(other.AllowedModes, StringComparer.Ordinal);
         }

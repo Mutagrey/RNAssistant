@@ -73,7 +73,7 @@ namespace RNAssistant.Core.Llm
                 ExpectedText = scenario.ExpectedText, Endpoint = settings.BaseUrl, Model = settings.Model,
                 ResponseFormat = scenario.ResponseFormat, StreamingRequested = scenario.Streaming };
             var options = scenario.Assertion == ModelDiagnosticAssertion.V8
-                ? ModelProtocolWire.CreateRequestOptions(scenario.ResponseFormat, scenario.CallableTools, new ModelProtocolCallContext(scenario.CallableTools.Where(t => (t.Policy?.IndependentLocalRead == true || t.Policy?.IndependentAgentMessage == true)).Select(t => t.Id)))
+                ? ModelProtocolWire.CreateRequestOptions(scenario.ResponseFormat, scenario.CallableTools, new ModelProtocolCallContext(scenario.CallableTools.Where(t => t.Policy?.AllowsSequentialBatch == true).Select(t => t.Id)))
                 : new LlmRequestOptions { ResponseFormat = scenario.ResponseFormat,
                     ResponseSchemaName = "diagnostic_marker", ResponseSchemaJson = scenario.ResponseSchemaJson };
             options.NativeToolCallContent = scenario.NativeCallContent;
@@ -221,7 +221,7 @@ namespace RNAssistant.Core.Llm
             if (scenario.Assertion == ModelDiagnosticAssertion.V8)
             {
                 var parsed = ModelProtocolWire.Parse(result.ActualContent, scenario.CallableTools, scenario.CallableTools,
-                    new ModelProtocolCallContext(scenario.CallableTools.Where(t => (t.Policy?.IndependentLocalRead == true || t.Policy?.IndependentAgentMessage == true)).Select(t => t.Id)), scenario.ResponseFormat == LlmResponseFormats.JsonSchema);
+                    new ModelProtocolCallContext(scenario.CallableTools.Where(t => t.Policy?.AllowsSequentialBatch == true).Select(t => t.Id)), scenario.ResponseFormat == LlmResponseFormats.JsonSchema);
                 result.ParserVerdict = parsed.Success ? ModelDiagnosticVerdict.Pass : ModelDiagnosticVerdict.Fail;
                 result.ParserErrorCode = parsed.ErrorCode;
                 if (!parsed.Success) { result.Reason = "v8_parser_rejected"; return false; }

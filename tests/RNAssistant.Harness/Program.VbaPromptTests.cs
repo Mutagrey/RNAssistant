@@ -2357,9 +2357,8 @@ namespace RNAssistant.Harness
                 ToolCall lastCall = null;
                 for (var index = 0; index < 3; index++)
                 {
-                    var pending = PrepareVbaNative(executor, session, Command("vba.module.patch",
-                        "moduleName", "Module1", "patch", new JArray(new JObject {
-                            ["find"] = "Debug.Print FOV", ["text"] = "Debug.Print fov" })));
+                    var pending = PrepareVbaNative(executor, session, Command("core.patch", "targets",
+                        PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit("Debug.Print FOV", "Debug.Print fov"))))));
                     var completed = ConfirmVbaNative(pending);
                     AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "VBE-equivalent request is satisfied");
                     AssertTrue(completed.MayHaveDispatched, "case-only write did reach the backend");
@@ -2367,7 +2366,7 @@ namespace RNAssistant.Harness
                         "restored casing is no change, not a successful edit");
                     AssertEqual(ResourceEffectOutcome.VerifiedNoChange, completed.ResourceEffect.Outcome,
                         "authority does not advance the source revision for restored casing");
-                    AssertEqual(false, (bool)JObject.Parse(completed.Result.DataJson)["changed"], "model sees actual no-change");
+                    AssertEqual(ResourceTargetStatus.Unchanged, completed.ResourceEffect.Targets.Single().Status, "model sees actual no-change");
                     AssertEqual(source, adapter.VbaModuleCode, "VBE restored the original source");
                     lastCall = completed.Context.Call;
                     progress.Observe(lastCall, ToolExecutionProgress.Capture(completed), completed.Result.Message,
@@ -2380,12 +2379,11 @@ namespace RNAssistant.Harness
                 AssertEqual("repeated_tool_no_progress", reason, "case loop reaches the existing progress guard");
                 AssertEqual(3, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only dispatched attempts wrote");
 
-                var renamed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("vba.module.patch",
-                    "moduleName", "Module1", "patch", new JArray(new JObject {
-                        ["find"] = source, ["text"] = source.Replace("fov", "viewFov").Replace("FOV", "viewFov") }))));
+                var renamed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("core.patch", "targets",
+                    PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit(source, source.Replace("fov", "viewFov").Replace("FOV", "viewFov"))))))));
                 AssertEqual(ToolEffectEvidence.VerifiedChange, renamed.Evidence.Effect,
                     "a real identifier rename remains a significant change");
-                AssertEqual(true, (bool)JObject.Parse(renamed.Result.DataJson)["changed"], "actual rename is reported");
+                AssertEqual(ResourceTargetStatus.Changed, renamed.ResourceEffect.Targets.Single().Status, "actual rename is reported");
             });
         }
 

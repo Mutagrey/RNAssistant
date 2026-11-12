@@ -38,6 +38,7 @@ function fixture(scope = office) {
     RNAssistantNavigationTree: { icon: () => "" },
     RNAssistantAgentCommunication: { marker: () => "" },
     RNAssistantProjectChats: { scope: () => fixture.source, refreshTree() {} },
+    RNAssistantConversationPanel: { selected: () => ({ target: { source: fixture.source, sessionId: scope.sessionId } }) },
     RNAssistantActionMenu: {
       closeAll() { fixture.menu = []; },
       open(trigger, items) { fixture.menu = items; }
@@ -85,6 +86,29 @@ function fixture(scope = office) {
 }
 
 const tests = [
+  ["catalog errors retain memberships and the successful generation", async () => {
+    for (const scope of [office, workspace, plugin]) {
+      const f = fixture(scope);
+      f.groups.accept([snapshot(scope, 5, "Актуальная группа", "r5")]);
+      f.groups.accept([Object.assign({}, scope, { generation: 0, groups: [], error: "Каталог недоступен" })]);
+      assert.equal(f.nodes()[0].title, "Актуальная группа");
+      assert.equal(f.nodes().at(-1).title, "Группы недоступны");
+      assert.equal(f.groups.createAction(scope).disabled, true, "uncertainty blocks mutations, not navigation");
+      f.groups.accept([snapshot(scope, 4, "Старое имя", "r4")]);
+      assert.equal(f.nodes()[0].title, "Актуальная группа", "error did not lower the successful watermark");
+      f.groups.accept([snapshot(scope, 5, "Актуальная группа", "r5")]);
+      assert.equal(f.nodes().length, 1, "a current successful read clears the error");
+      assert.equal(f.groups.createAction(scope).disabled, false);
+      f.groups.accept([Object.assign({}, scope, { generation: 4, groups: [], error: "Поздняя ошибка" })]);
+      assert.equal(f.nodes().length, 1, "a provably older error cannot replace the current snapshot");
+      f.groups.accept([Object.assign({}, scope, { generation: 6, groups: [], error: "Новое состояние недоступно" })]);
+      f.groups.accept([snapshot(scope, 5, "Старое имя", "r5")]);
+      assert.equal(f.nodes()[0].title, "Актуальная группа", "a known newer error also advances the watermark");
+      assert.equal(f.nodes().length, 2, "an older success cannot clear a newer error");
+      f.groups.accept([Object.assign({}, scope, { generation: 6, groups: [] })]);
+      assert.equal(f.nodes().length, 0, "a successful removal still clears the group");
+    }
+  }],
   ["Office, workspace and plugin retain exact bridge scope", async () => {
     for (const scope of [office, workspace, plugin]) {
       const f = fixture(scope);

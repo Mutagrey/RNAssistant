@@ -316,7 +316,11 @@ The editor labels built-ins as read-only and offers an editable copy after the
 core text has loaded. The copy has a distinct id; the original keeps its
 published id.
 
-Agent-side package authoring uses `skills.upsert/delete`; reference text uses
+Agent-side package authoring uses `skills.upsert/delete`. `core.patch` also edits
+the body of an existing custom skill through the same owner: target `skill: <id>`
+from discovery, current delivered source, update-only preparation and whole-package
+revision recheck. Omitted metadata and references are preserved; built-ins stay
+read-only. Package metadata changes still use `skills.upsert`. Reference text uses
 `core.write/patch/replace` and `resources.delete` with a semantic skill-reference
 target. Their schemas cannot mix package-core metadata and reference fields.
 The existing owner and versioned publication/result contract are shared. Preparation

@@ -58,7 +58,7 @@ still validates action-specific fields, evidence, batching and outcomes independ
 
 | Action | Required action-specific field | Meaning |
 | --- | --- | --- |
-| `execute` | Nonempty `tool_calls` | Propose one or more validated calls. Each call has exactly `name` and root object `arguments`; runtime assigns IDs. Batch independent local reads together, or independent `agents.send` calls together; never mix these groups. |
+| `execute` | Nonempty `tool_calls` | Propose one or more validated calls. Each call has exactly `name` and root object `arguments`; runtime assigns IDs. Independent reads, skill selections, agent messages and managed edits may share an ordered batch under local policy. Calls depending on a prior result or newly loaded skill/tool wait for the next request. |
 | `reflection` | Nonblank `decision` | Record a useful interpretation and request another bounded model step. No tool dispatch, result or new authority. |
 | `finish` | `outcome`, `results` array, nonblank `message` | Assert the final answer and assessed task outcome. No questions, approval requests, offers to continue or promises of future work. |
 
@@ -411,8 +411,9 @@ still rejected. Target WebView2 and full integration qualification remain open.
 
 History readers require `ResponseProtocolVersion=8` and exact accepted
 metadata. Production JSON history rejects native call metadata. Internal results use typed
-Tool Result v2 records with user transport; the final request batches them as above. Workspace replay checks adjacent batch
-siblings against the same run, step and model attempt with consecutive indexes;
+Tool Result v2 records with user transport; the final request batches them as above.
+Office and Workspace share the accepted-history reader: it joins adjacent batch
+siblings only for the same run, step, model attempt and declared count with consecutive indexes;
 an index reset cannot start a second batch before the preceding results.
 Reference-contract revisions before 4 and incompatible format-8 histories cannot continue;
 old chats remain readable, without automatic conversion or deletion. An absent

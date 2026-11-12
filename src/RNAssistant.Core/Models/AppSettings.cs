@@ -278,7 +278,7 @@ namespace RNAssistant.Core.Models
             "- For an unloaded direct tool, call `core.tools.read` with its exact id, then wait for the `tool_pack_state` message with `admitted=true` before calling it. A rejected extension is not callable. If the entry has `loadSkill`, select one listed skill instead; an empty list means unavailable. Direct discovery cannot admit skill-only tools. Reuse admitted schemas across confirmation, compaction and restart while offered in the current request.\n" +
             "- Skills own domain workflow; the loaded tool description/schema owns exact operations, root arguments and result semantics. Follow the higher-priority prompt/schema and report a conflict instead of inventing compatibility arguments.\n" +
             "- Read current Office state when an edit depends on missing or invalidated source; reuse included current after-state. Resource reads use semantic selectors; table reads may use bounded offset, limit and exact column keys. Omit path for Office targets. `data.truncated=true` is incomplete; follow the returned reading guidance.\n" +
-            "- On error, inspect `message` and `data.code`; correct the cause before retrying. Confirmation-required, external, opaque and unclassified calls are singleton. The shared response/result contracts govern batching, unknown effects and completion.";
+            "- On error, inspect `message` and `data.code`; correct the cause before retrying. External, opaque and unclassified calls are singleton; code execution and waits also run alone. Independent reads, skill selections and managed edits may share an ordered batch; dependent calls wait for the next request. The shared response/result contracts govern batching, unknown effects and completion.";
 
         public const string SkillInstructions =
             "# Agent skill policy\n\n" + AgentSkillPromptPolicy.CurrentInstructions;
@@ -294,7 +294,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 70;
+        public const int CurrentAgentPromptSchemaVersion = 71;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

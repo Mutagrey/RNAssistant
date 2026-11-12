@@ -1041,11 +1041,8 @@ namespace RNAssistant.Runtime
 
         internal static IReadOnlyList<AgentMessage> RestoreAcceptedHistory(ChatSession session, ChatBlobStore payloads, bool currentRunOnly = false)
         {
-            const string recovery = "История чата содержит неполную запись вызова. " +
-                "Создайте новый чат; старая история сохранена. ";
             var history = new List<AgentMessage>();
-            AcceptedToolCallOrigin priorOrigin = null;
-            string priorRunId = null;
+            ChatMessage previousAccepted = null;
             var source = session.Messages ?? new List<ChatMessage>();
             if (currentRunOnly)
             {
@@ -1058,15 +1055,15 @@ namespace RNAssistant.Runtime
             {
                 if (item == null || item.ExcludeFromModelContext && !item.ProtocolMessage)
                 {
-                    priorOrigin = null;
-                    priorRunId = null;
+                    ConversationResponseHistoryReader.RequireCompleteBatch(previousAccepted);
+                    previousAccepted = null;
                     continue;
                 }
                 if (item.Role == "user" && !item.ProtocolMessage)
                 {
                     history.Add(AgentMessage.User(ConversationInputMessage.ModelText(item)));
-                    priorOrigin = null;
-                    priorRunId = null;
+                    ConversationResponseHistoryReader.RequireCompleteBatch(previousAccepted);
+                    previousAccepted = null;
                     continue;
                 }
                 if (item.Role == "assistant" && item.ProtocolMessage)
@@ -1078,34 +1075,11 @@ namespace RNAssistant.Runtime
                         throw new InvalidOperationException("This conversation uses retired tool contracts. Start a new chat; stored history is preserved.");
                     foreach (var call in accepted.Response.ToolCalls.Where(c => c.Name == ResourceMutationToolCatalog.Patch))
                         ResourcePatch.ValidateCall(call.ArgumentsJson);
-                    var origin = item.AcceptedCallOrigin;
-                    var previous = history.LastOrDefault();
-                    if (origin != null && string.IsNullOrWhiteSpace(item.RunId))
-                        throw new InvalidOperationException(recovery + "Accepted call has no run ID.");
-                    if (origin != null && previous?.Kind == AgentMessageKind.Assistant &&
-                        previous.Action == ConversationResponse.ExecuteAction)
-                    {
-                        if (priorOrigin == null || origin.CallIndex != priorOrigin.CallIndex + 1 ||
-                            origin.StepId != priorOrigin.StepId || origin.ModelAttemptId != priorOrigin.ModelAttemptId ||
-                            item.RunId != priorRunId || previous.Reason != accepted.Response.Reason ||
-                            accepted.Response.Message.Length != 0)
-                            throw new InvalidOperationException("Stored workspace batch origin or response metadata disagree.");
-                        var calls = previous.ToolCalls.Concat(accepted.Response.ToolCalls).ToArray();
-                        history.RemoveAt(history.Count - 1);
-                        history.Add(AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
-                            previous.Reason, previous.Text, calls: calls,
-                            sourceModelAttemptId: origin.ModelAttemptId)));
-                    }
-                    else
-                    {
-                        if (origin != null && origin.CallIndex != 0)
-                            throw new InvalidOperationException("Stored workspace batch has no first accepted call.");
-                        history.Add(AgentMessage.Assistant(accepted.Response));
-                    }
-                    priorOrigin = origin;
-                    priorRunId = origin == null ? null : item.RunId;
+                    ConversationResponseHistoryReader.AppendAcceptedResponse(history, complete, accepted.Response, ref previousAccepted);
                     continue;
                 }
+                ConversationResponseHistoryReader.RequireCompleteBatch(previousAccepted);
+                previousAccepted = null;
                 if (item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId))
                 {
                     ToolResultWireReadResult parsed; string error;
@@ -1115,12 +1089,9 @@ namespace RNAssistant.Runtime
                         throw new InvalidOperationException("Stored workspace tool result is invalid: runtime ID mismatch.");
                     history.Add(AgentMessage.AcceptedToolResult(item.ToolCallId, parsed.Result.Message,
                         item.Content, item.ExecutionProgress, item.ResourceEvidence, item.ResourceEffect));
-                    priorOrigin = null;
-                    priorRunId = null;
                 }
-                priorOrigin = null;
-                priorRunId = null;
             }
+            ConversationResponseHistoryReader.RequireCompleteBatch(previousAccepted);
             return history;
         }
 
@@ -1768,7 +1739,7 @@ namespace RNAssistant.Runtime
             private ModelRequestPreparation PrepareRequest(SkillRequestSurface surface)
             {
                 return new ModelRequestPreparation(_settings, surface.Tools,
-                    new ModelProtocolCallContext(surface.Tools.Where(tool => tool.Policy.IndependentLocalRead || tool.Policy.IndependentAgentMessage).Select(tool => tool.Id),
+                    new ModelProtocolCallContext(surface.Tools.Where(tool => tool.Policy.AllowsSequentialBatch).Select(tool => tool.Id),
                         reflectionEnabled: _session.LastRun.KernelState.Limits.MaxConsecutiveReflections > 0),
                     RuntimeContextPrompt.ProjectJsonSchemaMessages);
             }
@@ -2174,7 +2145,11 @@ namespace RNAssistant.Runtime
                         patchTarget: patchPreview == null ? null : new PatchTargetPlan { Source = source.Resource, SourceHash = source.ContentSha256, Preview = patchPreview }));
                 }
                 catch (Exception error) when (error is IOException || error is ResourceRequestException || error is TextPatternException)
-                { return Task.FromResult(new ToolPreparationResult(Failure(error), recovery: Recovery(context, error), patchDiagnostic: PatchDiagnostic.From(error))); }
+                {
+                    var recovery = Recovery(context, error);
+                    return Task.FromResult(new ToolPreparationResult(Failure(error), recovery: recovery, patchDiagnostic: PatchDiagnostic.From(error),
+                        resourceEvidence: RefreshSource(recovery, token)));
+                }
             }
 
             private bool CanUse(ResourceEvidence source, ToolHandlerContext context)
@@ -2237,8 +2212,9 @@ namespace RNAssistant.Runtime
                 catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is ResourceRequestException || error is TextPatternException)
                 {
                     var unknown = context.MayHaveDispatched || error is WorkspaceFileException file && file.Code == "effect_unknown";
+                    var recovery = unknown ? null : Recovery(context, error);
                     return Return(unknown ? ToolResult.Unknown(error.Message) : Failure(error), unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None,
-                        recovery: unknown ? null : Recovery(context, error));
+                        RefreshSource(recovery, token).FirstOrDefault(), recovery: recovery);
                 }
             }
             private static string Value(ToolHandlerContext context, string name)
@@ -2263,6 +2239,18 @@ namespace RNAssistant.Runtime
                     catch (Exception lookup) when (lookup is IOException || lookup is UnauthorizedAccessException) { }
                 }
                 return new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan);
+            }
+            private IReadOnlyList<ResourceEvidence> RefreshSource(ToolRecoveryContract recovery, CancellationToken token)
+            {
+                if (recovery?.RetryPolicy != ToolRetryPolicy.RefreshRequired || recovery.ResourceIdentity == null)
+                    return new ResourceEvidence[0];
+                try
+                {
+                    var read = new WorkspaceFileResourceProvider(_files, _workspace).ReadModelText(recovery.SemanticTarget, 16384, token);
+                    return read.Evidence.Where(e => recovery.ResourceIdentity.Equals(e.Resource.Identity) && e.View == recovery.View).ToArray();
+                }
+                catch (Exception error) when (error is IOException || error is ResourceRequestException || error is UnauthorizedAccessException)
+                { return new ResourceEvidence[0]; }
             }
             private static ToolResult Failure(Exception error)
             {

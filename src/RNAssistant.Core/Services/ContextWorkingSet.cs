@@ -54,6 +54,7 @@ namespace RNAssistant.Core.Services
                 var recovery = message.ExecutionProgress?.Recovery;
                 if (message.RunId == runId && recovery != null && recovery.RetryPolicy != ToolRetryPolicy.None &&
                     message.ExecutionProgress.Outcome == ToolExecutionOutcome.Error &&
+                    !(recovery.RetryPolicy == ToolRetryPolicy.RefreshRequired && recovery.IsSatisfiedBy(message.ResourceEvidence, null)) &&
                     !laterSuccesses.Any(later => recovery.IsSatisfiedBy(later.ResourceEvidence, later.ResourceEffect))) mandatory = true;
                 // Keep the latest receipt for an exact call, including resumed runs.
                 if (!selected.Add(wire.ToolCallId)) continue;

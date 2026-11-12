@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
@@ -23,6 +25,46 @@ namespace RNAssistant.Core.ModelProtocol
     // authority. Old/unknown versions require explicit reset; no v7 inference.
     public static class ConversationResponseHistoryReader
     {
+        // Durable occurrences store one call each. Both hosts reconstruct the
+        // original decision before handing its pending suffix to the kernel.
+        public static void AppendAcceptedResponse(List<AgentMessage> history, ChatMessage occurrence,
+            AgentResponse response, ref ChatMessage previousOccurrence)
+        {
+            var origin = occurrence.AcceptedCallOrigin;
+            var previous = history.LastOrDefault();
+            if (origin != null && string.IsNullOrWhiteSpace(occurrence.RunId))
+                throw InvalidBatch("Accepted call has no run ID.");
+            if (origin != null && previous?.Kind == AgentMessageKind.Assistant && previous.Action == ConversationResponse.ExecuteAction)
+            {
+                var prior = previousOccurrence?.AcceptedCallOrigin;
+                if (prior == null || origin.CallIndex != prior.CallIndex + 1 || origin.CallCount != prior.CallCount ||
+                    origin.StepId != prior.StepId || origin.ModelAttemptId != prior.ModelAttemptId ||
+                    occurrence.RunId != previousOccurrence.RunId || previous.Reason != response.Reason || response.Message.Length != 0)
+                    throw InvalidBatch("Stored batch origin or response metadata disagree.");
+                history[history.Count - 1] = AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,
+                    previous.Reason, previous.Text, calls: previous.ToolCalls.Concat(response.ToolCalls).ToArray(),
+                    sourceModelAttemptId: origin.ModelAttemptId));
+            }
+            else
+            {
+                RequireCompleteBatch(previousOccurrence);
+                if (origin != null && origin.CallIndex != 0)
+                    throw InvalidBatch("Stored batch has no first accepted call.");
+                history.Add(AgentMessage.Assistant(response));
+            }
+            previousOccurrence = origin == null ? null : occurrence;
+        }
+
+        public static void RequireCompleteBatch(ChatMessage lastOccurrence)
+        {
+            var origin = lastOccurrence?.AcceptedCallOrigin;
+            if (origin != null && origin.CallIndex + 1 != origin.CallCount)
+                throw InvalidBatch("Stored batch is missing accepted calls.");
+        }
+
+        private static InvalidOperationException InvalidBatch(string reason)
+        { return new InvalidOperationException(reason + " Создайте новый чат; сохранённая история не изменяется."); }
+
         public static ConversationHistoryReadResult Read(ChatMessage message)
         {
             if (message == null || message.Role != "assistant" || message.Activity != null ||

@@ -39,6 +39,16 @@ Workspace owner не переиспользует отсутствующий п�
 
 ## Patch: old/new и упорядоченные якоря
 
+При `RefreshRequired` после отказа без эффекта Office/Workspace owner пытается сам
+прочитать текущую цель один раз, с лимитом 16 384 символа. Error остаётся Error;
+полученный исходник идёт отдельным наблюдением через CAS/context compiler, включая
+retention после compaction. Только реально доставленные bytes дают authority
+следующей правке; бюджетное исключение и частичное чтение не разрешают полный
+overwrite. Ошибка чтения сохраняет исходный отказ и возможность явного чтения.
+Счётчик неизменных mutable reads сбрасывается только для нужной цели; schema и
+immutable reads, unknown-effect/replay guards сохраняются. Запись автоматически
+не повторяется, новый эффект требует нового предложения модели и обычных guards.
+
 ```json
 {"targets":[{"target":"VBA module: Module1","edits":[{"old":"total + i","new":"total + i * 2","anchors_before":["Public Sub ProcessData()","    For i = 1 To 10"],"anchors_after":["    Next i","End Sub"]}]}]}
 ```
@@ -216,6 +226,9 @@ Read-back подтверждает применение текста, а не п
 | `owner_error` | `fix_patch`, `read_target` по owner recovery или `inspect_owner_error` |
 | `owner_error` при статусе `Unknown` | `verify_effect` |
 
+Если runtime приложил текущий исходник к отказу подготовки, `nextAction` —
+`use_current_source`; доставка тела и достаточность coverage проверяются отдельно.
+
 `nextAction` — подсказка, не разрешение на повторный dispatch. Unknown сохраняется
 в существующем runtime outcome/recovery; перед следующей записью требуется
 reconciliation, автоматического replay пакета нет. Ошибка после dispatch не
@@ -337,6 +350,7 @@ backslash-последовательности допустимы. Для мно
 | Plan | write/patch/delete/restore; target `plan: <уникальное название>`, numbered history и существующий journal |
 | Prompt template | write/patch/replace по обнаруженному `prompt: <key>`; defaults неизменяемы, текущий field и publication проверяются до записи |
 | Custom skill reference | write/patch/replace/delete; `skill reference: <id> / references/<name>.md`, package revision guard; built-ins неизменяемы, UTF-8 BOM/CRLF сохраняются |
+| Custom skill body | patch по `skill: <id>` через существующий `skills.upsert` owner в update-only режиме; metadata/references сохраняются, полный package guard; built-ins неизменяемы |
 
 Неподдержанная операция возвращает явный отказ до dispatch. Generic tools не
 эмулируют перенос комбинацией copy+delete. Task list, tool/skill package

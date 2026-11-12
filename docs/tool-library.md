@@ -171,9 +171,10 @@ Incompatible busy-run inputs remain queued for a compatible next run; wait repor
 InputPending rather than including them under broader permissions.
 
 Independent `agents.send` calls may share one ordered execute batch (up to 32 calls),
-with no model round trip between recipients. Only sends may join that batch; reads,
-wait, spawn and control/group mutations cannot. Local `IndependentAgentMessage`
-policy authorizes batching without changing write/evidence classification. Each call
+with no model round trip between recipients. Locally admitted reads, skill selections
+and managed mutations may join it; waits and opaque/code-executing actions cannot.
+Local `AllowsSequentialBatch` policy authorizes the ordered batch without changing
+write/evidence classification. Error or Unknown stops its unstarted tail. Each call
 keeps its own durable identity and receipt; queued proves intake, not peer completion.
 Partial delivery is possible; completed/unknown sends are never automatically replayed.
 

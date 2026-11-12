@@ -67,9 +67,10 @@ namespace RNAssistant.Core.ModelProtocol
             "This restriction applies to the call object, not its arguments: keep fields required by the tool schema, for example core.tools.read uses arguments.id. ";
 
         public const string BatchGuidance =
-            "Batch only independent local reads together, or independent agents.send calls together. " +
-            "Calls execute in order with a separate result each; never mix sends with reads or other tools. " +
-            "Return other calls alone and wait for their results. ";
+            "Independent reads, skill selections, agent messages and managed edits may share a batch when offered by the schema. " +
+            "Calls execute sequentially with separate guards, confirmations and results; a failure or unknown effect stops the remainder. " +
+            "If a call needs another call's result or newly loaded instructions/tools, wait for the next request. " +
+            "Opaque actions, code execution and waits must be called alone. ";
 
         public const string ExecuteGuidance =
             "Every new execute decision must contain a nonempty tool_calls array inside its JSON in content. " +

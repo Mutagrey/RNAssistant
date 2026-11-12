@@ -55,6 +55,14 @@ namespace RNAssistant.Core.Agent
                 !string.Equals(pending.PendingId, pendingId, StringComparison.Ordinal) ||
                 !continuation.AcceptedCallIds.Contains(pending.Call.Id, StringComparer.OrdinalIgnoreCase))
                 throw new InvalidOperationException("A complete matching pending continuation is required.");
+            var currentIds = new HashSet<string>(continuation.AcceptedCallIds, StringComparer.OrdinalIgnoreCase);
+            var currentHistory = continuation.AcceptedMessages.Where(message => message.Kind == AgentMessageKind.ToolResult
+                ? currentIds.Contains(message.ToolCallId)
+                : message.ToolCalls.Count == 0 || message.ToolCalls.Any(call => currentIds.Contains(call.Id)));
+            var restored = AgentRunContinuation.Restore(new AgentRunState(continuation.Summary, continuation.Limits),
+                continuation.Revision, currentHistory);
+            if (!currentIds.SetEquals(restored.AcceptedCallIds))
+                throw new InvalidOperationException("Saved confirmation history differs from this run's accepted calls.");
             var state = new State(runId, continuation);
             // Claim the continuation cursor before either executing or consuming
             // it. A duplicate resume cannot reach the tool runtime.
@@ -63,6 +71,7 @@ namespace RNAssistant.Core.Agent
             {
                 await RecordNotDispatchedAsync(state, pending.Call, pending.Policy, pending.StepId,
                     "User rejected the pending confirmation.", cancelled: true).ConfigureAwait(false);
+                await CloseBatchAsync(state, pending.RemainingCalls, pending.StepId, "Confirmation rejected before dispatch.", true).ConfigureAwait(false);
                 return await FinishAsync(state, RunLifecycle.Cancelled, "confirmation_denied",
                     "Pending tool call was rejected without dispatch.").ConfigureAwait(false);
             }
@@ -70,10 +79,21 @@ namespace RNAssistant.Core.Agent
             {
                 await RecordNotDispatchedAsync(state, pending.Call, pending.Policy, pending.StepId,
                     "Pending approval superseded by a new user message.", cancelled: true).ConfigureAwait(false);
+                await CloseBatchAsync(state, pending.RemainingCalls, pending.StepId, "Batch superseded by a new user message.").ConfigureAwait(false);
                 return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
             }
+            state.BatchTail = pending.RemainingCalls;
             var execution = await ExecuteOneAsync(state, pending.Call, pending.Policy, pending.StepId,
                 true, pending.ChargedToolSteps, pending.PreparedStateJson, cancellationToken).ConfigureAwait(false);
+            state.BatchTail = new PendingBatchCall[0];
+            if (execution?.Lifecycle != RunLifecycle.AwaitingConfirmation)
+            {
+                if (execution != null || state.LastOutcome != ToolExecutionOutcome.Ok)
+                    await CloseBatchAsync(state, pending.RemainingCalls, pending.StepId, "Earlier call prevented dispatch.",
+                        execution?.Lifecycle == RunLifecycle.Cancelled).ConfigureAwait(false);
+                else
+                    execution = await ExecuteCallsAsync(state, pending.RemainingCalls, pending.StepId, cancellationToken).ConfigureAwait(false);
+            }
             if (execution != null)
                 return await FinishAsync(state, execution.Lifecycle, execution.Reason, execution.AssistantMessage).ConfigureAwait(false);
             return await LoopAsync(state, cancellationToken).ConfigureAwait(false);
@@ -408,27 +428,10 @@ namespace RNAssistant.Core.Agent
                 }
                 if (response.Action == ConversationResponse.ReflectionAction) continue;
 
-                for (var index = 0; index < response.ToolCalls.Count; index++)
-                {
-                    if (_input != null && (_input.HasPendingInput || (_input as IRunPauseChannel)?.PauseId != null))
-                    {
-                        for (var rest = index; rest < response.ToolCalls.Count; rest++)
-                            await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
-                                "Incoming control or message prevented dispatch.").ConfigureAwait(false);
-                        break;
-                    }
-                    var result = await ExecuteOneAsync(state, response.ToolCalls[index], policies[index], stepId,
-                        false, 0, null, cancellationToken).ConfigureAwait(false);
-                    if (result != null)
-                    {
-                        // Keep accepted exchanges closed when cancellation or a
-                        // technical failure prevents the rest of an accepted batch.
-                        for (var rest = index + 1; rest < response.ToolCalls.Count; rest++)
-                            await RecordNotDispatchedAsync(state, response.ToolCalls[rest], policies[rest], stepId,
-                                "Run ended before dispatch.", cancelled: result.Lifecycle == RunLifecycle.Cancelled).ConfigureAwait(false);
-                        return await FinishAsync(state, result.Lifecycle, result.Reason, result.AssistantMessage).ConfigureAwait(false);
-                    }
-                }
+                var result = await ExecuteCallsAsync(state, response.ToolCalls.Select((call, index) =>
+                    new PendingBatchCall(call.Id, policies[index])).ToArray(), stepId, cancellationToken).ConfigureAwait(false);
+                if (result != null)
+                    return await FinishAsync(state, result.Lifecycle, result.Reason, result.AssistantMessage).ConfigureAwait(false);
                 if (state.Progress.RecoveryIgnored)
                     return await FinishAsync(state, RunLifecycle.Failed, "repeated_tool_no_progress",
                         "Three consecutive model responses repeated only rejected calls. No repeated operation was dispatched; change the approach or reconcile the earlier result.").ConfigureAwait(false);
@@ -508,10 +511,52 @@ namespace RNAssistant.Core.Agent
                     throw new InvalidOperationException("Exact execution policy is unavailable: " + call.Name);
                 policies.Add(policy);
             }
-            if (policies.Count > 1 && !policies.All(policy => policy.IndependentLocalRead) &&
-                !policies.All(policy => policy.Policy?.IndependentAgentMessage == true))
+            if (policies.Count > 1 && !policies.All(policy => policy.AllowsSequentialBatch))
                 throw new InvalidOperationException(ModelProtocolWire.BatchGuidance);
             return policies.ToArray();
+        }
+
+        private async Task CloseBatchAsync(State state, IEnumerable<PendingBatchCall> calls, string stepId,
+            string message, bool cancelled = false)
+        {
+            foreach (var item in calls)
+                await RecordNotDispatchedAsync(state, AcceptedBatchCall(state, item), item.Policy, stepId, message, cancelled: cancelled).ConfigureAwait(false);
+        }
+
+        private static ToolCall AcceptedBatchCall(State state, PendingBatchCall item)
+        {
+            var call = state.Messages.Last(message => message.ToolCalls.Count > 0).ToolCalls.Single(value => value.Id == item.CallId);
+            if (call.Name != item.Policy.ToolId) throw new InvalidOperationException("Pending policy differs from the accepted call.");
+            return call;
+        }
+
+        private async Task<RunSummary> ExecuteCallsAsync(State state, IReadOnlyList<PendingBatchCall> calls,
+            string stepId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                for (var index = 0; index < calls.Count; index++)
+                {
+                    if (_input != null && (_input.HasPendingInput || (_input as IRunPauseChannel)?.PauseId != null))
+                    {
+                        await CloseBatchAsync(state, calls.Skip(index), stepId, "Incoming control or message prevented dispatch.").ConfigureAwait(false);
+                        return null;
+                    }
+                    state.BatchTail = calls.Skip(index + 1).ToArray();
+                    var item = calls[index];
+                    var result = await ExecuteOneAsync(state, AcceptedBatchCall(state, item), item.Policy, stepId,
+                        false, 0, null, cancellationToken).ConfigureAwait(false);
+                    if (result?.Lifecycle == RunLifecycle.AwaitingConfirmation) return result;
+                    if (result != null || state.LastOutcome != ToolExecutionOutcome.Ok)
+                    {
+                        await CloseBatchAsync(state, state.BatchTail, stepId, "Earlier call prevented dispatch.",
+                            result?.Lifecycle == RunLifecycle.Cancelled).ConfigureAwait(false);
+                        return result;
+                    }
+                }
+                return null;
+            }
+            finally { state.BatchTail = new PendingBatchCall[0]; }
         }
 
         private async Task<RunSummary> ExecuteOneAsync(State state, ToolCall call, ToolPolicySnapshot policy,
@@ -613,6 +658,7 @@ namespace RNAssistant.Core.Agent
             if (record.ToolStepsConsumed > remaining) stop = RunLifecycle.Failed;
             state.ToolSteps = (int)Math.Min(int.MaxValue, (long)state.ToolSteps + Math.Max(0, (long)record.ToolStepsConsumed - chargedSteps));
             state.Counts = state.Counts.Add(record);
+            state.LastOutcome = record.Outcome;
             if (record.Outcome == ToolExecutionOutcome.Waiting)
             {
                 state.PendingWait = new PendingToolWait(context, record.WaitCondition);
@@ -621,7 +667,7 @@ namespace RNAssistant.Core.Agent
                 return state.Summary(RunLifecycle.Waiting, "waiting_agents", record.Message);
             }
             if (record.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
-                state.Pending = new PendingConfirmation(record);
+                state.Pending = new PendingConfirmation(record).WithRemainingCalls(state.BatchTail);
             else
                 state.Messages.Add(AgentMessage.ToolResult(record));
             if (record.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
@@ -663,6 +709,7 @@ namespace RNAssistant.Core.Agent
                 result: code == null ? null : RNAssistant.Core.Tools.Contracts.ToolResult.Error(message,
                     Newtonsoft.Json.JsonConvert.SerializeObject(new { code, dispatched = false })), wasCancelled: cancelled);
             state.Messages.Add(AgentMessage.ToolResult(record));
+            state.LastOutcome = ToolExecutionOutcome.NotDispatched;
             state.ConsecutiveReflections = 0;
             state.ReflectionFeedbackIssued = false;
             await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ToolCompleted, state.Summary(),
@@ -716,6 +763,8 @@ namespace RNAssistant.Core.Agent
             internal int ToolSteps;
             internal long Revision;
             internal PendingConfirmation Pending;
+            internal IReadOnlyList<PendingBatchCall> BatchTail = new PendingBatchCall[0];
+            internal ToolExecutionOutcome LastOutcome;
             internal PendingToolWait PendingWait;
             internal string PauseId;
             internal int ConsecutiveReflections;

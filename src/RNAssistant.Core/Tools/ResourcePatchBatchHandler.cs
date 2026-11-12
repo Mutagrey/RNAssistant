@@ -271,7 +271,7 @@ namespace RNAssistant.Core.Tools
                 try
                 {
                     next = await TargetHandler.PrepareAsync(TargetContext(context, sections[i], i), token).ConfigureAwait(false);
-                    if (next.Result.Status != ToolResultStatus.Ok) return RejectPreparation(result, i, next.PatchDiagnostic ?? PatchDiagnostic.From(next.Result, next.Recovery), next.Recovery);
+                    if (next.Result.Status != ToolResultStatus.Ok) return RejectPreparation(result, i, next.PatchDiagnostic ?? PatchDiagnostic.From(next.Result, next.Recovery), next.Recovery, next.ResourceEvidence);
                     if (next.PatchTarget?.Source?.IsExact != true) throw new InvalidOperationException("Owner did not pin a patch source.");
                     if (!identities.Add((next.PatchTarget.EffectIdentity ?? next.PatchTarget.Source.Identity).Uri))
                         return RejectPreparation(result, i, PatchDiagnostic.Create("invalid_edit", "Two target sections resolve to the same resource; combine their edits."));
@@ -294,16 +294,18 @@ namespace RNAssistant.Core.Tools
                 JsonConvert.SerializeObject(new PatchBatchResult { Phase = "preparation", Diagnostic = diagnostic })),
                 recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
         }
-        private static ToolPreparationResult RejectPreparation(PatchBatchResult result, int index, PatchDiagnostic diagnostic, ToolRecoveryContract recovery = null)
+        private static ToolPreparationResult RejectPreparation(PatchBatchResult result, int index, PatchDiagnostic diagnostic, ToolRecoveryContract recovery = null,
+            IReadOnlyList<ResourceEvidence> resourceEvidence = null)
         {
             foreach (var target in result.Targets) { target.Status = ResourceTargetStatus.NotStarted; target.Preview = null; }
             diagnostic = diagnostic?.Bounded();
             if (diagnostic != null) diagnostic.TargetIndex = index + 1;
+            if (diagnostic != null && resourceEvidence?.Count > 0) diagnostic.NextAction = "use_current_source";
             result.Targets[index].Status = ResourceTargetStatus.Rejected; result.Targets[index].Diagnostic = diagnostic;
             return new ToolPreparationResult(ToolResult.Error(
                 "Patch rejected. No target in this call changed. " + (diagnostic?.Message ?? "Follow the rejected target diagnostic."),
                 JsonConvert.SerializeObject(result)),
-                recovery: recovery ?? new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
+                recovery: recovery ?? new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan), resourceEvidence: resourceEvidence);
         }
         public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
         {
@@ -329,8 +331,8 @@ namespace RNAssistant.Core.Tools
                             current.PatchTarget.SourceGuard.AuthorityGeneration == expected.SourceGuard.AuthorityGeneration;
                     if (current.Result.Status != ToolResultStatus.Ok || !sameSource || current.PatchTarget.SourceHash != expected.SourceHash)
                     {
-                        var rejected = RejectPreparation(result, i, current.PatchDiagnostic ?? PatchDiagnostic.Create("source_changed", "Prepared target is no longer current; read this target and rebuild the package."), current.Recovery);
-                        return new ToolHandlerResult(rejected.Result, ToolEffectEvidence.None, recovery: rejected.Recovery);
+                        var rejected = RejectPreparation(result, i, current.PatchDiagnostic ?? PatchDiagnostic.Create("source_changed", "Prepared target is no longer current; read this target and rebuild the package."), current.Recovery, current.ResourceEvidence);
+                        return new ToolHandlerResult(rejected.Result, ToolEffectEvidence.None, recovery: rejected.Recovery, resourceEvidence: rejected.ResourceEvidence);
                     }
                 }
                 catch (Exception ex)

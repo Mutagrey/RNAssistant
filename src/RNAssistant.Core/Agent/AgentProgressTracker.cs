@@ -137,15 +137,24 @@ namespace RNAssistant.Core.Agent
                 // A new model-proposed invocation after normal return is allowed
                 // by policy, still bounded by ordinary no-progress/run limits.
             }
+            var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
             if (progress.Outcome == ToolExecutionOutcome.Error)
             {
                 Failure previous;
                 if (!_failures.TryGetValue(key, out previous)) _failures.Add(key, previous = new Failure());
                 previous.Attempts++; previous.Recovery = progress.Recovery; previous.Message = message;
                 previous.AdmissionRevision = progress.AdmissionRevision;
-                return;
+                if (progress.Recovery?.RetryPolicy == ToolRetryPolicy.RefreshRequired &&
+                    progress.Recovery.ResourceIdentity != null)
+                    foreach (var read in _mutableReadTargets.Where(read => read.Value.Contains(progress.Recovery.ResourceIdentity)))
+                    {
+                        _unchanged.Remove(read.Key);
+                        _seenResults.Remove(read.Key);
+                    }
+                if (progress.Recovery?.RetryPolicy == ToolRetryPolicy.RefreshRequired && progress.Recovery.IsSatisfiedBy(observations, null))
+                    _failures.Remove(key);
+                else return;
             }
-            var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
             if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
             {
                 var mutable = observations.Where(observation => !observation.Immutable)

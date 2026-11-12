@@ -117,10 +117,14 @@ namespace RNAssistant.Office.Tools
                         if (result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
                         {
                             if (filePatch && (result.PatchDiagnostic?.Code == "source_changed" || result.PatchDiagnostic?.Code == "observation_required"))
-                                return new ToolPreparationResult(result.Result, recovery: new ToolRecoveryContract(
+                            {
+                                var recovery = new ToolRecoveryContract(
                                     ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
                                     selected.Reference.Identity, ResourceRepresentations.Text, target,
-                                    readScope: ToolRecoveryReadScope.RelevantLines), patchDiagnostic: result.PatchDiagnostic);
+                                    readScope: ToolRecoveryReadScope.RelevantLines);
+                                return new ToolPreparationResult(result.Result, recovery: recovery,
+                                    patchDiagnostic: result.PatchDiagnostic, resourceEvidence: RefreshSource(recovery, token));
+                            }
                             return result;
                         }
                         prepared.OwnerState = result.PreparedStateJson;
@@ -138,7 +142,11 @@ namespace RNAssistant.Office.Tools
                 }
             }
             catch (Exception ex) when (ex is ResourceRequestException || ex is InvalidDataException || ex is TextPatternException)
-            { return new ToolPreparationResult(Error(ex), recovery: Recovery(context, ex), patchDiagnostic: PatchDiagnostic.From(ex)); }
+            {
+                var recovery = Recovery(context, ex);
+                return new ToolPreparationResult(Error(ex), recovery: recovery, patchDiagnostic: PatchDiagnostic.From(ex),
+                    resourceEvidence: RefreshSource(recovery, token));
+            }
         }
 
         public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
@@ -196,9 +204,12 @@ namespace RNAssistant.Office.Tools
                 }
             }
             catch (Exception ex) when (ex is ResourceRequestException || ex is InvalidDataException || ex is TextPatternException)
-            { return new ToolHandlerResult(context.MayHaveDispatched ? Result.Unknown(ex.Message) : Error(ex),
-                context.MayHaveDispatched ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None,
-                recovery: context.MayHaveDispatched ? null : Recovery(context, ex)); }
+            {
+                var recovery = context.MayHaveDispatched ? null : Recovery(context, ex);
+                return new ToolHandlerResult(context.MayHaveDispatched ? Result.Unknown(ex.Message) : Error(ex),
+                    context.MayHaveDispatched ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None,
+                    recovery: recovery, resourceEvidence: RefreshSource(recovery, token));
+            }
         }
 
         private PlanResourceToolHandler PlanOwner()
@@ -396,6 +407,15 @@ namespace RNAssistant.Office.Tools
                 prepared.Operation = PromptToolCatalog.SaveToolId;
                 args["promptKey"] = ResourceUri.Parse(selected.Reference.Uri).Segments[1];
             }
+            else if (selected?.Descriptor.Kind == "skill")
+            {
+                if (_skills == null || !_skills.CanUse) throw new InvalidDataException("Skill authoring is unavailable.");
+                if (_id != ResourceMutationToolCatalog.Patch)
+                    throw new InvalidDataException("Use core.patch to edit an existing custom skill body, or skills.upsert to change its metadata.");
+                prepared.Operation = SkillAuthoringCatalog.UpsertToolId;
+                args["id"] = ResourceUri.Parse(selected.Reference.Uri).Segments[1];
+                args["mode"] = "updateOnly";
+            }
             else if (selected?.Descriptor.Kind == "skill-reference" || selected == null && target.StartsWith("skill reference: ", StringComparison.Ordinal))
             {
                 if (_skills == null || !_skills.CanUse) throw new InvalidDataException("Skill authoring is unavailable.");
@@ -470,6 +490,7 @@ namespace RNAssistant.Office.Tools
             if (content != null)
             {
                 if (PromptToolCatalog.Owns(prepared.Operation)) args["value"] = content;
+                else if (prepared.Operation == SkillAuthoringCatalog.UpsertToolId) args["bodyMarkdown"] = content;
                 else if (prepared.Operation == SkillAuthoringCatalog.ReferenceUpsertToolId) args["referenceMarkdown"] = content;
                 else { args["content"] = content; args["code"] = content; args["markdown"] = content; }
             }
@@ -523,12 +544,29 @@ namespace RNAssistant.Office.Tools
                     var view = current.Representations.Contains(ResourceRepresentations.Source) ? ResourceRepresentations.Source : ResourceRepresentations.Text;
                     return new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
                         current.Reference.Identity, view, ResourceGatewayService.IntentTarget(current),
-                        readScope: _id == ResourceMutationToolCatalog.Write || view == ResourceRepresentations.Source
+                        readScope: _id == ResourceMutationToolCatalog.Write
                             ? ToolRecoveryReadScope.Whole : ToolRecoveryReadScope.RelevantLines);
                 }
                 catch (ResourceRequestException) { }
             }
             return new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan);
+        }
+        private IReadOnlyList<ResourceEvidence> RefreshSource(ToolRecoveryContract recovery, CancellationToken token)
+        {
+            if (recovery?.RetryPolicy != ToolRetryPolicy.RefreshRequired || recovery.ResourceIdentity == null)
+                return new ResourceEvidence[0];
+            try
+            {
+                using (DocumentAccessGate.BeginOperation())
+                {
+                    var current = ResolveTarget(recovery.SemanticTarget);
+                    if (!current.Reference.Identity.Equals(recovery.ResourceIdentity)) return new ResourceEvidence[0];
+                    var read = _gateway.ReadAdaptiveText(_session, current.Reference, current.Descriptor, recovery.View, 16384, token).Result;
+                    return _gateway.Evidence(_session, read).Where(e => recovery.ResourceIdentity.Equals(e.Resource.Identity) && e.View == recovery.View).ToArray();
+                }
+            }
+            catch (Exception error) when (error is ResourceRequestException || error is IOException || error is InvalidOperationException)
+            { return new ResourceEvidence[0]; } // Keep the original rejection; never guess a replacement target or retry a write.
         }
         private static Result Error(Exception error) { return Result.Error(error.Message, JsonConvert.SerializeObject(new ResourceMutationError { Code = error is ResourceRequestException resource ? resource.ErrorCode : error is TextPatternException text ? text.ErrorCode : "resource_mutation_conflict" })); }
         private sealed class ResourceMutationError { [JsonProperty("code")] public string Code { get; set; } }

@@ -35,10 +35,10 @@ namespace RNAssistant.Office.Tools
 
             if (sourceHash != null)
             {
-                string text, readError; SkillReferenceMetadata metadata;
-                if (current == null || !_skillStore.TryReadReference(current, referencePath, out text, out metadata, out readError) ||
+                string text = current?.BodyMarkdown, readError; SkillReferenceMetadata metadata;
+                if (current == null || referencePath != null && !_skillStore.TryReadReference(current, referencePath, out text, out metadata, out readError) ||
                     TextPatternEngine.Sha256(text) != sourceHash)
-                    return new SkillAuthoringPreparation(SkillAuthoringOutcome.Error("Published reference differs from the package. Refresh and read the target before editing.", null, "source_changed", false));
+                    return new SkillAuthoringPreparation(SkillAuthoringOutcome.Error("Published source differs from the package. Refresh and read the target before editing.", null, "source_changed", false));
             }
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
             var beforeRevision = StateRevision(current);

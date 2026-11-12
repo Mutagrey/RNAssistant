@@ -158,7 +158,7 @@ namespace RNAssistant.Core.Tools
                             ? ToolResult.Error(preparation.Result.Message, preparation.Result.DataJson, preparation.Result.Resources)
                             : preparation.Result;
                         return Record(context, ToolExecutionOutcome.Error, failed, false, ToolEffectEvidence.None,
-                            recovery: preparation.Recovery);
+                            recovery: preparation.Recovery, resourceEvidence: preparation.ResourceEvidence);
                     }
                 }
                 catch (OperationCanceledException)
@@ -304,7 +304,7 @@ namespace RNAssistant.Core.Tools
             return new ToolPolicySnapshot(captured.ToolId, captured.Revision,
                 new ToolPolicy(policy.Effect, policy.Verification, false,
                     policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode, policy.EvidenceEligibility,
-                    policy.IndependentAgentMessage));
+                    policy.IndependentAgentMessage, policy.AllowSequentialBatch));
         }
 
         private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record, string preparedStateJson)

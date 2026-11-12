@@ -7,7 +7,12 @@
   function accept(values) {
     (values || []).forEach(function (value) {
       var id = key(value), prior = scopes.get(id);
-      if (!value.error && prior && value.generation < prior.generation) return;
+      if (prior && value.generation < prior.generation && (!value.error || value.generation > 0)) return;
+      // A failed catalog read is not an empty authoritative catalog. Keep the
+      // last successful membership until a current read replaces it.
+      // Error DTOs without a captured generation use zero; show their error,
+      // but never let them lower the watermark or move chats out of groups.
+      if (value.error && prior) value = Object.assign({}, value, { groups: prior.groups, generation: Math.max(prior.generation, value.generation || 0) });
       var changed = !prior || JSON.stringify([prior.groups, prior.error]) !== JSON.stringify([value.groups, value.error]);
       scopes.delete(id); scopes.set(id, value);
       if (changed) version++;

@@ -55,6 +55,24 @@ local actions) проходят; Windows compilation/WebView2 delivery откр�
 Пользователь отложил дальнейший diff и P4b; далее P6 browser automation, начиная
 с переходов на разрешённые сайты. Предыдущий P6d закоммичен `de343788`.
 
+## Замечания от 06.11 — исправления, 2026-11-11
+
+Product `16.14.0-dev`: независимые reads/skill selections/managed mutations идут
+одним последовательным пакетом с отдельными guards и confirmations; pending tail
+хранит IDs/policies, не копии аргументов. Office/Workspace используют общий reader
+для восстановления пакета. Отказ без эффекта может приложить bounded current source
+через прежний CAS/compiler; источник переживает compaction, repeated-read guard
+освобождается только для нужной mutable цели, записи автоматически не повторяются.
+`core.patch` редактирует body custom skill через существующего owner. UI сохраняет
+группы при ошибке refresh и монотонную generation; общие меню не дублируются.
+
+Проверены в текущем дереве 70 kernel, 7 protocol-context, 12 universal-mutation cases,
+184 protocol-v8 cases, один agent VBA batch и 13 Node guards. Ранее в отдельной копии
+проверены scripted Office и оба Workspace transport/history сценария; production Chrome
+group fixture, wide/narrow/125% и меню просмотрены. Это не Windows/Office/WebView2 qualification и не пользовательское
+визуальное принятие. HTTP 500, невоспроизведённый skill-target error и общий storage
+cutover остаются открытыми — [разбор всех замечаний](RISK_REGISTER.md#замечания-от-0611--повторная-проверка-2026-11-11).
+
 ## External Browser P6d — In Review, 2026-11-11
 
 Ручной ввод блокирует page mutations и запрашивает existing exact Run pause;

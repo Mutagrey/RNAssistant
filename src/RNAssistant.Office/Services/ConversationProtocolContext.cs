@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
                 .Where(tool => tool != null &&
                     !string.IsNullOrWhiteSpace(tool.Id) &&
                     tool.Policy != null &&
-                    (tool.Policy.IndependentLocalRead || tool.Policy.IndependentAgentMessage))
+                    tool.Policy.AllowsSequentialBatch)
                 .Select(tool => tool.Id).Distinct(StringComparer.Ordinal).ToArray();
         }
 
@@ -147,6 +147,7 @@ namespace RNAssistant.Office.Services
                 (ConversationInputMessage.IsUserInput(message) || message.AgentCommunication?.Sender != null) && message.RunId == state.Summary.TurnId);
             if (userIndex < 0) throw HistoryFailure("Continuation has no original input turn.");
             var history = new List<AgentMessage> { AgentMessage.User(ConversationInputMessage.ModelText(session.Messages[userIndex])) };
+            ChatMessage previousAccepted = null;
             for (var index = userIndex + 1; index < session.Messages.Count; index++)
             {
                 var message = session.Messages[index];
@@ -156,20 +157,26 @@ namespace RNAssistant.Office.Services
                     message = RNAssistant.Core.Storage.AcceptedCallPayloadService.Hydrate(message, payloads);
                     var parsed = ConversationResponseHistoryReader.Read(message);
                     if (!parsed.Success) throw HistoryFailure("Cannot reconstruct accepted calls: " + parsed.Error);
-                    history.Add(AgentMessage.Assistant(parsed.Response));
+                    ConversationResponseHistoryReader.AppendAcceptedResponse(history, message, parsed.Response, ref previousAccepted);
                 }
-                else if (ConversationInputMessage.IsUserInput(message) || message.AgentCommunication?.Sender != null)
-                    history.Add(AgentMessage.User(ConversationInputMessage.ModelText(message)));
-                else if (message.ProtocolMessage && !string.IsNullOrWhiteSpace(message.ToolCallId))
+                else
                 {
-                    ToolResultWireReadResult wire; string error;
-                    if (!ToolResultHistoryReader.TryRead(message, out wire, out error)) throw HistoryFailure(error);
-                    if (message.ExecutionProgress == null)
-                        throw HistoryFailure("Continuation lacks typed terminal progress; the previous effects cannot be safely replayed.");
-                    history.Add(AgentMessage.AcceptedToolResult(message.ToolCallId, wire.Result.Message, message.Content,
-                        message.ExecutionProgress, message.ResourceEvidence, message.ResourceEffect));
+                    ConversationResponseHistoryReader.RequireCompleteBatch(previousAccepted);
+                    previousAccepted = null;
+                    if (ConversationInputMessage.IsUserInput(message) || message.AgentCommunication?.Sender != null)
+                        history.Add(AgentMessage.User(ConversationInputMessage.ModelText(message)));
+                    else if (message.ProtocolMessage && !string.IsNullOrWhiteSpace(message.ToolCallId))
+                    {
+                        ToolResultWireReadResult wire; string error;
+                        if (!ToolResultHistoryReader.TryRead(message, out wire, out error)) throw HistoryFailure(error);
+                        if (message.ExecutionProgress == null)
+                            throw HistoryFailure("Continuation lacks typed terminal progress; the previous effects cannot be safely replayed.");
+                        history.Add(AgentMessage.AcceptedToolResult(message.ToolCallId, wire.Result.Message, message.Content,
+                            message.ExecutionProgress, message.ResourceEvidence, message.ResourceEffect));
+                    }
                 }
             }
+            ConversationResponseHistoryReader.RequireCompleteBatch(previousAccepted);
             try { return waiting ? AgentRunContinuation.RestoreWait(state, session.Revision, history)
                 : AgentRunContinuation.Restore(state, session.Revision, history); }
             catch (InvalidOperationException ex) { throw HistoryFailure(ex.Message); }

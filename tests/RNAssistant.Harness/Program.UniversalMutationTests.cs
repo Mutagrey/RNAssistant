@@ -237,6 +237,52 @@ namespace RNAssistant.Harness
                 AssertEqual("bb", File.ReadAllText(Path.Combine(workspace.RootPath, "matches.md")), "search receipt drives exact replacement");
             });
         }
+        private static void UniversalSkillBodyPatch()
+        {
+            WithTempPaths(paths => {
+                var store = new SkillStore(paths);
+                var skill = store.SaveOne(new SkillDefinition { Id = "common.patch_body", Name = "Preserved name",
+                    Description = "Preserved description", Version = "2.1.0", BodyMarkdown = "# Rules\nKeep original text.",
+                    Package = new SkillPackageManifest { PackageId = "common.patch_body" } });
+                string error; SkillReferenceMetadata reference;
+                AssertTrue(store.TrySaveReference(skill, "references/rules.md", "Reference stays intact", out reference, out error), "reference setup: " + error);
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), store, new ToolStore(paths));
+                var session = NewSession(adapter);
+                var command = Command("core.patch", "targets", PatchTargets(PatchSection("skill: " + skill.Id,
+                    EditSet(Edit("original text", "revised text")))));
+                var pending = PrepareVbaNative(executor, session, command);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "skill body uses ordinary patch confirmation: " + pending.Record.Message);
+                var result = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, "skill patch is verified: " + result.Message);
+                AssertEqual(ResourceTargetStatus.Changed, result.ResourceEffect.Targets[0].Status, "catalog publication proves the exact changed skill body");
+                var saved = store.Load().Single(item => item.Id == skill.Id);
+                AssertEqual("# Rules\nKeep revised text.", saved.BodyMarkdown, "only intended body text changes");
+                AssertEqual(skill.Name, saved.Name, "name preserved");
+                AssertEqual(skill.Description, saved.Description, "description preserved");
+                AssertEqual(skill.Version, saved.Version, "manual version preserved");
+                AssertEqual(skill.Package.PackageId, saved.Package.PackageId, "package metadata preserved");
+                string body; SkillReferenceMetadata metadata;
+                AssertTrue(store.TryReadReference(saved, "references/rules.md", out body, out metadata, out error), "reference readable");
+                AssertEqual("Reference stays intact", body, "references preserved");
+                var target = executor.ResourceGateway.ResolveIntentTarget(session, "skill: " + skill.Id);
+                AssertEqual(saved.BodyMarkdown, executor.ResourceGateway.Read(session,
+                    new ResourceReadRequest { Reference = target.Reference, Representation = "text" }).Result.Text, "semantic read sees the new published body");
+                var stale = PrepareVbaNative(executor, session, Command("core.patch", "targets", PatchTargets(PatchSection("skill: " + skill.Id,
+                    EditSet(Edit("revised text", "stale overwrite"))))));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, stale.Record.Outcome, "next patch prepared");
+                saved.Description = "External metadata change"; store.SaveOne(saved);
+                var rejected = ConfirmVbaNative(stale);
+                AssertEqual(ToolExecutionOutcome.Error, rejected.Outcome, "any package change invalidates confirmation");
+                AssertTrue(!rejected.MayHaveDispatched, "stale package cannot be written");
+                AssertEqual("# Rules\nKeep revised text.", store.Load().Single(item => item.Id == skill.Id).BodyMarkdown, "rejected patch preserves source");
+                var builtIn = PrepareVbaNative(executor, session, Command("core.patch", "targets", PatchTargets(PatchSection("skill: skills.vba.code.editing",
+                    EditSet(Edit("VBA specialist", "VBA editor"))))));
+                AssertEqual(ToolExecutionOutcome.Error, builtIn.Record.Outcome, "built-in skills remain read-only");
+                AssertTrue(!builtIn.Record.MayHaveDispatched, "built-in patch has no effect");
+            });
+        }
+
         private static void UniversalOfficeRoutesToOwners()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
@@ -268,7 +314,8 @@ namespace RNAssistant.Harness
                 AssertContains(adapter.GetVbaModuleCode("Universal"), "Debug.Print 3", "replacement verifies full module read-back");
                 var rewrite = executor.ExecuteManual(Command("core.write", "target", "VBA module: Universal", "content", "Sub Run()\nEnd Sub"), catalog, settings, false, true, session);
                 AssertTrue(rewrite.Success, "same write updates an existing module: " + rewrite.Message);
-                var html = executor.ExecuteManual(Command("core.write", "target", "HTML file: index.html", "content", "<main>before</main>"), catalog, settings, false, true, session);
+                var htmlTarget = "HTML file: index.html in " + CreateHtmlToolWorkspace(executor, session);
+                var html = executor.ExecuteManual(Command("core.write", "target", htmlTarget, "content", "<main>before</main>"), catalog, settings, false, true, session);
                 AssertTrue(html.Success, "same contract creates HTML: " + html.Message);
                 var historicalHtml = executor.ResourceGateway.ResolveIntentTarget(session,
                     executor.ResourceGateway.Find(session, "index.html", "html").Items.First(item => item.Target.StartsWith("HTML file: ")).Target).Descriptor.SnapshotTarget;
@@ -293,7 +340,8 @@ namespace RNAssistant.Harness
                 var classUpdate = executor.ExecuteManual(Command("core.write", "target", "VBA module: Klass", "content", "Public Value As String"), catalog, settings, false, true, session);
                 AssertTrue(classUpdate.Success, "existing type is resolved by owner: " + classUpdate.Message);
                 AssertTrue(!catalog.Any(t => t.Id.StartsWith("vba.module.") || t.Id.StartsWith("html.source.") || t.Id.StartsWith("file.source.")), "source owners are not public tools");
-                AssertEqual(10, CallableToolProfile.Core().Select(catalog).Count, "all hosts use the same compact core");
+                AssertTrue(CallableToolProfile.CoreIds.OrderBy(id => id).SequenceEqual(
+                    CallableToolProfile.Core().Select(catalog).Select(tool => tool.Id).OrderBy(id => id)), "Office exposes the current shared core contract");
                 AssertTrue(executor.ExecuteManual(Command("core.write", "target", "file: report.txt", "content", "before"), catalog, settings, false, true, session).Success,
                     "authored file joins the same prepared package");
                 AssertTrue(executor.ExecuteManual(Command("core.write", "target", "note: review.md", "content", "# Review"), catalog, settings, false, true, session).Success, "seed nonempty note for patch");
@@ -430,6 +478,38 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static ModelContextSnapshot UniversalRecoveryRequest(ToolExecutionRecord record, ChatBlobStore blobs,
+            ResourceAuthoritySnapshotSet resources, string expectedSource)
+        {
+            AssertTrue(record.Outcome == ToolExecutionOutcome.Error && !record.MayHaveDispatched,
+                "automatic source capture does not turn refusal into an effect");
+            AssertTrue(record.ResourceEvidence.Count == 1 && record.Recovery.IsSatisfiedBy(record.ResourceEvidence, null),
+                "refusal carries the current source from its owner");
+            var call = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = record.Context.Call.Id,
+                Name = record.Context.Call.Name, Arguments = JObject.Parse(record.Context.Call.ArgumentsJson).ToObject<Dictionary<string, object>>() },
+                "Edit.", "Change source.", null, ToolResultRoles.User, FixtureCallOrigin());
+            var materialized = new ToolResultMaterialization(record.Result, resourceEvidence: record.ResourceEvidence)
+                { ExecutionProgress = ToolExecutionProgress.Capture(record) };
+            var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = record.Context.Call.Id,
+                ToolId = record.Context.Call.Name }, materialized, int.MaxValue, ToolResultRoles.User);
+            call.RunId = terminal.RunId = record.Context.RunId;
+            var authority = new ModelAuthoritySnapshot(resources, "tools", new SkillCatalogSnapshot(null), null, 1);
+            var compiler = new ModelContextCompiler(blobs, projection: ModelToolResultProjection.Instance);
+            var result = compiler.Compile(authority, new ChatMessage[0], new[] { call, terminal }, null,
+                new ToolCatalogEntry[0], new AppSettings(), 12000);
+            AssertEqual(expectedSource, (string)JObject.Parse(result.Messages.Single(m => m.SyntheticResourceObservation).Content)["text"],
+                "next model request receives captured source without a second tool call");
+            AssertEqual(1, result.DeliveredObservations.Count, "only the delivered source grants observation authority");
+            var history = new ChatSession { Messages = new List<ChatMessage> { call, terminal } };
+            SetContinuityCheckpoint(history, terminal);
+            var active = new[] { new ChatMessage { Role = "user", Content = "Continue editing." } };
+            var retained = compiler.Compile(authority, new ChatMessage[0], active, null, new ToolCatalogEntry[0], new AppSettings(),
+                12000, workingSet: ContextWorkingSet.Restore(history, active, 4000));
+            AssertEqual(expectedSource, (string)JObject.Parse(retained.Messages.Single(m => m.SyntheticResourceObservation).Content)["text"],
+                "compaction retains the source independently of the failed operation");
+            return result;
+        }
+
         private static void UniversalOfficeRequiresDeliveredSource()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
@@ -447,6 +527,8 @@ namespace RNAssistant.Harness
                 var blocked = prepare(Command("core.write", "target", "VBA module: Module1", "content", ""), new ResourceEvidence[0]).Record;
                 AssertEqual(ToolExecutionOutcome.Error, blocked.Outcome, "accepted model call cannot use manual-editor authority");
                 AssertEqual(ToolRetryPolicy.RefreshRequired, blocked.Recovery.RetryPolicy, "fresh source allows recovery after refusal");
+                var scope = executor.ResourceAuthority.ScopeFor(session, blocked.ResourceEvidence.Single().Resource, true);
+                UniversalRecoveryRequest(blocked, executor.Payloads, executor.ResourceAuthority.CaptureMany(new[] { scope }), adapter.VbaModuleCode);
                 var module = VbaComponent(executor, session, "Module1");
                 var oldWhole = executor.ResourceGateway.Evidence(session, ReadVbaSource(executor, session, "Module1")).ToArray();
                 var excerpt = executor.ResourceGateway.ReadLines(session, new ResourceRef(module.Reference.Uri), "source", 2, 1).Result;
@@ -476,6 +558,7 @@ namespace RNAssistant.Harness
                 var stale = ConfirmVbaNative(pending);
                 AssertTrue(stale.Outcome == ToolExecutionOutcome.Error && !stale.MayHaveDispatched, "confirmation rechecks source without dispatch");
                 AssertEqual(ToolRetryPolicy.RefreshRequired, stale.Recovery.RetryPolicy, "source drift requires a new delivered read");
+                AssertTrue(stale.ResourceEvidence.Count == 1, "confirmation conflict also returns fresh source without replaying the write");
 
                 var tail = "        LastValue = 1\r\n    End If\r\nEnd Function";
                 var source = "Function LastValue() As Long\r\n    If True Then\r\n" + tail;
@@ -847,7 +930,8 @@ namespace RNAssistant.Harness
                 AssertEqual("external", File.ReadAllText(Path.Combine(workspace.RootPath, "collision.txt")), "collision preserves external data");
                 var unobserved = prepare("core.write", new JObject { ["target"] = "collision.txt", ["content"] = "overwrite" });
                 AssertTrue(!unobserved.MayHaveDispatched && unobserved.Outcome == ToolExecutionOutcome.Error, "whole write requires delivered source");
-                observed["collision.txt"] = files.ReadText(workspace, "collision.txt").Evidence;
+                var recovered = UniversalRecoveryRequest(unobserved, blobs, files.CaptureAuthority(unobserved.ResourceEvidence), "external");
+                observed["collision.txt"] = recovered.DeliveredObservations.Single();
                 var pendingUpdate = prepare("core.write", new JObject { ["target"] = "collision.txt", ["content"] = "prepared" });
                 File.WriteAllText(Path.Combine(workspace.RootPath, "collision.txt"), "changed while waiting");
                 AssertTrue(!confirm(pendingUpdate).MayHaveDispatched, "source is checked again before overwrite");

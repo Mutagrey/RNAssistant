@@ -154,7 +154,8 @@ Inspector и S2 этим не запускаются.
 Уточнение 2026-11-11 по замечаниям от 06.11: общий `accept` сохраняет группы при
 ошибке каталога и не снижает generation. Покрыты поздний error, error без generation,
 старый success и успешный пустой snapshot для Office/Workspace/plugin — 13 Node
-guards проходят. Геометрия/подсветка меню уже изменены общим деревом от 11.11;
+guards и production Chrome fixture проходят; wide/narrow/125%, меню и focus
+просмотрены. Геометрия/подсветка меню уже изменены общим деревом от 11.11;
 новых CSS overrides нет. Визуальное принятие и Windows/WebView2 остаются открытыми.
 
 В create/rename/delete заменены `window.prompt/confirm` на общий `app-dialog` и
