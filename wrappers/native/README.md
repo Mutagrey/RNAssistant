@@ -73,16 +73,17 @@ artifacts\portable\Release\x64\
   logs\
 ```
 
-The managed `InProcessWindowHost` owns the window and retained session. The main
-window is unowned, uses ordinary z-order and appears in the taskbar. Pin prevents
-automatic collapse; it does not mean TopMost. The former owner-mode file and
-environment override are no longer used.
+The managed `InProcessWindowHost` owns the window and document session. The unchanged
+Excel VBA launcher passes `Application.Hwnd`; OfficeHosts resolves the active workbook
+window. A caller may also pass `ActiveWindow.Hwnd`. The form has no separate
+taskbar entry. Pin prevents automatic collapse without TopMost. The former owner-mode
+file and environment override are no longer used.
 
-Closing the window (× / Alt+F4) dismisses its UI and leaves runs alive. Launching
-again resumes the same session, including when the invocation comes from another
-workbook HWND; it does not silently rebind the run. `Host_ClosePanel` remains an
-explicit session shutdown. Compact and the native companion share the retained
-pane; only one WebView is created. Windows/Office visual qualification remains open;
+Closing the window (× / Alt+F4), `Host_ClosePanel`, and `Host_SetPanelVisible(0)`
+end the session and cancel active runs. Opening from another workbook asks the Web UI
+to check editors and persist drafts before closing the old exact session and creating
+a new one for the new HWND. Compact and the native companion share one WebView only
+within the current session. Windows/Office visual qualification remains open;
 see [window review](../../docs/ui/UI_MIGRATION_PLAN.md#native-window--in-review-2026-11-11).
 
 ## Native API

@@ -26,8 +26,8 @@ namespace RNAssistant.OfficeHosts.Windows
             ContextMenuStrip = _menu;
             _menu.Items.Add("Открыть", null, (s, e) => OpenRequested?.Invoke());
             Add("Полное окно", HostWindowCommand.ShowFull); Add("Компактная панель", HostWindowCommand.ShowCompact);
-            Add("Вернуть на экран", HostWindowCommand.ResetPlacement); Add("Закрыть интерфейс", HostWindowCommand.Dismiss);
-            _menu.Items.Add("Завершить сеанс…", null, (s, e) => ShutdownRequested?.Invoke());
+            Add("Вернуть на экран", HostWindowCommand.ResetPlacement);
+            _menu.Items.Add("Закрыть RNAssistant…", null, (s, e) => ShutdownRequested?.Invoke());
             HandleCreated += (s, e) => { var side = (int)Math.Round(48 * WindowNative.Scale(Handle)); Size = new Size(side, side); };
             _tip.SetToolTip(this, _status);
         }

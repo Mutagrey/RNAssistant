@@ -8,12 +8,12 @@ namespace RNAssistant.Office.Contracts
     [JsonConverter(typeof(StringEnumConverter))]
     public enum HostWindowPresentation { FullNormal, FullMaximized, Compact, Companion }
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum HostWindowVisibility { Visible, ContextHidden, Dismissed, SystemMinimized, ShuttingDown }
+    public enum HostWindowVisibility { Visible, ContextHidden, SystemMinimized, ShuttingDown }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum HostWindowCommand
     {
         ShowFull, ShowCompact, Park, Maximize, Restore, SetPinned, SetAutoCollapse,
-        Dismiss, SystemMinimize, ResetPlacement, ChromeReady, Shutdown
+        SystemMinimize, ResetPlacement, ChromeReady, Shutdown, SwitchDocument
     }
 
     public sealed class HostWindowCapabilitiesDto
@@ -37,7 +37,6 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("canMaximize")] public bool CanMaximize { get; set; }
         [JsonProperty("canRestore")] public bool CanRestore { get; set; }
         [JsonProperty("canCompact")] public bool CanCompact { get; set; }
-        [JsonProperty("canDismiss")] public bool CanDismiss { get; set; }
     }
 
     public sealed class HostWindowCommandPayload
@@ -64,6 +63,10 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("type")] public string Type { get { return "hostWindowShutdownRequested"; } }
     }
+    public sealed class HostWindowSwitchMessage
+    {
+        [JsonProperty("type")] public string Type { get { return "hostWindowSwitchRequested"; } }
+    }
     public sealed class HostWindowActivity
     {
         public int Running { get; set; }
@@ -76,6 +79,7 @@ namespace RNAssistant.Office.Contracts
         HostWindowBootstrapDto Snapshot { get; }
         event Action<HostWindowStateDto> StateChanged;
         event Action ShutdownRequested;
+        event Action SwitchRequested;
         Task<HostWindowCommandResponse> ExecuteAsync(HostWindowCommandPayload command, string requestId);
         void ResponsePosted(string requestId);
         void ConfigureChrome(bool supported);

@@ -454,6 +454,10 @@ if (window.chrome && window.chrome.webview) {
       if (window.RNAssistantWindow) window.RNAssistantWindow.shutdown();
       return;
     }
+    if (response.type === "hostWindowSwitchRequested") {
+      if (window.RNAssistantWindow) window.RNAssistantWindow.switchDocument();
+      return;
+    }
     if (response && response.type === "modelDiagnostics") {
       if (window.RNAssistantPerformanceDiagnostics)
         window.RNAssistantPerformanceDiagnostics.recordModel(response.payload);

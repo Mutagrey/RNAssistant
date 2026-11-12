@@ -38,12 +38,13 @@ namespace RNAssistant.Harness
             old = policy.Revision; policy.Resume();
             AssertTrue(!policy.Collapse(old, true, false), "new launcher supersedes deferred focus decision");
             AssertTrue(policy.Collapse(policy.Revision, true, false), "known focus loss parks");
-            policy.CompanionVisibility(true); apply(HostWindowCommand.Dismiss); policy.CompanionVisibility(true);
-            AssertEqual(HostWindowVisibility.Dismissed, policy.Visibility, "returning to Excel cannot resurrect dismissed companion");
-            policy.Resume(); apply(HostWindowCommand.SystemMinimize); policy.CompanionVisibility(true);
+            policy.CompanionVisibility(true); policy.Resume(); apply(HostWindowCommand.SystemMinimize); policy.CompanionVisibility(true);
             AssertEqual(HostWindowVisibility.SystemMinimized, policy.Visibility, "system minimize never creates companion");
             apply(HostWindowCommand.Shutdown); policy.Resume();
             AssertEqual(HostWindowVisibility.ShuttingDown, policy.Visibility, "late launcher cannot revive shutdown");
+            var switched = new AssistantWindowPolicy();
+            switched.Apply(new HostWindowCommandPayload { Command = HostWindowCommand.SwitchDocument });
+            AssertEqual(HostWindowVisibility.ShuttingDown, switched.Visibility, "new document ends the old exact session");
         }
 
         private static async Task HostWindowPreferenceIsolation()
@@ -77,6 +78,7 @@ namespace RNAssistant.Harness
                 Capabilities = new HostWindowCapabilitiesDto { Pin = true, CompactPresentation = true, Companion = true }, State = Policy.Snapshot() }; } }
             public event Action<HostWindowStateDto> StateChanged;
             public event Action ShutdownRequested { add { } remove { } }
+            public event Action SwitchRequested { add { } remove { } }
             public Task<HostWindowCommandResponse> ExecuteAsync(HostWindowCommandPayload command, string id)
             {
                 Policy.Apply(command); Commands++; StateChanged?.Invoke(Policy.Snapshot());

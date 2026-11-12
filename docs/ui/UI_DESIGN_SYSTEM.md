@@ -76,22 +76,24 @@ runtime terminal publication. Rejected/Unknown имеют текстовые с�
 Геометрия header/control сверена с frozen Demo при 1280×900/100%: 40/28 CSS px.
 Controls доступны при 420×520/125%; минимальная Compact проверена при 360×320/125%.
 
-Меню окна → pin → уменьшение представления → maximize/restore → закрытие.
-Pin имеет aria-pressed и подпись «Не сворачивать автоматически»; крестик сообщает
-«Закрыть окно — работа продолжится». Это не обещание TopMost. Второстепенные Dock
+В header остаются только меню окна, Compact/Companion и × с отдельной границей от
+действий Dockview. Pin и maximize/restore перенесены в меню; значки Compact и
+Companion различаются. × означает полное закрытие сеанса с остановкой запросов и
+сохранением черновиков. Pin не означает TopMost. Второстепенные Dock
 действия в Compact/narrow перенесены в тот же ActionMenu. Compact сохраняет общий
 composer/ленту; другие элементы Shell и group header временно скрыты владельцем.
 
 Trusted header использует app-region drag, интерактивные элементы — no-drag.
-Caption убирается после capability check и ChromeReady от смонтированной Shell.
-При unsupported Runtime/перезагрузке/сбое root UI остаётся native caption; Web
-показывает только меню окна до восстановления integrated chrome. Hover Snap не
+Caption убирается сразу после capability check WebView2; Web-кнопки появляются только
+после ChromeReady от смонтированной Shell. При unsupported Runtime/сбое root UI
+остаётся native caption, а дублирующие Web-кнопки скрыты. Hover Snap не
 имитируется и не заявляется. Companion — native 48 DIP tool window со стандартными
 системными цветами, коротким статусом и tooltip; без второго мини-чата/анимации.
 Конкретный внешний вид/Win32 delivery остаются In Review.
 
 [Compact](review/window-compact.png), [Full](review/window-full.png),
-[замеры рядом с Demo](review/window-chrome.json).
+[замеры рядом с Demo](review/window-chrome.json). Реальное Excel/Windows ревью после
+уточнения 2026-11-12 открыто.
 
 ## Предел параллельности и очередь — In Review, 2026-11-05
 

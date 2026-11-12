@@ -1,5 +1,16 @@
 # Stabilization risk register
 
+## Окно Excel после правки 2026-11-12
+
+Фото показали отдельный taskbar preview, дублирующую native caption и потерю
+Compact после открытия другой книги. Код восстановил owned-window показ, закрыл
+старую сессию на × и ввёл exact active-workbook resolution при прежнем VBA
+`Application.Hwnd`. Windows x64 + Excel/WebView2 проверка изменений ещё открыта:
+owner/taskbar, загрузочный caption, перенос между двумя книгами, Compact/Companion,
+cancel/flush при переходе и закрытие с активным run. На этой машине проверяется
+только браузерный UI; текущий общий Harness не компилируется из-за несвязанного
+`ExternalBrowserReadTarget.CanNavigate` (Office.Services.BrowserPageAutomation).
+
 ## Замечания от 06.11 — повторная проверка 2026-11-11
 
 Исходная сборка: `16.1.0-alpha.1-12fddb7`; её ошибки не считаются автоматически

@@ -25,6 +25,8 @@
     minus: '<path d="M5 12h14"/>',
     left: '<path d="m15 6-6 6 6 6"/>',
     fit: '<path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>',
+    windowCompact: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M7 13h10M7 16h6"/>',
+    windowCapsule: '<rect x="3" y="8" width="18" height="8" rx="4"/>',
     rotateLeft: '<path d="M3 10a9 9 0 1 1 3 9M3 4v6h6"/>',
     rotateRight: '<path d="M21 10a9 9 0 1 0-3 9M21 4v6h-6"/>',
     more: '<g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></g>',

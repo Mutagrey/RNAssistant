@@ -13,9 +13,9 @@ namespace RNAssistant.Office.WebView
             get { return _windowHost; }
             set
             {
-                if (_windowHost != null) { _windowHost.StateChanged -= ReportWindowState; _windowHost.ShutdownRequested -= RequestWindowShutdown; }
+                if (_windowHost != null) { _windowHost.StateChanged -= ReportWindowState; _windowHost.ShutdownRequested -= RequestWindowShutdown; _windowHost.SwitchRequested -= RequestWindowSwitch; }
                 _windowHost = value;
-                if (value != null) { value.StateChanged += ReportWindowState; value.ShutdownRequested += RequestWindowShutdown; }
+                if (value != null) { value.StateChanged += ReportWindowState; value.ShutdownRequested += RequestWindowShutdown; value.SwitchRequested += RequestWindowSwitch; }
             }
         }
         public HostWindowActivity WindowActivity
@@ -31,11 +31,13 @@ namespace RNAssistant.Office.WebView
         }
         public bool CanShutdownWindow
         {
-            get { lock (_hostSwitchSync) return !_disposed && !_hostSwitchPending && _requestsInFlight == 0 && WindowActivity.Running == 0; }
+            get { lock (_hostSwitchSync) return !_disposed && !_hostSwitchPending && _requestsInFlight == 0; }
         }
         private void ReportWindowState(HostWindowStateDto state)
         { _postMessageJson?.Invoke(JsonConvert.SerializeObject(new HostWindowStateMessage { Payload = state })); }
         private void RequestWindowShutdown()
         { _postMessageJson?.Invoke(JsonConvert.SerializeObject(new HostWindowShutdownMessage())); }
+        private void RequestWindowSwitch()
+        { _postMessageJson?.Invoke(JsonConvert.SerializeObject(new HostWindowSwitchMessage())); }
     }
 }

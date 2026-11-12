@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  var capabilities = null, current = null, busy = false, bound = false, readySent = false, initializing = false;
+  var capabilities = null, current = null, busy = false, bound = false, readySent = false, initializing = false, pendingSwitch = false;
   function compact() { return current && document.documentElement.dataset.hostPresentation === "Compact"; }
   function notice(error) { RNAssistantShellLayout.notice(error.detail || error.message || String(error)); }
   function control(id, label, icon) {
@@ -13,13 +13,10 @@
   function render() {
     var controls = document.getElementById("hostWindowControls");
     if (!controls) return;
-    controls.hidden = !capabilities;
+    controls.hidden = !capabilities || !current || !current.chromeReady;
     if (!capabilities || !current) return;
-    controls.dataset.integrated = String(capabilities.integratedChrome);
-    control("hostWindowPin", "Не сворачивать автоматически", "pin").setAttribute("aria-pressed", String(current.pinned));
-    control("hostWindowPresentation", compact() ? "В помощника" : "Компактная панель", "compress");
-    control("hostWindowMaximize", current.canRestore ? "Восстановить окно" : "Развернуть окно", current.canRestore ? "compress" : "fit");
-    control("hostWindowDismiss", "Закрыть окно — работа продолжится", "close");
+    control("hostWindowPresentation", compact() ? "Свернуть в помощник" : "Компактное окно", compact() ? "windowCapsule" : "windowCompact");
+    control("hostWindowClose", "Закрыть RNAssistant", "close");
     control("hostWindowMenu", "Действия с окном", "more");
     var status = [current.presentation, current.visibility, current.pinned ? "pin" : "auto",
       current.chromeReady ? "web chrome" : "native caption", current.anchorAvailable ? "Office anchor" : "нет Office anchor"];
@@ -52,14 +49,17 @@
       // Reconcile a timeout; never repeat the mutation.
       try { var actual = await send("getHostWindowState", {}); if (actual) apply(actual.state); } catch (ignored) { /* Native caption/launcher remain available. */ }
       throw error;
-    } finally { busy = false; render(); }
+    } finally { busy = false; render(); if (pendingSwitch) { pendingSwitch = false; shutdown(true); } }
   }
   function request(name, value) { command(name, value).catch(notice); }
-  function shutdown() {
-    if (!capabilities || busy) return;
-    if (!RNAssistantDockWorkspace.canCloseAll()) return;
-    RNAssistantDialog.open({ title: "Завершить сеанс RNAssistant?", submitLabel: "Завершить сеанс", danger: true,
-      message: "Окно и сеанс будут закрыты. При активных запросах сначала остановите их и дождитесь завершения операций.",
+  function shutdown(replacement) {
+    if (!capabilities || busy) { if (replacement) pendingSwitch = true; return; }
+    if (replacement) pendingSwitch = false;
+    if (!RNAssistantDockWorkspace.canCloseAll()) { notice(new Error("Сначала сохраните изменения редакторов.")); return; }
+    RNAssistantDialog.open({ title: replacement ? "Открыть RNAssistant для другой книги?" : "Закрыть RNAssistant?",
+      submitLabel: replacement ? "Переключить" : "Закрыть RNAssistant", danger: !replacement,
+      message: replacement ? "Текущий сеанс будет закрыт, активные запросы остановлены. Черновики сохранятся перед открытием новой книги." :
+        "Активные запросы будут остановлены. Черновики сохранятся перед закрытием.",
       onSubmit: async function () {
         if (!RNAssistantDockWorkspace.canCloseAll()) throw new Error("Сначала сохраните изменения редакторов.");
         var editing = false;
@@ -72,15 +72,15 @@
           drafts.push(chat.target.source === "office" ? RNAssistantChatDrafts.flushOffice(chat.target.sessionId) : RNAssistantChatDrafts.flushWorkspace(chat.target));
         });
         await Promise.all(drafts); await RNAssistantChatDrafts.flushAll();
-        await command("Shutdown");
+        await command(replacement ? "SwitchDocument" : "Shutdown");
       } });
   }
   function menu(trigger) {
     function inFull(action) { if (!window.RNAssistantWindow.inFull(action)) action(); }
     var entries = [
-      { label: compact() ? "Полное окно" : "Компактная панель", icon: "panel", onSelect: function () { request(compact() ? "ShowFull" : "ShowCompact"); } },
-      { label: "В помощника", icon: "compress", onSelect: function () { request("Park"); } },
-      { label: "Свернуть на панель задач", icon: "minus", onSelect: function () { request("SystemMinimize"); } },
+      { label: compact() ? "Полное окно" : "Компактное окно", icon: "windowCompact", onSelect: function () { request(compact() ? "ShowFull" : "ShowCompact"); } },
+      { label: "Свернуть в помощник", icon: "windowCapsule", onSelect: function () { request("Park"); } },
+      { label: current.canRestore ? "Восстановить размер окна" : "Развернуть окно", icon: "fit", onSelect: function () { request(current.canRestore ? "Restore" : "Maximize"); } },
       { label: "Не сворачивать автоматически", icon: "pin", status: current.pinned ? "Включено" : "Выключено", onSelect: function () { request("SetPinned", !current.pinned); } },
       { label: "Автоматически убирать окно", icon: "compress", status: current.autoCollapse ? "Включено" : "Выключено", onSelect: function () { request("SetAutoCollapse", !current.autoCollapse); } },
       { label: "Вернуть окно на экран", icon: "fit", onSelect: function () { request("ResetPlacement"); } },
@@ -90,7 +90,6 @@
       { label: "Панели…", icon: "layers", onSelect: function () { inFull(function () { document.getElementById("workspacePanels").onclick.call(trigger); }); } },
       { label: "Компоновка…", icon: "panel", onSelect: function () { inFull(function () { document.getElementById("workspaceLayout").onclick.call(trigger); }); } },
       { separator: true },
-      { label: "Завершить сеанс…", icon: "close", onSelect: shutdown },
       { label: current.presentation + " · " + current.visibility, informational: true }
     ];
     if (current.diagnostic) entries.push({ label: current.diagnostic, informational: true });
@@ -108,21 +107,21 @@
     }
     if (!bound) {
       bound = true;
-      document.getElementById("hostWindowPin").onclick = function () { request("SetPinned", !current.pinned); };
       document.getElementById("hostWindowPresentation").onclick = function () { request(compact() ? "Park" : "ShowCompact"); };
-      document.getElementById("hostWindowMaximize").onclick = function () { request(current.canRestore ? "Restore" : "Maximize"); };
-      document.getElementById("hostWindowDismiss").onclick = function () { request("Dismiss"); };
+      document.getElementById("hostWindowClose").onclick = function () { shutdown(false); };
       document.getElementById("hostWindowMenu").onclick = function () { menu(this); };
     }
     apply(value.state); render();
     if (capabilities.integratedChrome && !readySent) {
       readySent = true;
-      // Shell/Dock controls are mounted and painted before removing the recovery caption.
+      // Reveal the Web controls only after the Shell has mounted and painted.
       requestAnimationFrame(function () { requestAnimationFrame(function () { command("ChromeReady").catch(function (error) { readySent = false; notice(error); }); }); });
     }
+    if (pendingSwitch && !busy) { pendingSwitch = false; shutdown(true); }
   }
   window.RNAssistantWindow = {
-    bootstrap: bootstrap, apply: apply, command: command, shutdown: shutdown, isCompact: compact,
+    bootstrap: bootstrap, apply: apply, command: command, shutdown: shutdown,
+    switchDocument: function () { shutdown(true); }, isCompact: compact,
     inFull: function (action) {
       if (!compact()) return false;
       command("ShowFull").then(action).catch(notice); return true;

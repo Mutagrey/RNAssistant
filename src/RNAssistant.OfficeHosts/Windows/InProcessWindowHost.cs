@@ -33,8 +33,8 @@ namespace RNAssistant.OfficeHosts.Windows
         private bool _applying, _chromeSupported, _chromeReady, _captureProtected = true, _disposed;
         private bool _fullPlaced, _placed, _saveRunning, _saveAgain;
         private string _diagnostic, _deferredRequest;
-        private long _deferredRevision;
         private HostWindowCommand? _deferredCommand;
+        private IntPtr _switchAnchor;
         private long _focusRevision = -1;
         private IntPtr _focusCandidate;
         private DateTime _focusSince, _lastActivity;
@@ -42,12 +42,25 @@ namespace RNAssistant.OfficeHosts.Windows
         private Rectangle _lastAnchorBounds;
 
         public bool IsDisposed { get { return _disposed; } }
+        public InProcessWindowHost Successor { get; private set; }
         public HostWindowBootstrapDto Snapshot { get { return _snapshot; } }
         public event Action<HostWindowStateDto> StateChanged;
         public event Action ShutdownRequested;
+        public event Action SwitchRequested;
 
         public static InProcessWindowHost Create(int hostKind, long officeHwnd, string rootPath)
-        { return new InProcessWindowHost(hostKind, (IntPtr)officeHwnd, rootPath); }
+        { return new InProcessWindowHost(hostKind, NormalizeAnchor(hostKind, (IntPtr)officeHwnd), rootPath); }
+
+        private static IntPtr NormalizeAnchor(int hostKind, IntPtr launchHwnd)
+        {
+            if (hostKind != (int)OfficeHostKind.Excel) return launchHwnd;
+            // Older VBA launchers pass Application.Hwnd. Resolve its active workbook
+            // window here so both launcher variants keep exact document ownership.
+            var application = ExcelNativeObjectResolver.ResolveApplication(launchHwnd.ToInt64());
+            var active = application == null ? null : application.ActiveWindow;
+            if (active == null) throw new InvalidOperationException("Сначала откройте окно книги Excel.");
+            return new IntPtr(Convert.ToInt64(active.Hwnd));
+        }
 
         private InProcessWindowHost(int hostKind, IntPtr anchor, string root)
         {
@@ -92,7 +105,7 @@ namespace RNAssistant.OfficeHosts.Windows
             catch { Dispose(); throw; }
         }
 
-        // A different launcher HWND is invocation context, never an instruction to dispose/rebind a run.
+        // A new exact Office HWND requests a new document session; never retarget a live run.
         public void Show(int hostKind, long officeHwnd, string root)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(InProcessWindowHost));
@@ -100,13 +113,27 @@ namespace RNAssistant.OfficeHosts.Windows
             if (hostKind != _hostKind || !string.Equals(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 _root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Уже открыт другой профиль/host RNAssistant. Сначала явно завершите прежний сеанс.");
-            EnsureOwnerThread(); Resume();
+            EnsureOwnerThread();
+            var next = NormalizeAnchor(hostKind, (IntPtr)officeHwnd);
+            if (next != _anchor)
+            {
+                uint process;
+                var thread = WindowNative.GetWindowThreadProcessId(next, out process);
+                if (thread == 0 || process != _anchorProcess || thread != _anchorThread)
+                    throw new InvalidOperationException("Новая книга должна принадлежать тому же процессу и UI-потоку Office.");
+                _switchAnchor = next;
+                Resume();
+                if (SwitchRequested == null) ReplaceSession(next);
+                else SwitchRequested();
+                return;
+            }
+            Resume();
         }
         public void SetVisible(bool visible)
         {
             EnsureOwnerThread();
             if (_disposed || !_policy.Alive) throw new InvalidOperationException("Сеанс RNAssistant завершается.");
-            if (visible) Resume(); else Execute(new HostWindowCommandPayload { Command = HostWindowCommand.Dismiss });
+            if (visible) Resume(); else Dispose();
         }
         public void Shutdown() { EnsureOwnerThread(); Dispose(); }
         private void EnsureOwnerThread()
@@ -135,23 +162,23 @@ namespace RNAssistant.OfficeHosts.Windows
                     if (_disposed) throw new ObjectDisposedException(nameof(InProcessWindowHost));
                     if (request == null || !Enum.IsDefined(typeof(HostWindowCommand), request.Command))
                         throw new ArgumentException("Unknown window command.");
-                    if (_deferredCommand.HasValue) throw new InvalidOperationException("Предыдущая оконная команда ещё выполняется.");
+                    if (_deferredRequest != null) throw new InvalidOperationException("Предыдущая оконная команда ещё выполняется.");
                     if (request.Command == HostWindowCommand.ChromeReady && !_chromeSupported)
                         throw new InvalidOperationException("WebView Runtime не поддерживает встроенный заголовок.");
-                    if (request.Command == HostWindowCommand.Shutdown)
+                    if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument)
                     {
                         var pane = _session.PanelControl as AssistantPaneControl;
                         if (pane == null || !pane.CanShutdownWindow)
-                            throw new InvalidOperationException("Сначала остановите активные запросы и дождитесь завершения операций.");
-                        _session.Runtime.Controller.EnsureHostSwitchReady();
+                            throw new InvalidOperationException("Дождитесь завершения текущей операции и повторите закрытие.");
+                        if (request.Command == HostWindowCommand.SwitchDocument && _switchAnchor == IntPtr.Zero)
+                            throw new InvalidOperationException("Новая книга не выбрана.");
                     }
-                    if (request.Command == HostWindowCommand.Dismiss || request.Command == HostWindowCommand.Shutdown)
+                    if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument)
                     {
                         if (string.IsNullOrEmpty(requestId) || request.Value.HasValue) throw new ArgumentException("Invalid window command envelope.");
-                        // The response is posted by AssistantPaneControl before we hide/dispose either HWND.
-                        _deferredRequest = requestId; _deferredCommand = request.Command; _policy.Touch(); Publish();
-                        if (request.Command == HostWindowCommand.Shutdown) { RecordPlacement(false); _policy.Apply(request); Publish(); }
-                        _deferredRevision = _policy.Revision;
+                        // Post the accepted response before disposing WebView and both HWNDs.
+                        RecordPlacement(false); _policy.Apply(request); _deferredRequest = requestId;
+                        _deferredCommand = request.Command; Publish();
                     }
                     else Execute(request);
                     completion.TrySetResult(new HostWindowCommandResponse { Accepted = true, State = _snapshot.State });
@@ -166,15 +193,45 @@ namespace RNAssistant.OfficeHosts.Windows
             if (_disposed || requestId != _deferredRequest) return;
             _form.BeginInvoke(new Action(() =>
             {
-                if (_disposed || requestId != _deferredRequest || !_deferredCommand.HasValue) return;
-                var command = _deferredCommand.Value; _deferredCommand = null; _deferredRequest = null;
-                if (command == HostWindowCommand.Shutdown) Dispose();
-                else if (_deferredRevision == _policy.Revision) NativeCommand(command);
+                if (_disposed || requestId != _deferredRequest) return;
+                var replacement = _deferredCommand == HostWindowCommand.SwitchDocument ? _switchAnchor : IntPtr.Zero;
+                _deferredRequest = null; _deferredCommand = null;
+                if (replacement == IntPtr.Zero) Dispose();
+                else ReplaceSession(replacement);
             }));
+        }
+        private void ReplaceSession(IntPtr next)
+        {
+            try
+            {
+                Dispose();
+                if (!WindowNative.IsWindow(next)) throw new InvalidOperationException("Окно новой книги уже закрыто.");
+                var successor = new InProcessWindowHost(_hostKind, next, _root);
+                successor.Show(_hostKind, next.ToInt64(), _root);
+                Successor = successor;
+            }
+            catch (Exception error)
+            {
+                Diagnostic("Новый сеанс RNAssistant не открыт", error);
+                if (WindowNative.IsWindow(next)) MessageBox.Show(new Win32Owner(next), error.Message, "RNAssistant", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                else MessageBox.Show(error.Message, "RNAssistant", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+        private sealed class Win32Owner : IWin32Window
+        {
+            private readonly IntPtr _handle;
+            internal Win32Owner(IntPtr handle) { _handle = handle; }
+            public IntPtr Handle { get { return _handle; } }
         }
         private void NativeCommand(HostWindowCommand command)
         {
             if (_disposed || !_policy.Alive) return;
+            if (command == HostWindowCommand.Shutdown)
+            {
+                if (ShutdownRequested != null) { Resume(); ShutdownRequested(); }
+                else Dispose();
+                return;
+            }
             try { Execute(new HostWindowCommandPayload { Command = command }); }
             catch (Exception error) { Diagnostic("Оконная команда не выполнена", error); Publish(); }
         }
@@ -182,7 +239,7 @@ namespace RNAssistant.OfficeHosts.Windows
         {
             RecordPlacement(false);
             _policy.Apply(request); _focusRevision = -1;
-            if (request.Command == HostWindowCommand.Shutdown) { Dispose(); return; }
+            if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument) { Dispose(); return; }
             if (request.Command == HostWindowCommand.ChromeReady) { _chromeReady = true; _form.SetIntegratedChrome(true); }
             if (request.Command == HostWindowCommand.ResetPlacement)
             {
@@ -195,9 +252,9 @@ namespace RNAssistant.OfficeHosts.Windows
         }
 
         public void ConfigureChrome(bool supported)
-        { OnUi(() => { _chromeSupported = supported; _chromeReady = false; _form.SetIntegratedChrome(false); _policy.Touch(); Publish(); }); }
+        { OnUi(() => { _chromeSupported = supported; _chromeReady = false; _form.SetIntegratedChrome(supported); _policy.Touch(); Publish(); }); }
         public void InvalidateChrome()
-        { OnUi(() => { if (_disposed) return; _chromeReady = false; _form.SetIntegratedChrome(false); _policy.Touch(); Publish(); }); }
+        { OnUi(() => { if (_disposed) return; _chromeReady = false; _policy.Touch(); Publish(); }); }
 
         private void ApplyPresentation(bool activate)
         {
@@ -206,14 +263,9 @@ namespace RNAssistant.OfficeHosts.Windows
             try
             {
                 var visibility = _policy.Visibility;
-                if (visibility == HostWindowVisibility.Dismissed)
+                if (_policy.Presentation == HostWindowPresentation.Companion)
                 {
-                    _form.Hide(); UpdateCompanion();
-                }
-                else if (_policy.Presentation == HostWindowPresentation.Companion)
-                {
-                    // Remove the surface, retaining its taskbar/Alt+Tab entry as a standard return path.
-                    // The policy distinguishes parking from an explicit system minimize (no capsule).
+                    // Parking keeps the same WebView and run, without a separate taskbar entry.
                     if (WindowNative.BelongsTo(WindowNative.GetForegroundWindow(), _form.Handle)) _form.WindowState = FormWindowState.Minimized;
                     else WindowNative.ShowWindow(_form.Handle, 7); // SW_SHOWMINNOACTIVE: automatic parking never steals foreground
                     UpdateCompanion();
@@ -234,7 +286,7 @@ namespace RNAssistant.OfficeHosts.Windows
                         _form.Bounds = RestoreRectangle(isCompact ? _preferences.Compact : _preferences.Full, isCompact);
                     }
                     else if (_form.WindowState != FormWindowState.Maximized) _form.WindowState = FormWindowState.Maximized;
-                    if (!_form.Visible) _form.Show(); // deliberately unowned, ordinary z-order and taskbar
+                    if (!_form.Visible) _form.Show(new Win32Owner(_anchor));
                     _placed = true;
                     if (visibility == HostWindowVisibility.SystemMinimized) _form.WindowState = FormWindowState.Minimized;
                     else if (activate) { _form.BringToFront(); _form.Activate(); }
@@ -327,7 +379,7 @@ namespace RNAssistant.OfficeHosts.Windows
         }
         private void CheckFocus(object sender, EventArgs args)
         {
-            if (_disposed || !_policy.Alive || _deferredCommand.HasValue) return;
+            if (_disposed || !_policy.Alive || _deferredRequest != null) return;
             var foreground = WindowNative.GetForegroundWindow();
             if (foreground == IntPtr.Zero) { _focusRevision = -1; return; }
             var own = OwnInteraction(foreground);
@@ -350,7 +402,7 @@ namespace RNAssistant.OfficeHosts.Windows
             if (_disposed) return;
             var foreground = WindowNative.GetForegroundWindow();
             var show = _policy.Presentation == HostWindowPresentation.Companion &&
-                _policy.Visibility != HostWindowVisibility.Dismissed && _policy.Visibility != HostWindowVisibility.SystemMinimized &&
+                _policy.Visibility != HostWindowVisibility.SystemMinimized &&
                 AnchorAvailable() && !WindowNative.IsIconic(_anchor) &&
                 (_companion.Interacting || WindowNative.BelongsTo(foreground, _anchor));
             var revision = _policy.Revision; _policy.CompanionVisibility(show);
@@ -359,7 +411,7 @@ namespace RNAssistant.OfficeHosts.Windows
                 PositionCompanion(!_companion.Visible);
                 if (!_companion.Visible)
                 {
-                    _companion.Show();
+                    _companion.Show(new Win32Owner(_anchor));
                     WindowNative.SetWindowPos(_companion.Handle, IntPtr.Zero, 0, 0, 0, 0, 0x13); // TOP, no activate/move/size; never TOPMOST
                 }
             }
@@ -449,7 +501,7 @@ namespace RNAssistant.OfficeHosts.Windows
             finally
             {
                 _session = null; _lifetime.Dispose();
-                StateChanged = null; ShutdownRequested = null;
+                StateChanged = null; ShutdownRequested = null; SwitchRequested = null;
                 try { _companion.Dispose(); }
                 finally { _form.ShuttingDown = true; _form.Dispose(); }
             }

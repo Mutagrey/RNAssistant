@@ -287,7 +287,7 @@ namespace RNAssistant.Office.WebView
 
         private void OnRootProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs e)
         {
-            _bridge.WindowHost?.InvalidateChrome();
+            _bridge.WindowHost?.ConfigureChrome(false);
         }
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)

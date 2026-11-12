@@ -85,6 +85,16 @@ Windows qualification открыты; далее P4a, без автоматич�
 
 ## Native window — In Review, 2026-11-11
 
+По фото и прямому уточнению 2026-11-12 исправляется Windows pilot: OfficeHosts
+разрешает старый `Application.Hwnd` в exact `ActiveWindow.Hwnd`, форма снова
+показывается с владельцем Excel и
+без отдельного taskbar preview. × и Alt+F4 вызывают полный shutdown; переход к
+другой книге через подтверждение и сохранение drafts закрывает старый session и
+создаёт новый. Compact/Companion остаются режимами того же WebView только в пределах
+одной книги. Видимая группа оконных controls сокращена до меню, режима и ×; native
+caption убирается при поддержке non-client regions, Web controls ждут ChromeReady.
+Проверка на Windows после правки остаётся открытой.
+
 По приложенному пользователем плану управления окнами реализован scoped native
 window slice; общий S2/редизайн других экранов не запускается. Owners: OfficeHosts —
 формы/STA/native effects; Office Services — state/preferences; Office WebView —
@@ -114,11 +124,13 @@ file picker/DevTools/modal focus, non-activating companion drag и capture prote
 Hover Snap — отдельное улучшение, не gate базового chrome. Статус companion отражает
 живые snapshots, не восстановленные после restart ожидания.
 
-Для ревью: открыть из Excel; изменить Full placement и перейти в Compact во время
-ответа; Compact → Maximize → Companion → Open → Restore; включить pin и перейти в
-Excel; закрыть × и повторно открыть из другой книги. Проверить draft/edit/scroll и
-прежний target. Нужное Windows evidence — только фотографии экрана; не запрашивать
-логи/выгрузки. Два native окна должны сохранять capture-protection setting.
+Для ревью новой правки: открыть из Excel и убедиться в единственном предпросмотре
+книги на панели задач; увидеть одну строку оконных кнопок без native caption;
+Full → Compact → Companion → Open; открыть другую книгу и вызовом RNAssistant
+подтвердить переход — новый чат должен принадлежать новой книге; закрыть × и
+убедиться, что работа остановлена. Проверить draft/edit/scroll. Нужное Windows
+evidence — только фотографии экрана. Два native окна должны сохранять
+capture-protection setting.
 
 Rollback — revert только оконного среза; `native-window-state.json` можно оставить,
 старый код его не читает. Runtime/storage/tool protocol не мигрируются. По запросу

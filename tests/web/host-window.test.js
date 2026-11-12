@@ -33,7 +33,7 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
       windowProbe.object = RNAssistantDockWorkspace.getView('window-probe');
       const original = send;
       const current = {revision: 1, presentation: 'FullNormal', visibility: 'Visible', pinned: false, autoCollapse: true,
-        chromeReady: false, anchorAvailable: true, canRestore: false, canMaximize: true, canCompact: true, canDismiss: true};
+        chromeReady: false, anchorAvailable: true, canRestore: false, canMaximize: true, canCompact: true};
       windowProbe.state = current;
       windowProbe.set = (presentation, visibility = 'Visible') => {
         Object.assign(current, {revision: current.revision + 1, presentation, visibility, canRestore: presentation === 'FullMaximized'});
@@ -47,7 +47,7 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
         if (payload.command === 'ShowFull') current.presentation = 'FullNormal';
         if (payload.command === 'ShowCompact') current.presentation = 'Compact';
         if (payload.command === 'Park') { current.presentation = 'Companion'; current.visibility = 'ContextHidden'; }
-        if (payload.command === 'Dismiss') current.visibility = 'Dismissed';
+        if (payload.command === 'Shutdown' || payload.command === 'SwitchDocument') current.visibility = 'ShuttingDown';
         if (payload.command === 'SetPinned') current.pinned = payload.value;
         current.revision++; return {accepted: true, state: {...current}};
       };
@@ -77,12 +77,14 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     assert.equal(compact.value, 'Черновик сохраняется'); assert.equal(compact.disposed, 0);
     assert.ok(await page.evaluate(() => windowProbe.edit && windowProbe.chat.composer.edit(windowProbe.chat.target) === windowProbe.edit), 'edit state remains owned by the same composer');
     assert.equal(compact.layout, before.layout, 'transient placement never overwrites full layout');
-    for (const id of ['hostWindowPin', 'hostWindowMaximize', 'hostWindowDismiss']) assert.ok(await page.locator('#' + id).isVisible());
-    await page.locator('#hostWindowPin').click(); assert.equal(await page.locator('#hostWindowPin').getAttribute('aria-pressed'), 'true');
-    await page.locator('#hostWindowPin').focus(); await page.keyboard.press('Tab');
+    for (const id of ['hostWindowMenu', 'hostWindowPresentation', 'hostWindowClose']) assert.ok(await page.locator('#' + id).isVisible());
+    assert.equal(await page.locator('#hostWindowControls button').count(), 3, 'one compact window control group');
+    await page.locator('#hostWindowMenu').click();
+    await page.getByRole('menuitem', {name: /Не сворачивать автоматически/}).click();
+    await page.locator('#hostWindowMenu').focus(); await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'hostWindowPresentation', 'keyboard controls remain reachable');
     await page.evaluate(() => RNAssistantWindow.apply({...windowProbe.state, revision: 1, pinned: false}));
-    assert.equal(await page.locator('#hostWindowPin').getAttribute('aria-pressed'), 'true', 'stale push cannot undo a command');
+    assert.equal(await page.evaluate(() => windowProbe.state.pinned), true, 'stale push cannot undo a command');
     if (process.env.RNA_WINDOW_REVIEW) await page.screenshot({path: process.env.RNA_WINDOW_REVIEW + '-compact.png'});
     await page.evaluate(() => windowProbe.set('Companion', 'ContextHidden'));
     assert.equal(await page.evaluate(() => windowProbe.chat.view.canRender()), false, 'native hiding deactivates chat');
@@ -110,7 +112,9 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.waitForFunction(() => document.documentElement.dataset.hostPresentation === 'FullNormal');
     assert.ok(await page.locator('[data-tab-panel-id="settings"]').isVisible());
     await page.evaluate(() => windowProbe.set('FullMaximized'));
-    assert.equal(await page.locator('#hostWindowMaximize').getAttribute('aria-label'), 'Восстановить окно');
+    await page.locator('#hostWindowMenu').click();
+    assert.ok(await page.getByRole('menuitem', {name: 'Восстановить размер окна', exact: true}).isVisible());
+    await page.keyboard.press('Escape');
     await page.evaluate(() => windowProbe.set('FullNormal'));
     await page.evaluate(() => { RNAssistantDockWorkspace.close('settings'); RNAssistantDockWorkspace.close('window-probe'); });
     if (process.env.RNA_WINDOW_REVIEW) await page.screenshot({path: process.env.RNA_WINDOW_REVIEW + '-full.png'});
@@ -119,12 +123,12 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     const reference = await demo.evaluate(() => ({header: document.querySelector('.topbar').getBoundingClientRect().height,
       control: document.querySelector('#maximize-toggle').getBoundingClientRect().height}));
     const measured = await page.evaluate(() => ({header: document.querySelector('.workspace-topbar').getBoundingClientRect().height,
-      control: document.querySelector('#hostWindowMaximize').getBoundingClientRect().height}));
+      control: document.querySelector('#hostWindowClose').getBoundingClientRect().height}));
     assert.deepEqual(measured, reference, 'window controls use Demo header/control geometry at the same viewport');
     if (process.env.RNA_WINDOW_REVIEW) fs.writeFileSync(process.env.RNA_WINDOW_REVIEW + '.json', JSON.stringify({viewport: '1280x900 / 100%', reference, measured}, null, 2));
     await demo.close();
-    await page.evaluate(() => RNAssistantWindow.shutdown());
-    await page.getByRole('button', {name: 'Завершить сеанс', exact: true}).click();
+    await page.locator('#hostWindowClose').click();
+    await page.getByRole('dialog').getByRole('button', {name: 'Закрыть RNAssistant', exact: true}).click();
     await page.getByRole('alert').filter({hasText: 'Сначала завершите или отмените редактирование'}).waitFor();
     assert.equal(await page.evaluate(() => windowProbe.calls.some(call => call.command === 'Shutdown')), false, 'dirty message edit blocks destructive shutdown');
     await page.getByRole('dialog').getByRole('button', {name: 'Закрыть', exact: true}).click();
@@ -132,16 +136,14 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
       windowProbe.chat.composer.cancelEdit(windowProbe.chat.target);
       windowProbe.flushOffice = RNAssistantChatDrafts.flushOffice;
       RNAssistantChatDrafts.flushOffice = async () => { throw new Error('Draft save failed'); };
-      RNAssistantWindow.shutdown();
+      RNAssistantWindow.switchDocument();
     });
-    await page.getByRole('button', {name: 'Завершить сеанс', exact: true}).click();
+    await page.getByRole('dialog').getByRole('button', {name: 'Переключить', exact: true}).click();
     await page.getByRole('alert').filter({hasText: 'Draft save failed'}).waitFor();
-    assert.equal(await page.evaluate(() => windowProbe.calls.some(call => call.command === 'Shutdown')), false, 'failed draft write never destroys the session');
+    assert.equal(await page.evaluate(() => windowProbe.calls.some(call => call.command === 'SwitchDocument')), false, 'failed draft write never switches document session');
     await page.getByRole('dialog').getByRole('button', {name: 'Закрыть', exact: true}).click();
     await page.evaluate(() => { RNAssistantChatDrafts.flushOffice = windowProbe.flushOffice; });
-    await page.locator('#hostWindowDismiss').click();
     assert.equal(await page.evaluate(() => windowProbe.chat === RNAssistantConversationPanel.office('preview-chat')), true);
-    assert.equal(await page.evaluate(() => windowProbe.chat.view.canRender()), false);
     await page.evaluate(() => {
       windowProbe.set('Compact');
       RNAssistantConversationPanel.closeDeleted(windowProbe.chat.target);
@@ -167,6 +169,13 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await cold.waitForTimeout(50);
     assert.equal(await cold.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'minimum Compact viewport has no horizontal overflow');
     await cold.close();
+    await page.evaluate(() => RNAssistantWindow.switchDocument());
+    await page.getByRole('dialog').getByRole('button', {name: 'Переключить', exact: true}).click();
+    await page.waitForFunction(() => windowProbe.calls.some(call => call.command === 'SwitchDocument'));
+    await page.evaluate(() => windowProbe.set('FullNormal', 'Visible')); // Synthetic replacement host.
+    await page.locator('#hostWindowClose').click();
+    await page.getByRole('dialog').getByRole('button', {name: 'Закрыть RNAssistant', exact: true}).click();
+    await page.waitForFunction(() => windowProbe.calls.some(call => call.command === 'Shutdown'));
     assert.deepEqual(errors, []);
     console.log('PASS host window: capability, same-instance compact/full, native visibility, stale push, keyboard and 420px/125%');
   } finally { if (browser) await browser.close(); server.kill(); }

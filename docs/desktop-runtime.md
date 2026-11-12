@@ -3,11 +3,13 @@
 ## NativeHostCli: retained window session — In Review, 2026-11-11
 
 In-process launcher использует `OfficeHosts.Windows.InProcessWindowHost`, а C++/CLI
-сохраняет exports/loading/error boundary. Повторное открытие не позиционирует окно
-заново и не заменяет session из-за другого launch HWND. Основная форма — unowned,
-ShowInTaskbar, без TopMost; pin означает только запрет auto-collapse. ×/Alt+F4
-скрывает UI, сохраняя работу; явный `Host_ClosePanel`/Shutdown освобождает runtime
-через existing asynchronous RequestsDrained/ShutdownCompletion без Office UI wait.
+сохраняет exports/loading/error boundary. Прежний Excel VBA передаёт
+`Application.Hwnd`; OfficeHosts разрешает его в `ActiveWindow.Hwnd`:
+основная форма принадлежит окну книги, не имеет отдельного taskbar entry и не
+использует TopMost. Pin запрещает только auto-collapse. ×/Alt+F4/`Host_ClosePanel`
+завершают runtime и отменяют active runs через existing asynchronous
+RequestsDrained/ShutdownCompletion без Office UI wait. Вызов из другой книги после
+Web guard/flush создаёт новый exact session, не переназначая старый run.
 
 FullNormal/FullMaximized/Compact/Companion, независимые return points, focus и
 геометрия описаны в [Screen Map](ui/UI_SCREEN_MAP.md#native-window--in-review-2026-11-11).

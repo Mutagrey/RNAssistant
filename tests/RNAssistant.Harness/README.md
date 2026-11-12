@@ -96,6 +96,8 @@ deleted identities, initial bootstrap, dirty/failed-draft shutdown guards,
 keyboard/narrow/zoom and Demo geometry.
 `RNA_WINDOW_REVIEW=/tmp/window` optionally writes two screenshots and measurements.
 Native frame/DPI/focus/capture and Windows compilation remain separate evidence.
+После уточнения 2026-11-12 браузерный сценарий также проверяет единые оконные
+кнопки, guard закрытия и создание нового document session после draft flush.
 
 ## Run a focused slice
 

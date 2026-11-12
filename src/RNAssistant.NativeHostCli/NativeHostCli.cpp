@@ -25,6 +25,16 @@ private:
         catch (TargetInvocationException^ ex) { throw ex->InnerException == nullptr ? ex : ex->InnerException; }
     }
 
+    static void FollowSuccessor()
+    {
+        for (int i = 0; i < 4 && _host != nullptr; ++i)
+        {
+            Object^ next = _host->GetType()->GetProperty("Successor")->GetValue(_host, nullptr);
+            if (next == nullptr) break;
+            _host = next;
+        }
+    }
+
 public:
     static int ShowPanel(IntPtr officeHwnd, String^ rootPath, int hostKind)
     {
@@ -32,6 +42,7 @@ public:
         {
             ValidateShowArguments(officeHwnd, rootPath, hostKind);
             rootPath = Path::GetFullPath(rootPath);
+            FollowSuccessor();
             bool alive = _host != nullptr && !safe_cast<bool>(_host->GetType()->GetProperty("IsDisposed")->GetValue(_host, nullptr));
             array<Object^>^ arguments = gcnew array<Object^>(3);
             arguments[0] = hostKind; arguments[1] = officeHwnd.ToInt64(); arguments[2] = rootPath;
@@ -54,6 +65,7 @@ public:
     {
         try
         {
+            FollowSuccessor();
             if (_host != nullptr) Invoke("Shutdown", nullptr);
             _host = nullptr; ClearError(); return 0;
         }
@@ -63,6 +75,7 @@ public:
     {
         try
         {
+            FollowSuccessor();
             if (_host == nullptr || safe_cast<bool>(_host->GetType()->GetProperty("IsDisposed")->GetValue(_host, nullptr)))
             { SetError("Panel has not been created."); return -3; }
             array<Object^>^ arguments = gcnew array<Object^>(1); arguments[0] = visible;

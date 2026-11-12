@@ -60,10 +60,10 @@ namespace RNAssistant.Office.Services
                 case HostWindowCommand.Park:
                     if (Presentation != HostWindowPresentation.Companion) ReturnFromCompanion = Presentation;
                     Presentation = HostWindowPresentation.Companion; Visibility = HostWindowVisibility.ContextHidden; break;
-                case HostWindowCommand.Dismiss: Visibility = HostWindowVisibility.Dismissed; break;
                 case HostWindowCommand.SystemMinimize:
                     Resume(); Visibility = HostWindowVisibility.SystemMinimized; break;
-                case HostWindowCommand.Shutdown: Visibility = HostWindowVisibility.ShuttingDown; break;
+                case HostWindowCommand.Shutdown: case HostWindowCommand.SwitchDocument:
+                    Visibility = HostWindowVisibility.ShuttingDown; break;
                 // These invalidate pending focus decisions, too. Their effects are host-owned.
                 case HostWindowCommand.ChromeReady: case HostWindowCommand.ResetPlacement: break;
             }
@@ -82,7 +82,7 @@ namespace RNAssistant.Office.Services
         public void CompanionVisibility(bool visible)
         {
             if (!Alive || Presentation != HostWindowPresentation.Companion ||
-                Visibility == HostWindowVisibility.Dismissed || Visibility == HostWindowVisibility.SystemMinimized) return;
+                Visibility == HostWindowVisibility.SystemMinimized) return;
             var next = visible ? HostWindowVisibility.Visible : HostWindowVisibility.ContextHidden;
             if (Visibility != next) { Visibility = next; Revision++; }
         }
@@ -92,7 +92,7 @@ namespace RNAssistant.Office.Services
             return new HostWindowStateDto { Revision = Revision, Presentation = Presentation, Visibility = Visibility,
                 Pinned = Pinned, AutoCollapse = AutoCollapse, CanMaximize = Alive && Presentation != HostWindowPresentation.FullMaximized,
                 CanRestore = Alive && (Presentation == HostWindowPresentation.FullMaximized || Visibility == HostWindowVisibility.SystemMinimized),
-                CanCompact = Alive && Presentation != HostWindowPresentation.Compact, CanDismiss = Alive };
+                CanCompact = Alive && Presentation != HostWindowPresentation.Compact };
         }
     }
 }

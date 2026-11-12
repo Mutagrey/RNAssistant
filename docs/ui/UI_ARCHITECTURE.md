@@ -75,9 +75,14 @@ ToolRuntime terminal publication; поздний result другого preparati
 
 ## Native window — In Review, 2026-11-11
 
-NativeHostCli теперь только экспортный ABI/reflection loader. Один
+NativeHostCli — экспортный ABI/reflection loader. Один активный
 `OfficeHosts.Windows.InProcessWindowHost` владеет формами, HWND, геометрией, STA и
-retained `InProcessPanelSession`. `AssistantHostForm` обрабатывает frame/system
+`InProcessPanelSession` для точного документа. OfficeHosts разрешает старый
+`Application.Hwnd` и прямой `ActiveWindow.Hwnd` в окно активной книги; VBA launcher
+не меняется. Форма показывается с владельцем Office и без taskbar entry.
+При вызове из другой книги Shell проверяет редакторы/черновики, затем старый runtime
+завершается и создаётся новый с exact HWND; C++ shim следует за successor. Run
+старого документа не переназначается. `AssistantHostForm` обрабатывает frame/system
 commands/DPI; `CompanionForm` не содержит WebView. `Office.Services.AssistantWindowPolicy`
 владеет host-neutral переходами; typed `IAssistantWindowHost` не содержит HWND/COM.
 Office → OfficeHosts обратной зависимости нет. Desktop/VSTO этот owner не используют.
@@ -86,8 +91,9 @@ Office → OfficeHosts обратной зависимости нет. Desktop/V
 optional `hostWindow` bootstrap сообщает capabilities. Это additive capability,
 не второй протокол. Token проверяется до domain switch gate; presentation обходится
 без document maintenance и не входит в счётчик exclusive rebind. Root source check
-сохранён; plugin/preview не получает native authority. Shutdown/Dismiss из Web
-исполняются после публикации ACK; Shutdown закрывает admission до cleanup.
+сохранён; plugin/preview не получает native authority. Shutdown/SwitchDocument из Web
+исполняются после публикации ACK; закрытие останавливает active runs и закрывает
+admission до cleanup. Ошибка сохранения draft оставляет старую сессию открытой.
 
 `app-window` отображает revisioned native snapshot, а Shell/DockWorkspace владеют
 presentation. Compact временно максимизирует группу выбранного exact Chat View;
@@ -95,8 +101,8 @@ presentation. Compact временно максимизирует группу �
 актуальными metadata и исключением удалённых identities. Это не layout из одного чата.
 Сохранённая Full-раскладка остаётся единственной durable раскладкой. Начальный выбор
 чата заканчивается до применения сохранённого Compact; complex views сначала
-возвращают Full. Native visibility участвует в existing activate/deactivate; run не
-отменяется и WebView не suspend/reload. Геометрия/pin хранятся отдельно от SaveSettings
+возвращают Full. Compact/Companion не отменяют run и WebView не suspend/reload;
+закрытие всей формы отменяет run. Геометрия/pin хранятся отдельно от SaveSettings
 в `AppDataPaths.NativeWindowStateFile`: schema 1, DIP относительно monitor work area,
 atomic read-merge-write по host profile под коротким межпроцессным lock вне STA.
 

@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.14.3-dev
+
+- Restored Excel-owned RNAssistant windows without a separate taskbar preview.
+  Closing ends the session; opening from another workbook saves drafts and starts
+  a session for that workbook. Simplified the window controls and removed the
+  duplicate caption after WebView2 initialization. Windows delivery remains open.
+
 ### 16.14.2-dev
 
 - Stabilized encrypted BIN signing across RSA serialization paths and made the

@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Окно Excel — исправления по фото, In Review, 2026-11-12
+
+Пользователь уточнил: RNAssistant должен принадлежать окну Excel без отдельного
+taskbar preview; × завершает весь сеанс; вызов из другой книги создаёт новый.
+Старый VBA launcher с `Application.Hwnd` сохранён, OfficeHosts разрешает активную
+книгу и после guard/flush закрывает прежний session перед новым. Дублирующие кнопки
+убраны; web controls ждут ChromeReady. Scoped browser fixture проходит. Windows
+compile/Office delivery и визуальное принятие исправления открыты; общий Harness
+сейчас блокирует несвязанный `ExternalBrowserReadTarget.CanNavigate` compile error.
+[Точный сценарий](../ui/UI_MIGRATION_PLAN.md#native-window--in-review-2026-11-11).
+
 ## Сборочные исправления — In Review, 2026-11-12
 
 `16.14.2-dev`: по фото Windows исправлены `IsRedirected` WebView2 и тип
@@ -150,8 +161,8 @@ HWND/DPI/focus/IME/overlays/cleanup и визуальное принятие о�
 
 ## Native window / Compact / Companion — In Review, 2026-11-11
 
-NativeHostCli переведён на один managed window owner. Dismiss сохраняет session,
-повторный launch HWND не уничтожает run; separate Full/Compact/Companion placement,
+NativeHostCli переведён на managed window owner; исходные Dismiss и повторный
+launch HWND без замены session пересмотрены по фото 2026-11-12. Separate Full/Compact/Companion placement,
 pin, custom web chrome с native recovery caption и typed bridge подключены к прежней
 Shell/Chat View. Три host-neutral checks и scoped browser fixture проходят; Full
 layout, composer/edit, retained iframe и native-hidden lifecycle проверены локально.

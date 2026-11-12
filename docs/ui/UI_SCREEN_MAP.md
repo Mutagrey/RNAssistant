@@ -67,31 +67,30 @@ P6c остаётся в текущей Browser view: указатель движ
 
 ## Native window — In Review, 2026-11-11
 
-Первый native pilot — launcher Excel → NativeHostCli. Верхний header содержит
-меню окна, pin, уменьшение представления, native maximize/restore и закрытие.
+Первый native pilot — launcher Excel → NativeHostCli. Окно принадлежит активной
+книге Excel и не создаёт отдельный taskbar preview. Одна строка header содержит
+меню окна, переключение Compact/Companion и закрытие; pin и maximize — в меню.
 Существующий «Развернуть группу» остаётся командой Dockview. На узкой ширине и в
 Compact navigation/Inspector/Панели/Компоновка доступны через меню окна.
 
 | Действие | Результат |
 |---|---|
 | Full → «Компактная панель» | Тот же выбранный Chat View; прежние draft/edit/scroll/composer, скрытые views сохраняются |
-| Compact → уменьшение | Companion; основная форма убрана с рабочего стола, WebView/runtime и taskbar entry для возврата сохраняются |
+| Compact → уменьшение | Companion; основная форма убрана с рабочего стола, WebView/runtime сохраняются без отдельного taskbar entry |
 | Меню → «Полное окно» | FullNormal с прежними bounds и Full placement |
 | Native maximize/restore | FullMaximized в work area; Restore возвращает FullNormal либо Compact до максимизации |
 | Открыть Companion | Последнее интерактивное представление, включая FullMaximized; точка Restore не теряется |
-| Pin | Запрет auto-collapse; обычный z-order, без TopMost и Excel Win32 owner |
+| Pin | Запрет auto-collapse; обычный z-order, без TopMost; форма принадлежит Excel HWND |
 | Уход фокуса без pin | После debounce Companion; капсула видна только у связанного активного Office HWND |
-| × / Alt+F4 / системный Close | Dismiss обеих форм; работа и черновик сохраняются, возврат Excel сам UI не показывает |
+| × / Alt+F4 / системный Close | Один общий guard закрытия: сохранить черновики, остановить запросы и освободить session/WebView/forms |
 | Системное Minimize | Настоящая минимизация; Companion не появляется; Restore возвращает прежнее представление |
-| «Завершить сеанс…» | Общий dialog + guards редакторов/edit; подтверждённое сохранение drafts; active requests/операции требуют сначала остановки/завершения |
-| Повторный launcher из другой книги | Восстановление существующей сессии и видимого прежнего target; нет Dispose/rebind по новому HWND |
+| Повторный launcher из другой книги | Старый `Application.Hwnd` разрешается в окно активной книги; закрыть прежний exact session после guard/flush и создать новый; старый run не переназначать |
 | «Вернуть окно на экран» | Сброс только native placement; чаты/Dock layout/models не меняются |
 
 Companion: click открывает, native drag перемещает без click-open и сохраняет точку;
 основная форма при парковке минимизирована без изменения policy на SystemMinimized.
-Это сохраняет стандартный taskbar/Alt+Tab возврат; explicit SystemMinimize запрещает
-капсулу. Dismiss скрывает также основную форму/taskbar entry.
-контекстное меню даёт Full/Compact/Dismiss/Shutdown/reset. Статус — краткая сводка
+Возврат выполняют Companion или launcher Excel; explicit SystemMinimize запрещает
+капсулу. Контекстное меню даёт Full/Compact/Close/reset. Статус — краткая сводка
 существующих live run snapshots; завершение не открывает окно. При исчезновении
 anchor капсула скрывается; target выполняющегося run не меняется. Новый профиль или
 host kind получает явный отказ без уничтожения прежнего сеанса. `Host_ClosePanel`
@@ -200,7 +199,7 @@ Source-only не создаёт iframe. Read-only live оставляет previe
 Версии показывает только provider с историей. Произвольные URL ещё в плане.
 Решение 2026-11-11: Browser-вкладка сохраняет страницу/ввод при скрытии и переносе;
 × вкладки освобождает страницу, повторное открытие загружает её заново. Списка sessions
-и отдельного «Завершить сессию» нет; native window Dismiss остаётся скрытием окна.
+и отдельного «Завершить сессию» нет; закрытие native window завершает его сеанс.
 Dirty source editor сохраняет свой guard. Import добавляет source workspace,
 закрытие Browser не отменяет import/Run и не удаляет сохранённые данные.
 P3a (2026-11-11): первое открытие plugin source с failed check показывает ошибку без

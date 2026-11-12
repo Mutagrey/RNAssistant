@@ -22,7 +22,7 @@ namespace RNAssistant.OfficeHosts.Windows
             StartPosition = FormStartPosition.Manual;
             FormBorderStyle = FormBorderStyle.Sizable;
             AutoScaleMode = AutoScaleMode.None;
-            ShowInTaskbar = true; TopMost = false;
+            ShowInTaskbar = false; TopMost = false;
             MinimizeBox = MaximizeBox = true;
         }
 
@@ -37,7 +37,7 @@ namespace RNAssistant.OfficeHosts.Windows
         {
             if (!ShuttingDown && e.CloseReason == CloseReason.UserClosing)
             {
-                e.Cancel = true; Command?.Invoke(HostWindowCommand.Dismiss);
+                e.Cancel = true; Command?.Invoke(HostWindowCommand.Shutdown);
             }
             base.OnFormClosing(e);
         }
@@ -47,7 +47,7 @@ namespace RNAssistant.OfficeHosts.Windows
             if (!ShuttingDown && m.Msg == WindowNative.SysCommand)
             {
                 var command = m.WParam.ToInt64() & 0xFFF0;
-                HostWindowCommand? action = command == WindowNative.Close ? HostWindowCommand.Dismiss :
+                HostWindowCommand? action = command == WindowNative.Close ? HostWindowCommand.Shutdown :
                     command == WindowNative.Maximize ? HostWindowCommand.Maximize :
                     command == WindowNative.Restore ? HostWindowCommand.Restore :
                     command == WindowNative.Minimize ? HostWindowCommand.SystemMinimize : (HostWindowCommand?)null;
