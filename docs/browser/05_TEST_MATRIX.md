@@ -23,8 +23,10 @@ utilities. Прежний PFX-прототип удалён. Более ранн
   с сохранением encrypted backup. Test secrets удалены, реальный issuer не создан.
 - После фото первого запуска Windows utility генерация RSA 3072 на .NET Framework
   переведена на CNG; прежняя запись `RSA.Create().KeySize = 3072` не гарантировала
-  смены размера ключа. Утилита теперь помечает этап самопроверки в видимой ошибке.
-  BIN/header/AES/HMAC и подпись конфигурации не менялись; повторная Windows проверка открыта.
+  смены размера ключа. Повторное фото показало прежнюю общую ошибку подписи. Закрытые
+  RSA параметры теперь сериализуются явным DTO, а утилита помечает этап самопроверки
+  в видимой ошибке. BIN/header/AES/HMAC и подпись конфигурации не менялись; точная
+  причина Windows отказа и повторная проверка открыты.
 - Windows GUI sharing того же IssuerFiles/crypto проверен по коду/project includes.
   Для него добавлен отдельный `build-deployment-keys.cmd`. Реальная .NET 4.8 GUI
   compilation/execution, Office/WebView2 routing и events Open.

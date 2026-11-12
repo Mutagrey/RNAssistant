@@ -2,7 +2,7 @@
 
 ## Сборочные исправления — In Review, 2026-11-12
 
-`16.14.1-dev`: по фото Windows исправлены `IsRedirected` WebView2 и тип
+`16.14.2-dev`: по фото Windows исправлены `IsRedirected` WebView2 и тип
 `ConversationMetadata` для ContextInspector; MockDemo включает новые partial bridge
 files и условный public deployment trust. Host-neutral MockDemo build и 11 Browser
 Harness cases проходят; JS syntax check проходит, Chrome fixture требует локальный Playwright.
@@ -11,7 +11,9 @@ Harness cases проходят; JS syntax check проходит, Chrome fixture
 Public trust ещё не создан, поэтому Developer/external Browser остаются закрыты;
 Windows Office/GUI rebuild и delivery открыты. Первый запуск GUI показал отказ
 самопроверки ключа до записи файлов; .NET Framework RSA 3072 переведён на CNG,
-формат BIN сохранён, повторный Windows запуск открыт.
+повторное фото показало прежний общий отказ. Закрытые параметры теперь проходят через
+явный JSON DTO, а GUI показывает этап сбоя; внешний формат BIN сохранён. Точная причина
+на Windows и успешное создание ключей остаются открытыми до повторного запуска.
 
 ## Подписанная конфигурация приложения — In Review, 2026-11-12
 

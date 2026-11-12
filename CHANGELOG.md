@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.14.2-dev
+
+- Stabilized encrypted BIN signing across RSA serialization paths and made the
+  Windows key utility identify the failing self-check stage. The reported Windows
+  failure still requires a repeat with the rebuilt utility.
+
 ### 16.14.1-dev
 
 - Fixed Office compilation errors in Browser navigation and model context inspection.

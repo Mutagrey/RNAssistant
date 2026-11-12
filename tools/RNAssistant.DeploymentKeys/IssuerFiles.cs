@@ -42,7 +42,7 @@ namespace RNAssistant.DeploymentKeys
             byte[] signed;
             try { signed = DeploymentConfigurationCrypto.Sign(probe, key, password, trust); }
             catch (System.Security.Cryptography.CryptographicException error)
-            { throw new InvalidOperationException("Самопроверка подписи: " + error.Message, error); }
+            { throw new InvalidOperationException("Самопроверка подписи [" + (error.Data["deploymentStage"] as string ?? "rsa_provider") + "]: " + error.Message, error); }
             try { DeploymentConfigurationCrypto.Verify(signed, trust); }
             catch (System.Security.Cryptography.CryptographicException error)
             { throw new InvalidOperationException("Самопроверка открытого ключа: " + error.Message, error); }

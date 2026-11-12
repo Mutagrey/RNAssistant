@@ -22,6 +22,26 @@ namespace RNAssistant.Core.Services
             public string Payload { get; set; }
             public string Signature { get; set; }
         }
+        // Explicit JSON members keep the encrypted BIN payload independent of
+        // framework-specific serialization of the RSAParameters value type.
+        private sealed class PrivateRsaParameters
+        {
+            public byte[] D { get; set; }
+            public byte[] DP { get; set; }
+            public byte[] DQ { get; set; }
+            public byte[] Exponent { get; set; }
+            public byte[] InverseQ { get; set; }
+            public byte[] Modulus { get; set; }
+            public byte[] P { get; set; }
+            public byte[] Q { get; set; }
+            public static PrivateRsaParameters From(RSAParameters value)
+            { return new PrivateRsaParameters { D = value.D, DP = value.DP, DQ = value.DQ,
+                Exponent = value.Exponent, InverseQ = value.InverseQ, Modulus = value.Modulus,
+                P = value.P, Q = value.Q }; }
+            public RSAParameters ToParameters()
+            { return new RSAParameters { D = D, DP = DP, DQ = DQ, Exponent = Exponent,
+                InverseQ = InverseQ, Modulus = Modulus, P = P, Q = Q }; }
+        }
         public static DeploymentTrust CreateIssuer(string password, out byte[] encryptedKey)
         {
             CheckPassword(password);
@@ -32,7 +52,7 @@ namespace RNAssistant.Core.Services
                 byte[] verifier;
                 using (var derive = new Rfc2898DeriveBytes(password, salt, PasswordIterations, HashAlgorithmName.SHA256)) verifier = derive.GetBytes(32);
                 var privateParameters = rsa.ExportParameters(true);
-                var secret = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(privateParameters));
+                var secret = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(PrivateRsaParameters.From(privateParameters)));
                 try { encryptedKey = ProtectKey(secret, password); }
                 finally { Array.Clear(secret, 0, secret.Length); ClearPrivate(privateParameters); }
                 return new DeploymentTrust { PublicKey = new DeploymentPublicKey { Modulus = publicKey.Modulus, Exponent = publicKey.Exponent },
@@ -59,8 +79,10 @@ namespace RNAssistant.Core.Services
             RSAParameters parameters = default(RSAParameters);
             try
             {
-                parameters = JsonConvert.DeserializeObject<RSAParameters>(new UTF8Encoding(false, true).GetString(secret), Json);
-                if (parameters.D == null || !Equal(parameters.Modulus, trust.PublicKey.Modulus) || !Equal(parameters.Exponent, trust.PublicKey.Exponent)) throw Invalid();
+                var privateKey = JsonConvert.DeserializeObject<PrivateRsaParameters>(new UTF8Encoding(false, true).GetString(secret), Json);
+                parameters = privateKey?.ToParameters() ?? default(RSAParameters);
+                if (parameters.D == null || !Equal(parameters.Modulus, trust.PublicKey.Modulus) || !Equal(parameters.Exponent, trust.PublicKey.Exponent))
+                    throw Invalid("private_rsa_mismatch");
                 using (var rsa = CreateRsa())
                 {
                     rsa.ImportParameters(parameters);
@@ -68,7 +90,7 @@ namespace RNAssistant.Core.Services
                     var envelope = new SignedConfiguration { FormatVersion = 1, Payload = Convert.ToBase64String(payload),
                         Signature = Convert.ToBase64String(rsa.SignData(SignatureContext.Concat(payload).ToArray(), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)) };
                     var encoded = Encoding.ASCII.GetBytes(Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(envelope))));
-                    if (encoded.Length > MaximumBytes) throw Invalid();
+                    if (encoded.Length > MaximumBytes) throw Invalid("signed_config_too_large");
                     return encoded;
                 }
             }
@@ -126,13 +148,13 @@ namespace RNAssistant.Core.Services
         private static byte[] UnprotectKey(byte[] bytes, string password)
         {
             CheckPassword(password);
-            if (bytes == null || bytes.Length < 104 || bytes.Length > MaximumBytes || !bytes.Take(8).SequenceEqual(KeyHeader)) throw Invalid();
+            if (bytes == null || bytes.Length < 104 || bytes.Length > MaximumBytes || !bytes.Take(8).SequenceEqual(KeyHeader)) throw Invalid("key_header");
             var keys = Derive(password, bytes.Skip(8).Take(32).ToArray());
             try
             {
                 var bodyLength = bytes.Length - 32;
                 using (var mac = new HMACSHA256(keys.Skip(32).ToArray()))
-                    if (!Equal(mac.ComputeHash(bytes, 0, bodyLength), bytes.Skip(bodyLength).ToArray())) throw Invalid();
+                    if (!Equal(mac.ComputeHash(bytes, 0, bodyLength), bytes.Skip(bodyLength).ToArray())) throw Invalid("key_mac");
                 using (var aes = Aes.Create())
                 {
                     aes.Key = keys.Take(32).ToArray(); aes.IV = bytes.Skip(40).Take(16).ToArray();
@@ -152,6 +174,8 @@ namespace RNAssistant.Core.Services
         private static void CheckPassword(string password)
         { if (string.IsNullOrWhiteSpace(password) || password.Length > 1024) throw Invalid(); }
         private static CryptographicException Invalid() { return new CryptographicException("Неверные данные ключа, пароль или подпись конфигурации."); }
+        private static CryptographicException Invalid(string stage)
+        { var error = Invalid(); error.Data["deploymentStage"] = stage; return error; }
         public static byte[] ReadBounded(string path)
         {
             using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
