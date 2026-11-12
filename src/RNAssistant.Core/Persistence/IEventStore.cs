@@ -293,6 +293,10 @@ namespace RNAssistant.Core.Persistence
         // Verified canonical boundaries for the current run and selected same-chat
         // aliases. The disposable locator index is never accepted as evidence.
         FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references);
+        // The backend proves delivery using its canonical format at the supplied
+        // session cursor; input consumers do not interpret storage envelopes.
+        void ValidateInputDelivery(ChatSession session, IReadOnlyList<SessionEvent> facts,
+            IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> records);
         ISessionEventReader OpenReader(ConversationMetadata session);
         string ReadPayload(ConversationMetadata session, SessionEvent sessionEvent);
     }

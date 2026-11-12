@@ -40,7 +40,7 @@ namespace RNAssistant.Core.Storage
             var fact = DecodeChatCommit(record);
             return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning }.Concat(MessageReferences(item.Header))))
                 .Concat(fact.Tools?.Terminal == null ? new PayloadRef[0] : MessageReferences(fact.Tools.Terminal.Result))
-                .Where(item => item != null).Concat(fact.Checkpoint?.References ?? new PayloadRef[0]);
+                .Where(item => item != null).Concat(fact.Checkpoint?.References ?? new PayloadRef[0]).Concat(fact.Input?.Body == null ? new PayloadRef[0] : new[] { fact.Input.Body });
         }
 
         private ConversationChatReceipt FindChatWrite(SqliteConnection db, string operation)
@@ -121,6 +121,7 @@ namespace RNAssistant.Core.Storage
                     throw new InvalidDataException("Queue control must identify its exact chat and separate user intent.");
                 ValidateControl(db, record.Operation, fact.Control);
             }
+            ValidateChatInput(db, record, fact);
             ValidateChatRun(db, record, fact);
             ValidateChatTools(db, record, fact, keys, outcome);
             return ChatReferences(record);
@@ -181,11 +182,12 @@ namespace RNAssistant.Core.Storage
                 if (committed != null) ApplyChatToolRows(db, tx, record, position, committed, keys, existing, nextEvidence);
                 if (committed?.Checkpoint != null) ApplyRunRows(db, tx, record, position, committed.Checkpoint);
                 if (committed?.Control != null) ApplyControlRows(db, tx, record, position, committed.Control);
+                if (committed?.Input != null) ApplyChatInputRows(db, tx, record, position, committed.Input);
                 SaveCursor(db, position, tx); tx.Commit();
             }
         }
 
-        private ConversationChatReceipt CommitChat(ChatSession session, ConversationCommit commit, ConversationModelEvent modelEvent = null, ConversationInputEvent queueControl = null)
+        private ConversationChatReceipt CommitChat(ChatSession session, ConversationCommit commit, ConversationModelEvent modelEvent = null, ConversationInputEvent queueControl = null, PayloadRef inputBody = null)
         {
             RequireTextSession(session, commit); commit.BindJournal(session);
             using (RuntimeStorageActivity.Acquire(_paths))
@@ -204,7 +206,7 @@ namespace RNAssistant.Core.Storage
                 var receiptBody = session.LastContextReceipt == null ? null : StoreChatJson(session.LastContextReceipt);
                 var runBody = session.LastRun?.KernelState == null ? null : StoreChatJson(session.LastRun.KernelState);
                 var run = CopyRunHeader(session.LastRun);
-                foreach (var reference in new[] { context, receiptBody, runBody, modelEvent?.Body }
+                foreach (var reference in new[] { context, receiptBody, runBody, modelEvent?.Body, inputBody }
                     .Concat(messages.SelectMany(item => new[] { item.Body, item.Reasoning }.Concat(MessageReferences(item.Header))))
                     .Concat(tools?.Terminal == null ? new PayloadRef[0] : MessageReferences(tools.Terminal.Result)).Where(item => item != null))
                     if (!_bodies.HasVerifiedReference(reference.ToBlobReference())) throw new InvalidDataException("Chat body is unavailable before acceptance.");
@@ -221,8 +223,9 @@ namespace RNAssistant.Core.Storage
                         prior == null ? priorControl?.Position.Hash : prior.Fact.Control?.PreviousHash,
                         queueControl.Paused ? QueueControlAction.UserPause : QueueControlAction.UserResume,
                         null, null, null, null, queueControl.PauseReason);
+                    var input = queueControl?.Input == null ? null : PrepareChatInput(db, session, queueControl.Input, inputBody);
                     var fact = new ConversationChatCommit(card, commit.JournalRevision, commit.JournalMessageCount, messages, context, DateTime.UtcNow,
-                        run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control);
+                        run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control, input: input);
                     AssignChatReferences(db, fact, prior?.Fact);
                     var fingerprint = ChatFingerprint(fact);
                     if (prior != null)
@@ -343,11 +346,12 @@ namespace RNAssistant.Core.Storage
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationModelEvent ModelEvent { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationRuntimeTools Tools { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationQueueControl Control { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationInputState Input { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ModelResourceReference> References { get; internal set; }
         [JsonConstructor] internal ConversationChatCommit(ConversationCard card, long expectedRevision, int messageCount,
             IReadOnlyList<ConversationTextEntry> messages, PayloadRef context, DateTime createdUtc,
             ChatRunRecord run = null, PayloadRef runState = null, ConversationRunCheckpoint checkpoint = null,
-            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null, ConversationRuntimeTools tools = null, IReadOnlyList<ModelResourceReference> references = null, ConversationQueueControl control = null)
+            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null, ConversationRuntimeTools tools = null, IReadOnlyList<ModelResourceReference> references = null, ConversationQueueControl control = null, ConversationInputState input = null)
         {
             if (card == null || expectedRevision < 0 || messageCount < 0 || messages == null || messages.Count > 128 || context == null ||
                 messages.Any(item => item == null) || messages.Select(item => item.Header.Id).Distinct(StringComparer.Ordinal).Count() != messages.Count ||
@@ -357,7 +361,7 @@ namespace RNAssistant.Core.Storage
             if (run?.KernelState != null || runState != null && run == null || checkpoint != null &&
                 (checkpoint.ChatId != card.ChatId || checkpoint.RunId != run?.RunId || checkpoint.Body.Sha256 != runState?.Sha256))
                 throw new ArgumentException("Runtime metadata and checkpoint identity disagree.");
-            Tools = tools; References = references; Control = control;
+            Tools = tools; References = references; Control = control; Input = input;
             Run = run; RunState = runState; Checkpoint = checkpoint; ContextReceipt = contextReceipt; ModelEvent = modelEvent;
         }
     }

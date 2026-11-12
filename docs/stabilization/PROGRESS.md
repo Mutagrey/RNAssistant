@@ -185,8 +185,17 @@ call/run/deadline сохраняются; continuation явно получает
 используется прежний index, schema 16. Пять Office/Workspace scenarios проходят,
 включая оба lost ack, stale/deadline/pause guards, rebuild и чистый Workspace restore.
 Новые writers не включены; промежуточный срез без version bump.
+Подключён текстовый user Inbox (2026-11-12): acceptance/edit/remove/delivery атомарны
+с control и chat cursor; Applied проверяет точную исходную запись сообщения и CAS.
+Office queue/steer и Workspace intake проходят через существующие consumers;
+stale receipt читает свой prefix. Lost ack на трёх границах, restart, rebuild и
+чистый Workspace restore не повторяют ввод. 12 адресных checks проходят изолированно;
+schema 17 расширяет прежний input index. Common input journal больше не разбирает
+legacy envelopes; этот код остаётся в удаляемом при P7 adapter. Attachments,
+Workspace steer transport, полная boundedness input/control replay и расходы
+metadata/header ещё открыты. [Отчёт §12](../audits/storage-context-optimization.md#p1p2--journal-user-inbox-delivery-2026-11-12).
 Остальные mutation/resource owners, correlated wait delivery,
-rewrite/move/delete, usage, Inbox/peer control/feed и
+rewrite/move/delete, usage, peer control/feed и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
 Полный restore также должен сохранить Workspace identity locators и move intents.

@@ -36,7 +36,7 @@ namespace RNAssistant.Core.Storage
         {
             var chat = CurrentChat(db, id);
             if (chat == null && Card(db, id) != null) throw TextStoreScope();
-            if (chat != null && Scalar(db, "SELECT 1 FROM input_state WHERE stream=$stream AND recipient=$chat LIMIT 1", id) != null)
+            if (chat != null && Scalar(db, "SELECT 1 FROM input_state WHERE stream=$stream AND recipient=$chat AND request_id IS NULL LIMIT 1", id) != null)
                 throw TextStoreScope();
             var run = chat == null ? null : CurrentRun(db, id);
             if (run != null && (chat.Fact.Run == null || (run.Fact.RunId == chat.Fact.Run.RunId

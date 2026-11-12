@@ -123,11 +123,22 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal input:` covers four focused checks: real Office queue/steer and Workspace
+intake/runtime ports; FIFO edits/removal, immutable text/receipt identity and stale
+cursor reads; lost acceptance/message/Applied acknowledgements; exact message/body
+proof and explicit unsupported-owner rejection. Restart remains read-only until
+explicit delivery/reconciliation; rebuild and clean Workspace journal/CAS restore
+retain the same receipt. Pair with `journal wait:`, `inbox: durable FIFO edit and recovery`,
+`inbox: recovery reconciles Office and Workspace receipts` and
+`storage optimization: atomic agent delivery and wait`. These 12 checks pass
+host-neutral. Workspace steer transport, full input-history boundedness, production
+composition and Windows/Office qualification remain open.
+
 `journal wait:` covers five scenarios through real Office/Workspace consumers and
 scripted HTTP: timeout/restart, cancellation, lost queue Resume acknowledgement,
 lost continuation claim, changed deadline/paused-queue rejection. No terminal/E
 while waiting; original call/run/budget survive. Checks include stale continuation,
-rebuild and clean Workspace journal/CAS restore. Delivery/filtered reply waits and
+rebuild and clean Workspace journal/CAS restore. Peer delivery/filtered reply waits and
 Windows/Office remain separate. Pair with `journal confirmation:`, native run
 checkpoints/queue controls and the two kernel durable/timed wait checks.
 

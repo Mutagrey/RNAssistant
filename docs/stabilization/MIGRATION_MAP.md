@@ -2,12 +2,22 @@
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 user Inbox delivery (2026-11-12): text acceptance/edit/removal and delivery
+share the existing chat/control/input indices, with CAS text and an exact original
+message receipt for Applied. Owner: Core journal / existing Inbox and runtime
+consumers. Schema 17 adds request identity to input_state. Common input code delegates
+format-specific proof to IEventStore; legacy parsing stays only in the existing
+retiring ChatEventStoreAdapter until full-port P7 removal. No new adapter/store,
+dual-write, imported history or production switch. Attachments, peer controls/feed,
+correlated waits, other Store/resource operations, full Workspace steer transport
+and metadata/header costs remain open. [Contract](../session-events.md#journal-user-inbox-delivery--2026-11-12).
+
 P1/P2 saved waits and queue control (2026-11-12): Office/Workspace `agents.wait` now
 retains and explicitly claims its existing checkpoint through ConversationJournal.
 Timeout/cancellation close the original call once; lost acknowledgement leaves a
 recoverable wait. User pause/resume is atomic with the chat cursor and uses existing
 control rows (schema 16 adds only a query index). Owner: Core journal / existing
-kernel and Inbox. Incoming inputs, correlated waits, peer controls/feed and other
+kernel and Inbox. User input is connected above; correlated waits, peer controls/feed and other
 mutation/Store ports retain their P7 gate. No adapter, alternate scheduler/store,
 production writer switch or version bump. [Contract](../session-events.md#journal-saved-waits-and-queue-control--2026-11-12).
 

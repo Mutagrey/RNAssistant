@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using RNAssistant.Application.Conversations;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
@@ -27,7 +28,7 @@ namespace RNAssistant.Harness
         private static void JournalRuntimeToolParity()
         { JournalRuntimeHostParity(true); }
 
-        private static void JournalRuntimeHostParity(bool tools)
+        private static void JournalRuntimeHostParity(bool tools, bool inputs = false)
         {
             foreach (var office in new[] { true, false }) WithTempExecutor((executor, adapter) => {
                 var paths = FixturePaths.Value;
@@ -57,6 +58,7 @@ namespace RNAssistant.Harness
                                 var number = ++calls;
                                 AssertTrue(number <= (tools ? 4 : 3), "the scripted scenario requires no further requests");
                                 if (number == (tools ? 4 : 3)) AssertContains(wire, "Journal answer", "the next turn receives retained accepted history");
+                                if (inputs && office) AssertContains(wire, "Steered requirements", "Office consumes steering through its real input channel");
                                 var response = number == 1
                                     ? ModelProtocolWire.WriteAcceptedDecision("reflection", "Check the requested answer.", "", "Answer directly.")
                                     : ModelProtocolWire.WriteAcceptedDecision("finish", "The text answer is ready.", "Journal answer",
@@ -92,6 +94,29 @@ namespace RNAssistant.Harness
                         for (var turn = 0; turn < 2; turn++)
                         {
                             var text = turn == 0 ? "Give a text answer." : "Use the previous answer.";
+                            var inbox = inputs ? new ConversationInboxService(journal) : null;
+                            ConversationInput input = null;
+                            if (inputs)
+                            {
+                                var runId = Guid.NewGuid().ToString("N");
+                                chat.LastRun = new ChatRunRecord { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow,
+                                    ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                                input = InboxInput("input-" + turn, text, InputDelivery.Queue);
+                                input.AcceptedRunId = office ? null : runId;
+                                if (!office) input.Status = ConversationInputStatus.Delivering;
+                                inbox.Submit(chat, input);
+                                if (office) input = inbox.TakeNext(chat);
+                                var user = new ChatMessage { Id = input.Id, Role = "user", Content = text, RunId = runId };
+                                chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
+                                inbox.Applied(chat, input.Id);
+                                if (office)
+                                {
+                                    inbox.Bind(chat);
+                                    var steer = InboxInput("steer-" + turn, "Steered requirements", InputDelivery.Steer);
+                                    steer.AcceptedRunId = runId;
+                                    inbox.Submit(chat, steer);
+                                }
+                            }
                             if (office)
                             {
                                 var client = new LlmClient(() => "fixture-key");
@@ -100,17 +125,21 @@ namespace RNAssistant.Harness
                                     (configuration, messages, options, stream, token) => {
                                         traces.Configure(options, configuration.DebugModelTraffic);
                                         return client.CompleteAsync(configuration, messages, options, stream, token);
-                                    });
+                                    }, null, inbox: inbox);
                                 service.ExecuteAsync(ChatModes.Agent, text, chat, chat.Context, settings,
-                                    executor.GetControllerTools().ToArray(), null).GetAwaiter().GetResult();
+                                    executor.GetControllerTools().ToArray(), null, null, null, null, CancellationToken.None,
+                                    appendUserMessage: !inputs).GetAwaiter().GetResult();
                             }
                             else
                             {
-                                var runId = Guid.NewGuid().ToString("N");
-                                chat.LastRun = new ChatRunRecord { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow,
-                                    ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
-                                var user = new ChatMessage { Role = "user", Content = text, RunId = runId };
-                                chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
+                                var runId = inputs ? chat.LastRun.RunId : Guid.NewGuid().ToString("N");
+                                if (!inputs)
+                                {
+                                    chat.LastRun = new ChatRunRecord { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow,
+                                        ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                                    var user = new ChatMessage { Role = "user", Content = text, RunId = runId };
+                                    chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
+                                }
                                 var payloads = new ChatBlobStore(paths); var authority = new ResourceAuthorityStore(paths);
                                 var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
                                     new DocumentArtifactStore(authority, authority, payloads), new WorkspaceFileService(paths), payloads,
@@ -121,6 +150,16 @@ namespace RNAssistant.Harness
                             AssertEqual(RunLifecycle.Completed, chat.LastRun.KernelState.Summary.Lifecycle,
                                 (office ? "Office" : "Workspace") + " finishes through the real kernel and journal");
                             var retained = store.Load(chat.Id);
+                            if (inputs)
+                            {
+                                AssertEqual(1, retained.Messages.Count(item => item.Id == input.Id), "one accepted input becomes one user message");
+                                AssertEqual(ConversationInputStatus.Applied, new ConversationInboxService(journal)
+                                    .ReadAccepted(retained, input.OperationId, input.RequestFingerprint, !office).Current.Status,
+                                    "real runtime retains the canonical input receipt");
+                                if (office) AssertEqual(ConversationInputStatus.Applied,
+                                    new ConversationInboxService(journal).ReadAccepted(retained, "steer-" + turn, requireRunId: true).Current.Status,
+                                    "steering persists one exact message and applied receipt");
+                            }
                             AssertEqual(chat.Revision, retained.Revision, "restart preserves the exact accepted cursor");
                             AssertTrue(retained.Messages.Any(message => message.ProtocolMessage && message.Content.Contains("Journal answer")), "accepted answer is durable");
                             AssertEqual(RunLifecycle.Completed, retained.LastRun.KernelState.Summary.Lifecycle, "canonical checkpoint survives restart");

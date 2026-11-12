@@ -369,6 +369,10 @@ namespace RNAssistant.Harness
         }
         private sealed class InboxFailingEvents : IEventStore
         {
+            public void ValidateInputDelivery(ChatSession session, System.Collections.Generic.IReadOnlyList<SessionEvent> facts,
+                System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> records)
+            { Inner.ValidateInputDelivery(session, facts, records); }
+
             public IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs)
             { return Read(session, SessionEventReadMode.Validated).Where(item => item.Type == SessionEventDescriptors.For(SessionEventKind.ToolPackExtensionAccepted).Type && runs.Contains(item.RunId)).ToArray(); }
 

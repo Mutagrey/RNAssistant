@@ -1205,3 +1205,41 @@ after-state/CAS ownership.
    intermediate journal integration; the new claim marker does not change the
    production backend's behavior. No product bump, production switch, tag or push.
    Version-format/diff/link checks pass; unrelated working-tree changes are excluded.
+
+## P1/P2 — journal user Inbox delivery (2026-11-12)
+
+1. Text user acceptance, pending edits/removal and delivery now use the existing
+   ConversationJournal owner. Office queue/steer and Workspace initial intake run
+   through existing Inbox and real runtime consumers. Initial Pending/Delivering
+   and explicit removal of paused undelivered input retain current semantics.
+2. Input/control/chat cursor commit atomically in one frame; text stays in CAS.
+   Applied stores an addressed prior message receipt and verifies input ID, role,
+   accepted run, provenance and exact body before acceptance and during replay.
+   Lost acceptance/message/Applied acknowledgements cannot manufacture success or
+   automatically repeat delivery. Read-only receipts respect the supplied cursor.
+3. Schema 17 adds request identity to existing input_state and its unique index.
+   No store, registry, façade, fallback, dual-write or legacy history import.
+   Common input code delegates delivery proof to the existing event port; old
+   envelope parsing moved mechanically into the retiring ChatEventStoreAdapter.
+   ChatStore is not optimized; its removal still belongs to whole-port P7 cutover.
+   Production C# net +175 lines.
+4. Twelve targeted checks pass in isolated `0313240f` + this slice on macOS/net8/
+   C#7.3: four journal input cases, five journal wait cases, two existing Inbox
+   recovery cases and native atomic agent delivery/wait. They cover exact proof,
+   stale receipts/revisions, request collisions, missing message, wrong body,
+   edit/remove, restart, lost acknowledgements, rebuild and clean Workspace
+   journal/CAS restore. No VSTO/Office validation or production qualification.
+5. Input replay reads indexed controls, not unrelated chat bodies. Inbox hydrates
+   only the latest CAS body per input; acceptance identity remains separate from
+   edited text. Applied verification reads the addressed original frame. Full
+   input/control replay still scales with transition count; metadata/header costs,
+   CPU/allocation and Windows latency are not claimed solved by this slice.
+6. Attachments, peer input/control/feed, correlated waits, remaining Store/resource
+   operations, Workspace steer transport/default composition and P3 costs remain
+   open. P4 remains deferred. Verified history/CAS/keys/Workspace-locator backup,
+   stopped old writers and Windows/Office screen-photo evidence still gate cutover.
+7. Canonical session events, MIGRATION_MAP, PROGRESS and Harness guide updated.
+   Intermediate journal integration leaves production composition unchanged;
+   format-validation relocation preserves existing backend behavior. No product
+   bump, tag or push. Version-format/diff/link checks pass; unrelated dirty work
+   is excluded from the commit.

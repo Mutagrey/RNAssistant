@@ -276,6 +276,7 @@ namespace RNAssistant.Core.Storage
             else if (record.Kind == "input.changed")
             {
                 var fact = DecodeInput(record); var prior = InputState(db, fact.MessageId);
+                if (prior?.Header != null) throw new InvalidOperationException("Chat input transitions require the atomic chat port.");
                 if (fact.Status == ConversationInputStatus.Delivering && QueueControl(db, fact.Recipient)?.Fact.Paused == true)
                     throw new InvalidOperationException("Paused input remains pending.");
                 if (prior == null || prior.Recipient != fact.Recipient || fact.Revision != checked(prior.Revision + 1) ||
@@ -408,11 +409,12 @@ namespace RNAssistant.Core.Storage
         private void SaveInputState(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position, ConversationInputState state, bool initial)
         {
             using (var command = Command(db, initial
-                ? "INSERT INTO input_state VALUES($stream,$message,$recipient,$status,$revision,$run,$sequence,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)"
-                : "UPDATE input_state SET status=$status,revision=$revision,run=$run,operation=$operation,fingerprint=$fingerprint,segment=$segment,start_offset=$start,end_offset=$end,sequence=$sequence,hash=$hash,first_sequence=$first WHERE stream=$stream AND message=$message AND recipient=$recipient", tx))
+                ? "INSERT INTO input_state VALUES($stream,$message,$recipient,$status,$revision,$run,$sequence,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,$request)"
+                : "UPDATE input_state SET status=$status,revision=$revision,run=$run,request_id=$request,operation=$operation,fingerprint=$fingerprint,segment=$segment,start_offset=$start,end_offset=$end,sequence=$sequence,hash=$hash,first_sequence=$first WHERE stream=$stream AND message=$message AND recipient=$recipient", tx))
             {
                 command.Parameters.AddWithValue("$message", state.MessageId); command.Parameters.AddWithValue("$recipient", state.Recipient);
                 command.Parameters.AddWithValue("$status", state.Status.ToString()); command.Parameters.AddWithValue("$revision", state.Revision);
+                command.Parameters.AddWithValue("$request", (object)state.Header?.OperationId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$run", (object)state.RunId ?? DBNull.Value); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
             }
         }
@@ -440,6 +442,7 @@ namespace RNAssistant.Core.Storage
         }
         private static ConversationInputState DecodeInput(JournalRecord record)
         {
+            if (record.Kind == "chat.committed") return DecodeChatCommit(record).Input ?? throw new InvalidDataException("Missing input transition.");
             var fact = DeliveryData<ConversationInputState>(record);
             if (record.Kind != "input.changed" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact))) throw new InvalidDataException("Invalid input state.");
             return fact;
@@ -528,12 +531,19 @@ namespace RNAssistant.Core.Storage
         public long Revision { get; private set; }
         public ConversationInputStatus Status { get; private set; }
         public string RunId { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationInput Header { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PayloadRef Body { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public JournalCursor AppliedMessage { get; private set; }
         [JsonConstructor]
-        internal ConversationInputState(string recipient, string messageId, long revision, ConversationInputStatus status, string runId)
+        internal ConversationInputState(string recipient, string messageId, long revision, ConversationInputStatus status, string runId, ConversationInput header = null, PayloadRef body = null, JournalCursor appliedMessage = null)
         {
             if (string.IsNullOrWhiteSpace(recipient) || string.IsNullOrWhiteSpace(messageId) || revision < 0 || !Enum.IsDefined(typeof(ConversationInputStatus), status) ||
-                ((status == ConversationInputStatus.Delivering || status == ConversationInputStatus.Applied) ? string.IsNullOrWhiteSpace(runId) : runId != null))
+                (header == null && ((status == ConversationInputStatus.Delivering || status == ConversationInputStatus.Applied) ? string.IsNullOrWhiteSpace(runId) : runId != null)) ||
+                (header == null ? body != null || appliedMessage != null : body == null || header.Text != null ||
+                    header.Id != messageId || header.Revision != revision || header.Status != status || header.AcceptedRunId != runId ||
+                    (status == ConversationInputStatus.Applied) != (appliedMessage != null)))
                 throw new ArgumentException("Invalid input delivery state.");
+            Header = header; Body = body; AppliedMessage = appliedMessage;
             Recipient = recipient; MessageId = messageId; Revision = revision; Status = status; RunId = runId;
         }
     }

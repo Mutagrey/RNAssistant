@@ -1,5 +1,35 @@
 # Session event stream
 
+## Journal user Inbox delivery — 2026-11-12
+
+Text user input now uses the existing journal owner: acceptance/edit/removal,
+delivery state and queue control share one `chat.committed` frame and cursor.
+Text lives in CAS. Schema 17 adds request identity to the existing input index;
+no new durable store or projection is introduced. Initial Pending (Office queue)
+and Delivering with an accepted run (Workspace) preserve the existing intake contract.
+Paused, undelivered inputs can still be explicitly removed or resumed.
+
+Applied requires an exact prior journal message receipt: same input ID, user role,
+run when accepted, provenance and CAS body. Index rows are locators, not proof.
+The event port owns validation of its format; legacy envelope parsing has moved
+from the common input journal into the existing retiring event adapter. Its behavior
+and P7 removal condition are unchanged. No ChatStore optimization or extra adapter.
+
+Read-only receipt lookup is fenced to the supplied chat revision, including stale
+projections. Input replay selects indexed controls and hydrates only latest input
+bodies through the existing Inbox owner. Full replay still grows with input/control
+transitions; this is not a bounded-history or metadata/header-cost completion claim.
+Lost acceptance/message/Applied acknowledgement, restart, rebuild and clean Workspace
+journal/CAS restore preserve receipts without automatic redelivery. Office queue and
+steer run through its real consumer; Workspace initial intake runs through shared
+Inbox and real runtime ports. Workspace steer transport and default composition
+remain part of cutover evidence.
+
+Attachments, peer input/control/feed, correlated waits, remaining Store/resource
+operations and P3 metadata/header costs stay open; P4 stays deferred. Production
+writers remain unchanged. Windows/Office qualification is open.
+[Evidence](audits/storage-context-optimization.md#p1p2--journal-user-inbox-delivery-2026-11-12).
+
 ## Journal saved waits and queue control — 2026-11-12
 
 Unfiltered `agents.wait` now runs through the real Office/Workspace consumers on the
@@ -13,9 +43,9 @@ Inbox user pause/resume now shares a chat frame with the existing queue-control 
 and index. Input replay reads that chat's indexed control records, without scanning
 message bodies. Schema 16 adds the control-page index; no new durable owner or table.
 Cold Inbox still pauses a saved wait until explicit user resume, even if an earlier
-Resume receipt survived an acknowledgement loss. Actual incoming inputs, correlated
-reply/completion waits, peer controls and the remaining Inbox/feed integration stay
-unsupported explicitly; this slice does not qualify message delivery.
+Resume receipt survived an acknowledgement loss. User input is connected in the
+slice above; correlated reply/completion waits, peer controls and remaining feed
+integration stay unsupported explicitly. This wait slice alone does not qualify delivery.
 
 Five Office/Workspace checks cover timeout, cancellation, claim/control acknowledgement
 loss, changed deadline and pause fencing; rebuild and clean Workspace journal/CAS
