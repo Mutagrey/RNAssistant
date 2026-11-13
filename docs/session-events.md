@@ -1,5 +1,32 @@
 # Session event stream
 
+## Journal single-chat deletion — 2026-11-13
+
+`IConversationStore.Delete` now uses one `chat.deleted` fact in the existing
+ConversationJournal. The typed fact pins the exact address/revision and prior hash.
+Its canonical locator replaces the existing card locator; live alias, metadata and
+active selection disappear in one index transaction. Retained identity rejects
+recreation through Store, primitive creation and spawn. No table/schema migration,
+physical journal deletion or CAS removal is involved: canonical history and evidence
+remain available to closure/rebuild/backup, while normal Store/feed/peer access sees
+an unavailable chat. This is logical deletion, not storage-space reclamation.
+
+Deletion takes the same resource scope lease as group membership. Exact scope/head
+and terminal-run guards are rechecked inside append admission; running, waiting,
+unresolved confirmation and a run not yet checkpointed must be stopped/reconciled
+first. Groups and other chats survive, and membership reads filter the deleted ID.
+No group payload or participant history is rewritten. The add/delete race is tested
+host-neutral, including refusal during the membership lease and after deletion.
+
+A lost flush acknowledgement or index update is resolved only by the exact canonical
+tombstone, without reappending. Unavailable read-back throws instead of reporting
+success; restart/rebuild retains the accepted deletion. An already absent chat returns
+false and does not dispatch. Office ChatSessionService selects a surviving chat;
+WorkspaceStore retains its existing selection behavior. Four checks cover these
+consumers, guards, faults, retained Unknown/resource proof after deletion, rebuild
+and clean Workspace restore. Document deletion,
+Move/MoveDocument, production cutover and Windows/Office qualification remain open.
+
 ## Journal chat groups — 2026-11-13
 
 The existing ConversationGroupService now accepts native conversation/resource
@@ -17,9 +44,9 @@ List/no-op return no effect. Lost publication acknowledgement leaves source Unkn
 even when the group is durable; restart, rebuild and restore do not retry or upgrade
 that terminal. Runtime authority commits are excluded from model/UI JSON.
 
-Native chat Delete/Move remain unsupported. Their future integration must share
-this lease, including the add/delete-chat race check; that race is not qualified
-for the native backend yet. Default writers still use the explicit retiring
+Native single-chat Delete now shares this lease; its add/delete race has host-neutral
+coverage above. Move and document deletion remain unsupported and must preserve
+the same serialization. Default writers still use the explicit retiring
 composition below. Whole-port P7 removes ChatStore.Groups and the legacy constructor/
 catalog branch, with no import, dual-write or fallback. Group reads still hydrate
 all group bodies in the scope; Publish's existing authority snapshot and broader
@@ -460,8 +487,8 @@ ChatStore overloads are removed. Production composition still uses its existing
 introduced; this slice does not alter `ChatStore` itself.
 
 No-tool runtime/protocol messages and `CommitRun` are now connected as described
-above. Resources/attachments, history rewrites, move/delete and storage
-usage remain unsupported in this isolated integration. Reading an unconnected tool/
+above. Single-chat deletion is connected by `chat.deleted`. Other resource/attachment
+owners, history rewrites, move/document deletion and storage usage remain open. Reading an unconnected tool/
 agent chat must not return an apparently complete text history. Remaining operations must move to
 the same owner before P7 removes the old backend; verified backup, stopped legacy
 writers and Windows/Office photo evidence still gate that switch. Existing journal

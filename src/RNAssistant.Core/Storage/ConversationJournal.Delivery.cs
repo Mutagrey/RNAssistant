@@ -196,19 +196,28 @@ namespace RNAssistant.Core.Storage
                 using (var reader = command.ExecuteReader()) while (reader.Read()) ids.Add(reader.GetString(0));
             }
             if (ids.Count > 1) throw new InvalidOperationException("Agent alias is ambiguous.");
-            return ids.Count == 0 ? null : Card(db, ids[0]).Item1;
+            return ids.Count == 0 ? null : Card(db, ids[0])?.Item1;
         }
 
         private Tuple<ConversationCard, string> Card(SqliteConnection db, string chat)
+        {
+            var record = CardRecord(db, chat);
+            if (record == null || record.Kind == "chat.deleted") return null;
+            var fact = DecodeCard(record);
+            if (fact.ChatId != chat) throw new InvalidDataException("Foreign conversation card.");
+            return Tuple.Create(fact, record.Operation);
+        }
+
+        private JournalRecord CardRecord(SqliteConnection db, string chat)
         {
             using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM chat_card WHERE stream=$stream AND chat=$chat"))
             {
                 command.Parameters.AddWithValue("$chat", chat);
                 var record = LocatedRecord(command);
                 if (record == null) return null;
-                var fact = DecodeCard(record);
-                if (fact.ChatId != chat) throw new InvalidDataException("Foreign conversation card.");
-                return Tuple.Create(fact, record.Operation);
+                if (record.Kind == "chat.deleted" && DecodeChatDeletion(record).Address.Id != chat)
+                    throw new InvalidDataException("Foreign chat deletion.");
+                return record;
             }
         }
 
@@ -297,7 +306,7 @@ namespace RNAssistant.Core.Storage
             if (record.Kind == "agent.spawned") return ValidateSpawn(db, record);
             if (record.Kind == "chat.created")
             {
-                if (Card(db, DecodeCard(record).ChatId) != null) throw new InvalidDataException("Chat already exists.");
+                if (CardRecord(db, DecodeCard(record).ChatId) != null) throw new InvalidDataException("Chat identity already exists or was deleted.");
             }
             else if (record.Kind == "input.changed")
             {
