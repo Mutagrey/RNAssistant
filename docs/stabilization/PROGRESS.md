@@ -1,5 +1,12 @@
 # Stabilization progress
 
+## Native caption — исправление по повторному замечанию, 2026-11-13
+
+Системный заголовок исключён из CreateParams до создания HWND; conditional caption
+path удалён. Shell controls доступны и без WebView2 native drag regions, перенос
+в этом случае идёт через typed BeginMove. Focused browser fixture проходит;
+реальная рамка/resize/Alt+F4 в Windows + Excel остаются открытым evidence.
+
 ## Local Browser F3b — Plugin Save/Apply cutover, 2026-11-13
 
 `16.16.0-dev`: saved plugin catalog подключён к Application/tools/common Browser;

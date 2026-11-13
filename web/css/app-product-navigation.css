@@ -23,8 +23,9 @@
 .workspace-topbar [hidden] { display: none !important; }
 .host-window-controls { display: flex; align-items: center; gap: 0; padding-left: var(--space-2); margin-left: var(--space-1); border-left: 1px solid var(--line); }
 .host-window-controls #hostWindowClose { margin-left: var(--space-1); }
-.integrated-window-chrome .workspace-topbar { -webkit-app-region: drag; app-region: drag; }
-.integrated-window-chrome .workspace-topbar :is(button, input, a, [role="button"]) { -webkit-app-region: no-drag; app-region: no-drag; }
+.integrated-window-chrome .workspace-topbar { user-select: none; }
+.native-window-drag .workspace-topbar { -webkit-app-region: drag; app-region: drag; }
+.native-window-drag .workspace-topbar :is(button, input, select, textarea, a, [role="button"], [contenteditable], [tabindex]) { -webkit-app-region: no-drag; app-region: no-drag; }
 .integrated-window-chrome .workspace-context { min-width: var(--shell-window-drag-width); }
 .workspace-topbar #hostWindowClose:hover { color: var(--danger); background: var(--surface-hover); }
 html[data-host-presentation="Compact"] .shell.app-shell { grid-template-columns: minmax(0, 1fr); }

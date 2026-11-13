@@ -241,7 +241,7 @@ namespace RNAssistant.Office.WebView
                 }
                 catch (Exception error)
                 {
-                    RuntimeLog.Error("Integrated window chrome unavailable; retaining native caption.", error);
+                    RuntimeLog.Error("WebView2 native drag regions unavailable; using header move commands.", error);
                     _bridge.WindowHost.ConfigureChrome(false);
                 }
                 core.ProcessFailed += OnRootProcessFailed;

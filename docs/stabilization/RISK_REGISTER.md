@@ -19,9 +19,9 @@ Compact после открытия другой книги. Код восста
 старую сессию на × и ввёл exact active-workbook resolution при прежнем VBA
 `Application.Hwnd`. Windows x64 + Excel/WebView2 проверка изменений ещё открыта:
 owner/taskbar, загрузочный caption, перенос между двумя книгами, Compact/Companion,
-cancel/flush при переходе и закрытие с активным run. На этой машине проверяется
-только браузерный UI; текущий общий Harness не компилируется из-за несвязанного
-`ExternalBrowserReadTarget.CanNavigate` (Office.Services.BrowserPageAutomation).
+cancel/flush при переходе и закрытие с активным run.
+2026-11-13 caption исключён из стиля формы до первого HWND; browser fixture покрывает
+controls и перенос при отсутствии native drag regions, но не Win32 frame/resize.
 
 ## Замечания от 06.11 — повторная проверка 2026-11-11
 

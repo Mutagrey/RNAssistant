@@ -19,7 +19,7 @@
     control("hostWindowClose", "Закрыть RNAssistant", "close");
     control("hostWindowMenu", "Действия с окном", "more");
     var status = [current.presentation, current.visibility, current.pinned ? "pin" : "auto",
-      current.chromeReady ? "web chrome" : "native caption", current.anchorAvailable ? "Office anchor" : "нет Office anchor"];
+      current.chromeReady ? "web chrome" : "загрузка панели", current.anchorAvailable ? "Office anchor" : "нет Office anchor"];
     if (current.diagnostic) status.push(current.diagnostic);
     document.getElementById("hostWindowMenu").title = "Действия с окном · " + status.join(" · ");
   }
@@ -33,6 +33,7 @@
     var presentation = initializing ? "FullNormal" : current.presentation;
     if (presentation !== "Companion") document.documentElement.dataset.hostPresentation = presentation;
     document.documentElement.classList.toggle("integrated-window-chrome", !!current.chromeReady);
+    document.documentElement.classList.toggle("native-window-drag", !!(current.chromeReady && capabilities && capabilities.nativeDragRegions));
     RNAssistantShellLayout.refresh();
     RNAssistantDockWorkspace.setHostWindow(presentation, current.visibility === "Visible" && current.presentation !== "Companion");
     render();
@@ -47,11 +48,34 @@
       apply(response.state); return response;
     } catch (error) {
       // Reconcile a timeout; never repeat the mutation.
-      try { var actual = await send("getHostWindowState", {}); if (actual) apply(actual.state); } catch (ignored) { /* Native caption/launcher remain available. */ }
+      try { var actual = await send("getHostWindowState", {}); if (actual) apply(actual.state); } catch (ignored) { /* Alt+F4/launcher remain available. */ }
       throw error;
     } finally { busy = false; render(); if (pendingSwitch) { pendingSwitch = false; shutdown(true); } }
   }
   function request(name, value) { command(name, value).catch(notice); }
+  function bindHeaderMove() {
+    var header = document.querySelector(".workspace-topbar"), press = null;
+    function draggable(event) {
+      return capabilities && !capabilities.nativeDragRegions && current && current.chromeReady && !busy &&
+        !event.target.closest('button, input, select, textarea, a, [role="button"], [contenteditable], [tabindex]');
+    }
+    header.addEventListener("pointerdown", function (event) {
+      press = event.button === 0 && draggable(event) ? { x: event.clientX, y: event.clientY } : null;
+    });
+    header.addEventListener("pointermove", function (event) {
+      if (!press) return;
+      if (!(event.buttons & 1) || !draggable(event)) { press = null; return; }
+      if (Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) < 4) return;
+      press = null; event.preventDefault(); request("BeginMove");
+    });
+    function reset() { press = null; }
+    document.addEventListener("pointerup", reset);
+    document.addEventListener("pointercancel", reset);
+    window.addEventListener("blur", reset);
+    header.addEventListener("dblclick", function (event) {
+      if (event.button === 0 && draggable(event)) { event.preventDefault(); request(current.canRestore ? "Restore" : "Maximize"); }
+    });
+  }
   function shutdown(replacement) {
     if (!capabilities || busy) { if (replacement) pendingSwitch = true; return; }
     if (replacement) pendingSwitch = false;
@@ -107,6 +131,7 @@
     }
     if (!bound) {
       bound = true;
+      bindHeaderMove();
       document.getElementById("hostWindowPresentation").onclick = function () { request(compact() ? "Park" : "ShowCompact"); };
       document.getElementById("hostWindowClose").onclick = function () { shutdown(false); };
       document.getElementById("hostWindowMenu").onclick = function () { menu(this); };

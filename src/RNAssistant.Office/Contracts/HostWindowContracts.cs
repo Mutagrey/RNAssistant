@@ -13,12 +13,13 @@ namespace RNAssistant.Office.Contracts
     public enum HostWindowCommand
     {
         ShowFull, ShowCompact, Park, Maximize, Restore, SetPinned, SetAutoCollapse,
-        SystemMinimize, ResetPlacement, ChromeReady, Shutdown, SwitchDocument
+        SystemMinimize, ResetPlacement, ChromeReady, Shutdown, SwitchDocument, BeginMove
     }
 
     public sealed class HostWindowCapabilitiesDto
     {
         [JsonProperty("integratedChrome")] public bool IntegratedChrome { get; set; }
+        [JsonProperty("nativeDragRegions")] public bool NativeDragRegions { get; set; }
         [JsonProperty("compactPresentation")] public bool CompactPresentation { get; set; }
         [JsonProperty("companion")] public bool Companion { get; set; }
         [JsonProperty("pin")] public bool Pin { get; set; }

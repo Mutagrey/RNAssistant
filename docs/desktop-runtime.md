@@ -18,9 +18,17 @@ run. Для Full первоначально используется DesktopWind
 размещение имеет приоритет. Compact/Companion имеют независимые bounds. Существующий
 Desktop.exe и встроенные VSTO task panes сохраняют прежнее оконное поведение.
 
+Системный заголовок основной формы исключён из `CreateParams` (`WS_CAPTION`) до
+создания HWND, включая повторное создание handle. WebView2/ChromeReady не меняют
+стиль формы. `integratedChrome` доступен всегда у этого host; отдельный
+`nativeDragRegions` выбирает app-region либо typed `BeginMove` для переноса за
+свободную область Shell. При недоступном root UI Alt+F4 закрывает session напрямую;
+после ChromeReady используется обычный guard/flush. Caption не восстанавливается.
+
 Custom frame и non-client regions сверены с Microsoft
 [WebView2 settings](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2settings9),
 [custom frame](https://learn.microsoft.com/en-us/windows/win32/dwm/customframe),
+[window styles](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-styles),
 [system commands](https://learn.microsoft.com/en-us/windows/win32/menurc/wm-syscommand) и
 [DPI](https://learn.microsoft.com/en-us/windows/win32/hidpi/wm-dpichanged);
 background parking использует [ShowWindow/SW_SHOWMINNOACTIVE](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow).

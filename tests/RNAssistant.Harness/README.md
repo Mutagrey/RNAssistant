@@ -116,6 +116,8 @@ production Shell/Dockview with synthetic native snapshots: retained chat/edit/if
 Full placement across Compact and both state/resize orders, native visibility,
 deleted identities, initial bootstrap, dirty/failed-draft shutdown guards,
 keyboard/narrow/zoom and Demo geometry.
+It also checks header move commands and visible controls without WebView2 native
+drag regions; this is not evidence for the actual Win32 title bar.
 `RNA_WINDOW_REVIEW=/tmp/window` optionally writes two screenshots and measurements.
 Native frame/DPI/focus/capture and Windows compilation remain separate evidence.
 После уточнения 2026-11-12 браузерный сценарий также проверяет единые оконные

@@ -124,7 +124,11 @@ Windows qualification открыты; далее P4a, без автоматич�
 другой книге через подтверждение и сохранение drafts закрывает старый session и
 создаёт новый. Compact/Companion остаются режимами того же WebView только в пределах
 одной книги. Видимая группа оконных controls сокращена до меню, режима и ×; native
-caption убирается при поддержке non-client regions, Web controls ждут ChromeReady.
+caption с 2026-11-13 исключён из CreateParams до создания HWND, без проверки
+WebView2. Web controls ждут ChromeReady при любом Runtime; native drag regions
+имеют отдельную capability и явный header move через bridge при её отсутствии.
+Focused browser fixture проверяет controls/перенос без native drag regions;
+старый VBA launcher не меняется.
 Проверка на Windows после правки остаётся открытой.
 
 По приложенному пользователем плану управления окнами реализован scoped native
