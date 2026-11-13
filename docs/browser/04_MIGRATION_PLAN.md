@@ -1,5 +1,20 @@
 # Universal Browser: план реализации
 
+## Local package implementation — 2026-11-13
+
+00–08 implementation is complete through 07 on `16.25.1-dev`, with separate
+end-to-end commits. The latest Progress/Test Matrix sections supersede the historical
+external-browser/P1–P6 sequence below. Interactive local execution, exact bindings,
+semantic input, media fallback, native selection/find, version/export lifecycle,
+StartSurface and selected Inspector are connected to existing owners. No new JS-worker
+migration or later UI phase starts implicitly.
+
+Windows native compilation/qualification and UI acceptance remain open. The raw HTML
+and generic Workspace project have no existing annotation owner; capability is explicit.
+Offline autonomous HTML embeds binding snapshots; live Office/plugin tools need the
+app. Historical source/test links below are pinned to audited `e9bb52c1` where their
+retired files existed. Integration evidence is recorded in [Progress](06_PROGRESS.md).
+
 ## Действующий порядок local Browser — 2026-11-13
 
 Пакет 00–08 исполняется последовательно в одном чате на текущем `main`:
@@ -210,10 +225,10 @@ Owner: Web Browser/PreviewSurface; data owner — existing HtmlArtifactView/expo
    интерфейсом [P1 presentation](03_CONTRACTS.md#p1-presentation). Общие controls:
    read-only address и «Страница / Исходник»; existing title/path/status/actions остаются.
    Keyboard/aria используют общие form-control/view-switch.
-3. В [app-browser-object-view.js](../../web/js/app-browser-object-view.js), `load/reload/stop/dispose`,
+3. В [app-browser-object-view.js](https://github.com/Mutagrey/RNAssistant/blob/e9bb52c1e4761c7b10cce1613b70ee572fb92750/web/js/app-browser-object-view.js), `load/reload/stop/dispose`,
    связать loaded presentation с surface. Ready hidden DOM и текущий mode сохраняются;
    callbacks/leases поздней загрузки не применяются к закрытому view.
-4. В [app-html-artifact-view.js](../../web/js/app-html-artifact-view.js), `load/mode/create`,
+4. В [app-html-artifact-view.js](https://github.com/Mutagrey/RNAssistant/blob/e9bb52c1e4761c7b10cce1613b70ee572fb92750/web/js/app-html-artifact-view.js), `load/mode/create`,
    вернуть presentation/selectMode вместо локальных mode buttons. File picker остаётся
    над исходником в provider content и скрыт в preview. Остаются один iframe,
    `renderSource` с pagination и position per file, artifact version picker/actions.
