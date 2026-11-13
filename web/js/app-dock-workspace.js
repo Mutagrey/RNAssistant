@@ -78,6 +78,13 @@
   function sectionView(name) {
     return Object.keys(views).find(function (id) { return views[id].section === name; }) || null;
   }
+  function updateTarget(target) {
+    var descriptor = target && views[target.view];
+    if (!descriptor || !descriptor.perObject || !descriptor.accepts(target)) return false;
+    var item = panel(descriptor.key(target)); if (!item) return false;
+    item.api.updateParameters({ target: Object.freeze(Object.assign({}, target)) });
+    item.api.setTitle(descriptor.titleFor(target)); changed(); return true;
+  }
   function workspaceActive() { return hostCompact || section === "chat" || !!sectionView(section); }
   function placeHost() {
     if (!host) return;
@@ -235,6 +242,7 @@
   function show(id, group, direction) {
     if (id !== "conversation" && window.RNAssistantWindow && RNAssistantWindow.inFull(function () { show(id, group, direction); })) return;
     if (!api || !views[id] || views[id].targetRoute) return;
+    if (id === "browser") return RNAssistantBrowser.open("/", null, { group: group, direction: direction });
     if (id === "conversation" && views[id].perObject) {
       var selected = RNAssistantConversationPanel.selected();
       return openTarget(selected ? selected.route : { view: "conversation", source: "office", sessionId: state.activeChatId || "" }, { group: group, direction: direction });
@@ -627,7 +635,7 @@
     eachView: function (type, callback) { Object.keys(objectViews).forEach(function (id) {
       var item = panel(id); if (item && item.params && item.params.target.view === type) callback(objectViews[id].view);
     }); },
-    registerTargetRoute: registerTargetRoute, registerView: registerView, openTarget: openTarget, sectionView: sectionView,
+    registerTargetRoute: registerTargetRoute, registerView: registerView, openTarget: openTarget, updateTarget: updateTarget, sectionView: sectionView,
     isSectionVisible: function (name) { var id = sectionView(name); return !!id && visible(id); },
     bind: bind, mount: mount, show: show, close: close, updateContext: updateContext, refreshPresentation: refreshPresentation,
     isVisible: visible,

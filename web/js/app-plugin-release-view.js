@@ -19,17 +19,10 @@
         return RNAssistantPlugins.openSourceChat(null, plugin, { referencePanel: key(target), beside: true, isCurrent: context.isCurrent });
       },
       load: async function (context) {
-        var value = await send("openPlugin", { pluginId: target.pluginId, releaseId: target.releaseId });
-        function close() { send("closePlugin", { instanceId: value.instanceId }).catch(function () {}); }
-        if (!context.isCurrent()) { close(); return null; }
-        var frame = document.createElement("iframe"); frame.title = target.title;
-        frame.sandbox = "allow-scripts allow-same-origin allow-downloads"; frame.referrerPolicy = "no-referrer";
-        function appearance() { if (target.pluginId === "data-templates") RNAssistantPlugins.applyAppearance(frame); }
-        var theme = new MutationObserver(appearance);
-        theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent"] });
-        frame.addEventListener("load", appearance); frame.src = value.entryUrl;
-        return { element: frame, frame: frame, presentation: { address: value.entryUrl }, comparison: comparison,
-          dispose: function () { theme.disconnect(); frame.remove(); close(); } };
+        var source = document.createElement("div"); source.className = "empty-state";
+        source.textContent = RNAssistantBrowser.unavailable;
+        return { element: source, presentation: { address: "/plugins/" + encodeURIComponent(target.pluginId) + "/versions/" + encodeURIComponent(target.releaseId), supportedModes: ["source"], mode: "source" }, comparison: comparison,
+          dispose: function () { source.remove(); } };
       },
       actions: function (root, context) {
         var more = RNAssistantActionMenu.createTrigger("Действия с версией"); more.classList.add("compact"); root.appendChild(more);

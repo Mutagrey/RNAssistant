@@ -42,10 +42,9 @@ namespace RNAssistant.Office.WebView
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
         private IBrowserPageHost _externalBrowser;
-        internal void RequireBrowserAccess(string url) { _controller.RequireBrowserAccess(url); }
         internal Task<Action> PauseBrowserRunAsync(string chatId, string pauseId)
         { return Task.Run(() => _agentCommunication.PauseForUser(chatId, pauseId)); }
-        public IBrowserPageHost ExternalBrowser
+        public IBrowserPageHost Browser
         {
             get { return _externalBrowser; }
             set { _externalBrowser = value; _controller.SetExternalBrowserReadSource(value as IBrowserReadSource); }
@@ -238,9 +237,9 @@ namespace RNAssistant.Office.WebView
 
                 switch (type)
                 {
-                    case BridgeOperationId.ExternalBrowserCommand:
-                        if (ExternalBrowser == null) throw new InvalidOperationException("External Browser pilot is disabled on this host.");
-                        responsePayload = await ExternalBrowser.ExecuteAsync(Payload<BrowserCommandPayload>(payload), cancellationToken).ConfigureAwait(false);
+                    case BridgeOperationId.BrowserCommand:
+                        if (Browser == null) throw new InvalidOperationException("Локальный Browser недоступен на этом host.");
+                        responsePayload = await Browser.ExecuteAsync(Payload<BrowserCommandPayload>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetHostWindowState:
                         if (WindowHost == null) throw new InvalidOperationException("This host does not support window commands.");
@@ -649,6 +648,9 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.QueryNavigationSuggestions:
                         responsePayload = BrowserSuggestions(Payload<BrowserSuggestionRequest>(payload));
+                        break;
+                    case BridgeOperationId.ReadBrowserSource:
+                        responsePayload = BrowserSource(Payload<BrowserSourceRequest>(payload));
                         break;
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = _controller.GetCasHealth();
@@ -1107,12 +1109,12 @@ namespace RNAssistant.Office.WebView
             if (response == null) throw new InvalidOperationException("Application initialization returned no state.");
             response.OfficeHostChatAvailable = OfficeHostChatRequested != null;
             return new BridgeBootstrapResponse { BridgeToken = _bridgeToken, Init = response, HostWindow = WindowHost?.Snapshot,
-                ExternalBrowserAvailable = ExternalBrowser != null };
+                BrowserAvailable = Browser != null };
         }
 
         public void Dispose()
         {
-            ExternalBrowser = null;
+            Browser = null;
             WindowHost = null;
             _agentCommunication.Clear();
             lock (_hostSwitchSync)

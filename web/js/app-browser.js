@@ -1,0 +1,139 @@
+(function () {
+  "use strict";
+  var live = new Map(), available = false;
+  var unavailable = "Исполнение страницы недоступно: сетевая изоляция WebView2 ещё не подтверждена. Исходники и версии доступны.";
+  function id() { return "browser-" + crypto.randomUUID(); }
+  function key(target) { return "browser:" + target.browserTabId; }
+  function accepts(target) {
+    return target && target.view === "browser" && typeof target.browserTabId === "string" && target.browserTabId.length <= 256 &&
+      target.ownerScope && ["Document", "Workspace", "User"].includes(target.ownerScope.kind) && typeof target.ownerScope.scopeId === "string" &&
+      typeof target.locator === "string" && target.locator.length <= 2048;
+  }
+  function create(target) {
+    var root = document.createElement("section"); root.className = "browser-object-view"; root.setAttribute("aria-label", "Browser");
+    var content = document.createElement("div"); content.className = "browser-object-content browser-local-content";
+    var files = document.createElement("select"); files.className = "rna-form-control compact browser-document-file"; files.setAttribute("aria-label", "Файл проекта");
+    var source = document.createElement("div"); source.className = "browser-document-source product-viewer";
+    var empty = document.createElement("div"); empty.className = "empty-state";
+    content.append(files, source, empty); root.appendChild(content);
+    var mount = document.createElement("div"); mount.className = "browser-view";
+    var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell") });
+    var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, pending = new Set();
+    var sourcePage = null, loadingSource = 0, selectedMode = "source", targetGeneration = -1, homeView = null;
+    var operationId = id();
+    var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; },
+      discuss: function () {
+        var binding = current && current.target && current.target.ownerScope;
+        if (!binding || !binding.chatId) throw new Error("Выберите чат в дереве проекта и откройте страницу в его контексте.");
+        return RNAssistantConversationPanel.open(binding.kind === "Document" ? { source: "office", sessionId: binding.chatId } :
+          { source: "workspace", workspaceId: binding.scopeId, sessionId: binding.chatId }, { referencePanel: key(target), beside: true });
+      } });
+    function label() { return { title: current && current.title || target.title || "Browser", address: current && current.url || target.locator,
+      storage: { kind: current && current.target && current.target.workspaceId ? "directory" : "managed" } }; }
+    function fail(error) { if (!disposed) surface.fail(label(), error.detail || error.message || String(error)); }
+    async function request(type, payload) {
+      var task = send(type, payload); pending.add(task);
+      try { return await task; } finally { pending.delete(task); }
+    }
+    function stopReads() {
+      generation++; loadingSource = 0;
+      pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
+    }
+    function presentation() {
+      surface.setDocument({ address: current && current.url || target.locator,
+        mode: selectedMode, supportedModes: current && current.status !== "Home" ? ["preview", "source"] : [],
+        canGoBack: current && current.canGoBack, canGoForward: current && current.canGoForward,
+        back: function () { return command("Back"); }, forward: function () { return command("Forward"); },
+        home: function () { return command("Home"); }, stop: function () { stopReads(); return command("Stop"); },
+        navigate: function (locator) { return command("Navigate", { locator: locator }); },
+        suggest: function (prefix, epoch) { return request("queryNavigationSuggestions", { ownerScope: current && current.ownerScope || target.ownerScope,
+          prefix: prefix, requestGeneration: epoch, limit: 12 }); }
+      }, selectMode);
+    }
+    function selectMode(mode) { selectedMode = mode; presentation(); render(); }
+    function render() {
+      if (!active || disposed || !current) return;
+      var home = current.status === "Home", removed = current.status === "Removed";
+      empty.hidden = !home && !removed && selectedMode === "source";
+      source.hidden = files.hidden = home || removed || selectedMode !== "source";
+      if (home) {
+        if (window.RNAssistantStartSurface) {
+          if (!homeView) homeView = RNAssistantStartSurface.mount(empty, { kind: "browser", ownerScope: current.ownerScope,
+            navigate: function (locator) { return command("Navigate", { locator: locator }); } });
+          homeView.activate();
+        } else empty.textContent = "Локальные проекты и материалы. Выберите адрес из подсказок.";
+      } else {
+        if (homeView) { homeView.dispose(); homeView = null; }
+        empty.textContent = current.message || unavailable;
+        if (!removed && selectedMode === "source" && !sourcePage && !loadingSource) loadSource(null, 0).catch(fail);
+      }
+    }
+    async function loadSource(path, offset) {
+      if (!active || disposed || !current || current.status === "Home" || current.status === "Removed") return;
+      var epoch = ++generation, owner = current, previous = sourcePage;
+      sourcePage = null; loadingSource = epoch; files.disabled = true;
+      try {
+        var result = await request("readBrowserSource", { ownerScope: owner.ownerScope, locator: owner.url, path: path, offset: offset,
+          count: 32000, expectedRevision: offset > 0 && previous && previous.path === path ? previous.revision : null, requestGeneration: epoch });
+        if (disposed || !active || epoch !== generation || current.documentGeneration !== owner.documentGeneration) return;
+        if (result.requestGeneration !== epoch || !Array.isArray(result.files) || result.files.length > 512 || typeof result.text !== "string" || result.text.length > 32000)
+          throw new Error("Ответ исходника не соответствует текущему запросу.");
+        sourcePage = result;
+        files.replaceChildren(); result.files.forEach(function (path) { files.appendChild(new Option(path, path)); }); files.value = result.path;
+        RNAssistantViewerRegistry.mount("text", source, { text: result.text, code: true, path: result.path, offset: result.offset,
+          totalCharacters: result.totalCharacters, hasPrevious: result.offset > 0, hasNext: result.offset + result.text.length < result.totalCharacters,
+          onPrevious: function () { loadSource(result.path, Math.max(0, result.offset - 32000)).catch(fail); },
+          onNext: function () { loadSource(result.path, result.offset + result.text.length).catch(fail); }, onCopy: copyTextResult });
+      } finally { if (!disposed && epoch === generation) { loadingSource = 0; files.disabled = false; } }
+    }
+    files.onchange = function () { loadSource(files.value, 0).catch(fail); };
+    function apply(value) {
+      if (disposed || !value || value.browserTabId !== target.browserTabId || session && value.sessionId !== session ||
+          current && value.revision < current.revision) return;
+      if (!session) return; // Open response establishes ownership before events are admitted.
+      current = value;
+      if (value.status === "Closed") { session = null; stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
+      if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
+        RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope,
+          locator: value.url, title: value.title || "Browser" });
+        targetGeneration = value.documentGeneration; if (homeView) { homeView.dispose(); homeView = null; } }
+      surface.waiting(label(), value.message || " "); presentation(); render();
+    }
+    async function command(action, extra) {
+      if (!session) throw new Error("Страница ещё не открыта.");
+      var binding = session, value = await send("browserCommand", Object.assign({ action: action, browserTabId: target.browserTabId,
+        sessionId: binding, operationId: operationId }, extra || {}));
+      if (!disposed && binding === session) apply(value);
+    }
+    async function open() {
+      if (session || opening || disposed) return opening;
+      opening = (async function () {
+        var value = await send("browserCommand", { action: "Open", browserTabId: target.browserTabId, operationId: operationId,
+          ownerScope: target.ownerScope, locator: target.locator });
+        if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
+        session = value.sessionId; apply(value);
+        if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
+        await command("Attach");
+      }());
+      try { await opening; } finally { opening = null; }
+    }
+    live.set(target.browserTabId, apply);
+    return { element: mount, layout: renderer.layout,
+      activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) render(); else open().catch(fail); },
+      deactivate: function () { if (!active) return; active = false; stopReads(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); },
+      dispose: function () { if (disposed) return; disposed = true; active = false; stopReads(); live.delete(target.browserTabId);
+        if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
+        RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
+    };
+  }
+  function open(locator, owner, options) {
+    return RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: options && options.browserTabId || id(),
+      locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser" }, options);
+  }
+  window.RNAssistantBrowser = { open: open, create: create, key: key, unavailable: unavailable,
+    bootstrap: function (value) { available = value === true; },
+    apply: function (value) { var fn = value && live.get(value.browserTabId); if (fn) fn(value); },
+    register: function (dock) { dock.registerView("browser", { title: "Browser", icon: "globe", perObject: true, menu: true, maximumInstances: 16, renderer: "onlyWhenVisible",
+      accepts: accepts, key: key, create: create, titleFor: function (target) { return target.title || "Browser"; } }); }
+  };
+}());

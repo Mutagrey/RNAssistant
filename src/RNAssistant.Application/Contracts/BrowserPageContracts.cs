@@ -47,6 +47,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("reason")] public BrowserRefusalCode Reason { get; set; }
         [JsonProperty("attached")] public bool Attached { get; set; }
         [JsonProperty("viewportRevision")] public long ViewportRevision { get; set; }
+        [JsonProperty("documentGeneration")] public long DocumentGeneration { get; set; }
         [JsonProperty("sessionId")] public string SessionId { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
         [JsonProperty("layoutRevision")] public long LayoutRevision { get; set; }
@@ -63,7 +64,7 @@ namespace RNAssistant.Application.Contracts
 
     public sealed class BrowserPageStateMessage
     {
-        [JsonProperty("type")] public string Type { get { return "externalBrowserState"; } }
+        [JsonProperty("type")] public string Type { get { return "browserPageState"; } }
         [JsonProperty("payload")] public BrowserPageStateDto Payload { get; set; }
     }
 

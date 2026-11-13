@@ -1,5 +1,16 @@
 # Архитектура UI RNAssistant
 
+## Local Browser source-only — In Review, 2026-11-13
+
+`app-browser` — один новый view для локальных адресов, `browserTabId` является Dock
+identity; pageSession остаётся runtime-only. Единственный history owner —
+LocalBrowserPageRuntime; UI не хранит собственный стек. Источники читают existing
+domain owners через typed ReadBrowserSource, bounded text viewer и revision guard.
+PreviewSurface владеет toolbar/combobox. Исполнение закрыто B02 до qualification;
+Shell iframe с авторским HTML не является fallback. Provider routes мигрируют
+по следующему срезу versions, редактор остаётся прежним владельцем dirty buffer.
+
+
 ## Local Browser / Settings — In Review, 2026-11-13
 
 F0: app-browser-target проверяет kind-specific identity/capabilities, включая Home,

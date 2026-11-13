@@ -96,21 +96,11 @@
     status.textContent = language === "html" ? "Подготовка просмотра…" : "Схема ожидает просмотра…";
     async function startHtml() {
       if (disposed || htmlStarted) return;
-      htmlStarted = true; var current = ++token; status.textContent = "Подготовка просмотра…";
-      try {
-        if (source.length > 200000) throw new Error("HTML превышает лимит 200 000 символов.");
-        var js = "";
-        // Only the already pinned ECharts package is admitted, never authored vendor directives.
-        if (/\becharts\s*\./.test(source)) {
-          var runtime = window.RNAssistantHtmlVendorRuntime;
-          var files = [{ kind: "script", content: "echarts.init" }];
-          await runtime.ensure(files); js = runtime.source(runtime.used(files)[0]).js;
-        }
-        if (disposed || current !== token) return;
-        surface.appendChild(makeFrame("HTML-превью без доступа к сети", frameDocument(source, js, true), true));
-        status.textContent = "";
-      } catch (error) { if (!disposed && current === token) { stop(); fail(error); } }
+      htmlStarted = true;
+      status.textContent = RNAssistantBrowser.unavailable;
+      showCode(true);
     }
+
     function diagram() {
       var current = ++token; status.textContent = "Построение схемы…";
       renderQueue = renderQueue.catch(function () {}).then(async function () {

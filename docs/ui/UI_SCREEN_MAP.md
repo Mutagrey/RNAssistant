@@ -1,5 +1,15 @@
 # Карта экранов, навигации и состояний
 
+## Local Browser source-only — In Review, 2026-11-13
+
+В выборе «+» доступен Browser → Главная `/`. Вкладка сохраняет свой browserTabId
+при local navigation. Back/Forward/Home/Reload работают через host session;
+адрес принимает только local locator, completion не исполняет ввод автоматически.
+Источник — выбор файла и bounded read; режим «Страница» показывает причину B02.
+Source-only не считается ready live page. Полные StartSurface и version actions
+следуют в F3/F4; это ещё не окончательное сокращение экранов по 07.
+
+
 ## Local-only Settings — In Review, 2026-11-13
 
 Подключение содержит API/model catalogue/key/HTTP headers для LLM и пустой раздел

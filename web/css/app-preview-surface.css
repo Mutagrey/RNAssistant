@@ -3,7 +3,7 @@
 .preview-surface-toolbar{position:relative;display:flex;align-items:center;gap:var(--space-1);min-width:0;height:var(--control-compact)}
 .preview-surface-navigation,.preview-surface-actions{display:flex;align-items:center;gap:var(--space-1);flex:none}
 .preview-surface-navigation>.icon-btn,.preview-surface-actions>.icon-btn{flex:none}
-.rna-form-control.preview-surface-location{display:flex;align-items:center;gap:0;flex:1;min-width:0;height:var(--control-compact);padding:0;overflow:hidden;border-radius:var(--radius-lg)}
+.rna-form-control.preview-surface-location{position:relative;display:flex;align-items:center;gap:0;flex:1;min-width:0;height:var(--control-compact);padding:0;overflow:visible;border-radius:var(--radius-lg)}
 .preview-surface-location>.preview-surface-address{flex:1;min-width:0;width:0;height:100%;padding:0 var(--space-2);border:0;outline:0;background:transparent;color:var(--ink);font:inherit;text-overflow:ellipsis}
 .preview-surface-location:focus-within{outline:2px solid var(--focus);outline-offset:1px}
 .preview-surface-address:focus-visible{outline:0}
@@ -18,6 +18,9 @@
 .preview-surface-toolbar.is-address-focused .preview-surface-copy-address{display:inline-grid}
 .preview-surface-toolbar.is-address-focused>.preview-surface-actions{position:absolute;top:calc(100% + var(--space-2));left:0;right:0;z-index:3;display:flex;flex-wrap:wrap;justify-content:flex-end;min-width:0;padding:var(--space-2);border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface);box-shadow:var(--shadow)}
 .preview-surface-toolbar.is-address-focused>.preview-surface-actions:empty{display:none}
+.preview-surface-completion{position:absolute;top:calc(100% + var(--space-2));left:0;right:0;z-index:4;max-height:40vh;overflow:auto;padding:var(--space-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface);box-shadow:var(--shadow)}
+.preview-surface-completion>button{display:block;width:100%;padding:var(--space-2);border:0;text-align:left;overflow-wrap:anywhere;background:transparent;color:var(--ink);font:inherit}
+.preview-surface-completion>button[aria-selected="true"],.preview-surface-completion>button:hover{background:var(--surface-hover)}
 @container (max-width:600px){
   .preview-surface-actions{display:none}
   .preview-surface-toolbar>.preview-surface-tools{display:inline-grid}
@@ -43,13 +46,7 @@
 /* Addressed saved content uses the same Browser surface and existing controls. */
 .browser-object-view, .browser-object-content, .browser-html-document { display:flex; flex-direction:column; min-width:0; min-height:0; }
 .browser-object-content, .browser-html-document { flex:1; overflow:hidden; }
-.browser-object-content iframe { flex:1; width:100%; min-height:0; border:0; background:var(--surface); }
 .browser-object-content [hidden] { display:none; }
-.external-browser-view { container-type:inline-size; }
-.external-browser-control { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--space-2); padding:var(--space-2); font-size:var(--text-sm); }
-.external-browser-control[hidden] { display:none; }
-.external-browser-diagnostics { padding:var(--space-2); font-size:var(--text-sm); }
-.external-browser-diagnostics pre { max-height:160px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
 .browser-document-file { flex:none; margin:var(--space-2); }
 .browser-document-source { flex:1; min-height:0; overflow:hidden; }
 .browser-object-content[hidden], .browser-source-diff[hidden] { display:none; }

@@ -15,32 +15,25 @@ using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.WebView
 {
-    // Only this transport sees WebView frames. No plugin message is forwarded to
-    // AssistantWebBridge, and the command controller never binds an Office session.
+    // Command-only transport, gated by local execution qualification. No Shell frames
+    // or bridge access; the command controller never binds an Office session.
     public sealed class PluginWebViewHost : IPluginCommandExecutor, IPluginProjectPicker, IDisposable
     {
         private readonly PluginApplicationService _service;
-        private readonly CoreWebView2 _main;
+        private Task<CoreWebView2Environment> _environment;
+        private string _profile;
         private readonly IntPtr _parent;
         private readonly string _assets;
-        private readonly string _inspectorScript;
         private readonly SynchronizationContext _ui;
         private readonly List<Transport> _transports = new List<Transport>();
         private readonly HashSet<Task> _runs = new HashSet<Task>();
         private bool _closed;
         public Task Drained { get; private set; } = Task.CompletedTask;
-        public PluginWebViewHost(PluginApplicationService service, CoreWebView2 main, IntPtr parent, string webRoot)
+        public PluginWebViewHost(PluginApplicationService service, IntPtr parent, string webRoot)
         {
-            _service=service; _main=main; _parent=parent; _assets=Path.Combine(webRoot,"plugin-host");
-            _inspectorScript=File.ReadAllText(Path.Combine(webRoot,"js","app-visual-inspector.js"))+
-                "\nwindow.RNAssistantVisualInspector.install(1);";
+            _service=service; _parent=parent; _assets=Path.Combine(webRoot,"plugin-host");
             _ui=SynchronizationContext.Current ?? throw new InvalidOperationException("UI dispatcher required.");
-            _transports.Add(new Transport(service,main,_assets,null,_inspectorScript));
             service.Executor=this; service.ProjectPicker=this;
-        }
-        public bool CanNavigateFrame(string url)
-        {
-            Uri uri; return Uri.TryCreate(url,UriKind.Absolute,out uri) && _service.FindInstance(uri.GetLeftPart(UriPartial.Authority))?.EntryUrl == url;
         }
         public Task<PluginDataSelection> PickAsync(CancellationToken token)
         {
@@ -60,6 +53,7 @@ namespace RNAssistant.Office.WebView
         private async Task<string> ExecuteOnUi(PluginInstance operation, PluginCommandDefinition command, string argumentsJson, CancellationToken token, Action<string> progress)
         {
             if(_closed) throw new ObjectDisposedException(nameof(PluginWebViewHost));
+            BrowserIsolationPolicy.RequireExecution();
             CoreWebView2Controller controller=null; Transport transport=null;
             var completion=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             using(token.Register(() => _ui.Post(ignored => completion.TrySetCanceled(),null)))
@@ -67,13 +61,14 @@ namespace RNAssistant.Office.WebView
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    var options=_main.Environment.CreateCoreWebView2ControllerOptions(); options.ProfileName="RNAssistantPlugins"; options.IsInPrivateModeEnabled=true;
-                    controller=await _main.Environment.CreateCoreWebView2ControllerAsync(_parent,options);
+                    var environment=await (_environment ?? (_environment=CreateEnvironmentAsync()));
+                    var options=environment.CreateCoreWebView2ControllerOptions(); options.ProfileName="RNAssistantLocal"; options.IsInPrivateModeEnabled=true;
+                    controller=await environment.CreateCoreWebView2ControllerAsync(_parent,options);
                     token.ThrowIfCancellationRequested();
                     if(_closed) throw new OperationCanceledException();
                     controller.IsVisible=false; controller.Bounds=new Rectangle(0,0,1,1);
                     var core=controller.CoreWebView2;
-                    transport=new Transport(_service,core,_assets,operation,null); _transports.Add(transport);
+                    transport=new Transport(_service,core,_assets,operation); _transports.Add(transport);
                     var entry=operation.Origin+"/.host/runner.html";
                     core.NavigationStarting+=(s,e)=> { if(e.Uri!=entry) {e.Cancel=true;completion.TrySetException(new PluginException("plugin_navigation_denied","Command navigation denied."));} };
                     core.NavigationCompleted+=(s,e)=> { if(!e.IsSuccess) completion.TrySetException(new PluginException("plugin_load_failed","Command host failed to load.")); };
@@ -121,6 +116,22 @@ namespace RNAssistant.Office.WebView
                 }
             }
         }
+        private async Task<CoreWebView2Environment> CreateEnvironmentAsync()
+        {
+            // One lazy local-only group per host, never the privileged Shell/Edge environment.
+            BrowserIsolationPolicy.RequireExecution();
+            _profile=Path.Combine(Path.GetTempPath(),"RNAssistant","LocalBrowser",Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_profile);
+            var environment=await CoreWebView2Environment.CreateAsync(null,_profile);
+            if(!string.Equals(Path.GetFullPath(environment.UserDataFolder),Path.GetFullPath(_profile),StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("WebView2 replaced the isolated profile.");
+            var profile=_profile;
+            environment.BrowserProcessExited+=(sender,args)=> {
+                _environment=null;
+                Task.Run(()=> {try{Directory.Delete(profile,true);}catch(IOException){}catch(UnauthorizedAccessException){}});
+            };
+            return environment;
+        }
         private Task<T> OnUi<T>(Func<Task<T>> action)
         {
             var result=new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -145,78 +156,28 @@ namespace RNAssistant.Office.WebView
             private readonly CoreWebView2 _core;
             private readonly string _assets;
             private readonly PluginInstance _operation;
-            private readonly string _inspectorScript;
-            private readonly SynchronizationContext _ui = SynchronizationContext.Current;
-            private readonly Dictionary<CoreWebView2Frame,PluginInstance> _frames=new Dictionary<CoreWebView2Frame,PluginInstance>();
-            private readonly HashSet<string> _claimed=new HashSet<string>();
-            private readonly HashSet<Stream> _bodies=new HashSet<Stream>();
+                private readonly HashSet<Stream> _bodies=new HashSet<Stream>();
             private readonly object _bodySync=new object();
             private long _bodyBytes;
             private int _pending;
             private bool _closed;
             private readonly TaskCompletionSource<bool> _drained=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public Task Drained {get{return _drained.Task;}}
-            public Transport(PluginApplicationService service,CoreWebView2 core,string assets,PluginInstance operation,string inspectorScript)
+            public Transport(PluginApplicationService service,CoreWebView2 core,string assets,PluginInstance operation)
             {
-                _service=service;_core=core;_assets=assets;_operation=operation;_inspectorScript=inspectorScript;
-                core.AddWebResourceRequestedFilter(operation==null ? "https://*.rnassistant-plugin.invalid/*" : "*",CoreWebView2WebResourceContext.All,CoreWebView2WebResourceRequestSourceKinds.All);
+                _service=service;_core=core;_assets=assets;_operation=operation ?? throw new ArgumentNullException(nameof(operation));
+                core.AddWebResourceRequestedFilter("*",CoreWebView2WebResourceContext.All,CoreWebView2WebResourceRequestSourceKinds.All);
                 core.WebResourceRequested+=OnResource;
-                if(operation==null)core.FrameCreated+=OnFrame;
-            }
-            private void OnFrame(object sender,CoreWebView2FrameCreatedEventArgs args)
-            {
-                var frame=args.Frame;
-                frame.NavigationStarting+=(s,e)=> {
-                    if(_closed){e.Cancel=true;return;}
-                    Uri uri;
-                    var instance=Uri.TryCreate(e.Uri,UriKind.Absolute,out uri) ? _service.FindInstance(uri.GetLeftPart(UriPartial.Authority)) : null;
-                    PluginInstance bound;
-                    if(_frames.TryGetValue(frame,out bound)) { if(instance!=bound || e.Uri!=bound.EntryUrl){e.Cancel=true;_ = _service.CloseInstanceAsync(bound.Id);} return; }
-                    if(instance==null)return; // existing HTML material sandbox has its own policy
-                    if(instance.CommandOperation || e.Uri!=instance.EntryUrl || !_claimed.Add(instance.Id)){e.Cancel=true;return;}
-                    _frames.Add(frame,instance);
-                };
-                frame.NavigationCompleted+=async (s,e)=> {
-                    PluginInstance instance;
-                    if(_closed || !e.IsSuccess || _inspectorScript==null || frame.IsDestroyed()!=0 ||
-                        !_frames.TryGetValue(frame,out instance) || instance.Token.IsCancellationRequested)return;
-                    try { await frame.ExecuteScriptAsync(_inspectorScript); }
-                    catch(Exception error) { Diagnostics.RuntimeLog.Error("Plugin visual inspector injection failed.",error); }
-                };
-                frame.WebMessageReceived+=async (s,e)=> {
-                    PluginInstance instance;
-                    if(_closed || !_frames.TryGetValue(frame,out instance) || e.Source!=instance.EntryUrl || instance.Token.IsCancellationRequested)return;
-                    if(_pending>=64)return;
-                    _pending++;
-                    try
-                    {
-                        var request=Decode<PluginFrameRequest>(e.TryGetWebMessageAsString());
-                        var response=await Task.Run(()=>_service.DispatchAsync(instance,request,instance.Token, message=> _ui.Post(ignored=> {
-                            try { if(!_closed && !instance.Token.IsCancellationRequested)
-                                frame.PostWebMessageAsJson(JsonConvert.SerializeObject(new PluginFrameResponse {RequestId=request.RequestId,Progress=message})); }
-                            catch (Exception error) { Diagnostics.RuntimeLog.Error("Plugin progress delivery failed.", error); }
-                        },null)));
-                        if(!_closed && !instance.Token.IsCancellationRequested)frame.PostWebMessageAsJson(JsonConvert.SerializeObject(response));
-                    }
-                    catch(Exception error) { if(!_closed) Diagnostics.RuntimeLog.Error("Plugin frame message failed.",error); }
-                    finally{Finished();}
-                };
-                frame.Destroyed+=async (s,e)=> {
-                    try { PluginInstance instance;
-                        if(_frames.TryGetValue(frame,out instance)){_frames.Remove(frame);await _service.CloseInstanceAsync(instance.Id);} }
-                    catch (Exception error) { Diagnostics.RuntimeLog.Error("Plugin frame cleanup failed.", error); }
-                };
             }
             private async void OnResource(object sender,CoreWebView2WebResourceRequestedEventArgs e)
             {
                 Uri uri;
-                if(!Uri.TryCreate(e.Request.Uri,UriKind.Absolute,out uri))return;
-                if(_operation==null && !uri.Host.EndsWith(".rnassistant-plugin.invalid",StringComparison.Ordinal))return;
                 var deferral=e.GetDeferral();_pending++;
                 try
                 {
                     if(_closed || _pending>64)throw new PluginException("plugin_busy","Plugin transport is unavailable.");
-                    var instance=_operation ?? _service.FindInstance(uri.GetLeftPart(UriPartial.Authority));
+                    if(!Uri.TryCreate(e.Request.Uri,UriKind.Absolute,out uri))throw new InvalidOperationException("Invalid local URL.");
+                    var instance=_operation;
                     if(instance==null || instance.Token.IsCancellationRequested || uri.GetLeftPart(UriPartial.Authority)!=instance.Origin)
                         throw new PluginException("plugin_origin_denied","Unbound plugin origin.");
                     var path=Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/'); byte[] bytes; string mime;
@@ -260,7 +221,7 @@ namespace RNAssistant.Office.WebView
                 }
                 catch(Exception error)
                 {
-                    if(!_closed)e.Response=_core.Environment.CreateWebResourceResponse(new MemoryStream(),403,"Plugin request refused","Cache-Control: no-store\r\n");
+                    e.Response=_core.Environment.CreateWebResourceResponse(new MemoryStream(),403,"Plugin request refused","Cache-Control: no-store\r\n");
                     Diagnostics.RuntimeLog.Error("Plugin resource refused.",error);
                 }
                 finally{deferral.Complete();Finished();}
@@ -285,8 +246,7 @@ namespace RNAssistant.Office.WebView
             private void Finished(){_pending--;if(_closed && _pending==0)_drained.TrySetResult(true);}
             public void Dispose()
             {
-                if(_closed)return;_closed=true;_core.WebResourceRequested-=OnResource;_core.FrameCreated-=OnFrame;
-                foreach(var instance in _frames.Values)instance.Dispose();
+                if(_closed)return;_closed=true;_core.WebResourceRequested-=OnResource;
                 Stream[] bodies;lock(_bodySync)bodies=_bodies.ToArray();foreach(var body in bodies)body.Dispose();
                 if(_pending==0)_drained.TrySetResult(true);
             }

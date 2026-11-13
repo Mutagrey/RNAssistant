@@ -31,7 +31,7 @@ namespace RNAssistant.Office.WebView
         private CoreWebView2Controller _webViewController;
         private RNAssistant.Application.PluginApplicationService _plugins;
         private PluginWebViewHost _pluginHost;
-        private ExternalBrowserDockHost _externalBrowser;
+        private LocalBrowserPageRuntime _externalBrowser;
         public TabularWebViewExecutor TabularExecutor { get; private set; }
         private Stopwatch _initialNavigationTimer;
         private DateTime _lastSlowPostReportUtc;
@@ -96,7 +96,7 @@ namespace RNAssistant.Office.WebView
                 if (rebound)
                 {
                     if (_externalBrowser != null) await _externalBrowser.ResetAsync().ConfigureAwait(true);
-                    _bridge.ExternalBrowser = _externalBrowser;
+                    _bridge.Browser = _externalBrowser;
                     return;
                 }
                 await Task.Delay(25).ConfigureAwait(false);
@@ -228,13 +228,9 @@ namespace RNAssistant.Office.WebView
                 : string.Empty;
 
             var core = _webView.CoreWebView2;
-            if (string.Equals(Environment.GetEnvironmentVariable("RNA_BROWSER_PILOT"), "1", StringComparison.Ordinal))
-            {
-                _externalBrowser = new ExternalBrowserDockHost(this, _webView, Path.Combine(_webRoot, "browser-probe"),
-                    value => PostBridgeMessage(JsonConvert.SerializeObject(new BrowserPageStateMessage { Payload = value })),
-                    url => _bridge.RequireBrowserAccess(url), (chat, pause) => _bridge.PauseBrowserRunAsync(chat, pause));
-                _bridge.ExternalBrowser = _externalBrowser;
-            }
+            _externalBrowser = new LocalBrowserPageRuntime(request => _bridge.ResolveBrowserLocator(request),
+                value => PostBridgeMessage(JsonConvert.SerializeObject(new BrowserPageStateMessage { Payload = value })));
+            _bridge.Browser = _externalBrowser;
             if (_bridge.WindowHost != null)
             {
                 try
@@ -251,7 +247,7 @@ namespace RNAssistant.Office.WebView
             }
             if (TabularExecutor != null) TabularExecutor.Dispose();
             TabularExecutor = new TabularWebViewExecutor(core.Environment, Handle);
-            try { _pluginHost = new PluginWebViewHost(_plugins, core, Handle, _webRoot); _plugins.EnsureDataTemplates(); }
+            try { _pluginHost = new PluginWebViewHost(_plugins, Handle, _webRoot); _plugins.EnsureDataTemplates(); }
             catch (Exception error) { _plugins.StartupError = error.Message; RuntimeLog.Error("Plugin host initialization failed.", error); }
             core.WebMessageReceived += OnWebMessageReceived;
             core.NavigationStarting += OnNavigationStarting;
@@ -416,7 +412,7 @@ namespace RNAssistant.Office.WebView
 
         private void OnFrameNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
-            if (!WebViewSecurityPolicy.CanNavigateFrame(e.Uri) && !(_pluginHost?.CanNavigateFrame(e.Uri) ?? false))
+            if (!WebViewSecurityPolicy.CanNavigateFrame(e.Uri))
             {
                 e.Cancel = true;
                 RuntimeLog.Info("Blocked WebView frame navigation: " + (e.Uri ?? string.Empty));
@@ -684,7 +680,7 @@ namespace RNAssistant.Office.WebView
 
         private void DetachInitializedWebView()
         {
-            _bridge.ExternalBrowser = null;
+            _bridge.Browser = null;
             _externalBrowser?.Dispose(); _externalBrowser = null;
             _bridge.WindowHost?.InvalidateChrome();
             try

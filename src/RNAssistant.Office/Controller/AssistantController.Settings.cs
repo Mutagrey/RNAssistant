@@ -13,9 +13,6 @@ namespace RNAssistant.Office
     {
         public event Action<AppSettings> SettingsChanged;
 
-        internal void RequireBrowserAccess(string url)
-        { ExternalBrowserPolicy.RequireAccess(url); }
-
         public SettingsResponse GetSettings()
         {
             return new SettingsResponse

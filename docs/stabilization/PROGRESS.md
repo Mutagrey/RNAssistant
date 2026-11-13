@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Local Browser F1a — source-only, 2026-11-13
+
+`16.15.0-dev`: общий local Browser/session/32K source reader и combobox. B02 теперь
+принудительно закрывает active HTML/plugin execution; старый native pilot и Shell
+plugin iframe transport удалены. 5 focused Harness cases, MockDemo build и Chrome
+wide/narrow/125% проходят; native Windows evidence открыт. Дальше F2 media/common
+capabilities и F3 versions, без возврата к исходному аудиту. Подробности и ограничения:
+[Browser Progress](../browser/06_PROGRESS.md#f1a--local-source-only-browser-2026-11-13).
+
+
 ## Local Browser package — последовательная реализация, 2026-11-13
 
 Исходный HEAD совпал с аудитом `e9bb52c1`. Существующие незавершённые Browser

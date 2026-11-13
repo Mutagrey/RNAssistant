@@ -108,7 +108,7 @@ document.addEventListener("DOMContentLoaded", function () {
   window.RNAssistantLibraryView.register(window.RNAssistantDockWorkspace);
   window.RNAssistantVbaView.register(window.RNAssistantDockWorkspace);
   window.RNAssistantConversationPanel.register(window.RNAssistantDockWorkspace);
-  window.RNAssistantExternalBrowser.register(window.RNAssistantDockWorkspace);
+  window.RNAssistantBrowser.register(window.RNAssistantDockWorkspace);
   window.RNAssistantDockWorkspace.bind();
   window.RNAssistantShellLayout.refresh();
   window.addEventListener("load", function () {

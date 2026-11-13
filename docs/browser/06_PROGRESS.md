@@ -1,5 +1,30 @@
 # Universal Browser: статус
 
+## F1a — local source-only Browser, 2026-11-13
+
+`16.15.0-dev`: один `LocalBrowserPageRuntime` владеет 16 вкладками, 64 visits на
+вкладку и bounded Open receipts. Open/Attach различаются; повтор и поздний Open
+после Close не создают другую страницу. Back повторяет exact resolution; удалённая
+entry не заменяется другой с теми же bytes. Home не создаёт renderer/environment.
+Typed `browserCommand` заменяет external pilot command; `RNA_BROWSER_PILOT` удалён.
+Общий Browser source view использует PreviewSurface, Dockview и существующий text
+viewer: 32K страницы, guarded revisions, local completion с generations.
+
+B02 принудительно закрывает исполнение, live reads/actions/media и новые аннотации.
+Старый native singleton и Shell plugin-frame transport удалены; hidden plugin
+commands имеют ту же обязательную admission и отдельную lazy local environment,
+без Shell/Edge profile. Авторский inline HTML в чате также source-only; inert
+Mermaid SVG остаётся. Это поддерживаемый fallback, **не квалифицированный native
+renderer/input/network**. Provider source/versions routes ещё объединяются в F3/F4;
+старые iframe-specific web fixtures заменяются вместе с их consumers.
+
+Проверки: Harness local browser 3/3, exact target 1/1, typed bridge 1/1;
+MockDemo host-neutral build — 0 errors. Production Chrome: exact owner/attach,
+late completion, external locator refusal, hide/show, close, narrow/125%; snapshots
+в UI Migration Plan. Native Office/VSTO не запускались. Далее F2 common capabilities
+и исправление media materialization, затем F3 versions/member-set.
+
+
 ## Единый локальный Browser — реализация пакета, 2026-11-13
 
 Scope пользователя заменяет external P5/P6 roadmap ниже: один local page runtime,

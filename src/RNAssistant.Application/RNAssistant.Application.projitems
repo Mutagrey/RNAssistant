@@ -1,5 +1,9 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)BrowserIsolationPolicy.cs" Link="Application\BrowserIsolationPolicy.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BrowserSourceReader.cs" Link="Application\BrowserSourceReader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserSourceContracts.cs" Link="Application\Contracts\BrowserSourceContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)LocalBrowserPageRuntime.cs" Link="Application\LocalBrowserPageRuntime.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserPageContracts.cs" Link="Application\Contracts\BrowserPageContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserNavigationContracts.cs" Link="Application\Contracts\BrowserNavigationContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserVersionContracts.cs" Link="Application\Contracts\BrowserVersionContracts.cs" />

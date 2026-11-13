@@ -1,5 +1,17 @@
 # Universal Browser: матрица проверок
 
+## F1a local source-only evidence — 2026-11-13
+
+`local browser:` 3/3; `browser target:` 1/1; `external browser: typed bridge` 1/1
+(историческое имя теста, новый browserCommand). MockDemo build 0 errors.
+[local-browser](../../tests/web/local-browser.test.js) проверяет production view:
+exact owner без activeChat fallback, attach, no iframe, stale completion,
+external locator refusal, session retention, close, bounds при 1280/420 и 125%.
+Старый external-browser UI fixture удалён. Iframe-specific retained-form assertions
+старого saved-views fixture исторические и будут заменены при F3/F4 route cutover.
+B02/native input/Office qualification не закрыты этими host-neutral проверками.
+
+
 ## F0 contracts / resolver — 2026-11-13
 
 `local browser: addresses and exact scope`: traversal/encoding/network rejection,

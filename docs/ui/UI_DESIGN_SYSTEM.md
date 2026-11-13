@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Local Browser combobox — In Review, 2026-11-13
+
+PreviewSurface расширен local combobox: Up/Down/Enter, Escape/blur без перехода,
+поздние responses отбрасываются. Copy копирует committed locator. Список использует
+общие tokens, ограничен 20 metadata rows. Новый Browser использует прежний portal
+и `onlyWhenVisible` Dock renderer; hide/move сохраняют owned view/session.
+Source-only refusal использует общий status, без нового визуального слоя.
+
+
 ## Local-only Settings — In Review, 2026-11-13
 
 Пустой «Разработчик» использует прежний advanced disclosure; новых tokens,

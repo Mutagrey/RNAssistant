@@ -1,5 +1,13 @@
 # RNAssistant Harness
 
+Local Browser F1a: use `local browser:`, `browser target:` and
+`external browser: typed bridge` as separate filter invocations. The new
+`tests/web/local-browser.test.js` covers source-only Dock/combobox/session lifecycle;
+it replaces the retired external-browser UI fixture. Active-content assertions
+in old provider fixtures are historical until version-route cutover. No native
+WebView2 or Office qualification is claimed. MockDemo compiles real controller adapters.
+
+
 ## Local Browser cutover — 2026-11-13
 
 `local browser: network access is denied` and `bridge: retired page network is denied`

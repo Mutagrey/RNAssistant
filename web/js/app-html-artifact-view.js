@@ -24,25 +24,17 @@
     if (!project || !Array.isArray(project.Files) || !project.Files.length || project.Files.length > 100)
       throw new Error("Сохранённый проект не содержит доступных файлов.");
     var files = project.Files.map(function (f) { return { id: f.Path.toLowerCase(), path: f.Path, kind: f.Kind, content: f.Content }; });
-    var preview = browserTarget.capabilities.preview;
-    var snapshot = preview ? await RNAssistantHtmlResourceExport.fromArtifactViews(envelope.Views, context) : null;
-    if (preview) await RNAssistantHtmlWorkspacePreview.ensureVendors(files);
+    var preview = false;
     if (!context.isCurrent()) return null;
     var root = node("div", "browser-html-document");
     var picker = node("select", "rna-form-control compact browser-document-file"); picker.setAttribute("aria-label", "Файл проекта");
     files.forEach(function (file) { picker.appendChild(new Option(file.path, file.id)); });
     picker.value = String(project.EntryPath).toLowerCase(); if (!picker.value) picker.selectedIndex = 0;
     root.appendChild(picker);
-    var frame = preview ? node("iframe") : null;
-    if (frame) {
-      frame.title = target.title; frame.setAttribute("sandbox", "allow-scripts"); frame.referrerPolicy = "no-referrer";
-      frame.srcdoc = RNAssistantHtmlWorkspacePreview.build({ files: files, activeFileId: String(project.EntryPath).toLowerCase(),
-        dataSources: (project.Data || []).map(function (d) { return { name: d.Name }; }), resourceSnapshot: snapshot, hostBridge: false });
-      root.appendChild(frame);
-    }
+    var frame = null;
     var source = node("div", "browser-document-source product-viewer"); root.appendChild(source);
     var positions = Object.create(null), sourceFile = null;
-    var presentation = { address: browserTarget.resourceUri, supportedModes: preview ? ["preview", "source"] : ["source"] };
+    var presentation = { address: browserTarget.displayLocator, supportedModes: preview ? ["preview", "source"] : ["source"] };
     if (project.ExternalDependencies && project.ExternalDependencies.length) presentation.details = [
       { label: "Внешние зависимости", status: project.ExternalDependencies.join(", "), icon: "external", disabled: true }];
     function renderSource() {

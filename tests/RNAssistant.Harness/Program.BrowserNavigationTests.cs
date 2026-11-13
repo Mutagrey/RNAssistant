@@ -8,6 +8,49 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static async System.Threading.Tasks.Task BrowserLocalSessionLifecycle()
+        {
+            var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = "workspace", ChatId = "chat" };
+            var saved = new BrowserTargetDescriptor { Kind = BrowserTargetKind.PluginRelease, OwnerScope = owner, State = BrowserTargetState.Ready,
+                DisplayLocator = BrowserLocalLocator.ForPlugin("plugin", "index.html", "entry-one"), SavedVersionId = "entry-one", ReleaseId = "same-package",
+                Capabilities = new BrowserTargetCapabilities { Source = true, Preview = true, Interact = true } };
+            var other = new BrowserTargetDescriptor { Kind = BrowserTargetKind.PluginRelease, OwnerScope = owner, State = BrowserTargetState.Ready,
+                DisplayLocator = BrowserLocalLocator.ForPlugin("plugin", "index.html", "entry-two"), SavedVersionId = "entry-two", ReleaseId = "same-package",
+                Capabilities = new BrowserTargetCapabilities { Source = true } };
+            using (var runtime = new LocalBrowserPageRuntime(request => BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, new[] { saved, other }), null))
+            {
+                var open = new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "tab", OperationId = "op", OwnerScope = owner, Locator = "/" };
+                var home = await runtime.ExecuteAsync(open, default(System.Threading.CancellationToken));
+                var repeat = await runtime.ExecuteAsync(open, default(System.Threading.CancellationToken));
+                AssertEqual(home.SessionId, repeat.SessionId, "duplicate open reuses exact page session");
+                AssertTrue(!home.Attached && home.Status == BrowserPageStatus.Home, "open alone is not Dock attach or renderer readiness");
+                Func<BrowserCommandKind, string, System.Threading.Tasks.Task<BrowserPageStateDto>> command = (action, locator) => runtime.ExecuteAsync(
+                    new BrowserCommandPayload { BrowserTabId = "tab", SessionId = home.SessionId, OperationId = "op", Action = action, Locator = locator }, default(System.Threading.CancellationToken));
+                AssertTrue((await command(BrowserCommandKind.Attach, null)).Attached, "exact attach acknowledgement");
+                var first = await command(BrowserCommandKind.Navigate, saved.DisplayLocator);
+                AssertEqual(BrowserPageStatus.Unavailable, first.Status, "unqualified execution fails closed before renderer creation");
+                AssertEqual(BrowserRefusalCode.IsolationUnqualified, first.Reason, "typed qualification refusal");
+                AssertTrue(!first.Target.Capabilities.Preview && runtime.TargetsFor("chat").Count == 0, "source-only page cannot grant live actions");
+                await command(BrowserCommandKind.Navigate, other.DisplayLocator);
+                saved.State = BrowserTargetState.Removed;
+                var removed = await command(BrowserCommandKind.Back, null);
+                AssertEqual(BrowserPageStatus.Removed, removed.Status, "Back revalidates the exact entry");
+                AssertEqual("entry-one", removed.Target.SavedVersionId, "same bytes are never substituted");
+                AssertEqual("entry-two", (await command(BrowserCommandKind.Forward, null)).Target.SavedVersionId, "peer entry is unaffected");
+                var peer = await runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "peer", OperationId = "peer-op", OwnerScope = owner, Locator = "/" }, default(System.Threading.CancellationToken));
+                await command(BrowserCommandKind.Close, null);
+                AssertEqual(BrowserPageStatus.Closed, (await runtime.ExecuteAsync(open, default(System.Threading.CancellationToken))).Status, "late duplicate cannot resurrect closed page");
+                AssertEqual(BrowserPageStatus.Home, (await runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Attach, BrowserTabId = "peer", SessionId = peer.SessionId, OperationId = "peer-op" }, default(System.Threading.CancellationToken))).Status, "close affects only its page");
+            }
+            var source = new BrowserSourceRequest { Count = 2, RequestGeneration = 9 };
+            var page = BrowserSourceReader.Read(saved, source, new[] { "index.html" }, path => "12345");
+            AssertEqual("12", page.Text, "bounded source delivery");
+            source.Offset = 2; source.ExpectedRevision = page.Revision;
+            RuntimeThrows<InvalidOperationException>(() => BrowserSourceReader.Read(saved, source, new[] { "index.html" }, path => "changed"));
+            source.Path = "../secret";
+            RuntimeThrows<InvalidOperationException>(() => BrowserSourceReader.Read(saved, source, new[] { "index.html" }, path => "12345"));
+        }
+
         private static void BrowserLocalAddressesAndScope()
         {
             BrowserLocalLocator locator;

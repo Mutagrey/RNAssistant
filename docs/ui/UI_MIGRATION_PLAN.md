@@ -1,5 +1,17 @@
 # План модернизации production UI
 
+## F1a Local Browser — In Review, 2026-11-13
+
+Общий local source Browser подключён к production typed bridge. Старый external
+pilot/native singleton удалён; active preview принудительно закрыт B02.
+`local-browser.test.js`: owner/attach, source paging, stale completion, отказ URL,
+hide/show/close и narrow/125% проходят; [wide](review/local-browser-wide.png),
+[narrow](review/local-browser-narrow.png). Для ревью: «+» → Browser, ввести local
+адрес, выбрать файл, скрыть/вернуть вкладку, попробовать внешний URL.
+Пользовательское визуальное принятие и native Windows qualification открыты.
+Provider version routes/StartSurface ещё в очереди F3/F4; это не завершение всех views.
+
+
 ## Local Browser package — ранний 02, In Review, 2026-11-13
 
 Удалены HTML proxy/network settings и developer site-policy flow; LLM connection

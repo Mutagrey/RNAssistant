@@ -393,8 +393,6 @@
     <Compile Include="Controller\AssistantController.Browser.cs" />
     <Compile Include="WebView\AssistantWebBridge.Browser.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.cs" />
-    <Compile Include="WebView\ExternalBrowserPage.cs" />
-    <Compile Include="WebView\ExternalBrowserDockHost.cs" />
     <Compile Include="WebView\TabularWebViewExecutor.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
     <Compile Include="WebView\AssistantWebBridge.Plugins.cs" />

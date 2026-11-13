@@ -13,6 +13,33 @@
     var actions = document.createElement("div"); actions.className = "preview-surface-actions";
     var status = document.createElement("div"); status.className = "preview-surface-status"; status.setAttribute("role", "status");
     var currentLabel = null, presentation = null, modeChange = null, infoMenu = null;
+    var completion = document.createElement("div"); completion.className = "preview-surface-completion"; completion.hidden = true;
+    completion.setAttribute("role", "listbox"); completion.id = "browser-completion-" + crypto.randomUUID();
+    address.setAttribute("role", "combobox"); address.setAttribute("aria-autocomplete", "list"); address.setAttribute("aria-controls", completion.id);
+    var suggestions = [], selectedSuggestion = -1, completionGeneration = 0;
+    function closeCompletion() { completionGeneration++; suggestions = []; selectedSuggestion = -1; completion.hidden = true; completion.replaceChildren();
+      address.setAttribute("aria-expanded", "false"); address.removeAttribute("aria-activedescendant"); }
+    function selectSuggestion(index) { selectedSuggestion = index;
+      Array.from(completion.children).forEach(function (item, i) { item.setAttribute("aria-selected", String(index === i)); });
+      if (completion.children[index]) address.setAttribute("aria-activedescendant", completion.children[index].id); }
+    address.oninput = async function () {
+      closeCompletion(); var epoch = completionGeneration, owner = presentation;
+      if (!owner || !owner.suggest) return;
+      try {
+        var result = await owner.suggest(address.value, epoch);
+        if (epoch !== completionGeneration || owner !== presentation || document.activeElement !== address || result.requestGeneration !== epoch) return;
+        suggestions = (result.items || []).slice(0, 20);
+        suggestions.forEach(function (item, index) {
+          var option = document.createElement("button"); option.type = "button"; option.setAttribute("role", "option"); option.id = completion.id + "-" + index;
+          option.textContent = (item.title || item.displayLocator) + " · " + item.displayLocator; option.title = item.sourceLabel || "";
+          option.onpointerdown = function (event) { event.preventDefault(); };
+          option.onclick = function () { var locator = item.displayLocator; closeCompletion(); invoke(function () { return owner.navigate(locator); }); };
+          completion.appendChild(option);
+        });
+        completion.hidden = !suggestions.length; address.setAttribute("aria-expanded", String(!!suggestions.length));
+      } catch (error) { if (epoch === completionGeneration) closeCompletion(); }
+    };
+    address.onblur = function () { closeCompletion(); address.value = currentAddress(); };
     function iconButton(name, label) {
       var button = document.createElement("button"); button.type = "button"; button.className = "icon-btn compact";
       button.innerHTML = RNAssistantIcons.render(name); button.title = label; button.setAttribute("aria-label", label); return button;
@@ -20,6 +47,11 @@
     function invoke(action) {
       try { Promise.resolve(action()).catch(function (error) { if (bar.isConnected) fail(currentLabel, error.detail || error.message); }); }
       catch (error) { fail(currentLabel, error.detail || error.message); }
+    }
+    async function navigateAddress(owner, value) {
+      var epoch = completionGeneration;
+      try { await owner.navigate(value); }
+      finally { if (epoch === completionGeneration || document.activeElement !== address) address.value = currentAddress(); }
     }
     var back = iconButton("left", "Назад"), forward = iconButton("right", "Вперёд");
     back.disabled = forward.disabled = true;
@@ -30,13 +62,17 @@
     if (!options.reloadButton) reload.onclick = function () { invoke(options.reload); };
     var annotate = iconButton("selection", "Аннотировать"); annotate.disabled = true;
     annotate.title = options.annotationUnavailable || "Выбор элементов недоступен для этого просмотра";
-    navigation.append(back, forward, reload, annotate);
+    var home = iconButton("home", "Главная"), stop = iconButton("stop", "Остановить загрузку");
+    home.hidden = stop.hidden = true;
+    home.onclick = function () { if (presentation && presentation.home) invoke(presentation.home); };
+    stop.onclick = function () { if (presentation && presentation.stop) invoke(presentation.stop); };
+    navigation.append(back, forward, reload, home, stop, annotate);
 
     var info = iconButton("info", "Сведения о странице"); info.setAttribute("aria-haspopup", "dialog"); info.setAttribute("aria-expanded", "false");
     var copyAddress = iconButton("copy", "Копировать адрес"); copyAddress.classList.add("preview-surface-copy-address");
     copyAddress.onpointerdown = function (event) { event.preventDefault(); };
-    copyAddress.onclick = function () { invoke(function () { return copyTextResult(address.value); }); };
-    location.append(info, address, copyAddress);
+    copyAddress.onclick = function () { invoke(function () { return copyTextResult(currentAddress()); }); };
+    location.append(info, address, copyAddress, completion);
     var tools = iconButton("more", "Инструменты страницы"); tools.classList.add("preview-surface-tools"); tools.setAttribute("aria-expanded", "false");
     toolbar.append(navigation, location, actions, tools); bar.append(toolbar, status); root.insertBefore(bar, root.firstChild);
 
@@ -46,6 +82,7 @@
     function outsidePointer(event) { if (!toolbar.contains(event.target) && !inOwnMenu(event.target)) expand(false); }
     function leaveWindow() { expand(false); }
     function expand(value) {
+      if (!value) closeCompletion();
       toolbar.classList.toggle("is-address-focused", value); tools.setAttribute("aria-expanded", String(value));
       document.removeEventListener("pointerdown", outsidePointer, true); window.removeEventListener("blur", leaveWindow);
       if (value) { document.addEventListener("pointerdown", outsidePointer, true); window.addEventListener("blur", leaveWindow); }
@@ -53,11 +90,15 @@
     address.onfocus = function () { expand(true); address.select(); };
     toolbar.addEventListener("focusout", function (event) { if (!toolbar.contains(event.relatedTarget) && !inOwnMenu(event.relatedTarget)) expand(false); });
     toolbar.addEventListener("keydown", function (event) {
+      if (event.target === address && (event.key === "ArrowDown" || event.key === "ArrowUp") && suggestions.length) {
+        event.preventDefault(); selectSuggestion((selectedSuggestion + (event.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length); return;
+      }
       if (event.key === "Escape" && !toolbar.querySelector('[aria-haspopup][aria-expanded="true"]')) {
         expand(false); address.value = currentAddress(); reload.focus(); event.stopPropagation();
       }
       if (event.key === "Enter" && event.target === address && presentation && presentation.navigate && address.value.trim()) {
-        var value = address.value.trim(); expand(false); invoke(function () { return presentation.navigate(value); });
+        var value = selectedSuggestion >= 0 ? suggestions[selectedSuggestion].displayLocator : address.value.trim();
+        event.preventDefault(); expand(false); var owner = presentation; invoke(function () { return navigateAddress(owner, value); });
       }
     });
     tools.onclick = function () { address.focus(); };
@@ -95,6 +136,7 @@
     }
     var modes = null, modeButtons = {};
     function setDocument(value, onModeChange) {
+      closeCompletion();
       presentation = value; modeChange = onModeChange;
       if (value.supportedModes && value.supportedModes.length && !modes) {
         modes = document.createElement("div"); modes.className = "view-switch"; modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление страницы");
@@ -112,6 +154,7 @@
         });
       }
       back.disabled = !value.back || !value.canGoBack; forward.disabled = !value.forward || !value.canGoForward;
+      home.hidden = !value.home; stop.hidden = !value.stop;
       updateAddress(); updateInfo();
     }
     function clearDocument() {

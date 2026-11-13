@@ -290,7 +290,8 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(id, chatId));
         }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
-        internal void RequireBrowserAccess(string url) { Services.ExternalBrowserPolicy.RequireAccess(url); }
+        internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
+        { throw new InvalidOperationException("Source is not configured by this fixture."); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
         public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }

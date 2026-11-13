@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.15.0-dev
+
+- Added local Browser tabs with exact ownership, attach acknowledgement, bounded
+  navigation history, local address completion and paged source reading.
+- Active authored HTML previews and plugin commands fail closed while WebView2
+  network isolation (B02) remains unqualified. Removed the external native pilot
+  and Shell plugin iframe transport. Source editing, export and saved data remain.
+
 ### 16.14.6-dev
 
 - Removed HTML HTTP proxy and external Browser grants, including obsolete

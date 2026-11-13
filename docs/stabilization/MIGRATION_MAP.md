@@ -1,5 +1,16 @@
 # Current-to-target migration map
 
+## Local Browser F1a — source-only boundary, 2026-11-13
+
+External native Page/Dock singleton и Shell plugin frame transport удалены.
+Один LocalBrowserPageRuntime поддерживает точные source-only sessions/history.
+BrowserPageAutomation и прежние gateway/action consumers сохраняются до F2;
+owner 01/03, условие удаления остаточных external names — переключение common
+capability contribution. Active native renderer/input admission заблокирована B02,
+не заменяется iframe. Legacy provider toolbar/source routes — owner 05, удаление
+при F3/F4 version adapter cutover. Source/body stores не дублируются.
+
+
 ## Local Browser — промежуточный F0, 2026-11-13
 
 Contracts переведены в Application/Contracts; старый Office Contracts file удалён,

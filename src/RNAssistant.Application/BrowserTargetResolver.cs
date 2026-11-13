@@ -34,7 +34,7 @@ namespace RNAssistant.Application
                 throw new InvalidOperationException("Этот ресурс не поддерживает HTML Browser.");
             if (!string.IsNullOrEmpty(artifact.AvailabilityIssue))
                 throw new InvalidOperationException("Источник Browser недоступен: " + artifact.AvailabilityIssue);
-            return new BrowserTargetDescriptor {
+            return BrowserIsolationPolicy.SourceOnly(new BrowserTargetDescriptor {
                 Kind = project ? BrowserTargetKind.HtmlArtifact : BrowserTargetKind.HtmlResource,
                 State = BrowserTargetState.Ready, ChatId = source.Id, DocumentId = source.DocumentAuthorityId ?? "",
                 ResourceUri = exactUri, ArtifactId = artifact.Id, Revision = artifact.Revision,
@@ -44,7 +44,7 @@ namespace RNAssistant.Application
                 Capabilities = new BrowserTargetCapabilities { Source = true, Preview = project,
                     Versions = project && !string.IsNullOrEmpty(source.DocumentAuthorityId), ExportProject = project,
                     CreateProject = project && !string.IsNullOrEmpty(source.DocumentAuthorityId) }
-            };
+            });
         }
 
         // Called after the existing HTML owner refreshes its exact selected publication.
@@ -74,7 +74,7 @@ namespace RNAssistant.Application
                 Edit = mutable, Versions = true, Restore = mutable, ExportProject = true,
                 Annotations = mutable && files != null && files.Any(file => file.Kind == "html")
             };
-            return result;
+            return BrowserIsolationPolicy.SourceOnly(result);
         }
 
         private static void RequireScope(ChatSession source)

@@ -30,6 +30,8 @@ namespace RNAssistant.MockDemo
             _currentEvents = new AsyncLocal<List<string>>();
             _eventObserver = eventObserver;
             _bridge = new AssistantWebBridge(controller, PostMessage);
+            _bridge.Browser = new RNAssistant.Application.LocalBrowserPageRuntime(request => _bridge.ResolveBrowserLocator(request),
+                value => PostMessage(JsonConvert.SerializeObject(new RNAssistant.Application.Contracts.BrowserPageStateMessage { Payload = value })));
         }
 
         public Task DrainAsync() { return _controller.InboxWorkersDrained; }

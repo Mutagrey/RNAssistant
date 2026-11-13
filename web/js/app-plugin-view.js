@@ -175,23 +175,13 @@
   }
   function disposeVisual(){if(pluginAnnotations){pluginAnnotations.dispose();pluginAnnotations=null;}if(pluginInspector){pluginInspector.dispose();pluginInspector=null;}}
   async function closeView(){frameReady=false;pendingNavigation=null;disposeVisual();previewSurface.clear();var old=view;view=null;el('PreviewFrameHost').replaceChildren();syncPanelView();if(old)await send('closePlugin',{instanceId:old.instanceId});}
-  async function showView(preview){var current=epoch,previous=view,opened;
-    var label={title:selected.name,path:preview?'Неприменённые исходники':'Активная версия'};
-    try{opened=await send('openPlugin',{
-      pluginId:selected.pluginId,candidateId:preview?candidate.candidateId:null});}
-    catch(error){if(current===epoch)previewSurface.fail(label,error.detail||error.message);throw error;}
-    if(current!==epoch){await send('closePlugin',{instanceId:opened.instanceId});return;}
-    label.address=opened.entryUrl;label.storage={kind:'directory',detail:selected.sourceRoot||''};
-    disposeVisual();view=opened;frameReady=false;if(dataPlugin())pendingNavigation={view:navigation.view,templateId:navigation.templateId};
-    var frame=document.createElement('iframe');frame.title=selected.name+(preview?' — предпросмотр':'');frame.sandbox='allow-scripts allow-same-origin allow-downloads';frame.referrerPolicy='no-referrer';
-    if(dataPlugin())frame.addEventListener('load',syncAppearance);
-    previewSurface.watch(frame,label);
-    el('PreviewFrameHost').replaceChildren(frame);
-    createVisual(frame);
-    frame.src=view.entryUrl;
-    syncPanelView();
+  async function showView(preview){
+    var previous=view;view=null;frameReady=false;disposeVisual();
+    el('PreviewFrameHost').textContent=RNAssistantBrowser.unavailable;
+    previewSurface.waiting({title:selected.name,path:'Исходники'},RNAssistantBrowser.unavailable);
     if(previous)await send('closePlugin',{instanceId:previous.instanceId});
-    status('');}
+    syncPanelView();
+  }
   function stopSourceWatch(){clearInterval(sourceTimer);clearTimeout(sourceDebounce);sourceTimer=null;sourceDebounce=null;}
   async function checkAndPreview(stamp,force){
     if(!selected||!previewOpen||disposed)return false;

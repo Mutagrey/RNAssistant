@@ -1,5 +1,17 @@
 # Universal Browser: предлагаемые контракты
 
+## Local source-only session — F1a, 2026-11-13
+
+Production transport — `browserCommand`/`browserPageState`. Open требует exact
+ownerScope, browserTabId, operationId, locator; Attach подтверждает конкретную
+operation/session. UI не передаёт транспортные origins или grants. 16 tabs,
+64 owner-bound visits/tab, 128 retained receipts; закрытие не отменяет chat run.
+LocalBrowserPageRuntime поддерживает source-only admission до закрытия B02;
+Unavailable не даёт BrowserPageHandle и не выдаётся за выполненное browser.open.
+ReadBrowserSource материализует один разрешённый member (bounded owner read),
+выдаёт максимум 32K символов и проверяет hash при следующей странице.
+
+
 ## F0 host-neutral contracts — 2026-11-13
 
 `Application/Contracts/BrowserPageContracts` владеет `IBrowserPageRuntime`,

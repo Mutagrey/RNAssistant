@@ -56,10 +56,10 @@ namespace RNAssistant.Harness
             {
                 var token = BridgeToken(bridge); var host = new HarnessExternalBrowserHost();
                 Func<object, string, Task<string>> send = (body, auth) => bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
-                    contractVersion = BridgeOperationCatalog.Version, id = Guid.NewGuid().ToString("N"), type = "externalBrowserCommand", bridgeToken = auth, payload = body }));
+                    contractVersion = BridgeOperationCatalog.Version, id = Guid.NewGuid().ToString("N"), type = "browserCommand", bridgeToken = auth, payload = body }));
                 var request = new BrowserCommandPayload { Action = BrowserCommandKind.Open };
                 AssertTrue(!(bool)JObject.Parse(await send(request, token))["ok"], "disabled pilot refuses open");
-                bridge.ExternalBrowser = host;
+                bridge.Browser = host;
                 AssertTrue(!(bool)JObject.Parse(await send(request, "foreign"))["ok"], "root token required");
                 AssertTrue(!(bool)JObject.Parse(await send(new { action = "ExecuteRawCdp" }, token))["ok"], "closed typed vocabulary");
                 AssertEqual(0, host.Calls, "invalid requests never reach the native owner");

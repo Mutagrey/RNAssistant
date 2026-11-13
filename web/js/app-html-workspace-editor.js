@@ -35,8 +35,7 @@
       if (options.previewSurface) options.previewSurface.clear();
       if (previewCleared) return;
       invalidatePreview();
-      frame.removeAttribute("src");
-      frame.srcdoc = "";
+      frame.replaceChildren();
       previewCleared = true;
     }
     var workspace = model.workspace;
@@ -432,64 +431,9 @@
       }
       detail.replaceChildren();
       if (!options.previewVisible || !options.previewVisible() || state.htmlWorkspaceDirty) return;
-      if (state.browserTarget && !state.browserTarget.capabilities.preview) {
-        clearPreview(frame); frame.classList.add("hidden");
-        if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), "Просмотр HTML недоступен для текущего источника.");
-        return;
-      }
-      frame.classList.remove("hidden");
-      var workspaceFiles = files();
-      if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {
-        clearPreview(frame);
-        detail.classList.remove("hidden"); detail.textContent = source.message(); frame.classList.add("hidden");
-        if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), source.message());
-        return;
-      }
-      if (htmlPreview.missingVendors(workspaceFiles).length) {
-        invalidatePreview();
-        var vendorEpoch = previewEpoch;
-        if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), "Загрузка зависимостей…");
-        frame.removeAttribute("src");
-        frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка зависимостей...</body></html>";
-        previewCleared = false;
-        htmlPreview.ensureVendors(workspaceFiles).then(function () {
-          if (vendorEpoch !== previewEpoch) return;
-          if (options.changed) options.changed();
-          else renderHtmlWorkspacePreview();
-        }).catch(function (error) {
-          if (vendorEpoch !== previewEpoch) return;
-          if (options.previewSurface) options.previewSurface.fail(previewLabel(selected), error && error.message);
-          frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#b42318\">" +
-            String(error && error.message || "Зависимость не загружена.").replace(/[&<>]/g, function (character) {
-              return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[character];
-            }) + "</body></html>";
-        });
-        return;
-      }
-      var previewInput = {
-        activeFileId: workspace().activeFileId,
-        dataSources: dataSources(),
-        files: workspaceFiles
-      };
-      // Include exact binding/source metadata and owner, not just generated HTML:
-      // identical markup in another workspace must never retain the old leases.
-      var previewKey = JSON.stringify([state.activeChatId, state.activeHtmlArtifactId,
-        previewInput.activeFileId, previewInput.dataSources, workspaceFiles.map(function (file) {
-          return [file.id, file.path, file.kind, file.source, file.sourceReadKey, file.sha256, file.byteLength, file.characters];
-        })]);
-      // Compare source strings directly instead of serializing another complete
-      // copy of the workspace on every chat-state update.
-      if (renderedPreviewKey === previewKey && renderedPreviewContents &&
-          workspaceFiles.every(function (file, index) { return renderedPreviewContents[index] === file.content; })) return;
-      if (options.inspector) previewInput.inspectGeneration = options.inspector.generation() + 1;
-      var previewHtml = htmlPreview.build(previewInput);
-      invalidatePreview();
-      if (options.previewSurface) options.previewSurface.watch(frame, previewLabel(selected));
-      frame.removeAttribute("src");
-      frame.srcdoc = previewHtml;
-      previewCleared = false;
-      renderedPreviewKey = previewKey;
-      renderedPreviewContents = workspaceFiles.map(function (file) { return file.content; });
+      clearPreview(frame); frame.classList.add("hidden");
+      detail.classList.remove("hidden"); detail.textContent = RNAssistantBrowser.unavailable;
+      if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), RNAssistantBrowser.unavailable);
     }
 
     return {

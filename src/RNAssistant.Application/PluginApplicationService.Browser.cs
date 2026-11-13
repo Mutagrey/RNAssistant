@@ -9,6 +9,40 @@ namespace RNAssistant.Application
 {
     public sealed partial class PluginApplicationService
     {
+        public BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                if (target?.OwnerScope == null || target.State != BrowserTargetState.Ready)
+                    throw new PluginException("browser_source_unavailable", "Исходник недоступен.");
+                if (request?.OwnerScope == null || !(request.OwnerScope.Kind == BrowserOwnerKind.User
+                    ? request.OwnerScope.ScopeId == "local" && string.IsNullOrEmpty(request.OwnerScope.ChatId)
+                    : request.OwnerScope.Matches(target.OwnerScope)))
+                    throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
+                var workspace = RequireProjectWorkspace(target.WorkspaceId);
+                var files = new WorkspaceFileService(_paths);
+                if (target.Kind == BrowserTargetKind.PluginRelease)
+                {
+                    var release = _store.ReadPublishedRelease(target.PluginId, target.ReleaseId);
+                    if (release.SourceWorkspaceId != workspace.WorkspaceId) throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
+                    return BrowserSourceReader.Read(target, request, release.Files.Select(file => file.Path),
+                        path => SourceComparisonService.Utf8(_store.ReadFile(release, path)));
+                }
+                if (target.Kind == BrowserTargetKind.PluginSource)
+                {
+                    var registration = RequireRegistration(target.PluginId);
+                    if (registration.SourceWorkspaceId != workspace.WorkspaceId) throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
+                    var manifest = PluginPackageFiles.ParseManifest(files.ReadText(workspace, "plugin.json").Text);
+                    if (manifest.Id != target.PluginId) throw new PluginException("browser_owner_changed", "Идентичность плагина изменилась.");
+                    return BrowserSourceReader.Read(target, request, manifest.Files.Concat(new[] { "plugin.json" }).Distinct(StringComparer.Ordinal),
+                        path => files.ReadText(workspace, path).Text);
+                }
+                // Entry-only legacy projects are readable; saving awaits an explicit member-set.
+                return BrowserSourceReader.Read(target, request, new[] { workspace.HtmlEntryPath }, path => files.ReadText(workspace, path).Text);
+            }
+        }
+
         // Metadata query. Does not Check, launch plugin scripts or capture project files.
         public IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope caller)
         {
