@@ -10,7 +10,7 @@ const { withPreviewPage } = require('./preview-session');
     function visual(type,extra={}) { const value=annotationNative.value;value.visual={type:'rnassistant-visual-inspector-'+type,generation:value.documentGeneration,sequence:++annotationNative.sequence,...extra}; }
     window.selectionEvent=()=>{const value=annotationNative.value;visual('selected',{selection:{tag:'button',stableUiId:'save',attributes:{'data-ui-id':'save'},selector:'#save',ancestry:[],textExcerpt:'Сохранить',rect:{x:25,y:25,width:100,height:28},viewport:{width:500,height:300,dpr:1}}});value.revision++;RNAssistantBrowser.apply(structuredClone(value));};
     send=async(type,p,...rest)=>{
-      if(type==='stageHtmlVisualSelection'){annotationCalls.push({type,p});if(annotationNative.deferred)await annotationNative.deferred;return {resource:{id:'visual-'+annotationCalls.filter(c=>c.type===type).length,kind:'text',fileName:'selection.json',size:500}};}
+      if(type==='stageBrowserVisualSelection'){annotationCalls.push({type,p});if(annotationNative.deferred)await annotationNative.deferred;return {resource:{id:'visual-'+annotationCalls.filter(c=>c.type===type).length,kind:'text',fileName:'selection.json',size:500}};}
       if(type==='discardChatResourceDraft'){annotationCalls.push({type,p});return {};}
       if(type==='readBrowserSource')return {files:['index.html'],path:'index.html',text:'<button>Сохранить</button>',requestGeneration:p.requestGeneration,offset:0,totalCharacters:26};
       if(type!=='browserCommand')return original(type,p,...rest);
@@ -38,7 +38,7 @@ const { withPreviewPage } = require('./preview-session');
   await fs.mkdir('docs/ui/review',{recursive:true});await page.screenshot({path:'docs/ui/review/browser-annotations-wide.png'});
   await editor.getByRole('button',{name:'Готово',exact:true}).click();await editor.waitFor({state:'detached'});
   assert.equal(await page.evaluate(()=>RNAssistantChatDrafts.readOffice('preview-chat').attachments[0].visualAnnotation.comment),'Сделать кнопку зелёной');
-  assert.equal(await page.evaluate(()=>annotationCalls.find(c=>c.type==='stageHtmlVisualSelection').p.chatId),'preview-chat');
+  assert.equal(await page.evaluate(()=>annotationCalls.find(c=>c.type==='stageBrowserVisualSelection').p.sessionId),'annotation-page');
   assert.equal(await page.evaluate(()=>RNAssistantChatDrafts.readOffice('preview-chat').pendingVisualAnnotation),null);
   await page.evaluate(()=>{const box=document.createElement('div');document.body.appendChild(box);
     const controller=RNAssistantBrowser.annotations({source:'office',sessionId:'preview-chat'});controller.renderDrafts(box,controller.visibleDrafts());
@@ -52,13 +52,13 @@ const { withPreviewPage } = require('./preview-session');
   await pending.waitFor({state:'detached'});
   assert.equal(await page.evaluate(()=>RNAssistantChatDrafts.readOffice('preview-chat').pendingVisualAnnotation.Comment),'Комментарий до перехода');
   assert.equal(await page.evaluate(()=>RNAssistantChatDrafts.readOffice('preview-chat').pendingVisualAnnotation.PreviewGeneration),1,'generation is never rewritten onto a new page');
-  assert.equal(await page.evaluate(()=>annotationCalls.filter(c=>c.type==='stageHtmlVisualSelection').length),1);
+  assert.equal(await page.evaluate(()=>annotationCalls.filter(c=>c.type==='stageBrowserVisualSelection').length),1);
   await page.evaluate(()=>RNAssistantChatDrafts.setPendingOfficeAnnotation('preview-chat',null));
   await root.getByRole('button',{name:'Аннотировать: выбрать элемент'}).click();await page.evaluate(()=>selectionEvent());
   const late=page.getByRole('dialog',{name:'Аннотация 3',exact:true});await late.getByRole('textbox').fill('Поздний ответ');
   await page.evaluate(()=>{annotationNative.deferred=new Promise(resolve=>annotationNative.release=resolve);});
   await late.getByRole('button',{name:'Готово',exact:true}).click();
-  await page.waitForFunction(()=>annotationCalls.filter(c=>c.type==='stageHtmlVisualSelection').length===2);
+  await page.waitForFunction(()=>annotationCalls.filter(c=>c.type==='stageBrowserVisualSelection').length===2);
   await page.evaluate(()=>{const value=annotationNative.value;value.documentGeneration++;value.visual=null;value.revision++;RNAssistantBrowser.apply(structuredClone(value));annotationNative.release();});
   await page.waitForFunction(()=>annotationCalls.some(c=>c.type==='discardChatResourceDraft' && c.p.id==='visual-2'));
   assert.equal(await page.evaluate(()=>RNAssistantChatDrafts.readOffice('preview-chat').attachments.length),1,'late prepared annotation is cleaned, never moved to current page');

@@ -89,13 +89,15 @@ namespace RNAssistant.Core.Storage
         }
 
         public ChatAttachment StageVisualSelection(string chatId, HtmlVisualSelection selection,
-            string sourceTitle, string comment, int annotationNumber, ResourceRef source)
+            string sourceTitle, string comment, int annotationNumber, ResourceRef source, HtmlVisualSourcePage page = null)
         {
             if (source == null || !source.IsExact)
                 throw new InvalidOperationException("An exact visual selection source is required.");
+            page?.Identity(source);
             var body = HtmlVisualSelectionPolicy.Capture(selection, sourceTitle, comment, annotationNumber);
             var draft = Import("html-selection-" + selection.Tag + ".json", "application/json", body, chatId);
             draft.VisualSelectionSource = source.Copy();
+            draft.VisualSelectionPage = page?.Copy();
             try
             {
                 if (draft.Status == "error")

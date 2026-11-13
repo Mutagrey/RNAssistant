@@ -241,6 +241,15 @@ namespace RNAssistant.Office.WebView
                         if (Browser == null) throw new InvalidOperationException("Локальный Browser недоступен на этом host.");
                         responsePayload = await Browser.ExecuteAsync(Payload<BrowserCommandPayload>(payload), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.StageBrowserVisualSelection:
+                        var annotations = Browser as IBrowserAnnotationSource;
+                        if (annotations == null) throw new InvalidOperationException("Аннотации Browser недоступны на этом host.");
+                        var annotationRequest = Payload<BrowserAnnotationRequest>(payload);
+                        var annotationCapture = await annotations.CaptureAnnotationAsync(annotationRequest, cancellationToken).ConfigureAwait(false);
+                        responsePayload = await RunBridgeWorkAsync(() => new ChatResourceDraftResponse { Resource =
+                            annotationCapture.Owner.Kind == BrowserOwnerKind.Document ? _controller.StageBrowserVisualSelection(annotationCapture, annotationRequest) :
+                                Plugins.StageBrowserVisualSelection(annotationCapture, annotationRequest) }, cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetHostWindowState:
                         if (WindowHost == null) throw new InvalidOperationException("This host does not support window commands.");
                         responsePayload = WindowHost.Snapshot;
@@ -254,8 +263,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
                     case BridgeOperationId.GetPluginSourceState: case BridgeOperationId.CheckPlugin:
                     case BridgeOperationId.OpenPlugin:
-                    case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin: case BridgeOperationId.StagePluginVisualSelection:
-                    case BridgeOperationId.DiscardPluginVisualSelection:
+                    case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin:
                     case BridgeOperationId.GetRemovedPlugins: case BridgeOperationId.RemovePlugin: case BridgeOperationId.RestorePlugin:
                     case BridgeOperationId.GetPluginChat:
                     case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:
@@ -1004,11 +1012,6 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.StageSelectionInput:
                         var stagedSelection = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.StageSelectionInput(stagedSelection.Mode, stagedSelection.ChatId);
-                        break;
-                    case BridgeOperationId.StageHtmlVisualSelection:
-                        var htmlSelection = Payload<StageHtmlVisualSelectionPayload>(payload);
-                        responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.StageHtmlVisualSelection(htmlSelection), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.AddSelectionContext:
                         var selectionContext = Payload<SelectionContextPayload>(payload);

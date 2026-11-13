@@ -27,26 +27,16 @@ namespace RNAssistant.Runtime
             if (drafts.Count == 0) return drafts;
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
-                var plugins = new PluginStore(_paths);
                 foreach (var draft in drafts)
                 {
                     if (draft.Status != "ready")
                         throw new InvalidOperationException(draft.Error ?? "Вложение не готово к отправке.");
                     if (draft.VisualSelectionSource == null) continue;
-                    ResourceAddress address;
-                    var source = draft.VisualSelectionSource;
                     if (draft.Status != "ready" || draft.Kind != "text" ||
                         !string.Equals(draft.ContentType, "application/json", StringComparison.OrdinalIgnoreCase) ||
-                        draft.Size < 1 || draft.Size > HtmlVisualSelectionPolicy.MaximumBodyBytes ||
-                        source?.IsExact != true || source.Revision != "1" ||
-                        !ResourceUri.TryParse(source.Uri, out address) || address.Provider != "plugin" ||
-                        address.Segments.Count != 3 || address.Segments[1] != "release")
-                        throw new InvalidOperationException("Выделение плагина недействительно. Выберите элемент заново.");
-                    var release = plugins.ReadRelease(new PluginReleaseIdentity(address.Segments[0], address.Segments[2]));
-                    var registration = plugins.Get(address.Segments[0]);
-                    if (release.SourceWorkspaceId != workspace.WorkspaceId ||
-                        registration?.SourceWorkspaceId != workspace.WorkspaceId)
-                        throw new InvalidOperationException("Выделение принадлежит другому workspace.");
+                        draft.Size < 1 || draft.Size > HtmlVisualSelectionPolicy.MaximumBodyBytes)
+                        throw new InvalidOperationException("Выделение HTML недействительно. Выберите элемент заново.");
+                    RNAssistant.Application.WorkspaceVisualSelectionService.RequireSource(_paths, workspace, draft);
                     HtmlVisualSelectionPolicy.ReadCapturedBody(attachments.ReadBytes(draft));
                 }
             }

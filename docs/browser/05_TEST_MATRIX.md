@@ -1,5 +1,78 @@
 # Universal Browser: матрица проверок
 
+## A3 correction evidence — 2026-11-13
+
+`visual selection:` 2/2; `local browser: annotations pin saved entry` 1/1;
+`html-visual-selection-draft.test.js` PASS. Реальные plugin v1/v3 с равными bytes
+получают разные annotation source IDs; working/saved Workspace также разделены.
+A3 из аудита ниже исправлен; прочие пункты остаются открытыми.
+
+## Проверка пакета 00–08 — 2026-11-13
+
+Baseline: `main` `3da1992c` + текущая незакоммиченная annotation correction
+`16.25.2-dev`. Это проверка текущего результата, не повтор реализации от `e9bb52c1`.
+Положительные проверки ниже **не закрывают** найденные расхождения требований.
+
+Harness: одна host-neutral сборка, остальные фильтры с `--no-build`:
+
+| Фильтры | Passed |
+| --- | ---: |
+| `local browser:` / `external browser:` (оставшиеся local admission guards) | 9 / 9 |
+| `browser target:` / `source comparison:` / `plugin versions:` | 1 / 3 / 3 |
+| `HTML checkpoints:` / `HTML project versions:` / `HTML project import:` | 3 / 1 / 4 |
+| `shared HTML: saved history` / `visual selection:` | 1 / 2 |
+| `llm transport:` / `bridge: retired page network` | 1 / 1 |
+| **Итого** | **38** |
+
+13 web-наборов проходят: `browser-local-network`, `browser-interactive`,
+`browser-offline-export`, `local-browser`, `browser-start-surface`, `plugin-browser`,
+`browser-saved-views`, `browser-source-diff`, `html-editor-views`, `html-annotations`,
+`chat-inspector`, `workspace-inspector`, `dock-layout-pruning`.
+Запуск: `NODE_PATH=/tmp/rna-window-check/node_modules`,
+`BROWSER_EXECUTABLE=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
+`node tests/web/<name>.test.js`. Native UI fixtures не исполняют WebView2 C#.
+Network/script/file:// cases действительно исполняют HTML в Chromium.
+Сгенерированные этой проверкой review PNG не заменяют принятое визуальное evidence.
+
+### Найденные дефекты и незакрытые требования
+
+| ID / приоритет | Факт и влияние | Evidence / следующая проверка |
+| --- | --- | --- |
+| A1 / P1, 01 §6.3 / 02 §7 | [LocalBrowserPage](../../src/RNAssistant.Office/WebView/LocalBrowserPage.cs) открывает только `Content.EntryPath`, теряя query/hash из `State.Url`. [Runtime](../../src/RNAssistant.Application/LocalBrowserPageRuntime.cs) добавляет каждый изменившийся native URL как новый visit; replace/pop не различаются. Back/Forward увеличивают generation, а [renderer](../../src/RNAssistant.Office/WebView/LocalBrowserRenderer.cs) пересоздаёт страницу: same-document DOM/form state теряется. | Подтверждено по коду; Windows не запускался. Нужны entry `?mode=x#section`, push/replace/back/forward с сохранением поля/scroll, отказ внешней навигации без изменения history и failed navigation rollback. |
+| A2 / P1, 05 export | Native `SourceChanged` меняет `State.Url` и `Target.RelativePath`, но оставляет прежний `DisplayLocator`. [OpenBrowserContent / PrepareBrowserHtmlExport](../../src/RNAssistant.Office/Controller/AssistantController.BrowserContent.cs) заново выбирают member по нему, поэтому экспорт после локальной ссылки использует старую страницу. | Actual-controller Mock probe: два HTML в одном импортированном проекте; применено ровно descriptor-изменение native handler (`RelativePath=second.html`). Результат: `native current member=second.html; prepared export entry=index.html`. Сам native click этим probe не проверен. |
+| A3 / P1, 03 §10 | [HtmlVisualSourcePage.Identity](../../src/RNAssistant.Core/Models/HtmlVisualSelection.cs) и [capture](../../src/RNAssistant.Application/BrowserContentSession.cs) не включают saved catalog entry. Разные v1/v3 одинакового content имеют один source identity; версия не отделяет history/reveal аннотации. | Реальный PluginApplicationService: Save v1 → изменить/Save v2 → вернуть bytes/Save v3. `distinct catalog entries=True; same page identity=True`. Существующая Workspace проверка ожидает общую identity working/saved; она не доказывает exact saved-entry isolation и должна быть скорректирована. |
+| A4 / P2, 04 §9 | [VersionInUse](../../src/RNAssistant.Application/PluginApplicationService.Versions.cs) учитывает любой открытый plugin instance, включая read-only preview. Пользователь не может удалить просматриваемую неактивную версию. | Реальный service probe: `CanDelete=True` до preview, `False/VersionInUse` во время, `True` после закрытия. Нужны Delete + removed invalidation viewer и отдельная сохранённая защита exact command/pending write. |
+| A5 / P2, 06 recents | [app-browser](../../web/js/app-browser.js) записывает посещения после Shell Open/Navigate/Back/Forward; native state events и agent Navigate обходят эти вызовы. Их принятые страницы отсутствуют в recents. | Проверка wiring. Нужен единый accepted-visit event от runtime, dedup без reload/read/scroll и без raw query payloads; текущий fixture проверяет только Shell commands. |
+| A6 / P2, 01 §7 / 05 §7 | Ручной переход связанной вкладки в другой разрешённый local scope отсутствует: `Navigate` сохраняет owner, resolver отказывает foreign workspace. Общий «Обсудить» не создаёт явный новый binding для обычного Workspace. | Это незавершённая функция, не основание ослабить существующий guard. Нужны typed user handoff, отзыв старого agent binding, отдельное явное подключение нового чата и stale/draft checks. |
+| A7 / P2, 05 §7 | В [общих действиях](../../web/js/app-browser-actions.js) и PreviewSurface нет пользовательской команды screenshot; agent media API не заменяет этот UI пункт. | Wiring review; добавить consumer существующего capture/media owner и проверить exact page/privacy/viewport/lifetime. |
+
+Backend probes использовали временные console entry points вне репозитория:
+`dotnet run --project /tmp/rna-plan-audit-probe/Probe.csproj` (A3/A4, текущая
+Harness assembly) и `/tmp/rna-plan-export-probe/Probe.csproj` (A2, ранее собранный
+actual-controller Mock `16.25.2-dev`; соответствующий current source перепроверен).
+Выводы сохранены в `/tmp/rna-plan-audit-probe.log` и
+`/tmp/rna-plan-export-probe.log`; позитивные suite summaries —
+`/tmp/rna-plan-audit-harness.json`, `/tmp/rna-plan-audit-web.json`.
+Продуктовый код этим аудитом не исправлялся. Последующий срез должен закрепить
+исправления минимальными regression cases в существующих suites.
+
+Открыто отдельно: Windows native compilation; network/worker isolation на WebView2;
+physical input/IME/DPI/takeover; multi-page/history; SDK/lease cleanup;
+1 → несколько preview → last-close process/controller/profile counts;
+визуальное принятие. Ранее отмеченный stale `html-workspace-export` fixture
+с ожиданием удалённого refresh tool этим прогоном не исправлен и не перепроверялся.
+
+## Universal annotation correction — 2026-11-13
+
+`visual selection:` passes document and raw HTML intake, plugin and ordinary Workspace
+input through model read/history, content/member identity (saved-entry separation is
+still open in A3 above), changed source and
+foreign-owner refusal. `local browser:` passes 9/9, including closed annotation capture.
+`html-visual-selection-draft.test.js` covers all four providers with the common command;
+`html-annotations.test.js` covers exact recipient, stale generation, late draft cleanup
+and the unchanged overlay at 420px/125%. Mock compiles the actual controller/bridge.
+Native WinForms/WebView2 compilation and real Windows interactions remain open.
+
 ## 07 Inspector / final local UI — 2026-11-13
 
 Passed: chat-inspector (two Office targets, late arsenal, exact draft preview, pinned

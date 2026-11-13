@@ -460,6 +460,13 @@ namespace RNAssistant.Core.Storage
             return OpenRetainedStream(evidence.Payload, maximumBytes, token, progress, requireSeek);
         }
 
+        // Metadata-only provenance validation for a captured page/annotation; never refreshes the working file.
+        public WorkspaceFileSnapshot DescribeExactSource(WorkspaceDescriptor workspace, string relativePath, ResourceRef exact)
+        {
+            RequireExactPath(workspace, relativePath, exact);
+            return new WorkspaceFileSnapshot(relativePath, PublishedEvidence(exact, ResourceRepresentations.Raw));
+        }
+
         public ResourceEvidence PublishTreeView(WorkspaceFileSnapshot snapshot, string body, ResourceCoverage coverage)
         {
             if (snapshot == null || body == null || coverage == null ||

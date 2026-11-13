@@ -1,5 +1,13 @@
 # Plugins
 
+## Common Browser annotations — 2026-11-13
+
+Plugins share `stageBrowserVisualSelection` with all local HTML sources. Native capture
+pins the package/member and recipient; the existing Workspace attachment/CAS intake
+validates release or ordinary HTML file provenance. History uses the same page identity.
+The plugin-specific staging/discard bridge operations and DTOs are removed; draft
+removal uses the common chat resource operation. No new annotation persistence owner.
+
 F3b cutover (2026-11-13, `16.16.0-dev`): Check → Save → Apply uses one saved-entry
 catalog in the existing authority. Save creates a user checkpoint without activation;
 Apply pins an exact saved entry and expected active entry/release/revision. Run intent

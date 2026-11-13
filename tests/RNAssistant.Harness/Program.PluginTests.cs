@@ -436,7 +436,7 @@ namespace RNAssistant.Harness
         }
         private static void WorkspaceVisualSelectionUsesSharedChat()
         {
-            WithPluginPaths(paths =>
+            foreach (var genericHtml in new[] { false, true }) WithPluginPaths(paths =>
             {
                 using (var service = new PluginApplicationService(paths))
                 {
@@ -461,38 +461,57 @@ namespace RNAssistant.Harness
                     forged["version"] = "invalid";
                     RuntimeThrows<InvalidOperationException>(() => HtmlVisualSelectionPolicy.ReadCapturedBody(
                         Encoding.UTF8.GetBytes(forged.ToString(Formatting.None))));
-                    var opened = service.Open(new PluginOpenRequest { PluginId = plugin.PluginId });
-                    var selectionRequest = new PluginVisualSelectionRequest { InstanceId = opened.InstanceId,
-                        WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId, PreviewGeneration = 1,
-                        Selection = selection, Comment = "Fix button", AnnotationNumber = 2 };
-                    var draft = service.StageVisualSelection(selectionRequest);
-                    AssertEqual(PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri,
+                    var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = plugin.SourceWorkspaceId, ChatId = sessionId };
+                    string locator;
+                    if (genericHtml) {
+                        var html = new WorkspaceHtmlVersionService(paths);
+                        var definition = html.GetDefinition(new HtmlProjectDefinitionRequest { OwnerScope = owner, WorkspaceId = owner.ScopeId });
+                        html.SetDefinition(new HtmlProjectDefinitionRequest { OwnerScope = owner, WorkspaceId = owner.ScopeId,
+                            ExpectedFingerprint = definition.Fingerprint,
+                            Definition = new HtmlProjectDefinition { EntryPath = "index.html", Members = new[] { "index.html" } } }, CancellationToken.None);
+                        locator = BrowserLocalLocator.ForProject(owner.ScopeId, "index.html");
+                    } else locator = BrowserLocalLocator.ForPlugin(plugin.PluginId, "index.html", plugin.SavedVersionId);
+                    var targetRequest = new BrowserResolveRequest { OwnerScope = owner, Locator = locator };
+                    var content = service.OpenBrowserContent(service.ResolveBrowserLocator(targetRequest).Target, CancellationToken.None);
+                    var capture = content.Annotation(content.EntryPath);
+                    var acceptedSource = capture.Source;
+                    if (genericHtml) {
+                        var html = new WorkspaceHtmlVersionService(paths);
+                        var state = html.State(new BrowserVersionRequest { Target = content.Target });
+                        var saved = html.Command(new BrowserVersionCommand { Target = content.Target, Action = BrowserVersionAction.Save,
+                            ExpectedContentRevision = state.ContentRevision, ExpectedDefinitionRevision = state.DefinitionRevision,
+                            ExpectedStateRevision = state.StateRevision, OperationId = "save-annotated-page" });
+                        AssertEqual(BrowserVersionOutcome.Saved, saved.Outcome, saved.Message);
+                        var savedTarget = html.Resolve(new BrowserResolveRequest { OwnerScope = owner,
+                            Locator = BrowserLocalLocator.ForProject(owner.ScopeId, "index.html", saved.Version.VersionId) }).Target;
+                        using (var savedContent = html.OpenBrowserContent(savedTarget, CancellationToken.None))
+                            AssertTrue(capture.Context.SourceId != savedContent.Annotation(savedContent.EntryPath).Context.SourceId,
+                                "saved and working pages have distinct annotation identities even with equal retained bytes");
+                        var foreign = capture.Page.Copy(); foreign.WorkspaceId = "other-project";
+                        RuntimeThrows<InvalidOperationException>(() => WorkspaceVisualSelectionService.RequireSource(paths,
+                            new WorkspaceStore(paths).OpenConnected(owner.ScopeId),
+                            new ChatAttachment { VisualSelectionSource = acceptedSource, VisualSelectionPage = foreign }));
+                    }
+                    body = HtmlVisualSelectionPolicy.Capture(selection, capture.Title, "Fix button", 2);
+                    var selectionRequest = new BrowserAnnotationRequest { Generation = 1, Selection = selection, Comment = "Fix button", AnnotationNumber = 2 };
+                    var draft = service.StageBrowserVisualSelection(capture, selectionRequest);
+                    AssertEqual(acceptedSource.Uri,
                         new AttachmentStore(paths).LoadDrafts(new[] { draft.Id }, sessionId).Single().VisualSelectionSource.Uri,
-                        "native staging pins the bound plugin release without exposing its URI to the browser");
+                        "Browser staging pins the captured plugin or ordinary HTML source");
                     File.AppendAllText(Path.Combine(plugin.SourceRoot, "index.html"), "\n<!-- candidate annotation fixture -->");
-                    var checkedCandidate = service.Check(plugin.PluginId);
-                    var preview = service.Open(new PluginOpenRequest { PluginId = plugin.PluginId,
-                        CandidateId = checkedCandidate.CandidateId });
-                    selectionRequest.InstanceId = preview.InstanceId;
-                    var candidateDraft = service.StageVisualSelection(selectionRequest);
-                    AssertTrue(preview.ReleaseId != plugin.ReleaseId &&
-                        new AttachmentStore(paths).LoadDrafts(new[] { candidateDraft.Id }, sessionId).Single()
-                            .VisualSelectionSource.Uri == PluginStore.ReleaseRef(plugin.PluginId, preview.ReleaseId).Uri,
-                        "checked candidate preview keeps its own retained release identity");
-                    service.DiscardVisualSelection(new PluginVisualDraftRequest { WorkspaceId = plugin.SourceWorkspaceId,
-                        SessionId = sessionId, Id = candidateDraft.Id });
-                    service.CloseInstanceAsync(preview.InstanceId).GetAwaiter().GetResult();
-                    PluginFailure(() => service.StageVisualSelection(selectionRequest), "plugin_selection_changed");
-                    selectionRequest.InstanceId = opened.InstanceId;
-                    PluginFailure(() => service.StageVisualSelection(new PluginVisualSelectionRequest {
-                        InstanceId = "unknown", WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId,
-                        PreviewGeneration = 1, Selection = selection, AnnotationNumber = 3 }), "plugin_selection_changed");
-                    var disposable = service.StageVisualSelection(selectionRequest);
-                    AssertTrue(service.DiscardVisualSelection(new PluginVisualDraftRequest {
-                        WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId, Id = disposable.Id }).Discarded,
-                        "discard acknowledges a staged draft in its chat");
-                    RuntimeThrows<InvalidOperationException>(() => new AttachmentStore(paths).LoadDrafts(
-                        new[] { disposable.Id }, sessionId));
+                    targetRequest.Locator = genericHtml ? locator : BrowserLocalLocator.ForPlugin(plugin.PluginId, "index.html");
+                    var preview = service.OpenBrowserContent(service.ResolveBrowserLocator(targetRequest).Target, CancellationToken.None);
+                    var candidateCapture = preview.Annotation(preview.EntryPath);
+                    var candidateDraft = service.StageBrowserVisualSelection(candidateCapture, selectionRequest);
+                    AssertTrue(candidateCapture.Context.SourceId != capture.Context.SourceId,
+                        "reloaded source gets its own page identity while an open page retains its source");
+                    new AttachmentStore(paths).DeleteDraft(candidateDraft.Id, sessionId);
+                    preview.Dispose(); preview.Drained.GetAwaiter().GetResult();
+                    RuntimeThrows<ObjectDisposedException>(() => preview.Annotation(preview.EntryPath));
+                    var disposable = service.StageBrowserVisualSelection(capture, selectionRequest);
+                    AssertTrue(new AttachmentStore(paths).DeleteDraft(disposable.Id, sessionId), "discard acknowledges a draft in its chat");
+                    RuntimeThrows<InvalidOperationException>(() => new AttachmentStore(paths).LoadDrafts(new[] { disposable.Id }, sessionId));
+                    content.Dispose(); content.Drained.GetAwaiter().GetResult();
 
                     var portProbe = new TcpListener(IPAddress.Loopback, 0);
                     portProbe.Start();
@@ -545,17 +564,17 @@ namespace RNAssistant.Harness
                             var visualView = historyView.Messages.Single(item => item.Role == "user").Attachments.Single();
                             AssertEqual("Fix button", visualView.VisualAnnotation.Comment,
                                 "shared project chat projects the immutable sent annotation");
-                            AssertEqual(plugin.ReleaseId, visualView.VisualSourceArtifactId,
+                            AssertEqual(capture.Context.SourceId, visualView.VisualSourceArtifactId,
                                 "sent annotation remains pinned to the retained release");
                             var committed = user.Attachments.Single();
                             AssertTrue(modelRequest.Contains("Current user attachments") &&
                                 modelRequest.Contains("skills.workspace.plugin.authoring") &&
                                 modelRequest.Contains("\\\"attachment\\\"") &&
                                 !modelRequest.Contains("rnassistant.html-visual-selection") &&
-                                !modelRequest.Contains(PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri) &&
+                                !modelRequest.Contains(acceptedSource.Uri) &&
                                 committed.ContentSha256 != null && committed.DraftChatId == null,
                                 "model receives a read target without implicit DOM body or runtime source URI");
-                            AssertTrue(user.ResourceRefs.Any(item => item.Uri == PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri) &&
+                            AssertTrue(user.ResourceRefs.Any(item => item.Uri == acceptedSource.Uri) &&
                                 new AttachmentStore(paths).ReadBytes(committed).SequenceEqual(body),
                                 "accepted message retains exact plugin source and selection body");
                             var provider = new WorkspaceChatAttachmentResourceProvider(paths, session);

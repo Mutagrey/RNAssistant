@@ -11,7 +11,7 @@ using RNAssistant.Application.Contracts;
 
 namespace RNAssistant.Office.WebView
 {
-    internal sealed partial class LocalBrowserRenderer : IBrowserRenderer
+    internal sealed partial class LocalBrowserRenderer : IBrowserRenderer, IBrowserAnnotationSource
     {
         private readonly Control _parent;
         private readonly WebView2 _shell;
@@ -116,6 +116,17 @@ namespace RNAssistant.Office.WebView
         internal void ResourceChanged(RNAssistant.Office.Contracts.ResourceChangedMessage change)
         { _ui.Post(ignored => { if (!_closed) foreach (var page in _pages.Values) page.ResourceChanged(change); }, null); }
         private void Publish(BrowserPageStateDto state) { RefreshHandles(); if (!_closed) Changed?.Invoke(state); }
+        public async Task<BrowserAnnotationCapture> CaptureAnnotationAsync(BrowserAnnotationRequest request, CancellationToken token)
+        {
+            await _dispatch.WaitAsync(token).ConfigureAwait(false);
+            try { return await OnUi(() => {
+                token.ThrowIfCancellationRequested();
+                LocalBrowserPage page;
+                if (_closed || !_pages.TryGetValue(request.BrowserTabId, out page))
+                    throw new InvalidOperationException("Страница аннотации закрыта.");
+                return Task.FromResult(page.CaptureAnnotation(request));
+            }).ConfigureAwait(false); } finally { _dispatch.Release(); }
+        }
         public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId)
         { return _handles.Where(handle => handle.ChatId == chatId).ToArray(); }
         private LocalBrowserPage Exact(BrowserPageHandle handle)

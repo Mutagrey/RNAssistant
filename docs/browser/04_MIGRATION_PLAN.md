@@ -1,16 +1,47 @@
 # Universal Browser: план реализации
 
+## Актуальный остаток после проверки — 2026-11-13
+
+Пакет 00–08 не завершён. Аудит текущего `main` `3da1992c` с annotation correction
+нашёл функциональные дефекты, которых не закрывают проходящие Harness/Chromium suites.
+Прежние этапы ниже — история интеграции, не разрешение пропустить этот остаток.
+
+A3 (exact saved-entry annotation identity) завершён первым вместе с уже открытым
+universal intake срезом. Остальные пункты продолжаются от этого состояния.
+
+Последовательность сквозных исправлений:
+
+1. 02/05: native query/hash, согласованная same-document history и текущий descriptor
+   для export; затем 06 recents от принятого runtime visit.
+2. **Готово (16.25.2-dev):** 03/04 exact saved-entry provenance аннотаций, сохранение его в attachments/history
+   и запрет reveal между v1/v3 одинакового content.
+3. 04/05: Delete при read-only viewer с removed invalidation, без ослабления защиты
+   выполняющейся command/pending write.
+4. 01/02/05: явный manual scope handoff/rebind; общий screenshot action через
+   существующий media owner.
+5. Визуальное принятие и Windows compilation/qualification, включая native input,
+   network/worker isolation и process/profile lifetime. Независимые исправления
+   не ждут Windows evidence; отсутствие qualification не отменяет интерактивность
+   внутренних страниц на поддерживаемом runtime.
+
+Каждый пункт продолжает полученное состояние, имеет собственную релевантную проверку
+и законченный commit; push/release отдельно не поручены. Полная карта 00–08 —
+[Progress](06_PROGRESS.md#проверка-пакета-0008--2026-11-13),
+дефекты и границы доказательств — [Test Matrix](05_TEST_MATRIX.md#проверка-пакета-0008--2026-11-13).
+
 ## Local package implementation — 2026-11-13
 
-00–08 implementation is complete through 07 on `16.25.1-dev`, with separate
+00–08 core implementation is integrated through 07 on `16.25.1-dev`, with separate
 end-to-end commits. The latest Progress/Test Matrix sections supersede the historical
 external-browser/P1–P6 sequence below. Interactive local execution, exact bindings,
 semantic input, media fallback, native selection/find, version/export lifecycle,
 StartSurface and selected Inspector are connected to existing owners. No new JS-worker
 migration or later UI phase starts implicitly.
 
-Windows native compilation/qualification and UI acceptance remain open. The raw HTML
-and generic Workspace project have no existing annotation owner; capability is explicit.
+The user identified incomplete universal annotation support after integration.
+The correction connects raw HTML and ordinary Workspace sources to the same native
+capture and existing chat/attachment owners; it is a functional fix, not a permission gate.
+Windows native compilation/qualification and UI acceptance remain open.
 Offline autonomous HTML embeds binding snapshots; live Office/plugin tools need the
 app. Historical source/test links below are pinned to audited `e9bb52c1` where their
 retired files existed. Integration evidence is recorded in [Progress](06_PROGRESS.md).

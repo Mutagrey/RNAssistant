@@ -1,3 +1,5 @@
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -191,25 +193,25 @@ namespace RNAssistant.Harness
                     "model-facing selection body contains no runtime URI");
                 var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths),
                     new ChatStore(paths).DocumentArtifacts);
-                var request = new StageHtmlVisualSelectionPayload { ChatId = session.Id,
-                    ArtifactId = source.Id, ArtifactRevision = 1, PreviewGeneration = 3, Selection = selection };
-                var acceptedWire = JsonConvert.DeserializeObject<StageHtmlVisualSelectionPayload>(
-                    JsonConvert.SerializeObject(request));
-                AssertEqual("save", acceptedWire.Selection.StableUiId,
-                    "Office bridge uses the shared Core selection contract");
-                var draft = ingestion.StageHtmlVisualSelection(session, request);
+                var capture = new BrowserAnnotationCapture { Owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document,
+                    ScopeId = session.DocumentAuthorityId, ChatId = session.Id }, Source = exact,
+                    Page = new HtmlVisualSourcePage { Path = "index.html", ContentRevision = source.Id + ":1" } };
+                var request = new BrowserAnnotationRequest { Generation = 3, Selection = selection };
+                var acceptedWire = JsonConvert.DeserializeObject<BrowserAnnotationRequest>(JsonConvert.SerializeObject(request));
+                AssertEqual("save", acceptedWire.Selection.StableUiId, "Browser uses the shared Core selection contract");
+                var draft = ingestion.StageBrowserVisualSelection(session, capture, request);
                 AssertEqual(exact.Uri, ingestion.LoadDrafts(session, new[] { draft.Id }).Single().VisualSelectionSource.Uri,
                     "draft retains exact host-selected source");
                 request.Comment = "Make the button green";
                 request.AnnotationNumber = 2;
-                var annotated = ingestion.StageHtmlVisualSelection(session, request);
+                var annotated = ingestion.StageBrowserVisualSelection(session, capture, request);
                 var annotation = HtmlVisualSelectionPolicy.ReadAnnotation(new AttachmentStore(paths).ReadBytes(annotated));
                 AssertEqual("Make the button green", annotation.Comment,
                     "the user's comment is in the immutable model-readable selection body");
                 AssertEqual(2, annotation.AnnotationNumber, "the UI number belongs to the same body");
                 request.Comment = "";
                 request.AnnotationNumber = 3;
-                var elementOnly = ingestion.StageHtmlVisualSelection(session, request);
+                var elementOnly = ingestion.StageBrowserVisualSelection(session, capture, request);
                 AssertEqual("", HtmlVisualSelectionPolicy.ReadAnnotation(new AttachmentStore(paths).ReadBytes(elementOnly)).Comment,
                     "an element-only annotation keeps its intentionally empty comment");
                 var elementOnlyDrafts = ingestion.LoadDrafts(session, new[] { elementOnly.Id });
@@ -220,12 +222,12 @@ namespace RNAssistant.Harness
                     Attachments = elementOnlyDrafts.ToList() }),
                     "an accepted attachment-only turn remains in replay");
                 request.Comment = new string('x', 2049);
-                RuntimeThrows<InvalidOperationException>(() => ingestion.StageHtmlVisualSelection(session, request));
+                RuntimeThrows<InvalidOperationException>(() => ingestion.StageBrowserVisualSelection(session, capture, request));
                 request.Comment = null;
                 request.AnnotationNumber = 0;
-                request.ArtifactRevision = 2;
-                RuntimeThrows<InvalidOperationException>(() => ingestion.StageHtmlVisualSelection(session, request));
-                request.ArtifactRevision = 1;
+                capture.Source = new ResourceRef(exact.Uri, "2");
+                RuntimeThrows<InvalidOperationException>(() => ingestion.StageBrowserVisualSelection(session, capture, request));
+                capture.Source = exact;
                 session.ActiveHtmlArtifactId = "other-snapshot";
                 AssertEqual(exact.Uri, ingestion.LoadDrafts(session, new[] { draft.Id }).Single().VisualSelectionSource.Uri,
                     "active editor selection cannot redirect an exact Browser annotation");
@@ -264,7 +266,7 @@ namespace RNAssistant.Harness
                     "sent annotation is projected from committed CAS into browser history");
                 AssertEqual(2, projected.VisualAnnotation.AnnotationNumber,
                     "sent annotation preserves its number");
-                AssertEqual(source.Id, projected.VisualSourceArtifactId,
+                AssertEqual(capture.Context.SourceId, projected.VisualSourceArtifactId,
                     "sent annotation keeps its exact HTML source");
                 AssertEqual(1, projected.VisualSourceRevision,
                     "sent annotation keeps its source revision");
@@ -278,6 +280,24 @@ namespace RNAssistant.Harness
                     new[] { unavailableMessage }, new AttachmentStore(paths)).Single().Attachments.Single();
                 AssertTrue(unavailable.VisualAnnotationUnavailable && unavailable.VisualAnnotation == null,
                     "invalid committed metadata is visible as an unavailable annotation");
+
+                var raw = ingestion.Stage(ConversationMetadata.From(session), "ordinary.html", "text/html",
+                    System.Text.Encoding.UTF8.GetBytes("<button id='save'>Save</button>"));
+                var rawMessage = new ChatMessage { Role = "user", Content = "HTML", Attachments = new List<ChatAttachment> { raw } };
+                session.Messages.Add(rawMessage); ingestion.CommitAndLink(session, rawMessage, session.Messages.Count - 1);
+                var rawArtifact = session.Artifacts.Single(item => item.Id == "attachment_" + raw.Id);
+                var rawSource = ChatResourceUri.CreateArtifactRevision(session, rawArtifact);
+                capture.Source = rawSource; capture.Page.ContentRevision = rawArtifact.Id + ":1";
+                request.AnnotationNumber = 4; request.Comment = "";
+                var rawDraft = ingestion.StageBrowserVisualSelection(session, capture, request);
+                AssertEqual(rawSource.Uri, ingestion.LoadDrafts(session, new[] { rawDraft.Id }).Single().VisualSelectionSource.Uri,
+                    "ordinary HTML needs no HTML-workspace conversion for annotation intake");
+                var firstPage = capture.Context.SourceId; capture.Page.Path = "other.html";
+                AssertTrue(firstPage != capture.Context.SourceId, "different pages of one bundle cannot share a reveal anchor");
+                capture.Page.Path = "index.html";
+                capture.Owner.ChatId = "another-chat";
+                RuntimeThrows<InvalidOperationException>(() => ingestion.StageBrowserVisualSelection(session, capture, request));
+                capture.Owner.ChatId = session.Id;
 
                 var chatOwned = new ChatArtifact { Id = "copied-html", Kind = ChatArtifactKinds.HtmlWorkspace,
                     Revision = 1, Title = "Copied page" };

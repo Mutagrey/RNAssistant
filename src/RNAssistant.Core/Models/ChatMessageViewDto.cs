@@ -165,8 +165,8 @@ namespace RNAssistant.Core.Models
                     if (annotation.AnnotationNumber > 0)
                     {
                         view.VisualAnnotation = annotation;
-                        view.VisualSourceArtifactId = sourceId;
-                        view.VisualSourceRevision = sourceRevision;
+                        view.VisualSourceArtifactId = attachment.VisualSelectionPage?.Identity(exactSource) ?? sourceId;
+                        view.VisualSourceRevision = attachment.VisualSelectionPage != null ? 1 : sourceRevision;
                         return;
                     }
                 }

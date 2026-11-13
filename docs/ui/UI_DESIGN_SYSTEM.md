@@ -1,5 +1,12 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Universal annotation availability — In Review, 2026-11-13
+
+The same selection button, comment editor and markers serve raw HTML, Workspace,
+document and plugin pages. No new provider toolbar or visual geometry. Rechecked the
+existing [420px/125% reference](review/browser-annotations-narrow.png) with the common
+staging operation; native Windows placement and user acceptance remain separate.
+
 ## 07 Inspector scope — In Review, 2026-11-13
 
 Use the existing Inspector section switcher, status/info/disclosure and action controls.

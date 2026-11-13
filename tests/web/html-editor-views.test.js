@@ -58,7 +58,6 @@ const { chromium } = require('playwright');
           htmlTest.versions[payload.chatId] = (htmlTest.versions[payload.chatId] || 1) + 1;
           return Promise.resolve(response(payload.chatId));
         }
-        if (command === 'stageHtmlVisualSelection') return Promise.resolve({ resource: { Id: 'annotation-' + payload.chatId, FileName: 'selection.json', Kind: 'file', Size: 180, Status: 'ready' } });
         return original(command, payload);
       };
       window.editorView = id => RNAssistantDockWorkspace.getView(RNAssistantHtmlWorkspaceView.key({ chatId: id }));

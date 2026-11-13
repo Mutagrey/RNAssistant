@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.25.2-dev
+
+- Connected annotations for ordinary HTML resources and Workspace HTML projects to
+  the common Browser path, including saved sources and chat history. Annotations
+  retain the exact page, saved catalog entry, content revision and recipient across
+  navigation; equal bytes in different versions cannot reanchor a comment.
+
 ### 16.25.1-dev
 
 - Inspector and next-request preview use the exact selected chat and draft. Historical

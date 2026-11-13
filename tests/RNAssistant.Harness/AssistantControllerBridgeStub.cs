@@ -39,8 +39,8 @@ namespace RNAssistant.Office
         public Task InboxWorkersDrained { get { return Task.CompletedTask; } }
         public void StopInboxWorkers() { }
         public ChatResourceDraftResponse StageSelectionInput(string mode, string chatId) { return new ChatResourceDraftResponse(); }
-        public ChatResourceDraftResponse StageHtmlVisualSelection(StageHtmlVisualSelectionPayload request)
-        { return new ChatResourceDraftResponse(); }
+        internal ChatAttachment StageBrowserVisualSelection(BrowserAnnotationCapture capture, BrowserAnnotationRequest request)
+        { return new ChatAttachment(); }
         public ChatInboxResponse GetChatInbox(string chatId, IReadOnlyList<string> receiptOperationIds = null)
         {
             LastChatId = chatId;

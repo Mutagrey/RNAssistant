@@ -8,7 +8,7 @@ using RNAssistant.Application.Contracts;
 namespace RNAssistant.Application
 {
     // The sole local tab/session/history owner; the native adapter owns rendering/input only.
-    public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IBrowserMediaSource, IDisposable
+    public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IBrowserMediaSource, IBrowserAnnotationSource, IDisposable
     {
         private sealed class Visit { public BrowserOwnerScope Owner; public string Locator; }
         private sealed class Page
@@ -196,6 +196,22 @@ namespace RNAssistant.Application
         public void BlockActions(BrowserPageHandle target) { _renderer?.BlockActions(target); }
         public void PresentResult(BrowserPageHandle target, string preparation, BrowserActionEffect effect) { _renderer?.PresentResult(target, preparation, effect); }
         public Task<BrowserMediaCapture> ReadMediaAsync(BrowserPageHandle target, CancellationToken token) => _renderer?.ReadMediaAsync(target, token) ?? throw Unavailable();
+        public async Task<BrowserAnnotationCapture> CaptureAnnotationAsync(BrowserAnnotationRequest request, CancellationToken token)
+        {
+            await _commands.WaitAsync(token).ConfigureAwait(false);
+            try {
+                lock (_sync) {
+                    Page page;
+                    if (_disposed || request?.BrowserTabId == null || !_pages.TryGetValue(request.BrowserTabId, out page) ||
+                        page.State.SessionId != request.SessionId || page.State.DocumentGeneration != request.Generation ||
+                        page.State.Status != BrowserPageStatus.Ready || !page.State.Attached)
+                        throw new InvalidOperationException("Страница аннотации изменилась. Выберите элемент заново.");
+                }
+                var source = _renderer as IBrowserAnnotationSource;
+                if (source == null) throw Unavailable();
+                return await source.CaptureAnnotationAsync(request, token).ConfigureAwait(false);
+            } finally { _commands.Release(); }
+        }
         public bool IsCaptureCurrent(BrowserMediaCapture capture) => _renderer?.IsCaptureCurrent(capture) == true;
         private static InvalidOperationException Unavailable() => new InvalidOperationException(NativeUnavailable);
         private Task _nativeReset = Task.CompletedTask;

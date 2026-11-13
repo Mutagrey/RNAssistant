@@ -1,5 +1,77 @@
 # Universal Browser: статус
 
+## Saved-entry annotation identity исправлена — 2026-11-13
+
+`16.25.2-dev`, A3: завершён общий annotation intake для raw/document/Workspace/plugin
+HTML. Runtime сохраняет `SavedVersionId` вместе с exact source/member/content;
+identity working, saved v1 и saved v3 различается даже при одинаковых bytes.
+Draft/history/reveal используют существующую attachment projection без нового store.
+Проверены два visual-selection сценария (включая intake/history), новый v1→v2→v3
+regression и common draft Node fixture. Windows qualification и UI acceptance открыты.
+Следом: A1/A2/A5 navigation/export/recents, A4 Delete, A6 handoff, A7 screenshot.
+
+## Проверка пакета 00–08 — 2026-11-13
+
+**План не закрыт: остались дефекты реализации, а не только Windows evidence.**
+Проверен текущий `main` (`3da1992c`) с незакоммиченной universal annotation
+correction (`16.25.2-dev`); исходный `e9bb52c1` использован только как база требований.
+Этот статус уточняет прежние заявления о завершении local implementation ниже.
+В этом проходе изменена документация; перечисленные дефекты ещё не исправлены.
+
+| Пакет | Состояние по текущему коду |
+| --- | --- |
+| 00 / 01: координация и контракты | Последовательные срезы интегрированы; native history, saved-entry identity аннотаций и ручная смена scope расходятся с обязательным контрактом. |
+| 02: host / network | Внутренние HTML/JS/resources подключены, сетевые Chromium probes проходят. Query/hash и native history требуют исправления; Windows compilation/isolation/lifetime evidence открыт. |
+| 03: agent tools / annotations | Semantic input, media admission и общий annotation intake подключены. Разные saved entries одинакового content смешиваются в identity аннотаций; native input/IME/DPI ещё не квалифицирован. |
+| 04: версии | Save/Activate/Delete/checkpoint/CAS checks проходят. Read-only viewer ошибочно блокирует удаление неактивной plugin version. |
+| 05: общий Browser | Общие source/preview/find/versions/export подключены. После внутренней ссылки экспорт выбирает прежний member; нет ручного scope handoff и пользовательской команды screenshot. UI acceptance открыт. |
+| 06: StartSurface / recents | Общий chooser/Home/search/restore проверен. Native link/SPA и agent Navigate не записываются в recents через общий runtime event. |
+| 07: экраны / Inspector | В проверенном local scope реализовано; selected-context и layout regressions проходят. Визуальное принятие и Windows integration остаются открытыми. |
+| 08: LLM без User-Agent | Закрыт в локальной реализации; проверка реальных HTTP-запросов проходит. |
+
+Приоритет исправлений (owners остаются прежними):
+
+1. **P1 / 02 + 05:** сохранить query/hash при native open и согласовать
+   push/replace/popstate/Back/Forward без пересоздания same-document страницы.
+   Обновлять текущий descriptor вместе с URL: иначе `second.html` экспортируется
+   как `index.html`. Затем подавать подтверждённые посещения в recents (06).
+2. **P1 / 03 + 04:** включить exact saved catalog entry в provenance аннотаций;
+   одинаковые bytes у v1/v3 не разрешают reveal/reuse между версиями.
+3. **P2 / 04 + 05:** разрешить Delete неактивной версии при read-only viewer,
+   сохранив блокировку exact pending write/command и invalidation открытого просмотра.
+4. **P2 / 01 + 02 + 05:** завершить явный ручной scope handoff с отзывом старого
+   agent binding; добавить screenshot в общий UI через существующий media owner.
+5. После локальных исправлений — визуальное принятие и Windows x64/Office x64/
+   VS 2022/WebView2 compilation + qualification. Недоступное Windows evidence
+   не блокирует пункты 1–4 и не требует выключать поддерживаемый внутренний HTML.
+
+Проверки: 38/38 Harness, 13/13 web-наборов; три отдельные backend probes
+подтвердили viewer deletion, annotation identity и неверный export entry.
+Native navigation/history выводы основаны на текущем C# и ещё не воспроизведены
+на Windows. Подробности, ссылки на owners и пробелы покрытия —
+[Test Matrix](05_TEST_MATRIX.md#проверка-пакета-0008--2026-11-13).
+Push/tag/release и Office/VSTO validation не выполнялись.
+
+## Universal annotation correction — 2026-11-13
+
+`16.25.2-dev`. The previous claim that implementation was complete understated a functional gap:
+raw HTML and generic Workspace HTML were excluded by provider-specific staging.
+All local HTML sources now use one `stageBrowserVisualSelection` command. The native
+page supplies the exact source, member path, content revision and bound chat;
+Shell cannot substitute a document, plugin or workspace source. Ordinary HTML needs
+no project conversion. Working and saved Workspace pages use retained file evidence.
+Existing ChatDrafts/attachments/CAS remain the owners; no annotation store is added.
+Page identity survives history projection and prevents revealing on another member
+or changed bundle. Retained-source checks in history read metadata, not source bodies.
+Old document/plugin staging operations and DTOs are removed.
+
+Passed: `visual selection:` 2/2 (including raw HTML, ordinary/saved Workspace HTML,
+plugin, accepted input/model resource read, history and foreign-owner refusal),
+`local browser:` 9/9, common draft Node test, Chromium annotations/420px/125%, and
+actual-controller Mock compilation. Native Windows compilation/qualification and
+user UI acceptance remain open. A chat must be bound explicitly; selecting another
+chat never silently moves pending annotations. External network remains denied.
+
 ## Final local integration — 2026-11-13
 
 Package 00–08 implementation is integrated with main through `e1f6b2f9`, including
@@ -11,8 +83,8 @@ UI/request/native-script, bindings and actual file:// evidence are listed below.
 
 Semantic element input is primary; fresh-image coordinates are optional. Internal
 member/resource/SDK transport remains supported. Single-page autonomous HTML embeds
-binding snapshots; live Office/plugin SDK needs the app. Raw/generic Workspace HTML
-has no existing annotation owner, explicitly reflected by capability.
+binding snapshots; live Office/plugin SDK needs the app. The raw/generic Workspace annotation gap present at this integration point
+is corrected in the universal annotation section above.
 
 Open: Windows x64/Office x64/VS 2022 native compilation and WebView2 qualification
 (network/worker isolation, trusted input/IME/DPI, manual takeover, media privacy,

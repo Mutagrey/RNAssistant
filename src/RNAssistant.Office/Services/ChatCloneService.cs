@@ -507,6 +507,7 @@ namespace RNAssistant.Office.Services
                 PageTextLengths = attachment.PageTextLengths == null ? new List<int>() : new List<int>(attachment.PageTextLengths),
                 ExtractionWarning = attachment.ExtractionWarning,
                 VisualSelectionSource = CloneResourceRef(attachment.VisualSelectionSource),
+                VisualSelectionPage = attachment.VisualSelectionPage?.Copy(),
                 Status = attachment.Status,
                 Error = attachment.Error,
                 CreatedUtc = attachment.CreatedUtc

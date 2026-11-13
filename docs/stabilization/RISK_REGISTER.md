@@ -1,16 +1,29 @@
 # Stabilization risk register
 
+## Browser package audit — Open, 2026-11-13
+
+Owner: Browser native/runtime + existing export/annotation/version services.
+A3 исправлен в 16.25.2-dev: exact saved-entry identity включена в attachment.
+Остаток P1: native query/hash/history mismatch; export после local link выбирает предыдущий
+member.
+P2: read-only plugin viewer блокирует Delete; native/agent visits не доходят до recents.
+Manual scope handoff и screenshot UI остаются незавершёнными пунктами пакета.
+38 Harness/13 web suites проходят, но этих сценариев в них нет; A2–A4 подтверждены
+отдельными backend probes. Исправления и нужное evidence перечислены в
+[Browser Test Matrix](../browser/05_TEST_MATRIX.md#найденные-дефекты-и-незакрытые-требования).
+
 ## Local Browser B02 — Open, 2026-11-13
 
 Удалены page HTTP proxy, внешняя навигация и site grants. Это не доказывает запрет
 WebRTC/STUN/TURN, worker/service-worker и всех Chromium transport channels.
-До квалификации механизма на конкретном Windows WebView2 Runtime новый активный
-local preview должен fail-closed отдавать source-only/unavailable с причиной.
-Owner: Browser 02/native host; next: typed qualification gate и network probes
-для каждого канала. Без просьб о Windows logs/files; экранная диагностика для фото.
-Старые HTML/plugin iframe consumers пока заменяются в F1, не считать ранний deny
-завершённой изоляцией. Старый `CanNavigate` Harness compile gap из раздела ниже
-больше не воспроизводится: текущие 9 Browser cases компилируются и проходят.
+Интерактивный local host уже подключён вместо старых HTML/plugin iframe consumers;
+Chromium network probes проходят. Fail-closed source-only/unavailable относится к
+неподдерживаемому runtime/API, а не ко всем внутренним страницам до получения фото.
+Owner: Browser 02/native host; осталось проверить native compilation и isolation
+на конкретном Windows WebView2 Runtime, включая workers, input и process/profile
+cleanup. Без просьб о Windows logs/files; диагностика для фото. Host-neutral checks
+не закрывают B02. Старый `CanNavigate` Harness compile gap ниже больше не
+воспроизводится: текущие 9 Browser cases компилируются и проходят.
 
 ## Окно Excel после правки 2026-11-12
 

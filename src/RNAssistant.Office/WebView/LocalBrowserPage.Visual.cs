@@ -15,15 +15,21 @@ namespace RNAssistant.Office.WebView
         internal event Action FindRequested;
         internal BrowserAnnotationContext AnnotationContext()
         {
-            if (string.IsNullOrEmpty(State.OwnerScope?.ChatId)) return null;
-            if (Content.Plugin != null && State.OwnerScope.Kind == BrowserOwnerKind.Workspace &&
-                Content.Plugin.Release.SourceWorkspaceId == State.OwnerScope.ScopeId)
-                return new BrowserAnnotationContext { PluginInstanceId = Content.Plugin.Id,
-                    SourceId = Content.Plugin.Release.ReleaseId, SourceRevision = 1 };
-            if (Content.HtmlWorkspace != null && State.OwnerScope.Kind == BrowserOwnerKind.Document &&
-                !string.IsNullOrEmpty(Content.Target.ArtifactId) && Content.Target.Revision > 0)
-                return new BrowserAnnotationContext { SourceId = Content.Target.ArtifactId, SourceRevision = Content.Target.Revision };
-            return null;
+            string path;
+            return Content != null && State.OwnerScope?.Matches(Content.Target.OwnerScope) == true && Controller != null &&
+                Content.TryMember(Core.Source, out path) ? Content.AnnotationContext(path) : null;
+        }
+        internal BrowserAnnotationCapture CaptureAnnotation(BrowserAnnotationRequest request)
+        {
+            string path;
+            if (!Ready || request.SessionId != State.SessionId || request.Generation != State.DocumentGeneration ||
+                !Content.TryMember(Core.Source, out path))
+                throw new InvalidOperationException("Страница аннотации изменилась. Выберите элемент заново.");
+            var capture = Content.Annotation(path);
+            if (capture == null || !capture.Owner.Matches(State.OwnerScope) || capture.Context.SourceId != request.SourceId)
+                throw new InvalidOperationException("Источник или чат аннотации изменился.");
+            HtmlVisualSelectionPolicy.Capture(request.Selection, capture.Title, request.Comment, request.AnnotationNumber);
+            return capture;
         }
         private async Task InitializeVisualAsync()
         {

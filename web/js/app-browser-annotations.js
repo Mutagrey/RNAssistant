@@ -32,17 +32,15 @@
     });
     async function discard(target, id) { return options.send("discardChatResourceDraft", { chatId: target.sessionId, workspaceId: target.workspaceId, id: id }); }
     async function stage(record, comment, number, replacing) {
-      var target = address(), origin = source(), binding = current && current.annotationContext, page = current;
+      var target = address(), origin = source(), page = current;
       if (busy || !enabled() || !record || record.pageSession !== current.sessionId || record.generation !== current.documentGeneration || record.sourceId !== origin.id || record.sourceRevision !== origin.revision ||
           RNAssistantConversationInput.isPending(target.source, target)) throw new Error("Источник выделения изменился или чат занят. Выберите элемент заново.");
       var view = panel(); if (view) view.captureDraft(true);
       var attachment = null, attached = false; busy = true;
       try {
-        var response = binding.pluginInstanceId ? await options.send("stagePluginVisualSelection", { workspaceId: target.workspaceId, sessionId: target.sessionId,
-          instanceId: binding.pluginInstanceId, previewGeneration: record.generation, selection: record.selection, comment: String(comment || ""), annotationNumber: number }) :
-          await options.send("stageHtmlVisualSelection", { chatId: target.sessionId, artifactId: origin.id, artifactRevision: origin.revision,
-            previewGeneration: record.generation, selection: record.selection, comment: String(comment || ""), annotationNumber: number });
-        attachment = binding.pluginInstanceId ? response : response && (response.resource || response.Resource);
+        var response = await options.send("stageBrowserVisualSelection", { browserTabId: page.browserTabId, sessionId: page.sessionId,
+          generation: record.generation, sourceId: origin.id, selection: record.selection, comment: String(comment || ""), annotationNumber: number });
+        attachment = response && (response.resource || response.Resource);
         if (!attachment || !attachmentId(attachment)) throw new Error("Аннотация не подготовлена.");
         if (!enabled() || current.sessionId !== page.sessionId || current.documentGeneration !== page.documentGeneration || JSON.stringify(address()) !== JSON.stringify(target))
           throw new Error("Страница изменилась. Выберите элемент заново.");

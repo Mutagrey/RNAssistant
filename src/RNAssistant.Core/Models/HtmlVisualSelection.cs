@@ -3,6 +3,25 @@ using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Models
 {
+    // Runtime provenance, stored with the attachment rather than in untrusted DOM evidence.
+    public sealed class HtmlVisualSourcePage
+    {
+        public string WorkspaceId { get; set; }
+        public string Path { get; set; }
+        public string ContentRevision { get; set; }
+        public string SavedVersionId { get; set; }
+        public string Identity(ResourceRef source)
+        {
+            if (source?.IsExact != true || string.IsNullOrEmpty(Path) || Path.Length > 2048 ||
+                string.IsNullOrEmpty(ContentRevision) || ContentRevision.Length > 256)
+                throw new System.InvalidOperationException("The exact annotation page is unavailable.");
+            using (var hash = System.Security.Cryptography.SHA256.Create())
+                return "page_" + System.BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(
+                    JsonConvert.SerializeObject(new[] { source.Uri, source.Revision, WorkspaceId, Path, ContentRevision, SavedVersionId })))).Replace("-", "").ToLowerInvariant();
+        }
+        public HtmlVisualSourcePage Copy() => (HtmlVisualSourcePage)MemberwiseClone();
+    }
+
     // One bounded DOM evidence contract for HTML and plugin previews. Source
     // identity is supplied by the trusted runtime, never by this payload.
     public sealed class HtmlVisualSelection

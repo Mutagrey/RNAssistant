@@ -30,7 +30,7 @@ namespace RNAssistant.Application
                     var current = Resolve(request).Target;
                     if (current?.State != BrowserTargetState.Ready || current.SavedVersionId != target.SavedVersionId)
                         throw new InvalidOperationException("The HTML project was removed or its owner is unavailable.");
-                });
+                }, annotationSource: path => members[path].ExactRef);
         }
     }
 }

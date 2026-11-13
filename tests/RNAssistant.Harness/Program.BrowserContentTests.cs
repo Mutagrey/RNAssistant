@@ -12,6 +12,27 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void BrowserAnnotationsPinSavedEntry()
+        {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths)) {
+                    var plugin = PluginFixture(service, paths, false);
+                    var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = plugin.SourceWorkspaceId,
+                        ChatId = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = plugin.SourceWorkspaceId }).SessionId };
+                    var file = Path.Combine(plugin.SourceRoot, "index.html"); var original = File.ReadAllText(file);
+                    File.WriteAllText(file, original + "\n<!-- v2 -->"); SavePluginCurrent(service, plugin.PluginId);
+                    File.WriteAllText(file, original); var third = SavePluginCurrent(service, plugin.PluginId);
+                    Func<string, BrowserContentSession> open = version => service.OpenBrowserContent(service.ResolveBrowserLocator(
+                        new BrowserResolveRequest { OwnerScope = owner, Locator = BrowserLocalLocator.ForPlugin(plugin.PluginId, "index.html", version) }).Target, CancellationToken.None);
+                    using (var firstPage = open(plugin.SavedVersionId)) using (var thirdPage = open(third.Version.VersionId)) {
+                        var first = firstPage.Annotation("index.html"); var last = thirdPage.Annotation("index.html");
+                        AssertEqual(first.Source.Uri, last.Source.Uri, "v1 and v3 retain the same immutable content");
+                        AssertTrue(first.Page.SavedVersionId != last.Page.SavedVersionId, "catalog entries remain distinct");
+                        AssertTrue(first.Context.SourceId != last.Context.SourceId, "equal bytes cannot reanchor an annotation to another saved entry");
+                    }
+                }
+            });
+        }
         private static void BrowserNativeDeliveryLifecycle()
         {
             var renderer = new BrowserRendererFixture(); var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = "project", ChatId = "chat" };
@@ -28,6 +49,8 @@ namespace RNAssistant.Harness
                 AssertEqual(BrowserPageStatus.Ready, attached.GetAwaiter().GetResult().Status, "attached native renderer promotes readiness");
                 AssertEqual(BrowserPageStatus.Closed, closed.GetAwaiter().GetResult().Status, "close follows native attachment without an orphan");
                 renderer.Notify(opened);
+                RuntimeThrows<InvalidOperationException>(() => runtime.CaptureAnnotationAsync(new BrowserAnnotationRequest {
+                    BrowserTabId = "tab", SessionId = opened.SessionId, Generation = opened.DocumentGeneration }, CancellationToken.None).GetAwaiter().GetResult());
                 RuntimeThrows<InvalidOperationException>(() => runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Reload, BrowserTabId = "tab", SessionId = opened.SessionId }, CancellationToken.None).GetAwaiter().GetResult());
             }
             AssertTrue(renderer.Disposed, "runtime disposes its sole native adapter");

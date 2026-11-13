@@ -418,45 +418,6 @@ namespace RNAssistant.Application
             }
         }
 
-        public PluginVisualSelectionDraftDto StageVisualSelection(PluginVisualSelectionRequest request)
-        {
-            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
-            {
-                RequireOpen();
-                if (request == null || request.PreviewGeneration < 1 || request.AnnotationNumber < 1 ||
-                    string.IsNullOrWhiteSpace(request.InstanceId))
-                    throw new PluginException("plugin_selection_invalid", "Откройте точный предпросмотр и выберите элемент заново.");
-                PluginInstance instance;
-                if (!_instances.TryGetValue(request.InstanceId, out instance) || instance.CommandOperation ||
-                    instance.Token.IsCancellationRequested)
-                    throw new PluginException("plugin_selection_changed", "Предпросмотр изменился. Выберите элемент заново.");
-                var workspace = RequireProjectWorkspace(request.WorkspaceId);
-                var session = Conversations.GetSession(workspace, request.SessionId);
-                if (session == null || instance.Release.SourceWorkspaceId != workspace.WorkspaceId ||
-                    _store.Get(instance.Release.PluginId)?.SourceWorkspaceId != workspace.WorkspaceId)
-                    throw new PluginException("plugin_selection_changed", "Предпросмотр и чат принадлежат разным проектам.");
-                // The DOM payload has no authority. The exact retained release comes only from the bound instance.
-                var draft = new AttachmentStore(_paths).StageVisualSelection(session.Id, request.Selection,
-                    instance.Manifest.Name, request.Comment, request.AnnotationNumber,
-                    PluginStore.ReleaseRef(instance.Release.PluginId, instance.Release.ReleaseId));
-                return new PluginVisualSelectionDraftDto { Id = draft.Id, FileName = draft.FileName,
-                    Kind = draft.Kind, Size = draft.Size };
-            }
-        }
-        public PluginVisualDraftDiscardDto DiscardVisualSelection(PluginVisualDraftRequest request)
-        {
-            using (PluginStore.AcquireRuntimeUse(_paths))
-            {
-                if (request == null || string.IsNullOrWhiteSpace(request.Id))
-                    throw new PluginException("plugin_selection_invalid", "Укажите подготовленную аннотацию.");
-                var workspace = RequireProjectWorkspace(request?.WorkspaceId);
-                if (Conversations.GetSession(workspace, request.SessionId) == null)
-                    throw new PluginException("project_chat_missing", "Чат аннотации не найден.");
-                return new PluginVisualDraftDiscardDto { Discarded = new AttachmentStore(_paths)
-                    .DeleteDraft(request.Id, request.SessionId) };
-            }
-        }
-
         public PluginInstance FindInstance(string origin)
         { lock (_sync) { return _disposed ? null : _instances.Values.FirstOrDefault(instance => instance.Origin == origin && !instance.Token.IsCancellationRequested); } }
         public Stream DownloadResult(PluginInstance instance, string id) { return _results.OpenDownload(instance,id); }
@@ -764,24 +725,15 @@ namespace RNAssistant.Application
                 {
                     var item = message.Attachments[index];
                     if (item?.VisualSelectionSource == null) continue;
-                    ResourceAddress address;
                     ResourceRef source = null;
                     string releaseId = null;
-                    if (item.VisualSelectionSource.IsExact &&
-                        ResourceUri.TryParse(item.VisualSelectionSource.Uri, out address) &&
-                        address.Provider == "plugin" && address.Segments.Count == 3 &&
-                        address.Segments[1] == "release" && item.VisualSelectionSource.Revision == "1")
-                    {
-                        try
-                        {
-                            var release = _store.ReadRelease(new PluginReleaseIdentity(address.Segments[0], address.Segments[2]));
-                            if (release.SourceWorkspaceId == workspace.WorkspaceId &&
-                                _store.Get(address.Segments[0])?.SourceWorkspaceId == workspace.WorkspaceId)
-                            { source = PluginStore.ReleaseRef(address.Segments[0], address.Segments[2]); releaseId = address.Segments[2]; }
-                        }
-                        catch (InvalidOperationException) { }
-                        catch (IOException) { }
-                    }
+                    try {
+                        source = WorkspaceVisualSelectionService.RequireSource(_paths, workspace, item);
+                        var address = ResourceUri.Parse(source.Uri);
+                        if (address.Provider == "plugin") releaseId = address.Segments[2];
+                    } catch (InvalidOperationException) { }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
                     ChatVisualAnnotationProjection.Apply(item, view.Attachments[index], attachments, source, releaseId, 1);
                 }
                 return view;

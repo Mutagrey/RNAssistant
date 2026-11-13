@@ -6,6 +6,8 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
 
 namespace RNAssistant.Office.Services
 {
@@ -39,19 +41,6 @@ namespace RNAssistant.Office.Services
             return resource;
         }
 
-        public ChatAttachment StageHtmlVisualSelection(ChatSession session, StageHtmlVisualSelectionPayload request)
-        {
-            if (session == null || request == null || request.ChatId != session.Id ||
-                string.IsNullOrWhiteSpace(request.ArtifactId) || request.ArtifactRevision < 1 ||
-                request.PreviewGeneration < 1)
-                throw new ArgumentException("Требуются чат, источник и поколение HTML-preview.");
-            var source = ChatResourceUri.CreateArtifactRevision(session, new ChatArtifact { Id = request.ArtifactId,
-                Revision = request.ArtifactRevision, Kind = ChatArtifactKinds.HtmlWorkspace, DocumentAuthorityId = session.DocumentAuthorityId });
-            var artifact = RequireVisualSource(session, source);
-            return _attachments.StageVisualSelection(session.Id, request.Selection, artifact.Title,
-                request.Comment, request.AnnotationNumber, source);
-        }
-
         public IReadOnlyList<ChatAttachment> LoadDrafts(
             ChatSession session,
             IEnumerable<string> resourceDraftIds)
@@ -69,9 +58,21 @@ namespace RNAssistant.Office.Services
             ChatArtifact artifact;
             try { artifact = _documentArtifacts.Read(ConversationMetadata.From(session), source, false); }
             catch (System.IO.InvalidDataException error) { throw new InvalidOperationException("Точный HTML-источник выделения недоступен.", error); }
-            if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace || _documentArtifacts.IsRemoved(ConversationMetadata.From(session), artifact))
+            if ((artifact.Kind != ChatArtifactKinds.HtmlWorkspace && !BrowserTargetResolver.IsHtmlResource(artifact)) ||
+                _documentArtifacts.IsRemoved(ConversationMetadata.From(session), artifact))
                 throw new InvalidOperationException("Точный HTML-источник выделения недоступен.");
             return artifact;
+        }
+        public ChatAttachment StageBrowserVisualSelection(ChatSession session, BrowserAnnotationCapture capture, BrowserAnnotationRequest request)
+        {
+            if (session == null || request == null || capture?.Owner?.Kind != BrowserOwnerKind.Document ||
+                capture.Owner.ChatId != session.Id || capture.Owner.ScopeId != session.DocumentAuthorityId || capture.Page == null ||
+                capture.Page.WorkspaceId != null || !BrowserContentSession.ValidPath(capture.Page.Path))
+                throw new InvalidOperationException("Аннотация принадлежит другому документу или чату.");
+            var artifact = RequireVisualSource(session, capture.Source);
+            capture.Page.Identity(capture.Source);
+            return _attachments.StageVisualSelection(session.Id, request.Selection, artifact.Title,
+                request.Comment, request.AnnotationNumber, capture.Source, capture.Page);
         }
 
         public void Discard(ConversationMetadata session, string resourceDraftId)

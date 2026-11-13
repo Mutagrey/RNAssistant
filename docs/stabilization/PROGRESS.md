@@ -1,5 +1,12 @@
 # Stabilization progress
 
+## Browser annotation identity fixed — 2026-11-13
+
+`16.25.2-dev`: universal intake завершён с exact saved-entry identity. Одинаковые
+bytes разных версий больше не разрешают перенос/reveal аннотации. Два intake/history
+checks, regression v1/v3 и common draft fixture проходят. Остаток Browser A1/A2/A4–A7
+и Windows/UI evidence открыт; [статус](../browser/06_PROGRESS.md).
+
 ## Native document relocation — 2026-11-13
 
 Move/MoveDocument работают через существующий ConversationJournal: один факт и
@@ -11,6 +18,28 @@ rebuild/restore включает сбой после создания пусто
 Далее — history rewrites/usage и resource consumers, затем оставшаяся P3.
 P4 отложена; production cutover и Windows/Office qualification не объявлены закрытыми.
 [Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-chat-relocation-2026-11-13).
+
+## Browser package audit: implementation gaps — 2026-11-13
+
+На `3da1992c` + незакоммиченной annotation correction пакет 00–08 **не закрыт**.
+38 Harness и 13 web-наборов проходят, но отдельные probes подтвердили неверный
+member экспорта после внутренней ссылки, смешение аннотаций разных saved entries
+одинакового content и блокировку Delete открытым read-only viewer. По native коду
+query/hash и same-document history также не завершены; recents, manual scope handoff
+и screenshot UI имеют остаток. Этот аудит меняет документацию, не исправляет код.
+Windows evidence и UI acceptance остаются открытыми дополнительно к этим дефектам.
+Приоритет и последовательные срезы — [Browser progress](../browser/06_PROGRESS.md#проверка-пакета-0008--2026-11-13).
+
+## Universal Browser annotations corrected — 2026-11-13
+
+`16.25.2-dev`: removed the raw HTML/generic Workspace exclusion. All local HTML
+sources now use native page capture and the existing exact-chat attachment/CAS
+owners. Page/member identity survives sent history; stale/closed pages cannot
+redirect drafts. Old document/plugin staging bridge operations are removed.
+Visual-selection Harness (including ordinary HTML/project/plugin intake) 2/2,
+local Browser 9/9, common draft/Chromium UI and actual-controller Mock checks pass.
+Native Windows compilation/qualification and UI acceptance remain open.
+[Correction and evidence](../browser/06_PROGRESS.md#universal-annotation-correction--2026-11-13).
 
 ## Native document chat deletion — 2026-11-13
 

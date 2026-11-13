@@ -1,5 +1,25 @@
 # План модернизации production UI
 
+## Browser package audit — Incomplete, 2026-11-13
+
+A3 исправлен в 16.25.2-dev вместе с universal annotation intake.
+Проходящие local fixtures не закрывают остальные пункты пакета 00–08. По текущему коду остаются
+native query/hash/history и неверный export member после ссылки, Delete при read-only viewer, recents от native/agent navigation,
+manual scope handoff и общий screenshot action. Реализация Inspector 07 сохраняется;
+принятие UI и Windows qualification открыты отдельно. Аудит не меняет UI/code и
+не начинает следующую фазу; порядок исправлений и owners —
+[Browser Migration Plan](../browser/04_MIGRATION_PLAN.md#актуальный-остаток-после-проверки--2026-11-13).
+
+## Universal annotation correction — In Review, 2026-11-13
+
+The prior raw/generic Workspace exclusion was unfinished integration. All local HTML
+providers now stage through the same exact native page and existing chat drafts.
+Review: open an ordinary HTML in its chat → select/comment → send → reopen history;
+repeat for Workspace source/saved page and plugin; reload/change source before completing
+a pending comment. Switching the selected chat must not redirect the annotation.
+Focused Harness, common draft/Chromium UI and Mock checks pass. Windows native
+compilation/qualification and user acceptance remain open.
+
 ## 07 scoped Inspector — In Review, 2026-11-13
 
 Completed after F2c5: one selected context for Office/Workspace/plugin; exact pinned

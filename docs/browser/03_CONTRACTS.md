@@ -18,9 +18,20 @@ revision bind the existing draft owner. Source changes preserve pending comments
 invalidate selection; close/reopen cannot revive an old generation. Native IDs remain
 transient. Document staging resolves the exact published retained HTML snapshot, never
 the active editor or latest head. Plugin staging retains its exact instance/package.
-Annotations are enabled for bound document HTML and plugin pages; raw HTML and generic
-Workspace projects have no annotation owner yet. They remain interactive. The old
-iframe transport, injected inspector and editor-owned annotation path are removed.
+All local HTML types share `stageBrowserVisualSelection`: document HTML, raw HTML,
+ordinary Workspace projects and plugins, including retained/saved sources. Runtime
+validates the open page/session/generation, then native supplies the captured source
+and bound recipient. Neither a source URI nor a recipient is accepted from this command.
+The existing attachment stores an exact source plus `VisualSelectionPage` (member path,
+whole-content revision, Workspace when applicable). Its derived identity is used by
+all draft/history/reveal consumers. Workspace file provenance is checked against the
+retained file owner without refreshing live bytes. No second annotation store.
+The descriptor also retains the exact `SavedVersionId`. Working and saved entries,
+including v1/v3 with equal bytes, have distinct identities; cross-version reveal
+requires reopening the exact source. No latest/content-only fallback.
+A page without a bound chat requires an explicit chat context; never use active chat
+as fallback. Provider-specific staging DTOs/commands, the old iframe transport and
+editor-owned annotation path are removed.
 
 ## Native input admission — F2c3, 2026-11-13
 

@@ -71,7 +71,29 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("sourceId")] public string SourceId { get; set; }
         [JsonProperty("sourceRevision")] public int SourceRevision { get; set; }
-        [JsonProperty("pluginInstanceId")] public string PluginInstanceId { get; set; }
+    }
+    public sealed class BrowserAnnotationRequest
+    {
+        [JsonProperty("browserTabId")] public string BrowserTabId { get; set; }
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("generation")] public long Generation { get; set; }
+        [JsonProperty("sourceId")] public string SourceId { get; set; }
+        [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
+        [JsonProperty("comment")] public string Comment { get; set; }
+        [JsonProperty("annotationNumber")] public int AnnotationNumber { get; set; }
+    }
+    // Native-captured authority. Never deserialized from a Shell request.
+    public sealed class BrowserAnnotationCapture
+    {
+        public BrowserOwnerScope Owner { get; set; }
+        public ResourceRef Source { get; set; }
+        public HtmlVisualSourcePage Page { get; set; }
+        public string Title { get; set; }
+        public BrowserAnnotationContext Context => new BrowserAnnotationContext { SourceId = Page.Identity(Source), SourceRevision = 1 };
+    }
+    public interface IBrowserAnnotationSource
+    {
+        Task<BrowserAnnotationCapture> CaptureAnnotationAsync(BrowserAnnotationRequest request, CancellationToken token);
     }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum BrowserVisualOperation

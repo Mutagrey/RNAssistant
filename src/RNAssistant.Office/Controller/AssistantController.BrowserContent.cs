@@ -17,6 +17,12 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        internal ChatAttachment StageBrowserVisualSelection(BrowserAnnotationCapture capture, BrowserAnnotationRequest request)
+        {
+            var session = LoadAddressedSession(capture.Owner.ChatId);
+            ConversationRunPolicy.RequireCurrentSession(session); EnsureCurrentDocument(session);
+            return _chatResourceIngestion.StageBrowserVisualSelection(session, capture, request);
+        }
         internal BrowserHtmlExportResponse PrepareBrowserHtmlExport(BrowserProjectTransferRequest request, CancellationToken token)
         {
             using (var content = OpenBrowserContent(request?.Target, token)) {
@@ -83,12 +89,14 @@ namespace RNAssistant.Office
                 var entry = snapshot.Files.SingleOrDefault(file => file.Id == snapshot.ActiveFileId && file.Kind == "html") ?? snapshot.Files.FirstOrDefault(file => file.Kind == "html");
                 target.EntryPath = target.RelativePath ?? entry?.Path;
                 return new BrowserContentSession(target, files.Keys, target.EntryPath,
-                    (path, cancellation) => { cancellation.ThrowIfCancellationRequested(); return new MemoryStream(new UTF8Encoding(false, true).GetBytes(files[path]), false); }, validate, htmlWorkspace: snapshot);
+                    (path, cancellation) => { cancellation.ThrowIfCancellationRequested(); return new MemoryStream(new UTF8Encoding(false, true).GetBytes(files[path]), false); }, validate, htmlWorkspace: snapshot,
+                    annotationSource: path => reference);
             }
             if (!BrowserTargetResolver.IsHtmlResource(artifact)) throw new InvalidOperationException("This resource is not HTML.");
             var payload = new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, artifact.MimeType);
             return new BrowserContentSession(target, new[] { "index.html" }, "index.html",
-                (path, cancellation) => new ChatBlobStore(_paths).OpenVerifiedRead(payload.ToBlobReference(), 16 * 1024 * 1024, cancellation), validate);
+                (path, cancellation) => new ChatBlobStore(_paths).OpenVerifiedRead(payload.ToBlobReference(), 16 * 1024 * 1024, cancellation), validate,
+                annotationSource: path => reference);
         }
     }
 }

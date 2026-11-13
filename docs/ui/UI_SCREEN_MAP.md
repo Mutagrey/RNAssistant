@@ -30,13 +30,15 @@ read private values. Navigation/source mode/hiding closes the row and clears hig
 
 ## Native element annotations — In Review, 2026-11-13
 
-Bound document HTML and plugin Browser pages expose the shared selection button.
+All local HTML Browser pages expose the shared selection button when bound to a chat:
+document HTML, a separate HTML resource, ordinary Workspace projects and plugins,
+including working and saved pages.
 Select an element → enter a comment → «Готово» adds an attachment to the source chat's
 existing draft. «На странице» reveals an annotation only in an open exact-source
-Browser; otherwise it explains which source is required. Changing the current chat
-never changes the recipient. Raw HTML/generic Workspace HTML remain interactive but
-have no annotation capability. Page changes preserve the comment and require a fresh
-selection. The comment overlay temporarily hides the native HWND.
+Browser with the exact saved entry; equal bytes in another version do not qualify.
+Otherwise it explains which source is required. Changing the current chat
+never changes the recipient. A page opened without a chat requires explicit chat
+binding. Page/source changes preserve the comment and require a fresh selection. The comment overlay temporarily hides the native HWND.
 
 ## Browser export choices — In Review, 2026-11-13
 
@@ -285,8 +287,8 @@ Windows/WebView2 остаётся отдельной проверкой.
 «В папке». Это способ хранения, не публичный доступ и не обещание шифрования.
 
 Saved HTML сохраняет read-only адрес, ▶ / `</>`, file picker и 32K source pages.
-Аннотация есть слева у всех providers: работает в живом HTML/plugin, у снимков
-недоступна с пояснением. Live preview использует прежние editor controls. Reload живого
+Аннотация слева общая для всех локальных HTML и снимков с привязанным чатом.
+Актуальный native-путь описан в начале документа. Reload живого
 HTML читает свежие исходники; изменения других агентов обновляют чистую view, скрытую —
 при activate. Dirty buffer сохраняется. Reload сохранённого снимка остаётся exact.
 Clock сохранённого HTML доступен и без captured head/при одной версии. Каждое открытие
@@ -312,7 +314,7 @@ Diff скрыт без capability; back/forward видны, но выключе�
 P2b (2026-11-11): modes/actions подтверждает typed runtime target. До успешного чтения
 saved target проектные действия скрыты; ошибка привязки показывает явный отказ.
 Source-only не создаёт iframe. Read-only live оставляет preview, но отключает редактор
-и аннотации; чужой ответ не заменяет прежнее содержимое. Raw HTML остаётся текстом.
+и аннотации; чужой ответ не заменяет прежнее содержимое. Отдельный HTML использует общий интерактивный Browser и аннотации.
 Версии показывает только provider с историей. Произвольные URL ещё в плане.
 Решение 2026-11-11: Browser-вкладка сохраняет страницу/ввод при скрытии и переносе;
 × вкладки освобождает страницу, повторное открытие загружает её заново. Списка sessions

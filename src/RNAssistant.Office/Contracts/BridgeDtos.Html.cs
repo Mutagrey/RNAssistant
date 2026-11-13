@@ -28,18 +28,6 @@ namespace RNAssistant.Office.Contracts
         public int EditCount { get; set; }
     }
 
-    public sealed class StageHtmlVisualSelectionPayload : ChatPayload
-    {
-        [JsonProperty("artifactId")] public string ArtifactId { get; set; }
-        [JsonProperty("artifactRevision")] public int ArtifactRevision { get; set; }
-        // Native page correlation; the exact document snapshot is resolved
-        // independently of the addressed chat's active editor selection.
-        [JsonProperty("previewGeneration")] public int PreviewGeneration { get; set; }
-        [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
-        [JsonProperty("comment")] public string Comment { get; set; }
-        [JsonProperty("annotationNumber")] public int AnnotationNumber { get; set; }
-    }
-
     public sealed class HtmlWorkspaceMutationUploadRequest : ChatPayload
     {
         [JsonProperty("byteLength", Required = Required.Always)]

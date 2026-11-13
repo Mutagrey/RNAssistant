@@ -15,6 +15,7 @@ namespace RNAssistant.Application
         private readonly Func<string, CancellationToken, Stream> _read;
         private readonly Action _validate;
         private readonly Func<Task> _close;
+        private readonly Func<string, ResourceRef> _annotationSource;
         private bool _disposed;
         public BrowserTargetDescriptor Target { get; }
         public IReadOnlyList<string> Members { get; }
@@ -26,7 +27,7 @@ namespace RNAssistant.Application
 
         public BrowserContentSession(BrowserTargetDescriptor target, IEnumerable<string> members, string entryPath,
             Func<string, CancellationToken, Stream> read, Action validate, PluginInstance plugin = null, Func<Task> close = null,
-            HtmlWorkspaceSnapshot htmlWorkspace = null)
+            HtmlWorkspaceSnapshot htmlWorkspace = null, Func<string, ResourceRef> annotationSource = null)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             var paths = members?.Take(513).ToArray();
@@ -37,6 +38,7 @@ namespace RNAssistant.Application
             _read = read ?? throw new ArgumentNullException(nameof(read)); _validate = validate ?? throw new ArgumentNullException(nameof(validate));
             Plugin = plugin; _close = close;
             HtmlWorkspace = htmlWorkspace;
+            _annotationSource = annotationSource;
             Origin = plugin?.Origin ?? "https://page-" + Guid.NewGuid().ToString("N") + ".rnassistant.invalid";
         }
         public static bool ValidPath(string path)
@@ -64,6 +66,22 @@ namespace RNAssistant.Application
         }
         public void Validate()
         { if (_disposed) throw new ObjectDisposedException(nameof(BrowserContentSession)); _validate(); }
+        public BrowserAnnotationCapture Annotation(string path)
+        {
+            Validate();
+            return CapturedAnnotation(path);
+        }
+        public BrowserAnnotationContext AnnotationContext(string path) => CapturedAnnotation(path)?.Context;
+        private BrowserAnnotationCapture CapturedAnnotation(string path)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(BrowserContentSession));
+            if (string.IsNullOrEmpty(Target.OwnerScope?.ChatId) || !Members.Contains(path, StringComparer.Ordinal)) return null;
+            var source = _annotationSource?.Invoke(path);
+            if (source?.IsExact != true) return null;
+            return new BrowserAnnotationCapture { Owner = Target.OwnerScope, Source = source.Copy(), Title = Target.Title,
+                Page = new HtmlVisualSourcePage { Path = path, ContentRevision = Target.ContentRevision, SavedVersionId = Target.SavedVersionId,
+                    WorkspaceId = Target.OwnerScope.Kind == BrowserOwnerKind.Workspace ? Target.OwnerScope.ScopeId : null } };
+        }
         public void Dispose()
         { if (_disposed) return; _disposed = true; if (_close != null) Drained = _close(); }
     }

@@ -252,6 +252,7 @@ namespace RNAssistant.Core.Models
         {
             var copy = (ChatAttachment)MemberwiseClone();
             copy.PageTextLengths = PageTextLengths?.ToList();
+            copy.VisualSelectionPage = VisualSelectionPage?.Copy();
             return copy;
         }
 
@@ -278,6 +279,8 @@ namespace RNAssistant.Core.Models
         // kept in the attachment CAS body, not duplicated in chat metadata.
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public ResourceRef VisualSelectionSource { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public HtmlVisualSourcePage VisualSelectionPage { get; set; }
         public string Status { get; set; }
         public string Error { get; set; }
         public DateTime CreatedUtc { get; set; }

@@ -1,5 +1,15 @@
 # Архитектура UI RNAssistant
 
+## Universal annotation ownership — In Review, 2026-11-13
+
+BrowserContentSession provides one exact source binding for every local HTML provider.
+`stageBrowserVisualSelection` obtains it from the native page after session/generation
+checks; document and Workspace ingestion retain their existing draft/attachment owners.
+WorkspaceVisualSelectionService validates plugin or retained file provenance for intake
+and history. A small attachment page descriptor distinguishes members and bundle
+revisions and exact saved catalog entries; no Browser annotation store, new editor or global active-chat fallback.
+Provider-specific staging commands/DTOs are removed.
+
 ## 07 selected Inspector — In Review, 2026-11-13
 
 Diagnostics.context resolves explicit live/retained conversation identity before reads;
