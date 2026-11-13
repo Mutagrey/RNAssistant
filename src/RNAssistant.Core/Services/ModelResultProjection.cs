@@ -243,7 +243,7 @@ namespace RNAssistant.Core.Services
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "pageIndex", "startPage", "requestedPages", "nextPageIndex", "pageCount", "kind", "target", "type", "scope",
                     "representation", "text", "table", "tree", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
                     "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
-                    "rawContentIncluded", "bodyIncluded", "omittedReason", "observation",
+                    "rawContentIncluded", "bodyIncluded", "omittedReason", "observation", "snapshotTarget", "loaded",
                     "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
             if (name == "core.read")
             {
@@ -271,7 +271,7 @@ namespace RNAssistant.Core.Services
             if (name == "core.find" && result["items"] is JArray)
                 result["items"] = new JArray(((JArray)result["items"]).Select(item =>
                 {
-                    var candidate = SelectFields(item, "target", "type", "title", "mimeType", "byteLength",
+                    var candidate = SelectFields(item, "target", "snapshotTarget", "type", "title", "mimeType", "byteLength",
                         "representations", "sectionTitle", "description", "usage", "snippet");
                     if (candidate["representations"] is JArray views)
                         candidate["representations"] = new JArray(views.Where(view => view.Type == JTokenType.String &&

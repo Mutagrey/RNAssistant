@@ -1,5 +1,18 @@
 # Universal Browser: предлагаемые контракты
 
+## Browser capability / media — F2a, 2026-11-13
+
+`IBrowserCapabilityContribution` связывается с реальным Workspace owner/chat/run,
+не с Office target. Browser branch core.find/read/search использует существующие
+semantic handlers и authority; Office route не принимает Browser target/scope.
+`IBrowserMediaSource` возвращает native-only bounded BrowserMediaCapture и проверяет
+его актуальность. Отсутствие провайдера, privacy proof или exact viewport — отказ.
+CAS хранит PNG и metadata immutable observation; ToolResultMaterialization и
+ConversationRunCommit сохраняют terminal + RESOURCE_MEDIA_INPUT атомарно. LlmClient
+проверяет наличие image parts в фактическом wire перед HTTP. Hydration одноразовая;
+historical pixels не дают coordinate authority. Native реализация закрыта B02.
+
+
 ## Local source-only session — F1a, 2026-11-13
 
 Production transport — `browserCommand`/`browserPageState`. Open требует exact

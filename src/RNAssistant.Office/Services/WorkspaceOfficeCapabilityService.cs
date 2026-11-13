@@ -59,8 +59,7 @@ namespace RNAssistant.Office.Services
             // Preserve the accepted catalog across a host switch so pending
             // confirmation can finish with a definite no-effect refusal.
             var tools = OfficeToolCatalog.ForHost(target.Host)
-                .Where(item => item.Id != "excel.chat.chart.create")
-                .Concat(_executor.GetControllerTools().Where(item => ExternalBrowserToolHandler.Owns(item.Id))).ToArray();
+                .Where(item => item.Id != "excel.chat.chart.create").ToArray();
             var result = new WorkspaceOfficeCapabilitySet { Target = target, Available = available,
                 Tools = new WorkspaceToolContribution[0], ModelProjection = ModelToolResultProjection.Instance };
             if (!string.Equals(_adapter.HostName, target.Host, StringComparison.OrdinalIgnoreCase))
@@ -91,9 +90,28 @@ namespace RNAssistant.Office.Services
             result.ResourceSearch = native.HandlerFor(ResourceToolCatalog.SearchToolId) as IReadOnlyToolHandler;
             if (result.Tools.Any(item => item.Handler == null) || result.ResourceFind == null || result.ResourceRead == null || result.ResourceSearch == null)
                 throw new InvalidOperationException("The bound Office tool handlers are incomplete.");
+            result.ResourceFind = new BoundOfficeResource(result.ResourceFind);
+            result.ResourceRead = new BoundOfficeResource(result.ResourceRead);
+            result.ResourceSearch = new BoundOfficeResource(result.ResourceSearch);
             result.MutationObserver = new ResourceMutationAuthorityObserver(
                 _executor.ResourceAuthority, new ResourceMutationJournal(_paths), session, _executor.Payloads);
             return result;
+        }
+
+        private sealed class BoundOfficeResource : IReadOnlyToolHandler
+        {
+            private readonly IReadOnlyToolHandler _inner;
+            internal BoundOfficeResource(IReadOnlyToolHandler inner) { _inner = inner; }
+            public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
+            {
+                object value;
+                var target = context.Arguments.TryGetValue("target", out value) ? value as string : null;
+                var scope = context.Arguments.TryGetValue("scope", out value) ? value as string : null;
+                if (target != null && target.StartsWith("Browser ", StringComparison.Ordinal) ||
+                    scope != null && scope != "document" && scope != "selection" && scope != "vba")
+                    return OfficeToolFailure.Rejected("Browser resources use type=browser independently of Office.", "resource_scope_invalid");
+                return _inner.ExecuteAsync(context, token);
+            }
         }
 
         private static ChatSession OfficeSession(WorkspaceOfficeRunTarget target,

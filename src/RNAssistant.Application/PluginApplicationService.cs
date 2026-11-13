@@ -29,6 +29,7 @@ namespace RNAssistant.Application
         private readonly string _webRoot;
         private readonly IWorkspaceWebVerifierFactory _webHost;
         private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
+        private readonly IBrowserCapabilityContribution _browserCapabilities;
         private readonly PluginStore _store;
         private readonly PluginIconLibrary _icons;
         private readonly WorkspaceStore _workspaces;
@@ -56,13 +57,14 @@ namespace RNAssistant.Application
         public IPluginCommandExecutor Executor { get; set; }
 
         public PluginApplicationService(AppDataPaths paths, string webRoot = null, IWorkspaceWebVerifierFactory webHost = null,
-            IWorkspaceOfficeCapabilities officeCapabilities = null)
+            IWorkspaceOfficeCapabilities officeCapabilities = null, IBrowserCapabilityContribution browserCapabilities = null)
         {
             _paths = paths; _webRoot = webRoot; _webHost = webHost; _officeCapabilities = officeCapabilities;
+            _browserCapabilities = browserCapabilities;
             _store = new PluginStore(paths); _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
             Vendors = new VendorCatalog(paths, webRoot); _results = new PluginResultStore(paths);
             Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools, officeCapabilities,
-                () => PluginStore.AcquireRuntimeUse(paths), IsPluginSourceWorkspace);
+                () => PluginStore.AcquireRuntimeUse(paths), IsPluginSourceWorkspace, browserCapabilities: browserCapabilities);
         }
 
         public PluginCatalogDto List()
@@ -189,7 +191,7 @@ namespace RNAssistant.Application
                 _data.Clear(); _candidates.Clear(); _revoked.Clear();
                 Conversations.Dispose();
                 Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
-                    () => PluginStore.AcquireRuntimeUse(_paths), IsPluginSourceWorkspace);
+                    () => PluginStore.AcquireRuntimeUse(_paths), IsPluginSourceWorkspace, browserCapabilities: _browserCapabilities);
             }
         }
         public PluginItemDto Connect(PluginConnectRequest request)

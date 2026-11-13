@@ -71,7 +71,8 @@ namespace RNAssistant.Office.WebView
             _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
             _bridge.WindowHost = windowHost;
             _plugins = new RNAssistant.Application.PluginApplicationService(controller.StoragePaths, webRoot,
-                officeCapabilities: new WorkspaceOfficeCapabilities(() => _controller));
+                officeCapabilities: new WorkspaceOfficeCapabilities(() => _controller),
+                browserCapabilities: new BrowserCapabilityService(controller.StoragePaths, () => _externalBrowser));
             _bridge.Plugins = _plugins;
             _lifetimeCancellation = new System.Threading.CancellationTokenSource();
             CreateWebViewControl();

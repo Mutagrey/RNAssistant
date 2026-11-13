@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Application.Conversations;
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -57,6 +58,7 @@ namespace RNAssistant.Runtime
         private readonly IWorkspaceWebVerifierFactory _webHost;
         private readonly Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> _extraTools;
         private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
+        private readonly IBrowserCapabilityContribution _browserCapabilities;
         private readonly CallableToolProfile _toolProfile;
         private readonly Func<WorkspaceDescriptor, bool> _isPluginSourceWorkspace;
         private readonly Func<IDisposable> _runtimeUseLease;
@@ -99,7 +101,7 @@ namespace RNAssistant.Runtime
             IWorkspaceOfficeCapabilities officeCapabilities = null,
             Func<IDisposable> runtimeUseLease = null,
             Func<WorkspaceDescriptor, bool> isPluginSourceWorkspace = null,
-            CallableToolProfile toolProfile = null)
+            CallableToolProfile toolProfile = null, IBrowserCapabilityContribution browserCapabilities = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _executionAdmission = ConversationExecutionScheduler.ForStorage(paths);
@@ -108,6 +110,7 @@ namespace RNAssistant.Runtime
             _conversationLeases = ConversationLeaseService.ForWorkspace(paths);
             _activeRuns = new ConversationRunOwner(_conversationLeases);
             _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
+            _browserCapabilities = browserCapabilities;
             _isPluginSourceWorkspace = isPluginSourceWorkspace;
             _toolProfile = toolProfile ?? CallableToolProfile.Core();
             _runtimeUseLease = runtimeUseLease;
@@ -403,7 +406,7 @@ namespace RNAssistant.Runtime
         {
             return new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
                 runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost,
-                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox)
+                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities)
                 .ToolIds;
         }
 
@@ -533,7 +536,7 @@ namespace RNAssistant.Runtime
                         session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
                         webHost: _webHost, extraTools: _extraTools?.Invoke(workspace),
                         office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
-                        pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
+                        pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, _payloads, currentRunOnly: true)),
@@ -585,9 +588,9 @@ namespace RNAssistant.Runtime
                 var officeTarget = pluginSource ? null : _officeCapabilities?.CaptureCurrentTarget();
                 var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
-                    extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId),
+                    extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId), browserRunId: runId,
                     pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value),
-                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                 var userMessage = new ChatMessage { Id = queuedInput?.Id ?? Guid.NewGuid().ToString("N"), Role = "user",
                     Content = message ?? string.Empty, RunId = runId, AgentCommunication = queuedInput?.AgentCommunication,
                     Attachments = editedSource == null ? drafts : editedSource.Attachments ?? new List<ChatAttachment>(),
@@ -736,7 +739,7 @@ namespace RNAssistant.Runtime
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value),
-                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox);
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                 using (var inputChannel = approve ? new WorkspaceInputChannel(this, session, workspace) : null)
                 using (var control = OpenRunControl(session, runReservation, cancellationToken, inputChannel))
                 {
@@ -1166,6 +1169,10 @@ namespace RNAssistant.Runtime
             private ModelAuthoritySnapshot _lastAuthority;
             private readonly ModelTracePersistenceService _modelTrace;
             private readonly Dictionary<string, ResourceEvidence> _delivered = new Dictionary<string, ResourceEvidence>(StringComparer.Ordinal);
+            private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<ChatAttachment>> _readMedia =
+                new System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<ChatAttachment>>(StringComparer.Ordinal);
+            private readonly List<ChatMessage> _mediaUpdates = new List<ChatMessage>();
+            private readonly AttachmentStore _attachmentStore;
             private long _cursor;
             public ToolRuntime Tools { get; private set; }
             public IReadOnlyList<string> ToolIds { get { return _catalog.Select(item => item.Id).ToArray(); } }
@@ -1180,7 +1187,8 @@ namespace RNAssistant.Runtime
                 CallableToolProfile toolProfile = null, Action<LlmRequestDiagnosticUpdate> diagnosticProgress = null,
                 AgentCommunicationService agentCommunication = null, ConversationInboxService agentInbox = null,
                 Func<ToolExecutionContext, ResourceMutationOrigin> mutationOrigin = null,
-                IResourceAuthorityStore resourceAuthority = null, IResourceMutationJournal resourceMutations = null)
+                IResourceAuthorityStore resourceAuthority = null, IResourceMutationJournal resourceMutations = null,
+                IBrowserCapabilityContribution browser = null, string browserRunId = null)
             {
                 _conversations = conversations; _events = events; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
@@ -1193,7 +1201,12 @@ namespace RNAssistant.Runtime
                     : acceptedPolicy;
                 if (office != null && office.ModelProjection == null)
                     throw new InvalidOperationException("The bound Office result projection is unavailable.");
-                _compiler = new ModelContextCompiler(payloads, office?.ModelProjection);
+                _attachmentStore = new AttachmentStore(paths);
+                if (session != null) _mediaUpdates.AddRange(ResourceMediaMessages.Release(session.Messages));
+                var browserSet = session == null ? null : browser?.ForOwner(new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace,
+                    ScopeId = workspace.WorkspaceId, ChatId = session.Id }, session, _settings, browserRunId ?? session.LastRun?.RunId, CaptureMedia);
+                var projection = office?.ModelProjection ?? browserSet?.ModelProjection;
+                _compiler = new ModelContextCompiler(payloads, projection);
                 _taskLists = new WorkspaceTaskListObserver(paths, conversations, payloads, session);
                 _plans = new WorkspacePlanService(paths, conversations, payloads, workspace, session, artifacts);
                 _modelTrace = new ModelTracePersistenceService(events);
@@ -1209,7 +1222,7 @@ namespace RNAssistant.Runtime
                     options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                     _modelTrace.Configure(options, _settings.DebugModelTraffic);
                     return client.CompleteAsync(configuration, messages, options, stream, token);
-                }, payloads, office?.ModelProjection);
+                }, payloads, projection);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
                 var registry = new ToolHandlerRegistry();
                 var chatCatalog = new ConversationCatalogAccess(agentCommunication, session, _settings.MaxCollaborationAgents);
@@ -1227,24 +1240,26 @@ namespace RNAssistant.Runtime
                         ModelContextBudget.InputBudgetTokens(_settings), _settings));
                 Register(registry, entries, "core.find", (_mode.AllowsSkills ? "Browse workspace files and directories (default type=file, up to 200; explicit recursive/glob selectors return files only; recursive=true includes descendants) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Browse workspace files and directories, up to 200; explicit recursive/glob selectors return files only; recursive=true includes descendants. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
                     " Use type=chat to find bounded overviews of saved chats in this project without starting them; query filters title or agent address. Use type=attachment to find accepted message attachments in this chat." +
-                    (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document."),
-                    ResourceSchema(true, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
+                    (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document.") +
+                    (browserSet == null ? string.Empty : " Use type=browser to discover local pages belonging to this chat."),
+                    ResourceSchema(true, _mode.AllowsSkills, office != null, maximumFileReadCharacters, browserSet != null), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, true, _plans,
                         maximumFileReadCharacters,
-                        office?.ResourceFind, _chatAttachments, chatCatalog));
+                        office?.ResourceFind, _chatAttachments, chatCatalog, browserSet?.ResourceFind));
                 Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts structured substring edits and full-line context from a delivered excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
                     " For PDF files, representation=text with startPage/pageCount reads consecutive complete pages within the model budget; nextPageIndex continues the range. Use pageIndex with optional startChar/charCount for a long page. Extracted text may omit visual or scanned content." +
                     " Use type=chat with target=Chat overview: <agent_id> from discovery, representation=text or metadata, and no history selectors to read a bounded historical overview without starting that chat. Use type=attachment with the exact semantic target from discovery to read an immutable attachment; it does not authorize a source edit." +
-                    (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document; VBA source supports the same procedure selector with representation=source."),
-                    ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
+                    (office == null ? string.Empty : " Use type=office and a semantic target to read the pinned Office document; VBA source supports the same procedure selector with representation=source.") +
+                    (browserSet == null ? string.Empty : " Use type=browser and an exact discovered Browser target for text or bounded viewport media. Media is hydrated for the next model request only."),
+                    ResourceSchema(false, _mode.AllowsSkills, office != null, maximumFileReadCharacters, browserSet != null), false,
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, false, _plans,
                         maximumFileReadCharacters,
-                        office?.ResourceRead, _chatAttachments, chatCatalog));
+                        office?.ResourceRead, _chatAttachments, chatCatalog, browserSet?.ResourceRead));
                 var searchObservation = new ResourceSearchObservation();
                 Register(registry, entries, "core.search", ResourceModelSearchSchema.Description,
-                    ResourceModelSearchSchema.Create(true, office != null), false,
-                    new WorkspaceSearchHandler(_resources.Select("file"), office?.ResourceSearch, searchObservation), independentRead: false);
+                    ResourceModelSearchSchema.Create(true, office != null, browserSet != null), false,
+                    new WorkspaceSearchHandler(_resources.Select("file"), office?.ResourceSearch, searchObservation, browserSet?.ResourceSearch), independentRead: false);
                 if (webHost != null && webHost.IsAvailable)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
@@ -1263,6 +1278,7 @@ namespace RNAssistant.Runtime
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);
+                if (browserSet?.Tools != null) foreach (var contribution in browserSet.Tools) Register(registry, entries, contribution.Entry, contribution.Handler);
                 if (office?.Tools != null) foreach (var contribution in office.Tools)
                     if (!entries.Any(item => item.Id == contribution.Entry.Id)) Register(registry, entries, contribution.Entry, contribution.Handler);
                 var discovery = new CapabilityCatalogService(_skillCatalog);
@@ -1360,7 +1376,7 @@ namespace RNAssistant.Runtime
             }
 
             private static string ResourceSchema(bool find, bool allowSkills, bool allowOffice,
-                int maximumFileReadCharacters)
+                int maximumFileReadCharacters, bool allowBrowser = false)
             {
                 var files = ResourceVariant(find, false, maximumFileReadCharacters);
                 // Complete alternatives: the exact runtime gate and structured output
@@ -1368,6 +1384,7 @@ namespace RNAssistant.Runtime
                 var variants = new JArray(files, AttachmentResourceVariant(find, maximumFileReadCharacters), ChatResourceVariant(find));
                 if (allowSkills) { variants.Add(ResourceVariant(find, true, maximumFileReadCharacters)); variants.Add(PlanResourceVariant(find, maximumFileReadCharacters)); }
                 if (allowOffice) variants.Add(OfficeResourceVariant(find));
+                if (allowBrowser) variants.Add(BrowserResourceSchema.Create(find));
                 return new JObject { ["type"] = "object", ["properties"] = new JObject(),
                     ["required"] = new JArray(), ["additionalProperties"] = false,
                     ["anyOf"] = variants }.ToString(Formatting.None);
@@ -1645,9 +1662,14 @@ namespace RNAssistant.Runtime
                     CompileMs = compileMs,
                     TraceMs = contextTimer.ElapsedMilliseconds - authorityMs - setupMs - compileMs
                 };
-                var result = await _protocol.GetResponseAsync(preparation.CreateRequest(snapshot, _catalog,
-                    notice => _compiler.CompileRepair(snapshot, notice)),
-                    ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
+                ModelProtocolResult result;
+                try
+                {
+                    result = await _protocol.GetResponseAsync(preparation.CreateRequest(snapshot, _catalog,
+                        notice => _compiler.CompileRepair(snapshot, notice)),
+                        ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
+                }
+                finally { _mediaUpdates.AddRange(ResourceMediaMessages.Release(_session.Messages)); }
                 _lastCompletion = result.Completion;
                 _deliveredEvidenceReferences = result.DeliveredEvidenceReferences;
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
@@ -1918,6 +1940,12 @@ namespace RNAssistant.Runtime
                 };
             }
 
+            private void CaptureMedia(string callId, IReadOnlyList<ChatAttachment> attachments)
+            {
+                if (string.IsNullOrWhiteSpace(callId) || attachments == null || attachments.Count == 0) return;
+                _readMedia[callId] = attachments.Where(item => item != null).ToArray();
+            }
+
             public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)
             {
                 if (expectedRevision != _cursor) throw new InvalidOperationException("Stale workspace run cursor.");
@@ -1932,12 +1960,32 @@ namespace RNAssistant.Runtime
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
                 {
                     var record = fact.Execution;
-                    var materialized = new ToolResultMaterialization(ToolResultPersistence.Terminal(record),
+                    IReadOnlyList<ChatAttachment> attachments;
+                    _readMedia.TryRemove(record.Context.Call.Id, out attachments);
+                    var materialized = new ToolResultMaterialization(ToolResultPersistence.Terminal(record), attachments,
                         resourceEvidence: record.ResourceEvidence.Concat(_plans.SourceEvidence(record.ResourceEffect)),
                         resourceEffect: record.ResourceEffect, authorityCommitId: record.AuthorityCommitId)
                         { ExecutionProgress = ToolExecutionProgress.Capture(record) };
+                    ChatMessage media = null;
+                    if (materialized.Result.Status == ToolResultStatus.Ok && materialized.ModelAttachments.Count > 0)
+                    {
+                        try
+                        {
+                            media = ResourceMediaMessages.Create(materialized);
+                            ResourceMediaMessages.RequireImagesReady(media, _settings, _attachmentStore.ReadBytes, cancellationToken);
+                            media.RunId = fact.Summary.RunId;
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception error)
+                        {
+                            media = null;
+                            materialized.ReplaceResult(ToolResult.Error("Requested media cannot be delivered: " + error.Message,
+                                "{\"code\":\"resource_media_unavailable\",\"loaded\":false,\"complete\":false}"));
+                        }
+                    }
                     _session.Messages.Add(ToolResultPersistence.Create(record.Context.Call.Id, record.Context.Call.Name,
                         record.Context.StepId, materialized, _payloads, fact.Summary.RunId));
+                    if (media != null) _session.Messages.Add(media);
                 }
                 if (fact.Kind == AgentRunEventKind.SummaryChanged)
                 {
@@ -1957,7 +2005,8 @@ namespace RNAssistant.Runtime
                     ReferenceEquals(message.RunViewState, runView));
                 var appended = _session.Messages.GetRange(firstMessage, _session.Messages.Count - firstMessage);
                 new ConversationRunCommit(_session, fact, appended,
-                    activity, updated: projected == null ? null : new[] { projected }).Persist(_conversations.CommitRun, _session);
+                    activity, updated: _mediaUpdates.Concat(projected == null ? new ChatMessage[0] : new[] { projected })).Persist(_conversations.CommitRun, _session);
+                _mediaUpdates.Clear();
                 if (fact.Kind == AgentRunEventKind.ToolCompleted &&
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation && _callable != null)
                     foreach (var message in appended)

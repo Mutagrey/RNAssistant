@@ -1,5 +1,17 @@
 # Universal Browser: матрица проверок
 
+## F2a common capability / media — 2026-11-13
+
+`local browser:` — 5/5. Новый standalone plugin-source fixture проходит настоящий
+Workspace run → Browser provider → CAS → terminal commit → LlmClient → loopback HTTP:
+точные PNG bytes во втором запросе, отсутствие в первом и после restart. Non-vision
+возвращает explicit error/loaded=false. Проверены stale viewport/privacy refusal и
+retained media после закрытия native fixture и пересоздания provider.
+`external browser:` — 9/9, включая независимый Workspace action при смене Office.
+`workspace: Office target` — 1/1; borrowed Browser reads отклоняются до capture.
+Это simulated native source; WebView2 capture/redaction/trusted input и B02 открыты.
+
+
 ## F1a local source-only evidence — 2026-11-13
 
 `local browser:` 3/3; `browser target:` 1/1; `external browser: typed bridge` 1/1

@@ -389,7 +389,9 @@
     <Compile Include="Services\ExternalBrowserPolicy.cs" />
     <Compile Include="Services\ExternalBrowserNavigation.cs" />
     <Compile Include="Services\ExternalBrowserResourceProvider.cs" />
+    <Compile Include="Services\ExternalBrowserResourceProvider.Media.cs" />
     <Compile Include="Services\BrowserPageAutomation.cs" />
+    <Compile Include="Services\BrowserCapabilityService.cs" />
     <Compile Include="Controller\AssistantController.Browser.cs" />
     <Compile Include="WebView\AssistantWebBridge.Browser.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.cs" />

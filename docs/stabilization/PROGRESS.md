@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser F2a — capability/media, 2026-11-13
+
+`16.15.1-dev`: independent Workspace Browser contribution и one-shot media delivery
+в реальный LLM wire; сохранены CAS/authority и единый terminal commit. 15 focused
+Harness cases проходят. Native execution остаётся source-only по B02; это не Office
+qualification. Следующий срез — F3 версии и coherent member-set capture.
+[Подробности](../browser/06_PROGRESS.md#f2a--common-capability-и-media-delivery-2026-11-13).
+
+
 ## Local Browser F1a — source-only, 2026-11-13
 
 `16.15.0-dev`: общий local Browser/session/32K source reader и combobox. B02 теперь

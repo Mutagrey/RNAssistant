@@ -145,14 +145,21 @@ namespace RNAssistant.Harness
                 var session = new ChatSession { Id = "workspace-browser", WorkspaceId = "workspace" };
                 var source = new HarnessBrowserActionSource { Target = new BrowserPageHandle(session.Id, "page", 1) };
                 executor.ExternalBrowserReadSource = source;
-                var office = new WorkspaceOfficeCapabilityService(adapter, executor, FixturePaths.Value);
-                var bound = office.ForTarget(office.CaptureCurrentTarget(), session, new AppSettings(), "run");
-                var runtime = new ToolRuntime(RegisterOfficeContributions(bound), "agent", true, true, mutationObserver: bound.MutationObserver);
+                var bound = new BrowserCapabilityService(FixturePaths.Value, () => source).ForOwner(new BrowserOwnerScope {
+                    Kind = BrowserOwnerKind.Workspace, ScopeId = session.WorkspaceId, ChatId = session.Id },
+                    session, new AppSettings(), "run", null);
+                var registry = new ToolHandlerRegistry();
+                foreach (var contribution in bound.Tools)
+                    registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(contribution.Entry.Id,
+                        contribution.Entry.Description, contribution.Entry.ArgumentSchemaJson),
+                        contribution.Entry.Policy, contribution.Entry.Binding), contribution.Handler);
+                var runtime = new ToolRuntime(registry, "agent", true, true);
                 var readCall = new ToolCall("read", "core.read", "{}");
                 var read = bound.ResourceRead.ExecuteAsync(new ToolHandlerContext(new ToolExecutionContext(readCall,
                     new ToolPolicySnapshot(readCall.Name, "test", ResourceReadToolHandler.Policy), "run", "turn", "read-step", DateTime.UtcNow, false, 1),
                     new Dictionary<string, object> { ["target"] = ExternalBrowserResourceProvider.Target }), CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, read.Result.Status, read.Result.Message);
+                adapter.DocumentKeyValue = "unrelated-office-document";
                 var call = new ToolCall("fill", ExternalBrowserToolHandler.Fill,
                     JsonConvert.SerializeObject(new { target = ExternalBrowserResourceProvider.Target, name = "Name", value = "Test" }));
                 session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ToolCallId = call.Id,

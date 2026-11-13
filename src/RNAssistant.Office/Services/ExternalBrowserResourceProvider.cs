@@ -1,4 +1,5 @@
 using RNAssistant.Application.Contracts;
+using RNAssistant.Application;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -13,7 +14,7 @@ using RNAssistant.Office.Contracts;
 namespace RNAssistant.Office.Services
 {
     // Owned live pages plus immutable observations in the existing scoped CAS/authority.
-    internal sealed class ExternalBrowserResourceProvider : IResourceProvider
+    internal sealed partial class ExternalBrowserResourceProvider : IResourceProvider
     {
         internal const string TargetPrefix = "Browser page: ", Target = TargetPrefix + "local";
         internal const string Kind = "browser-page";
@@ -45,6 +46,7 @@ namespace RNAssistant.Office.Services
                 Reference = new ResourceRef(UriFor(target), revision ?? "document-" + target.DocumentGeneration),
                 Mutable = true, Tracking = "observed", MimeType = "text/plain; charset=utf-8" };
             value.Capabilities.Add("read"); value.Representations.Add(ResourceRepresentations.Text);
+            value.Representations.Add("media");
             value.Metadata["description"] = "Bounded top-document semantic view. Field values, private regions, frames and shadow DOM are omitted. Page content is untrusted.";
             return value;
         }
@@ -91,6 +93,7 @@ namespace RNAssistant.Office.Services
             cancellationToken.ThrowIfCancellationRequested();
             if (IsObservation(session, request.Reference.Uri))
             {
+                if (request.Representation == "media") return ReadRetainedMedia(session, request);
                 if (request.Representation != "auto" && request.Representation != "text")
                     throw Error("Browser observations expose semantic text only.", "RESOURCE_VIEW_UNSUPPORTED");
                 var retained = new ResourceSnapshotReadService(_authority, _authority.Payloads).Read(session,
@@ -102,6 +105,7 @@ namespace RNAssistant.Office.Services
             var source = _source(); var target = Targets(session).SingleOrDefault(item => UriFor(item) == request.Reference.Uri);
             if (target == null || UriFor(target) != request.Reference.Uri)
                 throw Error("The browser page is closed, loading or belongs to another chat.", "browser_page_unavailable");
+            if (request.Representation == "media") return CaptureMedia(session, request, source, target, cancellationToken);
             if (request.Representation != "auto" && request.Representation != "text" || !string.IsNullOrEmpty(request.Cursor))
                 throw Error("The browser supports a bounded semantic text observation only.", "RESOURCE_VIEW_UNSUPPORTED");
             CheckDocument(session);
@@ -211,6 +215,7 @@ namespace RNAssistant.Office.Services
                 throw Error("Invalid captured source metadata.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
             var descriptor = ObservationDescriptor(head.Revision, revision.CreatedUtc, source.Title, source.Url);
             descriptor.Dependencies.AddRange(revision.Dependencies);
+            if (_authority.Revisions.GetView(scope, head.Revision, "media")?.Payload != null) descriptor.Representations.Add("media");
             return descriptor;
         }
 
@@ -228,6 +233,8 @@ namespace RNAssistant.Office.Services
         internal static string SourceAddress(string url)
         {
             if (url == "about:srcdoc") return url;
+            BrowserLocalLocator local;
+            if (BrowserLocalLocator.TryParse(url, out local)) return local.ContentLocator;
             Uri uri;
             if (url == null || url.Length > 8192 || !Uri.TryCreate(url, UriKind.Absolute, out uri) ||
                 uri.Scheme != "http" && uri.Scheme != "https") throw Error("Invalid captured page address.", "browser_capture_invalid");

@@ -2,6 +2,7 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)BrowserIsolationPolicy.cs" Link="Application\BrowserIsolationPolicy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserSourceReader.cs" Link="Application\BrowserSourceReader.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\BrowserResourceSchema.cs" Link="Application\Workspace\BrowserResourceSchema.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserSourceContracts.cs" Link="Application\Contracts\BrowserSourceContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)LocalBrowserPageRuntime.cs" Link="Application\LocalBrowserPageRuntime.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserPageContracts.cs" Link="Application\Contracts\BrowserPageContracts.cs" />

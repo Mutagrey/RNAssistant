@@ -125,6 +125,30 @@ namespace RNAssistant.Application.Contracts
         Task<BrowserObservation> ReadAsync(BrowserPageHandle target, CancellationToken cancellationToken);
     }
 
+    // Native page content only. A qualified owner must verify privacy and freshness;
+    // these bytes/coordinates never come from page JS or model tool arguments.
+    public sealed class BrowserMediaCapture
+    {
+        public BrowserPageHandle Page { get; set; }
+        public byte[] Png { get; set; }
+        public DateTime CapturedUtc { get; set; }
+        public string Title { get; set; }
+        public string SourceAddress { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public long ViewportRevision { get; set; }
+        public long ControlRevision { get; set; }
+        public double DeviceScale { get; set; }
+        public double Zoom { get; set; }
+        public bool PrivacyVerified { get; set; }
+    }
+
+    public interface IBrowserMediaSource : IBrowserReadSource
+    {
+        Task<BrowserMediaCapture> ReadMediaAsync(BrowserPageHandle target, CancellationToken cancellationToken);
+        bool IsCaptureCurrent(BrowserMediaCapture capture);
+    }
+
     // Semantic actions use the native site policy and exact observations; no model JS/selectors.
     public sealed class BrowserActionRequest
     {

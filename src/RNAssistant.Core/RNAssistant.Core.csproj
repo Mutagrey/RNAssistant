@@ -285,6 +285,7 @@
     <Compile Include="Services\ModelDiagnosticBuffer.cs" />
     <Compile Include="Services\ModelResultProjection.cs" />
     <Compile Include="Services\ToolResultMaterialization.cs" />
+    <Compile Include="Services\ResourceMediaMessages.cs" />
     <Compile Include="Services\ToolResultHistoryReader.cs" />
     <Compile Include="Services\ContextClaimProjection.cs" />
     <Compile Include="Services\RuntimeContextPrompt.cs" />

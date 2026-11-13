@@ -38,7 +38,7 @@ namespace RNAssistant.Core.Services
             var schema = Office();
             var properties = (JObject)schema["properties"];
             var scope = (JObject)properties["scope"];
-            scope["enum"] = new JArray("document", "selection", "vba", "browser");
+            scope["enum"] = new JArray("document", "selection", "vba");
             scope["default"] = "document";
             properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("office"),
                 ["description"] = "Find resources in this run's exact Office document." };

@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.15.1-dev
+
+- Decoupled Workspace Browser tools from Office document selection. Explicit viewport
+  media reaches the next model request through the existing CAS and chat commit;
+  unsupported delivery fails explicitly and pixels are not replayed after restart.
+- Preserved semantic captured-observation targets in model results. Native rendering,
+  capture and input remain unavailable until B02 isolation is qualified.
+
 ### 16.15.0-dev
 
 - Added local Browser tabs with exact ownership, attach acknowledgement, bounded

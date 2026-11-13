@@ -22,6 +22,7 @@ namespace RNAssistant.Runtime
         private readonly bool _find;
         private readonly WorkspacePlanService _plans;
         private readonly IReadOnlyToolHandler _office;
+        private readonly IReadOnlyToolHandler _browser;
         private readonly WorkspaceChatAttachmentResourceProvider _chatAttachments;
         private readonly RNAssistant.Application.Conversations.ConversationCatalogAccess _chats;
         private readonly int _maximumTextReadCharacters;
@@ -30,9 +31,9 @@ namespace RNAssistant.Runtime
             Func<SkillCatalogSnapshot> skills, bool find,
             WorkspacePlanService plans, int maximumTextReadCharacters, IReadOnlyToolHandler office = null,
             WorkspaceChatAttachmentResourceProvider chatAttachments = null,
-            RNAssistant.Application.Conversations.ConversationCatalogAccess chats = null)
+            RNAssistant.Application.Conversations.ConversationCatalogAccess chats = null, IReadOnlyToolHandler browser = null)
         { _files = files; _publications = publications; _skills = skills; _find = find; _plans = plans;
-            _office = office; _chatAttachments = chatAttachments; _chats = chats;
+            _office = office; _chatAttachments = chatAttachments; _chats = chats; _browser = browser;
             if (maximumTextReadCharacters < 1 || maximumTextReadCharacters > WorkspaceFileService.MaximumWindowTextCharacters)
                 throw new ArgumentOutOfRangeException(nameof(maximumTextReadCharacters));
             _maximumTextReadCharacters = maximumTextReadCharacters; }
@@ -43,6 +44,11 @@ namespace RNAssistant.Runtime
             try
             {
                 var type = Value(context, "type");
+                if (type == "browser")
+                {
+                    if (_browser == null) throw Error("Browser is unavailable in this run.", "browser_unavailable");
+                    return _browser.ExecuteAsync(context, cancellationToken);
+                }
                 if (type == "chat")
                 {
                     if (_chats == null) throw Error("Chat overview is unavailable.", "chat_catalog_unavailable");

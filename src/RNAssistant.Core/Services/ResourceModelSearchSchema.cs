@@ -10,11 +10,17 @@ namespace RNAssistant.Core.Services
     {
         public const string Description = "Read-only literal or line-oriented .NET regex search. " + RNAssistant.Core.Tools.ResourceTextMatcher.LineSearchGuidance + " Select one target or a scope. Results contain bounded snippets and 1-based UTF-16 line/column coordinates; no language parser is required. Workspace scope searches only the selected directory (root when omitted), unless recursive=true includes descendants. Only scanComplete and sourceComplete together establish absence within the selected target, depth and filters. Continue with the returned semantic continuation and identical arguments; changed sources or lost continuation state require a fresh search. Search is not a complete source read or patch authorization.";
 
-        public static string Create(bool workspace, bool office)
+        public static string Create(bool workspace, bool office, bool browser = false)
         {
             var variants = new JArray();
             variants.Add(Branch("target", new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1000 }, false));
             if (workspace) variants.Add(Branch("scope", new JObject { ["type"] = "string", ["enum"] = new JArray("workspace") }, true));
+            if (browser)
+            {
+                var target = Branch("target", new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1000 }, false);
+                ((JObject)target["properties"])["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("browser") };
+                ((JArray)target["required"]).Add("type"); variants.Add(target);
+            }
             if (office)
             {
                 var scope = Branch("scope", new JObject { ["type"] = "string", ["enum"] = workspace ? new JArray("vba") : new JArray("vba", "html") }, false);

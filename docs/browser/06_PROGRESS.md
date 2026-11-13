@@ -1,5 +1,27 @@
 # Universal Browser: статус
 
+## F2a — common capability и media delivery, 2026-11-13
+
+`16.15.1-dev`: Workspace/plugin-source получает Browser отдельно от Office target;
+`core.find/read/search type=browser` используют тот же Gateway/authority. Старый
+borrowed Office Browser route закрыт. Terminal и one-shot media message публикуются
+одним ConversationRunCommit; следующий реальный LLM request содержит PNG из CAS.
+После запроса/restart hydration исключается, immutable observation остаётся.
+Non-vision/budget/preparation failure даёт error/loaded=false; final wire guard
+не отправляет запрос, если обязательные image parts исчезли при сериализации.
+Semantic snapshotTarget теперь сохраняется общей model projection.
+
+Qualified native capture seam проверяет exact page, viewport/control, privacy,
+PNG/pixel/byte bounds до публикации. Проверки используют fixture pixels: **это не
+native capture qualification**. B02 по-прежнему блокирует production renderer,
+media и input. browser.open, local navigation/action расширения и trusted input
+остаются F2b после version adapters; никакого неявного открытия окна нет.
+
+Проверки: local browser 5/5 (включая реальные запросы vision/non-vision, restart,
+privacy/stale/retained provenance), existing browser guards 9/9, pinned Office 1/1.
+Далее F3 durable version catalog/CaptureSet, затем provider route/UI cutover.
+
+
 ## F1a — local source-only Browser, 2026-11-13
 
 `16.15.0-dev`: один `LocalBrowserPageRuntime` владеет 16 вкладками, 64 visits на

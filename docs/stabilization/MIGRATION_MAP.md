@@ -1,5 +1,16 @@
 # Current-to-target migration map
 
+## Browser F2a — capability cutover, 2026-11-13
+
+Workspace consumers переключены на IBrowserCapabilityContribution; borrowed Office
+Browser tool/resource branch удалён. Общие Gateway/action handlers сохранены без
+второго runtime/store. ResourceMediaMessages принадлежит Core; Office routing и
+Workspace terminal owners используют его, LlmClient проверяет final image delivery.
+Остаточные ExternalBrowser имена и BrowserPageAutomation — owner 01/03, удаление/
+замена при F2b local action/native admission cutover. Они не открывают production
+renderer: B02 остаётся обязательной блокировкой. Source/version adapters — F3/F4.
+
+
 ## Local Browser F1a — source-only boundary, 2026-11-13
 
 External native Page/Dock singleton и Shell plugin frame transport удалены.

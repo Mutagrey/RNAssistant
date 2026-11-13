@@ -20,5 +20,6 @@ namespace RNAssistant.Application.Contracts
         public IReadOnlyToolHandler ResourceFind { get; set; }
         public IReadOnlyToolHandler ResourceRead { get; set; }
         public IReadOnlyToolHandler ResourceSearch { get; set; }
+        public RNAssistant.Core.Services.ModelResultProjection ModelProjection { get; set; }
     }
 }

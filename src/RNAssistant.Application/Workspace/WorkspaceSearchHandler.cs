@@ -15,13 +15,19 @@ namespace RNAssistant.Runtime
         private readonly WorkspaceFileResourceProvider _files;
         private readonly ResourceTextSearch _search = new ResourceTextSearch();
         private readonly IReadOnlyToolHandler _office;
+        private readonly IReadOnlyToolHandler _browser;
         private readonly ResourceSearchObservation _observation;
-        public WorkspaceSearchHandler(WorkspaceFileResourceProvider files, IReadOnlyToolHandler office = null, ResourceSearchObservation observation = null) { _files = files; _office = office; _observation = observation; }
+        public WorkspaceSearchHandler(WorkspaceFileResourceProvider files, IReadOnlyToolHandler office = null, ResourceSearchObservation observation = null, IReadOnlyToolHandler browser = null) { _files = files; _office = office; _observation = observation; _browser = browser; }
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
         {
             try
             {
                 var request = ResourceModelSearchSchema.Parse(context.Arguments);
+                if (request.Type == "browser")
+                {
+                    if (_browser == null) return Failure("browser_unavailable", "Browser is unavailable in this run.");
+                    return _browser.ExecuteAsync(context, token);
+                }
                 if (request.Type == "office" || request.Scope == "vba")
                 {
                     if (_office == null) return Failure("resource_search_unsupported", "No Office document is bound to this run.");

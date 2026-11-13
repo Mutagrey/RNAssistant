@@ -1,5 +1,10 @@
 # RNAssistant Harness
 
+Local Browser F2a: `local browser:` has five cases including real Workspace media
+wire delivery, non-vision refusal and retained capture provenance. `external browser:`
+has nine guard/action cases; `workspace: Office target` verifies the Office boundary.
+Native pixels are fixtures: no WebView2/network/input qualification is implied.
+
 Local Browser F1a: use `local browser:`, `browser target:` and
 `external browser: typed bridge` as separate filter invocations. The new
 `tests/web/local-browser.test.js` covers source-only Dock/combobox/session lifecycle;

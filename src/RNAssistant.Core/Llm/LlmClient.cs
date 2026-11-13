@@ -100,6 +100,7 @@ namespace RNAssistant.Core.Llm
                 var messageList = messages as IList<ChatMessage> ??
                     (messages == null ? new List<ChatMessage>() : messages.ToList());
                 var apiBuild = _messageBuilder.Build(messageList, settings, requestOptions, cancellationToken);
+                RNAssistant.Core.Services.ResourceMediaMessages.RequireWireImages(messageList, apiBuild);
                 var apiMessages = apiBuild.Messages;
                 var hasImages = apiBuild.HasImages;
                 var hasAudio = apiBuild.HasAudio;
