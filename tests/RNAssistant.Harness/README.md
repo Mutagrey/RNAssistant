@@ -147,6 +147,15 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal feed:` covers five checks: active Workspace metadata-only reconnect and
+subscription with unavailable message CAS; actual Office/Workspace runtime notices;
+bounded pinned pages across interleaved chats, stale snapshots, rebuild and clean
+restore; callback backpressure/cancellation, lost append acknowledgement and corrupt
+complete suffix rejection; H=100/1000/10000 cost curve. Two-notice pages read 5 records
+(~87 KB), idle reads 2, reads after another writer's append read 4; CAS body reads 0.
+Pair with the four `event feed:` regressions.
+No cold-rebuild/Windows latency or production journal-switch claim.
+
 `journal input:` covers four focused checks: real Office queue/steer and Workspace
 intake/runtime ports; FIFO edits/removal, immutable text/receipt identity and stale
 cursor reads; lost acceptance/message/Applied acknowledgements; exact message/body

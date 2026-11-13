@@ -323,6 +323,6 @@ namespace RNAssistant.Core.Persistence
         public ConversationResyncReason Reason { get; set; }
         public SessionEventPosition HighWater { get; set; }
         public SessionEventPosition Next { get; set; }
-        public IReadOnlyList<SessionEvent> Events { get; set; } = new SessionEvent[0];
+        public IReadOnlyList<ConversationEventNotice> Events { get; set; } = new ConversationEventNotice[0];
     }
 }

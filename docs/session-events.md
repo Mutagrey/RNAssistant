@@ -1,5 +1,36 @@
 # Session event stream
 
+## Journal event feed and metadata reconnect — 2026-11-13
+
+The existing event-reader port now returns typed notices. ConversationJournal pages
+through its existing `chat_write` index, verifies canonical frames at exact cursor
+locators and pins the requested high water. Interleaved chats and later appends do
+not enter that page. Model, input and chat notices require no CAS body hydration.
+Native `chat.committed` notices identify affected metadata/context/message/run
+projections; their operation labels are invalidation categories, not legacy replay
+envelopes or execution evidence. The retiring reader owns legacy operation parsing.
+
+Workspace ReadEvents/SubscribeEvents now validate metadata through WorkspaceStore
+and reuse their configured event port. The unconditional full-chat load and extra
+ChatEventStoreAdapter construction are removed. Both routes work with unavailable
+message CAS and reject another Workspace's identity. Invalid canonical data becomes
+typed HistoryUnavailable; it is not an empty successful page. Subscriptions keep
+existing backpressure/cancellation and hold no storage/run lock during delivery.
+
+Five targeted cases plus four feed regressions cover actual Office/Workspace runtime,
+Workspace reconnect, bounded pages, scope/hash guards, concurrent append, lost ack,
+rebuild/restore, corruption and cancellation. At H=100/1000/10000 messages, two-notice
+pages read 5 canonical records (~87 KB), idle polls read 2, and a new event after
+another writer's append reads 4; CAS body reads remain 0.
+These are indexed logical-I/O measurements, not Windows latency or cold-rebuild costs.
+Schema 17 and durable facts are unchanged; no new index/store/adapter.
+
+Patch 16.15.2-dev covers the active Workspace metadata reconnect improvement.
+Default writers remain on ChatStore; journal production composition, Office UI
+subscription adoption, peer delivery/controls and remaining resource/Store owners
+are still open. Windows/Office qualification remains separate.
+[Evidence](audits/storage-context-optimization.md#p5--journal-event-feed-and-metadata-reconnect-2026-11-13).
+
 ## Journal user Inbox delivery — 2026-11-12
 
 Text user input now uses the existing journal owner: acceptance/edit/removal,
@@ -44,7 +75,7 @@ and index. Input replay reads that chat's indexed control records, without scann
 message bodies. Schema 16 adds the control-page index; no new durable owner or table.
 Cold Inbox still pauses a saved wait until explicit user resume, even if an earlier
 Resume receipt survived an acknowledgement loss. User input is connected in the
-slice above; correlated reply/completion waits, peer controls and remaining feed
+slice above; correlated reply/completion waits, peer controls and peer feed
 integration stay unsupported explicitly. This wait slice alone does not qualify delivery.
 
 Five Office/Workspace checks cover timeout, cancellation, claim/control acknowledgement
@@ -1617,15 +1648,16 @@ from canonical events, including after deletion of the disposable SQLite project
 session ID, event sequence and hash. Resource availability hints are checked by
 their own authority owners; this is not an atomic snapshot of all workspace files.
 `ConversationEventFeed` reads the same stream through `IEventStore.OpenReader`;
-ChatStore retains ownership of hash/sequence validation and byte boundaries.
+the selected backend owns canonical hash/sequence and locator validation, returning
+typed notices without exposing its replay format to the common feed.
 `ReadEvents(after, through?, limit)` returns 1–100 event notices per nonempty page,
 with `HighWater`, exclusive `NextCursor` and `HasMore`. Pin subsequent pages to the
 returned `HighWater` using `through`; later appends cannot change that prefix.
 Notices carry event/correlation metadata and operation kinds, never event bodies,
 CAS payloads or a second replay protocol. Consumers refresh state as needed.
 
-Malformed/cross-session cursors, missing or replaced positions, unavailable streams
-and incomplete tails produce explicit `ResyncRequired` with a typed reason. Obtain
+Malformed/cross-session cursors, missing or replaced positions and unavailable or
+corrupt canonical records produce explicit `ResyncRequired` with a typed reason. Obtain
 a fresh snapshot (or resolve unavailable history explicitly); no mutation is
 repeated. Kernel invocation counters remain private and are not transport cursors.
 `SubscribeEventsAsync` and CLI `events --follow` deliver those same bounded pages,
@@ -1636,14 +1668,15 @@ also delivered when empty; subsequent empty polls are suppressed. Cancellation o
 optional CLI `--timeout-seconds` ends only the subscriber. Resync delivers one final
 notification and stops, without model calls, reconciliation or lifecycle writes.
 
-The reader retains only a few transient boundaries and at most the requested page
-of events. A cold or changed file requires streaming validation of the entire
-canonical prefix, without materializing all events or loading CAS bodies. Repeated
-pages and idle polls over an unchanged file reuse validated offsets and recheck
-their exact boundaries. External growth still triggers full validation: a valid
-new tail cannot establish the integrity of an externally changed prefix. There is
-no persistent event index or second store. Changed-file validation remains O(history);
-the application's initial session scope check also loads its existing projection.
+Readers retain only their address/boundaries and at most the requested page.
+The retiring ChatStore reader still validates a cold/changed prefix by streaming;
+unchanged pages reuse checked offsets, and incomplete tails require resync. Native
+journal reads use the existing chat-write index and shared catch-up/repair owner.
+Its existing recovery handles only unaccepted incomplete suffixes; complete corrupt
+frames fail closed. Cursor validation and page projection do not hydrate CAS.
+Workspace's initial scope check reads metadata rather than the full transcript.
+Legacy changed-file validation remains O(history); native index rebuild is also
+separate from the bounded indexed-page cost. No additional event store/index exists.
 Office UI subscription adoption and bounded resource body transport remain open.
 
 ### Interactive workspace CLI presentation

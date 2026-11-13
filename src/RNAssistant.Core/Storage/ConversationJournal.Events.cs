@@ -195,7 +195,12 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        ISessionEventReader IEventStore.OpenReader(ConversationMetadata session) { throw TextStoreScope(); }
+        ISessionEventReader IEventStore.OpenReader(ConversationMetadata session)
+        {
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            RequireTextRoot();
+            return new JournalEventReader(this, session);
+        }
         string IEventStore.ReadPayload(ConversationMetadata session, SessionEvent item)
         {
             if (item?.SessionId != session.Id) throw TextStoreScope();

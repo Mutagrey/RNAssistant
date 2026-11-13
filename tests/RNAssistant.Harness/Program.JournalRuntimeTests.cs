@@ -28,7 +28,7 @@ namespace RNAssistant.Harness
         private static void JournalRuntimeToolParity()
         { JournalRuntimeHostParity(true); }
 
-        private static void JournalRuntimeHostParity(bool tools, bool inputs = false)
+        private static void JournalRuntimeHostParity(bool tools, bool inputs = false, bool feed = false)
         {
             foreach (var office in new[] { true, false }) WithTempExecutor((executor, adapter) => {
                 var paths = FixturePaths.Value;
@@ -93,6 +93,7 @@ namespace RNAssistant.Harness
                     {
                         for (var turn = 0; turn < 2; turn++)
                         {
+                            var eventStart = ConversationEventFeed.Cursor(chat);
                             var text = turn == 0 ? "Give a text answer." : "Use the previous answer.";
                             var inbox = inputs ? new ConversationInboxService(journal) : null;
                             ConversationInput input = null;
@@ -150,6 +151,19 @@ namespace RNAssistant.Harness
                             AssertEqual(RunLifecycle.Completed, chat.LastRun.KernelState.Summary.Lifecycle,
                                 (office ? "Office" : "Workspace") + " finishes through the real kernel and journal");
                             var retained = store.Load(chat.Id);
+                            if (feed)
+                            {
+                                var bodies = journal.ChatBodyReads;
+                                var page = new ConversationEventFeed(journal).Read(ConversationMetadata.From(retained), eventStart, limit: 100);
+                                AssertTrue(!page.ResyncRequired && !page.HasMore, "real runtime publishes a bounded native event page");
+                                AssertEqual(ConversationEventFeed.Cursor(retained), page.NextCursor, "feed reaches the accepted runtime checkpoint");
+                                AssertTrue(page.Events.Any(item => item.Type == SessionEventTypes.LlmRequest) &&
+                                    page.Events.Any(item => item.Type == SessionEventTypes.ModelResponseAccepted) &&
+                                    page.Events.Any(item => item.Type == "chat.committed" && item.Operations.Contains(SessionOperationTypes.MessageUpdated)),
+                                    "model and message notifications come from the actual runtime");
+                                AssertEqual(bodies, journal.ChatBodyReads, "feed never hydrates model/context/message CAS");
+                                AssertTrue(!Newtonsoft.Json.JsonConvert.SerializeObject(page).Contains("Journal answer"), "notices contain no answer body");
+                            }
                             if (inputs)
                             {
                                 AssertEqual(1, retained.Messages.Count(item => item.Id == input.Id), "one accepted input becomes one user message");

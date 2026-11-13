@@ -1243,3 +1243,40 @@ after-state/CAS ownership.
    format-validation relocation preserves existing backend behavior. No product
    bump, tag or push. Version-format/diff/link checks pass; unrelated dirty work
    is excluded from the commit.
+
+## P5 — journal event feed and metadata reconnect (2026-11-13)
+
+1. F22's journal consumer now uses the existing chat-write locators and shared
+   suffix validation. ConversationJournal implements ISessionEventReader; the
+   existing ConversationEventFeed consumes typed notices. Full production F22
+   closure still requires P7; Inbox history/eviction and peer delivery remain open.
+2. Pages validate exact scope/hash anchors and pin high water across interleaved
+   chats and later appends. Model/input/chat notices do not hydrate CAS. Workspace
+   ReadEvents/SubscribeEvents now use WorkspaceStore metadata ownership and the
+   configured event port, preserving foreign-workspace rejection and cancellation.
+   Invalid canonical data returns HistoryUnavailable and preserves corrupt bytes.
+3. Removed full-session hydration from Workspace feed entry points and unconditional
+   event-adapter construction. Legacy operation parsing moved out of the common feed
+   into its existing retiring reader. No new store/index/registry/adapter, durable
+   format change, imported history or fallback. Production C# net +125 lines.
+4. Nine checks pass on isolated `bf2bcb70` + this slice, macOS/net8/C#7.3: five
+   journal feed cases and four existing feed regressions. Real Office/Workspace
+   runtime notices, Workspace metadata reconnect with unavailable message CAS,
+   scope/hash/paging, external append, lost acknowledgement, backpressure/cancel,
+   corrupt complete suffix, rebuild and clean journal/CAS restore are covered.
+5. Before: native OpenReader was unsupported; Workspace scope checks loaded the full
+   session. At H=100/1000/10000 messages with equal 25-message frames, a two-notice
+   native page now reads 5 records (~87 KB), idle reads 2 and reading a new event
+   after another writer's append reads 4; no CAS body reads. These are logical-I/O
+   counters. No CPU/allocation/Windows timing comparison or cold-rebuild bound.
+6. The user clarified priority on 2026-11-13: complete stages by dependency while
+   retaining current capabilities; no reduced Windows pilot is required. Next are
+   peer delivery/correlated waits and remaining Store/resource consumers, followed
+   by complete cutover. P3 metadata/header and input-history costs remain open; P4
+   stays deferred. Production writers, Office UI subscription adoption, complete
+   backup/restore and Windows/Office photo qualification remain separate gates.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. Patch
+   16.15.2-dev records the active Workspace reconnect improvement; journal writers
+   remain unchanged. Retiring readers/adapters are removed with whole-port P7
+   cutover. Version-format/diff/link checks pass; no push/tag or unrelated dirty work
+   is included.

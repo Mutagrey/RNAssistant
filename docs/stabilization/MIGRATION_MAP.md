@@ -52,6 +52,16 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P5 event feed (2026-11-13): ConversationJournal implements the existing reader port
+with typed notices, exact anchors and bounded chat-write index queries. Common feed
+no longer parses legacy envelopes; that parsing remains inside the retiring reader.
+Workspace reconnect now uses existing WorkspaceStore metadata ownership and its
+configured event port, removing full-load and unconditional adapter construction.
+Owner: journal / WorkspaceStore / ConversationEventFeed. No new durable format,
+index, store or adapter. Existing ChatStore reader/adapters are removed at whole-port
+P7 cutover; production writers and Office UI subscription adoption are not switched.
+[Contract](../session-events.md#journal-event-feed-and-metadata-reconnect--2026-11-13).
+
 P1/P2 user Inbox delivery (2026-11-12): text acceptance/edit/removal and delivery
 share the existing chat/control/input indices, with CAS text and an exact original
 message receipt for Applied. Owner: Core journal / existing Inbox and runtime

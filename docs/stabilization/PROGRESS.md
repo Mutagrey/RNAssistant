@@ -242,6 +242,10 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 
 Текущий приоритет — прямое подключение Store/runtime/resource consumers к
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
+Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
+сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
+После event feed — peer delivery/correlated waits и остальные Store/resource
+consumers, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
 зависит от конкретного `ChatStore`. Семь адресных checks проходят, включая реальные
@@ -292,6 +296,14 @@ schema 17 расширяет прежний input index. Common input journal б
 legacy envelopes; этот код остаётся в удаляемом при P7 adapter. Attachments,
 Workspace steer transport, полная boundedness input/control replay и расходы
 metadata/header ещё открыты. [Отчёт §12](../audits/storage-context-optimization.md#p1p2--journal-user-inbox-delivery-2026-11-12).
+Подключён адресный journal event feed (2026-11-13): typed notices, pinned high water,
+scope/hash guards, backpressure и cancellation используют прежний reader port/index.
+На H=100/1000/10000 страница из двух notices читает 5 записей (~87 КБ), idle — 2,
+чтение нового события после append другого writer — 4,
+без CAS-тел; cold rebuild и Windows latency отдельно. 5 targeted + 4 feed regressions
+проходят. Workspace reconnect больше не загружает весь чат и использует выбранный
+event port; это активное улучшение `16.15.2-dev`. Writers ещё не переключены, Office UI
+subscription adoption остаётся открытым. [Отчёт §12](../audits/storage-context-optimization.md#p5--journal-event-feed-and-metadata-reconnect-2026-11-13).
 Остальные mutation/resource owners, correlated wait delivery,
 rewrite/move/delete, usage, peer control/feed и
 production composition остаются открыты. Backup смешанного root закономерно

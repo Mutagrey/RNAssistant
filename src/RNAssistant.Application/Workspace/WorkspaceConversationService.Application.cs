@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -145,12 +146,12 @@ namespace RNAssistant.Runtime
             if (limit < 1 || limit > 100) throw new ArgumentException("Event page limit must be 1–100.");
             try
             {
-                var session = GetSession(workspace, sessionId);
+                var session = _workspaces.ReadSessionMetadata(_conversationStore, workspace, sessionId);
                 if (session == null) return new ConversationEventPage { SessionId = sessionId, After = after,
                     Reason = ConversationResyncReason.HistoryUnavailable };
-                return new ConversationEventFeed(new ChatEventStoreAdapter(_chats)).Read(session, after, through, limit);
+                return new ConversationEventFeed(_eventStore).Read(session, after, through, limit);
             }
-            catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException)
             { return new ConversationEventPage { SessionId = sessionId, After = after, Reason = ConversationResyncReason.HistoryUnavailable }; }
         }
 
@@ -161,16 +162,16 @@ namespace RNAssistant.Runtime
             if (onPage == null) throw new ArgumentNullException(nameof(onPage));
             if (limit < 1 || limit > 100) throw new ArgumentException("Event page limit must be 1–100.");
             cancellationToken.ThrowIfCancellationRequested();
-            ChatSession session = null;
-            try { session = GetSession(workspace, sessionId); }
-            catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException) { }
+            ConversationMetadata session = null;
+            try { session = _workspaces.ReadSessionMetadata(_conversationStore, workspace, sessionId); }
+            catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException) { }
             if (session == null)
             {
                 await onPage(new ConversationEventPage { SessionId = sessionId, After = after,
                     Reason = ConversationResyncReason.HistoryUnavailable }).ConfigureAwait(false);
                 return;
             }
-            await new ConversationEventFeed(new ChatEventStoreAdapter(_chats))
+            await new ConversationEventFeed(_eventStore)
                 .SubscribeAsync(session, after, onPage, limit, cancellationToken).ConfigureAwait(false);
         }
 

@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.15.2-dev
+
+- Workspace event reads and subscriptions validate chat metadata without loading
+  the full transcript or message CAS. Invalid history reports a typed resync;
+  workspace ownership checks, cursor paging and cancellation are preserved.
+
 ### 16.15.1-dev
 
 - Decoupled Workspace Browser tools from Office document selection. Explicit viewport

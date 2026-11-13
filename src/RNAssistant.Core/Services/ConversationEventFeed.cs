@@ -7,7 +7,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 
@@ -21,7 +20,7 @@ namespace RNAssistant.Core.Services
         public ConversationEventFeed(IEventStore events)
         { _events = events ?? throw new ArgumentNullException(nameof(events)); }
 
-        public ConversationEventPage Read(ChatSession session, string after, string through = null, int limit = 50,
+        public ConversationEventPage Read(ConversationMetadata session, string after, string through = null, int limit = 50,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
@@ -35,30 +34,23 @@ namespace RNAssistant.Core.Services
                 if (through != null) result.Reason = Decode(session.Id, through, out until);
                 if (result.ResyncRequired) return result;
                 var scope = session.Host + ":" + session.DocumentKey + ":" + session.Id;
-                if (_scope != scope) { _reader = _events.OpenReader(ConversationMetadata.From(session)); _scope = scope; }
+                if (_scope != scope) { _reader = _events.OpenReader(session); _scope = scope; }
                 var page = _reader.Read(from, until, limit, cancellationToken);
                 result.Reason = page.Reason;
                 if (result.ResyncRequired) return result;
                 result.HighWater = Encode(session.Id, page.HighWater.Sequence, page.HighWater.Hash);
                 result.NextCursor = Encode(session.Id, page.Next.Sequence, page.Next.Hash);
                 result.HasMore = page.Next.Sequence < page.HighWater.Sequence;
-                result.Events = page.Events.Select(item => new ConversationEventNotice
-                {
-                    Sequence = item.Sequence, EventId = item.EventId, CreatedUtc = item.CreatedUtc, Type = item.Type,
-                    RunId = item.RunId, TurnId = item.TurnId, StepId = item.StepId,
-                    Operations = item.Type == SessionEventTypes.SessionCommit
-                        ? CommitOperationTypes(item.Data)
-                        : new string[0]
-                }).ToArray();
+                result.Events = page.Events;
             }
-            catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is InvalidOperationException || ex is JsonException || ex is UnauthorizedAccessException)
             { result = new ConversationEventPage { SessionId = session.Id, After = after, Reason = ConversationResyncReason.HistoryUnavailable }; }
             return result;
         }
 
         // One consumer at a time. Awaiting delivery is backpressure: there is no
         // unbounded queue, and no persistence/run lock survives a wait or callback.
-        public async Task SubscribeAsync(ChatSession session, string after, Func<ConversationEventPage, Task> onPage,
+        public async Task SubscribeAsync(ConversationMetadata session, string after, Func<ConversationEventPage, Task> onPage,
             int limit = 50, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (onPage == null) throw new ArgumentNullException(nameof(onPage));
@@ -116,28 +108,5 @@ namespace RNAssistant.Core.Services
             return ConversationResyncReason.None;
         }
 
-        private static string[] CommitOperationTypes(JToken data)
-        {
-            var root = data as JObject;
-            if (root == null) throw new JsonException("Session commit data must be an object.");
-            var token = root["Operations"];
-            if (token == null || token.Type == JTokenType.Null) return new string[0];
-            var operations = token as JArray;
-            if (operations == null) throw new JsonException("Session commit operations must be an array.");
-            var types = new List<string>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var item in operations)
-            {
-                if (item == null || item.Type == JTokenType.Null) continue;
-                var operation = item as JObject;
-                if (operation == null) throw new JsonException("Session commit operation must be an object.");
-                var type = operation["Type"];
-                if (type == null || type.Type == JTokenType.Null) continue;
-                if (type.Type != JTokenType.String) throw new JsonException("Session commit operation type must be a string.");
-                var name = (string)type;
-                if (seen.Add(name)) types.Add(name);
-            }
-            return types.ToArray();
-        }
     }
 }

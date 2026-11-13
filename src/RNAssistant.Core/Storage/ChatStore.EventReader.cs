@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -13,6 +15,39 @@ namespace RNAssistant.Core.Storage
 
         internal ISessionEventReader OpenEventReader(string host, string documentKey, string sessionId)
         { return new EventReader(this, host, documentKey, sessionId); }
+
+        internal static ConversationEventNotice ProjectEventNotice(SessionEvent item)
+        {
+            return new ConversationEventNotice {
+                Sequence = item.Sequence, EventId = item.EventId, CreatedUtc = item.CreatedUtc, Type = item.Type,
+                RunId = item.RunId, TurnId = item.TurnId, StepId = item.StepId,
+                Operations = item.Type == SessionEventTypes.SessionCommit ? CommitOperationTypes(item.Data) : new string[0]
+            };
+        }
+
+        private static string[] CommitOperationTypes(JToken data)
+        {
+            var root = data as JObject;
+            if (root == null) throw new JsonException("Session commit data must be an object.");
+            var token = root["Operations"];
+            if (token == null || token.Type == JTokenType.Null) return new string[0];
+            var operations = token as JArray;
+            if (operations == null) throw new JsonException("Session commit operations must be an array.");
+            var types = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in operations)
+            {
+                if (item == null || item.Type == JTokenType.Null) continue;
+                var operation = item as JObject;
+                if (operation == null) throw new JsonException("Session commit operation must be an object.");
+                var type = operation["Type"];
+                if (type == null || type.Type == JTokenType.Null) continue;
+                if (type.Type != JTokenType.String) throw new JsonException("Session commit operation type must be a string.");
+                var name = (string)type;
+                if (seen.Add(name)) types.Add(name);
+            }
+            return types.ToArray();
+        }
 
         // Validates changed streams without retaining their history. Unchanged
         // streams reuse exact byte boundaries for paging/polling. Bookmarks live
@@ -66,14 +101,14 @@ namespace RNAssistant.Core.Storage
                         else
                         {
                             end = end ?? _tail;
-                            var items = new List<SessionEvent>();
+                            var items = new List<ConversationEventNotice>();
                             var count = (int)Math.Min(limit, end.Position.Sequence - start.Position.Sequence);
                             _pageEnd = start;
                             if (count > 0)
                                 Scan(start.NextOffset, start, count, (item, boundary) =>
                                 {
                                     HydrateEventData(item, _store.Protection());
-                                    items.Add(item); _pageEnd = boundary;
+                                    items.Add(ProjectEventNotice(item)); _pageEnd = boundary;
                                 }, cancellationToken);
                             _highWater = end;
                             result = new SessionEventSlice { Events = items, HighWater = end.Position, Next = _pageEnd.Position };
@@ -97,7 +132,7 @@ namespace RNAssistant.Core.Storage
                 Reset();
                 Interlocked.Increment(ref _store._eventReaderFullValidationCount);
                 Boundary start = null, end = null;
-                var items = new List<SessionEvent>();
+                var items = new List<ConversationEventNotice>();
                 Scan(0, null, null, (item, boundary) =>
                 {
                     _tail = boundary;
@@ -106,7 +141,7 @@ namespace RNAssistant.Core.Storage
                     if (item.Sequence > after.Sequence && (through == null || item.Sequence <= through.Sequence) && items.Count < limit)
                     {
                         HydrateEventData(item, _store.Protection());
-                        items.Add(item); _pageEnd = boundary;
+                        items.Add(ProjectEventNotice(item)); _pageEnd = boundary;
                     }
                 }, token);
                 if (_tail == null) return Failure(ConversationResyncReason.HistoryUnavailable);

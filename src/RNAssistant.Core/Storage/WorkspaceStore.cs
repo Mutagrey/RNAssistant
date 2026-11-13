@@ -211,6 +211,17 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
+        public ConversationMetadata ReadSessionMetadata(IConversationStore chats, WorkspaceDescriptor workspace, string sessionId)
+        {
+            if (chats == null) throw new ArgumentNullException(nameof(chats));
+            ValidateDescriptor(workspace);
+            var metadata = chats.ReadMetadata(sessionId);
+            if (metadata != null && (metadata.Host != "Workspace" || metadata.DocumentKey != workspace.WorkspaceId ||
+                metadata.WorkspaceId != workspace.WorkspaceId))
+                throw new InvalidDataException("The session is not associated with this workspace.");
+            return metadata;
+        }
+
         public ChatSession LoadSession(IConversationStore chats, WorkspaceDescriptor workspace, string sessionId)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
