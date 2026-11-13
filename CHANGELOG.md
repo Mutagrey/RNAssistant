@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.23.0-dev
+
+- Local Browser connects interactive native pages, HTML bindings, plugin SDK and
+  trusted agent input. Page/source modes share the existing Dock tab; physical input
+  pauses agent control. External traffic stays blocked by scoped native routes and
+  response network policy. Windows/WebView2 qualification remains open.
+
 ### 16.22.0-dev
 
 - Agents can discover local sources and open one exact visible Browser tab, including

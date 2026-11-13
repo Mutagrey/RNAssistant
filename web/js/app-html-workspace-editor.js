@@ -22,7 +22,6 @@
 
     function invalidatePreview() {
       if (options.inspector) options.inspector.reset();
-      if (options.closeResources) options.closeResources();
     }
     function clearPreview(frame) {
       if (previewCleared) return;

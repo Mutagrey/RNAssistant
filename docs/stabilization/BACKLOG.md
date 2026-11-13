@@ -1,5 +1,13 @@
 # RNAssistant backlog
 
+## Stale HTML export refresh fixture — 2026-11-13
+
+`tests/web/html-workspace-export.test.js` passes its snapshot, chunk, offline API,
+checkpoint and lease-cleanup cases, then expects old `runTool` data-refresh calls at
+line 288. Current refresh uses resource metadata; update this adjacent fixture with
+the resource owner rather than restoring the retired tool. Actual file:// execution
+is separately covered by browser-interactive.test.js.
+
 ## Retired Markdown discovery fixture — 2026-11-13
 
 Owner: Harness resource-discovery tests. `resources: document discovery follows exact

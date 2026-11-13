@@ -29,7 +29,7 @@ namespace RNAssistant.Harness
                 AssertTrue((await command(BrowserCommandKind.Attach, null)).Attached, "exact attach acknowledgement");
                 var first = await command(BrowserCommandKind.Navigate, saved.DisplayLocator);
                 AssertEqual(BrowserPageStatus.Unavailable, first.Status, "unqualified execution fails closed before renderer creation");
-                AssertEqual(BrowserRefusalCode.IsolationUnqualified, first.Reason, "typed qualification refusal");
+                AssertEqual(BrowserRefusalCode.NativeUnavailable, first.Reason, "host without native renderer reports unavailable");
                 AssertTrue(!first.Target.Capabilities.Preview && runtime.TargetsFor("chat").Count == 0, "source-only page cannot grant live actions");
                 await command(BrowserCommandKind.Navigate, other.DisplayLocator);
                 saved.State = BrowserTargetState.Removed;
@@ -96,8 +96,8 @@ namespace RNAssistant.Harness
                     var page = service.BrowserTargets(new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" }).Single();
                     AssertEqual(BrowserTargetKind.PluginSource, page.Kind, "Home catalog exposes registered local source");
                     AssertEqual(before, service.Check(plugin.PluginId).CandidateId, "metadata query neither captures nor changes actor intent");
-                    AssertTrue(!page.Capabilities.Preview && page.Capabilities.PreviewReason == BrowserRefusalCode.IsolationUnqualified,
-                        "catalog does not invent native qualification");
+                    AssertTrue(!page.Capabilities.Preview && page.Capabilities.PreviewReason == BrowserRefusalCode.NativeUnavailable,
+                        "metadata catalog does not instantiate a native renderer");
                 }
             });
         }

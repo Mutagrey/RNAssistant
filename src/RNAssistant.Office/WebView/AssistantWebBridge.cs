@@ -1290,7 +1290,7 @@ namespace RNAssistant.Office.WebView
         private void PostResourceChanges(IEnumerable<ResourceChangedMessage> messages)
         {
             foreach (var message in messages)
-                try { _postMessageJson(JsonConvert.SerializeObject(message)); }
+                try { BrowserResourcesChanged?.Invoke(message); _postMessageJson(JsonConvert.SerializeObject(message)); }
                 catch { /* Advisory only; fresh requests still capture shared authority. */ }
         }
 

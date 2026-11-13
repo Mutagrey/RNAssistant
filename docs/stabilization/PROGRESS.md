@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Native Browser delivery connected — 2026-11-13
+
+`16.23.0-dev`: local interactive rendering, RN.resources/plugin transport and native
+input/media adapter replace the source-only execution guard. Host-neutral/Chromium
+checks cover bindings, input semantics, exact native attachment and file:// snapshots.
+Windows/WebView2 compilation and qualification remain open. Continue with common
+standalone export, remaining tool adapters, then 07; no release/push.
+[Details](../browser/06_PROGRESS.md#f2c1-native-delivery--2026-11-13).
+
 ## Interactive Browser correction — in progress, 2026-11-13
 
 User requires working internal JavaScript, native input, HTML bindings and plugin SDK.

@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Linq;
 using System.Threading;
 using RNAssistant.Application;
@@ -10,6 +12,45 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void BrowserNativeDeliveryLifecycle()
+        {
+            var renderer = new BrowserRendererFixture(); var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = "project", ChatId = "chat" };
+            using (var runtime = new LocalBrowserPageRuntime(request => new BrowserResolveResult { Locator = request.Locator,
+                Target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.WorkspaceHtmlProject, State = BrowserTargetState.Ready,
+                    OwnerScope = request.OwnerScope, DisplayLocator = request.Locator, Capabilities = new BrowserTargetCapabilities { Source = true } } }, null, renderer: renderer)) {
+                var opened = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "tab", OperationId = "open", OwnerScope = owner, Locator = "/projects/project/source/index.html" }, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(BrowserPageStatus.Starting, opened.Status, "metadata does not claim native readiness");
+                var attached = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Attach, BrowserTabId = "tab", SessionId = opened.SessionId, OperationId = "open",
+                    Bounds = new BrowserBoundsDto { Visible = true, X = 0, Y = 20, Width = 100, Height = 100, ViewportWidth = 300, ViewportHeight = 300 } }, CancellationToken.None);
+                var closed = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Close, BrowserTabId = "tab", SessionId = opened.SessionId }, CancellationToken.None);
+                AssertTrue(!closed.IsCompleted, "commands serialize across native initialization");
+                renderer.Ready.TrySetResult(true);
+                AssertEqual(BrowserPageStatus.Ready, attached.GetAwaiter().GetResult().Status, "attached native renderer promotes readiness");
+                AssertEqual(BrowserPageStatus.Closed, closed.GetAwaiter().GetResult().Status, "close follows native attachment without an orphan");
+                renderer.Notify(opened);
+                RuntimeThrows<InvalidOperationException>(() => runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Reload, BrowserTabId = "tab", SessionId = opened.SessionId }, CancellationToken.None).GetAwaiter().GetResult());
+            }
+            AssertTrue(renderer.Disposed, "runtime disposes its sole native adapter");
+        }
+        private sealed class BrowserRendererFixture : IBrowserRenderer
+        {
+            internal readonly TaskCompletionSource<bool> Ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal bool Disposed;
+            public event Action<BrowserPageStateDto> Changed;
+            internal void Notify(BrowserPageStateDto state) { Changed?.Invoke(state); }
+            public async Task<BrowserPageStateDto> UpdateAsync(BrowserCommandPayload command, BrowserPageStateDto state, CancellationToken token)
+            { if (command.Action == BrowserCommandKind.Attach) { await Ready.Task; state.Status = BrowserPageStatus.Ready; state.Target.Capabilities.Preview = true; } return state; }
+            public Task ResetAsync() => Task.CompletedTask;
+            public void Dispose() { Disposed = true; }
+            public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId) => new BrowserPageHandle[0];
+            public Task<BrowserObservation> ReadAsync(BrowserPageHandle page, CancellationToken token) => throw new NotSupportedException();
+            public Task PrepareAsync(BrowserPageHandle page, string revision, string id, BrowserActionRequest request, CancellationToken token) => throw new NotSupportedException();
+            public Task<BrowserActionResult> ActAsync(BrowserPageHandle page, string id, Action dispatch, CancellationToken token, bool navigation = false) => throw new NotSupportedException();
+            public void BlockActions(BrowserPageHandle page) { }
+            public void PresentResult(BrowserPageHandle page, string id, BrowserActionEffect effect) { }
+            public Task<BrowserMediaCapture> ReadMediaAsync(BrowserPageHandle page, CancellationToken token) => throw new NotSupportedException();
+            public bool IsCaptureCurrent(BrowserMediaCapture capture) => false;
+        }
         private static void BrowserExactLocalContent()
         {
             WithPluginPaths(paths => {
@@ -39,6 +80,9 @@ namespace RNAssistant.Harness
                     var instance = content.Plugin; content.Dispose(); content.Drained.GetAwaiter().GetResult();
                     AssertTrue(instance.Token.IsCancellationRequested, "closing content revokes its exact plugin instance");
                 }
+                BrowserLocalLocator memberLocator;
+                AssertTrue(BrowserLocalLocator.TryParse(BrowserLocalLocator.ForResource("html_ws_one", "saved", "pages/two.html"), out memberLocator) &&
+                    memberLocator.RelativePath == "pages/two.html" && memberLocator.VersionId == "saved", "document member navigation preserves saved identity");
                 BrowserNetworkPolicy.RequireSupportedRuntime("157.0.8103.51");
                 RuntimeThrows<InvalidOperationException>(() => BrowserNetworkPolicy.RequireSupportedRuntime("151.0.0.0"));
             });

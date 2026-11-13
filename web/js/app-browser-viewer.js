@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  // A stable iframe surface follows a Dock/inline placeholder. No provider APIs or navigation authority.
+  // A stable presentation surface follows a Dock/inline placeholder. No provider APIs or navigation authority.
   var layer;
   function host(root) {
     if (!layer) {
@@ -24,7 +24,7 @@
       if (disposed) return;
       var rect = anchor.getBoundingClientRect(), shown = active && anchor.isConnected && rect.width > 0 && rect.height > 0 && !anchor.closest("[inert]");
       surface.hidden = !shown; surface.inert = !shown;
-      if (!shown) { last = ""; return; }
+      if (!shown) { last = ""; if (options.onLayout) options.onLayout(); return; }
       var box = container.getBoundingClientRect(), scale = box.width / container.clientWidth || 1;
       var values = [(rect.left - box.left) / scale, (rect.top - box.top) / scale, rect.width / scale, rect.height / scale];
       var key = values.map(function (value) { return value.toFixed(2); }).join("|");
@@ -32,6 +32,7 @@
         ["left", "top", "width", "height"].forEach(function (name, i) { surface.style[name] = values[i] + "px"; });
         last = key;
       }
+      if (options.onLayout) options.onLayout();
     }
     function layout() { if (!disposed && !queued) queued = requestAnimationFrame(place); }
     var observer = new ResizeObserver(layout); observer.observe(anchor);
@@ -42,12 +43,13 @@
     document.addEventListener("scroll", layout, { capture: true, signal: listeners.signal });
     anchor.addEventListener("keydown", function (event) {
       if (event.key !== "Enter" || !active) return;
+      if (options.onEnter && options.onEnter()) { event.preventDefault(); return; }
       var control = surface.querySelector('button:not([disabled]):not([hidden]), summary, iframe');
       if (control) { event.preventDefault(); control.focus(); }
     }, { signal: listeners.signal });
     return { element: anchor, surface: surface, layout: layout,
       activate: function () { active = true; layout(); },
-      deactivate: function () { active = false; surface.hidden = true; surface.inert = true; last = ""; },
+      deactivate: function () { active = false; surface.hidden = true; surface.inert = true; last = ""; if (options.onLayout) options.onLayout(); },
       destroy: function () { if (disposed) return; disposed = true; cancelAnimationFrame(queued); observer.disconnect(); listeners.abort(); surface.remove(); anchor.remove(); }
     };
   }

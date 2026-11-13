@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Interactive Browser layout — In Review, 2026-11-13
+
+Native content occupies the common preview content slot. The manual-control strip
+uses shared spacing/type/border/button tokens and wraps in narrow layouts. The
+existing action cursor component is reused in the isolated page world; native input
+attribution owns its human-takeover dismissal. [Wide](review/browser-interactive-wide.png)
+and [narrow/125%](review/browser-interactive-narrow.png) show the Shell with an empty
+native slot; they are placement evidence, not a rendered Windows page or acceptance.
+
 ## Agent open presentation — In Review, 2026-11-13
 
 Agent opens reuse the common Browser chrome, focus and source-only status. No new

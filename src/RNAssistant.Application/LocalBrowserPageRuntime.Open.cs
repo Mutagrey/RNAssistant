@@ -99,7 +99,7 @@ namespace RNAssistant.Application
             {
                 if (!_agentOpens.TryGetValue(state.OperationId, out operation) || operation.TabId != state.BrowserTabId || operation.Completion.Task.IsCompleted) return;
                 if (state.Status == BrowserPageStatus.Closed) operation.Completion.TrySetException(new InvalidOperationException("Browser closed before attachment."));
-                else if (request.Action == BrowserCommandKind.Attach && state.Attached && request.Bounds?.Visible == true && ValidBounds(request.Bounds))
+                else if (request.Action == BrowserCommandKind.Attach && state.Attached && (_renderer == null || state.Status == BrowserPageStatus.Ready) && request.Bounds?.Visible == true && ValidBounds(request.Bounds))
                     operation.Completion.TrySetResult(Copy(state));
             }
         }

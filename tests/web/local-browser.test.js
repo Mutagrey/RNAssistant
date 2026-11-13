@@ -18,7 +18,7 @@ const {withPreviewPage} = require('./preview-session');
         let value = p.pages.get(payload.browserTabId);
         if (payload.action === 'Open') {
           value = {browserTabId:payload.browserTabId,operationId:payload.operationId,sessionId:'session-'+(++p.targets),ownerScope:payload.ownerScope,
-            revision:1,documentGeneration:1,attached:false,status:'Unavailable',reason:'IsolationUnqualified',url:payload.locator,title:'Local source',message:RNAssistantBrowser.unavailable,
+            revision:1,documentGeneration:1,attached:false,status:'Unavailable',reason:'NativeUnavailable',url:payload.locator,title:'Local source',message:RNAssistantBrowser.unavailable,
             target:{ownerScope:payload.ownerScope,workspaceId:'project',capabilities:{source:true}}};p.pages.set(payload.browserTabId,value);
         } else if (payload.action === 'Close') {value.status='Closed';p.pages.delete(payload.browserTabId);}
         else if (payload.sessionId !== value.sessionId) throw new Error('Stale session');

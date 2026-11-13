@@ -39,10 +39,14 @@ namespace RNAssistant.Application
             if (parts.Any(item => item.Length > 256 || item == "." || item == ".." ||
                 item.IndexOfAny(new[] { '/', '\\', ':', '%', '?', '#', '\0' }) >= 0 || item.Any(char.IsControl))) return false;
             var value = new BrowserLocalLocator { Key = parts.Length > 1 ? parts[1] : null, Query = query, Fragment = fragment };
-            if (parts[0] == "resources" && (parts.Length == 2 || parts.Length == 4 && parts[2] == "versions"))
+            if (parts[0] == "resources" && parts.Length >= 2)
             {
-                value.Kind = parts.Length == 2 ? BrowserLocatorKind.Resource : BrowserLocatorKind.ResourceVersion;
-                value.VersionId = parts.Length == 4 ? parts[3] : null;
+                var saved = parts.Length >= 4 && parts[2] == "versions";
+                var prefix = saved ? 4 : 2;
+                if (parts.Length != prefix && (parts.Length <= prefix + 1 || parts[prefix] != "files")) return false;
+                value.Kind = saved ? BrowserLocatorKind.ResourceVersion : BrowserLocatorKind.Resource;
+                value.VersionId = saved ? parts[3] : null;
+                value.RelativePath = parts.Length == prefix ? null : string.Join("/", parts.Skip(prefix + 1));
             }
             else if ((parts[0] == "projects" || parts[0] == "plugins") && parts.Length >= 4)
             {
@@ -64,8 +68,8 @@ namespace RNAssistant.Application
         { return Format("projects", key, path, version); }
         public static string ForPlugin(string key, string path, string version = null)
         { return Format("plugins", key, path, version); }
-        public static string ForResource(string key, string version = null)
-        { return Require("/resources/" + Uri.EscapeDataString(key ?? "") + (version == null ? "" : "/versions/" + Uri.EscapeDataString(version))); }
+        public static string ForResource(string key, string version = null, string path = null)
+        { return Require("/resources/" + Uri.EscapeDataString(key ?? "") + (version == null ? "" : "/versions/" + Uri.EscapeDataString(version)) + (path == null ? "" : "/files/" + string.Join("/", path.Split('/').Select(Uri.EscapeDataString)))); }
         private static string Format(string area, string key, string path, string version)
         {
             return Require("/" + area + "/" + Uri.EscapeDataString(key ?? "") +

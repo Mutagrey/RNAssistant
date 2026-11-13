@@ -1,5 +1,33 @@
 # Universal Browser: статус
 
+## F2c1 Native delivery — 2026-11-13
+
+Continued from `4fd0ba79`; native delivery now replaces the unconditional execution
+refusal. One lazy isolated environment serves visible pages and plugin command
+controllers; exact origins/members and Connection-Allowlist/CSP remain mandatory.
+Document HTML reuses the product assembler and local vendors, RN.resources uses
+scoped native leases plus the existing data plane, and plugin SDK uses its existing
+instance/command owners. Old iframe resource-control delivery is removed.
+
+The native adapter supplies isolated semantic observation, trusted CDP input with
+bounded read-back, held-state cleanup, physical takeover/run pause and conservative
+viewport capture. Unknown input blocks further actions until manual reopen. Internal
+links/new tabs retain the owner; resource member addresses use `/files/{path}`.
+Preview is the default. Source/diff/menus/hidden views exclude the native viewport;
+only native readiness promotes interactive capabilities.
+
+Checks: local Browser Harness 9; target checks; Mock real-controller compile;
+Chromium binding open/read/close/subscribe, trusted click/fill, stale/private refusals
+and actual file:// snapshot execution with zero HTTP; Dock placement/mode/modal/
+narrow-zoom/close fixture. Screenshots show Shell layout only, with a blank native
+slot. No VSTO/Office build or Windows qualification was run on this Mac.
+
+Remaining F2c: expose exact autonomous HTML export in common Browser actions;
+complete coordinate/selection adapters and their delivered-image admission. Native
+C# delivery, worker routing, OS hooks, input release, captures and final profile
+cleanup require Windows/WebView2 evidence. Then continue 07 and integrate main;
+no push/release. The package is not declared complete.
+
 ## F2c Interactive Browser — in progress, 2026-11-13
 
 User correction supersedes the permanent source-only interpretation: internal HTML,

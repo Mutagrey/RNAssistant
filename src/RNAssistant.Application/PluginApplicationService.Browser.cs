@@ -42,7 +42,7 @@ namespace RNAssistant.Application
                     State = BrowserTargetState.Ready, Immutable = locator.Kind == BrowserLocatorKind.PluginVersion,
                     Capabilities = new BrowserTargetCapabilities { Source = true, Versions = true,
                         SaveVersion = locator.VersionId == null && workspace?.ReadOnly != true, Edit = locator.VersionId == null && workspace?.ReadOnly != true,
-                        ActivateVersion = locator.VersionId != null, PreviewReason = BrowserRefusalCode.IsolationUnqualified,
+                        ActivateVersion = locator.VersionId != null, PreviewReason = BrowserRefusalCode.NativeUnavailable,
                         SaveReason = locator.VersionId != null || workspace?.ReadOnly == true ? BrowserRefusalCode.ReadOnly : BrowserRefusalCode.None } };
                 PluginManifestV1 manifest;
                 if (locator.VersionId != null)
@@ -177,7 +177,7 @@ namespace RNAssistant.Application
                         Reason = sourceAvailable ? BrowserRefusalCode.None : BrowserRefusalCode.TargetUnavailable, OwnerScope = scope, WorkspaceId = workspaceId, ChatId = scope.ChatId,
                         PluginId = plugin?.PluginId, EntryPath = entryPath, RelativePath = entryPath, Title = title,
                         DisplayLocator = plugin == null ? BrowserLocalLocator.ForProject(workspaceId, entryPath) : BrowserLocalLocator.ForPlugin(plugin.PluginId, entryPath),
-                        Capabilities = new BrowserTargetCapabilities { Source = true, Versions = true, PreviewReason = BrowserRefusalCode.IsolationUnqualified } });
+                        Capabilities = new BrowserTargetCapabilities { Source = true, Versions = true, PreviewReason = BrowserRefusalCode.NativeUnavailable } });
                 }
                 return targets;
             }

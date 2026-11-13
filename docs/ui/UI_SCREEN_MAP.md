@@ -1,5 +1,13 @@
 # Карта экранов, навигации и состояний
 
+## Interactive local page — In Review, 2026-11-13
+
+A ready local Browser opens in «Страница». «Исходник» and «Сравнение» remain in the
+same tab; unsupported native hosts show source plus the actual unavailability reason.
+Physical takeover displays «Вы управляете» / «Продолжить агентом» with an exact
+control revision. Closing the page does not cancel the conversation run. Internal
+new-window links open a scoped Dock tab; native overlays yield to Shell menus/dialogs.
+
 ## Agent open — In Review, 2026-11-13
 
 A run can open an explicitly discovered local source in the common Browser. The tool

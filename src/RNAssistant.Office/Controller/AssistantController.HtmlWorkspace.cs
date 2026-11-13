@@ -67,7 +67,7 @@ namespace RNAssistant.Office
                 if (diagnosticOwners.Contains(workspaceId, StringComparer.Ordinal))
                     return LoadDiagnosticsMetadata(chatId, null) != null;
                 var session = LoadAddressedSession(chatId);
-                return session != null && (workspaceId == "viewer" || workspaceId == ArtifactCatalogService.Owner ||
+                return session != null && (workspaceId == "viewer" || workspaceId == "browser" || workspaceId == ArtifactCatalogService.Owner ||
                     workspaceId == PromptContextInspectorDownloadService.Owner ||
                     workspaceId == VbaEditorResourceService.Owner ||
                     workspaceId == SkillEditorResourceService.Owner ||

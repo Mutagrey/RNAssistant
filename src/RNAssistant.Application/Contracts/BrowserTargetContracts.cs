@@ -25,7 +25,7 @@ namespace RNAssistant.Application.Contracts
     public enum BrowserRefusalCode
     {
         None, InvalidLocator, OutsideScope, TargetUnavailable, AmbiguousTarget, Removed,
-        ReadOnly, ProjectDefinitionRequired, IsolationUnqualified, NativeUnavailable,
+        ReadOnly, ProjectDefinitionRequired, NativeUnavailable,
         StaleBinding, SavedVersionRequired, ActiveVersion, VersionInUse, OperationUnknown,
         UnsupportedEncoding, UnsupportedDependency, InvalidContent
     }

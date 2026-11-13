@@ -1,5 +1,24 @@
 # Universal Browser: матрица проверок
 
+## F2c1 interactive checks — 2026-11-13
+
+`browser-interactive.test.js` exercises the actual assembler, RN.resources native
+client and isolated semantic JS in Chromium: trusted fill/click, local data, lease
+close, change subscription, stale target/private refusal. It also writes exported
+HTML and opens it via file://: interactive controls read captured data with no HTTP.
+`browser-native-layout.test.js` checks content-only bounds, preview/source, modal
+occlusion, manual controls, 420px/125%, close; the fixture does not draw a fake native
+page. Local Browser Harness covers serialized renderer attach/close in addition to
+existing exact owner/content/open/media tests. Mock compilation includes controller
+binding changes but excludes native WinForms/WebView2 files.
+
+Windows still must compile and exercise native C# delivery, worker interception,
+physical takeover, key/button release on cancellation, plugin commands/data/vendors,
+DOM/media privacy, multi-page navigation, SDK leases and process/profile drain.
+Host-neutral tests are not evidence that these Windows gates passed. The legacy
+html-workspace-export fixture passes snapshot/export cases, then fails its stale
+expectation of the removed refresh tool; tracked separately in BACKLOG.
+
 ## F2c content and network baseline — 2026-11-13
 
 Harness exact local members checks declared paths, traversal/foreign rejection,

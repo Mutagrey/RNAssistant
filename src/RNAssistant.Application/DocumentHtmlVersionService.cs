@@ -47,7 +47,7 @@ namespace RNAssistant.Application
                 }
                 var artifact = _artifacts.Read(owner, exact, false);
                 var target = BrowserTargetResolver.Saved(owner, artifact, exact.Uri);
-                target.DisplayLocator = locator.ContentLocator; target.SavedVersionId = entry?.VersionId;
+                target.DisplayLocator = locator.ContentLocator; target.RelativePath = locator.RelativePath; target.SavedVersionId = entry?.VersionId;
                 if (logical != null && entry == null)
                 { target.Kind = BrowserTargetKind.HtmlWorkspace; target.Immutable = false; target.Capabilities.SaveVersion = true; target.Capabilities.Edit = true; }
                 if (entry?.Removed == true || _artifacts.IsRemoved(owner, artifact))

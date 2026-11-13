@@ -67,31 +67,32 @@
     var nativeFetch = window.fetch && window.fetch.bind(window);
     var handles = new Set();
     var subscribers = new Set();
-    window.addEventListener("message", function (event) {
-      if (transport) return; // Exported snapshots have no mutable head subscriptions.
-      if (event.source !== window.parent || !event.data || event.data.type !== "rnassistant-resource-changed") return;
-      var changed = (event.data.names || []).filter(function (name) { return names.indexOf(name) >= 0; });
-      if (changed.length) subscribers.forEach(function (listener) {
-        try { listener(Object.freeze({ names: changed.slice(), generation: event.data.generation })); } catch (_) {}
-      });
+    var native = !transport && window.chrome && window.chrome.webview;
+    var nativePending = new Map(), nativeSequence = 0;
+    if (native) native.addEventListener("message", function (event) {
+      var value = event.data;
+      if (value && value.type === "rnassistant-resource-changed") {
+        var changed = (value.names || []).filter(function (name) { return names.indexOf(name) >= 0; });
+        if (changed.length) subscribers.forEach(function (listener) { try { listener(Object.freeze({ names: changed, generation: value.generation })); } catch (_) {} });
+      }
+      var pending = value && value.type === "rnassistant-resource-result" && nativePending.get(value.requestId);
+      if (!pending) return;
+      nativePending.delete(value.requestId); clearTimeout(pending.timer);
+      if (value.ok) pending.resolve(value.value); else pending.reject(new Error(value.error || "RESOURCE_ACCESS_DENIED"));
     });
     function control(operation, bindingName, leaseId) {
       if (transport) return Promise.resolve().then(function () {
         return operation === "open" ? transport.open(bindingName) : transport.close(leaseId);
       });
-      return new Promise(function (resolve, reject) {
-        if (window.parent === window) { reject(new Error("RESOURCE_HOST_REQUIRED: open this workspace in RNAssistant.")); return; }
-        var channel = new MessageChannel();
-        var timeout = setTimeout(function () { channel.port1.close(); reject(new Error("RESOURCE_CONTROL_TIMEOUT")); }, 15000);
-        channel.port1.onmessage = function (event) {
-          clearTimeout(timeout); channel.port1.close();
-          if (!event.data || !event.data.ok) reject(new Error(String(event.data && event.data.error || "RESOURCE_ACCESS_DENIED")));
-          else resolve(event.data.value);
-        };
-        window.parent.postMessage({ type: "rnassistant-resource-control", operation: operation,
-          bindingName: bindingName, leaseId: leaseId }, "*", [channel.port2]);
+      if (native) return new Promise(function (resolve, reject) {
+        if (nativePending.size >= 64) { reject(new Error("RESOURCE_CONTROL_LIMIT")); return; }
+        var id = "resource-" + (++nativeSequence), timer = setTimeout(function () { nativePending.delete(id); reject(new Error("RESOURCE_CONTROL_TIMEOUT")); }, 15000);
+        nativePending.set(id, { resolve: resolve, reject: reject, timer: timer });
+        native.postMessage(JSON.stringify({ type: "rnassistant-resource-control", requestId: id, operation: operation, bindingName: bindingName, leaseId: leaseId }));
       });
+      return Promise.reject(new Error("RESOURCE_HOST_REQUIRED: open this workspace in RNAssistant."));
     }
+
     async function open(name) {
       if (names.indexOf(name) < 0) throw new Error("RESOURCE_BINDING_UNKNOWN: " + name);
       var lease = await control("open", name, null);
@@ -255,7 +256,7 @@
     var inspector = options.inspectGeneration && options.hostBridge !== false
       ? "<script>" + safeScript(window.RNAssistantVisualInspector.script(options.inspectGeneration)) + "<\/script>\n" : "";
     var vendorRuntime = vendorHead(files);
-    var headInject = '<meta charset="utf-8">' + previewContentSecurityPolicy(options.hostBridge === false) + "\n" + previewViewportReset() + "\n" +
+    var headInject = '<meta charset="utf-8">' + (options.nativeHost ? "" : previewContentSecurityPolicy(options.hostBridge === false)) + "\n" + previewViewportReset() + "\n" +
       inspector + vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {

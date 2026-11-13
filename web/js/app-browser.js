@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   var live = new Map(), versionViews = new Map(), available = false;
-  var unavailable = "Исполнение страницы недоступно: сетевая изоляция WebView2 ещё не подтверждена. Исходники и версии доступны.";
+  var unavailable = "Native Browser недоступен. Исходники и версии доступны; подробности — в состоянии страницы.";
   function id() { return "browser-" + crypto.randomUUID(); }
   function key(target) { return "browser:" + target.browserTabId; }
   function accepts(target) {
@@ -22,11 +22,12 @@
     var files = document.createElement("select"); files.className = "rna-form-control compact browser-document-file"; files.setAttribute("aria-label", "Файл проекта");
     var source = document.createElement("div"); source.className = "browser-document-source product-viewer";
     var empty = document.createElement("div"); empty.className = "empty-state";
-    content.append(files, source, empty); root.appendChild(content);
+    var viewport = document.createElement("div"); viewport.className = "browser-native-viewport"; viewport.setAttribute("aria-label", "Интерактивная страница");
+    content.append(files, source, viewport, empty); root.appendChild(content);
     var mount = document.createElement("div"); mount.className = "browser-view";
-    var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell") });
+    var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell"), onLayout: layoutNative, onEnter: function () { if (session && selectedMode === "preview" && current.status === "Ready") { command("Focus").catch(fail); return true; } return false; } });
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, pending = new Set();
-    var sourcePage = null, loadingSource = 0, selectedMode = "source", targetGeneration = -1, homeView = null;
+    var sourcePage = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
     function discuss() {
         var binding = current && current.target && current.target.ownerScope;
@@ -41,6 +42,40 @@
           { source: "workspace", workspaceId: binding.scopeId, sessionId: binding.chatId }, { referencePanel: key(target), beside: true });
     }
     var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; }, discuss: discuss });
+    var placementKey = "", placementQueued = 0;
+    var control = document.createElement("div"); control.className = "browser-control"; control.hidden = true;
+    var controlText = document.createElement("span"); controlText.setAttribute("role", "status");
+    var resume = document.createElement("button"); resume.className = "secondary"; resume.textContent = "Продолжить агентом";
+    resume.onclick = async function () { resume.disabled = true; try { await command("ResumeAgent", { controlRevision: current.controlRevision }); } catch (error) { fail(error); } finally { resume.disabled = false; } };
+    control.append(controlText, resume); root.insertBefore(control, content);
+    function nativeBounds(attachment) {
+      var fallback = attachment && current && current.status === "Unavailable";
+      var rect = (fallback ? content : viewport).getBoundingClientRect(), overlay = document.querySelector('dialog[open], [aria-modal="true"], .rna-action-menu-popup') || root.querySelector('.preview-surface-toolbar.is-address-focused, .preview-surface-completion:not([hidden])');
+      var visible = active && mount.isConnected && !root.hidden && selectedMode === "preview" && current &&
+        !["Home", "Removed", "Closed", "Unavailable", "Failed"].includes(current.status) && !overlay;
+      return { visible: !!(visible || fallback && active && mount.isConnected) && rect.width > 0 && rect.height > 0,
+        x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.max(0, Math.min(rect.width, innerWidth - Math.max(0, rect.x))),
+        height: Math.max(0, Math.min(rect.height, innerHeight - Math.max(0, rect.y))), viewportWidth: innerWidth, viewportHeight: innerHeight };
+    }
+    function layoutNative() {
+      if (disposed || placementQueued) return;
+      placementQueued = requestAnimationFrame(function () {
+        placementQueued = 0;
+        if (disposed || !session || !current || !current.attached) return;
+        var bounds = nativeBounds(), key = JSON.stringify(bounds);
+        if (key === placementKey) return; placementKey = key;
+        command("Layout", { bounds: bounds }).catch(fail);
+      });
+    }
+    var nativeSize = new ResizeObserver(layoutNative); nativeSize.observe(viewport);
+    var overlays = new MutationObserver(function (changes) {
+      var selector = 'dialog, [aria-modal], .rna-action-menu-popup';
+      if (changes.some(function (change) {
+        return change.type === "attributes" && (change.target.matches(selector) || root.contains(change.target)) || Array.from(change.addedNodes).concat(Array.from(change.removedNodes)).some(function (node) {
+          return node.nodeType === 1 && (node.matches(selector) || !!node.querySelector(selector));
+        });
+      })) layoutNative();
+    }); overlays.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open", "aria-modal", "hidden", "class"] });
     var comparison = null;
     var providerActions = RNAssistantBrowserActions.mount(surface.actions, { target: function () { return current && current.target; },
       generation: function () { return current && current.documentGeneration; }, isCurrent: function () { return active && !disposed; },
@@ -129,7 +164,7 @@
         var scope = current.ownerScope, recent = RNAssistantDockWorkspace.recentNavigation(scope, query, 8), seen = new Set();
         function rows(items) { return items.filter(function (entry) { if (seen.has(entry.displayLocator)) return false; seen.add(entry.displayLocator); return true; }).map(function (entry) {
           return { key: entry.displayLocator, title: entry.title || entry.displayLocator, icon: "globe", description: entry.sourceLabel + " · " + entry.displayLocator,
-            disabledReason: entry.disabledReason && !["None", "IsolationUnqualified", "ProjectDefinitionRequired"].includes(entry.disabledReason) ? entry.disabledReason === "Removed" ? "Версия удалена" : "Источник недоступен" : "",
+            disabledReason: entry.disabledReason && !["None", "NativeUnavailable", "ProjectDefinitionRequired"].includes(entry.disabledReason) ? entry.disabledReason === "Removed" ? "Версия удалена" : "Источник недоступен" : "",
             payload: { locator: entry.displayLocator } };
         }); }
         var sections = [{ title: "Недавно", entries: rows(recent) }, { title: "Локальные страницы", entries: rows(entries.slice(0, 12)) }];
@@ -164,13 +199,17 @@
         suggest: suggestions
       }, selectMode);
     }
-    function selectMode(mode) { selectedMode = mode; presentation(); render(); }
+    function selectMode(mode) { selectedMode = mode; presentation(); render(); layoutNative(); }
     function render() {
       if (!active || disposed || !current) return;
       var home = current.status === "Home", removed = current.status === "Removed";
       content.hidden = selectedMode === "diff" && !!comparison;
-      if (comparison) { if (content.hidden) { comparison.activate(); return; } comparison.deactivate(); }
-      empty.hidden = !home && !removed && selectedMode === "source";
+      if (comparison) { if (content.hidden) { comparison.activate(); layoutNative(); return; } comparison.deactivate(); }
+      var nativeReady = !home && !removed && ["Starting", "Ready"].includes(current.status);
+      viewport.hidden = selectedMode !== "preview" || !nativeReady;
+      control.hidden = !current.manualControl; controlText.textContent = current.manualControl ? "Вы управляете" : "";
+      empty.hidden = !home && !removed && (selectedMode === "source" || selectedMode === "preview" && nativeReady);
+      layoutNative();
       source.hidden = files.hidden = home || removed || selectedMode !== "source";
       empty.classList.toggle("browser-home", home);
       if (home) {
@@ -222,6 +261,7 @@
         }
         if (!comparison && selectedMode === "diff") selectedMode = "source";
         providerActions.refresh(); if (homeView) { homeView.dispose(); homeView = null; } }
+      if (value.status === "Unavailable" && targetGeneration === value.documentGeneration && selectedMode === "preview") selectedMode = "source";
       surface.waiting(label(), value.message || " "); presentation(); render();
     }
     async function command(action, extra) {
@@ -244,10 +284,10 @@
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
         session = value.sessionId; apply(value); if (target.recordVisit) RNAssistantDockWorkspace.recordNavigation(value);
         if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
-        var rect = mount.getBoundingClientRect();
-        await command("Attach", { bounds: { visible: active && mount.isConnected && rect.width > 0 && rect.height > 0,
-          x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.min(rect.width, innerWidth - Math.max(0, rect.x)),
-          height: Math.min(rect.height, innerHeight - Math.max(0, rect.y)), viewportWidth: innerWidth, viewportHeight: innerHeight } });
+        renderer.layout(); await new Promise(function (resolve) { requestAnimationFrame(resolve); });
+        var bounds = nativeBounds(true); placementKey = JSON.stringify(bounds);
+        await command("Attach", { bounds: bounds });
+        layoutNative();
       }());
       try { await opening; } finally { opening = null; }
     }
@@ -261,8 +301,8 @@
       },
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
-      deactivate: function () { if (!active) return; active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
+      deactivate: function () { if (!active) return; active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
+      dispose: function () { if (disposed) return; disposed = true; active = false; cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
         if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
         RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
     };
@@ -286,7 +326,7 @@
   }
   window.RNAssistantBrowser = { open: open, openResource: openResource, create: create, key: key, unavailable: unavailable,
     openRequested: function (request) {
-      if (!request || !request.operationId || !request.browserTabId || !request.ownerScope || !request.ownerScope.chatId) return false;
+      if (!request || !request.operationId || !request.browserTabId || !request.ownerScope || !request.ownerScope.scopeId) return false;
       return open(request.locator, request.ownerScope, { browserTabId: request.browserTabId, operationId: request.operationId, title: request.title });
     },
     bootstrap: function (value) { available = value === true; },

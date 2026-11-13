@@ -11,11 +11,13 @@ compared and deleted without deleting CAS; active/live/pending entries are prote
 Plugin source and saved views use the common Browser. Old candidate Apply, published
 history writer, provider view/iframe/template/CSS were removed. Changed notifications
 refresh metadata; lost receipts reconcile their original operation. Capture/hash checks
-run on bounded worker work, never mtime guards. B02 still blocks authored execution.
+run on bounded worker work, never mtime guards. The shared native Browser now executes
+the local package; Windows evidence remains open.
 
-Local Browser package status (2026-11-13): B02 keeps authored page execution,
-commands and native preview source-only/unavailable; older iframe descriptions
-below are historical until the shared Browser route cutover. Plugin Check now uses
+Local Browser package status (2026-11-13, `16.23.0-dev`): visible pages and hidden
+command controllers share one lazy isolated environment, exact origins and response
+network policy. The existing SDK/data/command owners remain authoritative; older
+iframe descriptions below are historical. Windows/WebView2 qualification is open. Plugin Check now uses
 WorkspaceFileService CaptureSet: pinned plugin.json, the complete declared member-set,
 streamed CAS payloads and sorted file scopes/held read handles through publication.
 The resolved package is bounded to 512 files/256 MiB; vendor bytes remain exact CAS

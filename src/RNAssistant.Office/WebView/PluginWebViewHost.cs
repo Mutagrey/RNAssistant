@@ -15,13 +15,12 @@ using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.WebView
 {
-    // Command-only transport, gated by local execution qualification. No Shell frames
+    // Command-only transport in the shared isolated local environment. No Shell frames
     // or bridge access; the command controller never binds an Office session.
     public sealed class PluginWebViewHost : IPluginCommandExecutor, IPluginProjectPicker, IDisposable
     {
         private readonly PluginApplicationService _service;
-        private Task<CoreWebView2Environment> _environment;
-        private string _profile;
+        private readonly LocalBrowserEnvironment _environment;
         private readonly IntPtr _parent;
         private readonly string _assets;
         private readonly SynchronizationContext _ui;
@@ -29,9 +28,9 @@ namespace RNAssistant.Office.WebView
         private readonly HashSet<Task> _runs = new HashSet<Task>();
         private bool _closed;
         public Task Drained { get; private set; } = Task.CompletedTask;
-        public PluginWebViewHost(PluginApplicationService service, IntPtr parent, string webRoot)
+        internal PluginWebViewHost(PluginApplicationService service, IntPtr parent, string webRoot, LocalBrowserEnvironment environment)
         {
-            _service=service; _parent=parent; _assets=Path.Combine(webRoot,"plugin-host");
+            _environment=environment; _service=service; _parent=parent; _assets=Path.Combine(webRoot,"plugin-host");
             _ui=SynchronizationContext.Current ?? throw new InvalidOperationException("UI dispatcher required.");
             service.Executor=this; service.ProjectPicker=this;
         }
@@ -53,22 +52,21 @@ namespace RNAssistant.Office.WebView
         private async Task<string> ExecuteOnUi(PluginInstance operation, PluginCommandDefinition command, string argumentsJson, CancellationToken token, Action<string> progress)
         {
             if(_closed) throw new ObjectDisposedException(nameof(PluginWebViewHost));
-            BrowserIsolationPolicy.RequireExecution();
-            CoreWebView2Controller controller=null; Transport transport=null;
+            CoreWebView2Controller controller=null; Transport transport=null; LocalBrowserEnvironment.Lease lease=null;
             var completion=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             using(token.Register(() => _ui.Post(ignored => completion.TrySetCanceled(),null)))
             {
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    var environment=await (_environment ?? (_environment=CreateEnvironmentAsync()));
+                    lease=await _environment.AcquireAsync(); var environment=lease.Environment;
                     var options=environment.CreateCoreWebView2ControllerOptions(); options.ProfileName="RNAssistantLocal"; options.IsInPrivateModeEnabled=true;
                     controller=await environment.CreateCoreWebView2ControllerAsync(_parent,options);
                     token.ThrowIfCancellationRequested();
                     if(_closed) throw new OperationCanceledException();
                     controller.IsVisible=false; controller.Bounds=new Rectangle(0,0,1,1);
                     var core=controller.CoreWebView2;
-                    transport=new Transport(_service,core,_assets,operation); _transports.Add(transport);
+                    transport=new Transport(_service,core,_assets,operation,_environment); _transports.Add(transport);
                     var entry=operation.Origin+"/.host/runner.html";
                     core.NavigationStarting+=(s,e)=> { if(e.Uri!=entry) {e.Cancel=true;completion.TrySetException(new PluginException("plugin_navigation_denied","Command navigation denied."));} };
                     core.NavigationCompleted+=(s,e)=> { if(!e.IsSuccess) completion.TrySetException(new PluginException("plugin_load_failed","Command host failed to load.")); };
@@ -113,24 +111,9 @@ namespace RNAssistant.Office.WebView
                     if(transport!=null) {transport.Dispose();_transports.Remove(transport);}
                     controller?.Close();
                     if(transport!=null) await transport.Drained;
+                    lease?.Dispose();
                 }
             }
-        }
-        private async Task<CoreWebView2Environment> CreateEnvironmentAsync()
-        {
-            // One lazy local-only group per host, never the privileged Shell/Edge environment.
-            BrowserIsolationPolicy.RequireExecution();
-            _profile=Path.Combine(Path.GetTempPath(),"RNAssistant","LocalBrowser",Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_profile);
-            var environment=await CoreWebView2Environment.CreateAsync(null,_profile);
-            if(!string.Equals(Path.GetFullPath(environment.UserDataFolder),Path.GetFullPath(_profile),StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("WebView2 replaced the isolated profile.");
-            var profile=_profile;
-            environment.BrowserProcessExited+=(sender,args)=> {
-                _environment=null;
-                Task.Run(()=> {try{Directory.Delete(profile,true);}catch(IOException){}catch(UnauthorizedAccessException){}});
-            };
-            return environment;
         }
         private Task<T> OnUi<T>(Func<Task<T>> action)
         {
@@ -150,12 +133,13 @@ namespace RNAssistant.Office.WebView
             if(json==null || json.Length>1024*1024)throw new PluginException("plugin_message_limit","Plugin message exceeds its limit.");
             return JsonConvert.DeserializeObject<T>(json,new JsonSerializerSettings {MissingMemberHandling=MissingMemberHandling.Error,MaxDepth=32});
         }
-        private sealed class Transport : IDisposable
+        internal sealed class Transport : IDisposable
         {
             private readonly PluginApplicationService _service;
             private readonly CoreWebView2 _core;
             private readonly string _assets;
             private readonly PluginInstance _operation;
+            private readonly IDisposable _route;
                 private readonly HashSet<Stream> _bodies=new HashSet<Stream>();
             private readonly object _bodySync=new object();
             private long _bodyBytes;
@@ -163,11 +147,10 @@ namespace RNAssistant.Office.WebView
             private bool _closed;
             private readonly TaskCompletionSource<bool> _drained=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public Task Drained {get{return _drained.Task;}}
-            public Transport(PluginApplicationService service,CoreWebView2 core,string assets,PluginInstance operation)
+            public Transport(PluginApplicationService service,CoreWebView2 core,string assets,PluginInstance operation,LocalBrowserEnvironment environment)
             {
                 _service=service;_core=core;_assets=assets;_operation=operation ?? throw new ArgumentNullException(nameof(operation));
-                core.AddWebResourceRequestedFilter("*",CoreWebView2WebResourceContext.All,CoreWebView2WebResourceRequestSourceKinds.All);
-                core.WebResourceRequested+=OnResource;
+                _route=environment.Route(core,operation.Origin,args=>OnResource(core,args));
             }
             private async void OnResource(object sender,CoreWebView2WebResourceRequestedEventArgs e)
             {
@@ -216,12 +199,13 @@ namespace RNAssistant.Office.WebView
                         else bytes=await Task.Run(()=>_service.ReadPackageFile(instance,path));
                         mime=PluginStore.Mime(path);
                     }
-                    var headers="Content-Type: "+mime+"\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'\r\n";
+                    if(_closed)return;
+                    var headers=BrowserNetworkPolicy.Headers(mime);
                     e.Response=_core.Environment.CreateWebResourceResponse(Body(bytes),200,"OK",headers);
                 }
                 catch(Exception error)
                 {
-                    e.Response=_core.Environment.CreateWebResourceResponse(new MemoryStream(),403,"Plugin request refused","Cache-Control: no-store\r\n");
+                    if(!_closed)e.Response=_core.Environment.CreateWebResourceResponse(new MemoryStream(),403,"Plugin request refused",BrowserNetworkPolicy.Headers("text/plain"));
                     Diagnostics.RuntimeLog.Error("Plugin resource refused.",error);
                 }
                 finally{deferral.Complete();Finished();}
@@ -246,7 +230,7 @@ namespace RNAssistant.Office.WebView
             private void Finished(){_pending--;if(_closed && _pending==0)_drained.TrySetResult(true);}
             public void Dispose()
             {
-                if(_closed)return;_closed=true;_core.WebResourceRequested-=OnResource;
+                if(_closed)return;_closed=true;_route.Dispose();
                 Stream[] bodies;lock(_bodySync)bodies=_bodies.ToArray();foreach(var body in bodies)body.Dispose();
                 if(_pending==0)_drained.TrySetResult(true);
             }

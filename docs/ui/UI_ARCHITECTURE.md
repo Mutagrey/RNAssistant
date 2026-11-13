@@ -1,5 +1,13 @@
 # Архитектура UI RNAssistant
 
+## Interactive Browser viewport — In Review, 2026-11-13
+
+The existing Browser portal owns common chrome and a dedicated native viewport.
+Placement reports only the viewport rectangle; source/diff, hidden Dock tabs and
+Shell overlays hide the HWND. Runtime/native adapter owns execution and readiness;
+UI cannot promote it by setting a flag. RN.resources leaves the retired iframe
+channel and delegates to scoped native leases. No separate Browser or chat store.
+
 ## Agent-owned Browser placement — In Review, 2026-11-13
 
 Typed browserOpenRequested carries runtime-allocated identity to the existing Dock

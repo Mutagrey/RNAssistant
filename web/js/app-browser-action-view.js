@@ -2,7 +2,7 @@
   "use strict";
   if (global.RNAssistantBrowserActionView) return;
   // Presentation only. The native semantic owner supplies actual elements and verified outcomes.
-  global.RNAssistantBrowserActionView = { create: function (styles) {
+  global.RNAssistantBrowserActionView = { create: function (styles, options) {
     var host = document.createElement("div"), root = host.attachShadow({ mode: "closed" });
     host.setAttribute("aria-hidden", "true"); host.setAttribute("inert", "");
     host.setAttribute("data-rna-browser-action-view", "");
@@ -83,7 +83,7 @@
       hide: hide
     };
     ["pointerdown", "pointermove", "keydown", "input", "change"].forEach(function (type) {
-      document.addEventListener(type, function (event) { if (event.isTrusted) hide(); }, true);
+      document.addEventListener(type, function (event) { if (event.isTrusted && !(options && options.nativeOwned)) hide(); }, true);
     });
     ["resize", "scroll", "pagehide"].forEach(function (type) { global.addEventListener(type, hide, true); });
     document.addEventListener("visibilitychange", function () { if (document.hidden) hide(); });

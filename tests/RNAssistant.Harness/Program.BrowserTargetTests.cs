@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
                 var target = BrowserTargetResolver.Saved(source, metadata, exact);
                 AssertEqual(exact, target.ResourceUri, "saved target remains exact after head advances");
                 AssertEqual(BrowserTargetKind.HtmlArtifact, target.Kind, "saved snapshot has a distinct target kind");
-                AssertTrue(!target.Capabilities.Preview && target.Capabilities.PreviewReason == BrowserRefusalCode.IsolationUnqualified && target.Capabilities.Source && !target.Capabilities.Edit &&
+                AssertTrue(!target.Capabilities.Preview && target.Capabilities.PreviewReason == BrowserRefusalCode.NativeUnavailable && target.Capabilities.Source && !target.Capabilities.Edit &&
                     !target.Capabilities.Restore && !target.Capabilities.Annotations, "snapshot is immutable regardless of its current head");
                 RuntimeThrows<InvalidOperationException>(() => BrowserTargetResolver.Saved(source, metadata, exact + "/source"));
                 var foreign = NewSession(adapter); foreign.DocumentAuthorityId = "other-document";
@@ -50,7 +50,7 @@ namespace RNAssistant.Harness
                 AssertEqual(selected, source.ActiveHtmlArtifactId, "resolving a snapshot never selects it for editing");
                 var live = BrowserTargetResolver.Live(source);
                 AssertEqual(selected, live.ArtifactId, "live editor uses its addressed owner's selected publication");
-                AssertTrue(live.Capabilities.Edit && !live.Capabilities.Annotations && !live.Capabilities.CreateProject, "source editing retains its owner while active capture is unqualified");
+                AssertTrue(live.Capabilities.Edit && !live.Capabilities.Annotations && !live.Capabilities.CreateProject, "source editing retains its owner while native capabilities await attachment");
                 source.HtmlWorkspaceRecovery.CanMutate = false;
                 var blocked = BrowserTargetResolver.Live(source);
                 AssertEqual(BrowserTargetState.Ready, blocked.State, "retained source stays readable during recovery");

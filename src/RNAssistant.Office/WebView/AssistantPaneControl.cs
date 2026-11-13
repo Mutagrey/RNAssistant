@@ -32,6 +32,7 @@ namespace RNAssistant.Office.WebView
         private RNAssistant.Application.PluginApplicationService _plugins;
         private PluginWebViewHost _pluginHost;
         private LocalBrowserPageRuntime _externalBrowser;
+        private LocalBrowserEnvironment _localBrowserEnvironment;
         public TabularWebViewExecutor TabularExecutor { get; private set; }
         private Stopwatch _initialNavigationTimer;
         private DateTime _lastSlowPostReportUtc;
@@ -229,9 +230,15 @@ namespace RNAssistant.Office.WebView
                 : string.Empty;
 
             var core = _webView.CoreWebView2;
+            _localBrowserEnvironment = _localBrowserEnvironment ?? new LocalBrowserEnvironment(Handle);
+            var nativeBrowser = new LocalBrowserRenderer(this, _webView, _localBrowserEnvironment, _plugins, _webRoot,
+                (target, token) => _bridge.OpenBrowserContent(target, token), content => new BrowserResourceBinding(_controller, content), _bridge.PauseBrowserRunAsync);
             _externalBrowser = new LocalBrowserPageRuntime(request => _bridge.ResolveBrowserLocator(request),
                 value => PostBridgeMessage(JsonConvert.SerializeObject(new BrowserPageStateMessage { Payload = value })),
-                owner => _bridge.BrowserTargets(owner, ""), request => PostBridgeMessage(JsonConvert.SerializeObject(request)));
+                owner => _bridge.BrowserTargets(owner, ""), request => PostBridgeMessage(JsonConvert.SerializeObject(request)), nativeBrowser);
+            nativeBrowser.Navigate = _externalBrowser.ExecuteAsync;
+            _bridge.BrowserResourcesChanged = nativeBrowser.ResourceChanged;
+            nativeBrowser.OpenTab = request => PostBridgeMessage(JsonConvert.SerializeObject(request));
             _bridge.Browser = _externalBrowser;
             if (_bridge.WindowHost != null)
             {
@@ -249,7 +256,7 @@ namespace RNAssistant.Office.WebView
             }
             if (TabularExecutor != null) TabularExecutor.Dispose();
             TabularExecutor = new TabularWebViewExecutor(core.Environment, Handle);
-            try { _pluginHost = new PluginWebViewHost(_plugins, Handle, _webRoot); _plugins.EnsureDataTemplates(); }
+            try { _pluginHost = new PluginWebViewHost(_plugins, Handle, _webRoot, _localBrowserEnvironment); _plugins.EnsureDataTemplates(); }
             catch (Exception error) { _plugins.StartupError = error.Message; RuntimeLog.Error("Plugin host initialization failed.", error); }
             core.WebMessageReceived += OnWebMessageReceived;
             core.NavigationStarting += OnNavigationStarting;
@@ -728,6 +735,7 @@ namespace RNAssistant.Office.WebView
                 if (TabularExecutor != null) TabularExecutor.Dispose();
                 DetachInitializedWebView();
                 _pluginHost?.Dispose();
+                _localBrowserEnvironment?.Dispose(); _localBrowserEnvironment = null;
                 _plugins.Dispose();
                 _bridge.Dispose();
                 if (_resourceRequestsDrained.Task.IsCompleted)

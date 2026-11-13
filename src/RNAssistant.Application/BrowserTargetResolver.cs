@@ -39,7 +39,7 @@ namespace RNAssistant.Application
                 throw new InvalidOperationException("Этот ресурс не поддерживает HTML Browser.");
             if (!string.IsNullOrEmpty(artifact.AvailabilityIssue))
                 throw new InvalidOperationException("Источник Browser недоступен: " + artifact.AvailabilityIssue);
-            return BrowserIsolationPolicy.SourceOnly(new BrowserTargetDescriptor {
+            return new BrowserTargetDescriptor {
                 Kind = project ? BrowserTargetKind.HtmlArtifact : BrowserTargetKind.HtmlResource,
                 State = BrowserTargetState.Ready, ChatId = source.Id, DocumentId = source.DocumentAuthorityId ?? "",
                 ResourceUri = exactUri, ArtifactId = artifact.Id, Revision = artifact.Revision,
@@ -47,11 +47,11 @@ namespace RNAssistant.Application
                 OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = source.DocumentAuthorityId ?? source.Id, ChatId = source.Id },
                 ContentRevision = artifact.Id + ":" + artifact.Revision, Immutable = true, Title = artifact.Title,
                 DisplayLocator = BrowserLocalLocator.ForResource(artifact.Id + "~" + artifact.Revision),
-                Capabilities = new BrowserTargetCapabilities { Source = true, Preview = project,
+                Capabilities = new BrowserTargetCapabilities { Source = true, PreviewReason = BrowserRefusalCode.NativeUnavailable,
                     Versions = project && !string.IsNullOrEmpty(source.DocumentAuthorityId), ExportProject = project,
                     CreateProject = !string.IsNullOrEmpty(source.DocumentAuthorityId) && (project || artifact.ContentByteLength <= HtmlProjectImportService.MaximumSourceBytes),
                     CreateProjectReason = !project && artifact.ContentByteLength > HtmlProjectImportService.MaximumSourceBytes ? BrowserRefusalCode.InvalidContent : BrowserRefusalCode.None }
-            });
+            };
         }
 
         // Called after the existing HTML owner refreshes its exact selected publication.
@@ -77,11 +77,11 @@ namespace RNAssistant.Application
             result.DisplayLocator = BrowserLocalLocator.ForResource(HtmlWorkspaceIdentity.LogicalId(artifact.Id));
             var files = source.HtmlWorkspace?.Files;
             result.Capabilities = new BrowserTargetCapabilities {
-                Source = files != null && files.Count != 0, Preview = files != null && files.Any(file => file.Kind == "html"),
+                Source = files != null && files.Count != 0, PreviewReason = BrowserRefusalCode.NativeUnavailable,
                 Edit = mutable, Versions = true, SaveVersion = mutable, Restore = mutable, ExportProject = true,
-                Annotations = mutable && files != null && files.Any(file => file.Kind == "html")
+                Annotations = false
             };
-            return BrowserIsolationPolicy.SourceOnly(result);
+            return result;
         }
 
         private static void RequireScope(ChatSession source)

@@ -1,5 +1,13 @@
 # План модернизации production UI
 
+## F2c1 native cutover — In Review, 2026-11-13
+
+Review: open a local Browser, switch Page/Source, open a menu/dialog, resize to
+420px/125%, take manual control, then close. Dedicated viewport placement and
+ready-state promotion are implemented; use the actual Windows host to review the
+rendered page and takeover. Keep common export and remaining coordinate/selection
+adapters ahead of 07. Earlier source-only completion wording is superseded.
+
 ## F2c scope correction — in progress, 2026-11-13
 
 User rejected source-only Browser as the final result. Finish real internal page

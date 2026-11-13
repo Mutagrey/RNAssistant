@@ -5,7 +5,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)BrowserContentSession.cs" Link="Application\BrowserContentSession.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceHtmlVersionService.Browser.cs" Link="Application\WorkspaceHtmlVersionService.Browser.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.BrowserContent.cs" Link="Application\PluginApplicationService.BrowserContent.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BrowserIsolationPolicy.cs" Link="Application\BrowserIsolationPolicy.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserRendererContracts.cs" Link="Application\Contracts\BrowserRendererContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserSourceReader.cs" Link="Application\BrowserSourceReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\BrowserResourceSchema.cs" Link="Application\Workspace\BrowserResourceSchema.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserSourceContracts.cs" Link="Application\Contracts\BrowserSourceContracts.cs" />

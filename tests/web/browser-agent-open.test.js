@@ -12,7 +12,7 @@ const {withPreviewPage}=require('./preview-session');
       p.calls.push(structuredClone(payload));let value=p.pages.get(payload.browserTabId);
       if(payload.action==='Open'){
         if(!value){value={browserTabId:payload.browserTabId,operationId:payload.operationId,sessionId:'native-'+payload.browserTabId,ownerScope:payload.ownerScope,
-          url:payload.locator,title:'Agent source',revision:0,documentGeneration:1,status:'Unavailable',reason:'IsolationUnqualified',
+          url:payload.locator,title:'Agent source',revision:0,documentGeneration:1,status:'Unavailable',reason:'NativeUnavailable',
           target:{kind:'WorkspaceHtmlProject',state:'Ready',ownerScope:payload.ownerScope,workspaceId:payload.ownerScope.scopeId,capabilities:{source:true}}};p.pages.set(payload.browserTabId,value);}
         if(p.delay)return new Promise(resolve=>{p.pending=()=>resolve(structuredClone(value));});
       }

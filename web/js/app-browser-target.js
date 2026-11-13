@@ -41,7 +41,8 @@
     try {
       var parts = path.slice(1).split("/").map(decodeURIComponent);
       if (path[0] !== "/" || parts.length > 64 || parts.some(function (part) { return !part || part.length > 256 || part === "." || part === ".." || /[\\/:%?#\u0000-\u001f\u007f]/.test(part); })) return null;
-      if (parts[0] === "resources" ? !(parts.length === 2 || parts.length === 4 && parts[2] === "versions") :
+      var resourcePrefix = parts.length >= 4 && parts[2] === "versions" ? 4 : 2;
+      if (parts[0] === "resources" ? !(parts.length === resourcePrefix || parts.length > resourcePrefix + 1 && parts[resourcePrefix] === "files") :
           !(["projects", "plugins"].includes(parts[0]) && (parts[2] === "source" && parts.length >= 4 || parts[2] === "versions" && parts.length >= 5))) return null;
       return path;
     } catch (_) { return null; }

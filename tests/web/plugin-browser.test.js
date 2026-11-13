@@ -23,7 +23,7 @@ const {withPreviewPage}=require('./preview-session');
       if(payload.action==='Open'){
         const pluginId=payload.locator.split('/')[2],scope={kind:'Workspace',scopeId:'ws-'+pluginId};
         value={browserTabId:payload.browserTabId,sessionId:'session-'+payload.browserTabId,operationId:payload.operationId,ownerScope:payload.ownerScope,
-          revision:1,documentGeneration:1,url:payload.locator,status:'Unavailable',reason:'IsolationUnqualified',title:pluginId,
+          revision:1,documentGeneration:1,url:payload.locator,status:'Unavailable',reason:'NativeUnavailable',title:pluginId,
           target:{kind:'PluginSource',state:'Ready',pluginId,workspaceId:scope.scopeId,ownerScope:scope,displayLocator:payload.locator,
             entryPath:'plugin.json',capabilities:{source:true,versions:true,saveVersion:false,saveReason:'InvalidContent'}}};p.pages.set(payload.browserTabId,value);
       }else if(payload.action==='Close'){value.status='Closed';}

@@ -193,7 +193,7 @@ namespace RNAssistant.Application
                 WorkspaceId = registration.SourceWorkspaceId, OwnerScope = scope, DisplayLocator = locator.ContentLocator,
                 SavedVersionId = locator.VersionId, EntryPath = requested.EntryPath, RelativePath = locator.RelativePath,
                 Capabilities = new BrowserTargetCapabilities { Source = !removed, Versions = true, SaveVersion = writable,
-                    ActivateVersion = locator.VersionId != null && !removed, PreviewReason = BrowserRefusalCode.IsolationUnqualified,
+                    ActivateVersion = locator.VersionId != null && !removed, PreviewReason = BrowserRefusalCode.NativeUnavailable,
                     SaveReason = writable ? BrowserRefusalCode.None : BrowserRefusalCode.ReadOnly } };
             return target;
         }

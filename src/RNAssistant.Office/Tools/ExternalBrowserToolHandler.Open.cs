@@ -64,7 +64,7 @@ namespace RNAssistant.Office.Tools
                 using (_documentAccess?.Invoke(_session)) { }
                 var ready = page.Status == BrowserPageStatus.Ready;
                 var result = new ToolHandlerResult(RuntimeResult.Ok(ready ? "The exact Browser tab is attached. Discover its live page target and read it before acting." :
-                    "The exact source tab is attached. Page execution, semantic page reads, media and input remain unavailable until native isolation is qualified.",
+                    "The exact source tab is attached. Page execution, semantic page reads, media and input are unavailable in the current host.",
                     JsonConvert.SerializeObject(new OpenResult { Status = ready ? "ready" : "source_only", ExecutionAvailable = ready })), ToolEffectEvidence.VerifiedChange);
                 return context.Complete(result);
             }

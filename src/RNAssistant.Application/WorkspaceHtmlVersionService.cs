@@ -43,7 +43,7 @@ namespace RNAssistant.Application
                     WorkspaceId = locator.Key, SavedVersionId = locator.VersionId, Immutable = locator.VersionId != null,
                     OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = locator.Key, ChatId = request.OwnerScope.ChatId },
                     ChatId = request.OwnerScope.ChatId, RelativePath = locator.RelativePath, DisplayLocator = locator.ContentLocator, Title = workspace.Name,
-                    Capabilities = new BrowserTargetCapabilities { Source = true, Versions = true, PreviewReason = BrowserRefusalCode.IsolationUnqualified,
+                    Capabilities = new BrowserTargetCapabilities { Source = true, Versions = true, PreviewReason = BrowserRefusalCode.NativeUnavailable,
                         SaveReason = locator.VersionId != null ? BrowserRefusalCode.ReadOnly : BrowserRefusalCode.None } };
                 if (locator.VersionId != null)
                 {
@@ -83,7 +83,7 @@ namespace RNAssistant.Application
                 if (target != null)
                 {
                     target.State = BrowserTargetState.Unavailable; target.Reason = BrowserRefusalCode.TargetUnavailable; target.Message = error.Message;
-                    target.Capabilities = new BrowserTargetCapabilities { Versions = true, SaveReason = BrowserRefusalCode.TargetUnavailable, PreviewReason = BrowserRefusalCode.IsolationUnqualified };
+                    target.Capabilities = new BrowserTargetCapabilities { Versions = true, SaveReason = BrowserRefusalCode.TargetUnavailable, PreviewReason = BrowserRefusalCode.NativeUnavailable };
                 }
                 return new BrowserResolveResult { Target = target, Reason = BrowserRefusalCode.TargetUnavailable, Message = error.Message };
             }

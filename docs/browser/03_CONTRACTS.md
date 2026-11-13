@@ -1,5 +1,28 @@
 # Universal Browser: предлагаемые контракты
 
+## Native consumer cutover — F2c1, 2026-11-13
+
+IBrowserRenderer is the sole native adapter of LocalBrowserPageRuntime. The runtime
+serializes placement/navigation/close and retains session/history/open receipts;
+metadata alone grants no execution capability. Attach waits for native readiness.
+Native page responses use captured exact members; file/query/hash navigation never
+turns into arbitrary HTTP access. Document resource members may be addressed as
+`/resources/{key}[/versions/{id}]/files/{relativePath}`.
+
+RN.resources open/read/close/subscribe uses a per-page bounded lease owner over the
+existing ResourceDataPlane. It never holds its lock across host reads. HTML assembly
+uses existing preview/vendor code in a controlled isolated world before authored JS
+runs. Plugin SDK/commands share the isolated environment and their original grants.
+The final consumer closes the worker broker; profile cleanup waits for process exit.
+
+Input uses native CDP, not DOM event dispatch/value assignment. Semantic admission
+pins exact observation/geometry/control state; read-back is bounded and Unknown is
+not retried. OS hooks distinguish physical input from agent input. Hook failure
+refuses agent input while preserving manual page execution. Native dialogs and file
+choosers are not silently accepted by agent actions. Screenshot inspection refuses
+private/form/opaque/embedded/shadow content; native privacy evidence remains open.
+Coordinate actions and native selection/highlight remain the next adapter slice.
+
 ## Interactive content binding — F2c in progress, 2026-11-13
 
 BrowserContentSession is a transient member list over existing captured CAS/package

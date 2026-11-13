@@ -7,9 +7,8 @@ using RNAssistant.Application.Contracts;
 
 namespace RNAssistant.Application
 {
-    // The host's sole local tab/session owner. No renderer is created while B02 is open.
-    // Source-only navigation still has exact scope, bounded history and attach receipts.
-    public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IDisposable
+    // The sole local tab/session/history owner; the native adapter owns rendering/input only.
+    public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IBrowserMediaSource, IDisposable
     {
         private sealed class Visit { public BrowserOwnerScope Owner; public string Locator; }
         private sealed class Page
@@ -20,6 +19,7 @@ namespace RNAssistant.Application
             public int Position = -1;
             public BrowserBoundsDto Bounds;
         }
+        private readonly SemaphoreSlim _commands = new SemaphoreSlim(1, 1);
         private readonly object _sync = new object();
         private readonly Dictionary<string, Page> _pages = new Dictionary<string, Page>(StringComparer.Ordinal);
         private readonly Dictionary<string, Page> _operations = new Dictionary<string, Page>(StringComparer.Ordinal);
@@ -27,11 +27,55 @@ namespace RNAssistant.Application
         private readonly Func<BrowserResolveRequest, BrowserResolveResult> _resolve;
         private readonly Action<BrowserPageStateDto> _publish;
         private bool _disposed;
+        private readonly IBrowserRenderer _renderer;
+        private const string NativeUnavailable = "Native Browser недоступен в этом host. Исходники и версии доступны.";
         public LocalBrowserPageRuntime(Func<BrowserResolveRequest, BrowserResolveResult> resolve, Action<BrowserPageStateDto> publish,
-            Func<BrowserOwnerScope, IReadOnlyList<BrowserTargetDescriptor>> sourceCatalog = null, Action<BrowserDockOpenRequest> requestDockOpen = null)
-        { _resolve = resolve ?? throw new ArgumentNullException(nameof(resolve)); _publish = publish; _sourceCatalog = sourceCatalog; _requestDockOpen = requestDockOpen; }
+            Func<BrowserOwnerScope, IReadOnlyList<BrowserTargetDescriptor>> sourceCatalog = null, Action<BrowserDockOpenRequest> requestDockOpen = null, IBrowserRenderer renderer = null)
+        { _resolve = resolve ?? throw new ArgumentNullException(nameof(resolve)); _publish = publish; _sourceCatalog = sourceCatalog; _requestDockOpen = requestDockOpen; _renderer = renderer; if (_renderer != null) _renderer.Changed += NativeChanged; }
 
-        public Task<BrowserPageStateDto> ExecuteAsync(BrowserCommandPayload request, CancellationToken token)
+        public async Task<BrowserPageStateDto> ExecuteAsync(BrowserCommandPayload request, CancellationToken token)
+        {
+            await _commands.WaitAsync(token).ConfigureAwait(false);
+            try { return await DeliverAsync(request, token).ConfigureAwait(false); }
+            finally { _commands.Release(); }
+        }
+        private async Task<BrowserPageStateDto> DeliverAsync(BrowserCommandPayload request, CancellationToken token)
+        {
+            var result = await ExecuteCoreAsync(request, token).ConfigureAwait(false);
+            if (_renderer != null) {
+                try { result = await _renderer.UpdateAsync(request, result, token).ConfigureAwait(false); }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception error) when (request.Action != BrowserCommandKind.ResumeAgent && request.Action != BrowserCommandKind.Focus && request.Action != BrowserCommandKind.Layout) {
+                    result.Status = BrowserPageStatus.Unavailable; result.Reason = BrowserRefusalCode.NativeUnavailable; result.Message = error.Message;
+                    if (result.Target?.Capabilities != null) { result.Target.Capabilities.Preview = result.Target.Capabilities.Interact = result.Target.Capabilities.Media = false;
+                    result.Target.Capabilities.PreviewReason = result.Reason; }
+                }
+                lock (_sync) {
+                    Page page;
+                    if (result.Status != BrowserPageStatus.Closed && (!_pages.TryGetValue(result.BrowserTabId, out page) || page.State.SessionId != result.SessionId || page.State.DocumentGeneration > result.DocumentGeneration))
+                        throw new InvalidOperationException("Browser changed during native delivery.");
+                    if (_pages.TryGetValue(result.BrowserTabId, out page)) { result.Revision = Math.Max(result.Revision, page.State.Revision) + 1; page.State = Copy(result); }
+                }
+            }
+            ObserveAgentOpen(request, result); _publish?.Invoke(Copy(result)); return Copy(result);
+        }
+        private void NativeChanged(BrowserPageStateDto state)
+        {
+            BrowserPageStateDto value;
+            lock (_sync) {
+                Page page;
+                if (_disposed || !_pages.TryGetValue(state.BrowserTabId, out page) || page.State.SessionId != state.SessionId || page.State.DocumentGeneration > state.DocumentGeneration) return;
+                if (page.State.Url != state.Url) {
+                    page.History.RemoveRange(page.Position + 1, page.History.Count - page.Position - 1);
+                    page.History.Add(new Visit { Owner = state.OwnerScope, Locator = state.Url });
+                    if (page.History.Count > 64) page.History.RemoveAt(0); page.Position = page.History.Count - 1;
+                }
+                value = Copy(state); value.Revision = Math.Max(value.Revision, page.State.Revision) + 1;
+                value.CanGoBack = page.Position > 0; value.CanGoForward = page.Position + 1 < page.History.Count; page.State = value;
+            }
+            _publish?.Invoke(Copy(value));
+        }
+        private Task<BrowserPageStateDto> ExecuteCoreAsync(BrowserCommandPayload request, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             BrowserPageStateDto result;
@@ -81,14 +125,13 @@ namespace RNAssistant.Application
                             if (!SameBounds(page.Bounds, request.Bounds)) { page.State.ViewportRevision++; page.Bounds = request.Bounds; }
                             break;
                         case BrowserCommandKind.Focus: case BrowserCommandKind.Stop: break;
-                        default: throw new InvalidOperationException(BrowserIsolationPolicy.Message);
+                        case BrowserCommandKind.ResumeAgent: if (_renderer == null) throw Unavailable(); break;
+                        default: throw new InvalidOperationException("Unsupported Browser command.");
                     }
                     page.State.Revision++;
                 }
                 result = Copy(page.State);
             }
-            ObserveAgentOpen(request, result);
-            _publish?.Invoke(result);
             return Task.FromResult(result);
         }
         private void Navigate(Page page, BrowserOwnerScope owner, string locator, bool append)
@@ -96,15 +139,17 @@ namespace RNAssistant.Application
             var resolved = _resolve(new BrowserResolveRequest { OwnerScope = owner, Locator = locator });
             if (resolved?.Target == null) throw new InvalidOperationException(resolved?.Message ?? "Локальная цель недоступна.");
             var state = page.State;
-            state.OwnerScope = owner; state.Target = BrowserIsolationPolicy.SourceOnly(resolved.Target);
+            state.OwnerScope = owner; state.Target = resolved.Target;
             state.Url = resolved.Locator; state.Title = resolved.Target.Title;
             state.DocumentGeneration++; state.ControlRevision++; state.Revision++;
             state.Status = resolved.Target.Kind == BrowserTargetKind.Home ? BrowserPageStatus.Home :
                 resolved.Target.State == BrowserTargetState.Removed ? BrowserPageStatus.Removed : BrowserPageStatus.Unavailable;
             state.Reason = state.Status == BrowserPageStatus.Home ? BrowserRefusalCode.None : state.Status == BrowserPageStatus.Removed ? BrowserRefusalCode.Removed :
-                resolved.Reason != BrowserRefusalCode.None ? resolved.Reason : BrowserIsolationPolicy.ExecutionRefusal;
+                resolved.Reason != BrowserRefusalCode.None ? resolved.Reason : BrowserRefusalCode.NativeUnavailable;
             state.Message = state.Status == BrowserPageStatus.Home ? "" : state.Status == BrowserPageStatus.Removed ? "Эта версия удалена из каталога." :
-                resolved.Message ?? BrowserIsolationPolicy.Message;
+                resolved.Message ?? (_renderer == null ? NativeUnavailable : "Загрузка локальной страницы…");
+            if (_renderer == null && state.Target.Capabilities != null) { state.Target.Capabilities.Preview = state.Target.Capabilities.Interact = state.Target.Capabilities.Media = false; state.Target.Capabilities.PreviewReason = BrowserRefusalCode.NativeUnavailable; }
+            if (_renderer != null && state.Target.State == BrowserTargetState.Ready && state.Target.Kind != BrowserTargetKind.Home) { state.Status = BrowserPageStatus.Starting; state.Reason = BrowserRefusalCode.None; }
             if (append)
             {
                 page.History.RemoveRange(page.Position + 1, page.History.Count - page.Position - 1);
@@ -144,13 +189,16 @@ namespace RNAssistant.Application
         private static bool SameBounds(BrowserBoundsDto a, BrowserBoundsDto b) => a != null && a.Visible == b.Visible && a.X == b.X && a.Y == b.Y &&
             a.Width == b.Width && a.Height == b.Height && a.ViewportWidth == b.ViewportWidth && a.ViewportHeight == b.ViewportHeight;
         private static BrowserPageStateDto Copy(BrowserPageStateDto value) => Newtonsoft.Json.JsonConvert.DeserializeObject<BrowserPageStateDto>(Newtonsoft.Json.JsonConvert.SerializeObject(value));
-        public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId) => new BrowserPageHandle[0];
-        public Task<BrowserObservation> ReadAsync(BrowserPageHandle target, CancellationToken token) { throw Unavailable(); }
-        public Task PrepareAsync(BrowserPageHandle target, string revision, string preparation, BrowserActionRequest request, CancellationToken token) { throw Unavailable(); }
-        public Task<BrowserActionResult> ActAsync(BrowserPageHandle target, string preparation, Action dispatch, CancellationToken token, bool navigation = false) { throw Unavailable(); }
-        public void BlockActions(BrowserPageHandle target) { }
-        public void PresentResult(BrowserPageHandle target, string preparation, BrowserActionEffect effect) { }
-        private static InvalidOperationException Unavailable() => new InvalidOperationException(BrowserIsolationPolicy.Message);
+        public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId) => _renderer?.TargetsFor(chatId) ?? new BrowserPageHandle[0];
+        public Task<BrowserObservation> ReadAsync(BrowserPageHandle target, CancellationToken token) => _renderer?.ReadAsync(target, token) ?? throw Unavailable();
+        public Task PrepareAsync(BrowserPageHandle target, string revision, string preparation, BrowserActionRequest request, CancellationToken token) => _renderer?.PrepareAsync(target, revision, preparation, request, token) ?? throw Unavailable();
+        public Task<BrowserActionResult> ActAsync(BrowserPageHandle target, string preparation, Action dispatch, CancellationToken token, bool navigation = false) => _renderer?.ActAsync(target, preparation, dispatch, token, navigation) ?? throw Unavailable();
+        public void BlockActions(BrowserPageHandle target) { _renderer?.BlockActions(target); }
+        public void PresentResult(BrowserPageHandle target, string preparation, BrowserActionEffect effect) { _renderer?.PresentResult(target, preparation, effect); }
+        public Task<BrowserMediaCapture> ReadMediaAsync(BrowserPageHandle target, CancellationToken token) => _renderer?.ReadMediaAsync(target, token) ?? throw Unavailable();
+        public bool IsCaptureCurrent(BrowserMediaCapture capture) => _renderer?.IsCaptureCurrent(capture) == true;
+        private static InvalidOperationException Unavailable() => new InvalidOperationException(NativeUnavailable);
+        private Task _nativeReset = Task.CompletedTask;
         public void Reset()
         {
             BrowserPageStateDto[] closed;
@@ -158,11 +206,12 @@ namespace RNAssistant.Application
                 foreach (var operation in _agentOpens.Values.Where(o => !o.Completion.Task.IsCompleted)) operation.Completion.TrySetException(new InvalidOperationException("The Browser owner reset."));
                 closed = _pages.Values.Select(page => { page.State.Status = BrowserPageStatus.Closed;
                     page.State.Attached = false; page.State.Revision++; return Copy(page.State); }).ToArray(); _pages.Clear(); }
+            if (_renderer != null) _nativeReset = _renderer.ResetAsync();
             foreach (var state in closed) {
                 ObserveAgentOpen(new BrowserCommandPayload { Action = BrowserCommandKind.Close }, state); _publish?.Invoke(state);
             }
         }
-        public Task ResetAsync() { Reset(); return Task.CompletedTask; }
-        public void Dispose() { lock (_sync) { if (_disposed) return; _disposed = true; } Reset(); }
+        public async Task ResetAsync() { Reset(); await _nativeReset.ConfigureAwait(false); }
+        public void Dispose() { lock (_sync) { if (_disposed) return; _disposed = true; } Reset(); if (_renderer != null) { _renderer.Changed -= NativeChanged; _renderer.Dispose(); } }
     }
 }

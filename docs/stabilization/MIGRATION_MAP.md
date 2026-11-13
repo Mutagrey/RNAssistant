@@ -1,5 +1,14 @@
 # Current-to-target migration map
 
+## Native local Browser cutover — F2c1, 2026-11-13
+
+Owner: Browser/native integration. LocalBrowserRenderer/Page/Environment now consume
+BrowserContentSession and the existing SDK/data-plane/assembler owners. Deleted
+BrowserIsolationPolicy and the old HTML iframe resource-control listener/client;
+there is no second authored iframe path. Source-only remains an explicit host/runtime
+unavailable state, not the product behavior. Native coordinate/selection delivery
+and common autonomous export are unfinished work, not compatibility adapters.
+
 ## F2c interactive delivery — in progress, 2026-11-13
 
 Owner: Browser/native integration. BrowserContentSession binds existing owners to

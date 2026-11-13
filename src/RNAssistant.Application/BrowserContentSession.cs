@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Models;
 
 namespace RNAssistant.Application
 {
@@ -20,10 +21,12 @@ namespace RNAssistant.Application
         public string EntryPath { get; }
         public string Origin { get; }
         public PluginInstance Plugin { get; }
+        public HtmlWorkspaceSnapshot HtmlWorkspace { get; }
         public Task Drained { get; private set; } = Task.CompletedTask;
 
         public BrowserContentSession(BrowserTargetDescriptor target, IEnumerable<string> members, string entryPath,
-            Func<string, CancellationToken, Stream> read, Action validate, PluginInstance plugin = null, Func<Task> close = null)
+            Func<string, CancellationToken, Stream> read, Action validate, PluginInstance plugin = null, Func<Task> close = null,
+            HtmlWorkspaceSnapshot htmlWorkspace = null)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             var paths = members?.Take(513).ToArray();
@@ -33,6 +36,7 @@ namespace RNAssistant.Application
             Members = Array.AsReadOnly(paths); EntryPath = entryPath;
             _read = read ?? throw new ArgumentNullException(nameof(read)); _validate = validate ?? throw new ArgumentNullException(nameof(validate));
             Plugin = plugin; _close = close;
+            HtmlWorkspace = htmlWorkspace;
             Origin = plugin?.Origin ?? "https://page-" + Guid.NewGuid().ToString("N") + ".rnassistant.invalid";
         }
         public static bool ValidPath(string path)

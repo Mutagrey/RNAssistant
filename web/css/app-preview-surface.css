@@ -49,6 +49,7 @@
 .browser-object-content { flex:1; overflow:hidden; }
 .browser-object-content [hidden] { display:none; }
 .browser-document-file { flex:none; margin:var(--space-2); }
+.browser-native-viewport { flex:1; min-height:0; }
 .browser-document-source { flex:1; min-height:0; overflow:hidden; }
 .browser-object-content[hidden], .browser-source-diff[hidden] { display:none; }
 .browser-source-diff { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; padding:var(--space-2); gap:var(--space-2); }
@@ -57,3 +58,6 @@
 .browser-source-diff-pair, .browser-source-diff-note, .browser-source-diff-status { font-size:var(--text-sm); overflow-wrap:anywhere; }
 .browser-source-diff-note { margin:0; color:var(--ink-muted); }
 .browser-source-diff-output { flex:1; min-height:0; overflow:auto; }
+
+.browser-control { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); padding:var(--space-2); border-bottom:1px solid var(--line); font:var(--text-sm) var(--font); }
+.browser-control[hidden] { display:none; }
