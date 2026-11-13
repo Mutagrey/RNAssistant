@@ -45,7 +45,7 @@ namespace RNAssistant.Application
             if (_renderer != null) {
                 try { result = await _renderer.UpdateAsync(request, result, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { throw; }
-                catch (Exception error) when (request.Action != BrowserCommandKind.ResumeAgent && request.Action != BrowserCommandKind.Focus && request.Action != BrowserCommandKind.Layout) {
+                catch (Exception error) when (request.Action != BrowserCommandKind.ResumeAgent && request.Action != BrowserCommandKind.Focus && request.Action != BrowserCommandKind.Layout && request.Action != BrowserCommandKind.VisualControl) {
                     result.Status = BrowserPageStatus.Unavailable; result.Reason = BrowserRefusalCode.NativeUnavailable; result.Message = error.Message;
                     if (result.Target?.Capabilities != null) { result.Target.Capabilities.Preview = result.Target.Capabilities.Interact = result.Target.Capabilities.Media = false;
                     result.Target.Capabilities.PreviewReason = result.Reason; }
@@ -125,7 +125,7 @@ namespace RNAssistant.Application
                             if (!SameBounds(page.Bounds, request.Bounds)) { page.State.ViewportRevision++; page.Bounds = request.Bounds; }
                             break;
                         case BrowserCommandKind.Focus: case BrowserCommandKind.Stop: break;
-                        case BrowserCommandKind.ResumeAgent: if (_renderer == null) throw Unavailable(); break;
+                        case BrowserCommandKind.VisualControl: case BrowserCommandKind.ResumeAgent: if (_renderer == null) throw Unavailable(); break;
                         default: throw new InvalidOperationException("Unsupported Browser command.");
                     }
                     page.State.Revision++;

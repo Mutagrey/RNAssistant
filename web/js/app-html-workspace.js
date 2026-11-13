@@ -160,10 +160,6 @@
       return open(state.activeChatId, { mode: options && options.purpose === "edit" ? "edit" : "preview",
         selection: kind === "html_workspace" ? null : { type: kind === "plan" ? "plan" : "artifact", id: artifactId(artifact) } });
     },
-    showAnnotation: async function (item, chatId) {
-      if (!open(chatId, { mode: "preview" })) return;
-      var editor = view(chatId); if (await editor.ready()) editor.annotations.showSent(item);
-    },
     isDirty: function (chatId) { var editor = view(chatId); return !!editor && editor.dirty(); },
     flushForCheckpoint: function (target) { var editor = view(target.chatId); return editor ? editor.flushForCheckpoint(target) : Promise.resolve(false); },
     canDelete: function (scope) {
@@ -171,7 +167,6 @@
       window.alert("Сохраните правки или закройте HTML-редактор перед удалением его чата."); return false;
     },
     closeDeleted: function (scope) { affected(scope).forEach(function (editor) { RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key(editor.target)); }); },
-    annotations: function (chatId) { var editor = view(chatId); return editor && editor.annotations; },
     onSnapshot: function (snapshot) { var editor = view(snapshot.activeChatId); if (editor) editor.onSnapshot(snapshot); }
   };
 }());

@@ -50,6 +50,7 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
@@ -408,6 +409,7 @@
     <Compile Include="WebView\LocalBrowserPage.Control.cs" />
     <Compile Include="WebView\LocalBrowserPage.Html.cs" />
     <Compile Include="WebView\LocalBrowserPage.Media.cs" />
+    <Compile Include="WebView\LocalBrowserPage.Visual.cs" />
     <Compile Include="WebView\LocalBrowserPhysicalInput.cs" />
     <Compile Include="WebView\BrowserResourceBinding.cs" />
     <Compile Include="Contracts\BrowserResourceContracts.cs" />

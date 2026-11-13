@@ -159,11 +159,7 @@
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }
   window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){el('Manager').hidden=false;},select:select,item:item,
-    showAnnotation:async function(annotation,target){
-      var plugin=items.find(function(item){return item.sourceWorkspaceId===target.workspaceId;});
-      if(!plugin||!await openSourceChat(target.sessionId,plugin)||!await select(plugin.pluginId))return;
-      status('Просмотр аннотации требует подтверждённого native Browser.',true);
-    },
+
     openSourceChat:openSourceChat,
     onChatSnapshot:function(){},
     isChatBusy:function(){return busy;},

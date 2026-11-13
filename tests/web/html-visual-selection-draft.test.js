@@ -1,80 +1,33 @@
-"use strict";
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const vm = require("node:vm");
-
-const elements = new Map();
-function element(id) {
-  if (!elements.has(id)) elements.set(id, { disabled: false, textContent: "", listeners: {},
-    addEventListener(type, callback) { this.listeners[type] = callback; }, focus() { this.focused = true; } });
-  return elements.get(id);
-}
-const calls = [], navigation = [], drafts = new Map();
-let selected = { generation: 4, selection: { tag: "button", selector: "button:nth-of-type(1)" } };
-let stageResponse = () => Promise.resolve({ resource: { Id: "selection-1", FileName: "html-selection-button.json" } });
-const state = { activeChatId: "office-chat", activeHtmlArtifactId: "html-r1",
-  artifacts: [{ Id: "html-r1", Kind: "html_workspace", Revision: 1 }] };
-const model = { prop(source, pascal, camel, fallback) {
-    return source && source[camel] !== undefined ? source[camel] : source && source[pascal] !== undefined ? source[pascal] : fallback;
-  }, artifactId: item => item.Id, artifactKind: item => item.Kind };
-const context = vm.createContext({ state, $: element, ATTACHMENT_MAX_FILES: 10,
-  log() {}, updateComposerInputState() {},
-  hasActiveMessageEdit: () => false,
-  setAttachmentStatus() {},
-  attachmentId: item => item.Id,
-  officeChatDraftText: () => drafts.get("office-chat").text,
-  readOfficeDraft: id => drafts.get(id),
-  saveOfficeDraft: (id, text, attachments) => drafts.set(id, { text, attachments }),
-  restoreChatDraft: id => { assert.equal(id, "office-chat"); },
-  switchTab: name => navigation.push(name),
-  send: (type, payload) => { calls.push({ type, payload });
-    return type === "stageHtmlVisualSelection" ? stageResponse() : Promise.resolve({}); },
-  window: null });
-context.window = context;
-vm.runInContext(fs.readFileSync("web/js/app-conversation-input.js", "utf8"), context);
-context.addEventListener = () => {};
-context.RNAssistantHtmlWorkspaceModel = { create: () => model };
-context.RNAssistantHtmlWorkspaceSource = { create: () => ({ release() {} }) };
-context.RNAssistantHtmlWorkspaceEditor = { create: () => ({}) };
-context.RNAssistantHtmlWorkspaceActions = { create: () => ({}) };
-context.RNAssistantHtmlWorkspaceArtifacts = {};
-context.RNAssistantHtmlWorkspaceTree = {};
-context.RNAssistantHtmlWorkspacePreview = {};
-context.RNAssistantPreviewSurface = { attach: () => ({}) };
-context.RNAssistantProjectChats = { setScope: scope => navigation.push(scope) };
-context.RNAssistantChatDrafts = { flushOffice: async () => {} };
-context.RNAssistantVisualInspector = { createHost: options => {
-  context.inspectorChanged = options.onSelectionChanged;
-  return { selectionRecord: () => selected, generation: () => selected ? selected.generation : 4,
-    deactivate: () => { selected = null; options.onSelectionChanged(false); } };
-} };
-drafts.set("office-chat", { text: "Change the color", attachments: [{ Id: "existing-file" }] });
-vm.runInContext(fs.readFileSync("web/js/app-html-workspace.js", "utf8"), context);
-
-(async () => {
-  context.inspectorChanged(true);
-  const button = element("attachHtmlWorkspaceSelectionButton");
-  await button.listeners.click.call(button);
-  assert.equal(calls[0].type, "stageHtmlVisualSelection");
-  assert.equal(calls[0].payload.chatId, "office-chat");
-  assert.equal(calls[0].payload.artifactId, "html-r1");
-  assert.equal(calls[0].payload.artifactRevision, 1);
-  assert.equal(calls[0].payload.previewGeneration, 4);
-  assert.deepEqual(drafts.get("office-chat").attachments.map(item => item.Id), ["existing-file", "selection-1"]);
-  assert.equal(drafts.get("office-chat").text, "Change the color", "comment remains in shared composer");
-  assert.deepEqual(navigation, ["office", "chat"]);
-  assert.equal(element("chatInput").focused, true);
-
-  selected = { generation: 5, selection: { tag: "div", selector: "div:nth-of-type(1)" } };
-  context.inspectorChanged(true);
-  let release;
-  stageResponse = () => new Promise(resolve => { release = resolve; });
-  const pending = button.listeners.click.call(button);
-  assert.equal(button.disabled, true);
-  state.activeHtmlArtifactId = "html-r2";
-  release({ resource: { Id: "stale-selection" } });
-  await pending;
-  assert.equal(calls.at(-1).type, "discardChatResourceDraft", "late staged result is discarded");
-  assert.equal(drafts.get("office-chat").attachments.length, 2, "late result cannot enter draft");
-  console.log("PASS HTML visual selection: existing Office draft, exact stage request and late-source discard");
-})().catch(error => { console.error(error); process.exitCode = 1; });
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+(async()=>{
+  const calls=[],drafts=new Map(),contexts=[];
+  const key=t=>t.workspaceId+':'+t.sessionId;
+  const context={console,window:null,document:{createElement:()=>({dataset:{},setAttribute(){},remove(){}})},ATTACHMENT_MAX_FILES:10,
+    attachmentId:item=>item.id||item.Id,RNAssistantConversationInput:{isPending:()=>false},
+    RNAssistantConversationPanel:{find:()=>({snapshot:()=>({messages:[]}),captureDraft(){},controls(){}})},
+    RNAssistantChatDrafts:{readWorkspace:t=>drafts.get(key(t)),updateWorkspace:(t,c)=>drafts.set(key(t),{...drafts.get(key(t)),...c}),flushWorkspace:async()=>{},
+      readOffice:id=>drafts.get(id),saveOffice:(id,text,attachments,unused,next,pending)=>drafts.set(id,{text,attachments,nextAnnotationNumber:next,pendingVisualAnnotation:pending}),flushOffice:async()=>{}},
+    RNAssistantVisualInspector:{createHost:()=>({bind(){},receive(){},refresh(){},deactivate(){},dispose(){}})},
+    RNAssistantVisualAnnotations:{create:options=>{contexts.push(options);return {sync(){},onSelection(){},dispose(){},collapseEditor(){}}}}
+  };context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync('web/js/app-browser-annotations.js','utf8'),context);
+  let response=async()=>({id:'plugin-draft'});
+  function host(){return context.RNAssistantBrowserAnnotations.create({root:{appendChild(){}},viewport:{},surface:{setAnnotation(){}},layout(){},focus(){},command:async()=>{},isCurrent:()=>true,
+    send:async(type,payload)=>{calls.push({type,payload});return type==='discardChatResourceDraft'?{}:response();}});}
+  const target={source:'workspace',workspaceId:'project',sessionId:'plugin-chat'};drafts.set(key(target),{text:'Existing composer text',attachments:[{id:'file'}]});
+  const page={sessionId:'native',documentGeneration:4,status:'Ready',ownerScope:{kind:'Workspace',scopeId:'project',chatId:'plugin-chat'},target:{capabilities:{annotations:true}},annotationContext:{sourceId:'release',sourceRevision:1,pluginInstanceId:'instance'}};
+  const first=host();first.update(page);
+  await contexts[0].stage({generation:4,pageSession:'native',sourceId:'release',sourceRevision:1,selection:{tag:'button'}},'Change',1,null);
+  assert.equal(calls[0].type,'stagePluginVisualSelection');assert.equal(calls[0].payload.instanceId,'instance');assert.equal(calls[0].payload.sessionId,'plugin-chat');
+  assert.equal(drafts.get(key(target)).text,'Existing composer text');assert.deepEqual(drafts.get(key(target)).attachments.map(item=>item.id),['file','plugin-draft']);
+  let release;response=()=>new Promise(resolve=>release=resolve);
+  const late=contexts[0].stage({generation:4,pageSession:'native',sourceId:'release',sourceRevision:1,selection:{tag:'button'}},'Late',2,null);
+  first.update({...page,documentGeneration:5});release({id:'late'});await assert.rejects(late,/Страница изменилась/);
+  assert.equal(calls.at(-1).type,'discardChatResourceDraft');assert.equal(calls.at(-1).payload.chatId,'plugin-chat');assert.equal(drafts.get(key(target)).attachments.length,2);
+  response=async()=>({resource:{Id:'office-draft'}});drafts.set('office-chat',{text:'Office text',attachments:[]});const second=host();
+  second.update({...page,ownerScope:{kind:'Document',scopeId:'doc',chatId:'office-chat'},annotationContext:{sourceId:'html-r2',sourceRevision:2}});
+  await contexts[1].stage({generation:4,pageSession:'native',sourceId:'html-r2',sourceRevision:2,selection:{tag:'button'}},'',1,null);
+  const office=calls.find(call=>call.type==='stageHtmlVisualSelection');assert.equal(office.payload.chatId,'office-chat');assert.equal(office.payload.artifactId,'html-r2');assert.equal(office.payload.artifactRevision,2);
+  assert.equal(drafts.get('office-chat').text,'Office text');first.dispose();second.dispose();
+  console.log('PASS common native annotation drafts: exact Office/plugin owner, existing composer data, generation guard and late cleanup');
+})().catch(error=>{console.error(error);process.exitCode=1;});

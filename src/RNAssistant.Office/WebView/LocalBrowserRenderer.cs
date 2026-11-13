@@ -80,10 +80,12 @@ namespace RNAssistant.Office.WebView
                     if (command.Action == BrowserCommandKind.Stop) page.Core.Stop();
                     if (command.Action == BrowserCommandKind.Focus) page.Focus();
                     if (command.Action == BrowserCommandKind.ResumeAgent) page.ResumeAgent(command.ControlRevision);
+                    if (command.Action == BrowserCommandKind.VisualControl) await page.VisualControlAsync(command.Visual);
                     if (command.Bounds != null) Place(page, command.Bounds);
                     if (page.HasLoaded) state.Status = BrowserPageStatus.Ready; state.Reason = BrowserRefusalCode.None; state.Message = _physical == null ? "Страница работает. Ввод агента недоступен: не установлен контроль физического ввода." : null;
                     state.Target.Capabilities.Preview = true; state.Target.Capabilities.Interact = _physical != null && page.HasLoaded;
                     state.Target.Capabilities.Media = page.HasLoaded; state.Target.Capabilities.PreviewReason = BrowserRefusalCode.None;
+                    state.AnnotationContext = page.AnnotationContext(); state.Target.Capabilities.Annotations = page.HasLoaded && state.AnnotationContext != null;
                     state.Target.ContentRevision = page.Content.Target.ContentRevision;
                     state.Target.EntryPath = page.Content.EntryPath; if (state.Target.RelativePath == null) state.Target.RelativePath = page.Content.EntryPath;
                 }

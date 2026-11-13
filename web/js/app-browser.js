@@ -42,6 +42,10 @@
           { source: "workspace", workspaceId: binding.scopeId, sessionId: binding.chatId }, { referencePanel: key(target), beside: true });
     }
     var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; }, discuss: discuss });
+    var annotationHost = RNAssistantBrowserAnnotations.create({ root: root, viewport: viewport, surface: surface, send: send, command: command,
+      isCurrent: function () { return active && !disposed && selectedMode === "preview"; }, layout: layoutNative,
+      focus: function () { selectMode("preview"); RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: target.browserTabId,
+        ownerScope: current.ownerScope, locator: current.url, title: current.title }); } });
     var placementKey = "", placementQueued = 0;
     var control = document.createElement("div"); control.className = "browser-control"; control.hidden = true;
     var controlText = document.createElement("span"); controlText.setAttribute("role", "status");
@@ -50,7 +54,7 @@
     control.append(controlText, resume); root.insertBefore(control, content);
     function nativeBounds(attachment) {
       var fallback = attachment && current && current.status === "Unavailable";
-      var rect = (fallback ? content : viewport).getBoundingClientRect(), overlay = document.querySelector('dialog[open], [aria-modal="true"], .rna-action-menu-popup') || root.querySelector('.preview-surface-toolbar.is-address-focused, .preview-surface-completion:not([hidden])');
+      var rect = (fallback ? content : viewport).getBoundingClientRect(), overlay = document.querySelector('dialog[open], [aria-modal="true"], .rna-action-menu-popup') || root.querySelector('.preview-surface-toolbar.is-address-focused, .preview-surface-completion:not([hidden]), .visual-annotation-editor');
       var visible = active && mount.isConnected && !root.hidden && selectedMode === "preview" && current &&
         !["Home", "Removed", "Closed", "Unavailable", "Failed"].includes(current.status) && !overlay;
       return { visible: !!(visible || fallback && active && mount.isConnected) && rect.width > 0 && rect.height > 0,
@@ -199,7 +203,7 @@
         suggest: suggestions
       }, selectMode);
     }
-    function selectMode(mode) { selectedMode = mode; presentation(); render(); layoutNative(); }
+    function selectMode(mode) { if (mode !== "preview") annotationHost.deactivate(); selectedMode = mode; presentation(); render(); if (current) annotationHost.update(current); layoutNative(); }
     function render() {
       if (!active || disposed || !current) return;
       var home = current.status === "Home", removed = current.status === "Removed";
@@ -248,6 +252,7 @@
         authorityRevision = -1; sourceInvalidated = false; sourceRefreshEpoch++;
       }
       current = value;
+      annotationHost.update(value);
       if (value.status === "Closed") { session = null; stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
         RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope,
@@ -292,7 +297,7 @@
       try { await opening; } finally { opening = null; }
     }
     live.set(target.browserTabId, apply);
-    return { element: mount, layout: renderer.layout,
+    return { element: mount, layout: renderer.layout, annotationHost: annotationHost, canClose: function () { return !annotationHost.busy(); },
       authorityChanged: function (notice) {
         var value = current && current.target;
         if (!value || value.immutable || value.kind !== "HtmlWorkspace" || notice.scope !== "document:" + value.documentId ||
@@ -300,10 +305,10 @@
         authorityRevision = notice.generation; sourceInvalidated = true; if (active) refreshSource();
       },
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
-      activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
-      deactivate: function () { if (!active) return; active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
+      activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
+      deactivate: function () { if (!active) return; annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
       dispose: function () { if (disposed) return; disposed = true; active = false; cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
-        if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
+        annotationHost.dispose(); if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
         RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
     };
   }
@@ -330,6 +335,18 @@
       return open(request.locator, request.ownerScope, { browserTabId: request.browserTabId, operationId: request.operationId, title: request.title });
     },
     bootstrap: function (value) { available = value === true; },
+    annotations: function (target) {
+      var found = null; RNAssistantDockWorkspace.eachView("browser", function (view) {
+        var owner = view.annotationHost && view.annotationHost.address();
+        if (!found && owner && owner.source === target.source && owner.sessionId === target.sessionId && owner.workspaceId === target.workspaceId) found = view.annotationHost.annotations;
+      }); return found;
+    },
+    showAnnotation: function (item, target) {
+      var shown = false; RNAssistantDockWorkspace.eachView("browser", function (view) {
+        var owner = view.annotationHost && view.annotationHost.address(), annotations = view.annotationHost && view.annotationHost.annotations;
+        if (!shown && owner && owner.source === target.source && owner.sessionId === target.sessionId && owner.workspaceId === target.workspaceId && annotations.canShow(item)) { annotations.showSent(item); shown = true; }
+      }); if (!shown) window.alert("Откройте точную исходную версию в Browser: текущие страницы не соответствуют этой аннотации.");
+    },
     versionsChanged: function (value) { if (value && value.target) versionViews.forEach(function (notify) { notify(value); }); },
     apply: function (value) { var fn = value && live.get(value.browserTabId); if (fn) fn(value); },
     register: function (dock) { dock.registerView("browser", { title: "Browser", icon: "globe", discovery: "primary", order: 10, perObject: true, menu: true, maximumInstances: 16, renderer: "onlyWhenVisible",

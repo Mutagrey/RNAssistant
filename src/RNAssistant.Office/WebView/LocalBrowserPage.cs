@@ -123,14 +123,15 @@ namespace RNAssistant.Office.WebView
                 _loaded.TrySetResult(true); Publish();
             } catch (Exception error) { if (!_closed) { State.Status = BrowserPageStatus.Failed; State.Message = error.Message; _loaded.TrySetException(error); Publish(); } }
         }
-        private void SourceChanged(object sender, CoreWebView2SourceChangedEventArgs args)
+        private async void SourceChanged(object sender, CoreWebView2SourceChangedEventArgs args)
         {
             if (_closed || !_loaded.Task.IsCompleted) return; string member;
             if (!Content.TryMember(Core.Source, out member)) return;
             var address = new Uri(Core.Source); var target = State.Target;
             var locator = LocalLocator(member);
             locator += address.Query + address.Fragment;
-            if (State.Url != locator) { State.Url = locator; if (!args.IsNewDocument) State.DocumentGeneration++; target.RelativePath = member; InvalidateAutomation(); }
+            if (State.Url != locator) { State.Url = locator; if (!args.IsNewDocument) State.DocumentGeneration++; target.RelativePath = member; InvalidateAutomation();
+                if (!args.IsNewDocument) try { await InitializeVisualAsync(); } catch { State.Visual = null; State.AnnotationContext = null; } }
             Publish();
         }
         internal string LocalLocator(string member)

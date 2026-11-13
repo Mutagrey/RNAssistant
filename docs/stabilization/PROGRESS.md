@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Browser native annotations connected — 2026-11-13
+
+`16.24.1-dev`: element selection/highlight and existing annotation drafts now use the
+common native Browser, pinned to source/page/chat. Old iframe/editor transport is
+removed. Focused Chromium/Harness/Mock checks pass; native Windows compilation and
+qualification remain open. Page find, 07 and integration continue.
+[Details](../browser/06_PROGRESS.md#f2c4-native-annotations--2026-11-13).
+
 ## Browser input admission completed — 2026-11-13
 
 `16.24.0-dev`: semantic elements remain primary; optional coordinates require the

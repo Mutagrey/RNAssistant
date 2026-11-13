@@ -168,11 +168,16 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
                 session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
-                var source = new ChatArtifact { Id = "html-snapshot-1", Kind = ChatArtifactKinds.HtmlWorkspace,
-                    Title = "Sample page", Revision = 1, DocumentAuthorityId = session.DocumentAuthorityId };
+                var source = new ChatArtifact { Id = "html_ws_" + new string('a', 64) + "_r1_12345678", Kind = ChatArtifactKinds.HtmlWorkspace,
+                    Title = "Sample page", Revision = 1, DocumentAuthorityId = session.DocumentAuthorityId, InlineText = "{}", MimeType = "application/json" };
                 session.Artifacts.Add(source);
                 session.ActiveHtmlArtifactId = source.Id;
                 var exact = ChatResourceUri.CreateArtifactRevision(session, source);
+                var documents = new ChatStore(paths).DocumentArtifacts;
+                documents.RetainAuthoredSnapshot(session, source, "selection-fixture", "selection-fixture");
+                var authority = new ResourceAuthorityStore(paths); var scope = new ResourceAuthorityScopeId("document", session.DocumentAuthorityId);
+                authority.Publish(new ResourceAuthorityCommit("selection-fixture", scope, 0, 1, null,
+                    new[] { new ResourceHeadChange(exact.Identity, null, ResourceHeadState.Known(exact, 1, "fixture")) }, AuthorityCommitReason.InitialObservation));
                 var selection = new HtmlVisualSelection {
                     Tag = "button", StableUiId = "save", Selector = "html > body > button:nth-of-type(1)",
                     Attributes = new Dictionary<string, string> { { "data-ui-id", "save" } },
@@ -222,10 +227,14 @@ namespace RNAssistant.Harness
                 RuntimeThrows<InvalidOperationException>(() => ingestion.StageHtmlVisualSelection(session, request));
                 request.ArtifactRevision = 1;
                 session.ActiveHtmlArtifactId = "other-snapshot";
-                RuntimeThrows<InvalidOperationException>(() => ingestion.LoadDrafts(session, new[] { draft.Id }));
+                AssertEqual(exact.Uri, ingestion.LoadDrafts(session, new[] { draft.Id }).Single().VisualSelectionSource.Uri,
+                    "active editor selection cannot redirect an exact Browser annotation");
                 session.ActiveHtmlArtifactId = source.Id;
                 source.Revision = 2;
-                RuntimeThrows<InvalidOperationException>(() => ingestion.LoadDrafts(session, new[] { draft.Id }));
+                AssertEqual("1", ingestion.LoadDrafts(session, new[] { draft.Id }).Single().VisualSelectionSource.Revision,
+                    "a later projection keeps the annotation on its original published revision");
+                var documentId = session.DocumentAuthorityId; session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                RuntimeThrows<InvalidOperationException>(() => ingestion.LoadDrafts(session, new[] { draft.Id })); session.DocumentAuthorityId = documentId;
                 source.Revision = 1;
                 selection.Attributes["id"] = "secret-token";
                 RuntimeThrows<InvalidOperationException>(() => HtmlVisualSelectionPolicy.Capture(selection, source.Title));

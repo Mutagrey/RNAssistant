@@ -11,6 +11,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.24.1-dev
+
+- Restored element selection, highlighting and annotation drafts in the common native
+  Browser, with exact source/chat ownership and stale-page protection.
+
 ### 16.24.0-dev
 
 - Browser keeps element-based input and adds an optional fresh-viewport coordinate

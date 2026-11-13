@@ -419,7 +419,7 @@
           if (saved) updateWorkspaceDraft(target, { attachments: saved.attachments.filter(function (value) { return attachmentId(value) !== attachmentId(item); }) });
           if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); component.controls();
         } catch (error) { component.notice(error); }
-      });
+      }, window.RNAssistantBrowser && RNAssistantBrowser.annotations(target));
       node("workspaceChatControl").hidden = !snapshot().pendingId;
       node("workspaceChatPending").textContent = snapshot().pendingId ? (snapshot().pendingTool || "Действие") + "\n" + (snapshot().pendingArguments || "") : "";
       if (snapshot().pendingId && snapshot().patchPreview && window.RNAssistantRunChanges)

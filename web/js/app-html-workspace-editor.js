@@ -20,12 +20,8 @@
     var htmlPreviewRefreshTimer = 0;
     var previewCleared = false;
 
-    function invalidatePreview() {
-      if (options.inspector) options.inspector.reset();
-    }
     function clearPreview(frame) {
       if (previewCleared) return;
-      invalidatePreview();
       frame.replaceChildren();
       previewCleared = true;
     }

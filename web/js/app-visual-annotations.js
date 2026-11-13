@@ -26,8 +26,7 @@
     var show = document.createElement("button"); show.type = "button"; show.textContent = "На странице";
     show.addEventListener("click", function () {
       if (!target) return;
-      if (plugin) RNAssistantPlugins.showAnnotation(item, target);
-      else RNAssistantHtmlWorkspaceSurface.showAnnotation(item, target.sessionId);
+      RNAssistantBrowser.showAnnotation(item, target);
     });
     card.append(badge, copy, show);
     return card;
@@ -55,7 +54,7 @@
       return value ? { Id: "pending-visual-" + value.Number, pendingVisual: true,
         visualAnnotation: { selection: value.Selection, comment: value.Comment,
           annotationNumber: value.Number }, visualSourceArtifactId: value.ArtifactId,
-        visualSourceRevision: value.ArtifactRevision, replacingDraftId: value.ReplacingDraftId } : null;
+        visualSourceRevision: value.ArtifactRevision, previewGeneration: value.PreviewGeneration, browserSessionId: value.BrowserSessionId, replacingDraftId: value.ReplacingDraftId } : null;
     }
     function stagedDrafts() {
       return context.drafts().filter(function (item) { return !!annotation(item); });
@@ -241,6 +240,7 @@
         context.setPending({
           ArtifactId: value(item, "visualSourceArtifactId", "VisualSourceArtifactId"),
           ArtifactRevision: Number(value(item, "visualSourceRevision", "VisualSourceRevision")),
+          PreviewGeneration: inspector.generation(), BrowserSessionId: context.pageSession ? context.pageSession() : null,
           Number: number, Comment: data.comment || data.Comment || "",
           Selection: data.selection || data.Selection, ReplacingDraftId: attachmentId(item)
         });
@@ -248,7 +248,8 @@
       }
       context.openSource();
       var visible = pendingItem(), selection = data.selection || data.Selection;
-      openEditor({ generation: inspector.generation(), selection: selection,
+      openEditor({ generation: visible && visible.pendingVisual ? Number(visible.previewGeneration || 0) : inspector.generation(), selection: selection,
+        pageSession: visible && visible.pendingVisual ? visible.browserSessionId : context.pageSession ? context.pageSession() : null,
         sourceId: value(item, "visualSourceArtifactId", "VisualSourceArtifactId"),
         sourceRevision: Number(value(item, "visualSourceRevision", "VisualSourceRevision")),
         sessionId: context.sessionId ? context.sessionId() : null },
@@ -377,8 +378,6 @@
       });
       details.appendChild(list); box.appendChild(details); updateTargetStates();
     }
-    function onFrameLoad() { locations = Object.create(null); closeSent(); renderMarkers(); }
-    frame.addEventListener("load", onFrameLoad);
     window.addEventListener("resize", renderMarkers);
     function onKeyDown(event) {
       if (event.key === "Escape" && sentPopup) { event.preventDefault(); closeSent(); return; }
@@ -393,7 +392,9 @@
         renderMarkers();
         if (!browserOpen()) return;
         if (!record) {
-          if (editor && (reason === "reset" || reason === "load")) editor.record.generation = inspector.generation();
+          if (editor && (reason === "reset" || reason === "load" || reason === "invalidated")) {
+            closeEditor(false); context.status("Страница выделения изменилась. Комментарий сохранён в черновике; выберите элемент заново.");
+          }
           if (editor && !editor.busy && (reason === "deactivate" || reason === "stopped")) closeEditor(false);
           return;
         }
@@ -413,9 +414,10 @@
         record.sourceId = source.id;
         record.sourceRevision = revision;
         record.sessionId = context.sessionId ? context.sessionId() : null;
+        record.pageSession = context.pageSession ? context.pageSession() : null;
         context.setPending({
           ArtifactId: record.sourceId, ArtifactRevision: record.sourceRevision,
-          Number: number, Comment: "", Selection: record.selection, ReplacingDraftId: null
+          Number: number, Comment: "", Selection: record.selection, ReplacingDraftId: null, PreviewGeneration: record.generation, BrowserSessionId: record.pageSession
         });
         context.updated();
         openEditor(record, number, pendingItem());
@@ -433,7 +435,6 @@
       collapseEditor: function () { closeEditor(false); closeSent(); },
       canShow: currentSource,
       dispose: function () { closeEditor(false); closeSent(); inspector.watch([]); layer.remove();
-        frame.removeEventListener("load", onFrameLoad);
         window.removeEventListener("resize", renderMarkers);
         document.removeEventListener("keydown", onKeyDown); }
     };

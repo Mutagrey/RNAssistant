@@ -1,5 +1,16 @@
 # Universal Browser: статус
 
+## F2c4 native annotations — 2026-11-13
+
+`16.24.1-dev`: shared element inspector/annotations now use the native Browser's
+isolated world and existing exact-source draft owners. Removed old iframe/injected
+inspector and editor annotation path. Pending comments survive navigation without
+acquiring a new selection; late prepared results are discarded. Document annotations
+can refer to the exact retained published source independently of the current editor.
+Focused Chromium, two Harness visual-selection cases and Mock compile pass. UI remains
+In Review; native Windows compilation/qualification remains open. Next: page find,
+07 selected Inspector/screens and main integration. No push/release.
+
 ## F2c3 element input and viewport fallback — 2026-11-13
 
 `16.24.0-dev`: element names remain the primary action target. Added the optional

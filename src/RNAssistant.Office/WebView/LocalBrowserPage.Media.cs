@@ -36,7 +36,7 @@ namespace RNAssistant.Office.WebView
             if (!Ready || !Control.Visible) throw new InvalidOperationException("Only the visible native page viewport can be captured.");
             Content.Validate(); token.ThrowIfCancellationRequested();
             var handle = Handle; var viewport = State.ViewportRevision; var control = State.ControlRevision; var zoom = Controller.ZoomFactor;
-            await Evaluate<bool>("__rnaActionView.hide();true");
+            await Evaluate<bool>("__rnaActionView.hide();if(globalThis.__rnaVisualHide)__rnaVisualHide();true");
             var privacy = await Evaluate<PrivacyView>("__rnaLocalBrowser.privacy()");
             if (privacy?.safe != true) throw new InvalidOperationException("The page contains private, input or uninspectable regions; media capture is refused.");
             if (privacy.width * privacy.scale > 4096 || privacy.height * privacy.scale > 4096 || privacy.width * privacy.height * privacy.scale * privacy.scale > 4 * 1024 * 1024)

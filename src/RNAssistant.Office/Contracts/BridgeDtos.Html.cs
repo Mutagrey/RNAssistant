@@ -32,8 +32,8 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }
         [JsonProperty("artifactRevision")] public int ArtifactRevision { get; set; }
-        // UI frame correlation only. Native source authority comes from the
-        // addressed chat's active artifact and exact revision.
+        // Native page correlation; the exact document snapshot is resolved
+        // independently of the addressed chat's active editor selection.
         [JsonProperty("previewGeneration")] public int PreviewGeneration { get; set; }
         [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
         [JsonProperty("comment")] public string Comment { get; set; }

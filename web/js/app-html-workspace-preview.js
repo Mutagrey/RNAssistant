@@ -253,11 +253,9 @@
       throw new Error("RESOURCE_EXPORT_REQUIRED: capture exact resource bindings before standalone export.");
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
-    var inspector = options.inspectGeneration && options.hostBridge !== false
-      ? "<script>" + safeScript(window.RNAssistantVisualInspector.script(options.inspectGeneration)) + "<\/script>\n" : "";
     var vendorRuntime = vendorHead(files);
     var headInject = '<meta charset="utf-8">' + (options.nativeHost ? "" : previewContentSecurityPolicy(options.hostBridge === false)) + "\n" + previewViewportReset() + "\n" +
-      inspector + vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + "\n" + cssBlock(files);
+      vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

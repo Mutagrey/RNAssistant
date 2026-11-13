@@ -469,6 +469,7 @@ namespace RNAssistant.Harness
                     AssertEqual(PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri,
                         new AttachmentStore(paths).LoadDrafts(new[] { draft.Id }, sessionId).Single().VisualSelectionSource.Uri,
                         "native staging pins the bound plugin release without exposing its URI to the browser");
+                    File.AppendAllText(Path.Combine(plugin.SourceRoot, "index.html"), "\n<!-- candidate annotation fixture -->");
                     var checkedCandidate = service.Check(plugin.PluginId);
                     var preview = service.Open(new PluginOpenRequest { PluginId = plugin.PluginId,
                         CandidateId = checkedCandidate.CandidateId });
@@ -565,7 +566,7 @@ namespace RNAssistant.Harness
                                 System.Reflection.BindingFlags.NonPublic);
                             var schema = JObject.Parse((string)ports.GetMethod("ResourceSchema",
                                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
-                                .Invoke(null, new object[] { false, true, false, 16000 }));
+                                .Invoke(null, new object[] { false, true, false, 16000, false }));
                             string schemaError;
                             AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
                                 ["type"] = "attachment", ["target"] = target }, schema, false, out schemaError),
@@ -604,9 +605,9 @@ namespace RNAssistant.Harness
                                 new PluginReleaseIdentity(plugin.PluginId, plugin.ReleaseId));
                             var retainedHtml = Encoding.UTF8.GetString(new PluginStore(paths).ReadFile(published, "index.html"));
                             AssertTrue(accepted.Selection.Attributes["id"] == "run" &&
-                                retainedHtml == source.Text && source.Text.Contains(anchor),
-                                "accepted DOM evidence is checked against one real source anchor and the retained release");
-                            AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() =>
+                                retainedHtml != source.Text && retainedHtml.Contains(anchor) && source.Text.Contains(anchor),
+                                "annotation retains its release while a unique current source anchor is checked independently");
+                            AssertEqual("ambiguous_context", RuntimeThrows<TextPatternException>(() =>
                                 files.ApplyTextEdits(sourceWorkspace, "index.html", source.Reference, LineHunk("id=\"", "id=\"other-"))).ErrorCode,
                                 "a partial-line anchor refuses the annotated edit");
                             AssertEqual(source.Reference.Revision, files.ReadText(sourceWorkspace, "index.html").Reference.Revision,

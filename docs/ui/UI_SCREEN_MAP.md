@@ -1,5 +1,15 @@
 # Карта экранов, навигации и состояний
 
+## Native element annotations — In Review, 2026-11-13
+
+Bound document HTML and plugin Browser pages expose the shared selection button.
+Select an element → enter a comment → «Готово» adds an attachment to the source chat's
+existing draft. «На странице» reveals an annotation only in an open exact-source
+Browser; otherwise it explains which source is required. Changing the current chat
+never changes the recipient. Raw HTML/generic Workspace HTML remain interactive but
+have no annotation capability. Page changes preserve the comment and require a fresh
+selection. The comment overlay temporarily hides the native HWND.
+
 ## Browser export choices — In Review, 2026-11-13
 
 HTML Browser menu: «Скачать автономный HTML» creates the selected interactive page

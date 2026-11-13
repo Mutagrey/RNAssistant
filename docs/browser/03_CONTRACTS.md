@@ -1,5 +1,17 @@
 # Universal Browser: предлагаемые контракты
 
+## Native annotations — F2c4, 2026-11-13
+
+Common Browser selection uses typed VisualControl/events in the isolated page world;
+only trusted manual clicks select an element. Exact page session/generation and source
+revision bind the existing draft owner. Source changes preserve pending comments but
+invalidate selection; close/reopen cannot revive an old generation. Native IDs remain
+transient. Document staging resolves the exact published retained HTML snapshot, never
+the active editor or latest head. Plugin staging retains its exact instance/package.
+Annotations are enabled for bound document HTML and plugin pages; raw HTML and generic
+Workspace projects have no annotation owner yet. They remain interactive. The old
+iframe transport, injected inspector and editor-owned annotation path are removed.
+
 ## Native input admission — F2c3, 2026-11-13
 
 Semantic element names remain the primary input contract. Optional point/toPoint are

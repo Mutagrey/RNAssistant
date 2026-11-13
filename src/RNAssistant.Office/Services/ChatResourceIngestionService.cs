@@ -45,15 +45,10 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(request.ArtifactId) || request.ArtifactRevision < 1 ||
                 request.PreviewGeneration < 1)
                 throw new ArgumentException("Требуются чат, источник и поколение HTML-preview.");
-            if (!string.Equals(session.ActiveHtmlArtifactId, request.ArtifactId, StringComparison.Ordinal))
-                throw new InvalidOperationException("HTML-preview изменился. Выберите элемент заново.");
-            var matches = (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
-                item.Id == request.ArtifactId && item.Kind == ChatArtifactKinds.HtmlWorkspace &&
-                item.Revision == request.ArtifactRevision).Take(2).ToArray();
-            if (matches.Length != 1)
-                throw new InvalidOperationException("Версия HTML-источника изменилась. Выберите элемент заново.");
-            var source = ChatResourceUri.CreateArtifactRevision(session, matches[0]);
-            return _attachments.StageVisualSelection(session.Id, request.Selection, matches[0].Title,
+            var source = ChatResourceUri.CreateArtifactRevision(session, new ChatArtifact { Id = request.ArtifactId,
+                Revision = request.ArtifactRevision, Kind = ChatArtifactKinds.HtmlWorkspace, DocumentAuthorityId = session.DocumentAuthorityId });
+            var artifact = RequireVisualSource(session, source);
+            return _attachments.StageVisualSelection(session.Id, request.Selection, artifact.Title,
                 request.Comment, request.AnnotationNumber, source);
         }
 
@@ -64,17 +59,19 @@ namespace RNAssistant.Office.Services
             var drafts = _attachments.LoadDrafts(resourceDraftIds, RequireChatId(session?.Id));
             foreach (var draft in drafts.Where(item => item.VisualSelectionSource != null))
             {
-                var active = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
-                    item != null && item.Id == session.ActiveHtmlArtifactId && item.Kind == ChatArtifactKinds.HtmlWorkspace);
-                var exact = active == null ? null : ChatResourceUri.CreateArtifactRevision(session, active);
-                if (exact == null || !draft.VisualSelectionSource.IsExact ||
-                    !string.Equals(draft.VisualSelectionSource.Uri,
-                        exact.Uri, StringComparison.Ordinal) ||
-                    !string.Equals(draft.VisualSelectionSource.Revision,
-                        exact.Revision, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Выделение HTML устарело. Удалите его из черновика и выберите элемент заново.");
+                RequireVisualSource(session, draft.VisualSelectionSource);
             }
             return drafts;
+        }
+        private ChatArtifact RequireVisualSource(ChatSession session, ResourceRef source)
+        {
+            if (source?.IsExact != true || !DocumentArtifactStore.Owns(session, source)) throw new InvalidOperationException("Источник выделения принадлежит другому документу.");
+            ChatArtifact artifact;
+            try { artifact = _documentArtifacts.Read(ConversationMetadata.From(session), source, false); }
+            catch (System.IO.InvalidDataException error) { throw new InvalidOperationException("Точный HTML-источник выделения недоступен.", error); }
+            if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace || _documentArtifacts.IsRemoved(ConversationMetadata.From(session), artifact))
+                throw new InvalidOperationException("Точный HTML-источник выделения недоступен.");
+            return artifact;
         }
 
         public void Discard(ConversationMetadata session, string resourceDraftId)

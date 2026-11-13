@@ -174,7 +174,7 @@
       if (node("contextStrip").context !== snapshot().context) {
         node("contextStrip").context = snapshot().context; renderContext(component);
       }
-      var controller = window.RNAssistantHtmlWorkspaceSurface && RNAssistantHtmlWorkspaceSurface.annotations(id);
+      var controller = window.RNAssistantBrowser && RNAssistantBrowser.annotations({ source: "office", sessionId: id });
       renderConversationAttachments(component, draft(), async function (item) {
         try {
           if (!item.unavailable) await send("discardChatResourceDraft", { chatId: id, id: attachmentId(item) });

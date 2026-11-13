@@ -4,11 +4,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using System.Runtime.Serialization;
+using RNAssistant.Core.Models;
 
 namespace RNAssistant.Application.Contracts
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum BrowserCommandKind { Open, Layout, Navigate, Back, Forward, Reload, Focus, Close, ResumeAgent, Home, Stop, Attach }
+    public enum BrowserCommandKind { Open, Layout, Navigate, Back, Forward, Reload, Focus, Close, ResumeAgent, Home, Stop, Attach, VisualControl }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum BrowserPageStatus { Starting, Ready, Failed, Closed, Home, Unavailable, Removed }
 
@@ -36,6 +38,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("controlRevision")] public long? ControlRevision { get; set; }
         [JsonProperty("bounds")] public BrowserBoundsDto Bounds { get; set; }
+        [JsonProperty("visual")] public BrowserVisualControl Visual { get; set; }
     }
 
     public sealed class BrowserPageStateDto
@@ -60,6 +63,78 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("canGoForward")] public bool CanGoForward { get; set; }
         [JsonProperty("message")] public string Message { get; set; }
         [JsonProperty("diagnostic")] public string Diagnostic { get; set; }
+        [JsonProperty("visual")] public BrowserVisualEvent Visual { get; set; }
+        [JsonProperty("annotationContext")] public BrowserAnnotationContext AnnotationContext { get; set; }
+    }
+
+    public sealed class BrowserAnnotationContext
+    {
+        [JsonProperty("sourceId")] public string SourceId { get; set; }
+        [JsonProperty("sourceRevision")] public int SourceRevision { get; set; }
+        [JsonProperty("pluginInstanceId")] public string PluginInstanceId { get; set; }
+    }
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum BrowserVisualOperation
+    {
+        [EnumMember(Value = "probe")] Probe, [EnumMember(Value = "activate")] Activate,
+        [EnumMember(Value = "palette")] Palette, [EnumMember(Value = "pointer-exit")] PointerExit,
+        [EnumMember(Value = "deactivate")] Deactivate, [EnumMember(Value = "watch")] Watch,
+        [EnumMember(Value = "reveal")] Reveal, [EnumMember(Value = "dispose")] Dispose
+    }
+    public sealed class BrowserVisualControl
+    {
+        [JsonProperty("generation")] public long Generation { get; set; }
+        [JsonProperty("operation")] public BrowserVisualOperation Operation { get; set; }
+        [JsonProperty("watches")] public BrowserVisualWatch[] Watches { get; set; }
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("palette")] public BrowserVisualPalette Palette { get; set; }
+    }
+    public sealed class BrowserVisualWatch
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("selector")] public string Selector { get; set; }
+        [JsonProperty("tag")] public string Tag { get; set; }
+        [JsonProperty("stableUiId")] public string StableUiId { get; set; }
+    }
+    public sealed class BrowserVisualPalette
+    {
+        [JsonProperty("accent")] public string Accent { get; set; }
+        [JsonProperty("ink")] public string Ink { get; set; }
+    }
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum BrowserVisualEventKind
+    {
+        [EnumMember(Value = "rnassistant-visual-inspector-ready")] Ready,
+        [EnumMember(Value = "rnassistant-visual-inspector-activated")] Activated,
+        [EnumMember(Value = "rnassistant-visual-inspector-stopped")] Stopped,
+        [EnumMember(Value = "rnassistant-visual-inspector-selected")] Selected,
+        [EnumMember(Value = "rnassistant-visual-inspector-unsupported")] Unsupported,
+        [EnumMember(Value = "rnassistant-visual-inspector-invalidated")] Invalidated,
+        [EnumMember(Value = "rnassistant-visual-inspector-locations")] Locations,
+        [EnumMember(Value = "rnassistant-visual-inspector-revealed")] Revealed
+    }
+    public sealed class BrowserVisualEvent
+    {
+        [JsonProperty("type")] public BrowserVisualEventKind Type { get; set; }
+        [JsonProperty("generation")] public long Generation { get; set; }
+        [JsonProperty("sequence")] public long Sequence { get; set; }
+        [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
+        [JsonProperty("locations")] public BrowserVisualLocation[] Locations { get; set; }
+        [JsonProperty("reveal")] public BrowserVisualReveal Reveal { get; set; }
+    }
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum BrowserVisualLocationStatus
+    { [EnumMember(Value = "missing")] Missing, [EnumMember(Value = "outside")] Outside, [EnumMember(Value = "visible")] Visible }
+    public sealed class BrowserVisualLocation
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("status")] public BrowserVisualLocationStatus Status { get; set; }
+        [JsonProperty("rect")] public HtmlVisualRect Rect { get; set; }
+    }
+    public sealed class BrowserVisualReveal
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("found")] public bool Found { get; set; }
     }
 
     public sealed class BrowserPageStateMessage

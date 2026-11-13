@@ -199,7 +199,7 @@
     if (queued || typeof globalThis.__rnaViewportChanged !== 'function') return;
     queued = true; requestAnimationFrame(function () { queued = false; __rnaViewportChanged('viewport'); });
   }
-  function authored(node) { return !(node.nodeType === 1 ? node : node.parentElement)?.closest('[data-rna-browser-action-view]'); }
+  function authored(node) { return !(node.nodeType === 1 ? node : node.parentElement)?.closest('[data-rna-browser-action-view],[data-rna-visual-highlight],[data-rna-visual-tooltip]'); }
   new MutationObserver(function (changes) {
     if (changes.some(function (value) {
       return value.type === 'childList' ? Array.from(value.addedNodes).concat(Array.from(value.removedNodes)).some(authored) : authored(value.target);

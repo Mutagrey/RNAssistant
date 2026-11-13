@@ -15,7 +15,7 @@ namespace RNAssistant.Office.WebView
     {
         internal bool InputAvailable { get; set; }
         private bool _geometryObserver;
-        private sealed class BindingCall { public string name { get; set; } public int executionContextId { get; set; } }
+        private sealed class BindingCall { public string name { get; set; } public string payload { get; set; } public int executionContextId { get; set; } }
         private int _world;
         private string _observationRevision, _observationId, _preparationId;
         private BrowserActionRequest _request;
@@ -54,16 +54,20 @@ namespace RNAssistant.Office.WebView
                     if (_closed) return;
                     try {
                         var call = JsonConvert.DeserializeObject<BindingCall>(args.ParameterObjectAsJson);
-                        if (call?.name != "__rnaViewportChanged" || call.executionContextId != _world) return;
+                        if (call == null || call.executionContextId != _world) return;
+                        if (call.name == "__rnaVisualEvent") { AcceptVisual(call.payload); return; }
+                        if (call.name != "__rnaViewportChanged") return;
                         State.ViewportRevision++; _observationId = _observationRevision = null; _mediaCapture = null; Publish();
                     } catch { }
                 };
                 await Core.CallDevToolsProtocolMethodAsync("Runtime.addBinding", "{\"name\":\"__rnaViewportChanged\",\"executionContextName\":\"RNAssistantLocal\"}");
+                await Core.CallDevToolsProtocolMethodAsync("Runtime.addBinding", "{\"name\":\"__rnaVisualEvent\",\"executionContextName\":\"RNAssistantLocal\"}");
             }
             var visual = File.ReadAllText(Path.Combine(_assets, "js", "app-browser-action-view.js"));
             var styles = File.ReadAllText(Path.Combine(_assets, "css", "app-browser-action-view.css"));
             await Evaluate<bool>(visual + "\n;globalThis.__rnaActionView=RNAssistantBrowserActionView.create(" + JsonConvert.SerializeObject(styles) + ",{nativeOwned:true});true");
             await Evaluate<bool>(AutomationScript);
+            await InitializeVisualAsync();
         }
         private BrowserMediaCapture _mediaCapture;
         private void InvalidateAutomation()

@@ -1,5 +1,13 @@
 # План модернизации production UI
 
+## F2c4 annotations — In Review, 2026-11-13
+
+Review: open bound document/plugin HTML, select an element, comment, switch tabs,
+then change the source before completing another annotation. Exact drafts persist;
+stale selection and late results cannot attach to the new source. Chromium isolated
+selection/common Shell and exact-source Harness checks pass. Native Windows compile
+and placement remain open. Continue page find, 07 and integration from this state.
+
 ## F2c2 common export — In Review, 2026-11-13
 
 Review: open a bound HTML page, download autonomous HTML, open it with file://,

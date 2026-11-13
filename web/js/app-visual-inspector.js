@@ -3,8 +3,8 @@
 
   // Runs only inside a host-built preview. The page DOM is untrusted evidence;
   // this script grants no file, resource, or chat authority.
-  function install(generation) {
-    if (!Number.isSafeInteger(generation) || generation < 1) return;
+  function install(generation, nativeEmit) {
+    if (!Number.isSafeInteger(generation) || generation < 1 || typeof nativeEmit !== "function") return;
     var active = false, disposed = false, hovered = null, selectedNode = null;
     var pointer = null, pointerInside = false;
     var overlay = null, tooltip = null, frame = 0, unsupportedFrame = false, observer = null;
@@ -14,8 +14,9 @@
     var sensitive = "input,textarea,select,option,[contenteditable],[data-private],[data-sensitive],script,style,template,noscript";
 
     function emit(kind, selection) {
-      window.parent.postMessage({ type: "rnassistant-visual-inspector-" + kind,
-        generation: generation, selection: selection || null }, "*");
+      var value = { type: "rnassistant-visual-inspector-" + kind, generation: generation };
+      value[kind === "revealed" ? "reveal" : "selection"] = selection || null;
+      nativeEmit(value);
     }
     function emitLocations() {
       if (!watches.length) return;
@@ -31,8 +32,8 @@
         return { id: item.id, status: "visible",
           rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
       });
-      window.parent.postMessage({ type: "rnassistant-visual-inspector-locations",
-        generation: generation, locations: locations }, "*");
+      var message = { type: "rnassistant-visual-inspector-locations", generation: generation, locations: locations };
+      nativeEmit(message);
     }
     function safeValue(value) {
       value = String(value || "").trim();
@@ -161,6 +162,7 @@
     }
     function onLeave() { pointerInside = false; show(selectedNode); }
     function onClick(event) {
+      if (!event.isTrusted) return;
       var node = target(event);
       event.preventDefault(); event.stopImmediatePropagation();
       var selection = snapshot(node);
@@ -222,8 +224,7 @@
     window.addEventListener("resize", refresh);
     function onControl(event) {
       var message = event.data;
-      if (disposed || event.source !== window.parent || !message ||
-          message.type !== "rnassistant-visual-inspector-control" || message.generation !== generation) return;
+      if (disposed || !message || message.generation !== generation) return;
       if (message.operation === "probe") emit("ready");
       else if (message.operation === "activate") { palette(message.palette); start(); emit("activated"); }
       else if (message.operation === "palette") palette(message.palette);
@@ -260,7 +261,7 @@
         }
         emit("revealed", { id: message.id, found: !!found });
       } else if (message.operation === "dispose") {
-        stop(); disposed = true; window.removeEventListener("message", onControl);
+        stop(); disposed = true;
         document.removeEventListener("scroll", refresh, true);
         window.removeEventListener("resize", refresh);
         if (watchObserver) { watchObserver.disconnect(); watchObserver = null; }
@@ -268,7 +269,8 @@
         if (tooltip) { tooltip.remove(); tooltip = null; }
       }
     }
-    window.addEventListener("message", onControl);
+    Object.defineProperty(globalThis, '__rnaVisualControl', { value: function (message) { onControl({ data: message }); }, configurable: true });
+    Object.defineProperty(globalThis, '__rnaVisualHide', { value: function () { show(null); }, configurable: true });
     emit("ready");
   }
 
@@ -277,7 +279,7 @@
     var generation = 0, ready = false, active = false, activating = false, selected = null, watched = [];
     var pendingReveal = null, lastParentPointerExit = 0;
     var themeObserver = null;
-    if (!frame || !button || !status) throw new Error("Visual inspector host is incomplete.");
+    if (!frame || !button || !status || typeof options.send !== "function") throw new Error("Visual inspector host is incomplete.");
     function changed(reason) {
       if (typeof options.onSelectionChanged === "function")
         options.onSelectionChanged(!!(active && ready && selected), reason || "state");
@@ -289,9 +291,11 @@
         palette = { accent: style.getPropertyValue("--accent").trim() || "#35684b",
           ink: style.getPropertyValue("--accent-ink").trim() || "#ffffff" };
       }
-      if (frame.contentWindow) frame.contentWindow.postMessage({
+      var message = {
         type: "rnassistant-visual-inspector-control", generation: generation, operation: operation,
-        watches: operation === "watch" ? watched : undefined, id: id, palette: palette }, "*");
+        watches: operation === "watch" ? watched : undefined, id: id, palette: palette };
+      delete message.type;
+      Promise.resolve(options.send(message)).catch(function (error) { if (message.generation !== generation) return; ready = active = activating = false; selected = null; paint(); changed("unavailable"); status.textContent = error.message; });
     }
     function paint() {
       button.disabled = !ready || activating || typeof options.enabled === "function" && !options.enabled();
@@ -314,21 +318,16 @@
       generation++; ready = false; active = false; activating = false; selected = null; paint(); changed("reset");
       return generation;
     }
-    function onLoad() {
-      if (!generation) return;
-      ready = false; active = false; activating = false; selected = null; paint(); changed("load");
-      control("probe");
-    }
     function onMessage(event) {
       var message = event.data;
-      if (!message || event.source !== frame.contentWindow || message.generation !== generation) return;
+      if (!message || message.generation !== generation) return;
       if (message.type === "rnassistant-visual-inspector-ready") {
         ready = true; paint(); if (watched.length) control("watch");
         if (pendingReveal) { control("reveal", pendingReveal); pendingReveal = null; }
         return;
       }
       if (message.type === "rnassistant-visual-inspector-revealed") {
-        if (typeof options.onReveal === "function") options.onReveal(message.selection);
+        if (typeof options.onReveal === "function") options.onReveal(message.reveal);
         return;
       }
       if (message.type === "rnassistant-visual-inspector-activated") {
@@ -389,8 +388,6 @@
     }
     function onWindowBlur() { if (active && ready) control("pointer-exit"); }
     function onVisibilityChange() { if (document.hidden) onWindowBlur(); }
-    frame.addEventListener("load", onLoad);
-    window.addEventListener("message", onMessage);
     window.addEventListener("pointermove", onParentPointerMove, true);
     window.addEventListener("blur", onWindowBlur);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -399,13 +396,14 @@
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent", "style"] });
     paint();
     return { reset: reset, deactivate: deactivate, refresh: paint, generation: function () { return generation; },
-      watch: function (items) { watched = Array.isArray(items) ? items.slice(0, 100) : []; if (ready) control("watch"); },
+      bind: function (value) { if (value !== generation) { generation = value; ready = active = activating = false; selected = null; paint(); changed("reset"); } control("probe"); },
+      receive: function (message) { onMessage({ data: message }); },
+      watch: function (items) { var next = Array.isArray(items) ? items.slice(0, 100) : []; if (JSON.stringify(next) === JSON.stringify(watched)) return; watched = next; if (ready) control("watch"); },
       reveal: function (id) { if (ready) control("reveal", id); else pendingReveal = id; },
       selection: function () { return selected; },
       selectionRecord: function () { return active && ready && selected ? { generation: generation, selection: selected } : null; },
       dispose: function () {
-        reset(); frame.removeEventListener("load", onLoad);
-        window.removeEventListener("message", onMessage); button.removeEventListener("click", onClick);
+        reset(); button.removeEventListener("click", onClick);
         window.removeEventListener("pointermove", onParentPointerMove, true);
         window.removeEventListener("blur", onWindowBlur);
         document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -414,7 +412,6 @@
   }
 
   window.RNAssistantVisualInspector = {
-    script: function (generation) { return "(" + install.toString() + ")(" + JSON.stringify(generation) + ");"; },
     install: install,
     createHost: createHost
   };

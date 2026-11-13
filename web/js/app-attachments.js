@@ -275,7 +275,7 @@ function renderAttachmentDrafts() {
   if (!box) return;
   box.innerHTML = "";
   var visual = window.RNAssistantVisualAnnotations;
-  var controller = window.RNAssistantHtmlWorkspaceSurface && RNAssistantHtmlWorkspaceSurface.annotations(state.activeChatId);
+  var controller = window.RNAssistantBrowser && RNAssistantBrowser.annotations({ source: "office", sessionId: state.activeChatId });
   var annotations = controller ? controller.visibleDrafts() :
     visual ? state.draftAttachments.filter(function (item) { return !!visual.annotation(item); }) : [];
   box.classList.toggle("hidden", !state.draftAttachments.length && !annotations.length);

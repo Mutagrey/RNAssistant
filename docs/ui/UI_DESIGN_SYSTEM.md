@@ -1,5 +1,12 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Native annotation presentation — In Review, 2026-11-13
+
+Reuse PreviewSurface's selection control, shared annotation markers/editor and accent
+palette. No provider-specific toolbar or geometry. [Wide](review/browser-annotations-wide.png)
+and [420px/125%](review/browser-annotations-narrow.png) verify the common Shell overlay;
+the empty viewport is a native fixture, not Windows rendering evidence.
+
 ## Export menu labels — In Review, 2026-11-13
 
 Use the existing ActionMenu/status surface for autonomous HTML and source ZIP;

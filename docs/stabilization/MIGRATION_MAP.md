@@ -1,5 +1,13 @@
 # Current-to-target migration map
 
+## Native annotation cutover — F2c4, 2026-11-13
+
+Owner: common Browser/native integration. Shared VisualInspector now uses typed native
+control/events, with no iframe message listener or generated inspector injection.
+Removed HTML-editor staging/toolbar/selection facade and plugin unavailable stub;
+chat cards/drafts delegate to the exact Browser owner. Existing draft/CAS/source
+owners remain; no new store or temporary adapter. Native compilation stays open.
+
 ## Browser input evidence — F2c3, 2026-11-13
 
 The existing accepted-response evidence and media provenance owners admit optional

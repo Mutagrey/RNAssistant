@@ -1,5 +1,14 @@
 # Artifact Library and Viewers
 
+## Exact Browser annotation source — 2026-11-13
+
+Document annotation intake resolves the explicitly supplied retained published HTML
+snapshot through DocumentArtifactStore and document authority. It does not require
+the active editor to point at that snapshot, nor substitute the current head. Source
+removal/foreign document is refused. Existing drafts/CAS retain selection/comment;
+Browser session/generation only gate live selection and are not persisted authority.
+Plugin annotations keep their existing exact-instance source validation.
+
 ## Document HTML explicit checkpoints — 2026-11-13
 
 DocumentArtifactStore.HtmlVersions reuses immutable HtmlWorkspace snapshots. Save

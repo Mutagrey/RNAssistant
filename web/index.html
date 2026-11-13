@@ -544,8 +544,6 @@
                   <button class="icon-btn compact html-workspace-mode-button active" type="button" data-html-mode="preview" title="Страница" aria-label="Страница" aria-pressed="true"><svg data-rna-icon="play" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                   <button class="icon-btn compact html-workspace-mode-button" type="button" data-html-mode="edit" title="Исходник" aria-label="Исходник" aria-pressed="false"><svg data-rna-icon="code" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                 </div>
-                <button class="icon-btn compact html-workspace-inspect-button" data-html-node="inspectHtmlWorkspaceButton" type="button" data-browser-control="true" title="Аннотировать: выбрать элемент" aria-label="Аннотировать: выбрать элемент" aria-pressed="false" disabled><svg data-rna-icon="selection" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
-                <span class="html-workspace-inspect-status" data-html-node="htmlWorkspaceInspectStatus" role="status"></span>
                 <div class="resource-editor-actions">
                   <button class="icon-btn html-workspace-icon" data-html-node="copyHtmlWorkspaceButton" type="button" title="Копировать исходный текст" aria-label="Копировать исходный текст"><svg data-rna-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                   <button class="icon-btn html-workspace-icon" data-html-node="undoHtmlWorkspaceButton" type="button" title="Восстановить предыдущую версию" aria-label="Восстановить предыдущую версию">
@@ -1115,21 +1113,21 @@
   <script src="js/app-vba-project.js?v=vba-upload-20260906-1-html-editors-20261103-1"></script>
   <script src="js/app-vba.js?v=shared-editor-tabs-20261019-1-html-editors-20261103-1"></script>
   <script src="js/app-html-resource-export.js?v=binary-chunks-20260906-1-browser-s3b3b-local-interactive-20261113"></script>
-  <script src="js/app-visual-inspector.js?v=annotate-hover-20261024-1-live-annotation-20261103"></script>
-  <script src="js/app-visual-annotations.js?v=chat-views-20261103-html-editors-20261103-1"></script>
-  <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1-vendors-1-visual-inspector-1-local-interactive-20261113"></script>
+  <script src="js/app-visual-inspector.js?v=annotate-hover-20261024-1-live-annotation-20261103-native-selection-20261113"></script>
+  <script src="js/app-visual-annotations.js?v=chat-views-20261103-html-editors-20261103-1-native-selection-20261113"></script>
+  <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1-vendors-1-visual-inspector-1-local-interactive-20261113-native-selection-20261113"></script>
   <script src="js/app-artifact-viewers.js?v=plugin-materials-20261103"></script>
   <script src="js/app-sequence-document-viewer.js?v=object-views-20261102"></script>
   <script src="js/app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1-annotation-surface-20261026-1-shared-source-20261029-1-materials-s3b2"></script>
   <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1-scope-20261102-browser-export-20261113"></script>
   <script src="js/app-html-workspace-model.js?v=html-read-20260906-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=plugin-materials-20261103-html-editors-20261103-1-local-interactive-20261113"></script>
+  <script src="js/app-html-workspace-editor.js?v=plugin-materials-20261103-html-editors-20261103-1-local-interactive-20261113-native-selection-20261113"></script>
   <script src="js/app-tree-adapter.js?v=plugin-materials-20261103"></script>
   <script src="js/app-html-workspace-tree.js?v=plugin-materials-20261103"></script>
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1-materials-s3b2"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1-html-editors-20261103-1-browser-export-20261113"></script>
-  <script src="js/app-html-workspace-view.js?v=html-editors-20261103-1-local-interactive-20261113"></script>
-  <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1-materials-s3b2-browser-s3b3b-html-editors-20261103-1"></script>
+  <script src="js/app-html-workspace-view.js?v=html-editors-20261103-1-local-interactive-20261113-native-selection-20261113"></script>
+  <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1-materials-s3b2-browser-s3b3b-html-editors-20261103-1-native-selection-20261113"></script>
   <script src="js/app-context.js?v=chat-views-20261103"></script>
   <script src="js/app-model-context-contents.js?v=request-dock-20261102"></script>
   <script src="js/app-model-context.js?v=request-dock-20261102"></script>
@@ -1150,19 +1148,19 @@
   <script src="js/app-agent.js?v=chat-continuity-20261103"></script>
   <script src="js/app-messages.js?v=chat-welcome-20261103-html-editors-20261103-1"></script>
   <script src="js/app-reasoning.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-attachments.js?v=chat-views-20261103-html-editors-20261103-1"></script>
+  <script src="js/app-attachments.js?v=chat-views-20261103-html-editors-20261103-1-native-selection-20261113"></script>
   <script src="js/app-chat-session.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-composer.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-inbox.js?v=chat-views-20261103"></script>
   <script src="js/app-chat-run.js?v=request-causes-20261103"></script>
   <script src="js/app-chat.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-edit.js?v=chat-views-20261103"></script>
-  <script src="js/app-workspace-chat.js?v=chat-views-20261103-chat-audit-20261103"></script>
-  <script src="js/app-office-chat-view.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
+  <script src="js/app-workspace-chat.js?v=chat-views-20261103-chat-audit-20261103-native-selection-20261113"></script>
+  <script src="js/app-office-chat-view.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103-native-selection-20261113"></script>
   <script src="js/app-agent-recovery.js?v=agent-recovery-20261104"></script>
   <script src="js/app-agent-communication.js?v=agent-recovery-menu-20261104"></script>
   <script src="js/app-conversation-panel.js?v=unified-workspace-20261111"></script>
-  <script src="js/app-plugins.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
+  <script src="js/app-plugins.js?v=plugin-materials-20261103-html-editors-20261103-1-native-selection-20261113"></script>
   <script src="js/app-project-chats.js?v=unified-workspace-20261111"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
@@ -1170,7 +1168,8 @@
   <script src="js/app-start-surface.js"></script>
   <script src="js/app-dock-workspace.js?v=unified-workspace-20261111"></script>
   <script src="js/app-browser-actions.js"></script>
-  <script src="js/app-browser.js?v=local-browser-20261113-local-interactive-20261113"></script>
+  <script src="js/app-browser-annotations.js?v=native-selection-20261113"></script>
+  <script src="js/app-browser.js?v=local-browser-20261113-native-selection"></script>
   <script src="js/app-active-runs.js?v=chat-parity-20261103"></script>
   <script src="js/app.js?v=unified-workspace-20261111"></script>
 </body>

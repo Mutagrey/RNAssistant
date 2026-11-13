@@ -1,5 +1,14 @@
 # Архитектура UI RNAssistant
 
+## Browser annotations — In Review, 2026-11-13
+
+app-browser-annotations owns the common native selection adapter; shared inspector,
+VisualAnnotations, ChatDrafts and ConversationPanel retain their responsibilities.
+Typed isolated-world events carry exact source/page generation; callbacks never use
+the selected/active chat as fallback. The editor no longer owns a second inspector or
+annotation transport. Pending comments survive source changes; stale selection cannot
+stage into another page. Native IDs are ephemeral, not durable draft authority.
+
 ## Common autonomous HTML export — In Review, 2026-11-13
 
 Browser and HTML editor delegate to HtmlResourceExport.downloadTarget and the typed

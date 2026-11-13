@@ -1,5 +1,14 @@
 # Universal Browser: матрица проверок
 
+## F2c4 native annotation evidence — 2026-11-13
+
+Passed: real Chromium isolated-world selection, privacy exclusions, trusted manual
+input, watch/reveal/scroll, stale generation refusal and cleanup; common Browser UI
+exact-chat draft/comment, source switch, late-result disposal and 420px/125% layout.
+Harness visual-selection cases cover exact published document source and plugin
+intake/read/patch; Mock compiles shared contracts/controller. Native WebView2 C#
+compilation, OS hit testing and overlay placement still require Windows evidence.
+
 ## F2c3 input admission evidence — 2026-11-13
 
 Passed: exact media/retained provenance and foreign-run/omitted-image refusal; real
