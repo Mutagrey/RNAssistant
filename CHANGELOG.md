@@ -11,6 +11,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.14.4-dev
+
+- LLM JSON/SSE requests and model configuration GET no longer send User-Agent,
+  including previously saved custom values in any letter case.
+
 ### 16.14.3-dev
 
 - Restored Excel-owned RNAssistant windows without a separate taskbar preview.

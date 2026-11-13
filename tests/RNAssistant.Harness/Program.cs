@@ -67,6 +67,7 @@ namespace RNAssistant.Harness
                 Test("model diagnostics: false success and HTTP failures", ModelDiagnosticsFailures),
                 Test("model diagnostics: timeout and cancellation", ModelDiagnosticsCancellation),
                 Test("model diagnostics: transport matrix", ModelDiagnosticsTransportMatrix),
+                Test("llm transport: no User-Agent", LlmTransportOmitsUserAgent),
                 Test("model diagnostics: transport rejection and no fallback", ModelDiagnosticsTransportFailures),
                 Test("model diagnostics: bounded SSE capture and native deltas", ModelDiagnosticsStreamCapture),
                 Test("universal mutations: exact original hunks", UniversalHunksUseOriginalSnapshot),

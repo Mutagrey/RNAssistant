@@ -147,7 +147,6 @@ namespace RNAssistant.Core.Llm
         private static void ApplyHeaders(HttpRequestMessage request, AppSettings settings, string apiKey, string accept)
         {
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
-            request.Headers.UserAgent.ParseAdd("RNAssistant/0.1");
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -156,6 +155,7 @@ namespace RNAssistant.Core.Llm
             foreach (var header in settings.CustomHeaders ?? new Dictionary<string, string>())
             {
                 if (string.IsNullOrWhiteSpace(header.Key) || string.IsNullOrWhiteSpace(header.Value)) continue;
+                if (string.Equals(header.Key, "User-Agent", StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
                 {
                     if (request.Content != null) request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(header.Value);

@@ -13,6 +13,52 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void LlmTransportOmitsUserAgent()
+        {
+            var scenarios = ModelDiagnosticScenarios.All("headers");
+            var json = scenarios.Single(item => item.Id == "C4-control");
+            var sse = scenarios.Single(item => item.Id == "C4");
+            var names = new[] { null, "User-Agent", "user-agent", "USER-AGENT" };
+            var replies = new List<Func<JObject, DiagnosticReply>>();
+            foreach (var name in names)
+            {
+                replies.Add(_ => DiagnosticTransportReply(json));
+                replies.Add(_ => DiagnosticTransportReply(sse));
+                replies.Add(_ => new DiagnosticReply { Body = "{\"models\":[]}" });
+            }
+            var observed = 0;
+            WithDiagnosticEndpoint(replies, (settings, requests) =>
+            {
+                var client = new LlmClient(() => "synthetic-header-key");
+                var runner = new ModelDiagnosticRunner(client.CompleteAsync);
+                foreach (var name in names)
+                {
+                    settings.CustomHeaders = new Dictionary<string, string> { { "X-Fixture", "preserved" } };
+                    if (name != null) settings.CustomHeaders.Add(name, "must-not-send/1.0");
+                    foreach (var scenario in new[] { json, sse })
+                    {
+                        var result = runner.RunAsync(settings, scenario, ModelDiagnosticExecutionKind.Synthetic,
+                            CancellationToken.None).GetAwaiter().GetResult();
+                        AssertEqual(ModelDiagnosticVerdict.Pass, result.Verdict, "JSON/SSE remains valid");
+                        if (scenario.Streaming) AssertTrue(result.StreamingObserved, "SSE is parsed");
+                    }
+                    AssertEqual("{\"models\":[]}", client.GetModelsConfigJsonAsync(settings, null, CancellationToken.None)
+                        .GetAwaiter().GetResult(), "models config GET remains valid");
+                }
+            }, request =>
+            {
+                var phase = observed++ % 3;
+                AssertTrue(request.Headers["User-Agent"] == null, "User-Agent absent on actual HTTP request");
+                AssertEqual("preserved", request.Headers["X-Fixture"], "ordinary custom header preserved");
+                AssertEqual("Bearer synthetic-header-key", request.Headers["Authorization"], "authorization preserved");
+                AssertEqual(phase == 1 ? "text/event-stream" : "application/json", request.Headers["Accept"], "accept preserved");
+                AssertEqual(phase == 2 ? "GET" : "POST", request.HttpMethod, "request method preserved");
+                if (phase == 2) AssertTrue(!request.HasEntityBody, "GET has no body");
+                else AssertTrue(request.ContentType.StartsWith("application/json", StringComparison.Ordinal), "JSON body type preserved");
+            });
+            AssertEqual(12, observed, "default and three custom header spellings across POST JSON/SSE and GET");
+        }
+
         private static void ModelDiagnosticsTransportMatrix()
         {
             var scenarios = ModelDiagnosticScenarios.All("transport-matrix");

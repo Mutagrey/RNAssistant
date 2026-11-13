@@ -124,6 +124,12 @@ captures, not real-model or Office qualification. Defaults are unchanged.
 
 ## Required transport
 
+The common LLM transport sends no `User-Agent` header on JSON/SSE POST or model
+configuration GET. Saved custom `User-Agent` values are ignored case-insensitively
+without changing stored settings. Authorization, Accept and other custom headers
+retain their existing behavior. Harness `llm transport: no User-Agent` observes
+12 actual loopback HTTP requests (default and three custom spellings).
+
 - `POST /v1/chat/completions`, or a `BaseUrl` already ending in `/chat/completions`;
 - request fields `model`, `messages`, `max_tokens`, `temperature`, `top_p`, and `stream`;
 - non-stream `choices[0].message` or SSE `choices[0].delta`;

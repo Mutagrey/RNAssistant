@@ -183,7 +183,7 @@ namespace RNAssistant.Harness
         }
 
         private static void WithDiagnosticEndpoint(IEnumerable<Func<JObject, DiagnosticReply>> replies,
-            Action<AppSettings, List<string>> run)
+            Action<AppSettings, List<string>> run, Action<HttpListenerRequest> observeRequest = null)
         {
             var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
             var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
@@ -202,7 +202,8 @@ namespace RNAssistant.Harness
                             string raw;
                             using (var reader = new StreamReader(context.Request.InputStream)) raw = await reader.ReadToEndAsync();
                             requests.Add(raw);
-                            var response = reply(JObject.Parse(raw));
+                            if (observeRequest != null) observeRequest(context.Request);
+                            var response = reply(string.IsNullOrEmpty(raw) ? new JObject() : JObject.Parse(raw));
                             var bytes = Encoding.UTF8.GetBytes(response.Body);
                             context.Response.StatusCode = response.Status;
                             context.Response.ContentType = response.ContentType;

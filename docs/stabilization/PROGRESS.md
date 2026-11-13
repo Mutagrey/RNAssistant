@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Local Browser package — последовательная реализация, 2026-11-13
+
+Исходный HEAD совпал с аудитом `e9bb52c1`. В рабочем дереве уже присутствовали
+незавершённые Browser preview/automation изменения; они не считаются завершённым
+F0/native cutover и не включаются автоматически в коммиты.
+Первый независимый срез 08 завершён: `16.14.4-dev`, LLM transport без User-Agent,
+включая custom headers. Focused Harness наблюдал 12 реальных loopback HTTP
+запросов JSON/SSE/GET; 1/1 case pass. Office/VSTO и полный suite не запускались.
+Далее candidate correctness, F0 и сквозные F1–F4 из пакета; local-only scope
+заменяет прежнее развитие внешнего Browser. Native network/input qualification
+и визуальное принятие остаются открытыми.
+
 ## Окно Excel — исправления по фото, In Review, 2026-11-12
 
 Пользователь уточнил: RNAssistant должен принадлежать окну Excel без отдельного
