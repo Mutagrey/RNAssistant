@@ -39,7 +39,7 @@ const {withPreviewPage} = require('./preview-session');
         let value=p.pages.get(payload.browserTabId);
         if(payload.action==='Open'){value={browserTabId:payload.browserTabId,sessionId:'session-'+payload.browserTabId,ownerScope:scope,url:payload.locator,
           target:target(payload.locator),title:'Fixture plugin',status:'Unavailable',revision:0,documentGeneration:1,message:RNAssistantBrowser.unavailable};p.pages.set(payload.browserTabId,value);}
-        else if(payload.action==='Navigate'){value.url=payload.locator;value.target=target(value.url);value.documentGeneration++;}
+        else if(payload.action==='NavigateUser'){value.url=payload.locator;value.target=target(value.url);value.documentGeneration++;}
         else if(payload.action==='Reload'){value.target=target(value.url);value.documentGeneration++;}
         else if(payload.action==='Close')value.status='Closed';
         value.status=payload.action==='Close'?'Closed':value.target.state==='Removed'?'Removed':'Unavailable';value.revision++;return Promise.resolve(structuredClone(value));
@@ -54,11 +54,11 @@ const {withPreviewPage} = require('./preview-session');
     await page.getByRole('menuitemcheckbox',{name:'v1',exact:true}).click();
     await root.locator('.browser-document-source').getByText('Source of /plugins/plugin/versions/v1/index.html').waitFor();
     assert.equal(await save.isDisabled(),true,'saved selection cannot save a fake working copy');
-    const navigationBefore=await page.evaluate(()=>versionProbe.calls.filter(c=>c.action==='Navigate').length);
+    const navigationBefore=await page.evaluate(()=>versionProbe.calls.filter(c=>c.action==='NavigateUser').length);
     await root.getByRole('button',{name:'Версии проекта',exact:true}).click();
     await page.getByRole('menuitem',{name:'Удалить версию 1',exact:true}).click();
     await page.waitForFunction(()=>versionProbe.pages.get('versions').status==='Removed');
-    assert.equal(await page.evaluate(()=>versionProbe.calls.filter(c=>c.action==='Navigate').length),navigationBefore,'trash does not open the row');
+    assert.equal(await page.evaluate(()=>versionProbe.calls.filter(c=>c.action==='NavigateUser').length),navigationBefore,'trash does not open the row');
     assert.equal(await page.evaluate(()=>versionProbe.entries.find(e=>e.versionId==='v3').removed),false,'same payload does not merge saved-entry identity');
     assert.equal(await root.locator('iframe').count(),0);
     await root.getByRole('button',{name:'Версии проекта',exact:true}).click();

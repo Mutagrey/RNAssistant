@@ -16,7 +16,7 @@ const {withPreviewPage}=require('./preview-session');
       if(type==='readBrowserSource')return Promise.resolve({files:['index.html'],path:'index.html',text:'<h1>Exact source</h1>',offset:0,totalCharacters:21,revision:'sha',requestGeneration:p.requestGeneration});
       let value=probe.pages.get(p.browserTabId);
       if(p.action==='Open') { value={browserTabId:p.browserTabId,sessionId:'session-'+p.browserTabId,ownerScope:p.ownerScope,visitRevision:1,revision:0,documentGeneration:1,url:p.locator,title:'Главная',status:'Home',attached:false};probe.pages.set(p.browserTabId,value); }
-      else if(p.action==='Navigate') {
+      else if(p.action==='NavigateUser') {
         if(!p.locator.startsWith('/projects/'))return Promise.reject(new Error('Локальный адрес недоступен'));
         value.visitRevision++;value.url=p.locator;value.title='Страница проекта';value.documentGeneration++;value.status='Unavailable';
         value.target={kind:'WorkspaceHtmlProject',state:'Ready',ownerScope:{kind:'Workspace',scopeId:'demo'},workspaceId:'demo',capabilities:{source:true}};
@@ -53,7 +53,7 @@ const {withPreviewPage}=require('./preview-session');
   await browser.locator('.browser-document-source').getByText('Exact source',{exact:false}).waitFor();
   const address=browser.getByRole('combobox',{name:'Адрес материала'});
   await address.fill('/projects/demo/source/index.html?token=SECRET#private');await address.press('Enter');
-  await page.waitForFunction(()=>startProbe.calls.some(c=>c.action==='Navigate'&&c.locator.includes('SECRET')));
+  await page.waitForFunction(()=>startProbe.calls.some(c=>c.action==='NavigateUser'&&c.locator.includes('SECRET')));
   await page.waitForTimeout(220);
   const persisted=await page.evaluate(()=>({recent:localStorage.getItem('rnassistant.ui.dock.s1.v1.local-recents.v1'),dock:localStorage.getItem('rnassistant.ui.dock.s1.v1')}));
   assert.ok(!persisted.recent.includes('SECRET')&&!persisted.dock.includes('SECRET'));

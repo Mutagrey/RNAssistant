@@ -1,5 +1,20 @@
 # Universal Browser: статус
 
+## Explicit Browser context handoff — 2026-11-14
+
+`16.26.0-dev`, A6: trusted Shell navigation can open another connected Workspace or
+plugin in the same tab. Agent Navigate remains scoped. Handoff revokes the live chat
+binding; source access metadata remains separate, so Back/layout restore cannot
+silently revive an old agent. Native discovery/actions/annotations enforce ChatBound.
+«Обсудить» explicitly selects an existing source-project chat or creates one through
+the existing project owner, then Bind verifies source scope, chat and generation.
+Pending annotations stay with their captured source; late choices are discarded.
+Manual pause/resume from an old chat is never transferred to the new binding.
+Checks: local Browser 12/12; real two-Workspace foreign/stale/Back/restore checks;
+local-browser menu/late reply/420px, saved views and StartSurface regressions pass.
+Wide/narrow UI reviewed locally; user acceptance and Windows native evidence open.
+Remaining implementation item: A7 user screenshot.
+
 ## Saved viewer deletion corrected — 2026-11-13
 
 `16.25.4-dev`, A4: an open read-only plugin viewer no longer blocks Delete of its

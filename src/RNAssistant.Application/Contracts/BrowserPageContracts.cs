@@ -10,7 +10,7 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Application.Contracts
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum BrowserCommandKind { Open, Layout, Navigate, Back, Forward, Reload, Focus, Close, ResumeAgent, Home, Stop, Attach, VisualControl }
+    public enum BrowserCommandKind { Open, Layout, Navigate, Back, Forward, Reload, Focus, Close, ResumeAgent, Home, Stop, Attach, VisualControl, NavigateUser, Bind }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum BrowserPageStatus { Starting, Ready, Failed, Closed, Home, Unavailable, Removed }
 
@@ -39,6 +39,9 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("controlRevision")] public long? ControlRevision { get; set; }
         [JsonProperty("bounds")] public BrowserBoundsDto Bounds { get; set; }
         [JsonProperty("visual")] public BrowserVisualControl Visual { get; set; }
+        [JsonProperty("binding")] public BrowserOwnerScope Binding { get; set; }
+        [JsonProperty("generation")] public long? Generation { get; set; }
+        [JsonProperty("bindChat")] public bool? BindChat { get; set; }
         // Runtime-only instruction, never accepted from Shell/model JSON.
         [JsonIgnore] public int? NativeHistoryEntryId { get; set; }
         [JsonIgnore] public string NativeLocator { get; set; }
@@ -68,6 +71,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("diagnostic")] public string Diagnostic { get; set; }
         [JsonProperty("visual")] public BrowserVisualEvent Visual { get; set; }
         [JsonProperty("annotationContext")] public BrowserAnnotationContext AnnotationContext { get; set; }
+        [JsonProperty("chatBound")] public bool ChatBound { get; set; }
         [JsonProperty("visitRevision")] public long VisitRevision { get; set; }
         [JsonIgnore] public BrowserNativeHistory NativeHistory { get; set; }
     }

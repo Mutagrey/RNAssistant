@@ -16,13 +16,13 @@ namespace RNAssistant.Office.WebView
         internal BrowserAnnotationContext AnnotationContext()
         {
             string path;
-            return Content != null && State.OwnerScope?.Matches(Content.Target.OwnerScope) == true && Controller != null &&
+            return State.ChatBound && Content != null && State.OwnerScope?.Matches(Content.Target.OwnerScope) == true && Controller != null &&
                 Content.TryMember(Core.Source, out path) ? Content.AnnotationContext(path) : null;
         }
         internal BrowserAnnotationCapture CaptureAnnotation(BrowserAnnotationRequest request)
         {
             string path;
-            if (!Ready || request.SessionId != State.SessionId || request.Generation != State.DocumentGeneration ||
+            if (!State.ChatBound || !Ready || request.SessionId != State.SessionId || request.Generation != State.DocumentGeneration ||
                 !Content.TryMember(Core.Source, out path))
                 throw new InvalidOperationException("Страница аннотации изменилась. Выберите элемент заново.");
             var capture = Content.Annotation(path);

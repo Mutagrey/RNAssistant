@@ -27,7 +27,7 @@ namespace RNAssistant.Office.WebView
             Control.BeginInvoke(new Action(async () => {
                 _physicalNotificationQueued = false; if (_closed) return;
                 if (AgentOwnsInput) ManualDialogs(); HideAction(); Publish();
-                if (Manual.Pending || Manual.Resume != null || string.IsNullOrEmpty(State.OwnerScope.ChatId)) return;
+                if (!State.ChatBound || Manual.Pending || Manual.Resume != null || string.IsNullOrEmpty(State.OwnerScope.ChatId)) return;
                 Manual.Pending = true;
                 try { Manual.Resume = await _pauseRun(State.OwnerScope.ChatId, Guid.NewGuid().ToString("N")); }
                 catch { Manual.Failed = true; if (!_closed) { State.Message = "Управление агента приостановлено. Подтвердите продолжение в чате."; Publish(); } }

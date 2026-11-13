@@ -1,5 +1,17 @@
 # Universal Browser: предлагаемые контракты
 
+## Manual scope handoff and chat binding — 2026-11-14
+
+NavigateUser belongs to trusted Shell user actions. It may resolve another connected
+project/plugin with the User catalog, then opens its actual source scope unbound.
+Agent Navigate never uses that path. ChatBound is runtime-owned and is checked by
+native target discovery, exact actions and annotation capture. Source OwnerScope may
+retain a document chat solely to read its exact source; it is not a live agent grant.
+Bind requires the current generation and a validated chat in the displayed source's
+exact scope. It resets page/control generation and the old manual resume callback.
+History retains source access, not a chat binding; layout persists explicit unbound
+state and Open revalidates it. Chat creation/selection use existing domain owners.
+
 ## Navigation reconciliation — 2026-11-13
 
 LocalBrowserPageRuntime owns the bounded global history. Native pages provide typed

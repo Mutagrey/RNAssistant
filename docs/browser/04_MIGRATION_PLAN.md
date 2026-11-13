@@ -17,7 +17,7 @@ universal intake срезом. Остальные пункты продолжа�
    и запрет reveal между v1/v3 одинакового content.
 3. **Готово локально (16.25.4-dev):** 04/05 Delete при read-only viewer с removed invalidation, без ослабления защиты
    выполняющейся command/pending write.
-4. 01/02/05: явный manual scope handoff/rebind; общий screenshot action через
+4. **Handoff/rebind готов (16.26.0-dev):** 01/02/05. Остался общий screenshot action через
    существующий media owner.
 5. Визуальное принятие и Windows compilation/qualification, включая native input,
    network/worker isolation и process/profile lifetime. Независимые исправления

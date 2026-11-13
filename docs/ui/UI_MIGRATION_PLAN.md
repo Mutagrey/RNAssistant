@@ -1,5 +1,12 @@
 # План модернизации production UI
 
+## Browser explicit binding — In Review, 2026-11-14
+
+A6 local implementation is complete in 16.26.0-dev. Review: open a bound page →
+manually navigate to another project → «Обсудить» → choose a chat → Back → restore
+layout. The old agent must stay detached. Foreign/stale Bind and late choices pass
+focused tests. Remaining A7 screenshot; user acceptance and Windows evidence open.
+
 ## Browser navigation correction — In Review, 2026-11-13
 
 A1/A2/A5 corrected locally in 16.25.3-dev: open local query/hash → type a field →

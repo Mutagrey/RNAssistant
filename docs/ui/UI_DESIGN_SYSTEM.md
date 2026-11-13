@@ -1,5 +1,12 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Browser explicit binding — In Review, 2026-11-14
+
+Unbound state reuses the Browser control row and standard ActionMenu. No new toolbar
+or per-provider geometry. [Wide](review/browser-binding-wide.png) and
+[420px/125%](review/browser-binding-narrow.png) were inspected; narrow actions remain
+under «Инструменты страницы». Native placement and user acceptance remain open.
+
 ## Browser navigation correction — In Review, 2026-11-13
 
 Navigation correction reuses the existing Browser address/history controls and

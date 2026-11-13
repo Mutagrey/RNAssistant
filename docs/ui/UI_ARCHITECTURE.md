@@ -1,5 +1,11 @@
 # Архитектура UI RNAssistant
 
+## Browser explicit binding — In Review, 2026-11-14
+
+Browser owns the explicit chat-binding workflow and reuses ActionMenu, project
+catalog/create operations and ConversationPanel. Runtime owns ChatBound/Bind guards;
+selected conversation is only an explicit menu choice, never an automatic grant.
+
 ## Browser navigation correction — In Review, 2026-11-13
 
 Browser apply consumes runtime VisitRevision for recents; command handlers no longer

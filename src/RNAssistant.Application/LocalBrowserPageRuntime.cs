@@ -83,7 +83,7 @@ namespace RNAssistant.Application
                 if (request.Action == BrowserCommandKind.Open)
                 {
                     if (!Key(request.OperationId) || request.OwnerScope == null) throw new InvalidOperationException("Требуется владелец и операция открытия Browser.");
-                    var openKey = request.BrowserTabId + "\n" + request.OwnerScope.Kind + "\n" + request.OwnerScope.ScopeId + "\n" + request.OwnerScope.ChatId + "\n" + request.Locator;
+                    var openKey = request.BrowserTabId + "\n" + request.OwnerScope.Kind + "\n" + request.OwnerScope.ScopeId + "\n" + request.OwnerScope.ChatId + "\n" + request.Locator + "\n" + (request.BindChat != false);
                     if (_operations.TryGetValue(request.OperationId, out page))
                     {
                         if (page.OpenKey != openKey) throw new InvalidOperationException("Операция открытия уже принадлежит другой цели.");
@@ -92,7 +92,8 @@ namespace RNAssistant.Application
                     if (_pages.ContainsKey(request.BrowserTabId)) throw new InvalidOperationException("Вкладка уже открыта; используйте её текущую session.");
                     if (_pages.Count >= 16) throw new InvalidOperationException("Открыто 16 страниц. Закройте одну перед открытием новой.");
                     page = new Page { OpenKey = openKey, State = new BrowserPageStateDto { BrowserTabId = request.BrowserTabId,
-                        OperationId = request.OperationId, SessionId = Guid.NewGuid().ToString("N") } };
+                        OperationId = request.OperationId, SessionId = Guid.NewGuid().ToString("N"),
+                        ChatBound = request.BindChat != false && !string.IsNullOrEmpty(request.OwnerScope.ChatId) } };
                     Navigate(page, request.OwnerScope, request.Locator ?? "/", true);
                     _pages.Add(request.BrowserTabId, page); _operations.Add(request.OperationId, page); _receipts.Enqueue(request.OperationId);
                     TrimReceipts();
@@ -108,6 +109,18 @@ namespace RNAssistant.Application
                         case BrowserCommandKind.Attach:
                             if (request.OperationId != page.State.OperationId) throw new InvalidOperationException("Подтверждение относится к другому открытию.");
                             page.State.Attached = true; break;
+                        case BrowserCommandKind.NavigateUser:
+                            var manualOwner = ManualNavigationOwner(page, request.Locator);
+                            if (manualOwner.Matches(page.State.OwnerScope)) goto case BrowserCommandKind.Navigate;
+                            Navigate(page, manualOwner, request.Locator, true); page.State.ChatBound = false; break;
+                        case BrowserCommandKind.Bind:
+                            var binding = request.Binding; var sourceOwner = page.State.Target?.OwnerScope;
+                            if (request.Generation != page.State.DocumentGeneration || binding == null || string.IsNullOrEmpty(binding.ChatId) ||
+                                sourceOwner == null || sourceOwner.Kind == BrowserOwnerKind.User || sourceOwner.Kind != binding.Kind || sourceOwner.ScopeId != binding.ScopeId ||
+                                page.State.Target.State != BrowserTargetState.Ready || page.State.Target.Kind == BrowserTargetKind.Home)
+                                throw new InvalidOperationException("Источник привязки изменился. Выберите чат заново.");
+                            Navigate(page, binding, page.State.Url, false); page.State.ChatBound = true; page.State.ManualControl = false;
+                            page.History[page.Position].Owner = binding; break;
                         case BrowserCommandKind.Navigate:
                             BrowserLocalLocator next, current;
                             if (page.State.Status == BrowserPageStatus.Ready && page.State.NativeHistory != null &&
@@ -141,6 +154,7 @@ namespace RNAssistant.Application
             var resolved = _resolve(new BrowserResolveRequest { OwnerScope = owner, Locator = locator });
             if (resolved?.Target == null) throw new InvalidOperationException(resolved?.Message ?? "Локальная цель недоступна.");
             var state = page.State;
+            if (state.OwnerScope != null && !state.OwnerScope.Matches(owner)) { state.ChatBound = false; state.ManualControl = false; }
             state.OwnerScope = owner; state.Target = resolved.Target;
             state.Url = resolved.Locator; state.Title = resolved.Target.Title;
             state.NativeHistory = null;
@@ -175,6 +189,21 @@ namespace RNAssistant.Application
             try { Navigate(page, visit.Owner, visit.Locator, false); }
             catch { page.Position = old; throw; }
             page.State.VisitRevision++;
+        }
+        private BrowserOwnerScope ManualNavigationOwner(Page page, string locator)
+        {
+            var current = _resolve(new BrowserResolveRequest { OwnerScope = page.State.OwnerScope, Locator = locator });
+            if (current?.Target != null) return page.State.OwnerScope;
+            BrowserLocalLocator parsed;
+            if (!BrowserLocalLocator.TryParse(locator, out parsed) || parsed.Kind != BrowserLocatorKind.ProjectSource &&
+                parsed.Kind != BrowserLocatorKind.ProjectVersion && parsed.Kind != BrowserLocatorKind.PluginSource && parsed.Kind != BrowserLocatorKind.PluginVersion)
+                throw new InvalidOperationException(current?.Message ?? "Локальная цель недоступна.");
+            // Explicit user navigation may change source scope, never an agent grant.
+            var manual = _resolve(new BrowserResolveRequest { OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" }, Locator = locator });
+            var owner = manual?.Target?.OwnerScope;
+            if (owner == null || owner.Kind != BrowserOwnerKind.Workspace || !string.IsNullOrEmpty(owner.ChatId))
+                throw new InvalidOperationException(manual?.Message ?? "Локальная цель недоступна.");
+            return owner;
         }
         private void TrimReceipts()
         {
@@ -217,7 +246,7 @@ namespace RNAssistant.Application
                     Page page;
                     if (_disposed || request?.BrowserTabId == null || !_pages.TryGetValue(request.BrowserTabId, out page) ||
                         page.State.SessionId != request.SessionId || page.State.DocumentGeneration != request.Generation ||
-                        page.State.Status != BrowserPageStatus.Ready || !page.State.Attached)
+                        page.State.Status != BrowserPageStatus.Ready || !page.State.Attached || !page.State.ChatBound)
                         throw new InvalidOperationException("Страница аннотации изменилась. Выберите элемент заново.");
                 }
                 var source = _renderer as IBrowserAnnotationSource;

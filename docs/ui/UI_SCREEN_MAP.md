@@ -1,5 +1,11 @@
 # Карта экранов, навигации и состояний
 
+## Browser explicit binding — In Review, 2026-11-14
+
+Manual address navigation can change project/plugin in the same tab. The existing
+control row displays «Без привязки к чату». «Обсудить» offers exact source chats or
+«Новый чат для страницы». Back/restore preserve unbound status; old drafts stay put.
+
 ## Browser navigation correction — In Review, 2026-11-13
 
 Browser Back/Forward within the live native page preserves SPA fields/scroll.

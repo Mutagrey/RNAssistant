@@ -14,7 +14,7 @@
     var scope = target.ownerScope;
     return { view: "browser", browserTabId: target.browserTabId, locator: RNAssistantBrowserTarget.preferenceLocator(target.locator),
       ownerScope: { kind: scope.kind, scopeId: scope.scopeId, chatId: typeof scope.chatId === "string" && scope.chatId.length <= 256 ? scope.chatId : null },
-      title: String(target.title || "Browser").slice(0, 160) };
+      title: String(target.title || "Browser").slice(0, 160), chatBound: target.chatBound !== false };
   }
   function create(target) {
     var root = document.createElement("section"); root.className = "browser-object-view"; root.setAttribute("aria-label", "Browser"); root.dataset.browserTabId = target.browserTabId;
@@ -29,17 +29,45 @@
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
     var sourcePage = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
-    function discuss() {
-        var binding = current && current.target && current.target.ownerScope;
-        if (binding && !binding.chatId && current.target.pluginId) {
-          var plugin = RNAssistantPlugins.item(current.target.pluginId), pageGeneration = current.documentGeneration;
-          if (!plugin) throw new Error("Проект плагина недоступен.");
-          return RNAssistantPlugins.openSourceChat(null, plugin, { referencePanel: key(target), beside: true,
-            isCurrent: function () { return active && !disposed && current.documentGeneration === pageGeneration; } });
+    async function discuss() {
+      var page = current, binding = page && page.target && page.target.ownerScope;
+      if (!binding || page.status === "Home") throw new Error("Откройте страницу для обсуждения.");
+      function accepted() { return active && !disposed && current && current.sessionId === page.sessionId && current.documentGeneration === page.documentGeneration; }
+      function openChat(owner) { return RNAssistantConversationPanel.open(owner.kind === "Document" ? { source: "office", sessionId: owner.chatId } :
+        { source: "workspace", workspaceId: owner.scopeId, sessionId: owner.chatId }, { referencePanel: key(target), beside: true }); }
+      if (page.chatBound && binding.chatId) return openChat(binding);
+      async function bind(chatId) {
+        if (!accepted()) return;
+        var owner = { kind: binding.kind, scopeId: binding.scopeId, chatId: chatId };
+        var bound = await command("Bind", { binding: owner, generation: page.documentGeneration });
+        if (active && !disposed && current.documentGeneration === bound.documentGeneration && current.chatBound && current.ownerScope.chatId === chatId) return openChat(owner);
+      }
+      var items;
+      if (binding.kind === "Document" && binding.chatId) {
+        items = [{ label: "Подключить чат источника", icon: "chat", onSelect: function () { return bind(binding.chatId); } }];
+      } else if (binding.kind === "Workspace") {
+        var catalog = await request("getProjectChats", {});
+        if (!accepted()) return;
+        var project = (catalog.projects || []).find(function (item) { return item.workspaceId === binding.scopeId; });
+        if (!project || !project.available) throw new Error("Проект страницы недоступен.");
+        items = (project.chats || []).slice(0, 20).map(function (chat) { return { label: chat.Title || "Чат проекта", icon: "chat",
+          onSelect: function () { return bind(chat.Id); } }; });
+        var selected = RNAssistantConversationPanel.selected(), address = selected && selected.target;
+        if (address && address.source === "workspace" && address.workspaceId === binding.scopeId &&
+            !((project.chats || []).slice(0, 20).some(function (chat) { return chat.Id === address.sessionId; }))) {
+          var selectedChat = address.sessionId;
+          items.unshift({ label: "Подключить выбранный чат проекта", icon: "chat", onSelect: function () { return bind(selectedChat); } });
         }
-        if (!binding || !binding.chatId) throw new Error("Выберите чат в дереве проекта и откройте страницу в его контексте.");
-        return RNAssistantConversationPanel.open(binding.kind === "Document" ? { source: "office", sessionId: binding.chatId } :
-          { source: "workspace", workspaceId: binding.scopeId, sessionId: binding.chatId }, { referencePanel: key(target), beside: true });
+        items.push({ label: "Новый чат для страницы", icon: "plus", onSelect: async function () {
+          if (!accepted()) return;
+          var created = await request("createProjectChat", { workspaceId: binding.scopeId, title: page.title || "Обсуждение HTML" });
+          if (accepted() && created && created.sessionId) return bind(created.sessionId);
+        } });
+        if ((project.chats || []).length > 20) items.push({ label: "Все чаты проекта", icon: "folder", onSelect: function () {
+          if (accepted()) return RNAssistantProjectChats.open(binding.scopeId);
+        } });
+      } else throw new Error("У этой страницы нет контекста обсуждения.");
+      RNAssistantActionMenu.open(surface.discussButton, items, { label: "Подключить чат страницы" });
     }
     var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; }, discuss: discuss });
     var annotationHost = RNAssistantBrowserAnnotations.create({ root: root, viewport: viewport, surface: surface, send: send, command: command,
@@ -214,7 +242,10 @@
       if (comparison) { if (content.hidden) { comparison.activate(); layoutNative(); return; } comparison.deactivate(); }
       var nativeReady = !home && !removed && ["Starting", "Ready"].includes(current.status);
       viewport.hidden = selectedMode !== "preview" || !nativeReady;
-      control.hidden = !current.manualControl; controlText.textContent = current.manualControl ? "Вы управляете" : "";
+      var unbound = !home && !removed && !current.chatBound;
+      control.hidden = !current.manualControl && !unbound;
+      controlText.textContent = unbound ? "Без привязки к чату · выберите «Обсудить»" : current.manualControl ? "Вы управляете" : "";
+      resume.hidden = unbound || !current.manualControl;
       empty.hidden = !home && !removed && (selectedMode === "source" || selectedMode === "preview" && nativeReady);
       layoutNative();
       source.hidden = files.hidden = home || removed || selectedMode !== "source";
@@ -261,7 +292,7 @@
       annotationHost.update(value);
       if (value.status === "Closed") { session = null; stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
-        RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope,
+        RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope, chatBound: value.chatBound,
           locator: value.url, title: value.title || "Browser" });
         targetGeneration = value.documentGeneration; versionControls.reset(); versionControls.refresh();
         if (comparison) { comparison.dispose(); comparison.element.remove(); comparison = null; }
@@ -278,7 +309,8 @@
     async function command(action, extra) {
       if (!session) throw new Error("Страница ещё не открыта.");
       var observedAuthority = authorityRevision;
-      var binding = session, value = await send("browserCommand", Object.assign({ action: action, browserTabId: target.browserTabId,
+      var runtimeAction = action === "Navigate" ? "NavigateUser" : action;
+      var binding = session, value = await send("browserCommand", Object.assign({ action: runtimeAction, browserTabId: target.browserTabId,
         sessionId: binding, operationId: operationId }, extra || {}));
       if (!disposed && binding === session) { apply(value);
         if (["Navigate", "Back", "Forward", "Reload", "Home"].includes(action)) {
@@ -286,12 +318,13 @@
           else if (sourceInvalidated) refreshSource();
         }
       }
+      return value;
     }
     async function open() {
       if (session || opening || disposed) return opening;
       opening = (async function () {
         var value = await send("browserCommand", { action: "Open", browserTabId: target.browserTabId, operationId: operationId,
-          ownerScope: target.ownerScope, locator: target.locator });
+          ownerScope: target.ownerScope, locator: target.locator, bindChat: target.chatBound !== false });
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
         session = value.sessionId; apply(value);
         if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
@@ -310,7 +343,7 @@
             !Number.isSafeInteger(notice.generation) || notice.generation <= authorityRevision) return;
         authorityRevision = notice.generation; sourceInvalidated = true; if (active) refreshSource();
       },
-      route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
+      route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
       deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
       dispose: function () { if (disposed) return; disposed = true; active = false; cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
@@ -322,7 +355,7 @@
     owner = owner || { kind: "User", scopeId: "local" }; options = Object.assign({}, options || {});
     if (options.reuse && !options.browserTabId) RNAssistantDockWorkspace.eachView("browser", function (view) {
       var route = view.route(); if (route.locator === locator && route.ownerScope.kind === owner.kind && route.ownerScope.scopeId === owner.scopeId &&
-        (route.ownerScope.chatId || "") === (owner.chatId || "")) options.browserTabId = route.browserTabId;
+        (route.ownerScope.chatId || "") === (owner.chatId || "") && (route.chatBound !== false || !owner.chatId)) options.browserTabId = route.browserTabId;
     });
     return RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: options && options.browserTabId || id(),
       operationId: options && options.operationId, locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser" }, options);

@@ -56,6 +56,8 @@ namespace RNAssistant.Office.WebView
                 token.ThrowIfCancellationRequested();
                 if (_closed) throw new ObjectDisposedException(nameof(LocalBrowserRenderer));
                 LocalBrowserPage page; _pages.TryGetValue(state.BrowserTabId, out page);
+                if (page != null && (!page.State.OwnerScope.Matches(state.OwnerScope) || page.State.ChatBound != state.ChatBound))
+                    _manual.Remove(state.SessionId); // A previous chat's paused run is never resumed by the new binding.
                 if (page != null && page.State.SessionId == state.SessionId && page.State.DocumentGeneration > state.DocumentGeneration) {
                     if (command.Action != BrowserCommandKind.Layout && command.Action != BrowserCommandKind.Focus && command.Action != BrowserCommandKind.Stop)
                         throw new InvalidOperationException("Browser changed before native delivery.");
@@ -81,7 +83,7 @@ namespace RNAssistant.Office.WebView
                 if (state.Status == BrowserPageStatus.Closed) _manual.Remove(state.SessionId);
                 if (state.Status == BrowserPageStatus.Closed || state.Status == BrowserPageStatus.Home || state.Target?.State != BrowserTargetState.Ready) { RefreshHandles(); return state; }
                 if (page == null && state.Status == BrowserPageStatus.Unavailable && command.Action != BrowserCommandKind.Attach &&
-                    command.Action != BrowserCommandKind.Reload && command.Action != BrowserCommandKind.Navigate && command.Action != BrowserCommandKind.Back && command.Action != BrowserCommandKind.Forward) return state;
+                    command.Action != BrowserCommandKind.Reload && command.Action != BrowserCommandKind.Navigate && command.Action != BrowserCommandKind.NavigateUser && command.Action != BrowserCommandKind.Bind && command.Action != BrowserCommandKind.Back && command.Action != BrowserCommandKind.Forward) return state;
                 if (page == null && state.Attached) {
                     page = new LocalBrowserPage(_parent, _environment, _plugins, _assets, state, _content, _bindings, _pauseRun) { InputAvailable = _physical != null };
                     LocalBrowserPage.ManualOwner manual;
@@ -150,7 +152,7 @@ namespace RNAssistant.Office.WebView
         private LocalBrowserPage Exact(BrowserPageHandle handle)
         {
             LocalBrowserPage page;
-            if (_closed || handle == null || !_pages.TryGetValue(handle.BrowserTabId, out page) || !page.Ready || !page.Handle.Matches(handle))
+            if (_closed || handle == null || !_pages.TryGetValue(handle.BrowserTabId, out page) || !page.Ready || !page.State.ChatBound || !page.Handle.Matches(handle))
                 throw new InvalidOperationException("The native Browser binding changed.");
             page.Content.Validate(); return page;
         }

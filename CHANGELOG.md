@@ -11,6 +11,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.26.0-dev
+
+- Added manual cross-project Browser navigation and explicit chat selection through
+  «Обсудить». Back and layout restoration cannot revive an old agent binding.
+
 ### 16.25.4-dev
 
 - Allowed deleting an inactive plugin version while its read-only preview is open;

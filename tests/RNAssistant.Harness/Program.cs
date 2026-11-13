@@ -1406,6 +1406,7 @@ namespace RNAssistant.Harness
                 Test("local browser: interactive content pins exact local members", BrowserExactLocalContent),
                 Test("local browser: native delivery lifecycle", BrowserNativeDeliveryLifecycle),
                 Test("local browser: native history reconciliation", BrowserNativeHistoryReconciliation),
+                Test("local browser: manual scope handoff and explicit binding", BrowserManualScopeHandoff),
                 Test("local browser: annotations pin saved entry", BrowserAnnotationsPinSavedEntry),
                 Test("local browser: open attachment receipts cancellation and close", BrowserOpenAttachmentReceipts),
                 Test("local browser: standalone Workspace discovery and visible open", BrowserOpenWorkspaceRuntime),

@@ -6,8 +6,7 @@ Owner: Browser native/runtime + existing export/annotation/version services.
 A3 исправлен в 16.25.2-dev; A1/A2/A5 — в 16.25.3-dev (локальная реализация и
 регрессионные проверки). Windows native history/input/isolation evidence открыт.
 A4 исправлен в 16.25.4-dev; команды/preparations защищены, viewer отзывается.
-Остаток: A6 manual scope handoff и
-A7 screenshot UI. [Evidence](../browser/05_TEST_MATRIX.md).
+A6 исправлен в 16.26.0-dev. Остаток: A7 screenshot UI. [Evidence](../browser/05_TEST_MATRIX.md).
 
 ## Local Browser B02 — Open, 2026-11-13
 

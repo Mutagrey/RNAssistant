@@ -1,5 +1,16 @@
 # Universal Browser: матрица проверок
 
+## A6 correction evidence — 2026-11-14
+
+Local Browser 12/12; focused final handoff case passes with actual project/plugin
+resolvers and chat owners: agent foreign navigation rejected, manual handoff unbound,
+foreign/stale Bind rejected, exact Bind accepted, Back and layout restore do not
+restore old agent authority. `local-browser` verifies the explicit chat menu,
+late choices after a generation change, persisted unbound state, hide/show/close and
+420px/125%. `browser-saved-views` and `browser-start-surface` pass with NavigateUser.
+[Wide](../ui/review/browser-binding-wide.png) and [narrow](../ui/review/browser-binding-narrow.png)
+are source-only host fixtures for Shell review; they do not qualify native Windows.
+
 ## A4 correction evidence — 2026-11-13
 
 `plugin versions:` 3/3. The real service test opens the inactive saved preview,

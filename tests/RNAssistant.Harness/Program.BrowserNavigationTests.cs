@@ -8,6 +8,44 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void BrowserManualScopeHandoff()
+        {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths)) {
+                    var plugin = PluginFixture(service, paths, false);
+                    var project = new HtmlProjectImportService(paths).Import(HtmlProjectSourceFixture(), default(System.Threading.CancellationToken));
+                    var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = plugin.SourceWorkspaceId,
+                        ChatId = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = plugin.SourceWorkspaceId }).SessionId };
+                    var next = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = project.WorkspaceId,
+                        ChatId = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = project.WorkspaceId }).SessionId };
+                    var original = BrowserLocalLocator.ForPlugin(plugin.PluginId, "index.html");
+                    var destination = BrowserLocalLocator.ForProject(project.WorkspaceId, project.EntryPath);
+                    using (var runtime = new LocalBrowserPageRuntime(service.ResolveBrowserLocator, null)) {
+                        var page = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "scope", OperationId = "open",
+                            OwnerScope = owner, Locator = original }, default(System.Threading.CancellationToken)).GetAwaiter().GetResult();
+                        AssertTrue(page.ChatBound, "an explicit chat open starts bound");
+                        Func<BrowserCommandPayload, BrowserPageStateDto> execute = request => {
+                            request.BrowserTabId = "scope"; request.SessionId = page.SessionId;
+                            return runtime.ExecuteAsync(request, default(System.Threading.CancellationToken)).GetAwaiter().GetResult();
+                        };
+                        RuntimeThrows<InvalidOperationException>(() => execute(new BrowserCommandPayload { Action = BrowserCommandKind.Navigate, OwnerScope = owner, Locator = destination }));
+                        page = execute(new BrowserCommandPayload { Action = BrowserCommandKind.NavigateUser, Locator = destination });
+                        AssertTrue(!page.ChatBound && page.OwnerScope.ScopeId == next.ScopeId && page.OwnerScope.ChatId == null, "manual handoff opens the allowed source without transferring the old agent");
+                        RuntimeThrows<InvalidOperationException>(() => execute(new BrowserCommandPayload { Action = BrowserCommandKind.Navigate, OwnerScope = owner, Locator = original }));
+                        RuntimeThrows<InvalidOperationException>(() => execute(new BrowserCommandPayload { Action = BrowserCommandKind.Bind, Generation = page.DocumentGeneration - 1, Binding = next }));
+                        RuntimeThrows<InvalidOperationException>(() => execute(new BrowserCommandPayload { Action = BrowserCommandKind.Bind, Generation = page.DocumentGeneration,
+                            Binding = new BrowserOwnerScope { Kind = next.Kind, ScopeId = next.ScopeId, ChatId = owner.ChatId } }));
+                        page = execute(new BrowserCommandPayload { Action = BrowserCommandKind.Bind, Generation = page.DocumentGeneration, Binding = next });
+                        AssertTrue(page.ChatBound && page.OwnerScope.ChatId == next.ChatId, "only explicit exact-project Bind grants the new chat");
+                        page = execute(new BrowserCommandPayload { Action = BrowserCommandKind.Back });
+                        AssertTrue(!page.ChatBound && page.OwnerScope.ChatId == owner.ChatId, "Back retains source access but cannot revive its former agent binding");
+                        var restored = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "restore", OperationId = "restore",
+                            OwnerScope = page.OwnerScope, Locator = page.Url, BindChat = false }, default(System.Threading.CancellationToken)).GetAwaiter().GetResult();
+                        AssertTrue(!restored.ChatBound, "layout restoration preserves explicit unbound state");
+                    }
+                }
+            });
+        }
         private static async System.Threading.Tasks.Task BrowserLocalSessionLifecycle()
         {
             var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = "workspace", ChatId = "chat" };

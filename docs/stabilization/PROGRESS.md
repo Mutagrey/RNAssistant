@@ -1,5 +1,12 @@
 # Stabilization progress
 
+## Browser explicit context handoff — 2026-11-14
+
+`16.26.0-dev`: A6 connected end to end. Manual cross-project navigation revokes agent
+binding; «Обсудить» explicitly binds an exact source chat. Back/restore/late callbacks
+cannot restore or transfer old authority. Twelve local Browser checks and focused
+Shell menu/layout regressions pass. Remaining A7 screenshot; Windows/UI evidence open.
+
 ## Native catalog storage usage — 2026-11-13
 
 Обычные каталоги Office/Workspace читают native usage через существующий Store-порт.
