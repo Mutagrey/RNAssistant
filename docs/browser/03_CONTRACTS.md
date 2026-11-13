@@ -1,5 +1,16 @@
 # Universal Browser: предлагаемые контракты
 
+## Autonomous page export — F2c2, 2026-11-13
+
+`prepareBrowserHtmlExport` resolves the exact Browser target and opens metadata-only
+leases for its immutable source and captured bindings. Existing resource authority,
+stream verifier and HtmlResourceExport assemble one offline page; no checkpoint,
+active workspace mutation or new store. Browser and HTML editor share this operation.
+Source is bounded to 16 MiB, captured data to 32 MiB and output to 64 MiB; all leases
+close on success, cancellation, failure or stale owner. `RN.resources` reads embedded
+text/table/records/binary snapshots under file://. Live Office/SDK calls require the
+application. This exports the selected page, not arbitrary multi-page/module projects.
+
 ## Native consumer cutover — F2c1, 2026-11-13
 
 IBrowserRenderer is the sole native adapter of LocalBrowserPageRuntime. The runtime

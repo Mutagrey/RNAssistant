@@ -1,5 +1,12 @@
 # Карта экранов, навигации и состояний
 
+## Browser export choices — In Review, 2026-11-13
+
+HTML Browser menu: «Скачать автономный HTML» creates the selected interactive page
+with captured bindings for file://; «Скачать исходники проекта (ZIP)» transfers the
+editable project. The editor uses the same HTML export after its dirty guard. Live
+Office/tool calls need the app. Offline page data is a fixed snapshot.
+
 ## Interactive local page — In Review, 2026-11-13
 
 A ready local Browser opens in «Страница». «Исходник» and «Сравнение» remain in the

@@ -17,11 +17,11 @@ namespace RNAssistant.Office.Services
         internal HtmlWorkspaceExportService(ResourceGatewayService gateway, ResourceDataPlaneService data)
         { _gateway = gateway; _data = data; }
 
-        internal HtmlResourceExport Open(ChatSession session, string workspaceId, CancellationToken cancellationToken)
+        internal HtmlResourceExport OpenBindings(ChatSession session, string workspaceId, IReadOnlyList<HtmlWorkspaceDataSource> bindings, CancellationToken cancellationToken)
         {
-            if (session == null || string.IsNullOrEmpty(workspaceId) || session.ActiveHtmlArtifactId != workspaceId)
-                throw Error("RESOURCE_ACCESS_DENIED", "Export requires the active exact workspace checkpoint.");
-            var sources = session.HtmlWorkspace.DataSources.ToArray();
+            if (session == null || string.IsNullOrEmpty(workspaceId) || bindings == null)
+                throw Error("RESOURCE_ACCESS_DENIED", "Export requires an exact workspace snapshot.");
+            var sources = bindings.ToArray();
             if (sources.Length > 32 || sources.Any(item => item == null || string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > 128) ||
                 sources.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count() != sources.Length)
                 throw Error("RESOURCE_EXPORT_BOUNDS", "Export requires at most 32 uniquely named bindings.");

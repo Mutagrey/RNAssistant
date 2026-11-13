@@ -356,54 +356,16 @@
 
     async function exportWorkspace() {
       if (state.bridgeUnavailable || state.htmlWorkspaceDirty || state.htmlWorkspaceExportPending || htmlActionPending || workspaceWrite ||
-          !state.activeChatId || !state.activeHtmlArtifactId) return false;
-      var chatId = state.activeChatId;
-      htmlActionPending = true;
-      state.htmlWorkspaceExportPending = true;
-      var resourceExport = null, exportArtifactId = "";
+          !state.activeChatId || !state.browserTarget || state.browserTarget.state !== "Ready") return false;
+      var target = state.browserTarget, chatId = state.activeChatId;
+      htmlActionPending = state.htmlWorkspaceExportPending = true;
       if (options.render) options.render();
       try {
-        var action = captureWorkspaceAction();
-        var response = await sendWorkspaceAction("prepareHtmlWorkspaceExport", action, {});
-        exportArtifactId = value(response, "ExportRevisionArtifactId", "exportRevisionArtifactId", "") || "";
-        resourceExport = value(response, "ResourceExport", "resourceExport", null);
-        if (!acceptWorkspaceAction(action) || state.htmlWorkspaceDirty) return false;
-        var responseArtifactId = value(response, "ActiveHtmlArtifactId", "activeHtmlArtifactId", "") || "";
-        var resourceUri = value(response, "ExportResourceUri", "exportResourceUri", "") || "";
-        var contentSha256 = value(response, "ExportContentSha256", "exportContentSha256", "") || "";
-        if (!exportArtifactId || exportArtifactId !== responseArtifactId ||
-            !/^rna:\/\/chat\//.test(resourceUri) || !/^[a-f0-9]{64}$/i.test(contentSha256)) {
-          throw new Error("HTML export returned incomplete revision evidence.");
-        }
-        if (!options.applyWorkspaceResponse(response, chatId) || state.activeHtmlArtifactId !== exportArtifactId) {
-          throw new Error("HTML workspace changed before export.");
-        }
-        if (typeof options.downloadHtmlExport !== "function") {
-          throw new Error("HTML export download is unavailable.");
-        }
-        await options.downloadHtmlExport({
-          chatId: chatId,
-          workspace: state.htmlWorkspace,
-          resourceExport: resourceExport,
-          revisionArtifactId: exportArtifactId,
-          resourceUri: resourceUri,
-          contentSha256: contentSha256
+        return await options.downloadHtmlExport(target, function () {
+          return state.activeChatId === chatId && state.browserTarget === target && !state.htmlWorkspaceDirty;
         });
-        options.log("HTML экспортирован из exact revision " + resourceUri + ".");
-        return true;
-      } catch (error) {
-        options.log(error.detail || error.message, "error");
-        window.alert(error.message || "HTML не экспортирован.");
-        return false;
-      } finally {
-        await Promise.all((resourceExport && resourceExport.bindings || []).map(function (binding) {
-          return options.send("resourceDataClose", { chatId: chatId, workspaceId: exportArtifactId,
-            leaseId: binding.lease.leaseId }).catch(function () {});
-        }));
-        htmlActionPending = false;
-        state.htmlWorkspaceExportPending = false;
-        if (options.render) options.render();
-      }
+      } catch (error) { options.log(error.detail || error.message, "error"); return false; }
+      finally { htmlActionPending = state.htmlWorkspaceExportPending = false; if (options.render) options.render(); }
     }
 
     async function restore(direction) {

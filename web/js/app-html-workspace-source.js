@@ -59,9 +59,9 @@
       });
     }
     function demandKey(workspace, wanted) { return workspace.revisionArtifactId + ":" + wanted.map(key).join("|"); }
-    function start(workspace, wanted, isCurrent, exporting) {
+    function start(workspace, wanted, isCurrent) {
       var job = { workspace: workspace, chatId: state.activeChatId, key: demandKey(workspace, wanted),
-        abort: new AbortController(), exporting: exporting, notify: true, startedAt: Date.now() };
+        abort: new AbortController(), notify: true, startedAt: Date.now() };
       function current() { return pending === job && !job.abort.signal.aborted && state.activeChatId === job.chatId &&
         currentWorkspace(workspace) && job.key === demandKey(workspace, wanted) && isCurrent(); }
       function active() { if (!current()) throw new Error("RESOURCE_SOURCE_CANCELLED"); }
@@ -116,26 +116,20 @@
     }
     function ensure(wanted) {
       var workspace = state.htmlWorkspace || {};
-      if (!currentWorkspace(workspace) || state.htmlWorkspaceExportPending || !wanted.length) { if (pending && !pending.exporting) cancel(false); return !wanted.length; }
+      if (!currentWorkspace(workspace) || state.htmlWorkspaceExportPending || !wanted.length) { if (pending) cancel(false); return !wanted.length; }
       restoreCached(wanted);
       if (pending && (pending.workspace !== workspace || pending.key !== demandKey(workspace, wanted))) { cancel(true); return false; }
       if (wanted.every(ready)) return true;
       if (pending || wanted.some(function (file) { return file.sourceError; })) return false;
-      start(workspace, wanted, function () { return !state.htmlWorkspaceExportPending; }, false);
+      start(workspace, wanted, function () { return !state.htmlWorkspaceExportPending; });
       return false;
-    }
-    async function exportSources(workspace, isCurrent) {
-      if (pending) { var old = pending; cancel(false); await old.promise; }
-      if (!currentWorkspace(workspace) || !isCurrent()) throw new Error("RESOURCE_EXPORT_CANCELLED");
-      var job = start(workspace, (workspace.files || []).slice(), isCurrent, true);
-      if (!await job.promise) throw job.error || new Error("RESOURCE_SOURCE_UNAVAILABLE");
     }
     function message() {
       if (!currentWorkspace(state.htmlWorkspace || {})) return "Workspace изменился. Скопируйте правки и перезагрузите исходники.";
       var error = (state.htmlWorkspace.files || []).find(function (file) { return file.sourceError; });
       return error ? "Исходник не загружен: " + error.sourceError + ". В меню ⋯ выберите «Перезагрузить исходники»." : "Загрузка исходников…";
     }
-    return { ensure: ensure, ready: ready, current: currentWorkspace, exportSources: exportSources,
+    return { ensure: ensure, ready: ready, current: currentWorkspace,
       message: message, release: function () { cancel(false); sourceCache.clear(); cachedCharacters = 0; } };
   }
   window.RNAssistantHtmlWorkspaceSource = { create: create, ready: ready };

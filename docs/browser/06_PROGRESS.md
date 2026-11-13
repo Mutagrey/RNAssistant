@@ -1,5 +1,17 @@
 # Universal Browser: статус
 
+## F2c2 autonomous HTML export — 2026-11-13
+
+`16.23.1-dev`: common Browser and editor export the exact selected page with embedded
+binding snapshots through existing bounded readers/assembler. The old active-workspace
+export/checkpoint bridge and editor-only source loader are removed. Export does not
+change the publication or create a saved version. The menu distinguishes autonomous
+HTML from editable source ZIP. Actual file:// execution, bindings and zero HTTP pass,
+as do controller/bridge/resource checks. Live Office/plugin tools still require the
+app; arbitrary multi-page source ZIP is not promised to run as one file:// page.
+Remaining: coordinate/selection adapters, Windows native qualification, 07 and main
+integration. No release/push.
+
 ## F2c1 Native delivery — 2026-11-13
 
 Continued from `4fd0ba79`; native delivery now replaces the unconditional execution

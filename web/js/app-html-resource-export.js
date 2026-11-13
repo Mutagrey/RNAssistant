@@ -20,7 +20,7 @@
     var bindings = resourceExport && resourceExport.bindings;
     if (!Array.isArray(bindings) || bindings.length > 32 || new Set(bindings.map(function (item) { return item.name; })).size !== bindings.length)
       throw new Error("RESOURCE_EXPORT_INVALID");
-    var total = 0, parts = [], resources = [];
+    var total = 0, parts = [], resources = [], maximum = options.maximumBytes || MAX_BYTES;
     function active() {
       if (options.signal && options.signal.aborted || !options.isCurrent()) throw new Error("RESOURCE_EXPORT_CANCELLED");
     }
@@ -58,7 +58,7 @@
               var item = await reader.read();
               if (item.done) break;
               size += item.value.byteLength;
-              if (size > lease.maxBatchBytes || total + size > MAX_BYTES) throw new Error("RESOURCE_EXPORT_BOUNDS");
+              if (size > lease.maxBatchBytes || total + size > maximum) throw new Error("RESOURCE_EXPORT_BOUNDS");
               chunks.push(item.value);
             }
           } finally { await reader.cancel(); reader.releaseLock(); }
@@ -227,5 +227,46 @@
       installSnapshotTransport.toString() + ")(" + escapeJson(JSON.stringify(manifest)) + ", " + partHash.toString() + "));</script>";
   }
 
-  window.RNAssistantHtmlResourceExport = { capture: capture, script: script, fromArtifactViews: fromArtifactViews };
+  async function downloadTarget(target, options) {
+    var prepared, writable;
+    function current() { return options.isCurrent() && !(options.signal && options.signal.aborted); }
+    try {
+      if (typeof window.showSaveFilePicker === "function") {
+        var handle = await window.showSaveFilePicker({ suggestedName: "rnassistant-project.html", types: [{ description: "HTML", accept: { "text/html": [".html"] } }] });
+        if (!current()) return false; writable = await handle.createWritable();
+      }
+      options.status("Подготовка автономного HTML и снимков данных…");
+      prepared = await options.send("prepareBrowserHtmlExport", { target: target });
+      if (!current()) return false;
+      var bytes = await RNAssistantResourceDownload.read(prepared.source, { maxBytes: 16 * 1024 * 1024,
+        isCurrent: current, signal: options.signal, fetch: options.fetch });
+      var workspace = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      var files = workspace.Files || workspace.files, sources = workspace.DataSources || workspace.dataSources || [];
+      if (!Array.isArray(files) || files.length > 512 || !Array.isArray(sources) || sources.length > 32) throw new Error("Некорректный снимок HTML workspace.");
+      var entry = files.find(function (file) { return (file.Path || file.path) === prepared.target.entryPath; });
+      if (!entry) throw new Error("В снимке отсутствует выбранная HTML-страница.");
+      await RNAssistantHtmlWorkspacePreview.ensureVendors(files);
+      var snapshot = await capture(prepared.resourceExport, { fetch: options.fetch, signal: options.signal, isCurrent: current, maximumBytes: 32 * 1024 * 1024 });
+      snapshot.workspace = { resourceUri: prepared.target.resourceUri, contentSha256: prepared.source.payload.sha256 };
+      var html = RNAssistantHtmlWorkspacePreview.build({ files: files, dataSources: sources,
+        activeFileId: entry.Id || entry.id, hostBridge: false, resourceSnapshot: snapshot });
+      var blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      if (blob.size > 64 * 1024 * 1024) throw new Error("Автономная страница превышает 64 МиБ; скачайте исходники проекта.");
+      if (!current()) return false;
+      if (writable) { await writable.write(blob); await writable.close(); writable = null; }
+      else { var url = URL.createObjectURL(blob), link = document.createElement("a"); link.href = url; link.download = "rnassistant-project.html"; link.click();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000); }
+      options.status("Автономный HTML подготовлен для скачивания. Данные включены как снимок.");
+      return true;
+    } catch (error) { if (current()) options.status(error.name === "AbortError" ? "Сохранение отменено." : error.detail || error.message); return false; }
+    finally {
+      if (writable) await writable.abort().catch(function () {});
+      if (prepared) {
+        var ids = (prepared.resourceExport && prepared.resourceExport.bindings || []).map(function (binding) { return binding.lease.leaseId; });
+        if (prepared.source) ids.push(prepared.source.leaseId);
+        await Promise.all(ids.map(function (leaseId) { return options.send("resourceDataClose", { chatId: prepared.chatId, workspaceId: "browser", leaseId: leaseId }).catch(function () {}); }));
+      }
+    }
+  }
+  window.RNAssistantHtmlResourceExport = { capture: capture, script: script, fromArtifactViews: fromArtifactViews, downloadTarget: downloadTarget };
 }());

@@ -132,10 +132,6 @@ namespace RNAssistant.Office.Contracts
         public string TargetPath { get; set; }
     }
 
-    public sealed class HtmlWorkspaceExportPayload : HtmlWorkspaceActionPayload
-    {
-    }
-
     public sealed class HtmlWorkspaceResponse
     {
         [JsonProperty("browserTarget")] public RNAssistant.Application.Contracts.BrowserTargetDescriptor BrowserTarget { get; set; }
@@ -170,17 +166,6 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("importedFromResourceUri", NullValueHandling = NullValueHandling.Ignore)]
         public string ImportedFromResourceUri { get; set; }
 
-        [JsonProperty("exportRevisionArtifactId", NullValueHandling = NullValueHandling.Ignore)]
-        public string ExportRevisionArtifactId { get; set; }
-
-        [JsonProperty("exportResourceUri", NullValueHandling = NullValueHandling.Ignore)]
-        public string ExportResourceUri { get; set; }
-
-        [JsonProperty("exportContentSha256", NullValueHandling = NullValueHandling.Ignore)]
-        public string ExportContentSha256 { get; set; }
-
-        [JsonProperty("resourceExport", NullValueHandling = NullValueHandling.Ignore)]
-        public HtmlResourceExport ResourceExport { get; set; }
     }
 
     public sealed class HtmlResourceExport

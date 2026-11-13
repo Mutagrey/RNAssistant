@@ -158,49 +158,6 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void HtmlExportCheckpointOwnsExactBindingPayload()
-        {
-            WithTempPaths(paths =>
-            {
-                var store = new ChatStore(paths);
-                var session = store.Create("Excel", "html-export", "Export.xlsx", "HTML export");
-                HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<main>exact</main>", true);
-                var first = HtmlWorkspaceToolService.UpsertDataSource(session, "bound", "{\"version\":1}");
-                var original = first.Binding.Resource.Copy();
-                store.Save(session);
-                var head = session.ActiveHtmlArtifactId;
-                var count = session.Artifacts.Count;
-                first.Binding.Policy = "head";
-                store.Save(session);
-                AssertEqual(head, session.ActiveHtmlArtifactId, "storage does not manufacture workspace revisions");
-                AssertEqual(count, session.Artifacts.Count, "storage creates no hidden snapshot");
-                var loaded = store.Load(session.Id);
-                AssertEqual("exact", loaded.HtmlWorkspace.DataSources.Single().Binding.Policy,
-                    "uncheckpointed configuration is not a second durable store");
-
-                HtmlWorkspaceToolService.UpsertDataSource(loaded, "bound", "{\"version\":2}");
-                var exportedReference = loaded.HtmlWorkspace.DataSources.Single().Binding.Resource.Copy();
-                var exportId = HtmlWorkspaceArtifactService.PrepareExport(loaded, loaded.ActiveHtmlArtifactId);
-                var exportArtifact = loaded.Artifacts.Single(item => item.Id == exportId);
-                var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(exportArtifact.InlineText);
-                AssertEqual(exportedReference.Uri, snapshot.DataSources.Single().Binding.Resource.Uri, "export pins exact reference");
-                AssertTrue(!exportArtifact.InlineText.Contains("\\\"version\\\""), "workspace contains no dataset body");
-                RuntimeThrows<InvalidOperationException>(() => HtmlWorkspaceArtifactService.PrepareExport(loaded, "stale-head"));
-                store.Save(loaded);
-                var replayed = store.Load(loaded.Id);
-                AssertEqual(exportedReference.Uri, replayed.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri, "reference replays exactly");
-                var gateway = new ResourceGatewayService(store.LoadArtifactBody);
-                var read = gateway.Read(replayed, new ResourceReadRequest { Reference = exportedReference, Representation = "text", MaxChars = 128 });
-                AssertContains(read.Result.Text, "2", "data body is read through the same resource provider/CAS");
-                var prior = gateway.Read(replayed, new ResourceReadRequest { Reference = original, Representation = "text", MaxChars = 128 });
-                AssertContains(prior.Result.Text, "1", "old payload remains an immutable snapshot");
-                HtmlWorkspaceToolService.UpsertFile(replayed, "index.html", "html", "<main>later</main>", true);
-                store.Save(replayed);
-                AssertTrue(store.LoadArtifactBody(replayed, exportId) && HtmlWorkspaceArtifactService.Restore(replayed, exportId), "explicit recovery target");
-                AssertEqual(exportedReference.Uri, replayed.HtmlWorkspace.DataSources.Single().Binding.Resource.Uri, "recovery restores the exact binding");
-            });
-        }
-
         private static void HtmlWorkspaceBranchesUseUniqueMonotonicRevisions()
         {
             var session = new ChatSession();

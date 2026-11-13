@@ -1,5 +1,12 @@
 # Архитектура UI RNAssistant
 
+## Common autonomous HTML export — In Review, 2026-11-13
+
+Browser and HTML editor delegate to HtmlResourceExport.downloadTarget and the typed
+prepareBrowserHtmlExport operation. Exact source and bindings use existing download
+leases/assembler; the active-workspace export/checkpoint path is removed. Closing or
+switching the owner cancels delivery and releases captured sources.
+
 ## Interactive Browser viewport — In Review, 2026-11-13
 
 The existing Browser portal owns common chrome and a dedicated native viewport.

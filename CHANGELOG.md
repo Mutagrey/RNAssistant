@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.23.1-dev
+
+- Browser and HTML editor share autonomous HTML export with embedded binding data.
+  The downloaded page runs through file://; source ZIP is a separate choice.
+  Export keeps the selected revision and does not create a checkpoint.
+
 ### 16.23.0-dev
 
 - Local Browser connects interactive native pages, HTML bindings, plugin SDK and

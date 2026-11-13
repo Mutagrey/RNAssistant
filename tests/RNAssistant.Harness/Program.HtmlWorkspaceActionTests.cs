@@ -104,7 +104,7 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
             foreach (var method in new[] { "deleteHtmlWorkspaceFile", "deleteHtmlWorkspaceData", "setActiveHtmlWorkspaceFile",
-                "restoreHtmlWorkspaceSnapshot", "redoHtmlWorkspaceSnapshot", "importUploadedHtmlToWorkspace", "prepareHtmlWorkspaceExport" })
+                "restoreHtmlWorkspaceSnapshot", "redoHtmlWorkspaceSnapshot", "importUploadedHtmlToWorkspace" })
             {
                 var payload = new JObject { ["chatId"] = "chat-html", ["expectedSessionRevision"] = 17,
                     ["expectedActiveHtmlArtifactId"] = "html-r3", ["path"] = "index.html", ["name"] = "sales",

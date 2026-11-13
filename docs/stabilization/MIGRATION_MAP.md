@@ -1,5 +1,12 @@
 # Current-to-target migration map
 
+## HTML export cutover — F2c2, 2026-11-13
+
+Owner: Browser/resource export. Browser and editor now share exact target capture
+and HtmlResourceExport.downloadTarget. Removed prepareHtmlWorkspaceExport, its DTO,
+mutating checkpoint helper and editor exportSources path. No temporary adapter or
+second resource store. Source ZIP remains a distinct supported project transfer.
+
 ## Native local Browser cutover — F2c1, 2026-11-13
 
 Owner: Browser/native integration. LocalBrowserRenderer/Page/Environment now consume

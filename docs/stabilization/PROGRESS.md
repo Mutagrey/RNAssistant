@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Autonomous HTML export connected — 2026-11-13
+
+`16.23.1-dev`: Browser/editor share exact bounded export; real file:// JavaScript
+and embedded binding reads pass without HTTP. Source ZIP remains separate; live
+Office/tools need the application. Controller/bridge/resource checks pass. Continue
+remaining native adapters and 07; Windows qualification stays open, no release/push.
+[Details](../browser/06_PROGRESS.md#f2c2-autonomous-html-export--2026-11-13).
+
 ## Native Browser delivery connected — 2026-11-13
 
 `16.23.0-dev`: local interactive rendering, RN.resources/plugin transport and native

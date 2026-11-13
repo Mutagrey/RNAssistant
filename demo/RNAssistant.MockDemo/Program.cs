@@ -28,6 +28,7 @@ namespace RNAssistant.MockDemo
             if ((args ?? new string[0]).Contains("--resource-workflow-test")) return await RunResourceWorkflowTestAsync().ConfigureAwait(false);
             if (options.UnifiedAgentTest) return await RunUnifiedAgentTestAsync().ConfigureAwait(false);
             SettingsService.ConfigureDemoDefaults(options.BaseUrl, "mock-strict");
+            if ((args ?? new string[0]).Contains("--browser-html-export-test")) return RunBrowserHtmlExportTest();
             if ((args ?? new string[0]).Contains("--artifact-transfer-test")) return RunArtifactTransferTest();
             if ((args ?? new string[0]).Contains("--chat-creation-test")) return RunChatCreationTest();
             if ((args ?? new string[0]).Contains("--inbox-test")) return await RunInboxTestAsync().ConfigureAwait(false);

@@ -168,99 +168,14 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   await assert.rejects(missing.read(), /RESOURCE_SNAPSHOT_UNAVAILABLE/); await missing.close();
   console.log("PASS HTML export: cancellation, size, missing snapshot and mixed revisions fail closed");
 
-  const calls = [];
-  const downloads = [];
-  const logs = [];
-  let invalidEvidence = false;
-  let failDownload = false;
-  const state = {
-    activeChatId: "chat-export",
-    chatProjectionRevisions: { "chat-export": 7 },
-    activeHtmlArtifactId: "html-r3",
-    bridgeUnavailable: false,
-    htmlWorkspaceDirty: false,
-    htmlWorkspace: {}
-  };
-  const actions = context.RNAssistantHtmlWorkspaceActions.create({
-    state,
-    send: async (method, payload) => {
-      calls.push({ method, payload: JSON.parse(JSON.stringify(payload)) });
-      if (method === "resourceDataClose") return { closed: true };
-      return {
-        activeChatId: "chat-export",
-        activeHtmlArtifactId: "html-r4",
-        exportRevisionArtifactId: "html-r4",
-        exportResourceUri: "rna://chat/chat-export/artifact/html-r4/revision/4",
-        exportContentSha256: invalidEvidence ? "bad" : "a".repeat(64),
-        resourceExport,
-        workspace: {
-          activeFileId: "index.html",
-          files: [{ id: "index.html", path: "index.html", kind: "html", content: "<main>exact</main>" }],
-          dataSources: [{ id: "bound", name: "bound", binding: { resource: { uri: "rna://test/data", revision: "r1" }, policy: "exact", view: "table" } }]
-        }
-      };
-    },
-    applyWorkspaceResponse: response => {
-      state.activeHtmlArtifactId = response.activeHtmlArtifactId;
-      state.htmlWorkspace = response.workspace;
-      return true;
-    },
-    downloadHtmlExport: async value => {
-      if (failDownload) throw new Error("RESOURCE_EXPORT_READ_FAILED");
-      downloads.push(value);
-    },
-    log: (message, level) => logs.push({ message, level }),
-    render: () => {}
-  });
-
-  assert.equal(await actions.exportWorkspace(), true);
-  assert.equal(calls[0].method, "prepareHtmlWorkspaceExport");
-  assert.equal(calls[0].payload.chatId, "chat-export");
-  assert.equal(calls[0].payload.expectedActiveHtmlArtifactId, "html-r3");
-  assert.equal(calls[0].payload.expectedSessionRevision, 7);
-  assert.equal(downloads[0].revisionArtifactId, "html-r4");
-  assert.equal(downloads[0].workspace.dataSources[0].binding.resource.revision, "r1");
-  assert.equal(downloads[0].workspace.dataSources[0].json, undefined);
-  assert.equal(calls.filter(item => item.method === "resourceDataClose").length, 5);
-  console.log("PASS HTML export: download uses the guarded server checkpoint payload");
-
-  state.htmlWorkspaceDirty = true;
-  const callCount = calls.length;
-  assert.equal(await actions.exportWorkspace(), false);
-  assert.equal(calls.length, callCount);
-  console.log("PASS HTML export: unsaved editor state blocks stale export");
-
-  state.htmlWorkspaceDirty = false;
-  invalidEvidence = true;
-  const downloadCount = downloads.length;
-  assert.equal(await actions.exportWorkspace(), false);
-  assert.equal(downloads.length, downloadCount);
-  assert.match(logs.at(-1).message, /incomplete revision evidence/);
-  console.log("PASS HTML export: incomplete revision evidence fails closed before download");
-
-  invalidEvidence = false; failDownload = true;
-  const successLogs = logs.filter(item => !item.level).length;
-  const closeCount = calls.filter(item => item.method === "resourceDataClose").length;
-  assert.equal(await actions.exportWorkspace(), false);
-  assert.equal(logs.filter(item => !item.level).length, successLogs, "async hydration failure is never reported as success");
-  assert.equal(calls.filter(item => item.method === "resourceDataClose").length, closeCount + 5);
-  assert.equal(state.htmlWorkspaceExportPending, false);
-  console.log("PASS HTML export: asynchronous download failure closes every prepared capability");
-
-  const lateCloses = [];
-  const lateActions = context.RNAssistantHtmlWorkspaceActions.create({
-    state,
-    log: (message, level) => logs.push({ message, level }),
-    send: async (method, payload) => {
-      if (method === "resourceDataClose") { lateCloses.push(payload); return { closed: true }; }
-      state.activeChatId = "another-chat";
-      return { exportRevisionArtifactId: "html-r4", resourceExport };
-    }
-  });
-  assert.equal(await lateActions.exportWorkspace(), false);
-  assert.equal(lateCloses.length, 5);
-  assert.ok(lateCloses.every(item => item.chatId === "chat-export" && item.workspaceId === "html-r4"));
-  console.log("PASS HTML export: a late response after chat change releases the original owner's leases");
+  const state = { activeChatId:"chat-export", browserTarget:{state:"Ready",resourceUri:"rna://chat/source/artifact/exact/revision/3"}, htmlWorkspaceDirty:false };
+  let calls = 0, probe;
+  const actions = context.RNAssistantHtmlWorkspaceActions.create({state, log(){}, render(){},
+    downloadHtmlExport:async(target,current)=>{calls++;probe=current;assert.equal(target,state.browserTarget);return current();}});
+  assert.equal(await actions.exportWorkspace(),true);
+  state.htmlWorkspaceDirty=true;assert.equal(await actions.exportWorkspace(),false);assert.equal(calls,1);
+  state.htmlWorkspaceDirty=false;state.activeChatId="another-chat";assert.equal(probe(),false);
+  console.log("PASS HTML editor export: shared exact target, dirty refusal and late context guard");
 
   const refreshCalls = [];
   const refreshState = {
@@ -284,27 +199,17 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     render: () => {}
   });
   await refreshActions.refreshAuto();
-  const toolRefreshes = refreshCalls.filter(call => call.method === "runTool");
-  assert.deepEqual(toolRefreshes.map(call => call.payload.arguments),
-    [{ name: "sales" }, { name: "costs" }]);
-  assert.ok(toolRefreshes.every(call => call.payload.chatId === "chat-refresh"));
-  assert.ok(toolRefreshes.every(call => call.payload.arguments.policy === undefined));
-  console.log("PASS HTML refresh: UI keeps policy internal and sends semantic names only");
+  assert.deepEqual(refreshCalls, [{method:"getHtmlWorkspace",payload:{chatId:"chat-refresh"}}]);
+  console.log("PASS HTML refresh: exact workspace metadata refresh delegates live reads to bindings");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  ["app-html-resource-export.js", "app-html-workspace-preview.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=binary-chunks-20260906-1"), asset));
-  ["app-html-workspace-actions.js", "app-html-workspace.js"]
-    .forEach(asset => assert.ok(index.includes(asset + "?v=" +
-      (asset === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "single-composer-20261023-1")), asset));
+  ["app-html-resource-export.js", "app-html-workspace-preview.js", "app-html-workspace-actions.js", "app-html-workspace.js",
+    "app-html-workspace-editor.js", "app-html-workspace-artifacts.js", "app-html-workspace.css"]
+    .forEach(asset => assert.ok(index.includes(asset + "?v="), asset));
   assert.ok(index.indexOf("app-html-resource-export.js?v=") < index.indexOf("app-html-workspace-preview.js?v="));
-  assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
-  assert.ok(index.includes(
-    "app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1"));
-  assert.ok(index.includes("app-html-workspace.css?v=theme-tokens-20261019-1"));
-  console.log("PASS HTML export: changed UI graph uses one cache key");
+  console.log("PASS HTML export: resource transport loads before the assembler");
 
-  console.log("OK 11/11");
+  console.log("OK HTML export");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

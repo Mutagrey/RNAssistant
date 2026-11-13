@@ -129,14 +129,10 @@ function fixture(texts = ["\ufeff<main>\r\n" + "я".repeat(140000) + "😀</main
     console.log("PASS HTML source: selection churn has bounded producer and cancellation backpressure");
   }
   {
-    const f = fixture(["<main>export</main>", ""]); f.state.htmlWorkspaceExportPending = true;
-    await f.source.exportSources(f.state.htmlWorkspace, () => true);
-    assert.ok(f.files.every(f.source.ready)); assert.equal(f.closes().length, 2);
-    const bad = fixture(["source"]); bad.state.htmlWorkspaceExportPending = true; bad.corrupt = true;
-    await assert.rejects(bad.source.exportSources(bad.state.htmlWorkspace, () => true));
+    const f = fixture(["<main>export</main>", ""]);
     vm.runInContext(read("js/app-html-workspace-preview.js"), f.context);
     assert.throws(() => f.context.RNAssistantHtmlWorkspacePreview.build({ files: [{ kind: "html" }] }), /RESOURCE_SOURCE_REQUIRED/);
-    console.log("PASS HTML source: export shares the reader and assembly refuses missing file bodies");
+    console.log("PASS HTML source: assembly refuses missing file bodies");
   }
   {
     const f = fixture(["source"]); let writes = 0;

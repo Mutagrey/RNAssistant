@@ -46,7 +46,10 @@
       var caps = target.capabilities, copy = operation(target), items = [];
       if (caps.edit && target.kind === "HtmlWorkspace") items.push({ label: "Редактировать исходники", icon: "code", onSelect: function () {
         return RNAssistantHtmlWorkspaceSurface.open(target.chatId, { mode: "edit" }); } });
-      if (caps.exportProject) items.push({ label: "Скачать проект в файлы", icon: "folder", onSelect: function () {
+      if (caps.exportProject && ["HtmlWorkspace", "HtmlArtifact"].includes(target.kind)) items.push({ label: "Скачать автономный HTML", icon: "download", onSelect: function () {
+        return RNAssistantHtmlResourceExport.downloadTarget(target, { send: send, fetch: window.fetch.bind(window), signal: abort.signal,
+          isCurrent: capture(target), status: context.status }); } });
+      if (caps.exportProject) items.push({ label: "Скачать исходники проекта (ZIP)", icon: "folder", onSelect: function () {
         return RNAssistantArtifactDownload.save(target, { send: send, fetch: window.fetch.bind(window), signal: abort.signal, isCurrent: capture(target), status: context.status,
           open: target.kind === "WorkspaceHtmlProject" ? function () { return send("exportBrowserProject", { target: target }); } : null,
           close: target.kind === "WorkspaceHtmlProject" ? function (lease) { return send("closeBrowserProjectTransfer", { target: target, leaseId: lease }); } : null }); } });

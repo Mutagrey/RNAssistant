@@ -523,39 +523,9 @@
     workspaceSource.release(); workspaceActions.cancelWrite();
     return ready(true, true);
   }
-  async function downloadHtmlWorkspaceExport(exportState) {
-    exportState = exportState || {};
-    var exportedWorkspace = exportState.workspace || {};
-    var exportedFiles = prop(exportedWorkspace, "Files", "files", []) || [];
-    var exportedData = prop(exportedWorkspace, "DataSources", "dataSources", []) || [];
-    if (!exportedFiles.some(function (file) { return fileKind(file) === "html"; })) {
-      throw new Error("HTML export checkpoint has no HTML entry file.");
-    }
-    function isCurrent() {
-      return state.activeChatId === exportState.chatId && state.activeHtmlArtifactId === exportState.revisionArtifactId && !state.htmlWorkspaceDirty;
-    }
-    await workspaceSource.exportSources(exportedWorkspace, isCurrent);
-    await htmlPreview.ensureVendors(exportedFiles);
-    var snapshot = await window.RNAssistantHtmlResourceExport.capture(exportState.resourceExport, {
-      fetch: window.fetch.bind(window), isCurrent: isCurrent
-    });
-    snapshot.workspace = { resourceUri: exportState.resourceUri, contentSha256: exportState.contentSha256 };
-    var html = htmlPreview.build({
-      activeFileId: prop(exportedWorkspace, "ActiveFileId", "activeFileId", ""),
-      dataSources: exportedData,
-      files: exportedFiles,
-      resourceSnapshot: snapshot,
-      hostBridge: false
-    });
-    if (!isCurrent()) throw new Error("RESOURCE_EXPORT_CANCELLED");
-    var url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = "rnassistant-workspace.html";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  function downloadHtmlWorkspaceExport(target, guard) {
+    return RNAssistantHtmlResourceExport.downloadTarget(target, { send: send, fetch: window.fetch.bind(window), signal: events.signal,
+      isCurrent: function () { return active && !disposed && !sourceConflict && guard(); }, status: function (message) { if (active && !disposed) log(message); } });
   }
 
   function applyArtifactViewerText(resourceUri, contentSha256, text) {

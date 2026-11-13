@@ -298,6 +298,13 @@ namespace RNAssistant.Office
         { return RNAssistant.Application.BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)); }
         internal BrowserVersionState BrowserVersionState(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
         internal HtmlProjectImportResult CopyBrowserProject(BrowserProjectTransferRequest request, CancellationToken token) { throw new NotSupportedException(); }
+        internal BrowserHtmlExportResponse PrepareBrowserHtmlExport(BrowserProjectTransferRequest request, CancellationToken token) {
+            LastChatId = request.Target.OwnerScope.ChatId;
+            return new BrowserHtmlExportResponse { ChatId = LastChatId, Target = request.Target,
+                Source = new ResourceDownloadOpenResponse { LeaseId = new string('a',64), Url = "https://rnassistant.local-resource/v1/download/" + new string('a',64),
+                    Payload = new PayloadRef(new string('b',64), 42, "application/json"), MaxChunkBytes = 256 * 1024 },
+                ResourceExport = new HtmlResourceExport { Bindings = new HtmlResourceExportBinding[0] } };
+        }
         internal ArtifactTransferDownload ExportBrowserProject(BrowserProjectTransferRequest request, CancellationToken token) { throw new NotSupportedException(); }
         internal ResourceDataCloseResponse CloseBrowserProjectTransfer(BrowserProjectTransferRequest request) { throw new NotSupportedException(); }
         internal SourceComparisonDto CompareBrowserSources(BrowserSourceComparisonRequest request) { throw new InvalidOperationException("Document comparison is not configured by this fixture."); }
@@ -842,27 +849,6 @@ namespace RNAssistant.Office
                 ActiveChatId = request.ChatId ?? string.Empty,
                 ImportedPath = request.TargetPath,
                 ImportedFromResourceUri = request.SourceResourceUri,
-                Workspace = HtmlWorkspaceDto.From(null)
-            };
-        }
-        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(HtmlWorkspaceExportPayload request, CancellationToken cancellationToken = default(CancellationToken)) {
-            LastHtmlAction = request;
-            LastChatId = request.ChatId;
-            LastExpectedHtmlArtifactId = request.ExpectedActiveHtmlArtifactId;
-            return new HtmlWorkspaceResponse
-            {
-                ActiveChatId = request.ChatId ?? string.Empty,
-                ActiveHtmlArtifactId = request.ExpectedActiveHtmlArtifactId,
-                ExportRevisionArtifactId = request.ExpectedActiveHtmlArtifactId,
-                ExportResourceUri = "rna://chat/" + request.ChatId + "/artifact/" + request.ExpectedActiveHtmlArtifactId + "/revision/3",
-                ExportContentSha256 = new string('a', 64),
-                ResourceExport = new HtmlResourceExport {
-                    Generations = new Dictionary<string, long> { ["conversation:" + request.ChatId] = 1 },
-                    Bindings = new[] { new HtmlResourceExportBinding { Name = "data", Lease = new ResourceDataOpenResponse {
-                        LeaseId = "export-lease", Url = "https://rnassistant.local-resource/v1/export-lease",
-                        Descriptor = new ResourceDescriptor { Reference = new ResourceRef("rna://state/conversation/" + request.ChatId + "/data", "r1") },
-                        View = "table", MaxBatchItems = 500, MaxBatchBytes = 8192 } } }
-                },
                 Workspace = HtmlWorkspaceDto.From(null)
             };
         }

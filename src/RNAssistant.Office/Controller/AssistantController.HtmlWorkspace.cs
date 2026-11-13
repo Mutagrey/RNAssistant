@@ -152,33 +152,6 @@ namespace RNAssistant.Office
             });
         }
 
-        public HtmlWorkspaceResponse PrepareHtmlWorkspaceExport(HtmlWorkspaceExportPayload request,
-            CancellationToken cancellationToken = default(CancellationToken))
-        {
-            return WithHtmlWorkspaceAction(request, session =>
-            {
-                var previousArtifactId = session.ActiveHtmlArtifactId;
-                var exportArtifactId = MutateHtmlWorkspaceAction(session, request, "html.workspace.export",
-                    new Dictionary<string, object> { ["expected"] = request.ExpectedActiveHtmlArtifactId },
-                    () => HtmlWorkspaceArtifactService.PrepareExport(session, request.ExpectedActiveHtmlArtifactId));
-                if (!string.Equals(previousArtifactId, exportArtifactId, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    _chatSessions.NotifySaved(session); // The mutation barrier already persisted the checkpoint.
-                }
-                var artifact = (session.Artifacts ?? new System.Collections.Generic.List<ChatArtifact>()).Single(item =>
-                    item != null &&
-                    string.Equals(item.Id, exportArtifactId, System.StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(item.Kind, ChatArtifactKinds.HtmlWorkspace, System.StringComparison.OrdinalIgnoreCase));
-                var response = HtmlWorkspaceState(session);
-                response.ExportRevisionArtifactId = artifact.Id;
-                response.ExportResourceUri = ChatResourceUri.CreateArtifactRevision(session, artifact).Uri;
-                response.ExportContentSha256 = artifact.ContentSha256;
-                response.ResourceExport = new HtmlWorkspaceExportService(_toolExecutor.ResourceGateway, _resourceData)
-                    .Open(session, artifact.Id, cancellationToken);
-                return response;
-            });
-        }
-
         public HtmlWorkspaceResponse DeleteHtmlWorkspaceFile(HtmlWorkspaceDeleteFilePayload request)
         {
             return WithHtmlWorkspaceAction(request, session =>

@@ -51,7 +51,7 @@ const {withPreviewPage}=require('./preview-session');
   await root.getByRole('combobox',{name:'Адрес материала'}).press('Enter');
   if(!await root.getByRole('button',{name:'Действия страницы',exact:true}).isVisible())await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
   await root.getByRole('button',{name:'Действия страницы',exact:true}).click();
-  await page.getByRole('menuitem',{name:'Скачать проект в файлы',exact:true}).click();
+  await page.getByRole('menuitem',{name:'Скачать исходники проекта (ZIP)',exact:true}).click();
   await page.waitForFunction(()=>htmlProbe.calls.some(c=>c.type==='closeBrowserProjectTransfer'));
   if(!await root.getByRole('button',{name:'Действия страницы',exact:true}).isVisible())await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
   await root.getByRole('button',{name:'Действия страницы',exact:true}).click();

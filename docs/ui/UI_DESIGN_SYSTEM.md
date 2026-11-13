@@ -1,5 +1,11 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Export menu labels — In Review, 2026-11-13
+
+Use the existing ActionMenu/status surface for autonomous HTML and source ZIP;
+explicit labels communicate different outputs. No additional dialog or toolbar.
+The download status reports preparation, without claiming an unverified disk write.
+
 ## Interactive Browser layout — In Review, 2026-11-13
 
 Native content occupies the common preview content slot. The manual-control strip

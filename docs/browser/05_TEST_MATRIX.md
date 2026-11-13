@@ -1,5 +1,15 @@
 # Universal Browser: матрица проверок
 
+## F2c2 autonomous export evidence — 2026-11-13
+
+Passed: real-controller Mock `--browser-html-export-test` (exact source/data,
+unchanged publication and stale refusal); Harness `html export:` and typed Browser
+HTML export bridge; HTML export/source unit fixtures; browser-offline-export real
+Chromium menu → download → file:// JS/field/button/binding read with zero HTTP,
+lease cleanup and late-close cancellation. Existing Workspace version/action test
+passes with the explicit source-ZIP label. Windows save-dialog/native evidence remains
+open; these tests do not qualify Office/WebView2.
+
 ## F2c1 interactive checks — 2026-11-13
 
 `browser-interactive.test.js` exercises the actual assembler, RN.resources native

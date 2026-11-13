@@ -11,11 +11,35 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Tools;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        internal BrowserHtmlExportResponse PrepareBrowserHtmlExport(BrowserProjectTransferRequest request, CancellationToken token)
+        {
+            using (var content = OpenBrowserContent(request?.Target, token)) {
+                if (content.HtmlWorkspace == null) throw new InvalidOperationException("Выберите HTML workspace для автономного экспорта.");
+                var target = content.Target; var metadata = BrowserOwner(target.OwnerScope, target.Immutable);
+                var artifact = _chatStore.DocumentArtifacts.Read(metadata, ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri)), false);
+                var payload = new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, "application/json; charset=utf-8");
+                var session = LoadAddressedSession(metadata.Id); _toolExecutor.BindResourceAuthority(session);
+                ResourceDownloadOpenResponse source = null; HtmlResourceExport resources = null;
+                try {
+                    source = _resourceData.OpenDownload(metadata, "browser", 16 * 1024 * 1024, cancellation => new ResourceDownloadContent {
+                        VerifiedStream = new ChatBlobStore(_paths).OpenVerifiedRead(payload.ToBlobReference(), 16 * 1024 * 1024, cancellation),
+                        VerifiedPayload = payload, ContentType = payload.ContentType }, token);
+                    resources = new HtmlWorkspaceExportService(_toolExecutor.ResourceGateway, _resourceData).OpenBindings(session, "browser", content.HtmlWorkspace.DataSources, token);
+                    content.Validate(); token.ThrowIfCancellationRequested();
+                    return new BrowserHtmlExportResponse { ChatId = metadata.Id, Target = target, Source = source, ResourceExport = resources };
+                } catch {
+                    if (source != null) _resourceData.Close(metadata.Id, "browser", source.LeaseId);
+                    if (resources != null) foreach (var binding in resources.Bindings) _resourceData.Close(metadata.Id, "browser", binding.Lease.LeaseId);
+                    throw;
+                }
+            }
+        }
         internal ResourceDataOpenResponse OpenBrowserResource(BrowserTargetDescriptor target, string name, CancellationToken token)
         {
             if (string.IsNullOrWhiteSpace(name) || name.Length > 128) throw new InvalidOperationException("RESOURCE_BINDING_UNKNOWN");

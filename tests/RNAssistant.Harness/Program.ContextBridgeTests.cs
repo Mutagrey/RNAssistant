@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -1672,20 +1673,15 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
             var token = BridgeToken(bridge);
-            var response = bridge.HandleMessageAsync(
-                "{\"contractVersion\":2,\"id\":\"html-export\",\"type\":\"prepareHtmlWorkspaceExport\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-html\",\"expectedSessionRevision\":7,\"expectedActiveHtmlArtifactId\":\"html-r3\"}}")
-                .GetAwaiter().GetResult();
+            var response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new { contractVersion = 2, id = "html-export", type = "prepareBrowserHtmlExport", bridgeToken = token,
+                payload = new { target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.HtmlArtifact, State = BrowserTargetState.Ready, ResourceUri = "rna://chat/doc/artifact/html_ws_one/revision/3",
+                    OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = "doc", ChatId = "chat-html" } } } })).GetAwaiter().GetResult();
             var envelope = JObject.Parse(response);
-            AssertTrue(envelope["ok"].Value<bool>(), "HTML export bridge response ok");
-            AssertEqual("chat-html", controller.LastChatId, "HTML export targets the addressed chat");
-            AssertEqual("html-r3", controller.LastExpectedHtmlArtifactId, "HTML export forwards exact active guard");
-            AssertEqual("html-r3", (string)envelope["payload"]["exportRevisionArtifactId"],
-                "HTML export returns the guarded checkpoint id");
-            var lease = envelope["payload"]["resourceExport"]["bindings"][0]["lease"];
-            AssertEqual("r1", (string)lease["descriptor"]["reference"]["revision"], "export returns an exact resource capability");
-            AssertTrue(lease["url"] != null && lease["rows"] == null && lease["text"] == null,
-                "export controls contain capability metadata, never resource bodies");
+            AssertTrue(envelope["ok"].Value<bool>(), "Browser HTML export response ok");
+            AssertEqual("chat-html", controller.LastChatId, "export forwards exact target owner");
+            AssertEqual("rna://chat/doc/artifact/html_ws_one/revision/3", (string)envelope["payload"]["target"]["resourceUri"], "export returns exact source evidence");
+            AssertTrue(envelope["payload"]["source"]["payload"]["sha256"] != null && envelope["payload"]["workspace"] == null,
+                "export controls contain bounded download metadata, not workspace bodies");
         }
 
         private static void BridgeUsesTypedArtifactViewerPayload()

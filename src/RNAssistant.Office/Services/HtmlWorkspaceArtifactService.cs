@@ -189,33 +189,6 @@ namespace RNAssistant.Office.Services
             ValidateRevisionLineage(session);
         }
 
-        public static string PrepareExport(ChatSession session, string expectedActiveArtifactId)
-        {
-            if (session == null) throw new InvalidOperationException("Chat session is required.");
-            if (string.IsNullOrWhiteSpace(expectedActiveArtifactId) ||
-                string.IsNullOrWhiteSpace(session.ActiveHtmlArtifactId) ||
-                !string.Equals(
-                expectedActiveArtifactId ?? string.Empty,
-                session.ActiveHtmlArtifactId ?? string.Empty,
-                StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("HTML workspace changed; reload it before exporting.");
-            }
-            EnsureMutable(session);
-            var selected = FindArtifact(session, session.ActiveHtmlArtifactId);
-            if (!string.IsNullOrEmpty(selected?.DocumentAuthorityId))
-            {
-                if (!SameState(selected.InlineText, HtmlWorkspaceCopyService.CaptureSnapshot(session.HtmlWorkspace, selected.Title)))
-                    throw new InvalidOperationException("Save the HTML changes before exporting the selected document revision.");
-                return selected.Id;
-            }
-            var artifactId = CaptureCurrent(session, "HTML export checkpoint");
-            if (string.IsNullOrWhiteSpace(artifactId))
-            {
-                throw new InvalidOperationException("HTML workspace has no exportable revision.");
-            }
-            return artifactId;
-        }
 
         public static void RebuildNavigation(ChatSession session)
         {

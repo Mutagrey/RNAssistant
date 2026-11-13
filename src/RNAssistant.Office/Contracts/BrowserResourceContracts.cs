@@ -3,6 +3,13 @@ using Newtonsoft.Json;
 namespace RNAssistant.Office.Contracts
 {
     // The unprivileged page supplies only a known binding name or its own lease.
+    public sealed class BrowserHtmlExportResponse
+    {
+        [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("target")] public RNAssistant.Application.Contracts.BrowserTargetDescriptor Target { get; set; }
+        [JsonProperty("source")] public ResourceDownloadOpenResponse Source { get; set; }
+        [JsonProperty("resourceExport")] public HtmlResourceExport ResourceExport { get; set; }
+    }
     public sealed class BrowserResourceChangedMessage
     {
         [JsonProperty("type")] public string Type => "rnassistant-resource-changed";

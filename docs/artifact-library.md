@@ -158,8 +158,12 @@ exact local resources. Cached Office data requires a complete retained text view
 missing data fails explicitly without live recapture or an incomplete success.
 Supported data views are `text`, `table` and `records`; binary resource bindings are
 not supported by this package version. External HTTP(S) dependencies remain external
-and are listed in the package/preview. The existing **Скачать HTML** action still
-produces a standalone page, separately from an editable project package.
+and are listed in the package/preview. **Скачать автономный HTML** in the common Browser/editor exports the selected page
+with inlined local HTML/CSS/JS/vendors and captured RN.resources data. It runs under
+`file://` without the app or HTTP; bindings are a fixed snapshot, not a live Office
+connection. Plugin SDK/tool calls still require RNAssistant. The source ZIP retains
+project files and is not promised to execute as an arbitrary file:// application.
+Export does not create a checkpoint or change the active workspace.
 
 `exportArtifact`, `beginArtifactImport`, `importArtifact`, `copyArtifact` and
 `closeArtifactTransfer` use typed control DTOs and the existing chunked resource

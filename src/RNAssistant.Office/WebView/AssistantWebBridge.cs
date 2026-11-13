@@ -875,6 +875,9 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetArtifactLibraryHistory(libraryHistory), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.PrepareBrowserHtmlExport:
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.PrepareBrowserHtmlExport(Payload<BrowserProjectTransferRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.ExportBrowserProject:
                         responsePayload = await RunBridgeWorkAsync(() => _controller.ExportBrowserProject(Payload<BrowserProjectTransferRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
@@ -952,10 +955,6 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ImportUploadedHtmlToWorkspace:
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);
                         responsePayload = _controller.ImportUploadedHtmlToWorkspace(htmlImport);
-                        break;
-                    case BridgeOperationId.PrepareHtmlWorkspaceExport:
-                        var htmlExport = Payload<HtmlWorkspaceExportPayload>(payload);
-                        responsePayload = _controller.PrepareHtmlWorkspaceExport(htmlExport, cancellationToken);
                         break;
                     case BridgeOperationId.DeleteHtmlWorkspaceFile:
                         var deleteHtmlFile = Payload<HtmlWorkspaceDeleteFilePayload>(payload);

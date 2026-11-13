@@ -1,5 +1,12 @@
 # План модернизации production UI
 
+## F2c2 common export — In Review, 2026-11-13
+
+Review: open a bound HTML page, download autonomous HTML, open it with file://,
+change a field and read a binding. Repeat from the editor after saving changes.
+The real Chromium export path and exact controller capture pass; live Office is not
+part of an offline page. Continue coordinate/selection adapters, then 07.
+
 ## F2c1 native cutover — In Review, 2026-11-13
 
 Review: open a local Browser, switch Page/Source, open a menu/dialog, resize to
