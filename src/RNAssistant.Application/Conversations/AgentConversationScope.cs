@@ -13,7 +13,7 @@ namespace RNAssistant.Application.Conversations
         internal Func<IReadOnlyList<AgentConversationEndpoint>> ReadCatalog;
         internal Func<ChatSession, string, ChatSession> Prepare;
         internal Action<ChatSession> Commit;
-        internal Func<ChatSession, AgentConversationEndpoint> Endpoint;
+        internal Func<AgentChatAddress, AgentConversationEndpoint> Endpoint;
         internal ConversationGroupService Groups;
         internal ConversationCatalogService Catalog;
     }

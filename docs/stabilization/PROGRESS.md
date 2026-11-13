@@ -253,7 +253,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После native peer Inbox/correlated waits — application peer delivery/controls и остальные Store/resource
+После native Send/Resolve — spawn, peer controls/projections и остальные Store/resource
 consumers, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
@@ -322,7 +322,16 @@ rebuild/restore и запрет подмены тела/provenance провер�
 Schema 18 расширяет существующие индексы. 3 новых + 19 regression checks проходят
 на изолированном baseline; промежуточный срез без bump/переключения writers.
 [Отчёт §12](../audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
-Application Send/Resolve/spawn, peer controls/live notification, остальные mutation/resource owners,
+Подключены application Send/Resolve и живое уведомление Inbox (2026-11-13): адрес
+разрешается через journal index без общего каталога; оба live cursor обновляются
+после точного read-back. Terminal закреплён за accepted call/runtime entry и квитанцией.
+Потеря ack с доступной квитанцией доказывает queued; при недоступном read-back recovery
+оставляет Unknown без повторной отправки. User pause сохраняется. 3 новых и 16
+регрессионных checks проходят изолированно; один прежний batch parser check также
+падает на чистом `a38e5aba` и вынесен в [backlog](BACKLOG.md#send-batch-parserfixture-mismatch--2026-11-13).
+Промежуточный срез без bump/default switch; schema 18 не меняется.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
+Spawn, peer controls, assignment/group projections, остальные mutation/resource owners,
 rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.

@@ -1,5 +1,36 @@
 # Session event stream
 
+## Journal outbound Send and Resolve — 2026-11-13
+
+Application Send/Resolve now use the existing event port's explicit atomic-delivery
+capability. ConversationJournal resolves the exact peer alias through its scoped
+index; the existing scope creates the endpoint without catalog enumeration. The
+registry lock is released before endpoint validation or persistence. Ordered Inbox
+locks protect both live cursors; scheduling runs after read-back and outside these
+locks. Incoming input signals the existing Inbox and cannot release a user/recovery
+pause. Closing views does not change delivery ownership.
+
+The native acceptance requires the current sender run, exact accepted call/step,
+canonical runtime entry and both observed chat revisions. Its policy comes from the
+accepted run. Membership, input/control and both heads remain one frame. A terminal
+with an effect must match that call's canonical delivery; successful intake does not
+prove recipient execution or an assignment's external effects. A lost append
+acknowledgement can return queued only after exact frame, intent and body read-back,
+without another append. Unavailable proof leaves an interrupted attempt; recovery
+retains Unknown, does not promote the outcome or schedule/replay the input.
+
+Three new Office run-service / Workspace runtime-port scenarios cover Send followed
+by Resolve, receipt loss, unavailable read-back/recovery, live notification, a stopped
+queue, restart, rebuild and clean Workspace restore. Known-address Send/Resolve use
+zero catalog reads in these fixtures. There is no CPU/latency or full input-history
+boundedness claim. Schema 18 and durable frame shapes are unchanged.
+
+The retiring event backend explicitly keeps SendEvents until whole-port P7; an
+atomic backend never falls back to Prepared/Submit/Accepted writes. No new store,
+adapter, imported history or dual-write. Spawn, peer controls, assignment/group
+projections, remaining Store/resource owners and production composition remain open.
+Windows/Office qualification is separate. [Evidence](audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
+
 ## Journal peer Inbox and correlated waits — 2026-11-13
 
 For integrated Store chats, native `agent.accepted` now commits delivery/membership,
@@ -23,9 +54,9 @@ service and Workspace runtime ports/shared input channel, preserving the origina
 run/call/deadline and applying the reply once. This proves reception/correlation;
 an assignment outcome is the peer's assessment, not external effect evidence.
 
-Native publication is injected at the persistence boundary in these checks.
-Application outbound Send/Resolve, spawn, peer controls and live notification remain
-to be connected; default production writers are unchanged. Full input-history
+Native publication is injected at the persistence boundary in these earlier checks;
+application Send/Resolve and live notification are covered by the slice above.
+Spawn and peer controls remain unconnected; default production writers are unchanged. Full input-history
 boundedness, metadata/header costs, remaining Store/resource owners and Windows/Office
 qualification remain open. [Evidence](audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
 

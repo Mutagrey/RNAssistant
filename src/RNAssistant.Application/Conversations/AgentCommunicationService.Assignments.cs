@@ -34,7 +34,8 @@ namespace RNAssistant.Application.Conversations
         // Only an applied recipient can report a result. The original public message
         // ID is the assignment address; no task identity, hierarchy or second store.
         internal AgentDeliveryReceipt Resolve(ConversationInboxService inbox, ChatSession source, int limit,
-            string runId, string operationId, string requestId, string outcome, string text, Action dispatch)
+            string runId, string operationId, string requestId, string outcome, string text, Action dispatch,
+            RNAssistant.Core.Tools.ToolExecutionContext execution = null)
         {
             AgentAssignmentOutcome result;
             string recipient;
@@ -52,7 +53,7 @@ namespace RNAssistant.Application.Conversations
                 recipient = original.AgentCommunication.Sender.AgentId;
             }
             var receipt = Send(inbox, source, limit, runId, operationId, recipient,
-                text, dispatch, replyTo: requestId, resolution: result);
+                text, dispatch, replyTo: requestId, resolution: result, execution: execution);
             receipt.RequestId = requestId; receipt.ReportedOutcome = result;
             return receipt;
         }

@@ -44,7 +44,8 @@ namespace RNAssistant.Core.Storage
         internal AgentMessageReceipt SendAgent(string operation, string sender, string run, string call, string recipientAlias,
             string root, string chain, int participantLimit, string text, bool expectReply = false, string replyTo = null,
             bool assignment = false, AgentAssignmentOutcome? resolution = null, CancellationToken token = default(CancellationToken),
-            string recipientRuntimeKey = null)
+            string recipientRuntimeKey = null, Action<SqliteConnection, AgentMessageAccepted> validateDispatch = null,
+            Action dispatch = null)
         {
             if (string.IsNullOrWhiteSpace(text) || text.Length > 128 * 1024) throw new ArgumentException("Bounded nonempty agent text is required.");
             using (RuntimeStorageActivity.Acquire(_paths, token))
@@ -55,7 +56,8 @@ namespace RNAssistant.Core.Storage
                     var target = FindAgent(db, recipientAlias) ?? throw new InvalidOperationException("Agent is unavailable in this scope.");
                     var source = Card(db, sender)?.Item1 ?? throw new InvalidOperationException("Sender is unavailable in this scope.");
                     var fact = new AgentMessageAccepted(sender, target.ChatId, run, call, root, chain, participantLimit,
-                        "m-" + Guid.NewGuid().ToString("N"), body, expectReply, replyTo, assignment, resolution, source.Policy, DateTime.UtcNow,
+                        "m-" + Guid.NewGuid().ToString("N"), body, expectReply, replyTo, assignment, resolution,
+                        source.Address == null ? source.Policy : CurrentRun(db, sender)?.Fact.Policy ?? source.Policy, DateTime.UtcNow,
                         recipientRuntimeKey: recipientRuntimeKey);
                     var fingerprint = DeliveryFingerprint(fact);
                     var prior = FindDelivery(db, "operation", operation);
@@ -67,6 +69,8 @@ namespace RNAssistant.Core.Storage
                     fact = PreparePeerInput(db, operation, fingerprint, fact, source, target);
                     var record = DeliveryRecord(operation, "agent.accepted", fact, fingerprint);
                     ValidateDeliveryRecord(db, record);
+                    validateDispatch?.Invoke(db, fact);
+                    dispatch?.Invoke();
                     var position = Journal.Append(cursor, operation, fingerprint, record.Kind, record.Data);
                     var projected = ApplyAcceptedDelivery(db, record, position);
                     return new AgentMessageReceipt(operation, fingerprint, fact, position, projected);
@@ -222,6 +226,20 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private AgentMessageReceipt DeliveryForCall(SqliteConnection db, string sender, string run, string call)
+        {
+            using (var command = Command(db, "SELECT operation FROM agent_delivery WHERE stream=$stream AND sender=$sender AND run=$run AND call=$call"))
+            {
+                command.Parameters.AddWithValue("$sender", sender); command.Parameters.AddWithValue("$run", run);
+                command.Parameters.AddWithValue("$call", call);
+                var operation = command.ExecuteScalar() as string;
+                var receipt = operation == null ? null : FindDelivery(db, "operation", operation);
+                if (receipt != null && (receipt.Fact.Sender != sender || receipt.Fact.RunId != run || receipt.Fact.CallId != call))
+                    throw new InvalidDataException("Foreign delivery call locator.");
+                return receipt;
+            }
+        }
+
         private JournalRecord LocatedRecord(SqliteCommand command)
         { JournalCursor ignored; return LocatedRecord(command, out ignored); }
 
@@ -293,7 +311,7 @@ namespace RNAssistant.Core.Storage
                 if (FindDelivery(db, "message", fact.MessageId) != null) throw new InvalidDataException("Agent message identity is already accepted.");
                 var sender = Card(db, fact.Sender)?.Item1; var recipient = Card(db, fact.Recipient)?.Item1;
                 if (sender == null || recipient == null || Card(db, fact.Root)?.Item1 == null) throw new InvalidOperationException("Delivery scope member is unavailable.");
-                sender.Policy.RequireSame(fact.Policy);
+                (sender.Address == null ? sender.Policy : CurrentRun(db, fact.Sender)?.Fact.Policy ?? sender.Policy).RequireSame(fact.Policy);
                 recipient.Policy.ForPeerInput(new AgentCommunicationContext { Sender = new AgentChatAddress { ChatId = sender.ChatId }, Policy = fact.Policy });
                 ValidatePeerInput(db, record, fact, sender, recipient);
                 var call = FindCall(db, fact.Sender, fact.RunId, fact.CallId);

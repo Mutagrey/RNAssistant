@@ -25,7 +25,7 @@ namespace RNAssistant.Core.Storage
             if (command.FactKind == AgentRunEventKind.ToolStarted &&
                 !SameRunValue(context, session.LastRun.KernelState.InFlightTool))
                 throw new InvalidOperationException("Dispatch requires its exact in-flight checkpoint.");
-            if (context?.Policy.MayHaveSideEffects == true && (context.Call.Name != ResourceMutationToolCatalog.Write ||
+            if (context?.Policy.MayHaveSideEffects == true && (context.Call.Name != ResourceMutationToolCatalog.Write && !IsPeerDelivery(context.Call.Name) ||
                 context.Policy.Policy?.ExecutionClass != ToolExecutionClass.ManagedMutation))
                 throw TextStoreScope();
             if (command.FactKind == AgentRunEventKind.ToolWaiting)
@@ -51,7 +51,7 @@ namespace RNAssistant.Core.Storage
                 execution?.Outcome != ToolExecutionOutcome.AwaitingConfirmation)
             {
                 if (execution == null) throw new InvalidOperationException("A kernel terminal requires execution evidence.");
-                if (context.Policy.MayHaveSideEffects)
+                if (context.Policy.MayHaveSideEffects && !IsPeerDelivery(context.Call.Name))
                     outcome = new ResourceJournal(_paths, _protector).CallOutcome(MutationOrigin(session, context));
                 if (execution.AuthorityCommitId != null && execution.AuthorityCommitId != outcome?.CommitId ||
                     execution.ResourceEffect != null && !SameRunValue(execution.ResourceEffect, outcome?.Effect))
@@ -109,7 +109,11 @@ namespace RNAssistant.Core.Storage
                     tools.Terminal.Result.ResultStepId != tools.StepId) throw new InvalidDataException("Foreign kernel terminal.");
                 ValidateResult(db, tools.Terminal, record.Operation, true); ValidateOutcome(tools.Terminal, outcome);
                 var progress = tools.Terminal.Result.ExecutionProgress;
-                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null :
+                var peer = IsPeerDelivery(tools.ToolName) ? DeliveryForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
+                if (peer != null && (peer.Fact.Input == null || peer.Position.Sequence > fact.ExpectedRevision ||
+                    tools.NoEffect || progress.Outcome == ToolExecutionOutcome.NotDispatched))
+                    throw new InvalidDataException("Peer terminal contradicts its exact accepted delivery.");
+                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null : peer == null &&
                     !tools.NoEffect && progress.Outcome != ToolExecutionOutcome.Unknown && progress.Outcome != ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Possible resource effects require exact linked proof or an unknown terminal.");
                 if (progress.Outcome != ToolExecutionOutcome.NotDispatched && StartedOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) == null)

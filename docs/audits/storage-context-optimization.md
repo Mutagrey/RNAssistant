@@ -1322,3 +1322,45 @@ after-state/CAS ownership.
    intermediate integration keeps production composition and behavior unchanged,
    so no version bump. Tested source hashes are checked against the isolated
    candidate and staged diff; unrelated work remains unstaged. No push/tag.
+
+## P5 — application Send/Resolve on the journal (2026-11-13)
+
+1. F19's known-address Send consumer now uses scoped journal alias lookup instead
+   of catalog enumeration. Existing AgentCommunicationService, Inbox, event port
+   and ConversationJournal remain owners. Spawn/control/list and complete F19/P5
+   closure remain open; F18/F21 input-history costs are not closed by this slice.
+2. Actual Office/Workspace tool execution enters the native atomic acceptance path.
+   Exact run/call/step/runtime-entry and both chat revisions guard dispatch; the
+   terminal checks its canonical delivery. Live cursors advance after read-back,
+   the existing Inbox signals input, and scheduling runs outside locks. User stop
+   remains effective. Receipt loss with exact frame/intent/body read-back proves
+   queued; unavailable read-back retains Unknown through recovery without replay.
+3. Native Send/Resolve no longer use catalog scans, source Prepared/Accepted or a
+   separate root reservation. The old event backend explicitly keeps SendEvents
+   until P7; this is a declared capability boundary, not fallback or dual-write.
+   Existing scope Endpoint now accepts the exact address. No new owner/store/index,
+   schema change or imported history. Production C# +259/−15 lines.
+4. On isolated `a38e5aba` + this slice, macOS/net8/C#7.3: 3 new Send/Resolve cases
+   and 16 regressions pass. They cover both real runtime consumers, exact native
+   receipt/terminal, notification/stop, lost acknowledgement, unavailable read-back,
+   Unknown recovery, restart, rebuild and clean Workspace restore. Regressions:
+   peer (3), native delivery (1), mutation (4), tool evidence (1), interrupted read
+   (1), send batches (2), spawn (2), receipt failure (1), assignment correlation (1).
+   One additional parser/batch-policy check fails identically on clean `a38e5aba`;
+   recorded separately in [backlog](../stabilization/BACKLOG.md#send-batch-parserfixture-mismatch--2026-11-13), not counted as passed.
+5. Before: native outbound application delivery was unsupported. The new fixture
+   records zero catalog enumerations for Send and Resolve, one acceptance per
+   accepted call, and no new acceptance on restart/rebuild/restore. These are
+   operation counts; no history cost curve, CPU/allocations or Windows latency
+   comparison was made. Inbox replay still grows with retained input history.
+6. Next: native spawn, peer controls and assignment/group projections, then other
+   Store/resource operations and P3 metadata/header costs. P4 remains deferred.
+   Production composition still uses the old backend. Verified history/CAS/keys/
+   Workspace locator backup, stopped old writers, full restore and Windows/Office
+   screen-photo evidence gate full cutover; controller binding changes are not
+   declared Windows qualified by this harness.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS, Harness guide
+   and the separate backlog item are updated. P7 removes the explicit capability
+   branch/SendEvents with the existing retiring adapters. This intermediate slice
+   changes no default production behavior, so no product bump. Scoped staging
+   preserves parallel window/UI changes. No push/tag.

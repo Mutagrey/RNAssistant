@@ -287,6 +287,12 @@ namespace RNAssistant.Core.Persistence
 
     public interface IEventStore
     {
+        // Explicit migration capability; an atomic backend never falls back to
+        // source Prepared / destination Submit / source Accepted event writes.
+        bool AtomicAgentDelivery { get; }
+        AgentChatAddress FindAgent(ConversationMetadata source, string agentId);
+        RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+            AgentDeliveryCommand command, Action dispatch);
         SessionEvent Append(ChatSession session, SessionEventWrite write);
         IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs);
         IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode);

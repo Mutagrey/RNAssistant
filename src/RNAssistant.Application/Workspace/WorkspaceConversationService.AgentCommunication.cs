@@ -46,7 +46,7 @@ namespace RNAssistant.Runtime
                     return child;
                 },
                 Commit = child => _chats.Commit(child, new ConversationCommit()),
-                Endpoint = child => AgentEndpoint(workspace, AgentCommunicationService.Address(child), captured, key)
+                Endpoint = address => AgentEndpoint(workspace, address, captured, key)
             });
         }
 

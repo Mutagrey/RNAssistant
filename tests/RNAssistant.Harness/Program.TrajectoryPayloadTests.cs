@@ -151,6 +151,11 @@ namespace RNAssistant.Harness
 
         private sealed class PayloadPreviewEvents : IEventStore
         {
+            public bool AtomicAgentDelivery { get { return false; } }
+            public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { throw new NotSupportedException(); }
+            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+                AgentDeliveryCommand command, Action dispatch) { throw new NotSupportedException(); }
+
             public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
             { throw new NotSupportedException(); }
 

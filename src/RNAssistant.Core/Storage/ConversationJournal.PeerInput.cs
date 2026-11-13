@@ -4,14 +4,107 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.Data.Sqlite;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
 {
     internal sealed partial class ConversationJournal
     {
+        bool IEventStore.AtomicAgentDelivery { get { return true; } }
+
+        AgentChatAddress IEventStore.FindAgent(ConversationMetadata source, string agentId)
+        {
+            return Access((db, cursor) => {
+                RequireChatRevision(source, TextChat(db, source.Id));
+                var card = FindAgent(db, agentId);
+                return card?.Address == null ? null : CardAddress(card);
+            }, CancellationToken.None);
+        }
+
+        RNAssistant.Core.Services.ConversationInputRecord IEventStore.AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+            AgentDeliveryCommand command, Action dispatch)
+        {
+            if (command == null || dispatch == null) throw new ArgumentNullException(nameof(command));
+            command = JsonConvert.DeserializeObject<AgentDeliveryCommand>(JsonConvert.SerializeObject(command));
+            var context = command.Execution;
+            if (source?.LastRun?.KernelState == null || recipient == null || source.Id == recipient.Id ||
+                context == null || !IsPeerDelivery(context.Call.Name) ||
+                source.LastRun.RunId != context.RunId || source.LastRun.TurnId != context.TurnId ||
+                !SameRunValue(source.LastRun.KernelState.InFlightTool, context) ||
+                command.Resolution.HasValue != (context.Call.Name == AgentCommunicationToolCatalog.Resolve) ||
+                command.AgentId != AgentChatAddress.IdFor(recipient.Id))
+                throw new InvalidOperationException("Peer delivery requires its exact entered call and recipient.");
+            AgentMessageReceipt accepted;
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                try
+                {
+                    accepted = SendAgent(command.OperationId, source.Id, context.RunId, context.Call.Id, command.AgentId,
+                        command.RootChatId, command.ChainId, command.ParticipantLimit, command.Text, command.ExpectReply,
+                        command.ReplyTo, command.Assignment, command.Resolution, recipientRuntimeKey: command.RecipientRuntimeKey,
+                        validateDispatch: (db, candidate) => {
+                            RequireChatRevision(ConversationMetadata.From(source), TextChat(db, source.Id));
+                            RequireChatRevision(ConversationMetadata.From(recipient), TextChat(db, recipient.Id));
+                            var run = CurrentRun(db, source.Id);
+                            var call = FindCall(db, source.Id, context.RunId, context.Call.Id);
+                            var operation = StartedOperation(db, source.Id, context.RunId, context.Call.Id);
+                            var start = operation == null ? null : FindChatWrite(db, operation);
+                            if (run?.Fact.RunId != context.RunId || run.Fact.Lifecycle != RunLifecycle.Running ||
+                                start?.Fact.Tools?.MayHaveSideEffects != true || start.Fact.Tools.Kind != AgentRunEventKind.ToolStarted ||
+                                start.Fact.Tools.StepId != context.StepId || start.Fact.Tools.CallId != context.Call.Id ||
+                                start.Fact.Tools.ToolName != context.Call.Name || call?.Call.ToolName != context.Call.Name ||
+                                start.Fact.Checkpoint.InvocationId != run.Fact.InvocationId ||
+                                call?.Call.AcceptedCallOrigin.StepId != context.StepId ||
+                                PendingTool(db, source.Id, context.RunId, context.Call.Id) != null)
+                                throw new InvalidOperationException("Peer delivery requires its active accepted call and runtime entry.");
+                        }, dispatch: dispatch);
+                }
+                catch (IOException)
+                {
+                    accepted = AgentReceipt(command.OperationId);
+                    if (accepted?.Fact.Sender != source.Id || accepted.Fact.RunId != context.RunId || accepted.Fact.CallId != context.Call.Id)
+                        throw;
+                }
+                Fault?.Invoke("before_peer_readback");
+                // Read the accepted frame/body before publishing any live projection.
+                accepted = AgentReceipt(accepted.Operation) ?? throw new InvalidDataException("Peer acceptance is unavailable.");
+                var text = ReadAgentText(accepted);
+                var fact = accepted.Fact;
+                if (fact.Sender != source.Id || fact.Recipient != recipient.Id || fact.RunId != context.RunId ||
+                    fact.CallId != context.Call.Id || fact.Root != command.RootChatId || fact.ChainId != command.ChainId ||
+                    fact.ParticipantLimit != command.ParticipantLimit || fact.RecipientRuntimeKey != command.RecipientRuntimeKey ||
+                    fact.ExpectReply != command.ExpectReply || fact.ReplyTo != command.ReplyTo || fact.Assignment != command.Assignment ||
+                    fact.Resolution != command.Resolution || text != command.Text)
+                    throw new InvalidDataException("Peer acknowledgement does not match the exact request.");
+                ConversationRunPolicy.ForAcceptedRun(source).RequireSame(fact.Policy);
+                ApplyPeerCursor(source, accepted, accepted.Fact.SenderRevision);
+                ApplyPeerCursor(recipient, accepted, accepted.Fact.RecipientRevision);
+                var change = new ConversationInputEvent { Input = JsonConvert.DeserializeObject<ConversationInput>(
+                    JsonConvert.SerializeObject(accepted.Fact.Input.Header)), Paused = accepted.Fact.Control.Paused,
+                    PauseReason = accepted.Fact.Control.Reason };
+                change.Input.Text = text;
+                return new ConversationInputRecord(ProjectPeerEvent(accepted, recipient.Id), change);
+            }
+        }
+
+        private static void ApplyPeerCursor(ChatSession session, AgentMessageReceipt receipt, long? previous)
+        {
+            if (session.Revision >= receipt.Position.Sequence) return;
+            if (session.Revision != previous) throw new ChatConcurrencyException("Peer acceptance cannot skip an unseen chat update.");
+            session.Revision = receipt.Position.Sequence; session.UpdatedUtc = receipt.Fact.CreatedUtc;
+            session.StorageHeadHash = receipt.Position.Hash; session.StorageByteLength = receipt.Position.End;
+            session.StorageTailByteOffset = receipt.Position.Start;
+        }
+
+        private static bool IsPeerDelivery(string tool)
+        { return tool == AgentCommunicationToolCatalog.Send || tool == AgentCommunicationToolCatalog.Resolve; }
+
         IReadOnlyList<AgentRequestReference> IEventStore.ReadAgentRequests(ConversationMetadata session, IReadOnlyList<string> messageIds)
         {
             if (messageIds == null || messageIds.Count < 1 || messageIds.Count > 32 || messageIds.Any(string.IsNullOrWhiteSpace))

@@ -369,6 +369,11 @@ namespace RNAssistant.Harness
         }
         private sealed class InboxFailingEvents : IEventStore
         {
+            public bool AtomicAgentDelivery { get { return Inner.AtomicAgentDelivery; } }
+            public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { return Inner.FindAgent(source, agentId); }
+            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+                AgentDeliveryCommand command, Action dispatch) { return Inner.AcceptAgentDelivery(source, recipient, command, dispatch); }
+
             public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
             { return Inner.ReadAgentRequests(session, ids); }
 

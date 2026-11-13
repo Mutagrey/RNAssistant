@@ -10,6 +10,10 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class ChatEventStoreAdapter : IEventStore
     {
+        public bool AtomicAgentDelivery { get { return false; } }
+        public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { throw new NotSupportedException(); }
+        public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+            AgentDeliveryCommand command, Action dispatch) { throw new NotSupportedException(); }
         private readonly ChatStore _store;
 
         public ChatEventStoreAdapter(ChatStore store)

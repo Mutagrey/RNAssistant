@@ -121,8 +121,14 @@ storage chat ID; порядок вкладок, rename и restart его не м
 доставка не повторяется автоматически; Stop/pause/входящие сообщения закрывают
 неотправленный остаток как NotDispatched. Зависимую от результата отправку нужно
 предложить следующим шагом.
-Runtime выдаёт message_id и пишет его в source Prepared до destination intake;
-queued receipt и входящее provenance сохраняют этот же ID. expect_reply=true
+Runtime выдаёт message_id; queued receipt и входящее provenance сохраняют этот же ID.
+При native journal delivery один frame сохраняет intake, membership и оба chat cursor;
+queued требует точного read-back. Потеря подтверждения записи не вызывает повтор:
+доступная квитанция доказывает intake, недоступная оставляет Unknown при recovery.
+Это ещё не production cutover. Старый event backend явно сохраняет source Prepared
+до destination intake до удаления whole-port P7; native backend туда не откатывается.
+[Граница подключения](session-events.md#journal-outbound-send-and-resolve--2026-11-13).
+expect_reply=true
 фиксирует ожидаемый ответ. Для ответа reply_to указывает message_id уже включённого
 в контекст входящего сообщения, а agent_id — его отправителя. Неизвестный ID,
 чужое сообщение или другой адресат отклоняются до dispatch. Поздний ответ сохраняет
