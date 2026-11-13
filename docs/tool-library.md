@@ -654,6 +654,39 @@ Controller-owned catalog reconciliation, `StoragePath` identity, generic executi
 and unversioned response fallback are absent. This does not make the flat store
 immutable history.
 
+#### Planned WebView2 executor — 2026-11-13
+
+Согласованное направление: заменить `RNAssistant.JsWorker.exe` и Jint исполнением
+JS-инструментов в WebView2. Это отдельный срез после работающего интерактивного native
+Browser; реализация перехода ещё не начата. Текущий контракт выше остаётся действующим.
+Owner: Application execution / native WebView2 adapter; `JsToolHandler` и Resource
+Data Plane сохраняют владение вызовом, входными ресурсами и evidence.
+
+Целевая схема — скрытый WebView2 и отдельный Web Worker для каждого выполнения.
+Сохраняются `js.run`, пользовательские `executor=js` packages, `RN.resources`,
+явные named inputs, exact revision/owner, bounded streaming, read-only policy и
+JSON-результат до 1 МиБ. Код не получает Shell bridge, Office/CLR, произвольную
+файловую систему, DOM открытых Browser tabs или неявные HTML bindings.
+
+Отмена/deadline должны завершать вычисление и закрывать его resource leases,
+включая бесконечный цикл, позднее создание controller и ответ после закрытия.
+`Connection-Allowlist` и native local routes используются по общему сетевому
+контракту Browser; они не заменяют управление памятью и изоляцию сбоев.
+Текущие Jint budgets (64 МиБ, миллион инструкций, recursion 100, 10 секунд исполнения
+и 12 секунд process deadline) нельзя объявлять автоматически сохранёнными в V8.
+До переключения явно определить новые memory/deadline/concurrency bounds и проверить
+влияние runaway/OOM на Shell и интерактивные страницы. WebView2 может разделять
+renderer-процессы; общий движок не требует общего execution context или process group.
+[Модель процессов WebView2](https://learn.microsoft.com/microsoft-edge/webview2/concepts/process-model).
+
+Последовательность: подключить новый executor к существующему ресурсному контракту;
+проверить результаты, потоковое чтение, отмену, сеть, cleanup и стоимость холодного/
+повторного запуска; затем переключить оба consumers и удалить `.exe`, pipe transport,
+Jint/Acornima и лишние build/deployment references после проверки их consumers.
+Скрытый fallback на Jint не является целевой архитектурой. Windows/WebView2 evidence
+фиксируется отдельно; предварительная оценка сложности — средняя, основной риск
+сосредоточен в lifecycle и ресурсных ограничениях.
+
 ### Model source reads
 
 `core.find` with `scope=catalogs` and a tool id discovers a semantic

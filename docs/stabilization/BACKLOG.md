@@ -1,5 +1,17 @@
 # RNAssistant backlog
 
+## JS tools on WebView2 — 2026-11-13
+
+Согласованное направление, реализация не начата. Owner: Application execution /
+native WebView2 adapter. После интерактивного native Browser перенести `js.run` и
+`executor=js` packages с отдельного `RNAssistant.JsWorker.exe`/Jint на скрытый
+WebView2 с отдельным Web Worker, сохранив существующий Resource Data Plane и права.
+[Контракт, этапы и условия удаления старого пути](../tool-library.md#planned-webview2-executor--2026-11-13).
+До переключения проверить runaway/cancel/OOM, сеть, lease cleanup, отсутствие влияния
+на Shell/Browser и явно определить замену Jint budgets. Не считать общий JS-движок
+гарантией общей изоляции или сохранения прежнего memory limit. Docs-only фиксация
+направления не запускает реализацию, сборку или release.
+
 ## Send batch parser/fixture mismatch — 2026-11-13
 
 Owner: ModelProtocol / Harness (`AgentSendBatchProtocol`). The existing
