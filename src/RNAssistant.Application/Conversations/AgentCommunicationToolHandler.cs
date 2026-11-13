@@ -74,7 +74,7 @@ namespace RNAssistant.Application.Conversations
                 {
                     var control = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
                     var pauseReceipt = _service.Pause(_inbox, _session, _limit, operationId, control.AgentId,
-                        context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume, context.MarkDispatchPossible);
+                        context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume, context.MarkDispatchPossible, context.Execution);
                     var data = JsonConvert.SerializeObject(pauseReceipt);
                     var unknown = pauseReceipt.Status == AgentPauseStatus.Unconfirmed;
                     var rejected = pauseReceipt.Status == AgentPauseStatus.Changed || pauseReceipt.Status == AgentPauseStatus.Unavailable || pauseReceipt.Status == AgentPauseStatus.Protected;

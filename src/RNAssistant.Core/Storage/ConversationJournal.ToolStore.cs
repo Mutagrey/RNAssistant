@@ -111,13 +111,18 @@ namespace RNAssistant.Core.Storage
                 var progress = tools.Terminal.Result.ExecutionProgress;
                 var peer = IsPeerDelivery(tools.ToolName) ? DeliveryForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
                 var spawn = tools.ToolName == AgentCommunicationToolCatalog.Spawn ? SpawnForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
+                var control = IsPeerPause(tools.ToolName) ? ControlForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
+                if (control != null && (control.Position.Sequence > fact.ExpectedRevision || tools.NoEffect ||
+                    progress.Outcome == ToolExecutionOutcome.NotDispatched || (control.Fact.Action == QueueControlAction.AgentPauseReleased) !=
+                        (tools.ToolName == AgentCommunicationToolCatalog.Resume)))
+                    throw new InvalidDataException("Peer control terminal contradicts its exact acceptance.");
                 if (spawn != null && (spawn.Fact.Chat == null || spawn.Position.Sequence > fact.ExpectedRevision ||
                     tools.NoEffect || progress.Outcome == ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Spawn terminal contradicts its exact accepted child.");
                 if (peer != null && (peer.Fact.Input == null || peer.Position.Sequence > fact.ExpectedRevision ||
                     tools.NoEffect || progress.Outcome == ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Peer terminal contradicts its exact accepted delivery.");
-                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null : peer == null && spawn == null &&
+                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null : peer == null && spawn == null && control == null &&
                     !tools.NoEffect && progress.Outcome != ToolExecutionOutcome.Unknown && progress.Outcome != ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Possible resource effects require exact linked proof or an unknown terminal.");
                 if (progress.Outcome != ToolExecutionOutcome.NotDispatched && StartedOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) == null)

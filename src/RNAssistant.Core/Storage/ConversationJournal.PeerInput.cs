@@ -74,9 +74,8 @@ namespace RNAssistant.Core.Storage
                 ConversationRunPolicy.ForAcceptedRun(source).RequireSame(fact.Policy);
                 ApplyPeerCursor(source, accepted, accepted.Fact.SenderRevision);
                 ApplyPeerCursor(recipient, accepted, accepted.Fact.RecipientRevision);
-                var change = new ConversationInputEvent { Input = JsonConvert.DeserializeObject<ConversationInput>(
-                    JsonConvert.SerializeObject(accepted.Fact.Input.Header)), Paused = accepted.Fact.Control.Paused,
-                    PauseReason = accepted.Fact.Control.Reason };
+                var change = ProjectQueueControl(accepted.Fact.Control, JsonConvert.DeserializeObject<ConversationInput>(
+                    JsonConvert.SerializeObject(accepted.Fact.Input.Header)));
                 change.Input.Text = text;
                 return new ConversationInputRecord(ProjectPeerEvent(accepted, recipient.Id), change);
             }
@@ -98,21 +97,27 @@ namespace RNAssistant.Core.Storage
         { return tool == AgentCommunicationToolCatalog.Send || tool == AgentCommunicationToolCatalog.Resolve; }
 
         private static bool IsPeerMutation(string tool)
-        { return IsPeerDelivery(tool) || tool == AgentCommunicationToolCatalog.Spawn; }
+        { return IsPeerDelivery(tool) || tool == AgentCommunicationToolCatalog.Spawn || IsPeerPause(tool); }
+
+        private static bool IsPeerPause(string tool)
+        { return tool == AgentCommunicationToolCatalog.Pause || tool == AgentCommunicationToolCatalog.Resume; }
 
         private void RequirePeerEntry(SqliteConnection db, string sender, ToolExecutionContext context)
+        { RequirePeerEntry(db, sender, context.RunId, context.Call.Id, context.StepId, context.Call.Name); }
+
+        private void RequirePeerEntry(SqliteConnection db, string sender, string runId, string callId, string stepId, string toolName)
         {
             var run = CurrentRun(db, sender);
-            var call = FindCall(db, sender, context.RunId, context.Call.Id);
-            var operation = StartedOperation(db, sender, context.RunId, context.Call.Id);
+            var call = FindCall(db, sender, runId, callId);
+            var operation = StartedOperation(db, sender, runId, callId);
             var start = operation == null ? null : FindChatWrite(db, operation);
-            if (run?.Fact.RunId != context.RunId || run.Fact.Lifecycle != RunLifecycle.Running ||
+            if (run?.Fact.RunId != runId || run.Fact.Lifecycle != RunLifecycle.Running ||
                 start?.Fact.Tools?.MayHaveSideEffects != true || start.Fact.Tools.Kind != AgentRunEventKind.ToolStarted ||
-                start.Fact.Tools.StepId != context.StepId || start.Fact.Tools.CallId != context.Call.Id ||
-                start.Fact.Tools.ToolName != context.Call.Name || call?.Call.ToolName != context.Call.Name ||
+                start.Fact.Tools.StepId != stepId || start.Fact.Tools.CallId != callId ||
+                start.Fact.Tools.ToolName != toolName || call?.Call.ToolName != toolName ||
                 start.Fact.Checkpoint.InvocationId != run.Fact.InvocationId ||
-                call?.Call.AcceptedCallOrigin.StepId != context.StepId ||
-                PendingTool(db, sender, context.RunId, context.Call.Id) != null)
+                call?.Call.AcceptedCallOrigin.StepId != stepId ||
+                PendingTool(db, sender, runId, callId) != null)
                 throw new InvalidOperationException("Peer mutation requires its active accepted call and runtime entry.");
         }
 
@@ -142,10 +147,10 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidOperationException("Peer input requires two integrated chats and the exact recipient binding.");
             var source = TextChat(db, sender.ChatId); var target = TextChat(db, recipient.ChatId);
             var prior = QueueControl(db, recipient.ChatId);
-            if (prior?.Fact.PeerControl == true) throw TextStoreScope();
             var header = PeerInputHeader(operation, fingerprint, fact, sender, Card(db, fact.Root)?.Item1);
             var input = new ConversationInputState(recipient.ChatId, fact.MessageId, 1, ConversationInputStatus.Pending, null, header, fact.Body);
-            var control = new ConversationQueueControl(recipient.ChatId, (prior?.Fact.Revision ?? 0) + 1, prior?.Position.Hash,
+            var control = prior?.Fact.PeerControl == true ? PreserveControl(prior.Fact, prior.Position.Hash) :
+                new ConversationQueueControl(recipient.ChatId, (prior?.Fact.Revision ?? 0) + 1, prior?.Position.Hash,
                 prior?.Fact.Paused == true ? QueueControlAction.UserPause : QueueControlAction.UserResume,
                 null, null, null, null, prior?.Fact.Reason);
             return new AgentMessageAccepted(fact.Sender, fact.Recipient, fact.RunId, fact.CallId, fact.Root, fact.ChainId,
@@ -185,10 +190,11 @@ namespace RNAssistant.Core.Storage
                 (TextChat(db, fact.Recipient)?.Position.Sequence ?? (record.Kind == "agent.spawned" ? (long?)0 : null)) != fact.RecipientRevision)
                 throw new ChatConcurrencyException("Peer delivery requires both observed chat heads.");
             var prior = QueueControl(db, fact.Recipient);
-            if (prior?.Fact.PeerControl == true || fact.Control.PeerControl || fact.Control.ChatId != fact.Recipient ||
-                fact.Control.Paused != (prior?.Fact.Paused == true) || fact.Control.Reason != prior?.Fact.Reason)
+            if (fact.Control.NativeChat || fact.Control.ChatId != fact.Recipient || (prior?.Fact.PeerControl == true
+                ? !SameControlState(fact.Control, prior.Fact) : fact.Control.PeerControl ||
+                    fact.Control.Paused != (prior?.Fact.Paused == true) || fact.Control.Reason != prior?.Fact.Reason))
                 throw new InvalidOperationException("Peer delivery cannot change queue authority.");
-            ValidateControl(db, record.Operation, fact.Control, freshChat: record.Kind == "agent.spawned");
+            ValidateControl(db, record.Operation, fact.Control, freshChat: record.Kind == "agent.spawned", preservePause: prior?.Fact.PeerControl == true);
             if (InputState(db, fact.MessageId) != null || ChatEntry(db, fact.Recipient, fact.MessageId) != null)
                 throw new InvalidOperationException("Peer input identity is already in use.");
             using (var command = Command(db, "SELECT 1 FROM input_state WHERE stream=$stream AND recipient=$chat AND request_id=$request"))
@@ -239,14 +245,15 @@ namespace RNAssistant.Core.Storage
                 Type = incoming ? SessionEventTypes.ConversationInputChanged : "agent.accepted",
                 RunId = incoming ? null : receipt.Fact.RunId, TurnId = incoming ? null : receipt.Fact.RunId,
                 Payload = incoming ? receipt.Fact.Body.ToBlobReference() : null,
-                Data = incoming ? JObject.FromObject(new ConversationInputEvent { Input = receipt.Fact.Input.Header,
-                    Paused = receipt.Fact.Control.Paused, PauseReason = receipt.Fact.Control.Reason }) : JObject.FromObject(receipt.Fact) };
+                Data = incoming ? JObject.FromObject(ProjectQueueControl(receipt.Fact.Control, receipt.Fact.Input.Header)) : JObject.FromObject(receipt.Fact) };
         }
 
         private const string ChatEventQuery = "SELECT operation,sequence FROM chat_write WHERE stream=$stream AND chat=$chat AND sequence>$after AND sequence<=$through" +
             " UNION ALL SELECT operation,sequence FROM agent_delivery AS d WHERE stream=$stream AND sender=$chat AND sequence>$after AND sequence<=$through AND NOT EXISTS(SELECT 1 FROM agent_spawn AS s WHERE s.stream=d.stream AND s.operation=d.operation)" +
             " UNION ALL SELECT operation,sequence FROM agent_delivery AS d WHERE stream=$stream AND recipient=$chat AND sequence>$after AND sequence<=$through AND NOT EXISTS(SELECT 1 FROM agent_spawn AS s WHERE s.stream=d.stream AND s.operation=d.operation)" +
-            " UNION ALL SELECT operation,sequence FROM agent_spawn WHERE stream=$stream AND sender=$chat AND sequence>$after AND sequence<=$through";
+            " UNION ALL SELECT operation,sequence FROM agent_spawn WHERE stream=$stream AND sender=$chat AND sequence>$after AND sequence<=$through" +
+            " UNION ALL SELECT operation,sequence FROM control_fact WHERE stream=$stream AND sender=$chat AND sequence>$after AND sequence<=$through" +
+            " UNION ALL SELECT operation,sequence FROM control_fact WHERE stream=$stream AND chat=$chat AND native=1 AND sequence>$after AND sequence<=$through";
 
         private JournalCursor ChatPosition(SqliteConnection db, string chat, long sequence)
         {
@@ -262,7 +269,9 @@ namespace RNAssistant.Core.Storage
             var spawn = FindSpawn(db, operation);
             if (spawn?.Fact.Chat != null && spawn.Fact.Sender == chat && spawn.Position.Sequence == sequence) return spawn.Position;
             var peer = FindDelivery(db, "operation", operation);
-            return DeliveryAffects(peer, chat) && peer.Position.Sequence == sequence ? peer.Position : null;
+            if (DeliveryAffects(peer, chat) && peer.Position.Sequence == sequence) return peer.Position;
+            var control = FindControl(db, operation);
+            return ControlAffects(control, chat) && control.Position.Sequence == sequence ? control.Position : null;
         }
     }
 }

@@ -68,6 +68,12 @@ namespace RNAssistant.Core.Storage
                 var delivery = FindDelivery(db, "operation", head);
                 if (delivery == null)
                 {
+                    var control = FindControl(db, head);
+                    if (ControlAffects(control, chat))
+                    {
+                        if (control.Position.Sequence <= receipt.Position.Sequence) throw new InvalidDataException("Control head is not newer than chat metadata.");
+                        return new ConversationChatReceipt(receipt.Fact, receipt.Operation, control.Position, control.Fact.ChangedUtc);
+                    }
                     var spawn = FindSpawn(db, head);
                     if (spawn?.Fact.Chat == null || spawn.Fact.Sender != chat || spawn.Position.Sequence <= receipt.Position.Sequence)
                         throw new InvalidDataException("Chat head does not identify its child creation.");
@@ -138,9 +144,9 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidOperationException("Chat message count does not match its exact append/update delta.");
             if (fact.Control != null)
             {
-                if (fact.Control.ChatId != fact.Card.ChatId || fact.Control.PeerControl || fact.Checkpoint != null || fact.ModelEvent != null || fact.Tools != null)
+                if (fact.Control.ChatId != fact.Card.ChatId || fact.Control.NativeChat || fact.Checkpoint != null || fact.ModelEvent != null || fact.Tools != null)
                     throw new InvalidDataException("Queue control must identify its exact chat and separate user intent.");
-                ValidateControl(db, record.Operation, fact.Control);
+                ValidateControl(db, record.Operation, fact.Control, preservePause: fact.Input != null && fact.Control.PeerControl);
             }
             ValidateChatInput(db, record, fact);
             ValidateChatRun(db, record, fact);
@@ -245,11 +251,8 @@ namespace RNAssistant.Core.Storage
                     var checkpoint = commit is ConversationRunCommit runtime
                         ? PrepareStoreCheckpoint(db, runtime, session, runBody, prior?.Fact.Checkpoint) : null;
                     var priorControl = queueControl == null ? null : QueueControl(db, session.Id);
-                    var control = queueControl == null ? null : new ConversationQueueControl(session.Id,
-                        prior?.Fact.Control?.Revision ?? (priorControl?.Fact.Revision ?? 0) + 1,
-                        prior == null ? priorControl?.Position.Hash : prior.Fact.Control?.PreviousHash,
-                        queueControl.Paused ? QueueControlAction.UserPause : QueueControlAction.UserResume,
-                        null, null, null, null, queueControl.PauseReason);
+                    var control = queueControl == null ? null : prior?.Fact.Control ??
+                        PrepareChatControl(db, session, queueControl, priorControl);
                     var input = queueControl?.Input == null ? null : PrepareChatInput(db, session, queueControl.Input, inputBody);
                     var fact = new ConversationChatCommit(card, commit.JournalRevision, commit.JournalMessageCount, messages, context, DateTime.UtcNow,
                         run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control, input: input);

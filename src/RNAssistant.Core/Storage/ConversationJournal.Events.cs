@@ -22,11 +22,12 @@ namespace RNAssistant.Core.Storage
             if (write.Descriptor.Kind == SessionEventKind.ConversationInputChanged)
             {
                 var change = write.Data as ConversationInputEvent;
-                if (change == null || change.AgentPause != null || (change.Input == null ? write.Payload != null || write.Correlation != null :
+                if (change == null || (change.Input == null ? write.Payload != null || write.Correlation != null :
                     write.Payload?.Text == null || write.Payload.Bytes != null || change.Input.Text != null ||
                     write.Correlation?.RunId != change.Input.AcceptedRunId || write.Correlation?.TurnId != change.Input.AcceptedRunId))
                     throw TextStoreScope();
                 RequireTextRoot();
+                if (change.Input == null) return CommitChatControl(session, change);
                 var body = change.Input == null ? null : PayloadRef.FromBlob(_bodies.StoreText(write.Payload.Text, "text/plain"));
                 var receipt = CommitChat(session, new ConversationCommit(), queueControl: change, inputBody: body);
                 ApplyChatReceipt(session, receipt);
@@ -69,7 +70,7 @@ namespace RNAssistant.Core.Storage
                 EventId = receipt.Operation, CreatedUtc = receipt.Fact.CreatedUtc, Hash = receipt.Position.Hash,
                 Type = SessionEventTypes.ConversationInputChanged, Payload = receipt.Fact.Input?.Body.ToBlobReference(),
                 RunId = receipt.Fact.Input?.RunId, TurnId = receipt.Fact.Input?.RunId,
-                Data = JObject.FromObject(new ConversationInputEvent { Input = receipt.Fact.Input?.Header, Paused = receipt.Fact.Control.Paused, PauseReason = receipt.Fact.Control.Reason }) };
+                Data = JObject.FromObject(ProjectQueueControl(receipt.Fact.Control, receipt.Fact.Input?.Header)) };
             return new SessionEvent { SessionId = receipt.Fact.Card.ChatId, Sequence = receipt.Position.Sequence,
                 EventId = receipt.Operation, CreatedUtc = receipt.Fact.CreatedUtc, Hash = receipt.Position.Hash,
                 Type = item == null ? "chat.committed" : SessionEventDescriptors.For(item.Kind).Type,
@@ -195,11 +196,12 @@ namespace RNAssistant.Core.Storage
                         if (write?.Fact.Card.ChatId != session.Id) write = null;
                         var spawn = write == null ? FindSpawn(db, operation) : null;
                         if (spawn != null && spawn.Fact.Sender != session.Id) throw new InvalidDataException("Foreign spawn event.");
-                        return Tuple.Create(write, write == null && spawn == null ? FindDelivery(db, "operation", operation) : null, spawn);
+                        var peer = write == null && spawn == null ? FindDelivery(db, "operation", operation) : null;
+                        return Tuple.Create(write, peer, spawn, write == null && peer == null && spawn == null ? FindControl(db, operation) : null);
                     }).ToArray();
                 }, CancellationToken.None);
                 return receipts.Select(item => item.Item1 != null ? ProjectChatEvent(item.Item1) : item.Item3 != null
-                    ? ProjectSpawnEvent(item.Item3) : ProjectPeerEvent(item.Item2, session.Id)).ToArray();
+                    ? ProjectSpawnEvent(item.Item3) : item.Item4 != null ? ProjectControlEvent(item.Item4, session.Id) : ProjectPeerEvent(item.Item2, session.Id)).ToArray();
             }
         }
 

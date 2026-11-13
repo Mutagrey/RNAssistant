@@ -4,7 +4,9 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Application.Conversations
 {
@@ -46,7 +48,8 @@ namespace RNAssistant.Application.Conversations
             {
                 live = endpoint.Runs?.CaptureCancellation(chatId, box.Session.LastRun?.RunId);
                 if (live?.Cancellation == null || live.Cancellation.IsCancellationRequested) return null;
-                var status = endpoint.Inbox.ControlPause(box.Session, live.RunId, pauseId, false, out changed, userControl: true);
+                var status = endpoint.Inbox.ControlPause(box.Session, live.RunId, pauseId, false, out changed, userControl: true,
+                    liveInvocationId: live.InvocationId);
                 if (status != AgentPauseStatus.Requested && status != AgentPauseStatus.Paused) return null;
                 session = box.Session;
             }
@@ -75,6 +78,61 @@ namespace RNAssistant.Application.Conversations
         }
 
         internal AgentPauseReceipt Pause(ConversationInboxService sourceInbox, ChatSession source, int limit,
+            string operationId, string agentId, bool resume, Action dispatch, ToolExecutionContext execution = null)
+        {
+            return sourceInbox.AtomicAgentDelivery
+                ? PauseAtomic(sourceInbox, source, limit, operationId, agentId, resume, dispatch, execution)
+                : PauseEvents(sourceInbox, source, limit, operationId, agentId, resume, dispatch);
+        }
+
+        private AgentPauseReceipt PauseAtomic(ConversationInboxService sourceInbox, ChatSession source, int limit,
+            string operationId, string agentId, bool resume, Action dispatch, ToolExecutionContext execution)
+        {
+            RequireEnabled(Math.Min(limit, _currentLimit?.Invoke() ?? limit));
+            if (execution == null) throw new AgentCommunicationException("agent_call_required", "Нет текущего вызова инструмента.");
+            AgentConversationScope scope;
+            lock (_sync) scope = Scope(source);
+            var address = sourceInbox.FindAgent(source, agentId);
+            if (address == null || address.ChatId == source.Id || scope.Endpoint == null)
+                throw new AgentCommunicationException("agent_control_invalid", "Укажите адрес другого участника своей области.");
+            var target = scope.Endpoint(address); var selected = target.Load();
+            if (!scope.Contains(selected) || selected.Id != address.ChatId)
+                throw new AgentCommunicationException("agent_chat_unavailable", "Участник принадлежит другой области.");
+            var runtimeKey = target.Validate(selected);
+            var receipt = new AgentPauseReceipt { AgentId = agentId, Status = AgentPauseStatus.Unavailable };
+            if (target.IsClosing?.Invoke() == true) return receipt;
+            var box = target.Inbox.Get(selected);
+            ConversationActiveSnapshot live; string pause;
+            lock (box.Sync)
+            {
+                live = target.Runs?.CaptureCancellation(selected.Id, box.Session.LastRun?.RunId);
+                if (live?.Cancellation == null || !box.Running || !box.Accepting)
+                {
+                    if (box.Paused || ConversationInboxService.HasPendingWait(box.Session)) receipt.Status = AgentPauseStatus.Protected;
+                    return receipt;
+                }
+                if (live.Cancellation.IsCancellationRequested || box.AgentPause == null && box.Paused || box.AgentPause?.RequiresUserResume == true)
+                { receipt.Status = AgentPauseStatus.Protected; return receipt; }
+                if (resume ? box.AgentPause == null : box.AgentPause != null)
+                { receipt.Status = resume ? AgentPauseStatus.NoChange : box.Paused ? AgentPauseStatus.Paused : AgentPauseStatus.Requested; return receipt; }
+                pause = box.AgentPause?.PauseId;
+            }
+            sourceInbox.AcceptAgentPause(source, target.Inbox, selected, new AgentPauseCommand { OperationId = operationId,
+                Execution = execution, AgentId = agentId, TargetRunId = live.RunId, LiveInvocationId = live.InvocationId,
+                RuntimeKey = runtimeKey, PauseId = pause, Resume = resume }, () => {
+                    var current = target.Runs.CaptureCancellation(selected.Id, live.RunId);
+                    if (current?.InvocationId != live.InvocationId || !ReferenceEquals(current.Cancellation, live.Cancellation) ||
+                        live.Cancellation.IsCancellationRequested || target.IsClosing?.Invoke() == true)
+                        throw new InvalidOperationException("The live control target changed before dispatch.");
+                    dispatch();
+                });
+            try { target.Changed?.Invoke(box.Session); } catch { }
+            receipt.Status = resume ? AgentPauseStatus.Released : AgentPauseStatus.Requested;
+            receipt.Changed = true;
+            return receipt;
+        }
+
+        private AgentPauseReceipt PauseEvents(ConversationInboxService sourceInbox, ChatSession source, int limit,
             string operationId, string agentId, bool resume, Action dispatch)
         {
             AgentConversationEndpoint target;

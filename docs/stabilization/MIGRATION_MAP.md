@@ -52,6 +52,20 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P5 native pause/resume (2026-11-13): typed event-port control commits one existing
+`queue.control` with source-call proof and both heads. Owner: Application
+AgentCommunicationService/Inbox, Core journal and existing runtime consumers.
+Schema 20 extends `control_fact`; no new store/registry. Local user controls/ack use
+the same direct frame, removing chat/run snapshot serialization. Office/Workspace
+checkpoint commits share the existing Inbox lock with native controls. The live
+RunOwner lifetime survives checkpoint invocation changes, never restart. Read-back,
+safe acknowledgement, protected user pause, stale release and Unknown keep their
+existing authorities. `PauseEvents` remains only behind the explicit retiring-backend
+capability; whole-port P7 removes it with SendEvents/SpawnEvents/adapters. Native
+cancel is next, followed by assignment/group projections, other Store/resource
+operations and metadata/header costs. Default writers are unchanged.
+[Contract](../session-events.md#journal-peer-pause-and-resume--2026-11-13).
+
 P5 application spawn (2026-11-13): existing `agent.spawned` now embeds the child's
 Store metadata/context and optional native input, advancing both heads atomically.
 Owner: Application AgentCommunicationService/Inbox and Core ConversationJournal.
@@ -60,7 +74,7 @@ registry. Common metadata writing/runtime-entry checks are shared with chat/Send
 `SpawnEvents` is explicitly retained only for the retiring backend; whole-port P7
 removes it and the capability branch with SendEvents/adapters. Native creation has
 no separate root reservation, Store commit, initial Send, import or fallback.
-Peer controls/projections, remaining Store/resource operations, metadata/header
+Native cancel/projections, remaining Store/resource operations, metadata/header
 costs and default composition remain open.
 [Contract](../session-events.md#journal-application-spawn--2026-11-13).
 
@@ -71,7 +85,7 @@ scan/global service lock during native persistence, no new store/adapter/schema.
 Exact runtime entry, receipt-linked terminal, both live cursors and Inbox signal are
 connected. Whole-port P7 removes the temporary capability branch and SendEvents
 together with the old event adapters; atomic delivery has no fallback/dual-write.
-Spawn is connected above; peer controls, assignment/group projections, other
+Spawn and pause/resume are connected above; native cancel, assignment/group projections, other
 Store/resource consumers and default composition remain open. [Contract](../session-events.md#journal-outbound-send-and-resolve--2026-11-13).
 
 P5 peer Inbox/correlation (2026-11-13): native acceptance shares delivery, input,
@@ -81,7 +95,7 @@ Owner: Core journal / existing Inbox, AgentCommunicationService and runtime cons
 Schema 18 extends existing chat/delivery indices only. Legacy Prepared parsing moves
 to the existing ChatEventStoreAdapter, removed with whole-port P7; no new adapter,
 fallback or dual-write. Send/Resolve and live notification are connected above;
-spawn is connected above; controls and default composition remain open. Input-history bounds,
+spawn and pause/resume are connected above; native cancel and default composition remain open. Input-history bounds,
 metadata/header and remaining Store/resource ports stay open.
 [Contract](../session-events.md#journal-peer-inbox-and-correlated-waits--2026-11-13).
 
@@ -102,7 +116,7 @@ consumers. Schema 17 adds request identity to input_state. Common input code del
 format-specific proof to IEventStore; legacy parsing stays only in the existing
 retiring ChatEventStoreAdapter until full-port P7 removal. No new adapter/store,
 dual-write, imported history or production switch. Native peer input/feed and waits
-are connected above; attachments, application peer delivery/controls, other
+are connected above; attachments, native cancel/peer projections, other
 Store/resource operations, full Workspace steer transport
 and metadata/header costs remain open. [Contract](../session-events.md#journal-user-inbox-delivery--2026-11-12).
 

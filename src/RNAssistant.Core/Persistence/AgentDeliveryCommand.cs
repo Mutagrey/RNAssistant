@@ -32,4 +32,16 @@ namespace RNAssistant.Core.Persistence
         public bool ExpectReply { get; set; }
         public bool Assignment { get; set; }
     }
+
+    public sealed class AgentPauseCommand
+    {
+        public string OperationId { get; set; }
+        public ToolExecutionContext Execution { get; set; }
+        public string AgentId { get; set; }
+        public string TargetRunId { get; set; }
+        public string LiveInvocationId { get; set; }
+        public string RuntimeKey { get; set; }
+        public string PauseId { get; set; }
+        public bool Resume { get; set; }
+    }
 }

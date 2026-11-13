@@ -119,6 +119,26 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
+        internal void AcceptAgentPause(ChatSession source, ConversationInboxService targetInbox, ChatSession target,
+            AgentPauseCommand command, Action dispatch)
+        {
+            if (!ReferenceEquals(_events, targetInbox._events)) throw new InvalidOperationException("Peer control requires the same event owner.");
+            var from = Get(source); var to = targetInbox.Get(target);
+            var first = string.CompareOrdinal(source.Id, target.Id) < 0 ? from : to;
+            var second = ReferenceEquals(first, from) ? to : from;
+            lock (first.Sync) lock (second.Sync)
+            {
+                if (!ReferenceEquals(from.Session, source) || !to.Running || !to.Accepting ||
+                    to.AgentPause?.RequiresUserResume == true || to.AgentPause == null && to.Paused ||
+                    command.Resume && (to.AgentPause?.PauseId != command.PauseId || to.AgentPause.LiveInvocationId != command.LiveInvocationId))
+                    throw new InvalidOperationException("Peer control no longer owns the observed live queue.");
+                var accepted = _events.AcceptAgentPause(source, to.Session, command, dispatch);
+                Apply(to, accepted.Change, accepted.Event);
+                to.Revision = accepted.Event.Sequence; to.ViewRevision++;
+                SignalInputChanged(to);
+            }
+        }
+
         internal RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ConversationInboxService recipientInbox,
             ChatSession recipient, AgentDeliveryCommand command, Action dispatch)
         {
@@ -226,8 +246,9 @@ namespace RNAssistant.Application.Conversations
                         box.Revision = record.Event.Sequence;
                         box.ViewRevision++;
                     }
+                    var lostLivePause = box.AgentPause?.LiveInvocationId != null;
                     box.AgentPause = null;
-                    if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
+                    if (lostLivePause || box.Inputs.Any(IsPending) || HasPendingWait(box.Session)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
                     _inboxes.Add(key, box);
                 }
             }
@@ -563,7 +584,7 @@ namespace RNAssistant.Application.Conversations
 
         // The caller pins the exact live invocation and serializes control with this Inbox.
         internal AgentPauseStatus ControlPause(ChatSession session, string runId, string pauseId, bool resume, out bool changed,
-            bool userControl = false)
+            bool userControl = false, string liveInvocationId = null)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -583,7 +604,7 @@ namespace RNAssistant.Application.Conversations
                 if (box.AgentPause != null && (!userControl || box.AgentPause.PauseId == pauseId))
                     return box.Paused ? AgentPauseStatus.Paused : AgentPauseStatus.Requested;
                 Write(box, null, agentPause: new ConversationAgentPause { RunId = runId, PauseId = pauseId,
-                    RequiresUserResume = userControl }, agentControl: true);
+                    RequiresUserResume = userControl, LiveInvocationId = AtomicAgentDelivery ? liveInvocationId : null }, agentControl: true);
                 changed = true;
                 return AgentPauseStatus.Requested;
             }
@@ -690,9 +711,10 @@ namespace RNAssistant.Application.Conversations
                 box.Revision = record.Event.Sequence;
                 box.ViewRevision++;
             }
+            var lostLivePause = box.AgentPause?.LiveInvocationId != null;
             box.AgentPause = null;
             // A recovered claim is never a license to dispatch another run.
-            if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session))
+            if (lostLivePause || box.Inputs.Any(IsPending) || HasPendingWait(box.Session))
             {
                 box.Paused = true;
                 box.PauseReason = "После перезапуска";

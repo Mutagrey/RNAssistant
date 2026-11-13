@@ -311,7 +311,8 @@ namespace RNAssistant.Core.Storage
                 IEnumerable<PayloadRef> references;
                 if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record, contextKeys, outcome);
                 else if (record.Kind == "queue.control")
-                { ValidateControl(db, record.Operation, DecodeControl(record)); references = new PayloadRef[0]; }
+                { var control = DecodeControl(record); ValidateControl(db, record.Operation, control);
+                    ValidatePeerControl(db, record, control); references = new PayloadRef[0]; }
                 else if (record.Kind == "run.checkpoint")
                 {
                     var fact = DecodeRun(record); ValidateRun(db, record.Operation, fact);

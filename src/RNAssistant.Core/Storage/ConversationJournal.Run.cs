@@ -113,8 +113,16 @@ namespace RNAssistant.Core.Storage
             var prior = CurrentRun(db, fact.ChatId);
             if (fact.PreviousHash != prior?.Position.Hash || fact.Revision != (prior?.Fact.Revision ?? 0) + 1)
                 throw new InvalidOperationException("Run checkpoint guard is stale.");
+            var control = QueueControl(db, fact.ChatId)?.Fact;
+            // A live coordinator may claim the same safe pause while still Waiting.
+            // This is not a release and cannot enter model/tools. A replacement
+            // request is checked again by the kernel at its next Running boundary.
+            var pausedClaim = control?.LiveInvocationId != null && prior?.Fact.RunId == fact.RunId &&
+                (fact.Resume && fact.Lifecycle == RunLifecycle.Waiting && fact.PauseId == prior.Fact.PauseId &&
+                    (fact.PauseId == control.PauseId || control.Action == QueueControlAction.AgentPauseRequested) ||
+                    !fact.Resume && control.Action == QueueControlAction.AgentPauseRequested);
             if ((fact.Resume || fact.Lifecycle == RunLifecycle.Running && (prior == null || prior.Fact.RunId != fact.RunId ||
-                prior.Fact.Lifecycle != RunLifecycle.Running)) && QueueControl(db, fact.ChatId)?.Fact.Paused == true)
+                prior.Fact.Lifecycle != RunLifecycle.Running)) && control?.Paused == true && !pausedClaim)
                 throw new InvalidOperationException("The paused queue requires an explicit matching release before continuation.");
             if (prior != null && prior.Fact.RunId == fact.RunId)
             {

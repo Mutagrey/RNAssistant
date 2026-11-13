@@ -297,6 +297,8 @@ namespace RNAssistant.Core.Persistence
         // accepted idle child without an initial input, never a backend fallback.
         RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
             AgentSpawnCommand command, Action dispatch);
+        RNAssistant.Core.Services.ConversationInputRecord AcceptAgentPause(ChatSession source, ChatSession target,
+            AgentPauseCommand command, Action dispatch);
         SessionEvent Append(ChatSession session, SessionEventWrite write);
         IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs);
         IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode);

@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Storage
                 peer ? run?.Fact.RunId : null, peer ? run?.Fact.InvocationId : null, peer ? pause : null, peer ? run?.Position.Hash : null);
             var fingerprint = TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact));
             return Access((db, cursor) => {
+                if (Card(db, chat)?.Item1.Address != null) throw TextStoreScope();
                 var prior = FindControl(db, operation);
                 if (prior != null)
                 {
@@ -60,28 +61,40 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private void ValidateControl(SqliteConnection db, string operation, ConversationQueueControl fact, bool freshChat = false)
+        private void ValidateControl(SqliteConnection db, string operation, ConversationQueueControl fact, bool freshChat = false, bool preservePause = false)
         {
             if (string.IsNullOrWhiteSpace(operation) || OperationExists(db, operation) || (Card(db, fact.ChatId) == null) != freshChat)
                 throw new InvalidOperationException("Control operation/chat identity conflicts.");
             var prior = QueueControl(db, fact.ChatId);
             if (fact.PreviousHash != prior?.Position.Hash || fact.Revision != (prior?.Fact.Revision ?? 0) + 1)
                 throw new InvalidOperationException("Control revision changed.");
+            if (preservePause)
+            {
+                if (!SameControlState(fact, prior?.Fact)) throw new InvalidOperationException("Input cannot replace queue authority.");
+                return;
+            }
             if (!fact.PeerControl) return;
             var run = CurrentRun(db, fact.ChatId);
             if (run == null || run.Position.Hash != fact.RunHash || run.Fact.RunId != fact.RunId || run.Fact.InvocationId != fact.InvocationId ||
                 TerminalRun(run.Fact.Lifecycle)) throw new InvalidOperationException("Control does not address the exact current invocation.");
             if (fact.Action == QueueControlAction.AgentPauseRequested)
             {
-                if (prior?.Fact.Paused == true || run.Fact.Lifecycle != RunLifecycle.Running ||
-                    fact.PauseId != TextPatternEngine.Sha256(_scope + "\n" + fact.ChatId + "\n" + operation))
+                var userReplacement = fact.RequiresUserResume && prior?.Fact.PeerControl == true &&
+                    prior.Fact.LiveInvocationId == fact.LiveInvocationId && prior.Fact.RunId == fact.RunId;
+                if (prior?.Fact.Paused == true && !userReplacement ||
+                    run.Fact.Lifecycle != RunLifecycle.Running && !(fact.LiveInvocationId != null &&
+                        run.Fact.Lifecycle == RunLifecycle.Waiting && (run.Fact.PauseId == null || userReplacement)) ||
+                    (fact.LiveInvocationId == null || fact.Origin != null) &&
+                        fact.PauseId != TextPatternEngine.Sha256(_scope + "\n" + fact.ChatId + "\n" + operation))
                     throw new InvalidOperationException("An existing user/recovery/agent pause cannot be replaced.");
             }
             else
             {
                 var previous = prior?.Fact;
                 if (previous?.PeerControl != true || !previous.Paused || previous.RunId != fact.RunId ||
-                    previous.InvocationId != fact.InvocationId || previous.PauseId != fact.PauseId)
+                    (fact.LiveInvocationId == null ? previous.InvocationId != fact.InvocationId :
+                        previous.LiveInvocationId != fact.LiveInvocationId) || previous.PauseId != fact.PauseId ||
+                    previous.RequiresUserResume != fact.RequiresUserResume || fact.Origin != null && previous.RequiresUserResume)
                     throw new InvalidOperationException("Peer control cannot release/acknowledge a different or protected pause.");
                 if (fact.Action == QueueControlAction.AgentPauseAcknowledged &&
                     (previous.Action != QueueControlAction.AgentPauseRequested || run.Fact.Lifecycle != RunLifecycle.Waiting || run.Fact.PauseId != fact.PauseId))
@@ -92,10 +105,12 @@ namespace RNAssistant.Core.Storage
         private void ApplyControl(SqliteConnection db, JournalRecord record, JournalCursor position)
         {
             var fact = DecodeControl(record); ValidateControl(db, record.Operation, fact);
+            ValidatePeerControl(db, record, fact);
             using (var tx = db.BeginTransaction())
             {
                 RegisterOperation(db, tx, record.Operation, record.Kind);
                 ApplyControlRows(db, tx, record, position, fact);
+                if (fact.NativeChat) ApplyPeerControlHeads(db, tx, record, position, fact);
                 SaveCursor(db, position, tx); tx.Commit();
             }
         }
@@ -103,8 +118,12 @@ namespace RNAssistant.Core.Storage
         private void ApplyControlRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record,
             JournalCursor position, ConversationQueueControl fact)
         {
-            using (var command = Command(db, "INSERT INTO control_fact VALUES($stream,$operation,$chat,$fingerprint,$segment,$start,$end,$sequence,$hash,$first); INSERT INTO control_current VALUES($stream,$chat,$operation) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation", tx))
+            using (var command = Command(db, "INSERT INTO control_fact VALUES($stream,$operation,$chat,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,$sender,$source_run,$source_call,$native); INSERT INTO control_current VALUES($stream,$chat,$operation) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation", tx))
             {
+                command.Parameters.AddWithValue("$native", fact.NativeChat ? 1 : 0);
+                command.Parameters.AddWithValue("$sender", (object)fact.Origin?.Sender ?? DBNull.Value);
+                command.Parameters.AddWithValue("$source_run", (object)fact.Origin?.RunId ?? DBNull.Value);
+                command.Parameters.AddWithValue("$source_call", (object)fact.Origin?.CallId ?? DBNull.Value);
                 command.Parameters.AddWithValue("$chat", fact.ChatId); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
             }
         }
@@ -133,17 +152,31 @@ namespace RNAssistant.Core.Storage
         public string PauseId { get; private set; }
         public string RunHash { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string Reason { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string LiveInvocationId { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool RequiresUserResume { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationPeerControlOrigin Origin { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public long? ChatRevision { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public DateTime? CreatedUtc { get; private set; }
+        [JsonIgnore] internal bool NativeChat { get { return Origin != null || ChatRevision.HasValue; } }
+        [JsonIgnore] internal long ObservedRevision { get { return Origin?.TargetRevision ?? ChatRevision.Value; } }
+        [JsonIgnore] internal DateTime ChangedUtc { get { return Origin?.CreatedUtc ?? CreatedUtc.Value; } }
         [JsonIgnore] internal bool Paused { get { return Action != QueueControlAction.UserResume && Action != QueueControlAction.AgentPauseReleased; } }
         [JsonIgnore] internal bool PeerControl { get { return Action == QueueControlAction.AgentPauseRequested || Action == QueueControlAction.AgentPauseAcknowledged || Action == QueueControlAction.AgentPauseReleased; } }
         [JsonConstructor]
         internal ConversationQueueControl(string chatId, long revision, string previousHash, QueueControlAction action,
-            string runId, string invocationId, string pauseId, string runHash, string reason = null)
+            string runId, string invocationId, string pauseId, string runHash, string reason = null,
+            string liveInvocationId = null, bool requiresUserResume = false, ConversationPeerControlOrigin origin = null,
+            long? chatRevision = null, DateTime? createdUtc = null)
         {
-            Action = action; Reason = reason;
+            Action = action; Reason = reason; LiveInvocationId = liveInvocationId; RequiresUserResume = requiresUserResume; Origin = origin;
+            ChatRevision = chatRevision; CreatedUtc = createdUtc;
             if (string.IsNullOrWhiteSpace(chatId) || revision < 1 || !Enum.IsDefined(typeof(QueueControlAction), action) ||
                 (revision == 1 ? previousHash != null : string.IsNullOrWhiteSpace(previousHash)) ||
                 (PeerControl ? string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(invocationId) || string.IsNullOrWhiteSpace(pauseId) || string.IsNullOrWhiteSpace(runHash)
-                    : runId != null || invocationId != null || pauseId != null || runHash != null)) throw new ArgumentException("Invalid queue control metadata.");
+                    : runId != null || invocationId != null || pauseId != null || runHash != null || liveInvocationId != null || requiresUserResume) ||
+                origin != null && (chatRevision.HasValue || liveInvocationId == null || requiresUserResume || action != QueueControlAction.AgentPauseRequested && action != QueueControlAction.AgentPauseReleased) ||
+                chatRevision.HasValue != createdUtc.HasValue || chatRevision.HasValue && (chatRevision < 1 || createdUtc.Value.Kind != DateTimeKind.Utc))
+                throw new ArgumentException("Invalid queue control metadata.");
             ChatId = chatId; Revision = revision; PreviousHash = previousHash; RunId = runId; InvocationId = invocationId; PauseId = pauseId; RunHash = runHash;
         }
     }

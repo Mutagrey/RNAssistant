@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Native pause/resume — 2026-11-13
+
+Peer pause/resume подключены к `queue.control` через реальные Office/Workspace
+consumers. Exact live lifetime сохраняется при checkpoint continuation; user Stop,
+takeover и устаревший release защищены. Local user controls/ack больше не копируют
+run snapshot; checkpoint и control используют существующий Inbox lock. Семь новых
+и 23 regression checks проходят, включая lost ack, Unknown без повтора, pending wait и
+restart/rebuild/restore. Default writers не переключены; Windows/Office evidence
+открыт. Далее native cancel, assignment/group projections, остальные Store/resource
+операции и metadata/header. [Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
+
 ## Native spawn — 2026-11-13
 
 Создание обычного чата, membership и начальный Inbox input подключены к одному
@@ -269,7 +280,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После native Send/Resolve/spawn — peer controls/projections, остальные Store/resource
+После native Send/Resolve/spawn/pause/resume — cancel/projections, остальные Store/resource
 consumers и metadata/header, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
@@ -354,7 +365,15 @@ idle не меняет selection и не запускает Run. Source/child fe
 холодная очередь сохраняет паузу. Schema 19, 4 новых + 14 regression checks проходят;
 промежуточный срез без bump/default switch.
 [Отчёт §12](../audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
-Peer controls, assignment/group projections, остальные mutation/resource owners,
+Подключены native pause/resume (2026-11-13): source-call proof и оба chat head
+сохраняются в одном `queue.control`; безопасный ack остаётся отдельной границей.
+Schema 20 расширяет существующий control index, user controls/ack не сериализуют
+chat/run bodies. Requested не отменяет текущий model/tool/wait; release сохраняет
+run и бюджет, не снимает user/recovery pause. Живой lifetime отделён от checkpoint
+invocation, cold replay сохраняет паузу. 7 новых и 23 regression checks проходят; промежуточный
+срез без bump/default switch.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
+Native cancel, assignment/group projections, остальные mutation/resource owners,
 rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.

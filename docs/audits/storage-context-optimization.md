@@ -1407,3 +1407,47 @@ after-state/CAS ownership.
    updated. Whole-port P7 removes `SpawnEvents` and the explicit capability branch
    with SendEvents/retiring adapters. This intermediate integration changes no
    default production behavior, so no product bump. One scoped commit; no push/tag.
+
+## P5 — native peer pause and resume (2026-11-13)
+
+1. Native pause/resume now reaches real Office run-service and Workspace runtime
+   consumers. Owners remain Application AgentCommunicationService/Inbox and Core
+   journal/event port. This advances P5; native cancel and peer projections remain
+   separate work. No new store, registry or intermediate facade.
+2. One `queue.control` records the exact source call/runtime entry, both heads,
+   target run, live owner lifetime and PauseId. Read-back precedes notification;
+   lost acknowledgement resolves to the same receipt, unavailable proof retains
+   Unknown without replay. Requested does not claim safe pause: the kernel reaches
+   `Waiting + PauseId` before acknowledgement. Resume retains run/counts/budget and
+   cannot release user Stop, cold recovery or a replacement user pause. Pending wait
+   retains its original deadline; incoming peer input preserves pause and FIFO.
+3. Input-less local user controls/ack now write direct control facts, removing
+   mutable run snapshot copying and chat/context serialization. The actual consumer
+   checkpoint commits share the existing Inbox lock through cursor publication;
+   model/user waits and UI callbacks stay outside. Schema 20 extends existing
+   `control_fact` and source-call/page indices. Native feed/rebuild/restore use the
+   same proof. `PauseEvents` explicitly serves only the retiring backend; native
+   controls never fall back, import history or dual-write.
+4. On `bdad05b3` + this slice, macOS/net8/C#7.3: seven new cases pass through both
+   consumers: pause/resume with input, lost ack, Stop, restart/rebuild/clean Workspace
+   restore, unavailable read-back/Unknown, pending wait, user takeover/stale release.
+   Twenty-three targeted regressions pass: Send/Resolve (3), spawn (4), peer (3),
+   saved waits (5), feed (5), primitive durable controls (1), retiring pause authority
+   and Workspace wire (2). The takeover case exposed and now guards the live cursor
+   race between checkpoint and control. No full suite or Office/VSTO validation.
+5. Before: native application peer controls were unsupported; local controls copied
+   aggregate run data. After: addressed peer controls enumerate zero catalogs in
+   these fixtures and direct control frames need no CAS bodies. Existing wait/user
+   discovery keeps its catalog reads. Feed cost checks retain 5/2/4 canonical reads
+   for page/idle/after append at H=100/1000/10000, with zero CAS hydration. These are
+   logical I/O/operation counts, not a pause history curve or CPU/Windows latency
+   measurement. Full Inbox replay and metadata/header costs remain open.
+6. Next: native cancel, assignment/group projections, other Store/resource
+   operations and P3 metadata/header costs. P4 stays deferred. Default writers are
+   unchanged. Whole-port P7 still requires verified history/CAS/keys/locator backup,
+   stopped old writers, full restore and Windows/Office screen-photo evidence.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. P7 removes PauseEvents and the explicit capability branch with
+   SendEvents/SpawnEvents/retiring adapters. This intermediate integration does not
+   change default production behavior, so no product bump. One scoped commit;
+   no push/tag.

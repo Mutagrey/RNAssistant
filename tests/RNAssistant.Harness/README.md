@@ -149,6 +149,18 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal control:` covers seven native pause/resume scenarios through both real
+Office run-service and Workspace runtime ports: pending peer input; lost acceptance
+acknowledgement; protected user Stop; restart/rebuild/clean Workspace restore;
+unavailable proof/Unknown without replay; pending wait's original safe boundary;
+user takeover with stale release. It checks live lifetime across checkpoint claims,
+exact native source notices/feed anchors, retained budgets/counts and cold authority
+loss. Peer controls use zero catalog reads; the wait discovery/user UI gestures
+retain their existing catalog calls. Pair with `journal send:`, `journal spawn:`,
+`journal peer:`, `journal wait:`, `journal feed:`, the primitive durable pause case
+and targeted `agent pause:` authority/Workspace checks. Reuse the build; these are
+host-neutral checks, not Windows/Office qualification or production cutover.
+
 `journal spawn:` reuses the real Office/Workspace runtime fixture in four cases:
 normal creation and child Resolve; idle Plan/Deny/model inheritance and Store rename;
 lost acknowledgement; unavailable read-back/Unknown recovery. Checks include one
@@ -177,7 +189,7 @@ exact body/provenance, cold pause, Applied without replay, rebuild and Workspace
 restore. Replies reach real Office run service and Workspace runtime ports/shared
 input channel. Publication is injected through native SendAgent after an atomic
 accepted-call checkpoint; application Send/Resolve/live notification are now covered
-above. Spawn is also connected above; peer controls remain open. Pair with `journal input:`, `journal wait:`,
+above. Spawn and pause/resume are also connected; native cancel remains open. Pair with `journal input:`, `journal wait:`,
 `journal feed:`, native atomic delivery, existing correlated reply and assignment
 recovery checks. No production switch or Windows qualification claim.
 

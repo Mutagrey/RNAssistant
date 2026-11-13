@@ -96,6 +96,17 @@ User Stop и recovery не снимаются агентом. Replay всегд�
 Close вкладки не меняет выполнение. Межпроцессный peer control
 не добавлен; пользовательский UI описан выше. Точные схемы — AgentCommunicationToolCatalog, skill v10.0.0.
 
+Native journal pause/resume (2026-11-13): тот же Application/Inbox принимает один
+`queue.control` с exact accepted call источника, обоими chat heads, target Run,
+PauseId и lifetime живого RunOwner. Этот lifetime сохраняется при внутренних сменах
+checkpoint invocation, но не после restart. Read-back предшествует уведомлению;
+потеря подтверждения разрешается по исходному receipt, недоступное proof оставляет
+Unknown без повтора. User controls/ack пишут отдельный control-факт без копирования
+незафиксированного run; checkpoint и control разделяют существующий Inbox lock.
+Индекс сохраняет authority при новых inputs и восстанавливает cold pause. Default
+backend не переключён; `PauseEvents` удаляется с ним на whole-port P7. Native cancel
+остаётся следующим срезом. [Контракт](session-events.md#journal-peer-pause-and-resume--2026-11-13).
+
 Owner — Application/Conversations (`AgentCommunicationService`), общий Inbox и
 существующий ConversationRunService/AgentKernel. Срез 2026-11-04 использует сохранённый
 каталог ChatStore в exact document/workspace; runtime связывает область с существующим

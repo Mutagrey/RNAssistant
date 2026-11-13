@@ -52,15 +52,20 @@ namespace RNAssistant.Core.Storage
                         if (receipt?.Fact.Card.ChatId != _address.Id) receipt = null;
                         var spawn = receipt == null ? _journal.FindSpawn(db, operation) : null;
                         var peer = receipt == null && spawn == null ? _journal.FindDelivery(db, "operation", operation) : null;
-                        var position = receipt?.Position ?? spawn?.Position ?? peer?.Position;
+                        var control = receipt == null && spawn == null && peer == null ? _journal.FindControl(db, operation) : null;
+                        var position = receipt?.Position ?? spawn?.Position ?? peer?.Position ?? control?.Position;
                         if ((spawn != null ? spawn.Fact.Chat == null || spawn.Fact.Sender != _address.Id :
-                            receipt == null && !DeliveryAffects(peer, _address.Id)) ||
+                            receipt == null && !DeliveryAffects(peer, _address.Id) && !ControlAffects(control, _address.Id)) ||
                             position.Sequence <= result.Next.Sequence || position.Sequence > highWater.Sequence)
                             throw new System.IO.InvalidDataException("Event locator does not identify the requested chat page.");
                         if (receipt != null) notices.Add(FeedNotice(receipt));
                         else if (spawn != null) notices.Add(new ConversationEventNotice { Sequence = position.Sequence,
                             EventId = spawn.Operation, CreatedUtc = spawn.Fact.Child.CreatedUtc, Type = "agent.spawned",
                             RunId = spawn.Fact.RunId, Operations = new string[0] });
+                        else if (control != null) notices.Add(new ConversationEventNotice { Sequence = position.Sequence,
+                            EventId = control.Operation, CreatedUtc = control.Fact.ChangedUtc,
+                            Type = control.Fact.ChatId == _address.Id ? SessionEventTypes.ConversationInputChanged : "agent.control",
+                            RunId = control.Fact.ChatId == _address.Id ? control.Fact.RunId : control.Fact.Origin.RunId, Operations = new string[0] });
                         else notices.Add(new ConversationEventNotice { Sequence = position.Sequence, EventId = peer.Operation,
                             CreatedUtc = peer.Fact.CreatedUtc, Type = peer.Fact.Recipient == _address.Id ? SessionEventTypes.ConversationInputChanged : "agent.accepted",
                             RunId = peer.Fact.Sender == _address.Id ? peer.Fact.RunId : null, Operations = new string[0] });
