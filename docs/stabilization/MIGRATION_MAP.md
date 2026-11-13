@@ -1,5 +1,13 @@
 # Current-to-target migration map
 
+## F2c interactive delivery — in progress, 2026-11-13
+
+Owner: Browser/native integration. BrowserContentSession binds existing owners to
+native byte routes without a second store. The unconditional SourceOnly policy must
+be removed at the native consumer cutover. Keep only runtime-specific unavailable
+errors. Old iframe resource-control listener must switch to a scoped native adapter;
+RN.resources and existing plugin SDK/data/command owners remain the API owners.
+
 ## F2b Local agent admission — 2026-11-13
 
 BrowserPageAutomation and its unused Office script/style embeds are removed.

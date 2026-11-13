@@ -1,5 +1,13 @@
 # План модернизации production UI
 
+## F2c scope correction — in progress, 2026-11-13
+
+User rejected source-only Browser as the final result. Finish real internal page
+execution/manual and agent input, RN.resources and plugin SDK before 07. Keep common
+Browser source/version/diff/actions; Preview becomes the interactive default when its
+native runtime is available. Validate autonomous HTML with captured bindings under
+file://, separately from source ZIP transfer and Windows/Office qualification.
+
 ## F2b Agent open — In Review, 2026-11-13
 
 Completed from F4c: real Workspace discovery → managed open → exact visible Dock ack.

@@ -1,5 +1,22 @@
 # Universal Browser: предлагаемые контракты
 
+## Interactive content binding — F2c in progress, 2026-11-13
+
+BrowserContentSession is a transient member list over existing captured CAS/package
+bytes. Workspace preview uses CaptureSet without publishing a saved version; plugin
+working preview uses existing Check/instance ownership. Per-session synthetic HTTPS
+serves only declared normalized members, retaining query/hash for local navigation.
+Native content must keep RN.resources and plugin SDK routes; internal calls remain
+scoped capabilities rather than general Shell access.
+
+Network responses apply Connection-Allowlist `(response-origin)` to documents and
+worker scripts, alongside CSP and exact host routes. Chromium 152+ is required for
+this enforcement mechanism; older runtimes need an explicit update message. The
+[Chromium contract](https://developer.chrome.com/docs/modern-web-guidance/guides/security/restrict-outbound-connections)
+includes non-Fetch channels; CSP alone is insufficient. Windows execution and input
+qualification remain separate evidence. The previous unconditional execution refusal
+is being replaced by actual native delivery, not relabeled as a completed feature.
+
 ## Agent open / local transport — F2b, 2026-11-13
 
 `browser.open` accepts an unambiguous semantic source delivered by `core.find` in

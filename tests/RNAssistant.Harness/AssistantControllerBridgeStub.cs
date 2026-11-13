@@ -292,6 +292,8 @@ namespace RNAssistant.Office
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
         internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
         { throw new InvalidOperationException("Source is not configured by this fixture."); }
+        internal RNAssistant.Application.BrowserContentSession OpenBrowserContent(BrowserTargetDescriptor target, CancellationToken token)
+        { throw new NotSupportedException("Native document content is checked with the real controller adapter."); }
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
         { return RNAssistant.Application.BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)); }
         internal BrowserVersionState BrowserVersionState(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }

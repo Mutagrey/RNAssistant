@@ -392,6 +392,7 @@
     <Compile Include="Services\ExternalBrowserResourceProvider.Media.cs" />
     <Compile Include="Services\BrowserCapabilityService.cs" />
     <Compile Include="Controller\AssistantController.Browser.cs" />
+    <Compile Include="Controller\AssistantController.BrowserContent.cs" />
     <Compile Include="WebView\AssistantWebBridge.Browser.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.Open.cs" />

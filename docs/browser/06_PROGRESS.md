@@ -1,5 +1,25 @@
 # Universal Browser: статус
 
+## F2c Interactive Browser — in progress, 2026-11-13
+
+User correction supersedes the permanent source-only interpretation: internal HTML,
+JavaScript, resource bindings and plugin SDK must execute. B02 is Windows evidence
+for the implementation, not a substitute for implementing it. Continue from `b5c7fb69`
+(F2b plus committed main), finish native content/render/input and internal bindings,
+then offline export through file://, then 07. No push/release.
+
+The first internal slice binds exact document/CAS, Workspace CaptureSet and plugin
+Check/instance members for native serving. It preserves source writes, saved-entry
+identity and original domain owners; no broad filesystem mapping or implicit Save.
+Host-neutral exact-member/cancellation/plugin cleanup and real-controller Mock compile
+pass. Network policy uses response Connection-Allowlist plus CSP and native routes;
+interactive Chrome/network probes are separate from WebView2/Windows qualification.
+
+Required next checks include RN.resources binary/tabular bindings, bundled/local
+vendors and plugin data/commands. Existing autonomous HTML export embeds data snapshots;
+project ZIP export currently carries source/data files and is not itself a guarantee
+of direct file:// execution. Preserve both sources and a runnable offline result.
+
 ## F2b Agent open — 2026-11-13
 
 `16.22.0-dev`, continued from `add50212`. Local source discovery and `browser.open`

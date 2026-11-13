@@ -1,5 +1,14 @@
 # Universal Browser: матрица проверок
 
+## F2c content and network baseline — 2026-11-13
+
+Harness exact local members checks declared paths, traversal/foreign rejection,
+retained working CAS bytes after source edit, cancellation and plugin instance drain.
+Mock compiles the real document adapter. browser-local-network uses production header
+constants in Chromium 157: trusted click/fill and local fetch work; external fetch,
+dedicated/shared/service/blob workers, WebSocket and WebRTC probes deliver no HTTP/UDP
+requests to the external loopback test listeners. This is not WebView2 qualification.
+
 ## F2b Agent open — 2026-11-13
 
 Local Browser tests cover exact visible attachment, wrong/invisible acknowledgements,

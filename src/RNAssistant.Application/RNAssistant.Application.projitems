@@ -1,6 +1,10 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Reference Include="System.IO.Compression" Condition="'$(TargetFramework)' == '' Or '$(TargetFrameworkIdentifier)' == '.NETFramework'" />
+    <Compile Include="$(MSBuildThisFileDirectory)BrowserNetworkPolicy.cs" Link="Application\BrowserNetworkPolicy.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BrowserContentSession.cs" Link="Application\BrowserContentSession.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WorkspaceHtmlVersionService.Browser.cs" Link="Application\WorkspaceHtmlVersionService.Browser.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.BrowserContent.cs" Link="Application\PluginApplicationService.BrowserContent.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserIsolationPolicy.cs" Link="Application\BrowserIsolationPolicy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserSourceReader.cs" Link="Application\BrowserSourceReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\BrowserResourceSchema.cs" Link="Application\Workspace\BrowserResourceSchema.cs" />

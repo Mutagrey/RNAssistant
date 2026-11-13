@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Interactive Browser correction — in progress, 2026-11-13
+
+User requires working internal JavaScript, native input, HTML bindings and plugin SDK.
+The source-only F2b state is incomplete. F2c now precedes 07: scoped native content,
+execution/input, resource/SDK integration and standalone file:// export. Exact-member
+content checks and real-controller Mock compile pass; native delivery remains in
+progress and Windows evidence stays open. No release/push or completed UI claim.
+
 Integration: Browser branch includes committed main `8e021769` (Journal Send/Resolve
 and native caption). Parallel uncommitted Journal work remains outside this branch.
 

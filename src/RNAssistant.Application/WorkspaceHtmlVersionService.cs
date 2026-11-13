@@ -209,10 +209,10 @@ namespace RNAssistant.Application
             });
             return result;
         }
-        private void Capture(string workspaceId, CancellationToken token, Action<HtmlProjectSnapshotV1, Action> publish)
+        private void Capture(string workspaceId, CancellationToken token, Action<HtmlProjectSnapshotV1, Action> publish, bool readOnlyPreview = false)
         {
             var workspace = _workspaces.OpenConnected(workspaceId);
-            if (workspace.ReadOnly) throw new InvalidOperationException("Проект доступен только для чтения.");
+            if (workspace.ReadOnly && !readOnlyPreview) throw new InvalidOperationException("Проект доступен только для чтения.");
             using (var definition = _workspaces.PinHtmlProjectDefinition(workspace, token))
             {
                 if (definition.State.Definition == null) throw new WorkspaceFileException("project_definition_required", "Укажите состав HTML-проекта.");

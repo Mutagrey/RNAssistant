@@ -6,6 +6,9 @@ namespace RNAssistant.Office.WebView
 {
     public sealed partial class AssistantWebBridge
     {
+        internal BrowserContentSession OpenBrowserContent(BrowserTargetDescriptor target, System.Threading.CancellationToken token)
+        { return target?.OwnerScope?.Kind == BrowserOwnerKind.Document ? _controller.OpenBrowserContent(target, token) : Plugins.OpenBrowserContent(target, token); }
+
         private void ReportBrowserVersionChanged(BrowserVersionStateChanged value)
         { if (!_disposed) _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(value)); }
 
