@@ -9,10 +9,13 @@ Chromium wide/narrow download/privacy/source-state и предыдущие expor
 
 ## Browser explicit binding — In Review, 2026-11-14
 
-A6 local implementation is complete in 16.26.0-dev. Review: open a bound page →
-manually navigate to another project → «Обсудить» → choose a chat → Back → restore
-layout. The old agent must stay detached. Foreign/stale Bind and late choices pass
-focused tests. Remaining A7 screenshot; user acceptance and Windows evidence open.
+A6 уточнён по решению пользователя в `16.27.1-dev`: «Обсудить» создаёт чат при
+отсутствующей связи или открывает связанный; раскрывает/выделяет его в дереве.
+Смена связи — отдельный пункт меню; tree selection/create не переносят authority.
+Проверка: две вкладки → создать чаты кнопкой → создать ещё один в дереве → явно
+перепривязать одну вкладку → повторно открыть связанный чат при свёрнутом/отфильтрованном
+дереве. Закрытие/смена generation во время ответа не открывают поздний чат.
+A1–A7 локально закрыты; остаются пользовательское принятие и Windows qualification.
 
 ## Browser navigation correction — In Review, 2026-11-13
 
@@ -29,7 +32,7 @@ native query/hash/history и неверный export member после ссыл�
 manual scope handoff и общий screenshot action. Реализация Inspector 07 сохраняется;
 принятие UI и Windows qualification открыты отдельно. Аудит не меняет UI/code и
 не начинает следующую фазу; порядок исправлений и owners —
-[Browser Migration Plan](../browser/04_MIGRATION_PLAN.md#актуальный-остаток-после-проверки--2026-11-13).
+[Browser Migration Plan](../browser/04_MIGRATION_PLAN.md#актуальный-остаток-после-исправлений--2026-11-14).
 
 ## Universal annotation correction — In Review, 2026-11-13
 

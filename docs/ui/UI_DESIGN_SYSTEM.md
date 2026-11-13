@@ -9,10 +9,12 @@
 
 ## Browser explicit binding — In Review, 2026-11-14
 
-Unbound state reuses the Browser control row and standard ActionMenu. No new toolbar
-or per-provider geometry. [Wide](review/browser-binding-wide.png) and
-[420px/125%](review/browser-binding-narrow.png) were inspected; narrow actions remain
-under «Инструменты страницы». Native placement and user acceptance remain open.
+Кнопка чата сохраняет общий icon-button. Обычный клик не открывает промежуточное меню;
+явная смена связи доступна в общем ActionMenu. Control row появляется только при
+ручном управлении, без служебной строки unbound. Новых размеров/overrides нет.
+[Чат рядом и дерево](review/browser-discussion-wide.png) /
+[Дерево на 420px/125%](review/browser-discussion-narrow.png) просмотрены локально.
+Native placement и пользовательское принятие остаются открытыми.
 
 ## Browser navigation correction — In Review, 2026-11-13
 

@@ -253,7 +253,7 @@
     record.setSelected = function (key, selectionOptions) {
       var item = key && record.rows.get(key);
       if (key && !item) return false;
-      if (record.selectedKey === key) return true;
+      if (record.selectedKey === key && !(selectionOptions && selectionOptions.reveal)) return true;
       if (item) {
         for (var parent = record.rows.get(item.dataset.parentKey); parent; parent = record.rows.get(parent.dataset.parentKey))
           if (parent.getAttribute("aria-expanded") === "false") toggle(parent, true);

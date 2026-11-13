@@ -8,9 +8,13 @@ Screenshot consumer использует общий Browser Actions → typed na
 
 ## Browser explicit binding — In Review, 2026-11-14
 
-Browser owns the explicit chat-binding workflow and reuses ActionMenu, project
-catalog/create operations and ConversationPanel. Runtime owns ChatBound/Bind guards;
-selected conversation is only an explicit menu choice, never an automatic grant.
+Одна вкладка Browser имеет максимум один явно выбранный чат; один чат может иметь
+несколько вкладок. Выбор/создание чата в дереве не меняет эти связи. Кнопка использует
+существующие conversation owners и открывает связанный чат либо создаёт новый в scope
+источника. Office creation сохраняет exact DocumentAuthorityId/DocumentKey и не меняет
+посторонний выбранный чат/черновик; Workspace использует CreateProjectChat.
+Runtime по-прежнему проверяет Bind generation/scope. Общая WorkspaceNavigation
+раскрывает/выделяет чат, снимая скрывающий его поиск. Нового store/registry нет.
 
 ## Browser navigation correction — In Review, 2026-11-13
 

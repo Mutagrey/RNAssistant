@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  var live = new Map(), versionViews = new Map(), available = false;
+  var live = new Map(), versionViews = new Map(), available = false, discussionIntent = 0;
   var unavailable = "Native Browser недоступен. Исходники и версии доступны; подробности — в состоянии страницы.";
   function id() { return "browser-" + crypto.randomUUID(); }
   function key(target) { return "browser:" + target.browserTabId; }
@@ -29,45 +29,90 @@
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
     var sourcePage = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
-    async function discuss() {
-      var page = current, binding = page && page.target && page.target.ownerScope;
-      if (!binding || page.status === "Home") throw new Error("Откройте страницу для обсуждения.");
-      function accepted() { return active && !disposed && current && current.sessionId === page.sessionId && current.documentGeneration === page.documentGeneration; }
-      function openChat(owner) { return RNAssistantConversationPanel.open(owner.kind === "Document" ? { source: "office", sessionId: owner.chatId } :
-        { source: "workspace", workspaceId: owner.scopeId, sessionId: owner.chatId }, { referencePanel: key(target), beside: true }); }
-      if (page.chatBound && binding.chatId) return openChat(binding);
-      async function bind(chatId) {
-        if (!accepted()) return;
-        var owner = { kind: binding.kind, scopeId: binding.scopeId, chatId: chatId };
-        var bound = await command("Bind", { binding: owner, generation: page.documentGeneration });
-        if (active && !disposed && current.documentGeneration === bound.documentGeneration && current.chatBound && current.ownerScope.chatId === chatId) return openChat(owner);
+    var discussionBusy = false, createdDiscussion = null;
+    function discussionContext() {
+      var page = current, owner = page && page.target && page.target.ownerScope;
+      if (!owner || page.status === "Home" || page.target.state !== "Ready" || !["Document", "Workspace"].includes(owner.kind))
+        throw new Error("Откройте доступную страницу для обсуждения.");
+      return { page: page, owner: owner, accepted: function () { return active && !disposed && current &&
+        current.sessionId === page.sessionId && current.documentGeneration === page.documentGeneration; } };
+    }
+    function canRevealDiscussion(context) { return context.accepted() && context.intent === discussionIntent &&
+      context.selectedChat === RNAssistantConversationPanel.selected(); }
+    async function openDiscussion(context, owner) {
+      if (!canRevealDiscussion(context)) return;
+      var address = owner.kind === "Document" ? { source: "office", sessionId: owner.chatId } :
+        { source: "workspace", workspaceId: owner.scopeId, sessionId: owner.chatId };
+      if (owner.kind === "Workspace") await RNAssistantProjectChats.refreshCatalog();
+      else if (!(state.chats || []).some(function (chat) { return chat.Id === owner.chatId; })) applyChatCatalogState(await send("listChats", {}));
+      if (!canRevealDiscussion(context)) return;
+      if (!RNAssistantConversationPanel.open(address, { referencePanel: key(target), beside: true })) throw new Error("Не удалось открыть чат страницы.");
+      RNAssistantWorkspaceNavigation.reveal(address);
+    }
+    async function bindDiscussion(context, chatId) {
+      if (!context.accepted()) return;
+      var owner = { kind: context.owner.kind, scopeId: context.owner.scopeId, chatId: chatId };
+      var bound = await command("Bind", { binding: owner, generation: context.page.documentGeneration });
+      if (active && !disposed && current.documentGeneration === bound.documentGeneration && current.chatBound && current.ownerScope.chatId === chatId) {
+        createdDiscussion = null;
+        var next = discussionContext(); next.intent = context.intent; next.selectedChat = context.selectedChat;
+        await openDiscussion(next, owner);
       }
-      var items;
-      if (binding.kind === "Document" && binding.chatId) {
-        items = [{ label: "Подключить чат источника", icon: "chat", onSelect: function () { return bind(binding.chatId); } }];
-      } else if (binding.kind === "Workspace") {
-        var catalog = await request("getProjectChats", {});
-        if (!accepted()) return;
-        var project = (catalog.projects || []).find(function (item) { return item.workspaceId === binding.scopeId; });
+    }
+    async function newDiscussion(context) {
+      if (!context.accepted()) return;
+      if (createdDiscussion && createdDiscussion.sessionId === context.page.sessionId && createdDiscussion.generation === context.page.documentGeneration)
+        return bindDiscussion(context, createdDiscussion.chatId);
+      var chatId;
+      if (context.owner.kind === "Workspace") {
+        var created = await send("createProjectChat", { workspaceId: context.owner.scopeId, title: String(context.page.title || "Обсуждение HTML").slice(0, 200) });
+        chatId = created && created.sessionId;
+        if (chatId) RNAssistantWorkspaceChat.snapshotSource({ workspaceId: context.owner.scopeId, sessionId: chatId }).accept(created);
+      } else {
+        var response = await send("createBrowserChat", { ownerScope: context.owner, locator: context.page.url });
+        chatId = response && response.activeChatId;
+        if (chatId) { officeChatSource(chatId).accept(response); applyChatCatalogState(response); }
+      }
+      if (!chatId) throw new Error("Создание чата не подтверждено. Проверьте рабочую область.");
+      if (!context.accepted()) { if (context.owner.kind === "Workspace") await RNAssistantProjectChats.refreshCatalog(); return; }
+      createdDiscussion = { sessionId: context.page.sessionId, generation: context.page.documentGeneration, chatId: chatId };
+      await bindDiscussion(context, chatId);
+    }
+    async function runDiscussion(context, action) {
+      if (discussionBusy || !context.accepted()) return;
+      context.intent = ++discussionIntent; context.selectedChat = RNAssistantConversationPanel.selected();
+      discussionBusy = true; surface.discussButton.disabled = true;
+      try { return await action(); }
+      finally { discussionBusy = false; if (!disposed) surface.discussButton.disabled = false; }
+    }
+    function discuss() {
+      var context = discussionContext();
+      return runDiscussion(context, function () {
+        return context.page.chatBound && context.owner.chatId ? openDiscussion(context, context.owner) : newDiscussion(context);
+      });
+    }
+    async function changeDiscussion(anchor) {
+      var context = discussionContext(), chats;
+      if (context.owner.kind === "Workspace") {
+        var catalog = await RNAssistantProjectChats.refreshCatalog();
+        var project = (catalog.projects || []).find(function (item) { return item.workspaceId === context.owner.scopeId; });
         if (!project || !project.available) throw new Error("Проект страницы недоступен.");
-        items = (project.chats || []).slice(0, 20).map(function (chat) { return { label: chat.Title || "Чат проекта", icon: "chat",
-          onSelect: function () { return bind(chat.Id); } }; });
-        var selected = RNAssistantConversationPanel.selected(), address = selected && selected.target;
-        if (address && address.source === "workspace" && address.workspaceId === binding.scopeId &&
-            !((project.chats || []).slice(0, 20).some(function (chat) { return chat.Id === address.sessionId; }))) {
-          var selectedChat = address.sessionId;
-          items.unshift({ label: "Подключить выбранный чат проекта", icon: "chat", onSelect: function () { return bind(selectedChat); } });
-        }
-        items.push({ label: "Новый чат для страницы", icon: "plus", onSelect: async function () {
-          if (!accepted()) return;
-          var created = await request("createProjectChat", { workspaceId: binding.scopeId, title: page.title || "Обсуждение HTML" });
-          if (accepted() && created && created.sessionId) return bind(created.sessionId);
-        } });
-        if ((project.chats || []).length > 20) items.push({ label: "Все чаты проекта", icon: "folder", onSelect: function () {
-          if (accepted()) return RNAssistantProjectChats.open(binding.scopeId);
-        } });
-      } else throw new Error("У этой страницы нет контекста обсуждения.");
-      RNAssistantActionMenu.open(surface.discussButton, items, { label: "Подключить чат страницы" });
+        chats = project.chats || [];
+      } else {
+        applyChatCatalogState(await request("listChats", {}));
+        chats = (state.chats || []).filter(function (chat) { return chat.DocumentAuthorityId === context.owner.scopeId && !chat.WorkspaceId; });
+      }
+      if (!context.accepted()) return;
+      var choices = chats.slice(0, 20), selected = RNAssistantConversationPanel.selected(), selectedId = selected && selected.target.sessionId;
+      var selectedChat = chats.find(function (chat) { return chat.Id === selectedId; });
+      if (selectedChat && !choices.some(function (chat) { return chat.Id === selectedId; })) choices.unshift(selectedChat);
+      function choose(action) { return function () { return runDiscussion(context, action).catch(fail); }; }
+      var items = choices.map(function (chat) { return { label: chat.Title || "Чат", icon: "chat",
+        disabled: context.page.chatBound && context.owner.chatId === chat.Id,
+        onSelect: choose(function () { return bindDiscussion(context, chat.Id); }) }; });
+      items.push({ label: "Новый чат для страницы", icon: "plus", onSelect: choose(function () { return newDiscussion(context); }) });
+      if (chats.length > 20) items.push({ label: "Выберите другой чат в дереве и снова откройте это меню", informational: true, icon: false });
+      RNAssistantActionMenu.open(anchor, items, { label: "Связать страницу с чатом" });
     }
     var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; }, discuss: discuss });
     var annotationHost = RNAssistantBrowserAnnotations.create({ root: root, viewport: viewport, surface: surface, send: send, command: command,
@@ -114,7 +159,7 @@
       selectionOff: function () { annotationHost.deactivate(); }, focusPage: function () { command('Focus').catch(fail); } });
     var providerActions = RNAssistantBrowserActions.mount(surface.actions, { target: function () { return current && current.target; },
       generation: function () { return current && current.documentGeneration; }, isCurrent: function () { return active && !disposed; },
-      status: surface.status, error: fail, discuss: discuss, find: pageFind.open, canFind: pageFind.enabled,
+      status: surface.status, error: fail, changeDiscussion: changeDiscussion, find: pageFind.open, canFind: pageFind.enabled,
       canScreenshot: function () { return active && !disposed && selectedMode === "preview" && current && current.status === "Ready" && current.attached && current.target.capabilities.media; },
       screenshotRequest: function () { return { browserTabId: target.browserTabId, sessionId: session, generation: current.documentGeneration }; },
       captureScreenshot: async function (request) {
@@ -253,10 +298,9 @@
       if (comparison) { if (content.hidden) { comparison.activate(); layoutNative(); return; } comparison.deactivate(); }
       var nativeReady = !home && !removed && ["Starting", "Ready"].includes(current.status);
       viewport.hidden = selectedMode !== "preview" || !nativeReady;
-      var unbound = !home && !removed && !current.chatBound;
-      control.hidden = !current.manualControl && !unbound;
-      controlText.textContent = unbound ? "Без привязки к чату · выберите «Обсудить»" : current.manualControl ? "Вы управляете" : "";
-      resume.hidden = unbound || !current.manualControl;
+      control.hidden = !current.manualControl || !current.chatBound;
+      controlText.textContent = current.manualControl ? "Вы управляете" : "";
+      resume.hidden = !current.chatBound || !current.manualControl;
       empty.hidden = !home && !removed && (selectedMode === "source" || selectedMode === "preview" && nativeReady);
       layoutNative();
       source.hidden = files.hidden = home || removed || selectedMode !== "source";

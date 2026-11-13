@@ -11,7 +11,7 @@ const {withPreviewPage} = require('./preview-session');
       window.send = (type, payload, ...rest) => {
         if (!['browserCommand','readBrowserSource','queryNavigationSuggestions','getProjectChats'].includes(type)) return original(type,payload,...rest);
         const p = localProbe;p.calls.push({type,...structuredClone(payload)});
-        if (type === 'getProjectChats') { const result={projects:[{workspaceId:'other',available:true,chats:[{Id:'other-chat',Title:'Чат другого проекта'}]}]}; return p.deferChats ? new Promise(resolve => p.finishChats=()=>resolve(result)) : Promise.resolve(result); }
+        if (type === 'getProjectChats') { const result={projects:[{workspaceId:'other',name:'Другой проект',rootPath:'/other',available:true,chats:[{Id:'other-chat',Title:'Чат другого проекта'}]}]}; return p.deferChats ? new Promise(resolve => p.finishChats=()=>resolve(result)) : Promise.resolve(result); }
         if (type === 'queryNavigationSuggestions') return new Promise(resolve => p.pending.push(() => resolve({requestGeneration:payload.requestGeneration,
           items:[{title:payload.prefix,displayLocator:'/projects/project/source/'+payload.prefix+'.html'}]})));
         if (type === 'readBrowserSource') return Promise.resolve({target:p.pages.values().next().value.target,files:['index.html','second.html'],path:payload.path||'index.html',
@@ -34,7 +34,7 @@ const {withPreviewPage} = require('./preview-session');
         value.revision++;return Promise.resolve(structuredClone(value));
       };
       const openConversation = RNAssistantConversationPanel.open;
-      RNAssistantConversationPanel.open = function(target,...rest) { if(target.workspaceId==='other'){localProbe.openedChat=target;return;} return openConversation.call(this,target,...rest); };
+      RNAssistantConversationPanel.open = function(target,...rest) { if(target.workspaceId==='other'){localProbe.openedChat=target;return true;} return openConversation.call(this,target,...rest); };
       RNAssistantBrowser.open('/projects/project/source/index.html',{kind:'Workspace',scopeId:'project',chatId:'source-chat'}, {browserTabId:'tab-one'});
     });
     const root=page.locator('section[aria-label="Browser"]:visible');
@@ -59,16 +59,19 @@ const {withPreviewPage} = require('./preview-session');
     await root.getByRole('button',{name:'Обновить предпросмотр',exact:true}).click();
     await root.locator('.browser-document-source').getByText('Exact source index.html',{exact:false}).waitFor();
     await address.fill('/projects/other/source/index.html');await address.press('Enter');
-    await root.getByText('Без привязки к чату · выберите «Обсудить»',{exact:true}).waitFor();
+    await page.waitForFunction(()=>!localProbe.pages.get('tab-one').chatBound);
+    assert.ok(await root.locator('.browser-control').isHidden());
     assert.equal(await page.evaluate(()=>localProbe.calls.filter(c=>c.action==='Bind').length),0,'manual navigation never binds the selected chat');
     await page.screenshot({path:'docs/ui/review/browser-binding-wide.png'});
-    await root.getByRole('button',{name:'Обсудить в чате рядом'}).click();
+    await root.getByRole('button',{name:'Действия страницы',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Связать с другим чатом…',exact:true}).click();
     await page.getByRole('menuitem',{name:'Чат другого проекта',exact:true}).click();
     await page.waitForFunction(()=>localProbe.openedChat?.sessionId==='other-chat');
     assert.equal(await page.evaluate(()=>localProbe.calls.find(c=>c.action==='Bind').binding.scopeId),'other');
     assert.equal(await root.getByText('Без привязки к чату · выберите «Обсудить»',{exact:true}).count(),0);
     await address.fill('/projects/other/source/second.html');await address.press('Enter');
-    await root.getByText('Без привязки к чату · выберите «Обсудить»',{exact:true}).waitFor();
+    await page.waitForFunction(()=>!localProbe.pages.get('tab-one').chatBound);
+    assert.ok(await root.locator('.browser-control').isHidden());
     await page.screenshot({path:'/tmp/rna-local-browser-wide.png'});
     await page.setViewportSize({width:420,height:800});await page.evaluate(()=>{document.documentElement.style.zoom='1.25';});
     await page.waitForTimeout(200);
@@ -77,11 +80,12 @@ const {withPreviewPage} = require('./preview-session');
     await page.screenshot({path:'docs/ui/review/browser-binding-narrow.png'});
     await page.evaluate(()=>localProbe.deferChats=true);
     await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
-    await root.getByRole('button',{name:'Обсудить в чате рядом'}).click();
+    await root.getByRole('button',{name:'Действия страницы',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Связать с другим чатом…',exact:true}).click();
     await page.waitForFunction(()=>!!localProbe.finishChats);
     await page.evaluate(()=>{const value=localProbe.pages.get('tab-one');value.documentGeneration++;value.revision++;RNAssistantBrowser.apply(structuredClone(value));localProbe.finishChats();});
     await page.waitForTimeout(80);
-    assert.equal(await page.getByRole('menu',{name:'Подключить чат страницы'}).count(),0,'late chat choices cannot bind a different page generation');
+    assert.equal(await page.getByRole('menu',{name:'Связать страницу с чатом'}).count(),0,'late chat choices cannot bind a different page generation');
     assert.ok(await page.evaluate(()=>localStorage.getItem('rnassistant.ui.dock.s1.v1').includes('"chatBound":false')),'restored unbound pages do not regain old agent access');
 
     await page.evaluate(()=>RNAssistantDockWorkspace.close('browser:tab-one'));

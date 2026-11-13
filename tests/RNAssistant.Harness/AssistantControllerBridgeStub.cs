@@ -41,6 +41,7 @@ namespace RNAssistant.Office
         public ChatResourceDraftResponse StageSelectionInput(string mode, string chatId) { return new ChatResourceDraftResponse(); }
         internal ChatAttachment StageBrowserVisualSelection(BrowserAnnotationCapture capture, BrowserAnnotationRequest request)
         { return new ChatAttachment(); }
+        internal ChatStateResponse CreateBrowserChat(BrowserResolveRequest request) { throw new NotSupportedException(); }
         internal ArtifactTransferDownload OpenBrowserScreenshot(BrowserScreenshotRequest request, BrowserMediaCapture capture, Func<bool> current, CancellationToken token)
         { throw new NotSupportedException(); }
         internal ResourceDataCloseResponse CloseBrowserScreenshot(BrowserScreenshotRequest request) { throw new NotSupportedException(); }

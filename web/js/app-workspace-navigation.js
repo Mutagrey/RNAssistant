@@ -16,7 +16,7 @@
     });
     return found;
   }
-  function select(target, activate) {
+  function select(target, activate, reveal) {
     if (!target) return;
     var selected = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
     if (!activate && selected && selected.target.source !== target.source) return;
@@ -26,7 +26,7 @@
     selectedTarget = target;
     var section = sections[activeSource], key = selection(activeSource, target);
     if (section) section.selectedKey = key;
-    if (pane && key) { RNAssistantNavigationTree.setSelected(root(), key, { focus: focusPending }); focusPending = false; }
+    if (pane && key) { RNAssistantNavigationTree.setSelected(root(), key, { focus: focusPending, reveal: !!reveal }); focusPending = false; }
     else if (pane) RNAssistantNavigationTree.setSelected(root(), null);
   }
   function status() {
@@ -98,6 +98,12 @@
     if (focusKey) focusPending = false;
   }
   window.RNAssistantWorkspaceNavigation = { update: update, select: select,
+    reveal: function (target) {
+      // Explicit reveal clears a filter that might hide the addressed chat.
+      state.chatSearch = ""; document.getElementById("chatSearchInput").value = "";
+      renderChatSessions(); RNAssistantProjectChats.search("");
+      RNAssistantShellLayout.setNavigationOpen(true); select(target, true, true);
+    },
     focusSearch: function () { switchTab("chat"); RNAssistantShellLayout.setNavigationOpen(true); if (pane) pane.focusSearch(); },
     notice: function (source, message, retry, error) { notices[source] = message || ""; errors[source] = !!error;
       if (retry) retries[source] = retry; else delete retries[source]; status(); } };

@@ -1,5 +1,23 @@
 # Universal Browser: матрица проверок
 
+## Discussion refinement evidence — 2026-11-14
+
+- `local browser:` — 13/13; exact source scope, foreign/stale Bind, Back/restore и
+  media guards остаются в силе.
+- MockDemo `--browser-html-export-test`: новый чат создаётся в исходном Excel document
+  при выбранном другом Word document; выбор сохраняется, Bind нового чата открывает
+  тот же HTML member. Export/screenshot проверки проходят.
+- `browser-discussion.test.js`: Workspace/document create/reopen, две вкладки с разными
+  чатами, реальное создание через дерево без rebind, явная смена только одной связи,
+  filtered/collapsed reveal, narrow/125%, duplicate-click и late-close cleanup;
+  позднее открытие другой вкладки не перехватывает выбранный чат.
+- `local-browser.test.js`: unbound без баннера, явный picker, stale menu, hide/show/restore.
+- `shared-navigation-tree.test.js` и `browser-screenshot.test.js`: общие навигационные
+  компоненты и exact PNG download сохраняют поведение после смены affordance.
+- [Wide](../ui/review/browser-discussion-wide.png) /
+  [Narrow 125%](../ui/review/browser-discussion-narrow.png) — локальное визуальное ревью.
+  Shell native response в Chromium — fixture, не Windows WebView2 qualification.
+
 ## A7 correction evidence — 2026-11-14
 
 - Harness `local browser:` — 13/13, включая unbound screenshot, stale session/generation,

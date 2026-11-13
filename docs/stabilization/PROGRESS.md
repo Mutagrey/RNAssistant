@@ -13,6 +13,14 @@ metadata/header, summary usage и размеры working-set metadata); полн
 P4 отложена; default writer прежний; Windows/Office evidence открыт.
 [Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-attachment-consumers-2026-11-14).
 
+## Browser discussion refinement — 2026-11-14
+
+`16.27.1-dev`: «Обсудить» создаёт чат только при отсутствии связи, иначе открывает
+связанный и выделяет его в дереве. Удалён unbound banner; явная смена связи в меню.
+Две вкладки/создание из дерева/late responses проверены, source document authority
+сохраняется. Local Browser 13/13 + actual controller + Chromium regressions проходят.
+[Evidence](../browser/05_TEST_MATRIX.md). A1–A7 закрыты локально; Windows и UI acceptance открыты.
+
 ## Native visible-history rewrites — 2026-11-14
 
 Text edit/delete/clear подключены к CAS-manifest и существующему индексу, через

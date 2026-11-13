@@ -423,6 +423,7 @@
       return entry.workspaceId === workspaceId && entry.available;
     }); },
     refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,
+    refreshCatalog: async function () { await refreshCatalog(); renderTree(); return catalog; },
     snapshot: currentSnapshot, read: readProjectChat,
     focus: function (target) { selectedWorkspaceId = target.workspaceId; renderTree(); },
     targets: function () { return projects().filter(function (entry) { return entry.available; }).flatMap(function (entry) {

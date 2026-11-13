@@ -557,6 +557,20 @@ namespace RNAssistant.Office.Services
             return session;
         }
 
+        internal ChatSession CreatePersistentBrowserChat(string documentAuthorityId, string title)
+        {
+            if (string.IsNullOrEmpty(documentAuthorityId)) throw new InvalidOperationException("Требуется документ страницы.");
+            // Address the source document, preserving an unrelated selected chat/draft.
+            var source = _activeSession?.DocumentAuthorityId == documentAuthorityId ? ChatSessionHeaderFactory.Create(_activeSession) :
+                _conversations.ListHeaders(includeStorageUsage: false).FirstOrDefault(header => header.WorkspaceId == null && header.DocumentAuthorityId == documentAuthorityId);
+            if (source == null || string.IsNullOrEmpty(source.DocumentKey))
+                throw new InvalidOperationException("Документ страницы отсутствует в рабочей области. Откройте его перед созданием чата.");
+            var session = _conversations.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, title);
+            session.DocumentAuthorityId = source.DocumentAuthorityId; session.DocumentPath = source.DocumentPath;
+            _conversations.Commit(session, new ConversationCommit());
+            return session;
+        }
+
         private ChatSession BuildNewChat(string title)
         {
             var host = _adapter.HostName;

@@ -5,6 +5,7 @@ using System.Text;
 using Newtonsoft.Json;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Persistence;
@@ -24,6 +25,17 @@ namespace RNAssistant.Office
         }
         private DocumentHtmlVersionService HtmlVersions()
         { return new DocumentHtmlVersionService(_paths, _chatStore.DocumentArtifacts); }
+        internal ChatStateResponse CreateBrowserChat(BrowserResolveRequest request)
+        {
+            using (_conversationLeases.AcquireMaintenance()) {
+                var target = ResolveBrowserLocator(request).Target;
+                if (target?.State != BrowserTargetState.Ready || target.Kind == BrowserTargetKind.Home)
+                    throw new InvalidOperationException("Источник страницы недоступен для обсуждения.");
+                var title = string.IsNullOrWhiteSpace(target.Title) ? "Обсуждение HTML" : target.Title;
+                var session = _chatSessions.CreatePersistentBrowserChat(target.OwnerScope.ScopeId, title.Substring(0, Math.Min(200, title.Length)));
+                return NewChatState(session, null);
+            }
+        }
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
         {
             BrowserLocalLocator locator;

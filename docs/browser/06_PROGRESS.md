@@ -1,5 +1,19 @@
 # Universal Browser: статус
 
+## Discussion button and independent bindings — 2026-11-14
+
+`16.27.1-dev`: основная кнопка открывает связанный чат или создаёт новый для источника,
+связывает вкладку и раскрывает/выделяет чат в дереве. Надпись unbound удалена; выбор
+другого чата перенесён в «Действия страницы». Две вкладки имеют независимые связи;
+создание/выбор чата в дереве их не меняет. Реализованы guards double-click/late response
+и повтор Bind уже созданного чата при известном результате создания. Запоздалый
+ответ другой вкладки не перехватывает более новое выбранное обсуждение.
+Office creation сохраняет source document authority; активный чужой документ и
+черновики не используются. Local Browser 13/13, actual-controller discussion/export/
+screenshot, Chromium multi-tab/tree/create/rebind/reveal/late-close и общие tree checks
+проходят. Остаток пакета — Windows compilation/qualification и пользовательское UI
+acceptance. Следующая UI-фаза, push/release не запускаются автоматически.
+
 ## A1–A7: локальные исправления завершены — 2026-11-14
 
 `16.27.0-dev`: A7 добавляет «Скачать снимок страницы» в общее меню Browser.

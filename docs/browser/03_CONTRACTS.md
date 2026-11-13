@@ -26,6 +26,17 @@ Bind requires the current generation and a validated chat in the displayed sourc
 exact scope. It resets page/control generation and the old manual resume callback.
 History retains source access, not a chat binding; layout persists explicit unbound
 state and Open revalidates it. Chat creation/selection use existing domain owners.
+Primary Discuss opens the bound chat, or creates one in the exact source scope and
+binds only this tab. Tree selection/create never rebinds tabs. Explicit reassignment
+is a secondary ActionMenu command restricted to the source scope. Chat navigation
+reveals the exact row, including a filtered/collapsed tree. Pending clicks coalesce;
+a late created chat remains in its catalog but cannot bind/open a closed or changed page.
+A newer Browser discussion action or a changed selected conversation suppresses late
+UI opening/reveal; this presentation guard does not transfer any tab binding.
+Document `CreateBrowserChat(BrowserResolveRequest)` resolves the source and uses the
+existing ChatSessionService/store to create an empty chat with its document authority,
+key and title; unrelated selection/drafts are preserved. Missing document context in
+the workspace gives an explicit open-document refusal, never a current-document fallback.
 
 ## Navigation reconciliation — 2026-11-13
 

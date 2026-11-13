@@ -65,7 +65,7 @@
         { label: "Создать проект из снимка", icon: "copy", status: copy && copy.issue || (copy && copy.pending ? "Проект создаётся…" : "Копия точных исходников в приложении"), disabled: !!copy || !caps.createProject,
           onSelect: function () { return createProject(target); } });
       if (target.resourceUri) items.push({ label: "Копировать точную ссылку", icon: "link", onSelect: function () { return copyTextResult(target.resourceUri); } });
-      if (target.pluginId) items.push({ label: "Чат исходников", icon: "chat", onSelect: context.discuss });
+      if (context.changeDiscussion) items.push({ label: "Связать с другим чатом…", icon: "chat", onSelect: function () { return context.changeDiscussion(more).catch(context.error); } });
       if (!items.length) items.push({ label: "Нет дополнительных действий", disabled: true, icon: false });
       RNAssistantActionMenu.open(more, items);
     };

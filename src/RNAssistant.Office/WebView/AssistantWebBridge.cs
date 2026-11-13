@@ -253,6 +253,9 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CloseBrowserScreenshot:
                         responsePayload = _controller.CloseBrowserScreenshot(Payload<BrowserScreenshotRequest>(payload));
                         break;
+                    case BridgeOperationId.CreateBrowserChat:
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.CreateBrowserChat(Payload<BrowserResolveRequest>(payload)), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.StageBrowserVisualSelection:
                         var annotations = Browser as IBrowserAnnotationSource;
                         if (annotations == null) throw new InvalidOperationException("Аннотации Browser недоступны на этом host.");

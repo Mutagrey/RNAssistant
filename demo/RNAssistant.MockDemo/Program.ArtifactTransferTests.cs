@@ -65,6 +65,7 @@ namespace RNAssistant.MockDemo
                 if (second.Target.EntryPath != "second.html") throw new Exception("Local link exported the previous member.");
                 foreach (var id in new[] { second.Source.LeaseId }.Concat(second.ResourceExport.Bindings.Select(value => value.Lease.LeaseId)))
                     controller.CloseResourceData(new ResourceDataCloseRequest { ChatId = second.ChatId, WorkspaceId = "browser", LeaseId = id });
+                CheckBrowserDiscussion(controller, target);
                 target.ResourceUri += "-stale"; var rejected = false;
                 try { controller.PrepareBrowserHtmlExport(new BrowserProjectTransferRequest { Target = target }, CancellationToken.None); }
                 catch (InvalidOperationException) { rejected = true; }
@@ -73,6 +74,26 @@ namespace RNAssistant.MockDemo
                 Console.WriteLine("PASS Browser export controller: exact source/data, unchanged publication, lease close and stale refusal"); return 0;
             } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
             finally { controller?.Dispose(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        private static void CheckBrowserDiscussion(AssistantController controller, BrowserTargetDescriptor target)
+        {
+            var unrelated = controller.CreateDocumentChat("Unrelated", "Word", "other-document", "Other.docx", "C:\\Other.docx");
+            var response = controller.CreateBrowserChat(new BrowserResolveRequest { OwnerScope = target.OwnerScope, Locator = target.DisplayLocator });
+            var created = response.CatalogChanges.UpsertedChats.Single();
+            if (created.DocumentAuthorityId != target.OwnerScope.ScopeId || created.Host != "Excel" || created.Id == target.OwnerScope.ChatId ||
+                response.CatalogChanges.RemovedTransientChatIds.Count != 0 || controller.ListChats().ActiveChatId != unrelated.ActiveChatId)
+                throw new Exception("Browser discussion changed selection or created a chat in the unrelated document.");
+            using (var runtime = new LocalBrowserPageRuntime(controller.ResolveBrowserLocator, null)) {
+                var page = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "discussion", OperationId = "discussion-open",
+                    OwnerScope = target.OwnerScope, Locator = target.DisplayLocator, BindChat = false }, CancellationToken.None).GetAwaiter().GetResult();
+                var bound = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Bind, BrowserTabId = page.BrowserTabId, SessionId = page.SessionId,
+                    Generation = page.DocumentGeneration, Binding = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = created.DocumentAuthorityId, ChatId = created.Id } }, CancellationToken.None).GetAwaiter().GetResult();
+                using (var content = controller.OpenBrowserContent(bound.Target, CancellationToken.None))
+                    if (!bound.ChatBound || bound.OwnerScope.ChatId != created.Id || bound.Target.ResourceUri != target.ResourceUri || content.EntryPath != target.EntryPath)
+                        throw new Exception("New document discussion lost the exact displayed HTML source.");
+            }
+            Console.WriteLine("PASS Browser discussion controller: exact source document, unrelated selection preserved and new chat binds the same HTML member");
         }
 
         private static void CheckBrowserScreenshotDownload(AssistantController controller)

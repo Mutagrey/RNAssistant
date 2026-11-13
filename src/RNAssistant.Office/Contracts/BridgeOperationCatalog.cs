@@ -14,6 +14,7 @@ namespace RNAssistant.Office.Contracts
         GetHostWindowState, HostWindowCommand,
         [BridgeOperationPolicy(true, 60)] BrowserCommand,
         [BridgeOperationPolicy(true, 60)] StageBrowserVisualSelection,
+        [BridgeOperationPolicy(true, 60)] CreateBrowserChat,
         [BridgeOperationPolicy(true, 60)] CaptureBrowserScreenshot,
         CloseBrowserScreenshot,
         GetPlugins, GetPluginIcons, SavePluginIcon, DeletePluginIcon, UpdatePluginAppearance, [BridgeOperationPolicy(true, 360)] DrawPluginIcon,
