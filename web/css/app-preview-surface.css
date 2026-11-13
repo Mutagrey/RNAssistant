@@ -10,6 +10,10 @@
 .preview-surface-toolbar .preview-surface-copy-address,.preview-surface-toolbar>.preview-surface-tools{display:none}
 .preview-surface-status{margin-top:var(--space-1);white-space:normal;overflow-wrap:anywhere;color:var(--ink-muted)}
 .preview-surface-status:empty{display:none}
+.preview-surface-find{display:flex;flex:none;align-items:center;flex-wrap:wrap;gap:var(--space-1);padding:var(--space-2);border-bottom:1px solid var(--line)}
+.preview-surface-find[hidden]{display:none}
+.preview-surface-find>input{flex:1;min-width:0;width:0}
+.preview-surface-find>.preview-surface-status{flex-basis:100%;margin:0}
 .preview-surface-status[data-error="true"]{color:var(--danger)}
 .preview-surface-bar [hidden]{display:none}
 .preview-surface-actions>.view-switch{flex:none;padding:0;background:transparent}

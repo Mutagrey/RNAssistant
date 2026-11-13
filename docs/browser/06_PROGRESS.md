@@ -1,5 +1,15 @@
 # Universal Browser: статус
 
+## F2c5 page find — 2026-11-13
+
+`16.25.0-dev`: common menu/Ctrl+F opens bounded native page find with next/previous
+and element highlighting over existing semantic capture. No second search index or
+model API. Exact page/request and hidden-view cleanup are covered by Chromium UI and
+native-script fixtures; Mock compile passes. Native Windows evidence remains open.
+02–06 local implementation now proceeds to 07 selected Inspector/screens, then main
+integration. UI acceptance, Windows compilation/qualification and release are not
+claimed; no push/release.
+
 ## F2c4 native annotations — 2026-11-13
 
 `16.24.1-dev`: shared element inspector/annotations now use the native Browser's

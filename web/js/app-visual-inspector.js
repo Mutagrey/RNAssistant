@@ -9,13 +9,13 @@
     var pointer = null, pointerInside = false;
     var overlay = null, tooltip = null, frame = 0, unsupportedFrame = false, observer = null;
     var accent = "#35684b", accentInk = "#ffffff";
-    var watches = [], watchObserver = null;
+    var watches = [], watchObserver = null, foundNode = null, findObserver = null;
     var allowed = ["id", "class", "role", "data-ui-id", "data-testid"];
     var sensitive = "input,textarea,select,option,[contenteditable],[data-private],[data-sensitive],script,style,template,noscript";
 
     function emit(kind, selection) {
       var value = { type: "rnassistant-visual-inspector-" + kind, generation: generation };
-      value[kind === "revealed" ? "reveal" : "selection"] = selection || null;
+      value[kind === "find" ? "find" : kind === "revealed" ? "reveal" : "selection"] = selection || null;
       nativeEmit(value);
     }
     function emitLocations() {
@@ -178,6 +178,7 @@
           var current = pointerInside && pointer ? document.elementFromPoint(pointer.x, pointer.y) : selectedNode;
           show(current === overlay || current === tooltip || current && current.localName === "iframe" ? null : current);
         }
+        if (!active && foundNode) show(foundNode);
         emitLocations();
       });
     }
@@ -222,10 +223,16 @@
     }
     document.addEventListener("scroll", refresh, true);
     window.addEventListener("resize", refresh);
+    function findShortcut(event) {
+      if (!event.isTrusted || !(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'f') return;
+      event.preventDefault(); event.stopImmediatePropagation(); emit('find-open');
+    }
+    document.addEventListener('keydown', findShortcut, true);
     function onControl(event) {
       var message = event.data;
       if (disposed || !message || message.generation !== generation) return;
-      if (message.operation === "probe") emit("ready");
+      if (message.operation === "find") { stop(); emit('find', __rnaLocalBrowser.find(message.find)); }
+      else if (message.operation === "probe") emit("ready");
       else if (message.operation === "activate") { palette(message.palette); start(); emit("activated"); }
       else if (message.operation === "palette") palette(message.palette);
       else if (message.operation === "pointer-exit") { pointerInside = false; show(selectedNode); }
@@ -262,6 +269,8 @@
         emit("revealed", { id: message.id, found: !!found });
       } else if (message.operation === "dispose") {
         stop(); disposed = true;
+        foundNode = null; if (findObserver) findObserver.disconnect();
+        document.removeEventListener('keydown', findShortcut, true);
         document.removeEventListener("scroll", refresh, true);
         window.removeEventListener("resize", refresh);
         if (watchObserver) { watchObserver.disconnect(); watchObserver = null; }
@@ -271,6 +280,17 @@
     }
     Object.defineProperty(globalThis, '__rnaVisualControl', { value: function (message) { onControl({ data: message }); }, configurable: true });
     Object.defineProperty(globalThis, '__rnaVisualHide', { value: function () { show(null); }, configurable: true });
+    Object.defineProperty(globalThis, '__rnaVisualHighlight', { value: function (node) {
+      foundNode = node; if (findObserver) { findObserver.disconnect(); findObserver = null; }
+      if (node) {
+        node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        findObserver = new MutationObserver(function (changes) {
+          if (changes.some(function (change) { return change.target !== overlay && change.target !== tooltip && !overlay?.contains(change.target) && !tooltip?.contains(change.target); })) { foundNode = null; show(null); findObserver.disconnect(); findObserver = null; }
+        });
+        findObserver.observe(document.body, { childList: true, characterData: true, attributes: true, subtree: true });
+      }
+      show(node);
+    }, configurable: true });
     emit("ready");
   }
 

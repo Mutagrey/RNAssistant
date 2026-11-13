@@ -1,5 +1,12 @@
 # Карта экранов, навигации и состояний
 
+## Find on the current page — In Review, 2026-11-13
+
+«Действия страницы → Найти на странице» or Ctrl+F opens the common search row. Enter
+advances, Shift+Enter goes back, Escape closes and returns focus to the native page.
+Counts explicitly refer to available text; truncated captures say so. Search does not
+read private values. Navigation/source mode/hiding closes the row and clears highlight.
+
 ## Native element annotations — In Review, 2026-11-13
 
 Bound document HTML and plugin Browser pages expose the shared selection button.

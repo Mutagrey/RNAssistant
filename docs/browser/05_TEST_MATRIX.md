@@ -1,5 +1,13 @@
 # Universal Browser: матрица проверок
 
+## F2c5 find evidence — 2026-11-13
+
+Real Chromium: shared semantic capture, private-value exclusion, next/previous/wrap,
+bounded results, DOM-change highlight invalidation and trusted Ctrl+F signal pass.
+Common Browser fixture checks query/next, stale response, navigation cleanup and
+420px/125% bounds. Mock compilation passes; native Windows focus/shortcut/placement
+and WebView2 compilation remain open.
+
 ## F2c4 native annotation evidence — 2026-11-13
 
 Passed: real Chromium isolated-world selection, privacy exclusions, trusted manual

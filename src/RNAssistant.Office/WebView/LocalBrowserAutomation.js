@@ -1,10 +1,10 @@
 (function () {
   "use strict";
   if (globalThis.__rnaLocalBrowser) return true;
-  var observation, mediaObservation, preparation, epoch = 0, geometryEpoch = 0;
+  var observation, mediaObservation, preparation, search, epoch = 0, geometryEpoch = 0;
   function capture() {
   // Never deliver input values, link destinations, HTML or page script state.
-  var nodes = [], elements = [], destinations = [], visited = 0, characters = 0, truncated = false, deadline = performance.now() + 100;
+  var nodes = [], elements = [], locations = [], destinations = [], visited = 0, characters = 0, truncated = false, deadline = performance.now() + 100;
   var privateSelector = 'script,style,template,noscript,iframe,object,embed,canvas,svg,[hidden],[aria-hidden="true"],[inert],[data-private],[data-sensitive],[contenteditable]:not([contenteditable="false"]),input[type="hidden"],input[type="password"]';
   var stop = {};
   function budget() { if (visited >= 3000 || performance.now() > deadline) { truncated = true; throw stop; } visited++; }
@@ -32,7 +32,7 @@
     }
     return /^(textbox|checkbox|radio|combobox)$/.test(role) ? "" : smallText(element);
   }
-  function add(role, value, element) {
+  function add(role, value, element, location) {
     var maximum = role === 'text' ? 2000 : 160;
     if (value.length > maximum) truncated = true;
     value = value.slice(0, maximum).replace(/\s+/g, " ").trim();
@@ -45,7 +45,7 @@
       else if (checked === "true" || checked === "false") entry.checked = checked === "true";
       else if (typeof element.checked === "boolean") entry.checked = element.checked;
     }
-    nodes.push(entry); elements.push(element);
+    nodes.push(entry); elements.push(element); locations.push(location || element);
     var rawHref = role === 'link' && element.tagName === 'A' ? element.getAttribute('href') : null;
     var href = rawHref != null && rawHref.length <= 8192 ? element.href : null;
     destinations.push(href && href.length <= 8192 ? href : null);
@@ -65,7 +65,7 @@
   }
   try {
     var root = document.body;
-    if (!root || hidden(root)) return { nodes: nodes, elements: elements, destinations: destinations, visited: visited, truncated: false };
+    if (!root || hidden(root)) return { nodes: nodes, elements: elements, locations: locations, destinations: destinations, visited: visited, truncated: false };
     add('region', 'Viewport', document.scrollingElement);
     var represented = new WeakSet(), walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
@@ -77,14 +77,14 @@
     });
     while (walker.nextNode()) {
       var node = walker.currentNode;
-      if (node.nodeType === 3) add("text", node.nodeValue, null);
+      if (node.nodeType === 3) add("text", node.nodeValue, null, node.parentElement);
       else {
         var kind = role(node);
         if (kind) { add(kind, name(node, kind), node); if (kind !== 'region') represented.add(node); }
       }
     }
   } catch (error) { if (error !== stop) throw error; }
-  return { nodes: nodes, elements: elements, destinations: destinations, visited: visited, truncated: truncated };
+  return { nodes: nodes, elements: elements, locations: locations, destinations: destinations, visited: visited, truncated: truncated };
   }
 
   function fail(code) { throw new Error(code); }
@@ -116,6 +116,18 @@
     return element;
   }
   var api = {
+    find: function (request) {
+      var query = String(request.query || '').trim().slice(0, 160), view = capture(), signature = fingerprint(view);
+      var matches = query ? view.nodes.map(function (node, i) { return { node: node, element: view.locations[i] }; }).filter(function (item) {
+        return item.element && item.node.role !== 'region' && item.node.name.toLowerCase().indexOf(query.toLowerCase()) >= 0;
+      }) : [];
+      var index = search && search.query === query && search.signature === signature ? search.index : -1;
+      if (matches.length) index = request.direction === 0 || index < 0 ? (request.direction < 0 ? matches.length - 1 : 0) : (index + request.direction + matches.length) % matches.length;
+      else index = -1;
+      search = { query: query, signature: signature, index: index };
+      if (globalThis.__rnaVisualHighlight) __rnaVisualHighlight(index < 0 ? null : matches[index].element);
+      return { query: query, requestId: request.requestId, index: index + 1, count: matches.length, truncated: view.truncated };
+    },
     invalidate: function () { epoch++; observation = mediaObservation = preparation = null; },
     captureMedia: function (id, geometry) {
       if (geometry !== geometryEpoch || !api.privacy().safe) return false;

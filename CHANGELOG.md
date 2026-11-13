@@ -11,6 +11,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.25.0-dev
+
+- Added common local page search with next/previous matches and native element
+  highlighting, bounded to the available semantic text.
+
 ### 16.24.1-dev
 
 - Restored element selection, highlighting and annotation drafts in the common native

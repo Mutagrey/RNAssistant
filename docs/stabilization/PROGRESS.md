@@ -1,5 +1,12 @@
 # Stabilization progress
 
+## Browser page find connected — 2026-11-13
+
+`16.25.0-dev`: common find/next/highlight uses bounded semantic capture, with private
+values excluded and stale replies rejected. Chromium/UI/Mock checks pass. Continue
+07 selected Inspector and main integration; Windows compilation/qualification and
+UI acceptance remain open. [Details](../browser/06_PROGRESS.md#f2c5-page-find--2026-11-13).
+
 ## Browser native annotations connected — 2026-11-13
 
 `16.24.1-dev`: element selection/highlight and existing annotation drafts now use the

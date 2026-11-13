@@ -1,5 +1,12 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Browser find row — In Review, 2026-11-13
+
+Find uses common form/icon controls, spacing/type tokens and an inline status below
+its field. It occupies layout space above the native viewport, not an overlapping
+second toolbar. [420px/125% fixture](review/browser-find-narrow.png) verifies narrow
+geometry; native Windows focus and rendering remain separate evidence.
+
 ## Native annotation presentation — In Review, 2026-11-13
 
 Reuse PreviewSurface's selection control, shared annotation markers/editor and accent

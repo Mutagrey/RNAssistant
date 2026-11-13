@@ -81,9 +81,12 @@
       })) layoutNative();
     }); overlays.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open", "aria-modal", "hidden", "class"] });
     var comparison = null;
+    var pageFind = RNAssistantBrowserFind.create({ root: root, content: content, command: command, layout: layoutNative,
+      isCurrent: function () { return active && !disposed && selectedMode === 'preview'; },
+      selectionOff: function () { annotationHost.deactivate(); }, focusPage: function () { command('Focus').catch(fail); } });
     var providerActions = RNAssistantBrowserActions.mount(surface.actions, { target: function () { return current && current.target; },
       generation: function () { return current && current.documentGeneration; }, isCurrent: function () { return active && !disposed; },
-      status: function (message) { surface.waiting(label(), message); }, error: fail, discuss: discuss });
+      status: function (message) { surface.waiting(label(), message); }, error: fail, discuss: discuss, find: pageFind.open, canFind: pageFind.enabled });
     var versionControls = RNAssistantArtifactVersions.mountBrowser(surface.actions, {
       target: function () { return current && current.target; }, request: request,
       isCurrent: function () { return active && !disposed; }, navigate: function (locator) { return command("Navigate", { locator: locator }); },
@@ -203,7 +206,7 @@
         suggest: suggestions
       }, selectMode);
     }
-    function selectMode(mode) { if (mode !== "preview") annotationHost.deactivate(); selectedMode = mode; presentation(); render(); if (current) annotationHost.update(current); layoutNative(); }
+    function selectMode(mode) { if (mode !== "preview") { annotationHost.deactivate(); pageFind.deactivate(); } selectedMode = mode; presentation(); render(); if (current) { annotationHost.update(current); pageFind.update(current); } layoutNative(); }
     function render() {
       if (!active || disposed || !current) return;
       var home = current.status === "Home", removed = current.status === "Removed";
@@ -267,7 +270,7 @@
         if (!comparison && selectedMode === "diff") selectedMode = "source";
         providerActions.refresh(); if (homeView) { homeView.dispose(); homeView = null; } }
       if (value.status === "Unavailable" && targetGeneration === value.documentGeneration && selectedMode === "preview") selectedMode = "source";
-      surface.waiting(label(), value.message || " "); presentation(); render();
+      pageFind.update(value); surface.waiting(label(), value.message || " "); presentation(); render();
     }
     async function command(action, extra) {
       if (!session) throw new Error("Страница ещё не открыта.");
@@ -306,9 +309,9 @@
       },
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
-      deactivate: function () { if (!active) return; annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
+      deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
       dispose: function () { if (disposed) return; disposed = true; active = false; cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
-        annotationHost.dispose(); if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
+        pageFind.dispose(); annotationHost.dispose(); if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
         RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
     };
   }

@@ -79,7 +79,8 @@ namespace RNAssistant.Application.Contracts
         [EnumMember(Value = "probe")] Probe, [EnumMember(Value = "activate")] Activate,
         [EnumMember(Value = "palette")] Palette, [EnumMember(Value = "pointer-exit")] PointerExit,
         [EnumMember(Value = "deactivate")] Deactivate, [EnumMember(Value = "watch")] Watch,
-        [EnumMember(Value = "reveal")] Reveal, [EnumMember(Value = "dispose")] Dispose
+        [EnumMember(Value = "reveal")] Reveal, [EnumMember(Value = "dispose")] Dispose,
+        [EnumMember(Value = "find")] Find
     }
     public sealed class BrowserVisualControl
     {
@@ -88,6 +89,21 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("watches")] public BrowserVisualWatch[] Watches { get; set; }
         [JsonProperty("id")] public string Id { get; set; }
         [JsonProperty("palette")] public BrowserVisualPalette Palette { get; set; }
+        [JsonProperty("find")] public BrowserFindRequest Find { get; set; }
+    }
+    public sealed class BrowserFindRequest
+    {
+        [JsonProperty("requestId")] public long RequestId { get; set; }
+        [JsonProperty("query")] public string Query { get; set; }
+        [JsonProperty("direction")] public int Direction { get; set; }
+    }
+    public sealed class BrowserFindResult
+    {
+        [JsonProperty("requestId")] public long RequestId { get; set; }
+        [JsonProperty("query")] public string Query { get; set; }
+        [JsonProperty("index")] public int Index { get; set; }
+        [JsonProperty("count")] public int Count { get; set; }
+        [JsonProperty("truncated")] public bool Truncated { get; set; }
     }
     public sealed class BrowserVisualWatch
     {
@@ -111,7 +127,9 @@ namespace RNAssistant.Application.Contracts
         [EnumMember(Value = "rnassistant-visual-inspector-unsupported")] Unsupported,
         [EnumMember(Value = "rnassistant-visual-inspector-invalidated")] Invalidated,
         [EnumMember(Value = "rnassistant-visual-inspector-locations")] Locations,
-        [EnumMember(Value = "rnassistant-visual-inspector-revealed")] Revealed
+        [EnumMember(Value = "rnassistant-visual-inspector-revealed")] Revealed,
+        [EnumMember(Value = "rnassistant-visual-inspector-find")] Find,
+        [EnumMember(Value = "rnassistant-visual-inspector-find-open")] FindOpen
     }
     public sealed class BrowserVisualEvent
     {
@@ -121,6 +139,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
         [JsonProperty("locations")] public BrowserVisualLocation[] Locations { get; set; }
         [JsonProperty("reveal")] public BrowserVisualReveal Reveal { get; set; }
+        [JsonProperty("find")] public BrowserFindResult Find { get; set; }
     }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum BrowserVisualLocationStatus

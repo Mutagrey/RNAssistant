@@ -1,5 +1,12 @@
 # План модернизации production UI
 
+## F2c5 find — In Review, 2026-11-13
+
+Review: local page → Ctrl+F → type text → next/previous → switch page or Source.
+Common UI and isolated native script fixtures pass; Windows focus/placement remains
+open. Browser 02–06 implementation now advances to 07 selected context and route
+reduction, preserving the existing run/journal owners.
+
 ## F2c4 annotations — In Review, 2026-11-13
 
 Review: open bound document/plugin HTML, select an element, comment, switch tabs,

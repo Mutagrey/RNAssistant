@@ -44,6 +44,7 @@
     more.onclick = function () {
       var target = context.target(); if (!target || target.state !== "Ready") return;
       var caps = target.capabilities, copy = operation(target), items = [];
+      if (context.canFind && context.canFind()) items.push({ label: 'Найти на странице', icon: 'search', onSelect: context.find });
       if (caps.edit && target.kind === "HtmlWorkspace") items.push({ label: "Редактировать исходники", icon: "code", onSelect: function () {
         return RNAssistantHtmlWorkspaceSurface.open(target.chatId, { mode: "edit" }); } });
       if (caps.exportProject && ["HtmlWorkspace", "HtmlArtifact"].includes(target.kind)) items.push({ label: "Скачать автономный HTML", icon: "download", onSelect: function () {

@@ -71,6 +71,7 @@ namespace RNAssistant.Office.WebView
                     if (!_manual.TryGetValue(state.SessionId, out manual)) _manual.Add(state.SessionId, manual = new LocalBrowserPage.ManualOwner());
                     page.Manual = manual;
                     _pages.Add(state.BrowserTabId, page); page.Changed += Publish;
+                    page.FindRequested += () => { if (!_closed && _shell.Visible) _shell.Focus(); };
                     page.NewTabRequested += locator => OpenTab?.Invoke(new BrowserDockOpenRequest { BrowserTabId = Guid.NewGuid().ToString("N"), OperationId = Guid.NewGuid().ToString("N"), OwnerScope = state.OwnerScope, Locator = locator, Title = state.Title });
                     try { await page.InitializeAsync(token); }
                     catch { _pages.Remove(state.BrowserTabId); page.Dispose(); await page.Drained; throw; }

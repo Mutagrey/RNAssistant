@@ -1,5 +1,12 @@
 # Архитектура UI RNAssistant
 
+## Common page find — In Review, 2026-11-13
+
+app-browser-find owns one compact presentation per Browser. Native VisualControl.find
+reuses bounded semantic capture and the shared highlight overlay; no provider iframe,
+search index or model read path. Page/session/request identities and hidden lifecycle
+suppress stale replies. Native Ctrl+F transfers focus to the existing Shell field.
+
 ## Browser annotations — In Review, 2026-11-13
 
 app-browser-annotations owns the common native selection adapter; shared inspector,

@@ -16,12 +16,13 @@ const { withPreviewPage } = require('./preview-session');
       if(type!=='browserCommand')return original(type,p,...rest);
       annotationCalls.push({type,p});let value=annotationNative.value;
       if(p.action==='Open')value=annotationNative.value={browserTabId:p.browserTabId,operationId:p.operationId,sessionId:'annotation-page',ownerScope:p.ownerScope,url:p.locator,title:'HTML с аннотациями',revision:1,documentGeneration:1,status:'Starting',attached:false,controlRevision:1,
-        annotationContext:{sourceId:'html-r1',sourceRevision:1},target:{kind:'HtmlWorkspace',state:'Ready',documentId:'doc',chatId:'preview-chat',artifactId:'html-r1',revision:1,resourceUri:'rna://chat/doc/artifact/html-r1/revision/1',ownerScope:p.ownerScope,capabilities:{source:true,annotations:true}}};
+        annotationContext:{sourceId:'html-r1',sourceRevision:1},target:{kind:'HtmlWorkspace',state:'Ready',documentId:'doc',chatId:'preview-chat',artifactId:'html-r1',revision:1,resourceUri:'rna://chat/doc/artifact/html-r1/revision/1',ownerScope:p.ownerScope,capabilities:{source:true,annotations:true,interact:true,preview:true}}};
       if(p.action==='Attach'){value.attached=true;value.status='Ready';}
       if(p.action==='VisualControl'){
         if(p.visual.generation!==value.documentGeneration)throw new Error('stale page');
         if(p.visual.operation==='probe')visual('ready');
         if(p.visual.operation==='activate')visual('activated');
+        if(p.visual.operation==='find')visual('find',{find:{...p.visual.find,index:p.visual.find.direction===1?2:1,count:2,truncated:false}});
         if(p.visual.operation==='watch')visual('locations',{locations:p.visual.watches.map(w=>({id:w.id,status:'visible',rect:{x:25,y:25,width:100,height:28}}))});
       }
       if(p.action==='Reload'){value.documentGeneration++;value.visual=null;}
@@ -67,6 +68,17 @@ const { withPreviewPage } = require('./preview-session');
   const narrow=page.getByRole('dialog',{name:'Аннотация 4',exact:true});await narrow.getByRole('textbox').fill('Узкое окно');
   const box=await narrow.boundingBox();assert.ok(box.x>=0 && box.x+box.width<=421,'common annotation editor fits narrow 125% layout');
   await page.screenshot({path:'docs/ui/review/browser-annotations-narrow.png'});
+  await narrow.getByRole('button',{name:'Отмена',exact:true}).click();
+  await root.locator('.preview-surface-address').focus();await page.keyboard.press('Control+f');
+  const find=root.getByRole('searchbox',{name:'Найти на странице'});await find.fill('Сохранить');
+  await root.getByText('1 из 2 в доступном тексте',{exact:true}).waitFor();await root.getByRole('button',{name:'Следующее совпадение'}).click();
+  await root.getByText('2 из 2 в доступном тексте',{exact:true}).waitFor();
+  await page.evaluate(()=>{const value=annotationNative.value;value.visual={...value.visual,sequence:++annotationNative.sequence,find:{...value.visual.find,requestId:value.visual.find.requestId-1,index:1}};value.revision++;RNAssistantBrowser.apply(structuredClone(value));});
+  await root.getByText('2 из 2 в доступном тексте',{exact:true}).waitFor();
+  const findBox=await find.boundingBox();assert.ok(findBox.x>=0 && findBox.x+findBox.width<=421);
+  await page.screenshot({path:'docs/ui/review/browser-find-narrow.png'});
+  await page.evaluate(()=>{const value=annotationNative.value;value.documentGeneration++;value.visual=null;value.revision++;RNAssistantBrowser.apply(structuredClone(value));});
+  await find.waitFor({state:'hidden'});
   assert.deepEqual(errors,[]);
   console.log('PASS Browser annotations: common native control, exact source chat, draft/comment, overlay placement, generation refusal and late cleanup');
 }))().catch(error=>{console.error(error);process.exitCode=1;});

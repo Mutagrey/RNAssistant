@@ -1,5 +1,15 @@
 # Universal Browser: предлагаемые контракты
 
+## Native page find — F2c5, 2026-11-13
+
+Typed VisualControl.find uses the same bounded native semantic capture and privacy
+exclusions as Browser reads. Query ≤160 characters; at most 160 semantic matches;
+next/previous wraps within that capture. It returns no selectors or action authority.
+Highlight uses the existing isolated inspector overlay and clears after DOM mutation.
+Session, document generation and request sequence reject stale replies. Ctrl+F/manual
+find takes manual control; agent keys cannot open the Shell search. Hidden/closed views
+cancel debounce and clear highlights. Unsupported/omitted text is not searched.
+
 ## Native annotations — F2c4, 2026-11-13
 
 Common Browser selection uses typed VisualControl/events in the isolated page world;

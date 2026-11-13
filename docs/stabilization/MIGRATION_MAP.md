@@ -1,5 +1,12 @@
 # Current-to-target migration map
 
+## Common native find — F2c5, 2026-11-13
+
+Owner: Browser/native integration. Typed find controls reuse the existing semantic
+capture and visual overlay. No legacy iframe find consumer, extra index or store.
+Common per-view search owns cancellation and request generation; Windows native
+focus/shortcut evidence is still required.
+
 ## Native annotation cutover — F2c4, 2026-11-13
 
 Owner: common Browser/native integration. Shared VisualInspector now uses typed native
