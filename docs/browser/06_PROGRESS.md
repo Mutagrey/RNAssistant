@@ -1,5 +1,24 @@
 # Universal Browser: статус
 
+## F3b core — saved-entry catalog, 2026-11-13
+
+PluginStore получил explicit Save/Activate/Delete/List на прежней ResourceAuthority.
+SavedVersionCatalog — общий внутренний metadata algorithm владельцев, без новой базы
+или копии файлов: constant-size head, отдельные immutable entries и operation receipts.
+Ordinal монотонен; tombstone entry не удаляет release/CAS. Same-operation reconcile
+возвращает исходный receipt с текущим Removed; новый Save сравнивает только latest
+available. Catalog и active entry/release публикуются атомарно. ActiveRevision отдельно
+от catalog revision: чужой Save не отзывает подготовленную активацию; disable/hide
+отзывают. SavedVersionException.MayHavePublished отличает Unknown от no-effect.
+
+Migration закрепляет cutoff registration chain, сохраняет published releases в
+стабильном временном порядке и возобновляется по receipts; never-active кандидаты
+не становятся версиями. Backend lifecycle + lost-receipt tests — 2/2, прежние
+publication/history — 2/2. Это промежуточный commit без product bump: Application,
+UI и plugins.save/apply переключаются следующим срезом. Старый Apply допускается
+только до появления каталога данного plugin; после этого требует saved entry.
+
+
 ## F3a — member-set capture prerequisite, 2026-11-13
 
 WorkspaceStore теперь владеет explicit HTML definition, expected fingerprint и

@@ -1,5 +1,16 @@
 # Universal Browser: матрица проверок
 
+## F3b core catalog — 2026-11-13
+
+`plugin versions:` — 2/2: legacy cutoff, исключение never-active candidate, Save без
+activation, latest-available dedup, stale cursor/source, Delete и monotonous ordinal,
+old receipt Removed, новый checkpoint тех же bytes, exact active/pending protection,
+restart, disable-before-dispatch, отдельные entries одного release. Fault wrapper
+имитирует lost response после authority commit и конфликт до commit; повтор исходной
+operation не исполняет dispatch снова и не создаёт новую версию. Published/history
+regressions — ещё 2/2. UI/tools пока не переключены; это backend evidence.
+
+
 ## F3a capture prerequisite — 2026-11-13
 
 `HTML project` — 4/4: exact import/member definition, stale/config/control-path guards,

@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser F3b core — saved catalog, 2026-11-13
+
+PluginStore catalog/receipts/tombstones и отдельная active identity реализованы;
+2 lifecycle/fault cases и 2 publication/history regressions проходят. Это backend
+invariant commit без product bump. Далее Application/UI и plugins.save/apply cutover,
+потом document/Workspace HTML checkpoints. Native B02 остаётся открытым.
+[Подробности](../browser/06_PROGRESS.md#f3b-core--saved-entry-catalog-2026-11-13).
+
+
 ## Local Browser F3a — coherent capture prerequisite, 2026-11-13
 
 CaptureSet/явный состав HTML-проекта подключены к Plugin Check, import и Browser

@@ -1,5 +1,11 @@
 # Universal Browser: предлагаемые контракты
 
+F3b: BrowserVersionState adds activeStateRevision; Activate commands pin
+expectedActiveRevision plus the selected saved entry and active release. This guard
+is independent of unrelated catalog Save operations. Save/Delete keep the catalog
+stateRevision guard. Core catalog entry identity is not its ordinal or release ID.
+
+
 ## Browser capability / media — F2a, 2026-11-13
 
 `IBrowserCapabilityContribution` связывается с реальным Workspace owner/chat/run,

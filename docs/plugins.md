@@ -1,5 +1,12 @@
 # Plugins
 
+F3b core (2026-11-13): PluginStore now has an explicit saved-entry catalog in the
+existing authority. Entries/ordinals and active entry identity are distinct from CAS
+release identity; operation receipts and tombstones survive restart. Application,
+UI and tool consumers still await the next cutover. The transitional candidate
+Apply refuses a plugin once its saved catalog exists; no second writer is enabled.
+
+
 Local Browser package status (2026-11-13): B02 keeps authored page execution,
 commands and native preview source-only/unavailable; older iframe descriptions
 below are historical until the shared Browser route cutover. Plugin Check now uses

@@ -1,5 +1,16 @@
 # Current-to-target migration map
 
+## Version catalog — F3b core adapter, 2026-11-13
+
+PluginStore owns saved entries in its existing plugins/local authority; shared
+SavedVersionCatalog only implements metadata operations for domain owners. No second
+store or live listing. Transitional Apply/PublishedRelease methods remain solely
+for current Application consumers until the next cutover (owner 01/04/05).
+Apply rejects candidate activation after that plugin's catalog initialization.
+Remove these methods and switch release/source UI, tools and bootstrap to explicit
+Save→Activate together; never keep both live version lists after consumer cutover.
+
+
 ## Browser F2a — capability cutover, 2026-11-13
 
 Workspace consumers переключены на IBrowserCapabilityContribution; borrowed Office

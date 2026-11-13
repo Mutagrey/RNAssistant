@@ -11,14 +11,17 @@ namespace RNAssistant.Core.Storage
 {
     // One authority journal owns registrations and immutable publications. CAS retains
     // package bytes; the registry never becomes a second workspace/file store.
-    public sealed class PluginStore
+    public sealed partial class PluginStore
     {
         private static readonly ResourceAuthorityScopeId Scope = new ResourceAuthorityScopeId("plugins", "local");
         private readonly ResourceAuthorityStore _authority;
         private readonly ChatBlobStore _blobs;
         private readonly WorkspaceFileService _files;
+        private readonly AppDataPaths _paths;
+        private readonly ResourceMutationJournal _journal;
         public PluginStore(AppDataPaths paths)
-        { _authority = new ResourceAuthorityStore(paths); _blobs = new ChatBlobStore(paths); _files = new WorkspaceFileService(paths); }
+        { _paths = paths; _authority = new ResourceAuthorityStore(paths); _blobs = new ChatBlobStore(paths);
+            _files = new WorkspaceFileService(paths); _journal = new ResourceMutationJournal(paths); }
 
         // A transient OS lease, not another registry. It protects retained plugin
         // bytes across panels/processes while the existing runtime-clear owner runs.
@@ -132,6 +135,10 @@ namespace RNAssistant.Core.Storage
 
         public PluginRegistration Apply(PluginReleaseRecord candidate, string expectedReleaseId)
         {
+            // Transitional caller boundary: once this owner's catalog is initialized,
+            // only explicit saved-entry activation may change its active head.
+            if (VersionCatalog(candidate.PluginId).State() != null)
+                throw new SavedVersionException("saved_version_required", "Save a version and activate its exact entry.");
             ValidateRelease(candidate);
             var current = Get(candidate.PluginId);
             if (current == null || current.SourceWorkspaceId != candidate.SourceWorkspaceId || current.ActiveReleaseId != expectedReleaseId)
@@ -163,6 +170,20 @@ namespace RNAssistant.Core.Storage
 
         public PluginRegistration Disable(string id)
         {
+            if (VersionCatalog(id).State() != null)
+            {
+                using (_journal.AcquireScope(Scope, true))
+                {
+                    var active = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
+                    if (!active.Enabled) return active;
+                    var expectedActive = active.ActiveRevision;
+                    active.Enabled = false;
+                    active.ActiveRevision = Guid.NewGuid().ToString("N");
+                    VersionCatalog(id).UpdateOwner(frozen => new[] {
+                        StageVersionRegistration(frozen, active, active.ActiveSavedVersionId, active.ActiveReleaseId, expectedActive) });
+                    return Get(id);
+                }
+            }
             var registration = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
             registration.Enabled = false;
             SaveRegistration(registration, registration.ActiveReleaseId);
@@ -173,9 +194,11 @@ namespace RNAssistant.Core.Storage
         {
             var registration = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
             if (registration.Hidden == hidden) return registration;
+            var previousActiveRevision = registration.ActiveRevision;
             registration.Hidden = hidden;
+            registration.ActiveRevision = Guid.NewGuid().ToString("N");
             PluginRegistration observed;
-            try { SaveRegistration(registration, registration.ActiveReleaseId); }
+            try { SaveRegistration(registration, registration.ActiveReleaseId, previousActiveRevision, true); }
             catch (Exception error)
             {
                 try { observed = Get(id); }
@@ -281,14 +304,14 @@ namespace RNAssistant.Core.Storage
             return ReadRelease(new PluginReleaseIdentity(id, releaseId));
         }
 
-        private IEnumerable<string> PublishedReleaseIds(string id)
+        private IEnumerable<string> PublishedReleaseIds(string id, ResourceRef cutoff = null)
         {
             // Follow the registration's immutable parent chain. Checked candidates
             // have release heads too, but no registration revision points to them.
             var head = _authority.GetHead(Scope, RegistrationRef(id, "0").Identity);
             if (head?.Knowledge != HeadKnowledge.Known) yield break;
             var seen = new HashSet<string>(StringComparer.Ordinal);
-            var reference = head.Revision;
+            var reference = cutoff ?? head.Revision;
             while (reference != null)
             {
                 var revision = _authority.GetRevision(Scope, reference);
@@ -307,12 +330,15 @@ namespace RNAssistant.Core.Storage
             return _blobs.ReadBytes(file.Payload.ToBlobReference()) ?? throw new PluginException("plugin_release_invalid", "Captured package file is unavailable.");
         }
 
-        private void SaveRegistration(PluginRegistration registration, string expectedRelease)
+        private void SaveRegistration(PluginRegistration registration, string expectedRelease,
+            string expectedActiveRevision = null, bool activeRevisionChanged = false)
         {
             var identity = RegistrationRef(registration.PluginId, "0").Identity;
             var before = _authority.GetHead(Scope, identity);
             var saved = before?.Knowledge == HeadKnowledge.Known ? Read<PluginRegistration>(before.Revision, "plugin-registration") : null;
-            if (saved?.ActiveReleaseId != expectedRelease || saved != null && saved.SourceWorkspaceId != registration.SourceWorkspaceId)
+            if (saved?.ActiveReleaseId != expectedRelease || saved != null && (saved.SourceWorkspaceId != registration.SourceWorkspaceId ||
+                saved.ActiveSavedVersionId != registration.ActiveSavedVersionId ||
+                saved.ActiveRevision != (activeRevisionChanged ? expectedActiveRevision : registration.ActiveRevision)))
                 throw new PluginException("plugin_selection_changed", "Plugin registration changed.");
             var next = RegistrationRef(registration.PluginId, "reg_" + Guid.NewGuid().ToString("N"));
             Publish(next, "plugin-registration", registration, Enumerable.Empty<PayloadRef>(), before?.Revision);

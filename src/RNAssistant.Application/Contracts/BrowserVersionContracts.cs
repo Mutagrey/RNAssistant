@@ -30,6 +30,7 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("target")] public BrowserTargetDescriptor Target { get; set; }
         [JsonProperty("stateRevision")] public string StateRevision { get; set; }
+        [JsonProperty("activeStateRevision")] public string ActiveStateRevision { get; set; }
         [JsonProperty("contentRevision")] public string ContentRevision { get; set; }
         [JsonProperty("definitionRevision")] public string DefinitionRevision { get; set; }
         [JsonProperty("dirty")] public bool Dirty { get; set; }
@@ -62,6 +63,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("expectedContentRevision")] public string ExpectedContentRevision { get; set; }
         [JsonProperty("expectedDefinitionRevision")] public string ExpectedDefinitionRevision { get; set; }
         [JsonProperty("expectedActiveVersionId")] public string ExpectedActiveVersionId { get; set; }
+        [JsonProperty("expectedActiveRevision")] public string ExpectedActiveRevision { get; set; }
         [JsonProperty("confirmed")] public bool Confirmed { get; set; }
     }
 

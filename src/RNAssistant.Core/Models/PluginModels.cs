@@ -143,6 +143,8 @@ namespace RNAssistant.Core.Models
         public string SourceWorkspaceId { get; set; }
         public string SourceRoot { get; set; }
         public string ActiveReleaseId { get; set; }
+        public string ActiveSavedVersionId { get; set; }
+        public string ActiveRevision { get; set; }
         public bool Enabled { get; set; }
         public bool Hidden { get; set; }
         public PluginAppearance Appearance { get; set; }
