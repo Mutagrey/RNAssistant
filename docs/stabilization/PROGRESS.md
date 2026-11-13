@@ -1,5 +1,11 @@
 # Stabilization progress
 
+## Native group catalog scope — 2026-11-13
+
+Исправлен scope каталога групп: временный carrier больше не получает случайный ID
+несуществующего чата. Native catalog возвращает группы без ложного scope error;
+проверено в существующем Office/Workspace UI-contract case. Очередь ниже не меняется.
+
 ## Native single-chat deletion — 2026-11-13
 
 Удаление одного чата подключено к `chat.deleted` через Office ChatSessionService

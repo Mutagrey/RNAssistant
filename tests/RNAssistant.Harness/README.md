@@ -161,7 +161,8 @@ document deletion/moves, storage reclamation and Windows qualification are not c
 
 `journal groups:` covers the existing typed UI owner and real Office/Workspace
 consumers: create/add/rename/remove/delete, no-op/list, exact revision/scope, name
-conflicts, tombstones, lease refusal and unchanged participant history. Lost authority
+conflicts, tombstones, lease refusal and unchanged participant history. The scoped UI
+case also exercises catalog capture without a fabricated chat ID. Lost authority
 acknowledgement preserves source Unknown through rebuild and clean Workspace restore.
 Model membership uses the native alias index (catalog access throws in the fixture).
 Targeted regressions: `agent groups:`, `journal resources:` and `journal mutation:`;

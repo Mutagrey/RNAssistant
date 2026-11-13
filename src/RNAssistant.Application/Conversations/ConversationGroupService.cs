@@ -43,7 +43,7 @@ namespace RNAssistant.Application.Conversations
                 .Select(entries => {
                     var header = entries.First();
                     var result = new ConversationGroupScopeView { Host = header.Host, DocumentKey = header.DocumentKey, WorkspaceId = header.WorkspaceId };
-                    try { result = Snapshot(new ChatSession { Host = header.Host, DocumentKey = header.DocumentKey,
+                    try { result = Snapshot(new ChatSession { Id = null, Host = header.Host, DocumentKey = header.DocumentKey,
                         WorkspaceId = header.WorkspaceId, DocumentAuthorityId = header.DocumentAuthorityId }); }
                     catch (Exception error) when (error is InvalidOperationException || error is System.IO.IOException || error is JsonException || error is ArgumentException)
                     { result.Error = error.Message; result.Groups = new ConversationGroupView[0]; }
