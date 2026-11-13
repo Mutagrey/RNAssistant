@@ -90,7 +90,7 @@ namespace RNAssistant.Harness
                             CapabilityToolCatalog.SearchToolId, CapabilityToolCatalog.ReadToolId,
                             "core.find", "core.read", "core.skills.load" });
                         var binding = "fixture.v1"; var executions = 0;
-                        Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> contributions = _ => new[] {
+                        Func<WorkspaceDescriptor, ChatSession, IReadOnlyList<WorkspaceToolContribution>> contributions = (_, capturedSession) => new[] {
                             new WorkspaceToolContribution { Entry = PackageTool("fixture.extra", ToolExposure.Direct, binding),
                                 Handler = new DiscoveryFixtureRead(() => executions++) },
                             new WorkspaceToolContribution { Entry = PackageTool("fixture.special", ToolExposure.Skill),

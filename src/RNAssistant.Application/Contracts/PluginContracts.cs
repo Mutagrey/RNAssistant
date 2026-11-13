@@ -52,16 +52,20 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("hidden")] public bool Hidden { get; set; }
     }
-    public sealed class PluginApplyRequest
+    public sealed class PluginActivateRequest
     {
         [JsonProperty("pluginId")] public string PluginId { get; set; }
-        [JsonProperty("candidateId")] public string CandidateId { get; set; }
+        [JsonProperty("versionId")] public string VersionId { get; set; }
+        [JsonProperty("expectedActiveVersionId")] public string ExpectedActiveVersionId { get; set; }
+        [JsonProperty("expectedActiveReleaseId")] public string ExpectedActiveReleaseId { get; set; }
+        [JsonProperty("expectedActiveRevision")] public string ExpectedActiveRevision { get; set; }
+        [JsonProperty("operationId")] public string OperationId { get; set; }
     }
     public sealed class PluginOpenRequest
     {
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("candidateId")] public string CandidateId { get; set; }
-        [JsonProperty("releaseId")] public string ReleaseId { get; set; }
+        [JsonProperty("versionId")] public string VersionId { get; set; }
     }
     public sealed class PluginVisualSelectionRequest
     {
@@ -94,6 +98,8 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class PluginPublishedVersionDto
     {
+        [JsonProperty("versionId")] public string VersionId { get; set; }
+        [JsonProperty("ordinal")] public long Ordinal { get; set; }
         [JsonProperty("releaseId")] public string ReleaseId { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("version")] public string Version { get; set; }
@@ -105,12 +111,6 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("items")] public IReadOnlyList<PluginPublishedVersionDto> Items { get; set; }
         [JsonProperty("nextCursor")] public string NextCursor { get; set; }
     }
-    public sealed class PluginRestoreVersionRequest
-    {
-        [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
-        [JsonProperty("releaseId", Required = Required.Always)] public string ReleaseId { get; set; }
-        [JsonProperty("expectedActiveReleaseId")] public string ExpectedActiveReleaseId { get; set; }
-    }
     public sealed class PluginCatalogDto
     {
         [JsonProperty("error")] public string Error { get; set; }
@@ -119,6 +119,8 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class PluginItemDto
     {
+        [JsonProperty("savedVersionId")] public string SavedVersionId { get; set; }
+        [JsonProperty("activeRevision")] public string ActiveRevision { get; set; }
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("icon")] public string Icon { get; set; }
@@ -126,6 +128,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("iconColor", NullValueHandling = NullValueHandling.Ignore)] public string IconColor { get; set; }
         [JsonProperty("iconError", NullValueHandling = NullValueHandling.Ignore)] public string IconError { get; set; }
         [JsonProperty("sourceWorkspaceId")] public string SourceWorkspaceId { get; set; }
+        [JsonProperty("entryPath")] public string EntryPath { get; set; }
         [JsonProperty("sourceRoot")] public string SourceRoot { get; set; }
         [JsonProperty("releaseId")] public string ReleaseId { get; set; }
         [JsonProperty("enabled")] public bool Enabled { get; set; }
@@ -146,6 +149,13 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("bytes")] public long Bytes { get; set; }
         [JsonProperty("checks")] public string[] Checks { get; set; }
     }
+    public sealed class PluginSavedVersionSummary
+    {
+        [JsonProperty("ordinal")] public long Ordinal { get; set; }
+        [JsonProperty("label")] public string Label { get; set; }
+        [JsonProperty("createdUtc")] public DateTime CreatedUtc { get; set; }
+        [JsonProperty("active")] public bool Active { get; set; }
+    }
     public sealed class PluginPublicationSummary
     {
         [JsonProperty("name")] public string Name { get; set; }
@@ -153,6 +163,7 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class PluginViewDto
     {
+        [JsonProperty("savedVersionId")] public string SavedVersionId { get; set; }
         [JsonProperty("instanceId")] public string InstanceId { get; set; }
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("releaseId")] public string ReleaseId { get; set; }

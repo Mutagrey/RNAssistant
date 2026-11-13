@@ -145,7 +145,6 @@
       element: function () { return document.getElementById("artifactCatalog"); },
       prepare: function () { RNAssistantArtifactCatalog.show(); renderHtmlWorkspace(); },
       onVisible: function (visible) { if (visible) renderHtmlWorkspace(); } });
-    RNAssistantPluginReleaseView.register(dock);
     dock.registerView("material", { perObject: true, accepts: accepts, key: key, create: create,
       maximumInstances: maximumInstances, renderer: function (target) { return target.kind === "html_workspace" ? "onlyWhenVisible" : "always"; }, titleFor: function (target) { return target.title + (target.kind === "html_workspace" && target.revision ? " · v" + target.revision : ""); } });
   }

@@ -11,6 +11,16 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.16.0-dev
+
+- Plugins now use Check → Save → Apply. Saved checkpoints have independent ordinals,
+  deletion receipts and active-entry guards; a run can apply its own saved result or
+  an explicitly selected version. Saving does not activate code or grant data access.
+- Plugin sources and saved versions open in the common local Browser. Save remains
+  visible on narrow panels; version deletion and uncertain-operation reconciliation
+  use the same catalog. Obsolete plugin tabs are pruned without resetting other Dock panels.
+- Authored execution remains unavailable pending native isolation qualification.
+
 ### 16.15.2-dev
 
 - Workspace event reads and subscriptions validate chat metadata without loading

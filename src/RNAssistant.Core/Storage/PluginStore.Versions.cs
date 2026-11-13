@@ -45,8 +45,10 @@ namespace RNAssistant.Core.Storage
                 var old = catalog.Operation(operationId, intent); if (old != null) return old;
                 if (actor.Kind == SavedVersionActorKind.Run)
                 {
-                    var chat = new ChatStore(_paths).Load(actor.ChatId);
-                    if (chat?.WorkspaceId != source.SourceWorkspaceId || chat.LastRun?.RunId != actor.RunId)
+                    var chat = new ChatStore(_paths).ReadSessionHeader(actor.ChatId);
+                    var lifecycle = chat?.RunViewState?.Lifecycle ?? chat?.RunStatus;
+                    var activeRun = lifecycle == RunViewLifecycles.Running || lifecycle == RunViewLifecycles.AwaitingConfirmation || lifecycle == RunViewLifecycles.AwaitingUser;
+                    if (chat?.WorkspaceId != source.SourceWorkspaceId || chat?.RunId != actor.RunId || !activeRun)
                         throw new SavedVersionException("version_actor_invalid", "The source run belongs to another workspace or has expired.");
                 }
                 if (Get(id)?.SourceWorkspaceId != source.SourceWorkspaceId)
@@ -73,9 +75,9 @@ namespace RNAssistant.Core.Storage
         }
 
         public SavedVersionOperation ActivateVersion(string id, string versionId, string expectedActiveRevision,
-            string expectedActiveVersion, string expectedActiveRelease, string operationId, Action beforeDispatch = null)
+            string expectedActiveVersion, string expectedActiveRelease, string operationId, Action beforeDispatch = null, CancellationToken token = default(CancellationToken))
         {
-            using (_journal.AcquireScope(Scope, true))
+            using (_journal.AcquireScope(Scope, true, token))
             {
                 MigrateVersions(id); var catalog = VersionCatalog(id);
                 var intent = "activate:" + versionId + ":" + expectedActiveVersion + ":" + expectedActiveRelease + ":" + expectedActiveRevision;
@@ -86,8 +88,12 @@ namespace RNAssistant.Core.Storage
                     throw new SavedVersionException("version_active_changed", "The active publication changed; prepare activation again.");
                 if (current.Hidden) throw new SavedVersionException("version_source_invalid", "Reconnect the plugin before activating a version.");
                 foreach (var file in release.Files)
+                {
+                    token.ThrowIfCancellationRequested();
                     if (!_blobs.HasVerifiedReference(file.Payload.ToBlobReference()))
                         throw new SavedVersionException("version_source_invalid", "A retained package member is unavailable: " + file.Path);
+                }
+                token.ThrowIfCancellationRequested();
                 var manifest = PluginPackageFiles.ParseManifest(release.ManifestJson);
                 current.ActiveReleaseId = release.ReleaseId; current.ActiveSavedVersionId = versionId;
                 current.ActiveRevision = Guid.NewGuid().ToString("N");

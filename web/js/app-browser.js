@@ -1,13 +1,13 @@
 (function () {
   "use strict";
-  var live = new Map(), available = false;
+  var live = new Map(), versionViews = new Map(), available = false;
   var unavailable = "Исполнение страницы недоступно: сетевая изоляция WebView2 ещё не подтверждена. Исходники и версии доступны.";
   function id() { return "browser-" + crypto.randomUUID(); }
   function key(target) { return "browser:" + target.browserTabId; }
   function accepts(target) {
     return target && target.view === "browser" && typeof target.browserTabId === "string" && target.browserTabId.length <= 256 &&
       target.ownerScope && ["Document", "Workspace", "User"].includes(target.ownerScope.kind) && typeof target.ownerScope.scopeId === "string" &&
-      typeof target.locator === "string" && target.locator.length <= 2048;
+      typeof target.locator === "string" && target.locator.length <= 2048 && /^\/(?!\/)/.test(target.locator);
   }
   function create(target) {
     var root = document.createElement("section"); root.className = "browser-object-view"; root.setAttribute("aria-label", "Browser");
@@ -24,10 +24,25 @@
     var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; },
       discuss: function () {
         var binding = current && current.target && current.target.ownerScope;
+        if (binding && !binding.chatId && current.target.pluginId) {
+          var plugin = RNAssistantPlugins.item(current.target.pluginId), pageGeneration = current.documentGeneration;
+          if (!plugin) throw new Error("Проект плагина недоступен.");
+          return RNAssistantPlugins.openSourceChat(null, plugin, { referencePanel: key(target), beside: true,
+            isCurrent: function () { return active && !disposed && current.documentGeneration === pageGeneration; } });
+        }
         if (!binding || !binding.chatId) throw new Error("Выберите чат в дереве проекта и откройте страницу в его контексте.");
         return RNAssistantConversationPanel.open(binding.kind === "Document" ? { source: "office", sessionId: binding.chatId } :
           { source: "workspace", workspaceId: binding.scopeId, sessionId: binding.chatId }, { referencePanel: key(target), beside: true });
       } });
+    var versionControls = RNAssistantArtifactVersions.mountBrowser(surface.actions, {
+      target: function () { return current && current.target; }, request: request,
+      isCurrent: function () { return active && !disposed; }, navigate: function (locator) { return command("Navigate", { locator: locator }); },
+      removed: function () { command("Reload").catch(fail); }, error: fail,
+      status: function (message) { surface.waiting(label(), message); }
+    });
+    versionViews.set(target.browserTabId, function (change) {
+      if (current && current.target && current.target.pluginId === change.target.pluginId) versionControls.refresh();
+    });
     function label() { return { title: current && current.title || target.title || "Browser", address: current && current.url || target.locator,
       storage: { kind: current && current.target && current.target.workspaceId ? "directory" : "managed" } }; }
     function fail(error) { if (!disposed) surface.fail(label(), error.detail || error.message || String(error)); }
@@ -96,7 +111,7 @@
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
         RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope,
           locator: value.url, title: value.title || "Browser" });
-        targetGeneration = value.documentGeneration; if (homeView) { homeView.dispose(); homeView = null; } }
+        targetGeneration = value.documentGeneration; versionControls.reset(); versionControls.refresh(); if (homeView) { homeView.dispose(); homeView = null; } }
       surface.waiting(label(), value.message || " "); presentation(); render();
     }
     async function command(action, extra) {
@@ -119,9 +134,9 @@
     }
     live.set(target.browserTabId, apply);
     return { element: mount, layout: renderer.layout,
-      activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) render(); else open().catch(fail); },
-      deactivate: function () { if (!active) return; active = false; stopReads(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; stopReads(); live.delete(target.browserTabId);
+      activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { render(); versionControls.refresh(); } else open().catch(fail); },
+      deactivate: function () { if (!active) return; active = false; stopReads(); versionControls.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); },
+      dispose: function () { if (disposed) return; disposed = true; active = false; stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose();
         if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
         RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
     };
@@ -132,6 +147,7 @@
   }
   window.RNAssistantBrowser = { open: open, create: create, key: key, unavailable: unavailable,
     bootstrap: function (value) { available = value === true; },
+    versionsChanged: function (value) { if (value && value.target) versionViews.forEach(function (notify) { notify(value); }); },
     apply: function (value) { var fn = value && live.get(value.browserTabId); if (fn) fn(value); },
     register: function (dock) { dock.registerView("browser", { title: "Browser", icon: "globe", perObject: true, menu: true, maximumInstances: 16, renderer: "onlyWhenVisible",
       accepts: accepts, key: key, create: create, titleFor: function (target) { return target.title || "Browser"; } }); }

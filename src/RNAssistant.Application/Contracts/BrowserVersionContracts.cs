@@ -63,6 +63,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("expectedContentRevision")] public string ExpectedContentRevision { get; set; }
         [JsonProperty("expectedDefinitionRevision")] public string ExpectedDefinitionRevision { get; set; }
         [JsonProperty("expectedActiveVersionId")] public string ExpectedActiveVersionId { get; set; }
+        [JsonProperty("expectedActiveReleaseId")] public string ExpectedActiveReleaseId { get; set; }
         [JsonProperty("expectedActiveRevision")] public string ExpectedActiveRevision { get; set; }
         [JsonProperty("confirmed")] public bool Confirmed { get; set; }
     }

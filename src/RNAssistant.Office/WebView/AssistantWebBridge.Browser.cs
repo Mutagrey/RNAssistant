@@ -6,6 +6,9 @@ namespace RNAssistant.Office.WebView
 {
     public sealed partial class AssistantWebBridge
     {
+        private void ReportBrowserVersionChanged(BrowserVersionStateChanged value)
+        { if (!_disposed) _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(value)); }
+
         private IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner)
         {
             if (owner?.Kind == BrowserOwnerKind.Document) return _controller.BrowserTargets(owner);
@@ -14,7 +17,9 @@ namespace RNAssistant.Office.WebView
         }
 
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
-        { return BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)); }
+        { return request.OwnerScope?.Kind == BrowserOwnerKind.Document ?
+            BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)) :
+            Plugins.ResolveBrowserLocator(request); }
 
         private BrowserSuggestionPage BrowserSuggestions(BrowserSuggestionRequest request)
         { return BrowserTargetResolver.QueryNavigationSuggestions(request.OwnerScope, request, BrowserTargets(request.OwnerScope)); }

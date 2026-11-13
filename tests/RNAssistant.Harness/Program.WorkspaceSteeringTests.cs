@@ -41,7 +41,7 @@ namespace RNAssistant.Harness
                 using (var finish = new ManualResetEventSlim())
                 using (var tool = new WorkspaceSteeringRead())
                 using (var cancel = new CancellationTokenSource())
-                using (var owner = new WorkspaceConversationService(paths, extraTools: _ => new[] {
+                using (var owner = new WorkspaceConversationService(paths, extraTools: (_, session) => new[] {
                     new WorkspaceToolContribution { Entry = PackageTool("fixture.wait", ToolExposure.Direct), Handler = tool } }))
                 using (var application = new PluginApplicationService(paths))
                 using (var bridge = new AssistantWebBridge(new AssistantController(paths), ignored => { }) { Plugins = application })

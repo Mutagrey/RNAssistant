@@ -252,8 +252,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetPlugins: case BridgeOperationId.GetPluginIcons: case BridgeOperationId.SavePluginIcon:
                     case BridgeOperationId.DeletePluginIcon: case BridgeOperationId.DrawPluginIcon: case BridgeOperationId.UpdatePluginAppearance:
                     case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
-                    case BridgeOperationId.GetPluginSourceState: case BridgeOperationId.CheckPlugin: case BridgeOperationId.ApplyPlugin:
-                    case BridgeOperationId.GetPluginVersions: case BridgeOperationId.ComparePluginSources: case BridgeOperationId.RestorePluginVersion: case BridgeOperationId.OpenPlugin:
+                    case BridgeOperationId.GetPluginSourceState: case BridgeOperationId.CheckPlugin:
+                    case BridgeOperationId.GetPluginVersions: case BridgeOperationId.ComparePluginSources: case BridgeOperationId.OpenPlugin:
                     case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin: case BridgeOperationId.StagePluginVisualSelection:
                     case BridgeOperationId.DiscardPluginVisualSelection:
                     case BridgeOperationId.GetRemovedPlugins: case BridgeOperationId.RemovePlugin: case BridgeOperationId.RestorePlugin:
@@ -648,6 +648,15 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.QueryNavigationSuggestions:
                         responsePayload = BrowserSuggestions(Payload<BrowserSuggestionRequest>(payload));
+                        break;
+                    case BridgeOperationId.GetBrowserVersionState:
+                        responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersionState(Payload<BrowserVersionRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.GetBrowserVersions:
+                        responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersions(Payload<BrowserVersionRequest>(payload)), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.BrowserVersionCommand:
+                        responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersionCommand(Payload<BrowserVersionCommand>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadBrowserSource:
                         responsePayload = BrowserSource(Payload<BrowserSourceRequest>(payload));
@@ -1125,6 +1134,7 @@ namespace RNAssistant.Office.WebView
             }
             _controller.StopInboxWorkers();
             _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
+            if (Plugins != null) Plugins.VersionChanged -= ReportBrowserVersionChanged;
             if (Plugins?.Conversations != null)
                 Plugins.Conversations.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
             _controller.ResourceAuthorityChanged -= ReportResourceChanged;

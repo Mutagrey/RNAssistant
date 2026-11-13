@@ -23,7 +23,9 @@ namespace RNAssistant.Office.WebView
                     _plugins.Conversations.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
                     _plugins.Conversations.AgentProgress = null;
                 }
+                if (_plugins != null) _plugins.VersionChanged -= ReportBrowserVersionChanged;
                 _plugins = value;
+                if (_plugins != null) _plugins.VersionChanged += ReportBrowserVersionChanged;
                 if (_plugins?.Conversations != null)
                 {
                     _plugins.Conversations.AgentCommunication = _agentCommunication;
@@ -55,10 +57,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ConnectPlugin: return Plugins.Connect(Payload<PluginConnectRequest>(payload));
                     case BridgeOperationId.GetPluginSourceState: return Plugins.SourceState(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.CheckPlugin: return Plugins.Check(Payload<PluginIdRequest>(payload).PluginId);
-                    case BridgeOperationId.ApplyPlugin: return Plugins.Apply(Payload<PluginApplyRequest>(payload));
                     case BridgeOperationId.GetPluginVersions: return Plugins.ReleaseHistory(Payload<PluginReleaseHistoryRequest>(payload));
                     case BridgeOperationId.ComparePluginSources: return Plugins.CompareSources(Payload<PluginSourceComparisonRequest>(payload));
-                    case BridgeOperationId.RestorePluginVersion: return Plugins.RestoreVersion(Payload<PluginRestoreVersionRequest>(payload));
                     case BridgeOperationId.OpenPlugin:
                         if(Plugins.Executor==null)throw new PluginException("plugins_unavailable",Plugins.StartupError ?? "Plugin browser host is unavailable.");
                         return Plugins.Open(Payload<PluginOpenRequest>(payload));

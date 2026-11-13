@@ -93,8 +93,8 @@
           head = value.headArtifactId;
         }
         var entries = (value.items || []).map(function (item) {
-          var id = target.kind === "html" ? item.resourceUri : item.releaseId;
-          var label = "v" + (target.kind === "html" ? item.revision : item.version), date = new Date(item.createdUtc || item.capturedUtc);
+          var id = target.kind === "html" ? item.resourceUri : item.versionId;
+          var label = "v" + (target.kind === "html" ? item.revision : item.ordinal), date = new Date(item.createdUtc || item.capturedUtc);
           return { key: id, label: label, icon: "clock", disabled: id === target.afterId,
             status: id === target.afterId ? "Открытая версия" : !isNaN(date.getTime()) ? date.toLocaleString() : "",
             checked: before && before.id === id, onSelect: function () {

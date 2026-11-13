@@ -77,7 +77,7 @@ html[data-host-presentation="Compact"] .split-layout[data-navigation] { grid-tem
 .shell.navigation-wide :is(.chatbar, .resource-editor-head, .dt-header, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--page-inset)) !important; }
 .shell .global-nav { min-width: 0; background: var(--surface-subtle); border-right: 1px solid var(--line); }
 .shell .split-layout > .global-nav { border-right: 0; }
-.shell .global-nav .tree-toolbar, .plugin-navigation .tree-toolbar { --control: var(--shell-control); }
+.shell .global-nav .tree-toolbar { --control: var(--shell-control); }
 .shell .instruction-layout .tool-list-panel { grid-template-rows: var(--navigation-heading-height) minmax(0, 1fr) auto; padding: 0 var(--space-2) var(--space-4); }
 .shell :is(.instruction-layout, .html-workspace-layout) .product-nav-heading { margin: 0 calc(-1 * var(--space-2)); }
 .shell .vba-layout .tool-list-panel { grid-template-rows: var(--navigation-heading-height) auto minmax(0, 1fr); padding: 0 var(--space-2) var(--space-4); }

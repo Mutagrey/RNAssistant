@@ -133,41 +133,6 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        public PluginRegistration Apply(PluginReleaseRecord candidate, string expectedReleaseId)
-        {
-            // Transitional caller boundary: once this owner's catalog is initialized,
-            // only explicit saved-entry activation may change its active head.
-            if (VersionCatalog(candidate.PluginId).State() != null)
-                throw new SavedVersionException("saved_version_required", "Save a version and activate its exact entry.");
-            ValidateRelease(candidate);
-            var current = Get(candidate.PluginId);
-            if (current == null || current.SourceWorkspaceId != candidate.SourceWorkspaceId || current.ActiveReleaseId != expectedReleaseId)
-                throw new PluginException("plugin_selection_changed", "Plugin registration changed. Refresh before applying.");
-            var retained = ReadRelease(new PluginReleaseIdentity(candidate.PluginId, candidate.ReleaseId));
-            if (retained.PackageSha256 != candidate.PackageSha256 || retained.ManifestJson != candidate.ManifestJson)
-                throw new PluginException("plugin_release_invalid", "Candidate differs from its retained snapshot.");
-            current.ActiveReleaseId = candidate.ReleaseId;
-            var manifest = PluginPackageFiles.ParseManifest(candidate.ManifestJson);
-            current.Name = manifest.Name;
-            current.Icon = manifest.Icon;
-            current.Enabled = true;
-            PluginRegistration readBack;
-            try { SaveRegistration(current, expectedReleaseId); }
-            catch (Exception error)
-            {
-                try { readBack = Get(candidate.PluginId); }
-                catch { throw new PluginException("effect_unknown", "Publication receipt is unavailable. Inspect the active release before retrying. " + error.Message); }
-                if (readBack?.ActiveReleaseId == candidate.ReleaseId && readBack.Enabled) return readBack;
-                if (readBack?.ActiveReleaseId == expectedReleaseId) throw;
-                throw new PluginException("effect_unknown", "Publication state changed without a verified receipt. Inspect before retrying. " + error.Message);
-            }
-            try { readBack = Get(candidate.PluginId); }
-            catch (Exception error) { throw new PluginException("effect_unknown", "Publication read-back failed. Inspect before retrying. " + error.Message); }
-            if (readBack?.ActiveReleaseId != candidate.ReleaseId || !readBack.Enabled)
-                throw new PluginException("effect_unknown", "Active publication read-back did not match. Inspect before retrying.");
-            return readBack;
-        }
-
         public PluginRegistration Disable(string id)
         {
             if (VersionCatalog(id).State() != null)
@@ -246,62 +211,6 @@ namespace RNAssistant.Core.Storage
             if (record.PluginId != identity.PluginId || record.ReleaseId != identity.ReleaseId)
                 throw new PluginException("plugin_release_invalid", "Publication identity mismatch.");
             return record;
-        }
-
-        public PluginPublishedReleasePage ListPublishedReleases(string id, string cursor)
-        {
-            RequireId(id);
-            var registration = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
-            var stamp = _authority.GetHead(Scope, RegistrationRef(id, "0").Identity)?.Revision?.Revision;
-            var offset = 0;
-            if (!string.IsNullOrEmpty(cursor))
-            {
-                var parts = cursor.Split('.');
-                if (parts.Length != 2 || parts[0] != stamp ||
-                    !int.TryParse(parts[1], out offset) || offset < 1 || offset > int.MaxValue - 13 || offset % 12 != 0)
-                    throw new PluginException("plugin_history_changed", "История версий изменилась. Откройте список заново.");
-            }
-            // One extra metadata entry determines whether another page exists.
-            // Package file payloads remain in CAS and are never read for the menu.
-            var published = PublishedReleaseIds(id).Take(offset + 13).ToArray();
-            if (offset >= published.Length && offset != 0)
-                throw new PluginException("plugin_history_changed", "История версий изменилась. Откройте список заново.");
-            var entries = published.Skip(offset).Take(12).Select(releaseId =>
-            {
-                var reference = ReleaseRef(id, releaseId);
-                var record = ReadRelease(new PluginReleaseIdentity(id, releaseId));
-                var manifest = PluginPackageFiles.ParseManifest(record.ManifestJson);
-                var revision = _authority.GetRevision(Scope, reference);
-                return new PluginPublishedRelease { ReleaseId = releaseId, Name = manifest.Name,
-                    Version = manifest.Version, CapturedUtc = revision?.CreatedUtc ?? DateTime.MinValue,
-                    Active = registration.ActiveReleaseId == releaseId && registration.Enabled };
-            }).ToArray();
-            return new PluginPublishedReleasePage { Items = entries,
-                NextCursor = published.Length > offset + entries.Length ? stamp + "." + (offset + entries.Length) : null };
-        }
-
-        public PluginRegistration RestorePublishedRelease(string id, string releaseId, string expectedActiveReleaseId)
-        {
-            var current = Get(id) ?? throw new PluginException("plugin_missing", "Plugin is not connected.");
-            if (current.ActiveReleaseId != expectedActiveReleaseId)
-                throw new PluginException("plugin_selection_changed", "Активная версия изменилась. Обновите список.");
-            if (!PublishedReleaseIds(id).Contains(releaseId))
-                throw new PluginException("plugin_release_missing", "Выбранная версия не была опубликована.");
-            var release = ReadRelease(new PluginReleaseIdentity(id, releaseId));
-            if (release.SourceWorkspaceId != current.SourceWorkspaceId)
-                throw new PluginException("plugin_selection_changed", "Версия принадлежит другому workspace.");
-            // Verify the one selected package without retaining all its files in memory.
-            foreach (var file in release.Files)
-                if (!_blobs.HasVerifiedReference(file.Payload.ToBlobReference()))
-                    throw new PluginException("plugin_release_invalid", "Файл выбранной версии недоступен: " + file.Path);
-            return Apply(release, expectedActiveReleaseId);
-        }
-
-        public PluginReleaseRecord ReadPublishedRelease(string id, string releaseId)
-        {
-            if (!PublishedReleaseIds(id).Contains(releaseId))
-                throw new PluginException("plugin_release_missing", "Выбранная версия не была опубликована.");
-            return ReadRelease(new PluginReleaseIdentity(id, releaseId));
         }
 
         private IEnumerable<string> PublishedReleaseIds(string id, ResourceRef cutoff = null)

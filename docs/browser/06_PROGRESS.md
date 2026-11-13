@@ -1,5 +1,35 @@
 # Universal Browser: статус
 
+## F3b Plugin cutover — 2026-11-13
+
+`16.16.0-dev`: Application, Bootstrap, agent tools и Browser используют один saved-entry
+catalog. Check не сохраняет; Save не активирует; Apply закрепляет saved entry и
+active revision своего session/run. Явный semantic выбор — ordinal/unique label;
+`plugins.versions` отдаёт bounded metadata без runtime IDs. Чужой Save и source edits
+не меняют prepared Apply; старый candidate protocol и process approval после restart
+не восстанавливаются. Pending/live execution блокирует удаление exact entry.
+
+Plugin sources/saved entries открываются через общий Browser; plugin iframe/view,
+release view, toolbar/template/CSS и старые Apply/PublishedRelease writers удалены.
+Direct locator не зависит от страницы suggestions. CAS snapshot читается даже при
+недоступной source directory; broken manifest оставляет history и disabled Save.
+UI сохраняет исходный operation ID при Unknown, не повторяет запись автоматически.
+
+Необходимая часть 06: existing Dock owner нормализует layout schema 1→2, удаляя
+неподдерживаемые descriptors по одному. Соседние вкладки/группы/порядок сохраняются;
+неудачное преобразование не перезаписывает preference. Срез продолжен с нового
+HEAD `59c101f9` (независимый Journal/Feed commit); его изменения не включались повторно.
+
+Checks: `plugin versions:` 3 cases; prepared tools, bounded history, source comparison,
+commands/cancel и bootstrap — всего 8 focused cases; Mock build — 0 errors.
+`browser-saved-views` проверяет Save/Delete, distinct entries одного payload, Unknown
+reconcile, failed Check и 420 px/125%; `local-browser` и Dock pruning — pass.
+UI In Review; native B02 и Windows/Office evidence открыты. Legacy plugin UI fixtures
+переносятся на общий Browser в следующем adapter срезе; native annotations не квалифицированы.
+Далее F3c: document/Workspace HTML checkpoints + raw HTML CreateProject; затем общие
+provider adapters, StartSurface/recents и оставшиеся native tool gates, после этого 07.
+
+
 ## F3b core — saved-entry catalog, 2026-11-13
 
 PluginStore получил explicit Save/Activate/Delete/List на прежней ResourceAuthority.

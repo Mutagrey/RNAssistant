@@ -1,5 +1,20 @@
 # Universal Browser: матрица проверок
 
+## F3b Plugin consumers — 2026-11-13
+
+`plugin versions:` — 3 cases, включая manual User без чата, direct locator/scope refusal,
+content drift при сохранённом mtime, broken manifest/history, CAS read при отсутствующем
+source root и Removed locator. `plugins: results and prepared authority stay scoped`
+проверяет real session/run, обязательный Save, confirmation, peer/source drift и отказ
+чужому run. Paged history/guarded restore и exact source comparison используют saved entries.
+`browser-saved-views.test.js` заменяет устаревшие iframe assertions общим Browser:
+Save ≠ Activate, active delete disabled, trash не выбирает строку, Unknown не auto-retry,
+original operation ID, failed Check и видимый Save 420 px/125%.
+`dock-layout-pruning.test.js`: schema 1→2, удаление старых plugin/external descriptors,
+сохранение соседних групп/порядка/active group, original preference при corruption.
+Это host-neutral evidence; actual native renderer/input/annotations и Office не проверены.
+
+
 ## F3b core catalog — 2026-11-13
 
 `plugin versions:` — 2/2: legacy cutoff, исключение never-active candidate, Save без

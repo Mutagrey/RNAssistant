@@ -3,12 +3,12 @@
   var items=[],busy=false,savedIcons=[],selectedIconId='puzzle',customSource=false,editingPlugin=null,chatSelectionSerial=0,refreshTask=null;
   function el(id){return document.getElementById('plugin'+id)||window.RNAssistantWorkspaceChat.node(id);}
   function item(id){return items.find(function(value){return value.pluginId===id;});}
-  function each(callback){RNAssistantDockWorkspace.eachView('plugin',callback);}
+
   function status(text,error){el('Status').textContent=text||'';el('Status').setAttribute('role',error?'alert':'status');}
   function controls(){el('CreateSubmit').disabled=busy;}
   async function run(action){if(busy)return;busy=true;controls();try{await action();}catch(error){status(error.detail||error.message,true);}finally{busy=false;controls();}}
   function sourcePlugin(){var snapshot=RNAssistantProjectChats.snapshot();return RNAssistantWorkspaceChat.owner()==='plugin'&&snapshot&&snapshot.project&&items.find(function(value){return value.sourceWorkspaceId===snapshot.project.workspaceId;});}
-  function selectedId(){var target=RNAssistantDockWorkspace.activeTarget();return target&&target.pluginId||((sourcePlugin()||{}).pluginId)||null;}
+  function selectedId(){var target=RNAssistantDockWorkspace.activeTarget();var match=target&&target.view==='browser'&&/^\/plugins\/([^/]+)\//.exec(target.locator||'');return match?decodeURIComponent(match[1]):((sourcePlugin()||{}).pluginId)||null;}
   function button(label,action){var node=document.createElement('button');node.type='button';node.textContent=label;node.onclick=action;return node;}
   function applyAppearance(frame){
     if(!frame||!frame.contentWindow)return;
@@ -28,7 +28,7 @@
       if(node.getAttribute('aria-current')==='page'){window.RNAssistantShellLayout.setNavigationOpen(!window.RNAssistantShellLayout.isNavigationOpen());return;}
       select(item.pluginId,null,true);
     });node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon || (item.pluginId==='data-templates'?'dataTemplates':'puzzle'),item.iconSvg,item.iconColor);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
-  });each(function(view){view.updateItem(item(view.pluginId));});RNAssistantDockWorkspace.refreshPresentation();if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
+  });RNAssistantDockWorkspace.refreshPresentation();if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
   function conversationAddress(){
     var owner=window.RNAssistantWorkspaceChat.owner(),snapshot=window.RNAssistantProjectChats.snapshot();
     return JSON.stringify(owner==='office'?[owner,state.activeChatId]:
@@ -46,7 +46,6 @@
     var snapshot=RNAssistantProjectChats.snapshot();
     if(!snapshot||!snapshot.project||snapshot.project.workspaceId!==workspaceId||!snapshot.sessionId||sessionId&&snapshot.sessionId!==sessionId)return false;
     var discussion=snapshot&&snapshot.sessionId?{source:'workspace',workspaceId:workspaceId,sessionId:snapshot.sessionId}:null;
-    if(discussion)each(function(view){if(view.pluginId===id)view.bindDiscussion(discussion);});
     RNAssistantPlugins.onChatSnapshot(snapshot);
     if(discussion&&placement)RNAssistantConversationPanel.open(discussion,placement);
     else window.RNAssistantDockWorkspace.show('conversation');
@@ -56,10 +55,10 @@
     var plugin=item(id);if(!plugin)return false;
     if(sessionId)return openSourceChat(sessionId,plugin);
     if(!document.getElementById('tab-chat').classList.contains('active')&&!document.getElementById('tab-artifacts').classList.contains('active'))switchTab('chat',{preserveChatOwner:true});
-    var target={view:'plugin',pluginId:id,title:plugin.name};
-    if(!RNAssistantDockWorkspace.openTarget(target))return false;
-    var view=RNAssistantDockWorkspace.getView(RNAssistantPluginView.key(target));if(view)await view.ready();return true;
+    return RNAssistantBrowser.open('/plugins/'+encodeURIComponent(id)+'/source/'+(plugin.entryPath||'plugin.json').split('/').map(encodeURIComponent).join('/'),
+      {kind:'User',scopeId:'local'}, {title:plugin.name});
   }
+
   function updateSourceLocation(){var connecting=el('Connect').checked,manual=connecting||customSource;
     el('SourceLocation').hidden=connecting||!!editingPlugin;el('SourceFolder').hidden=!manual||!!editingPlugin;
     el('Root').required=manual&&!editingPlugin;el('Root').disabled=!manual||!!editingPlugin;
@@ -122,7 +121,7 @@
         if(item)run(function(){return openManager(item);});}));
       var remove=popovers.action('Удалить с панели',window.RNAssistantIcons.render('trash'),function(){var id=anchor.dataset.pluginId,name=anchor.dataset.railLabel;
         if(!window.confirm('Убрать «'+name+'» с панели? Исходники, данные и опубликованная версия сохранятся. Плагин можно вернуть через «+».'))return;
-        popovers.hide();run(async function(){await send('removePlugin',{pluginId:id});RNAssistantDockWorkspace.close(RNAssistantPluginView.key({pluginId:id}));await refresh();status('Плагин убран с панели. Вернуть его можно через «+».');});});
+        popovers.hide();run(async function(){await send('removePlugin',{pluginId:id});await refresh();status('Плагин убран с панели. Вернуть его можно через «+».');});});
       remove.className='rail-hover-danger';body.appendChild(remove);
     });
     popovers.register('plugin-add',async function(anchor,body,isCurrent){body.textContent='Загружаю…';
@@ -136,10 +135,6 @@
     });
   }
   function bind(){
-    RNAssistantDockWorkspace.registerView('plugin',{perObject:true,maximumInstances:4,renderer:'onlyWhenVisible',
-      accepts:function(target){return target&&target.view==='plugin'&&typeof target.pluginId==='string'&&!!target.pluginId&&target.pluginId.length<=256&&typeof target.title==='string'&&target.title.length<=1024;},
-      key:RNAssistantPluginView.key,create:RNAssistantPluginView.create,titleFor:function(target){return target.title;}});
-    window.addEventListener('pagehide',function(event){if(!event.persisted)each(function(view){view.dispose();});});
     registerRailPopovers();
     new MutationObserver(function(){renderIconChoices();el('Rail').querySelectorAll('[data-plugin-id]').forEach(function(node){var value=item(node.dataset.pluginId);if(value)node.innerHTML=RNAssistantIcons.renderPlugin(value.icon||'puzzle',value.iconSvg,value.iconColor);});}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-accent']});
     el('Add').onclick=function(){run(function(){return openManager(null);});};
@@ -161,7 +156,7 @@
       if(!connecting&&(task||iconBrief)){if(!await openSourceChat(null,created))return;var message='Загрузи навыки skills.workspace.plugin.authoring и skills.workspace.files. Прочитай README.md и plugin.json. ';
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
-        message+='После изменений проверь пакет и предпросмотр; применяй только после подтверждения.';
+        message+='После изменений проверь пакет через plugins.check, сохрани контрольную точку через plugins.save; plugins.apply вызывай только для явно запрошенной активации сохранённой версии.';
         if(!RNAssistantProjectChats.snapshot()||!RNAssistantProjectChats.snapshot().sessionId){if(!await window.RNAssistantProjectChats.create())return;}
         el('Input').value=message;el('Input').dispatchEvent(new Event('input',{bubbles:true}));el('Form').requestSubmit();}
       el('CreateForm').reset();el('IconDescription').value='';el('IconImportName').value='';el('IconImportSvg').value='';
@@ -173,21 +168,14 @@
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }
-  async function restoreVersion(target){
-    var view=RNAssistantDockWorkspace.getView(RNAssistantPluginView.key(target));
-    if(busy||view&&view.isBusy())throw new Error('Дождитесь завершения операции с плагином.');
-    busy=true;controls();try{var restored=await send('restorePluginVersion',{pluginId:target.pluginId,releaseId:target.releaseId,expectedActiveReleaseId:target.expectedActiveReleaseId});
-      if(view)await view.invalidate(restored);await refresh();
-    }finally{busy=false;controls();}
-  }
   window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){el('Manager').hidden=false;},select:select,item:item,
     showAnnotation:async function(annotation,target){
       var plugin=items.find(function(item){return item.sourceWorkspaceId===target.workspaceId;});
       if(!plugin||!await openSourceChat(target.sessionId,plugin)||!await select(plugin.pluginId))return;
-      var view=RNAssistantDockWorkspace.getView(RNAssistantPluginView.key(plugin));if(view){view.bindDiscussion(target);view.showAnnotation(annotation);}
+      status('Просмотр аннотации требует подтверждённого native Browser.',true);
     },
-    applyAppearance:applyAppearance,restoreVersion:restoreVersion,openSourceChat:openSourceChat,
-    onChatSnapshot:function(snapshot){each(function(view){view.onChatSnapshot(snapshot);});},
-    isChatBusy:function(target){var pending=busy;each(function(view){pending=pending||view.isBusy(target);});return pending;},
+    applyAppearance:applyAppearance,openSourceChat:openSourceChat,
+    onChatSnapshot:function(){},
+    isChatBusy:function(){return busy;},
     sourceWorkspaceId:function(){var source=sourcePlugin();return source&&source.sourceWorkspaceId;},selectedId:selectedId};
 })();

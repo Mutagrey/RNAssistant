@@ -76,7 +76,7 @@ namespace RNAssistant.Harness
         private static void SourceComparisonPluginPublishedPair()
         {
             WithPluginPaths(paths => { using (var service = new PluginApplicationService(paths)) {
-                var item = PluginFixture(service, paths, false); var first = item.ReleaseId;
+                var item = PluginFixture(service, paths, false); var first = item.SavedVersionId;
                 var source = Path.Combine(item.SourceRoot, "app.js"); var original = File.ReadAllText(source);
                 File.WriteAllText(source, "new source\r\n");
                 var manifestPath = Path.Combine(item.SourceRoot, "plugin.json"); var manifest = JObject.Parse(File.ReadAllText(manifestPath));
@@ -87,10 +87,10 @@ namespace RNAssistant.Harness
                 var candidate = service.Check(item.PluginId);
                 var preview = service.Open(new PluginOpenRequest { PluginId = item.PluginId, CandidateId = candidate.CandidateId });
                 var request = new PluginSourceComparisonRequest { PluginId = item.PluginId, BeforeId = first, AfterId = preview.ReleaseId, Path = "app.js" };
-                PluginFailure(() => service.CompareSources(request), "plugin_release_missing");
+                SavedFailure(() => service.CompareSources(request), "version_unavailable");
                 service.CloseInstanceAsync(preview.InstanceId).GetAwaiter().GetResult();
-                item = service.Apply(new PluginApplyRequest { PluginId = item.PluginId, CandidateId = candidate.CandidateId });
-                request.AfterId = item.ReleaseId;
+                item = SaveAndActivatePlugin(service, item.PluginId);
+                request.AfterId = item.SavedVersionId;
                 File.WriteAllText(source, "dirty working source");
                 var result = service.CompareSources(request);
                 AssertEqual(original, result.BeforeText, "old published bytes");

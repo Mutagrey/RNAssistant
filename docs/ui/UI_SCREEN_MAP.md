@@ -1,5 +1,14 @@
 # Карта экранов, навигации и состояний
 
+## Plugin Browser — In Review, 2026-11-13
+
+Rail plugin → Browser source. Save создаёт checkpoint, clock выбирает working/saved
+entry, отдельная корзина удаляет запись после подтверждения. Apply активирует явно
+выбранную или сохранённую в этой вкладке запись; Save её не активирует. Unknown даёт
+команду проверки исходной операции в том же меню. Saved/Removed не подменяются latest.
+Старые plugin tabs удаляются из restore по одному; остальные user tabs сохраняются.
+
+
 ## Local Browser source-only — In Review, 2026-11-13
 
 В выборе «+» доступен Browser → Главная `/`. Вкладка сохраняет свой browserTabId

@@ -442,6 +442,10 @@ if (window.chrome && window.chrome.webview) {
       failBridgeTransport(response, null);
       return;
     }
+    if (response.type === "browserVersionStateChanged") {
+      if (window.RNAssistantBrowser) window.RNAssistantBrowser.versionsChanged(response);
+      return;
+    }
     if (response.type === "browserPageState") {
       if (window.RNAssistantBrowser) window.RNAssistantBrowser.apply(response.payload);
       return;

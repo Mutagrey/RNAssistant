@@ -698,6 +698,18 @@ namespace RNAssistant.Core.Storage
             return null;
         }
 
+        internal ChatSessionHeader ReadSessionHeader(string chatId)
+        {
+            if (string.IsNullOrWhiteSpace(chatId)) return null;
+            foreach (var path in SafeFindSessionFiles(chatId))
+            {
+                // Exact existing header projection: no transcript or message CAS hydration.
+                var header = LoadHeader(path, null, null, null, null, null);
+                if (header != null && string.Equals(header.Id, chatId, StringComparison.OrdinalIgnoreCase)) return header;
+            }
+            return null;
+        }
+
         internal ConversationMetadata ReadMetadata(string host, string documentKey, string chatId)
         {
             if (string.IsNullOrWhiteSpace(chatId)) return null;

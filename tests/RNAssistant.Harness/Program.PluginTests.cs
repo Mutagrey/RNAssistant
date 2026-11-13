@@ -650,12 +650,12 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static PluginItemDto PluginFixture(PluginApplicationService service,AppDataPaths paths,bool data=true)
+        private static PluginItemDto PluginFixture(PluginApplicationService service,AppDataPaths paths,bool data=true,bool legacy=false)
         {
             var item=service.Create(new PluginCreateRequest{Name="Test plugin",RootPath=Path.Combine(paths.Root,"source"),Description="Test"});
             if(data){var file=Path.Combine(item.SourceRoot,"plugin.json");var json=JObject.Parse(File.ReadAllText(file));json["capabilities"]=new JArray("project.read","project.write");File.WriteAllText(file,json.ToString());}
             var candidate=service.Check(item.PluginId);AssertTrue(candidate.HasChanges,"unpublished plugin has changes to apply");
-            return service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+            return legacy ? SeedLegacyPlugin(service, paths, item.PluginId) : SaveAndActivatePlugin(service, item.PluginId);
         }
         private static PluginInstance PluginOpen(PluginApplicationService service,string id,string candidate=null)
         {var view=service.Open(new PluginOpenRequest{PluginId=id,CandidateId=candidate});return service.FindInstance(new Uri(view.EntryUrl).GetLeftPart(UriPartial.Authority));}
@@ -750,7 +750,7 @@ namespace RNAssistant.Harness
                 using (var service = new PluginApplicationService(paths))
                 {
                     var item = PluginFixture(service, paths, false);
-                    var firstRelease = item.ReleaseId;
+                    var firstRelease = item.ReleaseId; var firstVersion = item.SavedVersionId;
                     var sourceFile = Path.Combine(item.SourceRoot, "app.js");
                     var original = File.ReadAllText(sourceFile);
                     File.WriteAllText(sourceFile, "revision 2");
@@ -758,15 +758,15 @@ namespace RNAssistant.Harness
                     AssertEqual(1, service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId }).Items.Count,
                         "checked candidate does not appear among published versions");
                     var preview = service.Open(new PluginOpenRequest { PluginId = item.PluginId, CandidateId = unpublished.CandidateId });
-                    PluginFailure(() => service.Open(new PluginOpenRequest { PluginId = item.PluginId, ReleaseId = preview.ReleaseId }),
-                        "plugin_release_missing");
+                    SavedFailure(() => service.Open(new PluginOpenRequest { PluginId = item.PluginId, VersionId = "sv_0000000000000000001_" + new string('0',32) }),
+                        "version_unavailable");
                     service.CloseInstanceAsync(preview.InstanceId).GetAwaiter().GetResult();
-                    item = service.Apply(new PluginApplyRequest { PluginId = item.PluginId, CandidateId = unpublished.CandidateId });
+                    item = SaveAndActivatePlugin(service, item.PluginId);
                     for (var revision = 3; revision <= 14; revision++)
                     {
                         File.WriteAllText(sourceFile, "revision " + revision);
                         var checkedPackage = service.Check(item.PluginId);
-                        item = service.Apply(new PluginApplyRequest { PluginId = item.PluginId, CandidateId = checkedPackage.CandidateId });
+                        item = SaveAndActivatePlugin(service, item.PluginId);
                     }
                     var latestSource = File.ReadAllText(sourceFile);
                     var firstPage = service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId });
@@ -777,23 +777,24 @@ namespace RNAssistant.Harness
                     AssertEqual(2, secondPage.Items.Count, "history loads only requested older metadata");
                     AssertEqual(firstRelease, secondPage.Items.Last().ReleaseId, "oldest published version is available");
                     AssertTrue(secondPage.NextCursor == null, "final page has no cursor");
-                    var historicalView = service.Open(new PluginOpenRequest { PluginId = item.PluginId, ReleaseId = firstRelease });
+                    var historicalView = service.Open(new PluginOpenRequest { PluginId = item.PluginId, VersionId = firstVersion });
                     AssertTrue(historicalView.Preview, "historical version uses isolated preview authority");
                     var instance = service.FindInstance(new Uri(historicalView.EntryUrl).GetLeftPart(UriPartial.Authority));
                     AssertEqual(original, Encoding.UTF8.GetString(service.ReadPackageFile(instance, "app.js")),
                         "historical preview serves frozen package bytes");
                     service.CloseInstanceAsync(historicalView.InstanceId).GetAwaiter().GetResult();
-                    PluginFailure(() => service.RestoreVersion(new PluginRestoreVersionRequest { PluginId = item.PluginId,
-                        ReleaseId = firstRelease, ExpectedActiveReleaseId = "stale" }), "plugin_selection_changed");
-                    var restored = service.RestoreVersion(new PluginRestoreVersionRequest { PluginId = item.PluginId,
-                        ReleaseId = firstRelease, ExpectedActiveReleaseId = item.ReleaseId });
+                    SavedFailure(() => service.ActivateSavedVersion(new PluginActivateRequest { PluginId = item.PluginId,
+                        VersionId = firstVersion, ExpectedActiveReleaseId = "stale", OperationId = "stale" }), "version_active_changed");
+                    var restored = service.ActivateSavedVersion(new PluginActivateRequest { PluginId = item.PluginId,
+                        VersionId = firstVersion, ExpectedActiveVersionId = item.SavedVersionId, ExpectedActiveReleaseId = item.ReleaseId,
+                        ExpectedActiveRevision = item.ActiveRevision, OperationId = "restore-old" });
                     AssertEqual(firstRelease, restored.ReleaseId, "restore switches the active publication to the selected release");
                     AssertEqual(latestSource, File.ReadAllText(sourceFile), "restore leaves editable source files untouched");
-                    PluginFailure(() => service.ReleaseHistory(new PluginReleaseHistoryRequest {
-                        PluginId = item.PluginId, Cursor = firstPage.NextCursor }), "plugin_history_changed");
+                    SavedFailure(() => service.ReleaseHistory(new PluginReleaseHistoryRequest {
+                        PluginId = item.PluginId, Cursor = firstPage.NextCursor }), "version_state_changed");
                     var restoredPage = service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId });
-                    AssertEqual(firstRelease, restoredPage.Items.First().ReleaseId, "restored version moves to the front");
-                    AssertTrue(restoredPage.Items.First().Active, "menu marks the restored version active");
+                    AssertEqual(item.SavedVersionId, restoredPage.Items.First().VersionId, "activation does not reorder saved ordinals");
+                    AssertTrue(service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId, Cursor = restoredPage.NextCursor }).Items.Last().Active, "menu marks the restored entry active");
                     AssertTrue(service.Check(item.PluginId).HasChanges, "current source still differs from restored publication");
                 }
             });
@@ -901,7 +902,7 @@ namespace RNAssistant.Harness
                     var oldCode=service.ReadPackageFile(active,"app.js");File.WriteAllText(Path.Combine(item.SourceRoot,"app.js"),"changed");
                     AssertTrue(sourceStamp!=service.SourceState(item.PluginId).Stamp,"source token changes after a declared file edit");
                     candidate=service.Check(item.PluginId);AssertTrue(candidate.HasChanges,"changed source offers Apply in the UI");
-                    service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+                    SaveAndActivatePlugin(service, item.PluginId);
                     AssertTrue(oldCode.SequenceEqual(service.ReadPackageFile(active,"app.js")),"active operations retain frozen bytes");
                     var fresh=PluginOpen(service,item.PluginId);AssertEqual("project_required",PluginRequest(service,fresh,PluginMethod.List).Result.ErrorCode,"new publication receives no old data grant");
                     File.WriteAllText(Path.Combine(item.SourceRoot,"plugin.json"),"{}");PluginFailure(()=>service.Check(item.PluginId),"plugin_manifest_invalid");
@@ -1429,7 +1430,7 @@ namespace RNAssistant.Harness
                     var svgPath=Path.Combine(item.SourceRoot,"icon.svg");
                     File.WriteAllText(svgPath,"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14\"/></svg>");
                     var candidate=service.Check(item.PluginId);
-                    var published=service.Apply(new PluginApplyRequest { PluginId=item.PluginId, CandidateId=candidate.CandidateId });
+                    var published=SaveAndActivatePlugin(service, item.PluginId);
                     AssertEqual("icon.svg",published.Icon,"SVG source becomes the published icon");
                     AssertTrue(published.IconSvg.Contains("<path"),"published icon exposes normalized static SVG");
                     var catalog=service.ListIcons().Items;
@@ -1469,7 +1470,7 @@ namespace RNAssistant.Harness
                 service.Executor=new PluginExecutor{Execute=(operation,token)=>{started.TrySetResult(operation);token.Register(()=>finish.TrySetCanceled());return finish.Task;}};
                 var invocation=service.InvokeAsync(context,"echo","{\"text\":\"a\"}",CancellationToken.None);var running=await started.Task;
                 File.WriteAllText(Path.Combine(item.SourceRoot,"commands.js"),"new code");var candidate=service.Check(item.PluginId);
-                service.Apply(new PluginApplyRequest{PluginId=item.PluginId,CandidateId=candidate.CandidateId});
+                SaveAndActivatePlugin(service, item.PluginId);
                 AssertEqual(context.Release.ReleaseId,running.Release.ReleaseId,"invocation pins admitted publication");
                 await service.CloseInstanceAsync(context.Id);
                 AssertTrue(!running.Token.IsCancellationRequested,"closing the UI leaves its command alive");
@@ -1549,35 +1550,34 @@ namespace RNAssistant.Harness
                 await PluginRequest(service,ui,PluginMethod.DropResult,"in.txt.canonical.json");
                 AssertEqual("plugin_result_denied",(await PluginRequest(service,ui,PluginMethod.OpenResult,"in.txt.canonical.json")).ErrorCode,"discard releases result authority");
                 var workspace=new WorkspaceStore(paths).Open(item.SourceRoot,false,true);
-                var registry=new ToolHandlerRegistry();
-                foreach(var tool in service.CaptureTools(workspace))registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(tool.Entry.Id,tool.Entry.Description,tool.Entry.ArgumentSchemaJson),tool.Entry.Policy,tool.Entry.Binding),tool.Handler);
-                var runtime=new ToolRuntime(registry,"agent",false,true,(context,preparation)=>"approval");
-                var checkCall=new ToolCall("check","plugins.check","{}");
-                var checkedResult=await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
-                AssertTrue(!checkedResult.Result.DataJson.Contains("candidateId") && !checkedResult.Result.DataJson.Contains("releaseId"),"model sees validation facts without authority handles");
-                var call=new ToolCall("apply","plugins.apply","{}");var policy=runtime.Describe(call);
-                var pending=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,false,5),CancellationToken.None);
-                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,pending.Outcome,"publication requires confirmation");
-                var userCheck = service.Check(item.PluginId);
-                AssertEqual(userCheck.CandidateId, service.Check(item.PluginId).CandidateId, "equivalent UI check keeps its intent");
-                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"peer-run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
-                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
-                var foreign=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"peer-run","turn","apply",DateTime.UtcNow,true,5,pending.PreparedStateJson),CancellationToken.None);
-                AssertTrue(!foreign.MayHaveDispatched && foreign.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"prepared intent cannot cross runs");
-                var applied=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,pending.PreparedStateJson),CancellationToken.None);
-                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, applied.Result.Status,"UI, peer and equivalent own checks preserve exact confirmation");
-                // New content invalidates the original actor's prepared intent, even if a cheap source stamp is unchanged.
-                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
-                var stale=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,false,5),CancellationToken.None);
-                var sourcePath=Path.Combine(item.SourceRoot,"commands.js");
-                var sourceTime=File.GetLastWriteTimeUtc(sourcePath);var originalSource=File.ReadAllText(sourcePath);
-                File.WriteAllText(sourcePath,new string(' ',originalSource.Length));File.SetLastWriteTimeUtc(sourcePath,sourceTime);
-                var refused=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,stale.PreparedStateJson),CancellationToken.None);
-                AssertTrue(!refused.MayHaveDispatched && refused.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"content drift refuses before dispatch regardless of mtime");
-                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
-                refused=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,stale.PreparedStateJson),CancellationToken.None);
-                AssertTrue(!refused.MayHaveDispatched && refused.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"changed own intent invalidates previous preparation");
-                File.WriteAllText(sourcePath,originalSource);
+                var session = service.Conversations.CreateSession(workspace, "Version tools");
+                session.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn", Status = "running" };
+                new ChatStore(paths).Save(session);
+                var registry = new ToolHandlerRegistry();
+                foreach (var tool in service.CaptureTools(workspace, session)) registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(tool.Entry.Id,
+                    tool.Entry.Description, tool.Entry.ArgumentSchemaJson), tool.Entry.Policy, tool.Entry.Binding), tool.Handler);
+                var runtime = new ToolRuntime(registry, "agent", false, true, (context, preparation) => "approval");
+                var checkCall = new ToolCall("check", "plugins.check", "{}");
+                var checkedResult = await runtime.ExecuteAsync(new ToolExecutionContext(checkCall, runtime.Describe(checkCall), "run", "turn", "check", DateTime.UtcNow, false, 5), CancellationToken.None);
+                AssertTrue(!checkedResult.Result.DataJson.Contains("candidateId") && !checkedResult.Result.DataJson.Contains("releaseId"), "model sees validation facts without authority handles");
+                var applyCall = new ToolCall("apply", "plugins.apply", "{}");
+                var absent = await runtime.ExecuteAsync(new ToolExecutionContext(applyCall, runtime.Describe(applyCall), "run", "turn", "apply", DateTime.UtcNow, false, 5), CancellationToken.None);
+                AssertTrue(absent.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error && !absent.MayHaveDispatched, "Check alone cannot activate a plugin");
+                var saveCall = new ToolCall("save", "plugins.save", "{}");
+                var savePending = await runtime.ExecuteAsync(new ToolExecutionContext(saveCall, runtime.Describe(saveCall), "run", "turn", "save", DateTime.UtcNow, false, 5), CancellationToken.None);
+                var saved = await runtime.ExecuteAsync(new ToolExecutionContext(saveCall, runtime.Describe(saveCall), "run", "turn", "save", DateTime.UtcNow, true, 5, savePending.PreparedStateJson), CancellationToken.None);
+                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, saved.Result.Status, "real run saves its checked source");
+                AssertTrue(!saved.Result.DataJson.Contains("VersionId") && !saved.Result.DataJson.Contains("releaseId"), "save exposes ordinal, never authority IDs");
+                var pending = await runtime.ExecuteAsync(new ToolExecutionContext(applyCall, runtime.Describe(applyCall), "run", "turn", "apply", DateTime.UtcNow, false, 5), CancellationToken.None);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Outcome, "activation preserves confirmation");
+                var sourcePath = Path.Combine(item.SourceRoot, "commands.js"); var originalSource = File.ReadAllText(sourcePath);
+                File.WriteAllText(sourcePath, originalSource + "\n// later working edit");
+                service.Check(item.PluginId); SavePluginCurrent(service, item.PluginId);
+                var foreign = await runtime.ExecuteAsync(new ToolExecutionContext(applyCall, runtime.Describe(applyCall), "peer-run", "turn", "apply", DateTime.UtcNow, true, 5, pending.PreparedStateJson), CancellationToken.None);
+                AssertTrue(!foreign.MayHaveDispatched && foreign.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error, "prepared saved entry cannot cross runs");
+                var applied = await runtime.ExecuteAsync(new ToolExecutionContext(applyCall, runtime.Describe(applyCall), "run", "turn", "apply", DateTime.UtcNow, true, 5, pending.PreparedStateJson), CancellationToken.None);
+                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, applied.Result.Status, "working edits and another actor save preserve the exact saved activation");
+                File.WriteAllText(sourcePath, originalSource);
                 var before=service.CaptureCommandContext(item.PluginId,project,true);await service.CloseInstanceAsync(before.Id);
                 picker.Root=Path.Combine(paths.Root,"other-data");Directory.CreateDirectory(picker.Root);await PluginRequest(service,ui,PluginMethod.PickProject);
                 PluginFailure(()=>service.CaptureCommandContext(item.PluginId,project,true),"plugin_project_changed");

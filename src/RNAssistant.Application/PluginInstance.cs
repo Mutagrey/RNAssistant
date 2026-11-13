@@ -58,6 +58,7 @@ namespace RNAssistant.Application
         public string Id { get; } = "instance_" + Guid.NewGuid().ToString("N");
         public string Origin { get { return "https://" + Id.Replace("_", "-") + ".rnassistant-plugin.invalid"; } }
         public string EntryUrl { get { return Origin + "/" + Manifest.Entry; } }
+        public string SavedVersionId { get; internal set; }
         public PluginReleaseRecord Release { get; private set; }
         public PluginManifestV1 Manifest { get; private set; }
         public bool Preview { get; private set; }

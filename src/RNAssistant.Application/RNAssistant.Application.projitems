@@ -10,6 +10,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserVersionContracts.cs" Link="Application\Contracts\BrowserVersionContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserCapabilityContracts.cs" Link="Application\Contracts\BrowserCapabilityContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.Browser.cs" Link="Application\PluginApplicationService.Browser.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.Versions.cs" Link="Application\PluginApplicationService.Versions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserLocalLocator.cs" Link="Application\BrowserLocalLocator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserTargetResolver.Navigation.cs" Link="Application\BrowserTargetResolver.Navigation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\SourceComparisonContracts.cs" Link="Application\Contracts\SourceComparisonContracts.cs" />

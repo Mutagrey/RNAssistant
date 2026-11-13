@@ -1,11 +1,17 @@
 # Plugins
 
-F3b core (2026-11-13): PluginStore now has an explicit saved-entry catalog in the
-existing authority. Entries/ordinals and active entry identity are distinct from CAS
-release identity; operation receipts and tombstones survive restart. Application,
-UI and tool consumers still await the next cutover. The transitional candidate
-Apply refuses a plugin once its saved catalog exists; no second writer is enabled.
+F3b cutover (2026-11-13, `16.16.0-dev`): Check → Save → Apply uses one saved-entry
+catalog in the existing authority. Save creates a user checkpoint without activation;
+Apply pins an exact saved entry and expected active entry/release/revision. Run intent
+belongs to its real source workspace/session/run. `plugins.versions` exposes ordinals
+and labels; `plugins.apply` optionally accepts `version` (ordinal text or unique label),
+otherwise uses that run's own last Save result. Historical entries can be viewed,
+compared and deleted without deleting CAS; active/live/pending entries are protected.
 
+Plugin source and saved views use the common Browser. Old candidate Apply, published
+history writer, provider view/iframe/template/CSS were removed. Changed notifications
+refresh metadata; lost receipts reconcile their original operation. Capture/hash checks
+run on bounded worker work, never mtime guards. B02 still blocks authored execution.
 
 Local Browser package status (2026-11-13): B02 keeps authored page execution,
 commands and native preview source-only/unavailable; older iframe descriptions
@@ -14,7 +20,7 @@ WorkspaceFileService CaptureSet: pinned plugin.json, the complete declared membe
 streamed CAS payloads and sorted file scopes/held read handles through publication.
 The resolved package is bounded to 512 files/256 MiB; vendor bytes remain exact CAS
 references. No sequential re-read/mtime scan is treated as an atomic snapshot.
-Check still creates no user version; Check→Save→Apply cutover is the next F3 slice.
+Check creates no user version. Explicit Save owns the user checkpoint.
 
 
 Статус: основа v1, 2026-10-19. Владелец — application plugin services;
@@ -441,14 +447,14 @@ UI и workspace-агент вызывают один `PluginApplicationService.I
 `plugins.<id>.<command>` подключены через существующий ToolRuntime с manifest schemas,
 замороженным release binding, policy, prepared state, journal/read-back evidence.
 Выбранный grant фиксируется до confirmation; его замена отклоняет продолжение.
-`plugins.check`/`plugins.apply` доступны только чату source workspace; аргументы пусты,
-candidate удерживает runtime отдельно для каждого run. Чужой Check и повторная
-проверка тех же bytes не отзывают confirmation. Изменение собственного intent,
-source bytes или active binding отклоняет Apply до dispatch. UI не может применить
-candidate другого run. До 128 process-local handles: idle handles истекают через
-час, live preview и подготовленные операции удерживают их до освобождения owner.
-Model-facing resource reads остаются `common.resources_*`; модели не выдаются
-candidate/release IDs, `ResourceRef`, paths native staging или grant tokens.
+`plugins.check`, `plugins.save`, `plugins.versions`, `plugins.apply` доступны source
+workspace с exact session/run. Check и Save принимают пустые arguments; Apply —
+optional semantic `version`, Versions — optional `before` ordinal (до 12 metadata rows).
+Runtime pins saved-entry identity independently of CAS release and current source.
+Foreign Save/source edits do not revoke saved Apply; active change/disable/hide do.
+Prepared handles are bounded to 128, pruned after the owning run ends, and never
+restored as approvals after restart. Model reads use `core.find/read/search`; candidate,
+release, entry IDs, ResourceRef, native paths and grants remain runtime-only.
 Полезный результат команды — её доменные данные/семантические имена.
 
 Workspace application source импортируется в Framework/CLI через `.projitems`.
@@ -512,7 +518,7 @@ Entrypoint kinds: `Script`, `Style`, `Module`, `Worker`, `Asset`.
 ## Data Templates и проверки
 
 Первый обычный plugin — `web/data-templates/plugin.json`. При первой установке он
-копируется в отдельный source workspace и проходит тот же check/apply. Форма
+копируется в отдельный source workspace и проходит тот же Check → Save → Activate. Форма
 `project.json`, UI/core, browser processing и standalone folder export сохранены.
 Native `ui/plugin-adapter.js` даёт scoped directory handles и передаёт inspection/XLSX
 в общий Worker service. `extract` создаёт временный canonical result;

@@ -22,11 +22,12 @@
 .preview-surface-completion>button{display:block;width:100%;padding:var(--space-2);border:0;text-align:left;overflow-wrap:anywhere;background:transparent;color:var(--ink);font:inherit}
 .preview-surface-completion>button[aria-selected="true"],.preview-surface-completion>button:hover{background:var(--surface-hover)}
 @container (max-width:600px){
-  .preview-surface-actions{display:none}
+  .preview-surface-toolbar{flex-wrap:wrap;height:auto}
+  .preview-surface-toolbar>.preview-surface-location{order:-1;flex-basis:100%}
+  .preview-surface-toolbar:not(.is-address-focused)>.preview-surface-actions{display:contents}
+  .preview-surface-toolbar:not(.is-address-focused)>.preview-surface-actions>:not(.preview-surface-persistent){display:none}
   .preview-surface-toolbar>.preview-surface-tools{display:inline-grid}
 }
-.plugin-preview{display:flex;flex-direction:column}
-.plugin-preview-frame-host{position:relative;flex:1;min-height:0;overflow:hidden}
 .html-workspace-preview{grid-template-rows:auto minmax(0,1fr)}
 .html-workspace-preview>.html-workspace-frame,.html-workspace-preview>.artifact-detail-preview{grid-column:1;grid-row:2;min-height:0}
 

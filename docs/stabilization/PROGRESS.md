@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser F3b — Plugin Save/Apply cutover, 2026-11-13
+
+`16.16.0-dev`: saved plugin catalog подключён к Application/tools/common Browser;
+старые candidate Apply и plugin view routes удалены, Dock restore prunes obsolete
+panels individually. Saved snapshots читаются независимо от live source directory.
+UI In Review, B02/Windows evidence открыт. Далее document/Workspace HTML checkpoints,
+raw HTML import, общий StartSurface и 07. [Детали](../browser/06_PROGRESS.md#f3b-plugin-cutover--2026-11-13).
+
+
 ## Local Browser F3b core — saved catalog, 2026-11-13
 
 PluginStore catalog/receipts/tombstones и отдельная active identity реализованы;

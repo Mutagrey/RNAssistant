@@ -1,5 +1,14 @@
 # Архитектура UI RNAssistant
 
+## Plugin saved versions — In Review, 2026-11-13
+
+Plugin rail открывает общий app-browser; app-plugin-view/app-plugin-release-view,
+их template и CSS удалены. app-artifact-versions владеет общими checkpoint controls;
+Application владеет Save/Activate/Delete, runtime IDs не выводятся модели. Метаданные
+versions не читают working bodies; отдельное state/check capture bounded и отменяемо.
+Dock owner нормализует schema 1→2 с выборочным pruning старых descriptors, без второго migrator.
+
+
 ## Local Browser source-only — In Review, 2026-11-13
 
 `app-browser` — один новый view для локальных адресов, `browserTabId` является Dock

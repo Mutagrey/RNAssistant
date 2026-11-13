@@ -1,5 +1,15 @@
 # План модернизации production UI
 
+## F3b Plugin Browser — In Review, 2026-11-13
+
+Plugin source/saved consumers переключены на common Browser/checkpoint controls.
+Для ревью: открыть плагин, Save, clock → сохранённая запись, удалить неактивную запись,
+повторить при 420 px/125%. `browser-saved-views` проверяет эти переходы и Unknown;
+`dock-layout-pruning` — сохранность соседних tabs после удаления прежнего route.
+Визуальное принятие пользователем и native evidence открыты. Document HTML editor,
+Workspace checkpoints и StartSurface продолжаются следующими сквозными этапами.
+
+
 ## F1a Local Browser — In Review, 2026-11-13
 
 Общий local source Browser подключён к production typed bridge. Старый external

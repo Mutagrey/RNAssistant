@@ -47,7 +47,6 @@ namespace RNAssistant.Application
             public PluginReleaseRecord Package;
             public string ExpectedRelease, Actor;
             public DateTime UsedUtc;
-            public bool Prepared;
         }
 
         public string StartupError { get; set; }
@@ -248,8 +247,8 @@ namespace RNAssistant.Application
                     (chosenIcon == "draw" ? "\n\nIcon brief: " + (request.IconDescription ?? "Use the plugin name and purpose.") +
                     "\nThe source chat can load skills.workspace.plugin.authoring to draw a static SVG icon with colors as ordinary text in icon.svg. Give it a viewBox fitting the artwork; the host normalizes display size. Set plugin.json icon to icon.svg and add that path to files; checking validates the self-contained SVG. No image-generation model is required.\n" :
                     "\n\nSelected icon: " + (savedIcon == null ? chosenIcon : savedIcon.Name) + ". Keep this icon unless the user asks to change it.\n") +
-                    "\n\nPlugin protocol v1. Edit ordinary source files; include new files in plugin.json. UI uses RNPlugin.invoke(command,args). Worker command modules register handlers with RNPluginCommands.register(id,async(args,context)=>result). context.files is a scoped project filesystem; no DOM/Office/network. Manifest capabilities project.read/project.write request host access, never grant it. Source workspace and user data projects are separate. Use plugins.check and plugins.apply after edits; checking validates package structure/dependencies, not business correctness. The preview gets a separate scratch data folder. Vendor packages use exact versions and mounts. No npm/build step.\n" +
-                    "\nSDK reference:\n- UI loads /.host/sdk.js. await RNPlugin.pickProject() returns a scoped directory handle. Selection is explicit; do not substitute the source workspace.\n- RNPlugin.invoke(id,args,onProgress) returns a promise with cancel(). Commands run outside the screen in a managed Worker.\n- Worker context.files.readText(path), writeText(path,text), open(path), createWriter(path) and root() use project-relative paths. open() returns size/name/readRange(offset,count)/close(). Close readers in finally.\n- Writers accept text/bytes through write(), then close() commits or abort() discards staging. Existing target reads are pinned and rechecked; uncertain writes must be inspected with files.reconcile(path), never retried automatically.\n- context.results.create(relativeName) stages a temporary result; context.results.open(relativeName) returns its retained file. Return semantic names in command results, not runtime transport tokens.\n- context.progress(message) reports bounded progress. Maximum command time is five minutes; no Office, parent bridge, network, local native paths or arbitrary filesystem access.\n- Command schemas use type:object, properties, required and additionalProperties:false; describe every top-level field. A writing command also needs writesData:true and both project.read/project.write capabilities.\n- Vendor dependencies declare exact id/version/mount. Include transitive dependencies explicitly. Changing vendor bytes requires a new version. Manifest and locks do not grant rights.\n- plugins.check and plugins.apply take empty arguments. Runtime owns the prepared candidate and confirmation. Verify the UI in preview before applying.\n");
+                    "\n\nPlugin protocol v1. Edit ordinary source files; include new files in plugin.json. UI uses RNPlugin.invoke(command,args). Worker command modules register handlers with RNPluginCommands.register(id,async(args,context)=>result). context.files is a scoped project filesystem; no DOM/Office/network. Manifest capabilities project.read/project.write request host access, never grant it. Source workspace and user data projects are separate. Use plugins.check, plugins.save, then explicit plugins.apply after edits; checking validates package structure/dependencies, not business correctness. The preview gets a separate scratch data folder. Vendor packages use exact versions and mounts. No npm/build step.\n" +
+                    "\nSDK reference:\n- UI loads /.host/sdk.js. await RNPlugin.pickProject() returns a scoped directory handle. Selection is explicit; do not substitute the source workspace.\n- RNPlugin.invoke(id,args,onProgress) returns a promise with cancel(). Commands run outside the screen in a managed Worker.\n- Worker context.files.readText(path), writeText(path,text), open(path), createWriter(path) and root() use project-relative paths. open() returns size/name/readRange(offset,count)/close(). Close readers in finally.\n- Writers accept text/bytes through write(), then close() commits or abort() discards staging. Existing target reads are pinned and rechecked; uncertain writes must be inspected with files.reconcile(path), never retried automatically.\n- context.results.create(relativeName) stages a temporary result; context.results.open(relativeName) returns its retained file. Return semantic names in command results, not runtime transport tokens.\n- context.progress(message) reports bounded progress. Maximum command time is five minutes; no Office, parent bridge, network, local native paths or arbitrary filesystem access.\n- Command schemas use type:object, properties, required and additionalProperties:false; describe every top-level field. A writing command also needs writesData:true and both project.read/project.write capabilities.\n- Vendor dependencies declare exact id/version/mount. Include transitive dependencies explicitly. Changing vendor bytes requires a new version. Manifest and locks do not grant rights.\n- plugins.check and plugins.save take empty arguments. plugins.apply uses this run's last saved version, or optional version (ordinal/unique label from plugins.versions). Runtime pins the saved entry and confirmation. Source edits never change an already saved target. Verify behavior before activation; preview execution may be unavailable until host isolation is qualified.\n");
                 var registration = _store.Connect(new PluginSourceWorkspace(workspace));
                 if (iconColor != null) registration = _store.SetAppearance(registration.PluginId,
                     new PluginAppearance { Name = registration.Name, Icon = registration.Icon, IconColor = iconColor });
@@ -276,7 +275,13 @@ namespace RNAssistant.Application
                 }
                 Connect(new PluginConnectRequest { RootPath = destination });
                 var checkedPackage = Check("data-templates");
-                Apply(new PluginApplyRequest { PluginId = "data-templates", CandidateId = checkedPackage.CandidateId });
+                var catalog = _store.VersionState("data-templates");
+                var saved = SavePluginVersion("data-templates", catalog.StateRevision,
+                    RequireCandidate("data-templates", checkedPackage.CandidateId).Package.PackageSha256,
+                    "install-save-" + Guid.NewGuid().ToString("N"), new SavedVersionActor { Kind = SavedVersionActorKind.User });
+                var active = RequireRegistration("data-templates");
+                ActivatePluginVersion("data-templates", saved.VersionId, active.ActiveRevision, active.ActiveSavedVersionId,
+                    active.ActiveReleaseId, "install-activate-" + Guid.NewGuid().ToString("N"));
             }
         }
 
@@ -354,25 +359,14 @@ namespace RNAssistant.Application
             }
         }
 
-        public PluginItemDto Apply(PluginApplyRequest request)
-        { return Apply(request, "user", null); }
-
-        private PluginItemDto Apply(PluginApplyRequest request, string actor, Action onDispatch)
+        public PluginItemDto ActivateSavedVersion(PluginActivateRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
-                RequireOpen(); var candidate = RequireCandidate(request.PluginId, request.CandidateId);
-                if (candidate.Actor != actor) throw new PluginException("plugin_candidate_owner", "Check belongs to another actor or run.");
-                var registration = RequireRegistration(request.PluginId);
-                if (registration.ActiveReleaseId != candidate.ExpectedRelease || registration.SourceWorkspaceId != candidate.Package.SourceWorkspaceId)
-                    throw new PluginException("plugin_selection_changed", "Plugin registration changed. Check again.");
-                var current = _store.Capture(Source(registration), Vendors, new[] { candidate.Package }, false);
-                if (current.ReleaseId != candidate.Package.ReleaseId)
-                    throw new PluginException("plugin_source_changed", "Source content changed after this check. Check again before applying.");
-                if (onDispatch != null) onDispatch();
-                var result = _store.Apply(candidate.Package, candidate.ExpectedRelease); _candidates.Remove(request.CandidateId);
-                _revoked.Remove(request.PluginId);
-                return Item(result);
+                RequireOpen();
+                ActivatePluginVersion(request.PluginId, request.VersionId, request.ExpectedActiveRevision,
+                    request.ExpectedActiveVersionId, request.ExpectedActiveReleaseId, request.OperationId);
+                return Item(RequireRegistration(request.PluginId));
             }
         }
 
@@ -382,10 +376,12 @@ namespace RNAssistant.Application
             {
                 RequireOpen();
                 if (request == null) throw new PluginException("plugin_history_invalid", "Укажите плагин.");
-                var page = _store.ListPublishedReleases(request.PluginId, request.Cursor);
-                return new PluginReleaseHistoryDto { Items = page.Items.Select(item => new PluginPublishedVersionDto {
-                    ReleaseId = item.ReleaseId, Name = item.Name, Version = item.Version,
-                    CapturedUtc = item.CapturedUtc, Active = item.Active }).ToArray(), NextCursor = page.NextCursor };
+                var page = _store.ListVersions(request.PluginId, request.Cursor);
+                var active = RequireRegistration(request.PluginId);
+                return new PluginReleaseHistoryDto { Items = page.Items.Select(entry => new PluginPublishedVersionDto {
+                    VersionId = entry.VersionId, Ordinal = entry.Ordinal, ReleaseId = Uri.UnescapeDataString(entry.ContentReference.Uri.Split('/').Last()),
+                    Name = active.Name, Version = entry.ManifestVersion, CapturedUtc = entry.CreatedUtc,
+                    Active = active.ActiveSavedVersionId == entry.VersionId }).ToArray(), NextCursor = page.Cursor };
             }
         }
 
@@ -396,8 +392,8 @@ namespace RNAssistant.Application
                 RequireOpen(); SourceComparisonService.Validate(request);
                 if (string.IsNullOrWhiteSpace(request.PluginId) || _store.Get(request.PluginId) == null)
                     throw new PluginException("plugin_missing", "Плагин недоступен.");
-                var before = _store.ReadPublishedRelease(request.PluginId, request.BeforeId);
-                var after = _store.ReadPublishedRelease(request.PluginId, request.AfterId);
+                var before = _store.ReadSavedRelease(request.PluginId, request.BeforeId);
+                var after = _store.ReadSavedRelease(request.PluginId, request.AfterId);
                 return SourceComparisonService.Read(request,
                     "v" + JsonConvert.DeserializeObject<PluginManifestV1>(before.ManifestJson).Version + " · " + before.ReleaseId,
                     "v" + JsonConvert.DeserializeObject<PluginManifestV1>(after.ManifestJson).Version + " · " + after.ReleaseId,
@@ -412,37 +408,23 @@ namespace RNAssistant.Application
                 Read = () => SourceComparisonService.Utf8(_store.ReadFile(release, file.Path)) });
         }
 
-        public PluginItemDto RestoreVersion(PluginRestoreVersionRequest request)
-        {
-            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
-            {
-                RequireOpen();
-                if (request == null || string.IsNullOrWhiteSpace(request.ReleaseId))
-                    throw new PluginException("plugin_history_invalid", "Выберите сохранённую версию.");
-                var restored = _store.RestorePublishedRelease(request.PluginId, request.ReleaseId, request.ExpectedActiveReleaseId);
-                foreach (var id in _candidates.Where(item => item.Value.Package.PluginId == request.PluginId).Select(item => item.Key).ToArray())
-                    _candidates.Remove(id);
-                _revoked.Remove(request.PluginId);
-                return Item(restored);
-            }
-        }
-
         public PluginViewDto Open(PluginOpenRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
-                RequireOpen(); var registration = RequireRegistration(request.PluginId);
-                if (!string.IsNullOrEmpty(request.CandidateId) && !string.IsNullOrEmpty(request.ReleaseId))
+                RequireOpen(); _store.VersionState(request.PluginId); var registration = RequireRegistration(request.PluginId);
+                if (!string.IsNullOrEmpty(request.CandidateId) && !string.IsNullOrEmpty(request.VersionId))
                     throw new PluginException("plugin_history_invalid", "Выберите один источник предпросмотра.");
-                var preview = !string.IsNullOrEmpty(request.CandidateId) || !string.IsNullOrEmpty(request.ReleaseId);
-                if (!preview && _revoked.Contains(request.PluginId)) throw new PluginException("plugin_disabled", "Apply a checked version to enable this plugin again.");
-                if (!preview && (!registration.Enabled || registration.ActiveReleaseId == null)) throw new PluginException("plugin_disabled", "Apply a checked version before opening this plugin.");
+                var preview = !string.IsNullOrEmpty(request.CandidateId) || !string.IsNullOrEmpty(request.VersionId);
+                if (!preview && _revoked.Contains(request.PluginId)) throw new PluginException("plugin_disabled", "Save and apply a version to enable this plugin again.");
+                if (!preview && (!registration.Enabled || registration.ActiveReleaseId == null)) throw new PluginException("plugin_disabled", "Save and apply a version before opening this plugin.");
                 var release = !string.IsNullOrEmpty(request.CandidateId) ? RequireCandidate(request.PluginId, request.CandidateId).Package :
-                    !string.IsNullOrEmpty(request.ReleaseId) ? _store.ReadPublishedRelease(request.PluginId, request.ReleaseId) :
+                    !string.IsNullOrEmpty(request.VersionId) ? _store.ReadSavedRelease(request.PluginId, request.VersionId) :
                     _store.ReadRelease(new PluginReleaseIdentity(request.PluginId, registration.ActiveReleaseId));
                 if (release.SourceWorkspaceId != registration.SourceWorkspaceId)
                     throw new PluginException("plugin_selection_changed", "Версия принадлежит другому workspace.");
-                var instance = new PluginInstance(_paths, release, preview) { Results = _results }; _instances.Add(instance.Id, instance);
+                var instance = new PluginInstance(_paths, release, preview) { Results = _results,
+                    SavedVersionId = !string.IsNullOrEmpty(request.CandidateId) ? null : request.VersionId ?? registration.ActiveSavedVersionId }; _instances.Add(instance.Id, instance);
                 return new PluginViewDto { InstanceId = instance.Id, PluginId = request.PluginId,
                     ReleaseId = release.ReleaseId, Preview = preview, EntryUrl = instance.EntryUrl };
             }
@@ -633,13 +615,14 @@ namespace RNAssistant.Application
             Action<string> progress = null, string callId = null, Action onDispatch = null)
         {
             context.Token.ThrowIfCancellationRequested();
+            if (context.SavedVersionId != null) _store.SavedVersion(context.Manifest.Id, context.SavedVersionId);
             if (!context.Preview) { var active = RequireRegistration(context.Manifest.Id);
-                if (!active.Enabled || active.ActiveReleaseId != context.Release.ReleaseId) throw new PluginException("plugin_version_changed", "Reopen the active plugin before starting a new command."); }
+                if (!active.Enabled || active.ActiveReleaseId != context.Release.ReleaseId || active.ActiveSavedVersionId != context.SavedVersionId) throw new PluginException("plugin_version_changed", "Reopen the active plugin before starting a new command."); }
             if (Executor == null) throw new PluginException("plugin_executor_unavailable", "This host has no plugin command executor.");
             var command = context.Manifest.Commands.SingleOrDefault(value => value.Id == commandId);
             if (command == null) throw new PluginException("plugin_command_missing", "Command is not part of this exact plugin package.");
             ValidateJson(argumentsJson, command.ArgumentsSchema);
-            var operation = new PluginInstance(_paths, context.Release, context.Preview, true, command.WritesData) { OnDispatch = onDispatch, Results = _results, ResultOwnerId = context.ResultOwnerId };
+            var operation = new PluginInstance(_paths, context.Release, context.Preview, true, command.WritesData) { OnDispatch = onDispatch, Results = _results, ResultOwnerId = context.ResultOwnerId, SavedVersionId = context.SavedVersionId };
             if (context.Data != null) { await operation.BindAsync(context.Data).ConfigureAwait(false); await operation.InheritSourcesAsync(context).ConfigureAwait(false); }
             var tracked = false;
             try
@@ -648,10 +631,11 @@ namespace RNAssistant.Application
                 {
                     RequireOpen();
                     context.Token.ThrowIfCancellationRequested();
+                    if (context.SavedVersionId != null) _store.SavedVersion(context.Manifest.Id, context.SavedVersionId);
                     if (!context.Preview)
                     {
                         var current = RequireRegistration(context.Manifest.Id);
-                        if (_revoked.Contains(context.Manifest.Id) || !current.Enabled || current.ActiveReleaseId != context.Release.ReleaseId)
+                        if (_revoked.Contains(context.Manifest.Id) || !current.Enabled || current.ActiveReleaseId != context.Release.ReleaseId || current.ActiveSavedVersionId != context.SavedVersionId)
                             throw new PluginException("plugin_version_changed", "The plugin changed before command acceptance.");
                     }
                     if (callId != null && _calls.ContainsKey(context.Id + ":" + callId)) throw new PluginException("plugin_call_pending", "This request ID already has an active command.");
@@ -1154,15 +1138,16 @@ namespace RNAssistant.Application
             PruneCandidates();
             Candidate value;
             if (id == null || !_candidates.TryGetValue(id, out value) || value.Package.PluginId != pluginId)
-                throw new PluginException("plugin_candidate_missing", "Check this plugin again before applying or previewing.");
+                throw new PluginException("plugin_candidate_missing", "Check this plugin again before saving or previewing.");
             value.UsedUtc = DateTime.UtcNow;
             return value;
         }
 
         private void PruneCandidates()
         {
+            PruneSavedIntents();
             var cutoff = DateTime.UtcNow.AddHours(-1);
-            foreach (var item in _candidates.Where(item => !item.Value.Prepared && item.Value.UsedUtc < cutoff &&
+            foreach (var item in _candidates.Where(item => item.Value.UsedUtc < cutoff && !_savedPreparations.Values.Any(prepared => prepared.Candidate == item.Key) &&
                 !_instances.Values.Any(instance => instance.Release.ReleaseId == item.Value.Package.ReleaseId)).ToArray())
                 _candidates.Remove(item.Key);
         }
@@ -1184,7 +1169,9 @@ namespace RNAssistant.Application
             var item = new PluginItemDto { PluginId = value.PluginId, Name = value.Appearance?.Name ?? value.Name,
                 Icon = value.Appearance?.Icon ?? value.Icon, IconSvg = value.Appearance?.IconSvg, IconColor = value.Appearance?.IconColor,
                 SourceWorkspaceId = value.SourceWorkspaceId, SourceRoot = value.SourceRoot,
-                ReleaseId = value.ActiveReleaseId, Enabled = value.Enabled, Hidden = value.Hidden };
+                ReleaseId = value.ActiveReleaseId, SavedVersionId = value.ActiveSavedVersionId, ActiveRevision = value.ActiveRevision, Enabled = value.Enabled, Hidden = value.Hidden };
+            try { item.EntryPath = PluginPackageFiles.ParseManifest(PluginPackageFiles.Utf8.GetString(PluginPackageFiles.Read(value.SourceRoot, "plugin.json", 1024 * 1024))).Entry; }
+            catch (Exception error) when (error is PluginException || error is System.IO.IOException || error is DecoderFallbackException) { item.EntryPath = "plugin.json"; }
             if (item.IconSvg == null && PluginPackageFiles.IconIsSvgPath(item.Icon))
             {
                 try
@@ -1203,7 +1190,7 @@ namespace RNAssistant.Application
             lock (_sync)
             {
                 if (_closing != null) return _closing;
-                _disposed = true;
+                _disposed = true; _savedIntents.Clear(); _savedPreparations.Clear();
                 var instances = _instances.Values.ToArray(); _instances.Clear();
                 foreach (var instance in instances) instance.Dispose();
                 foreach (var data in _data.Values) data.Dispose();

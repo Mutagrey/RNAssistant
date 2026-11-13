@@ -1,5 +1,16 @@
 # Universal Browser: предлагаемые контракты
 
+## Plugin saved-version consumers — 2026-11-13
+
+Typed bridge: GetBrowserVersionState / GetBrowserVersions / BrowserVersionCommand
+и BrowserVersionStateChanged; пока этот новый checkpoint adapter реализован для plugins.
+Activate pin: saved VersionId + expectedActiveVersionId/expectedActiveReleaseId/
+expectedActiveRevision; Save pin: expectedStateRevision + expectedContentRevision.
+Changed сообщает metadata, не authority. UI owner/run и tab selection не становятся
+частью catalog revision. Unknown сохраняет original operation; receipt может ссылаться
+на уже Removed entry, без resurrection. Workspace contribution получает exact ChatSession.
+
+
 F3b: BrowserVersionState adds activeStateRevision; Activate commands pin
 expectedActiveRevision plus the selected saved entry and active release. This guard
 is independent of unrelated catalog Save operations. Save/Delete keep the catalog

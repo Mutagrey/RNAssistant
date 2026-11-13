@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Checkpoint controls — In Review, 2026-11-13
+
+Общие compact Save (shared save icon), clock и Apply используют PreviewSurface и
+ActionMenu; корзина — sibling action строки, не вложенная кнопка. Save всегда видим,
+включая disabled с причиной. В narrow toolbar адрес переносится на полную ширину,
+Save остаётся вне скрываемых secondary controls. Общие tokens; дальнейшее сокращение
+toolbar — 07. [Wide](review/browser-versions-wide.png), [420 px / 125%](review/browser-versions-narrow.png).
+
+
 ## Local Browser combobox — In Review, 2026-11-13
 
 PreviewSurface расширен local combobox: Up/Down/Enter, Escape/blur без перехода,

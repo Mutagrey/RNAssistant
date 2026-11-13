@@ -56,7 +56,7 @@ namespace RNAssistant.Runtime
         private readonly ChatBlobStore _payloads;
         private readonly WorkspaceWebSnapshotStore _webSnapshots;
         private readonly IWorkspaceWebVerifierFactory _webHost;
-        private readonly Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> _extraTools;
+        private readonly Func<WorkspaceDescriptor, ChatSession, IReadOnlyList<WorkspaceToolContribution>> _extraTools;
         private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
         private readonly IBrowserCapabilityContribution _browserCapabilities;
         private readonly CallableToolProfile _toolProfile;
@@ -97,7 +97,7 @@ namespace RNAssistant.Runtime
             new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
         public WorkspaceConversationService(AppDataPaths paths, IWorkspaceWebVerifierFactory webHost = null,
-            Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> extraTools = null,
+            Func<WorkspaceDescriptor, ChatSession, IReadOnlyList<WorkspaceToolContribution>> extraTools = null,
             IWorkspaceOfficeCapabilities officeCapabilities = null,
             Func<IDisposable> runtimeUseLease = null,
             Func<WorkspaceDescriptor, bool> isPluginSourceWorkspace = null,
@@ -406,7 +406,7 @@ namespace RNAssistant.Runtime
         {
             return new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
                 runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost,
-                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities)
+                extraTools: _extraTools?.Invoke(workspace, null), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities)
                 .ToolIds;
         }
 
@@ -534,7 +534,7 @@ namespace RNAssistant.Runtime
                     var pendingRun = session.LastRun.KernelState;
                     var pendingPorts = new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace,
                         session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
-                        webHost: _webHost, extraTools: _extraTools?.Invoke(workspace),
+                        webHost: _webHost, extraTools: _extraTools?.Invoke(workspace, session),
                         office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
                         pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
@@ -588,7 +588,7 @@ namespace RNAssistant.Runtime
                 var officeTarget = pluginSource ? null : _officeCapabilities?.CaptureCurrentTarget();
                 var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
-                    extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId), browserRunId: runId,
+                    extraTools: _extraTools?.Invoke(workspace, session), office: OfficeFor(workspace, officeTarget, session, settings, runId), browserRunId: runId,
                     pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value),
                     toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                 var userMessage = new ChatMessage { Id = queuedInput?.Id ?? Guid.NewGuid().ToString("N"), Role = "user",
@@ -736,7 +736,7 @@ namespace RNAssistant.Runtime
                 };
                 var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace, session,
                     settings ?? new AppSettings(), apiKeyProvider, report, acceptance, approve, webHost: _webHost,
-                    extraTools: _extraTools?.Invoke(workspace),
+                    extraTools: _extraTools?.Invoke(workspace, session),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value),
                     toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);

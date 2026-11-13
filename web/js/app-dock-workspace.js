@@ -2,7 +2,7 @@
   "use strict";
   // Placement only. Conversation state, commands and drafts retain their existing owners.
   var api, host, parking, roots = {}, owner = "office", section = "chat";
-  var saveTimer, restoring = false;
+  var saveTimer, restoring = false, preservePreference = false;
   var compact = false, wideLayout = null, settingsVisible = false;
   var nativeVisible = true, hostCompact = false, compactChat = null, fullPresentation = null, compactEmpty;
   var tabFrame;
@@ -201,8 +201,9 @@
     });
   }
   function persist() {
+    if (preservePreference) return;
     if (hostCompact) return; // transient group maximize never replaces the durable Full layout
-    try { localStorage.setItem(storageKey, JSON.stringify({ version: 1, layout: compact && wideLayout || api.toJSON() })); }
+    try { localStorage.setItem(storageKey, JSON.stringify({ version: 2, layout: compact && wideLayout || api.toJSON() })); }
     catch (error) { notice("Компоновка не сохранена: хранилище недоступно"); }
   }
   function changed() {
@@ -407,7 +408,8 @@
     if (!layout || !layout.grid || !layout.panels) return false;
     var counts = {};
     return Object.keys(layout.panels).every(function (id) {
-      var spec = layout.panels[id], view = views[spec.contentComponent];
+      var spec = layout.panels[id], view = spec && Object.prototype.hasOwnProperty.call(views, spec.contentComponent) && views[spec.contentComponent];
+      if (!spec) return false;
       if (/^choose-\d+$/.test(id) && spec.contentComponent === "chooser") return true;
       if (!view || view.targetRoute) return false;
       if (!view.perObject) return spec.contentComponent === id;
@@ -415,9 +417,44 @@
       return counts[spec.contentComponent] <= view.maximumInstances && spec.params && view.accepts(spec.params.target) && view.key(spec.params.target) === id;
     });
   }
+  function normalizeLayout(input) {
+    if (!input || !input.grid || !input.panels || JSON.stringify(input).length > 1024 * 1024 || Object.keys(input.panels).length > 128)
+      throw new Error("Формат раскладки недоступен");
+    var layout = JSON.parse(JSON.stringify(input)), counts = Object.create(null), seen = new Set(), groups = new Set(), nodes = 0, pruned = 0;
+    Object.keys(layout.panels).forEach(function (id) {
+      var spec = layout.panels[id], view = spec && Object.prototype.hasOwnProperty.call(views, spec.contentComponent) && views[spec.contentComponent];
+      var single = {}; single[id] = spec;
+      var valid = validateLayout({ grid: {}, panels: single });
+      if (valid && view && view.perObject) { counts[spec.contentComponent] = (counts[spec.contentComponent] || 0) + 1; valid = counts[spec.contentComponent] <= view.maximumInstances; }
+      if (!valid) { delete layout.panels[id]; pruned++; }
+    });
+    function visit(node, depth) {
+      if (!node || ++nodes > 512 || depth > 32 || node.size != null && (!Number.isFinite(node.size) || node.size < 0)) throw new Error("Некорректная геометрия раскладки");
+      if (node.type === "branch") {
+        if (!Array.isArray(node.data)) throw new Error("Некорректная группа раскладки");
+        node.data = node.data.map(function (child) { return visit(child, depth + 1); }).filter(Boolean);
+        return node.data.length ? node : null;
+      }
+      if (node.type !== "leaf" || !node.data || !Array.isArray(node.data.views) || typeof node.data.id !== "string" || groups.has(node.data.id))
+        throw new Error("Некорректная панель раскладки");
+      var data = node.data;
+      data.views = data.views.filter(function (id) { if (typeof id !== "string" || !layout.panels[id] || seen.has(id)) return false; seen.add(id); return true; });
+      if (!data.views.length) return null;
+      if (!data.views.includes(data.activeView)) data.activeView = data.views[0];
+      groups.add(data.id); return node;
+    }
+    layout.grid.root = visit(layout.grid.root, 0);
+    if (!layout.grid.root) throw new Error("В раскладке не осталось доступных панелей");
+    Object.keys(layout.panels).forEach(function (id) { if (!seen.has(id)) { delete layout.panels[id]; pruned++; } });
+    if (!groups.has(layout.activeGroup)) layout.activeGroup = groups.values().next().value;
+    if (layout.maximizedGroup && !groups.has(layout.maximizedGroup)) delete layout.maximizedGroup;
+    if (!validateLayout(layout)) throw new Error("Не удалось проверить преобразованную раскладку");
+    return { layout: layout, pruned: pruned };
+  }
   function reset() {
     if (window.RNAssistantWindow && RNAssistantWindow.inFull(reset)) return;
     if (!canClose(api.panels)) return;
+    preservePreference = false;
     restoring = true; wideLayout = null; api.clear();
     var chat = api.addPanel({ id: "conversation", component: "conversation", title: "Чат", renderer: views.conversation.renderer,
       params: { target: { view: "conversation", source: "office", sessionId: "" } } });
@@ -516,8 +553,15 @@
     document.addEventListener("pointercancel", endDrag, { capture: true, signal: dragListeners.signal });
     window.addEventListener("blur", endDrag, { signal: dragListeners.signal });
     restoring = true;
-    try { var saved = JSON.parse(localStorage.getItem(storageKey)); if (saved && saved.version === 1 && validateLayout(saved.layout)) restoreLayout(saved.layout); else { reset(); if (saved) notice("Прежняя компоновка недоступна. Открыт исходный вид."); } }
-    catch (error) { reset(); notice("Не удалось прочитать компоновку. Открыт исходный вид."); }
+    try {
+      var saved = JSON.parse(localStorage.getItem(storageKey));
+      if (saved) {
+        if (![1, 2].includes(saved.version)) throw new Error("Неизвестная версия раскладки");
+        var normalized = normalizeLayout(saved.layout); restoreLayout(normalized.layout);
+        localStorage.setItem(storageKey, JSON.stringify({ version: 2, layout: normalized.layout }));
+        if (normalized.pruned) notice("Убраны недоступные вкладки: " + normalized.pruned + ". Остальная раскладка сохранена.");
+      } else reset();
+    } catch (error) { reset(); preservePreference = true; notice("Не удалось прочитать компоновку. Сохранённая раскладка не изменена."); }
     restoring = false;
     api.onDidLayoutChange(changed); api.onDidActivePanelChange(function () {
       var record = api.activePanel && objectViews[api.activePanel.id];
@@ -536,9 +580,9 @@
       layout: function (trigger) {
         menu(trigger, [["Чат и инспектор", "panel", reset], ["Одна группа вкладок", "layers", join],
           ["Сохранить раскладку", "check", function () { try { localStorage.setItem(savedKey, JSON.stringify(api.toJSON())); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
-          ["Вернуть сохранённую", "refresh", function () { try { var layout = JSON.parse(localStorage.getItem(savedKey)); if (validateLayout(layout)) {
+          ["Вернуть сохранённую", "refresh", function () { try { var layout = normalizeLayout(JSON.parse(localStorage.getItem(savedKey))).layout; if (validateLayout(layout)) {
             if (!canClose(api.panels.filter(function (item) { return !layout.panels[item.id]; }))) return;
-            restoring = true; wideLayout = null; restoreLayout(layout); restoring = false; changed(); notice("Раскладка восстановлена");
+            restoring = true; wideLayout = null; restoreLayout(layout); preservePreference = false; restoring = false; changed(); notice("Раскладка восстановлена");
           } else notice("Сохранённой раскладки нет или её формат недоступен"); } catch (error) { restoring = false; notice("Не удалось восстановить раскладку"); } }]]);
       }
     });

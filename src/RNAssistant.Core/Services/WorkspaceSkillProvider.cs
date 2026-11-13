@@ -44,9 +44,9 @@ Use only in the source workspace of a plugin with plugin.json. Load skills.works
 
 For an icon brief, draw the icon yourself as a complete static SVG document in icon.svg. Give it a viewBox fitting the artwork tightly with a small safety margin, without a large empty canvas; the host sizes it to 24 pixels while preserving the aspect ratio. Colors, fills, strokes, gradients, transforms, SVG styles and local defs/references are supported and preserved. Use currentColor only for a theme-colored design. Keep it compact and legible at 20 px. Do not include scripts, event handlers, animation, foreignObject, external resources or raster images. No image-generation model is needed. Set plugin.json icon to icon.svg and include icon.svg in files; update an existing icon through an exact source read and file patch/replace. The default puzzle icon remains until a validated SVG is published.
 
-After source edits, call plugins.check when available. A successful check proves package structure and safe icon syntax, not application behavior. Open the checked preview and verify the requested UI or command behavior. Apply only after the intended publication is confirmed; then read the active state. If the icon validator rejects the file, repair the SVG source and check again. Never replace an existing plugin's source merely to change its icon." + VisualAnnotationSourceWorkflow.Common + @"
+After source edits, call plugins.check when available. A successful check proves package structure and safe icon syntax, not application behavior. Inspect the checked snapshot and verify the requested behavior when qualified execution is available; report a source-only preview limit honestly. Call plugins.save to create an explicit checkpoint. Apply only after the intended activation is confirmed; then read the active state. If the icon validator rejects the file, repair the SVG source and check again. Never replace an existing plugin's source merely to change its icon." + VisualAnnotationSourceWorkflow.Common + @"
 
-For a plugin annotation, inspect plugin.json and only its declared HTML/CSS/JS source files. The accepted annotation is pinned to a retained release, while core.patch targets the current source workspace: re-read the current file and refuse an unexplained source/preview mismatch. Patch a unique current source anchor with core.patch; use plugins.check to retain a candidate and inspect that exact candidate in the right preview. A check alone validates the package, not the requested appearance or interaction. Only call plugins.apply when the user's publication intent and the normal confirmation boundary permit it.")
+For a plugin annotation, inspect plugin.json and only its declared HTML/CSS/JS source files. The accepted annotation is pinned to a retained release, while core.patch targets the current source workspace: re-read the current file and refuse an unexplained source/preview mismatch. Patch a unique current source anchor with core.patch; use plugins.check to retain a candidate and inspect that exact candidate in the right preview. A check alone validates the package, not the requested appearance or interaction. Use plugins.save to create this run's explicit checkpoint before plugins.apply. plugins.apply pins this run's last Save result, or an explicitly selected ordinal/unique label from plugins.versions. Source edits do not retarget saved versions. Only activate when the user's publication intent and normal confirmation permit it.")
             };
         }
 
@@ -59,6 +59,10 @@ For a plugin annotation, inspect plugin.json and only its declared HTML/CSS/JS s
             {
                 optional.Add(new SkillToolDependency { Id = "plugins.check",
                     Fallback = "Inspect the plugin source and report that package validation and a checked preview are unavailable; do not claim a validated candidate." });
+                optional.Add(new SkillToolDependency { Id = "plugins.save",
+                    Fallback = "Keep source edits and report that saved checkpoints are unavailable; never apply a checked candidate as a substitute." });
+                optional.Add(new SkillToolDependency { Id = "plugins.versions",
+                    Fallback = "Use only this run's own last Save result; do not guess a version or use another actor's publication." });
                 optional.Add(new SkillToolDependency { Id = "plugins.apply",
                     Fallback = "Keep the source changes and report that activation is unavailable; do not claim publication." });
             }
