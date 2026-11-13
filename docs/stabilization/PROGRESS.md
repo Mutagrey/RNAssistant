@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Browser audit corrections complete locally — 2026-11-14
+
+`16.27.0-dev`: исправлены A1–A7 аудита пакета 00–08 отдельными срезами; последний —
+пользовательский PNG через native capture и существующий data-plane. Local Browser
+13/13, actual-controller export/screenshot, Chromium UI/download/offline bindings и
+binary reader 7/7 проходят. [Evidence](../browser/05_TEST_MATRIX.md).
+Открыты Windows WebView2 compilation/history/input/isolation/lifetime и принятие UI;
+локальная проверка не является Office qualification. Push/release не выполнялись.
+
 ## Browser explicit context handoff — 2026-11-14
 
 `16.26.0-dev`: A6 connected end to end. Manual cross-project navigation revokes agent

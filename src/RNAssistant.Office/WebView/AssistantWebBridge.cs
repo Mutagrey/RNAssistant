@@ -241,6 +241,18 @@ namespace RNAssistant.Office.WebView
                         if (Browser == null) throw new InvalidOperationException("Локальный Browser недоступен на этом host.");
                         responsePayload = await Browser.ExecuteAsync(Payload<BrowserCommandPayload>(payload), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.CaptureBrowserScreenshot:
+                        var screenshots = Browser as IBrowserScreenshotSource;
+                        var media = Browser as IBrowserMediaSource;
+                        if (screenshots == null || media == null) throw new InvalidOperationException("Снимок Browser недоступен на этом host.");
+                        var screenshotRequest = Payload<BrowserScreenshotRequest>(payload);
+                        var screenshot = await screenshots.CaptureScreenshotAsync(screenshotRequest, cancellationToken).ConfigureAwait(false);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.OpenBrowserScreenshot(screenshotRequest, screenshot,
+                            () => media.IsCaptureCurrent(screenshot), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.CloseBrowserScreenshot:
+                        responsePayload = _controller.CloseBrowserScreenshot(Payload<BrowserScreenshotRequest>(payload));
+                        break;
                     case BridgeOperationId.StageBrowserVisualSelection:
                         var annotations = Browser as IBrowserAnnotationSource;
                         if (annotations == null) throw new InvalidOperationException("Аннотации Browser недоступны на этом host.");

@@ -1,5 +1,12 @@
 # План модернизации production UI
 
+## Browser screenshot — In Review, 2026-11-14
+
+A7 завершён локально: общий screenshot action, exact native session, PNG data-plane,
+late-close cleanup; источник данных чата не создаётся. Browser audit A1–A7 corrected.
+Chromium wide/narrow download/privacy/source-state и предыдущие export/binding checks
+проходят. Принятие UI и Windows native evidence открыты; следующая UI-фаза не начата.
+
 ## Browser explicit binding — In Review, 2026-11-14
 
 A6 local implementation is complete in 16.26.0-dev. Review: open a bound page →

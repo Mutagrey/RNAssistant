@@ -48,14 +48,25 @@ namespace RNAssistant.Office.WebView
         { _ui.Post(async ignored => { try { await Exact(target).PresentResult(preparation, effect); } catch { } }, null); }
         public Task<BrowserMediaCapture> ReadMediaAsync(BrowserPageHandle target, CancellationToken token)
         { return Action(target, page => page.ReadMediaAsync(token), token); }
+        public async Task<BrowserMediaCapture> CaptureScreenshotAsync(BrowserScreenshotRequest request, CancellationToken token)
+        {
+            await _dispatch.WaitAsync(token).ConfigureAwait(false);
+            try { return await OnUi(async () => {
+                token.ThrowIfCancellationRequested(); LocalBrowserPage page;
+                if (_closed || request?.BrowserTabId == null || !_pages.TryGetValue(request.BrowserTabId, out page) || !page.Ready ||
+                    page.State.SessionId != request.SessionId || page.State.DocumentGeneration != request.Generation)
+                    throw new InvalidOperationException("Страница снимка изменилась. Повторите действие.");
+                return await page.ReadMediaAsync(token);
+            }).ConfigureAwait(false); } finally { _dispatch.Release(); }
+        }
         public bool IsCaptureCurrent(BrowserMediaCapture capture)
         { return capture?.Page != null && _captures.Any(value => value.Page.Matches(capture.Page) && value.ViewportRevision == capture.ViewportRevision && value.ControlRevision == capture.ControlRevision && value.Zoom == capture.Zoom); }
         private volatile BrowserMediaCapture[] _captures = new BrowserMediaCapture[0];
         private volatile BrowserPageHandle[] _handles = new BrowserPageHandle[0];
         private void RefreshHandles()
         {
-            var pages = _pages.Values.Where(page => page.Ready && page.State.ChatBound).ToArray();
-            _handles = pages.Select(page => page.Handle).ToArray();
+            var pages = _pages.Values.Where(page => page.Ready).ToArray();
+            _handles = pages.Where(page => page.State.ChatBound).Select(page => page.Handle).ToArray();
             _captures = pages.Where(page => page.Control.Visible).Select(page => new BrowserMediaCapture { Page = page.Handle,
                 ViewportRevision = page.State.ViewportRevision, ControlRevision = page.State.ControlRevision, Zoom = page.Controller.ZoomFactor }).ToArray();
         }

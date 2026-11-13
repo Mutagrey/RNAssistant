@@ -114,7 +114,18 @@
       selectionOff: function () { annotationHost.deactivate(); }, focusPage: function () { command('Focus').catch(fail); } });
     var providerActions = RNAssistantBrowserActions.mount(surface.actions, { target: function () { return current && current.target; },
       generation: function () { return current && current.documentGeneration; }, isCurrent: function () { return active && !disposed; },
-      status: function (message) { surface.waiting(label(), message); }, error: fail, discuss: discuss, find: pageFind.open, canFind: pageFind.enabled });
+      status: surface.status, error: fail, discuss: discuss, find: pageFind.open, canFind: pageFind.enabled,
+      canScreenshot: function () { return active && !disposed && selectedMode === "preview" && current && current.status === "Ready" && current.attached && current.target.capabilities.media; },
+      screenshotRequest: function () { return { browserTabId: target.browserTabId, sessionId: session, generation: current.documentGeneration }; },
+      captureScreenshot: async function (request) {
+        function exact() { return active && !disposed && selectedMode === "preview" && session === request.sessionId && current.documentGeneration === request.generation; }
+        if (!exact()) throw new Error("Страница снимка изменилась.");
+        // The menu/picker hid the native HWND; acknowledge its visible placement before capture.
+        surface.collapse();
+        await command("Layout", { bounds: nativeBounds() });
+        if (!exact()) throw new Error("Страница снимка изменилась.");
+        return send("captureBrowserScreenshot", request);
+      } });
     var versionControls = RNAssistantArtifactVersions.mountBrowser(surface.actions, {
       target: function () { return current && current.target; }, request: request,
       isCurrent: function () { return active && !disposed; }, navigate: function (locator) { return command("Navigate", { locator: locator }); },

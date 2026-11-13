@@ -45,6 +45,13 @@
       var target = context.target(); if (!target || target.state !== "Ready") return;
       var caps = target.capabilities, copy = operation(target), items = [];
       if (context.canFind && context.canFind()) items.push({ label: 'Найти на странице', icon: 'search', onSelect: context.find });
+      if (context.canScreenshot) items.push({ label: "Скачать снимок страницы", icon: "image", disabled: !context.canScreenshot(), onSelect: function () {
+        var request = context.screenshotRequest(), accepted = capture(target);
+        return RNAssistantArtifactDownload.save({ title: "rnassistant-page.png" }, { send: send, fetch: window.fetch.bind(window), signal: abort.signal,
+          isCurrent: function () { return accepted() && context.canScreenshot(); }, status: context.status, prepareMessage: "Подготовка снимка…",
+          open: function () { return context.captureScreenshot(request); },
+          close: function (lease) { return send("closeBrowserScreenshot", Object.assign({}, request, { leaseId: lease })); } });
+      } });
       if (caps.edit && target.kind === "HtmlWorkspace") items.push({ label: "Редактировать исходники", icon: "code", onSelect: function () {
         return RNAssistantHtmlWorkspaceSurface.open(target.chatId, { mode: "edit" }); } });
       if (caps.exportProject && ["HtmlWorkspace", "HtmlArtifact"].includes(target.kind)) items.push({ label: "Скачать автономный HTML", icon: "download", onSelect: function () {

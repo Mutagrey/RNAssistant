@@ -11,7 +11,7 @@
         if (!current()) return;
         writable = await handle.createWritable();
       }
-      status("Подготовка оригинала…");
+      status(options.prepareMessage || "Подготовка оригинала…");
       var operation = options.open ? options.open() : options.send("exportArtifact", { chatId: target.chatId, documentId: target.documentId,
         resourceUri: target.resourceUri, preview: false });
       transfer = await operation;

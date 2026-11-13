@@ -1,12 +1,14 @@
 # Stabilization risk register
 
-## Browser package audit — Open, 2026-11-13
+## Browser package audit — implementation corrected, evidence open, 2026-11-14
 
 Owner: Browser native/runtime + existing export/annotation/version services.
 A3 исправлен в 16.25.2-dev; A1/A2/A5 — в 16.25.3-dev (локальная реализация и
 регрессионные проверки). Windows native history/input/isolation evidence открыт.
 A4 исправлен в 16.25.4-dev; команды/preparations защищены, viewer отзывается.
-A6 исправлен в 16.26.0-dev. Остаток: A7 screenshot UI. [Evidence](../browser/05_TEST_MATRIX.md).
+A6 исправлен в 16.26.0-dev; A7 screenshot UI — в 16.27.0-dev. Все A1–A7 закрыты
+локальной реализацией/регрессиями. Остаток — Windows qualification и принятие UI.
+[Evidence](../browser/05_TEST_MATRIX.md).
 
 ## Local Browser B02 — Open, 2026-11-13
 

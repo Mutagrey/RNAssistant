@@ -1,5 +1,11 @@
 # Карта экранов, навигации и состояний
 
+## Browser screenshot — In Review, 2026-11-14
+
+В меню «Действия страницы» добавлено «Скачать снимок страницы» (PNG видимой области).
+Доступно для Ready preview, в том числе без чата; Source/Unavailable отключены.
+Приватные или непроверяемые области показывают отказ через общий status.
+
 ## Browser explicit binding — In Review, 2026-11-14
 
 Manual address navigation can change project/plugin in the same tab. The existing

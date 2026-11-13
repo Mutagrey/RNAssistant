@@ -1,5 +1,11 @@
 # Архитектура UI RNAssistant
 
+## Browser screenshot — In Review, 2026-11-14
+
+Screenshot consumer использует общий Browser Actions → typed native capture →
+существующий ResourceDataPlaneService/ArtifactDownload. Owner — exact page session,
+не чат; отдельного screenshot store, registry или grant агенту нет.
+
 ## Browser explicit binding — In Review, 2026-11-14
 
 Browser owns the explicit chat-binding workflow and reuses ActionMenu, project

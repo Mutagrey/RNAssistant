@@ -1,5 +1,25 @@
 # Universal Browser: матрица проверок
 
+## A7 correction evidence — 2026-11-14
+
+- Harness `local browser:` — 13/13, включая unbound screenshot, stale session/generation,
+  reset во время capture и немедленный отзыв чтения.
+- MockDemo `--browser-html-export-test` — actual controller + data-plane: exact PNG/hash,
+  отказ чужому Close, stale viewport read, cleanup, privacy refusal; автономный export
+  текущего member по-прежнему проходит. PNG fixture не доказывает native capture.
+- `tests/web/browser-screenshot.test.js` — real Chromium download с проверкой bytes,
+  visible Layout acknowledgement, unbound page, Source disabled, privacy error,
+  narrow/125% и late-close lease cleanup без позднего download.
+- `browser-offline-export.test.js`, `local-browser.test.js` и `resource-download.test.js`
+  (7/7) проходят после подключения команды; file:// JS/bindings сохранены.
+- [Wide menu](../ui/review/browser-screenshot-wide.png),
+  [Narrow / 125%](../ui/review/browser-screenshot-narrow.png) просмотрены локально.
+  Native viewport в Shell fixture синтетический. Windows capture/IME/DPI/privacy,
+  compilation/isolation/lifetime и пользовательское UI acceptance остаются открытыми.
+
+A1–A7 имеют correction evidence выше исторической таблицы аудита ниже; таблица
+фиксирует обнаруженные тогда дефекты, а не текущий незакрытый implementation scope.
+
 ## A6 correction evidence — 2026-11-14
 
 Local Browser 12/12; focused final handoff case passes with actual project/plugin

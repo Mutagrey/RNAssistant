@@ -1,5 +1,12 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Browser screenshot — In Review, 2026-11-14
+
+Использованы общие action-menu item, image icon и status без новых размеров/overrides.
+Перед capture сворачиваются narrow tools и подтверждается native viewport placement.
+[Wide](review/browser-screenshot-wide.png) / [Narrow 125%](review/browser-screenshot-narrow.png)
+просмотрены локально; пользовательское принятие и Windows DPI остаются открытыми.
+
 ## Browser explicit binding — In Review, 2026-11-14
 
 Unbound state reuses the Browser control row and standard ActionMenu. No new toolbar

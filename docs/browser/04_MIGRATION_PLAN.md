@@ -1,13 +1,13 @@
 # Universal Browser: план реализации
 
-## Актуальный остаток после проверки — 2026-11-13
+## Актуальный остаток после исправлений — 2026-11-14
 
-Пакет 00–08 не завершён. Аудит текущего `main` `3da1992c` с annotation correction
-нашёл функциональные дефекты, которых не закрывают проходящие Harness/Chromium suites.
-Прежние этапы ниже — история интеграции, не разрешение пропустить этот остаток.
+A1–A7 из аудита `3da1992c` исправлены последовательными срезами до `16.27.0-dev`.
+Остаток — пользовательское принятие UI и Windows compilation/qualification.
+Локальные проверки не закрывают эти evidence gates.
 
 A3 (exact saved-entry annotation identity) завершён первым вместе с уже открытым
-universal intake срезом. Остальные пункты продолжаются от этого состояния.
+universal intake срезом. Остальные пункты выполнены от полученного состояния.
 
 Последовательность сквозных исправлений:
 
@@ -17,8 +17,8 @@ universal intake срезом. Остальные пункты продолжа�
    и запрет reveal между v1/v3 одинакового content.
 3. **Готово локально (16.25.4-dev):** 04/05 Delete при read-only viewer с removed invalidation, без ослабления защиты
    выполняющейся command/pending write.
-4. **Handoff/rebind готов (16.26.0-dev):** 01/02/05. Остался общий screenshot action через
-   существующий media owner.
+4. **Готово локально:** 01/02/05 handoff/rebind (`16.26.0-dev`) и общий screenshot
+   action через существующий media/data-plane owner (`16.27.0-dev`).
 5. Визуальное принятие и Windows compilation/qualification, включая native input,
    network/worker isolation и process/profile lifetime. Независимые исправления
    не ждут Windows evidence; отсутствие qualification не отменяет интерактивность

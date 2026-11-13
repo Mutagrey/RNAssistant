@@ -8,7 +8,7 @@ using RNAssistant.Application.Contracts;
 namespace RNAssistant.Application
 {
     // The sole local tab/session/history owner; the native adapter owns rendering/input only.
-    public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IBrowserMediaSource, IBrowserAnnotationSource, IDisposable
+    public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IBrowserMediaSource, IBrowserAnnotationSource, IBrowserScreenshotSource, IDisposable
     {
         private sealed class Visit { public BrowserOwnerScope Owner; public string Locator, NativeController; public int? NativeEntry; }
         private sealed class Page
@@ -254,7 +254,34 @@ namespace RNAssistant.Application
                 return await source.CaptureAnnotationAsync(request, token).ConfigureAwait(false);
             } finally { _commands.Release(); }
         }
-        public bool IsCaptureCurrent(BrowserMediaCapture capture) => _renderer?.IsCaptureCurrent(capture) == true;
+        public bool IsCaptureCurrent(BrowserMediaCapture capture)
+        {
+            lock (_sync) {
+                Page page; var handle = capture?.Page;
+                return !_disposed && handle?.BrowserTabId != null && _pages.TryGetValue(handle.BrowserTabId, out page) &&
+                    page.State.SessionId == handle.SessionId && page.State.DocumentGeneration == handle.DocumentGeneration &&
+                    page.State.Status == BrowserPageStatus.Ready && page.State.Attached && _renderer?.IsCaptureCurrent(capture) == true;
+            }
+        }
+        public async Task<BrowserMediaCapture> CaptureScreenshotAsync(BrowserScreenshotRequest request, CancellationToken token)
+        {
+            await _commands.WaitAsync(token).ConfigureAwait(false);
+            try {
+                lock (_sync) {
+                    Page page;
+                    if (_disposed || request?.BrowserTabId == null || !_pages.TryGetValue(request.BrowserTabId, out page) ||
+                        page.State.SessionId != request.SessionId || page.State.DocumentGeneration != request.Generation ||
+                        page.State.Status != BrowserPageStatus.Ready || !page.State.Attached)
+                        throw new InvalidOperationException("Страница снимка изменилась. Повторите действие.");
+                }
+                var source = _renderer as IBrowserScreenshotSource;
+                if (source == null) throw Unavailable();
+                var capture = await source.CaptureScreenshotAsync(request, token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+                if (!IsCaptureCurrent(capture)) throw new InvalidOperationException("Страница изменилась во время снимка.");
+                return capture;
+            } finally { _commands.Release(); }
+        }
         private static InvalidOperationException Unavailable() => new InvalidOperationException(NativeUnavailable);
         private Task _nativeReset = Task.CompletedTask;
         public void Reset()

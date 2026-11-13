@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.0-dev
+
+- Browser: скачивание PNG видимой страницы, включая вкладку без чата, через native
+  capture и общий data-plane. Exact session/privacy guards, narrow placement и cleanup
+  позднего ответа; проверки локальные, Windows qualification остаётся открытой.
+
 ### 16.26.0-dev
 
 - Added manual cross-project Browser navigation and explicit chat selection through

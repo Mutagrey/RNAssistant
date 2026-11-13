@@ -96,11 +96,43 @@ namespace RNAssistant.Harness
                 AssertEqual(beforeFailure, latest.VisitRevision, "failed native navigation never becomes a recent visit");
             }
         }
-        private sealed class BrowserRendererFixture : IBrowserRenderer
+        private static void BrowserUserScreenshotCapture()
+        {
+            var renderer = new BrowserRendererFixture(); renderer.Ready.SetResult(true);
+            var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = "project" };
+            using (var runtime = new LocalBrowserPageRuntime(request => new BrowserResolveResult { Locator = request.Locator,
+                Target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.WorkspaceHtmlProject, State = BrowserTargetState.Ready,
+                    OwnerScope = request.OwnerScope, DisplayLocator = request.Locator, Capabilities = new BrowserTargetCapabilities { Source = true } } }, null, renderer: renderer)) {
+                var opened = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "screen", OperationId = "screen-open",
+                    OwnerScope = owner, BindChat = false, Locator = "/projects/project/source/index.html" }, CancellationToken.None).GetAwaiter().GetResult();
+                var page = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Attach, BrowserTabId = opened.BrowserTabId,
+                    SessionId = opened.SessionId, OperationId = opened.OperationId }, CancellationToken.None).GetAwaiter().GetResult();
+                var request = new BrowserScreenshotRequest { BrowserTabId = page.BrowserTabId, SessionId = page.SessionId, Generation = page.DocumentGeneration };
+                var pixels = new BrowserMediaCapture { Page = new BrowserPageHandle(null, page.SessionId, page.DocumentGeneration, browserTabId: page.BrowserTabId, ownerScope: owner),
+                    Png = HarnessBrowserMediaSource.Pixels, PrivacyVerified = true };
+                renderer.Screenshot = value => Task.FromResult(pixels);
+                AssertTrue(!page.ChatBound, "user screenshot does not require an agent binding");
+                AssertTrue(ReferenceEquals(pixels, runtime.CaptureScreenshotAsync(request, CancellationToken.None).GetAwaiter().GetResult()), "exact native capture returned");
+                AssertTrue(runtime.TargetsFor("chat").Count == 0, "download grants no agent target");
+                foreach (var stale in new[] {
+                    new BrowserScreenshotRequest { BrowserTabId = page.BrowserTabId, SessionId = "foreign", Generation = request.Generation },
+                    new BrowserScreenshotRequest { BrowserTabId = page.BrowserTabId, SessionId = request.SessionId, Generation = request.Generation - 1 } })
+                    RuntimeThrows<InvalidOperationException>(() => runtime.CaptureScreenshotAsync(stale, CancellationToken.None).GetAwaiter().GetResult());
+                var pending = new TaskCompletionSource<BrowserMediaCapture>(TaskCreationOptions.RunContinuationsAsynchronously);
+                renderer.Screenshot = value => pending.Task;
+                var capture = runtime.CaptureScreenshotAsync(request, CancellationToken.None);
+                runtime.Reset(); pending.SetResult(pixels);
+                RuntimeThrows<InvalidOperationException>(() => capture.GetAwaiter().GetResult());
+                AssertTrue(!runtime.IsCaptureCurrent(pixels), "reset revokes the download even before native cleanup");
+                RuntimeThrows<InvalidOperationException>(() => runtime.CaptureScreenshotAsync(request, CancellationToken.None).GetAwaiter().GetResult());
+            }
+        }
+        private sealed class BrowserRendererFixture : IBrowserRenderer, IBrowserScreenshotSource
         {
             internal readonly TaskCompletionSource<bool> Ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             internal bool Disposed;
             internal BrowserCommandPayload LastCommand;
+            internal Func<BrowserScreenshotRequest, Task<BrowserMediaCapture>> Screenshot;
             public event Action<BrowserPageStateDto> Changed;
             internal void Notify(BrowserPageStateDto state) { Changed?.Invoke(state); }
             public async Task<BrowserPageStateDto> UpdateAsync(BrowserCommandPayload command, BrowserPageStateDto state, CancellationToken token)
@@ -114,7 +146,8 @@ namespace RNAssistant.Harness
             public void BlockActions(BrowserPageHandle page) { }
             public void PresentResult(BrowserPageHandle page, string id, BrowserActionEffect effect) { }
             public Task<BrowserMediaCapture> ReadMediaAsync(BrowserPageHandle page, CancellationToken token) => throw new NotSupportedException();
-            public bool IsCaptureCurrent(BrowserMediaCapture capture) => false;
+            public bool IsCaptureCurrent(BrowserMediaCapture capture) => Screenshot != null;
+            public Task<BrowserMediaCapture> CaptureScreenshotAsync(BrowserScreenshotRequest request, CancellationToken token) => Screenshot(request);
         }
         private static void BrowserExactLocalContent()
         {

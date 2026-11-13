@@ -1,5 +1,21 @@
 # Universal Browser: статус
 
+## A1–A7: локальные исправления завершены — 2026-11-14
+
+`16.27.0-dev`: A7 добавляет «Скачать снимок страницы» в общее меню Browser.
+Работает для exact visible preview, включая страницу без чата; привязку агенту
+не выдаёт. Native capture/privacy → typed bridge → существующий data-plane → PNG.
+Нет base64 в bridge, нового хранилища или фиктивного Workspace. Смена generation,
+reset/close и приватные области отклоняют захват/чтение; поздний ответ закрывает lease.
+На narrow перед захватом сворачивается панель и подтверждается видимый Layout.
+
+Проверки: local Browser 13/13; actual-controller PNG/hash/foreign close/stale read;
+Chromium screenshot/download/late close + offline file:// bindings/export + binding
+regressions; binary reader 7/7. Wide/narrow menu просмотрены локально.
+Все семь замечаний аудита реализации исправлены отдельными срезами. План целиком
+**не квалифицирован**: открыты Windows WebView2 compilation/input/history/isolation/
+lifetime и пользовательское принятие UI. Push, tag и release не выполнялись.
+
 ## Explicit Browser context handoff — 2026-11-14
 
 `16.26.0-dev`, A6: trusted Shell navigation can open another connected Workspace or

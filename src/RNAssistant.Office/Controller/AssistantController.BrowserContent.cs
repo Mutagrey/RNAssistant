@@ -17,6 +17,21 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        internal ArtifactTransferDownload OpenBrowserScreenshot(BrowserScreenshotRequest request, BrowserMediaCapture capture, Func<bool> current, CancellationToken token)
+        {
+            if (request == null || capture?.Page == null || capture.Page.BrowserTabId != request.BrowserTabId ||
+                capture.Page.SessionId != request.SessionId || capture.Page.DocumentGeneration != request.Generation ||
+                !capture.PrivacyVerified || capture.Png == null || capture.Png.Length == 0 || capture.Png.Length > 4 * 1024 * 1024 || current?.Invoke() != true)
+                throw new InvalidOperationException("Точный снимок страницы недоступен.");
+            return new ArtifactTransferDownload { FileName = "rnassistant-page.png", ContentType = "image/png", Kind = "browser_screenshot",
+                Data = _resourceData.OpenBrowserDownload(request.SessionId, current,
+                    cancellation => new ResourceDownloadContent { Bytes = capture.Png, ContentType = "image/png" }, token) };
+        }
+        internal ResourceDataCloseResponse CloseBrowserScreenshot(BrowserScreenshotRequest request)
+        {
+            _resourceData.CloseBrowserDownload(request?.SessionId, request?.LeaseId);
+            return new ResourceDataCloseResponse { Closed = true };
+        }
         internal ChatAttachment StageBrowserVisualSelection(BrowserAnnotationCapture capture, BrowserAnnotationRequest request)
         {
             var session = LoadAddressedSession(capture.Owner.ChatId);

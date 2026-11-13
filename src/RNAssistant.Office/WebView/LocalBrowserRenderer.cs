@@ -11,7 +11,7 @@ using RNAssistant.Application.Contracts;
 
 namespace RNAssistant.Office.WebView
 {
-    internal sealed partial class LocalBrowserRenderer : IBrowserRenderer, IBrowserAnnotationSource
+    internal sealed partial class LocalBrowserRenderer : IBrowserRenderer, IBrowserAnnotationSource, IBrowserScreenshotSource
     {
         private readonly Control _parent;
         private readonly WebView2 _shell;

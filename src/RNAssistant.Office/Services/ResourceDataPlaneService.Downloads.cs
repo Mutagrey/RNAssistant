@@ -49,6 +49,22 @@ namespace RNAssistant.Office.Services
             return OpenDownloadCore(null, workspaceId, ownerIsActive, maximumBytes, capture, token);
         }
 
+        internal ResourceDownloadOpenResponse OpenBrowserDownload(string sessionId, Func<bool> ownerIsActive,
+            Func<CancellationToken, ResourceDownloadContent> capture, CancellationToken token)
+        {
+            var owner = BrowserDownloadOwner(sessionId);
+            if (ownerIsActive == null || !ownerIsActive() || capture == null)
+                throw Error("RESOURCE_ACCESS_DENIED", "An exact visible Browser session is required for a screenshot.");
+            return OpenDownloadCore(null, owner, ownerIsActive, 4 * 1024 * 1024, capture, token);
+        }
+        internal void CloseBrowserDownload(string sessionId, string leaseId) => Close(null, BrowserDownloadOwner(sessionId), leaseId);
+        private static string BrowserDownloadOwner(string sessionId)
+        {
+            Guid id;
+            if (!Guid.TryParseExact(sessionId, "N", out id)) throw Error("RESOURCE_ACCESS_DENIED", "The Browser session is invalid.");
+            return "browser:" + sessionId;
+        }
+
         private ResourceDownloadOpenResponse OpenDownloadCore(string chatId, string workspaceId, Func<bool> workspaceIsActive,
             long maximumBytes, Func<CancellationToken, ResourceDownloadContent> capture, CancellationToken token)
         {

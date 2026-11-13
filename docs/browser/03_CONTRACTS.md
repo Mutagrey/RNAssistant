@@ -1,5 +1,20 @@
 # Universal Browser: предлагаемые контракты
 
+## User screenshot — 2026-11-14
+
+`CaptureBrowserScreenshot` принимает typed `BrowserScreenshotRequest` с точными
+BrowserTabId/SessionId/Generation. `IBrowserScreenshotSource` проверяет attached Ready
+page независимо от ChatBound; агентские targets/actions остаются привязанными к чату.
+Захват использует существующий native media owner/privacy checks: только видимый
+viewport, PNG ≤4 MiB, ≤4096 по стороне и ≤4M pixels. Приватные/input/uninspectable
+области по-прежнему дают явный отказ. Снимок не становится model observation.
+`ArtifactTransferDownload` возвращает только descriptor бинарного data-plane lease.
+Owner lease — namespaced Browser session, без chat/Workspace записи; каждый read
+проверяет текущие page/generation/viewport/control/zoom. Reset сразу отзывает доступ.
+`CloseBrowserScreenshot` закрывает только lease той же session даже после закрытия
+страницы; UI всегда закрывает поздний/завершённый transfer. Перед capture Shell
+сворачивает tools/menu и ждёт visible Layout, в том числе на narrow/zoom.
+
 ## Manual scope handoff and chat binding — 2026-11-14
 
 NavigateUser belongs to trusted Shell user actions. It may resolve another connected

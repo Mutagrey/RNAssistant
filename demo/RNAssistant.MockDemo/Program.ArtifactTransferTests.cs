@@ -69,9 +69,46 @@ namespace RNAssistant.MockDemo
                 try { controller.PrepareBrowserHtmlExport(new BrowserProjectTransferRequest { Target = target }, CancellationToken.None); }
                 catch (InvalidOperationException) { rejected = true; }
                 if (!rejected) throw new Exception("Stale export target was accepted.");
+                CheckBrowserScreenshotDownload(controller);
                 Console.WriteLine("PASS Browser export controller: exact source/data, unchanged publication, lease close and stale refusal"); return 0;
             } catch (Exception error) { Console.Error.WriteLine(error); return 1; }
             finally { controller?.Dispose(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        private static void CheckBrowserScreenshotDownload(AssistantController controller)
+        {
+            // Native pixels are a fixture; this checks the actual controller/data-plane boundary.
+            var request = new BrowserScreenshotRequest { BrowserTabId = "user-page", SessionId = Guid.NewGuid().ToString("N"), Generation = 7 };
+            var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6XkAAAAASUVORK5CYII=");
+            var capture = new BrowserMediaCapture { Page = new BrowserPageHandle(null, request.SessionId, request.Generation, browserTabId: request.BrowserTabId),
+                Png = png, PrivacyVerified = true };
+            var current = true;
+            var transfer = controller.OpenBrowserScreenshot(request, capture, () => current, CancellationToken.None);
+            var foreignRejected = false;
+            try { controller.CloseBrowserScreenshot(new BrowserScreenshotRequest { SessionId = Guid.NewGuid().ToString("N"), LeaseId = transfer.Data.LeaseId }); }
+            catch (Exception) { foreignRejected = true; }
+            if (!foreignRejected) throw new Exception("Foreign Browser session closed a screenshot lease.");
+            var url = transfer.Data.Url + "?offset=0&count=" + png.Length;
+            var response = controller.HandleResourceData("GET", url, CancellationToken.None);
+            using (response.Body) using (var bytes = new MemoryStream()) {
+                response.Body.CopyTo(bytes);
+                if (response.StatusCode != 200 || response.ContentType != "image/png" || !bytes.ToArray().SequenceEqual(png))
+                    throw new Exception("Screenshot did not transfer exact PNG bytes.");
+            }
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+                if (transfer.Data.Payload.Sha256 != BitConverter.ToString(sha.ComputeHash(png)).Replace("-", "").ToLowerInvariant())
+                    throw new Exception("Screenshot hash differs from native pixels.");
+            request.LeaseId = transfer.Data.LeaseId; controller.CloseBrowserScreenshot(request);
+            transfer = controller.OpenBrowserScreenshot(request, capture, () => current, CancellationToken.None);
+            current = false;
+            response = controller.HandleResourceData("GET", transfer.Data.Url + "?offset=0&count=" + png.Length, CancellationToken.None);
+            using (response.Body) if (response.StatusCode == 200) throw new Exception("Stale viewport still allowed a download.");
+            request.LeaseId = transfer.Data.LeaseId; controller.CloseBrowserScreenshot(request);
+            current = true; capture.PrivacyVerified = false; var privacyRejected = false;
+            try { controller.OpenBrowserScreenshot(request, capture, () => current, CancellationToken.None); }
+            catch (InvalidOperationException) { privacyRejected = true; }
+            if (!privacyRejected) throw new Exception("Unverified private pixels were accepted.");
+            Console.WriteLine("PASS Browser screenshot controller: unbound session, exact PNG/hash, foreign close, stale read, cleanup and privacy refusal");
         }
 
         private static int RunArtifactTransferTest()

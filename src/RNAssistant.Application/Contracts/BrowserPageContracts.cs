@@ -266,6 +266,18 @@ namespace RNAssistant.Application.Contracts
 
     // Native page content only. A qualified owner must verify privacy and freshness;
     // these bytes/coordinates never come from page JS or model tool arguments.
+    public sealed class BrowserScreenshotRequest
+    {
+        [JsonProperty("browserTabId")] public string BrowserTabId { get; set; }
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("generation")] public long Generation { get; set; }
+        [JsonProperty("leaseId")] public string LeaseId { get; set; }
+    }
+    // User download authority is independent of agent chat binding.
+    public interface IBrowserScreenshotSource
+    {
+        Task<BrowserMediaCapture> CaptureScreenshotAsync(BrowserScreenshotRequest request, CancellationToken token);
+    }
     public sealed class BrowserMediaCapture
     {
         public string CaptureRevision { get; set; }

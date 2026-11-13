@@ -185,7 +185,7 @@
       };
       pending = current; frame.addEventListener("load", current.load); frame.addEventListener("error", current.error);
     }
-    return { actions: actions, discussButton: discuss, refresh: refresh,
+    return { actions: actions, discussButton: discuss, refresh: refresh, status: setStatus,
       setAnnotation: function (button) { annotate.replaceWith(button); annotate = button; button.classList.add("icon-btn", "compact"); },
       updateLabel: function (value) { currentLabel = Object.assign({}, currentLabel, value); updateAddress(); updateInfo(); },
       collapse: function () { expand(false); RNAssistantActionMenu.closeWithin(bar); },
