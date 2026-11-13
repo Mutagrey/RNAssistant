@@ -60,14 +60,14 @@ namespace RNAssistant.Core.Storage
                     command.CommandText = "PRAGMA foreign_keys=ON"; command.ExecuteNonQuery();
                     command.CommandText = "PRAGMA user_version";
                     var version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version != 0 && version != 21) throw new IndexVersionMismatch();
-                    if (version == 21) return db;
+                    if (version != 0 && version != 22) throw new IndexVersionMismatch();
+                    if (version == 22) return db;
                     using (var transaction = db.BeginTransaction())
                     {
                     command.Transaction = transaction;
                     command.CommandText = "PRAGMA user_version";
                     version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version == 21) { transaction.Commit(); return db; }
+                    if (version == 22) { transaction.Commit(); return db; }
                     if (version != 0) throw new IndexVersionMismatch();
                     command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1";
                     if (command.ExecuteScalar() != null) throw new IndexVersionMismatch();
@@ -88,12 +88,12 @@ namespace RNAssistant.Core.Storage
                     command.CommandText += "; CREATE TABLE agent_spawn(stream TEXT,operation TEXT,sender TEXT,run TEXT,call TEXT,child TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation),UNIQUE(stream,sender,run,call)); CREATE INDEX agent_spawn_sender ON agent_spawn(stream,sender,sequence)";
                     command.CommandText += "; CREATE TABLE run_fact(stream TEXT,operation TEXT,chat TEXT,run TEXT,revision INTEGER,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation)); CREATE TABLE run_current(stream TEXT,chat TEXT,operation TEXT,PRIMARY KEY(stream,chat)); CREATE TABLE run_identity(stream TEXT,chat TEXT,run TEXT,PRIMARY KEY(stream,chat,run))";
                     command.CommandText += "; CREATE TABLE control_fact(stream TEXT,operation TEXT,chat TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,sender TEXT,source_run TEXT,source_call TEXT,native INTEGER NOT NULL,PRIMARY KEY(stream,operation)); CREATE TABLE control_current(stream TEXT,chat TEXT,operation TEXT,PRIMARY KEY(stream,chat)); CREATE INDEX control_chat_page ON control_fact(stream,chat,sequence); CREATE INDEX control_sender_page ON control_fact(stream,sender,sequence); CREATE UNIQUE INDEX control_source_call ON control_fact(stream,sender,source_run,source_call) WHERE sender IS NOT NULL";
-                    command.CommandText += "; CREATE TABLE chat_write(stream TEXT,chat TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation))";
+                    command.CommandText += "; CREATE TABLE chat_write(stream TEXT,chat TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation,chat))";
                     command.CommandText += "; CREATE TABLE chat_state(stream TEXT,chat TEXT,operation TEXT,message_count INTEGER,last_activity_ticks INTEGER,head_operation TEXT,PRIMARY KEY(stream,chat)); CREATE TABLE chat_message(stream TEXT,chat TEXT,id TEXT,ordinal INTEGER,operation TEXT,PRIMARY KEY(stream,chat,id),UNIQUE(stream,chat,ordinal))";
                     command.CommandText += "; CREATE TABLE chat_selection(stream TEXT PRIMARY KEY,chat TEXT)";
                     command.CommandText += "; CREATE INDEX chat_write_history ON chat_write(stream,chat,sequence)";
                     command.ExecuteNonQuery();
-                    command.CommandText = "PRAGMA user_version=21"; command.ExecuteNonQuery();
+                    command.CommandText = "PRAGMA user_version=22"; command.ExecuteNonQuery();
                     transaction.Commit();
                     }
                 }

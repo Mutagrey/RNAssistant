@@ -48,13 +48,19 @@ namespace RNAssistant.Core.Services
             string currentDocumentKey)
         {
             if (session == null) return;
-            var keys = session.PreviousDocumentKeys ?? new List<string>();
+            session.PreviousDocumentKeys = DocumentKeysAfterMove(session.PreviousDocumentKeys, previousDocumentKey, currentDocumentKey);
+        }
+
+        internal static List<string> DocumentKeysAfterMove(IEnumerable<string> previousKeys,
+            string previousDocumentKey, string currentDocumentKey)
+        {
+            var keys = previousKeys ?? Enumerable.Empty<string>();
             if (!string.IsNullOrWhiteSpace(previousDocumentKey) &&
                 !string.Equals(previousDocumentKey, currentDocumentKey, StringComparison.OrdinalIgnoreCase))
             {
-                keys.Add(previousDocumentKey.Trim());
+                keys = keys.Concat(new[] { previousDocumentKey.Trim() });
             }
-            session.PreviousDocumentKeys = keys
+            return keys
                 .Where(value => !string.IsNullOrWhiteSpace(value) &&
                     !string.Equals(value, currentDocumentKey, StringComparison.OrdinalIgnoreCase))
                 .Select(value => value.Trim())

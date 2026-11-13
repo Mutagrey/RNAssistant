@@ -553,6 +553,17 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private void RequireScopeBoundary(SqliteConnection db, JournalRecord record, long sequence, string hash)
+        {
+            var cursor = JournalIndex.LoadCursor(db, _scope);
+            // An empty successor header keeps the sequence but changes the hash.
+            // Replay has already verified that header through StorageJournal; its
+            // first fact can pin it before the derived cursor has stored it.
+            var canonicalPredecessor = record.Sequence == sequence + 1 && record.PreviousHash == hash;
+            if (cursor?.Sequence != sequence || cursor.Hash != hash && !canonicalPredecessor)
+                throw new ChatConcurrencyException("Document changed before the scoped operation.");
+        }
+
         private void SaveCursor(SqliteConnection db, JournalCursor cursor, SqliteTransaction transaction)
         { JournalIndex.SaveCursor(db, _scope, cursor, transaction); }
 

@@ -20,8 +20,10 @@ Native mutation и удаление одного чата держат общи�
 add/delete проверена host-neutral. `chat.deleted` скрывает чат и его memberships,
 сохраняя группу, другие чаты и canonical evidence. Удаление требует terminal run.
 Удаление всех чатов документа использует тот же lease и один `document.deleted` с
-границей по journal cursor; новые чаты после этой границы сохраняются. Move/MoveDocument
-ещё не подключены и должны сохранить эту сериализацию.
+границей по journal cursor; новые чаты после этой границы сохраняются. Native
+Move/MoveDocument используют тот же lease и terminal-run guard: меняется привязка,
+а IDs чатов, scope authority, группы и evidence остаются прежними. Перенос не
+меняет Unknown на успех и не повторяет операции. [Контракт переноса](session-events.md#journal-chat-relocation--2026-11-13).
 Прежний backend использует общий document lock. Конфликт/unknown не
 повторяется автоматически. Группы не запускают/продолжают/останавливают Run, не
 снимают ограничения и не меняют participant roster цепочки. Дочерний чат добавляется

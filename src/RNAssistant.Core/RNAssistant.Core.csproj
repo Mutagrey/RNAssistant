@@ -402,6 +402,7 @@
     <Compile Include="Storage\ConversationJournal.Store.cs" />
     <Compile Include="Storage\ConversationJournal.Delete.cs" />
     <Compile Include="Storage\ConversationJournal.DeleteDocument.cs" />
+    <Compile Include="Storage\ConversationJournal.Move.cs" />
     <Compile Include="Storage\ConversationJournal.RuntimeStore.cs" />
     <Compile Include="Storage\ConversationJournal.ToolStore.cs" />
     <Compile Include="Storage\ConversationJournal.Mutations.cs" />

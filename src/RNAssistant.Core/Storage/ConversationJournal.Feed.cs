@@ -48,7 +48,7 @@ namespace RNAssistant.Core.Storage
                     foreach (var operation in operations)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        var receipt = _journal.FindChatWrite(db, operation);
+                        var receipt = _journal.FindChatWrite(db, operation, _address.Id);
                         if (receipt?.Fact.Card.ChatId != _address.Id) receipt = null;
                         var spawn = receipt == null ? _journal.FindSpawn(db, operation) : null;
                         var peer = receipt == null && spawn == null ? _journal.FindDelivery(db, "operation", operation) : null;

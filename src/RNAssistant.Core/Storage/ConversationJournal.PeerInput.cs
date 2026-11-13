@@ -264,7 +264,7 @@ namespace RNAssistant.Core.Storage
                 command.Parameters.AddWithValue("$through", sequence); operation = command.ExecuteScalar() as string;
             }
             if (operation == null) return null;
-            var write = FindChatWrite(db, operation);
+            var write = FindChatWrite(db, operation, chat);
             if (write?.Fact.Card.ChatId == chat && write.Position.Sequence == sequence) return write.Position;
             var spawn = FindSpawn(db, operation);
             if (spawn?.Fact.Chat != null && spawn.Fact.Sender == chat && spawn.Position.Sequence == sequence) return spawn.Position;

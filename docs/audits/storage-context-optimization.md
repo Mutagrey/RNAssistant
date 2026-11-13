@@ -1679,3 +1679,43 @@ after-state/CAS ownership.
    are updated. ChatStore and its existing adapter remain only until whole-port P7;
    this intermediate native integration has no product bump. One scoped commit;
    no push/tag. Parallel Browser edits are outside this storage change.
+
+## P1/P2 — native chat relocation (2026-11-13)
+
+1. Existing ConversationJournal now implements the remaining Move/MoveDocument
+   Store operations. This closes their unsupported native path; overall persistence
+   findings are not declared resolved before the default-writer cutover.
+2. Single/batch address changes use one compact canonical fact and one index
+   transaction. Stable chat/authority IDs, history, groups and Unknown/resource proof
+   survive. Active runs, stale revisions and foreign workspace targets reject before
+   append. Selection, transient drafts and later independent writers retain their
+   existing semantics through actual Office Save As/alias and Workspace consumers.
+3. Removed both Store stubs; reused deletion scope/idle guards and the existing
+   lineage owner without constructing a full session for each metadata derivation.
+   Schema 22 extends chat_write's key with chat ID; no new store/table/registry,
+   compatibility import or fallback. The shared boundary guard recognizes an empty
+   successor header already verified by StorageJournal during Move/DeleteDocument
+   replay. Lost flush/index acknowledgement uses exact canonical read-back; failed
+   read-back throws and does not redispatch. The new partial is in the Core csproj.
+4. Five new cases and 12 selected regressions pass on an isolated source archive of
+   `3da1992c` plus owned changes, macOS/net8/C#7.3. Cases cover real host-neutral
+   consumers, identity/run/lease guards, append/flush/index/partial-index/read-back
+   faults, later creation/metadata/selection, event feeds, Unknown/resource linkage,
+   rebuild and clean restore. A retained empty successor header is checked through
+   single/batch Move and DeleteDocument. Regressions cover deletion (8), text Store,
+   feed paging, peer Inbox and existing Save As behavior. No VSTO/full-suite run or
+   mixed Browser working-tree qualification is claimed. All 16 owned source/project
+   files match the validation archive; version-format and scoped diff checks pass.
+5. Before: native relocation was unsupported. After: the fixture reads zero
+   message/context bodies and appends a frame below 4 KiB. Batch guards still scan
+   live scope metadata; relocated headers follow only address changes since the
+   last ordinary metadata commit. Lineage/header costs remain open. No CPU,
+   allocations, physical I/O or Windows latency improvement is claimed.
+6. Remaining: history rewrites/usage, resource consumers, P3 metadata/header and
+   authority-snapshot costs. P4 stays deferred. Default writers remain ChatStore;
+   verified backup/history/CAS/keys, writer shutdown, complete restore and Windows/
+   Office screen-photo evidence remain cutover/release gates.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. ChatStore/adapters retire at whole-port P7; this is an intermediate
+   native integration without a product bump. One scoped commit; no push/tag.
+   Parallel Browser changes are preserved outside this slice.

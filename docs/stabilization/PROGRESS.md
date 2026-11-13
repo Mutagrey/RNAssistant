@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Native document relocation — 2026-11-13
+
+Move/MoveDocument работают через существующий ConversationJournal: один факт и
+атомарный index update сохраняют IDs, authority, историю, группы и Unknown/evidence.
+Office Save As/alias reconciliation и Workspace consumers проверены host-neutral.
+Пять новых checks и 12 выбранных регрессий проходят на `3da1992c` + owned changes;
+rebuild/restore включает сбой после создания пустого successor header. Перенос не
+читает тела истории, но metadata/header costs ещё открыты. Default writers прежние.
+Далее — history rewrites/usage и resource consumers, затем оставшаяся P3.
+P4 отложена; production cutover и Windows/Office qualification не объявлены закрытыми.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-chat-relocation-2026-11-13).
+
 ## Native document chat deletion — 2026-11-13
 
 DeleteDocument подключён к одному `document.deleted`: все подходящие чаты проверяются

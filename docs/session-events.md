@@ -1,5 +1,37 @@
 # Session event stream
 
+## Journal chat relocation — 2026-11-13
+
+The existing ConversationJournal implements both `IConversationStore.Move` and
+`MoveDocument`. `chat.moved` / `document.moved` retain stable chat and authority IDs;
+only host/key/title/path and document-key lineage change. A compact predicate,
+prior sequence/hash, count and witness identify the batch without a target array.
+All matching chats must have terminal/absent runs before append. The existing
+resource scope lease serializes relocation with group mutation and deletion.
+Workspace relocation cannot change its workspace authority/key.
+
+One index transaction changes every selected card and metadata head. Single-chat
+Move selects that chat; whole-document Move preserves selection. Later creation,
+metadata and selection stay outside the accepted boundary. Clearing an old address
+does not clear a selection that has already moved. Transient Move stays in memory;
+stale, retained-deleted and foreign identities cannot be recreated by relocation.
+
+Schema 22 extends the existing chat-write key with chat ID: one canonical batch
+frame can have several chat locators. Reads derive metadata through addressed move
+predecessors back to the last ordinary commit; no message/context body is rewritten
+or hydrated by relocation. Load applies the current address to retained context.
+This still costs O(live scope metadata) for a batch and O(address changes since the
+last metadata commit) per moved header. Header/lineage costs remain P3 work.
+
+Exact canonical read-back resolves lost flush/index acknowledgement without another
+append; unavailable proof throws. Partial index application rolls back. The scope
+boundary check also recognizes a verified successor header left by an interrupted
+append, so Move and DeleteDocument rebuild from that prefix. History, CAS, groups,
+Unknown outcomes and resource proofs retain their identities through rebuild/restore.
+Office Save As/alias reconciliation and Workspace consumers are checked host-neutral.
+Default writers, remaining Store/resource operations, P7 and Windows/Office evidence
+remain open; no production backend switch is made by this slice.
+
 ## Journal document chat deletion — 2026-11-13
 
 `IConversationStore.DeleteDocument` now appends one `document.deleted` fact for the
@@ -27,8 +59,8 @@ does not hydrate historical bodies. The frame stays bounded independently of cou
 
 Four host-neutral cases cover Office/Workspace consumers, fault boundaries, active
 run/scope lease guards, concurrent later creation and retained Unknown/resource proof.
-Default writers and controller composition remain unchanged. Move/MoveDocument,
-other Store/resource ports, P7 and Windows/Office qualification remain open.
+Default writers and controller composition remain unchanged. Relocation is covered
+above; other Store/resource ports, P7 and Windows/Office qualification remain open.
 
 ## Journal single-chat deletion — 2026-11-13
 
@@ -55,7 +87,7 @@ false and does not dispatch. Office ChatSessionService selects a surviving chat;
 WorkspaceStore retains its existing selection behavior. Four checks cover these
 consumers, guards, faults, retained Unknown/resource proof after deletion, rebuild
 and clean Workspace restore. Whole-document chat deletion is covered above;
-Move/MoveDocument, production cutover and Windows/Office qualification remain open.
+Relocation is covered above; production cutover and Windows/Office qualification remain open.
 
 ## Journal chat groups — 2026-11-13
 
@@ -520,7 +552,7 @@ introduced; this slice does not alter `ChatStore` itself.
 
 No-tool runtime/protocol messages and `CommitRun` are now connected as described
 above. Single-chat deletion is connected by `chat.deleted`. Other resource/attachment
-owners, history rewrites, moves and storage usage remain open. Reading an unconnected tool/
+owners, history rewrites and storage usage remain open; relocation is covered above. Reading an unconnected tool/
 agent chat must not return an apparently complete text history. Remaining operations must move to
 the same owner before P7 removes the old backend; verified backup, stopped legacy
 writers and Windows/Office photo evidence still gate that switch. Existing journal

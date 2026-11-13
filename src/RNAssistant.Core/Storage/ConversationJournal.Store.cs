@@ -156,10 +156,12 @@ namespace RNAssistant.Core.Storage
                     Title = card.Title, DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath,
                     CreatedUtc = card.CreatedUtc, Model = card.SelectedModel, ReasoningEnabled = card.ReasoningEnabled,
                     TitleAssignedByAgent = card.TitleAssignedByAgent, AgentCreation = card.AgentCreation,
+                    PreviousDocumentKeys = (card.PreviousDocumentKeys ?? new string[0]).ToList(),
                     Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
                     Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)),
                     LastRun = LoadChatRun(receipt.Fact),
                     LastContextReceipt = receipt.Fact.ContextReceipt == null ? null : JsonConvert.DeserializeObject<ContextReceipt>(ReadChatBody(receipt.Fact.ContextReceipt)) };
+                session.Context.Host = address.Host; session.Context.DocumentKey = address.DocumentKey;
                 for (var before = Math.Min(100, receipt.Fact.MessageCount); before > 0; before = Math.Min(before + 100, receipt.Fact.MessageCount))
                 {
                     var start = session.Messages.Count;
@@ -208,8 +210,14 @@ namespace RNAssistant.Core.Storage
         {
             RequireTextRoot();
             Access((db, cursor) => {
-                if (!MatchesAddress(TextChat(db, id), host, key)) throw new InvalidOperationException("Selection belongs to another document/workspace.");
-                var fact = new ConversationChatSelection(id);
+                if (string.IsNullOrWhiteSpace(id))
+                {
+                    string selected;
+                    using (var command = Command(db, "SELECT chat FROM chat_selection WHERE stream=$stream")) selected = command.ExecuteScalar() as string;
+                    if (selected == null || !MatchesAddress(TextChat(db, selected), host, key)) return false;
+                }
+                else if (!MatchesAddress(TextChat(db, id), host, key)) throw new InvalidOperationException("Selection belongs to another document/workspace.");
+                var fact = new ConversationChatSelection(string.IsNullOrWhiteSpace(id) ? null : id);
                 var record = DeliveryRecord(Guid.NewGuid().ToString("N"), "chat.selected", fact, TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact)));
                 ValidateChatFact(db, record);
                 var position = Journal.Append(cursor, record.Operation, record.Fingerprint, record.Kind, record.Data);
@@ -233,8 +241,9 @@ namespace RNAssistant.Core.Storage
             return id == null ? store.CreateTransient(host, key, title, "New chat") : store.Load(host, key, id);
         }
 
-        ChatSession IConversationStore.Move(ChatSession session, string host, string key, string title) { throw TextStoreScope(); }
-        void IConversationStore.MoveDocument(string oldHost, string oldKey, string host, string key, string title, string path) { throw TextStoreScope(); }
+        ChatSession IConversationStore.Move(ChatSession session, string host, string key, string title) { return MoveChat(session, host, key, title); }
+        void IConversationStore.MoveDocument(string oldHost, string oldKey, string host, string key, string title, string path)
+        { MoveChats(oldHost, oldKey, host, key, title, path); }
         bool IConversationStore.Delete(string host, string key, string id) { return DeleteChat(host, key, id); }
         bool IConversationStore.DeleteDocument(string host, string key) { return DeleteDocument(host, key); }
         bool IConversationStore.PrepareInterruptedRunRecovery(ChatSession session, string runId)

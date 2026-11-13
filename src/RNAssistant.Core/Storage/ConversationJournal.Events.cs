@@ -192,7 +192,7 @@ namespace RNAssistant.Core.Storage
                         using (var reader = command.ExecuteReader()) while (reader.Read()) operations.Add(reader.GetString(0));
                     }
                     return operations.Select(operation => {
-                        var write = FindChatWrite(db, operation);
+                        var write = FindChatWrite(db, operation, session.Id);
                         if (write?.Fact.Card.ChatId != session.Id) write = null;
                         var spawn = write == null ? FindSpawn(db, operation) : null;
                         if (spawn != null && spawn.Fact.Sender != session.Id) throw new InvalidDataException("Foreign spawn event.");

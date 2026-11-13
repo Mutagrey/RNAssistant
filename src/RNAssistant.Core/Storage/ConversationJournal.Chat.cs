@@ -18,7 +18,7 @@ namespace RNAssistant.Core.Storage
     internal sealed partial class ConversationJournal
     {
         internal long ChatBodyReads;
-        private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.selected" || IsChatDeletion(kind); }
+        private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.selected" || IsChatDeletion(kind) || IsChatMove(kind); }
 
         private static string ChatFingerprint(ConversationChatCommit fact)
         {
@@ -37,6 +37,7 @@ namespace RNAssistant.Core.Storage
 
         private static IEnumerable<PayloadRef> ChatReferences(JournalRecord record)
         {
+            if (IsChatMove(record.Kind)) { DecodeChatMove(record); return new PayloadRef[0]; }
             if (record.Kind == "chat.deleted") { DecodeChatDeletion(record); return new PayloadRef[0]; }
             if (record.Kind == "document.deleted") { DecodeDocumentDeletion(record); return new PayloadRef[0]; }
             if (record.Kind == "chat.selected") { DecodeChatSelection(record); return new PayloadRef[0]; }
@@ -46,13 +47,14 @@ namespace RNAssistant.Core.Storage
                 .Where(item => item != null).Concat(fact.Checkpoint?.References ?? new PayloadRef[0]).Concat(fact.Input?.Body == null ? new PayloadRef[0] : new[] { fact.Input.Body });
         }
 
-        private ConversationChatReceipt FindChatWrite(SqliteConnection db, string operation)
+        private ConversationChatReceipt FindChatWrite(SqliteConnection db, string operation, string chat = null)
         {
-            using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM chat_write WHERE stream=$stream AND operation=$operation"))
+            using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM chat_write WHERE stream=$stream AND operation=$operation" + (chat == null ? "" : " AND chat=$chat")))
             {
                 command.Parameters.AddWithValue("$operation", operation);
+                if (chat != null) command.Parameters.AddWithValue("$chat", chat);
                 JournalCursor position; var record = LocatedRecord(command, out position);
-                return record == null ? null : new ConversationChatReceipt(DecodeChatCommit(record), record.Operation, position);
+                return record == null ? null : new ConversationChatReceipt(ReadChatWrite(db, record, position, chat), record.Operation, position);
             }
         }
 
@@ -60,7 +62,7 @@ namespace RNAssistant.Core.Storage
         {
             var operation = Scalar(db, "SELECT operation FROM chat_state WHERE stream=$stream AND chat=$chat", chat) as string;
             if (operation == null) return null;
-            var receipt = FindChatWrite(db, operation);
+            var receipt = FindChatWrite(db, operation, chat);
             if (receipt == null || receipt.Fact.Card.ChatId != chat || receipt.Fact.MessageCount !=
                 Convert.ToInt32(Scalar(db, "SELECT message_count FROM chat_state WHERE stream=$stream AND chat=$chat", chat)))
                 throw new InvalidDataException("Chat metadata disagrees with its canonical commit.");
@@ -104,12 +106,13 @@ namespace RNAssistant.Core.Storage
         private IEnumerable<PayloadRef> ValidateChatFact(SqliteConnection db, JournalRecord record, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
         {
             if (OperationExists(db, record.Operation)) throw new InvalidDataException("Duplicate chat operation.");
+            if (IsChatMove(record.Kind)) { ValidateChatMove(db, record); return new PayloadRef[0]; }
             if (record.Kind == "chat.deleted") { ValidateChatDeletion(db, record); return new PayloadRef[0]; }
             if (record.Kind == "document.deleted") { ValidateDocumentDeletion(db, record); return new PayloadRef[0]; }
             if (record.Kind == "chat.selected")
             {
                 var selected = DecodeChatSelection(record);
-                if (CurrentChat(db, selected.ChatId) == null) throw new InvalidOperationException("Selected chat is unavailable.");
+                if (selected.ChatId != null && CurrentChat(db, selected.ChatId) == null) throw new InvalidOperationException("Selected chat is unavailable.");
                 return new PayloadRef[0];
             }
             var fact = DecodeChatCommit(record); ValidateChatAddress(fact.Card);
@@ -122,6 +125,7 @@ namespace RNAssistant.Core.Storage
                 Scalar(db, "SELECT 1 FROM call_fact WHERE stream=$stream AND chat=$chat LIMIT 1", fact.Card.ChatId) != null))
                 throw new InvalidOperationException("Chat belongs to an integration not supported by the text store yet.");
             if (current != null && (!JToken.DeepEquals(JObject.FromObject(current.Fact.Card.Address), JObject.FromObject(fact.Card.Address)) ||
+                !(current.Fact.Card.PreviousDocumentKeys ?? new string[0]).SequenceEqual(fact.Card.PreviousDocumentKeys ?? new string[0]) ||
                 current.Fact.Card.CreatedUtc != fact.Card.CreatedUtc))
                 throw new InvalidOperationException("A metadata update cannot move chat ownership or replace creation identity.");
             var added = 0;
@@ -160,6 +164,7 @@ namespace RNAssistant.Core.Storage
 
         private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
         {
+            if (IsChatMove(record.Kind)) { ApplyChatMove(db, record, position); return; }
             if (record.Kind == "document.deleted") { ApplyDocumentDeletion(db, record, position); return; }
             ValidateChatFact(db, record, keys, outcome);
             var committed = record.Kind == "chat.committed" ? DecodeChatCommit(record) : null;
@@ -184,8 +189,9 @@ namespace RNAssistant.Core.Storage
                 RegisterOperation(db, tx, record.Operation, record.Kind);
                 if (record.Kind == "chat.selected")
                 {
-                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_selection VALUES($stream,$chat)", tx))
-                    { command.Parameters.AddWithValue("$chat", DecodeChatSelection(record).ChatId); command.ExecuteNonQuery(); }
+                    var selected = DecodeChatSelection(record).ChatId;
+                    using (var command = Command(db, selected == null ? "DELETE FROM chat_selection WHERE stream=$stream" : "INSERT OR REPLACE INTO chat_selection VALUES($stream,$chat)", tx))
+                    { if (selected != null) command.Parameters.AddWithValue("$chat", selected); command.ExecuteNonQuery(); }
                 }
                 else if (record.Kind == "chat.deleted") ApplyChatDeletion(db, tx, record, position);
                 else
@@ -233,7 +239,8 @@ namespace RNAssistant.Core.Storage
                 var card = new ConversationCard(session.Id, session.Title, ConversationRunPolicy.ForSession(session), session.CreatedUtc,
                     address: new ConversationMetadata(session.Id, 0, session.Host, session.DocumentKey, session.WorkspaceId, session.DocumentAuthorityId),
                     documentTitle: session.DocumentTitle, documentPath: session.DocumentPath, selectedModel: session.Model, reasoningEnabled: session.ReasoningEnabled,
-                    titleAssignedByAgent: session.TitleAssignedByAgent, agentCreation: session.AgentCreation);
+                    titleAssignedByAgent: session.TitleAssignedByAgent, agentCreation: session.AgentCreation,
+                    previousDocumentKeys: session.PreviousDocumentKeys);
                 ValidateChatAddress(card);
                 var messages = commit.Messages.Select(write => PublishText(write.Message)).ToArray();
                 ResourceJournalReceipt outcome;
@@ -319,7 +326,6 @@ namespace RNAssistant.Core.Storage
             if (session == null || commit == null || !session.UsesCurrentProtocol) throw new ArgumentException("A current chat and exact commit are required.");
             if (commit.RemovedMessageIds.Count != 0 ||
                 session.ParentSessionId != null || session.ParentSessionRevision != null || session.ForkedThroughMessageId != null ||
-                session.PreviousDocumentKeys.Count != 0 ||
                 session.ActiveContextCheckpointId != null || session.ActiveHtmlArtifactId != null ||
                 session.ActiveTaskListArtifactId != null || session.ActivePlanDocumentArtifactId != null ||
                 session.Artifacts.Count != 0 || session.ArtifactLinks.Count != 0 || session.ContextCheckpoints.Count != 0 ||
@@ -332,7 +338,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private static NotSupportedException TextStoreScope()
-        { return new NotSupportedException("Journal Store does not yet support this resource, agent, history-rewrite, move/delete or usage operation."); }
+        { return new NotSupportedException("Journal Store does not yet support this resource, agent, history-rewrite or usage operation."); }
 
         private static ConversationChatSelection DecodeChatSelection(JournalRecord record)
         {
@@ -415,6 +421,6 @@ namespace RNAssistant.Core.Storage
     {
         public string ChatId { get; private set; }
         [JsonConstructor] internal ConversationChatSelection(string chatId)
-        { if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("Chat identity is required."); ChatId = chatId; }
+        { if (chatId != null && string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("Chat identity is required."); ChatId = chatId; }
     }
 }

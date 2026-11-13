@@ -75,7 +75,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void JournalGroupConsumers(bool loseAcknowledgement, bool deleteSource = false, bool deleteDocument = false)
+        private static void JournalGroupConsumers(bool loseAcknowledgement, bool deleteSource = false, bool deleteDocument = false, bool moveDocument = false)
         {
             foreach (var office in new[] { true, false }) WithJournalInput(office, (paths, journal, source, scope) => {
                 IConversationStore store = journal;
@@ -180,6 +180,12 @@ namespace RNAssistant.Harness
                             "changed results link exact resource outcomes; list and no-op add have no effect");
                         AssertEqual(memberHead, store.Load(member.Id).StorageHeadHash, "group consumers never start or rewrite participants");
                         var terminalHashes = terminals.Select(item => item.Position.Hash).ToArray();
+                        if (moveDocument)
+                        {
+                            store.MoveDocument(source.Host, source.DocumentKey, source.Host,
+                                office ? "saved-unknown" : source.DocumentKey, "Relocated Unknown", null);
+                            source = store.Load(source.Id);
+                        }
                         var groupScope = source;
                         if (deleteSource || deleteDocument)
                         {
@@ -189,6 +195,7 @@ namespace RNAssistant.Harness
                                 WorkspaceId = source.WorkspaceId, DocumentAuthorityId = source.DocumentAuthorityId };
                         }
                         journal.Rebuild(); resources = new ResourceJournal(paths);
+                        if (moveDocument) AssertEqual(source.DocumentKey, store.Load(source.Id).DocumentKey, "relocation survives rebuild with Unknown evidence");
                         groups = NativeGroups(paths, journal, source, resources);
                         if (deleteSource || deleteDocument) AssertTrue(store.ReadMetadata(source.Id) == null, "retained resource proof cannot resurrect its source chat");
                         AssertEqual(loseAcknowledgement ? 1 : 0, groups.Read(groupScope).Count, "restart/rebuild preserves group or tombstone without replay");

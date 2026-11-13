@@ -203,7 +203,7 @@ namespace RNAssistant.Core.Storage
         {
             var record = CardRecord(db, chat);
             if (record == null || IsChatDeletion(record.Kind)) return null;
-            var fact = DecodeCard(record);
+            var fact = IsChatMove(record.Kind) ? FindChatWrite(db, record.Operation, chat).Fact.Card : DecodeCard(record);
             if (fact.ChatId != chat) throw new InvalidDataException("Foreign conversation card.");
             return Tuple.Create(fact, record.Operation);
         }
@@ -512,11 +512,12 @@ namespace RNAssistant.Core.Storage
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ReasoningEnabled { get; private set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool TitleAssignedByAgent { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public AgentThreadCreation AgentCreation { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<string> PreviousDocumentKeys { get; private set; }
         [JsonConstructor]
         internal ConversationCard(string chatId, string title, ConversationRunPolicy policy, DateTime createdUtc, ModelRunMetadata model = null,
             ConversationMetadata address = null, string documentTitle = null, string documentPath = null,
             string selectedModel = null, bool reasoningEnabled = false, bool titleAssignedByAgent = false,
-            AgentThreadCreation agentCreation = null)
+            AgentThreadCreation agentCreation = null, IReadOnlyList<string> previousDocumentKeys = null)
         {
             if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(title) || title.Length > 512 || policy == null || createdUtc.Kind != DateTimeKind.Utc)
                 throw new ArgumentException("Invalid conversation metadata.");
@@ -526,6 +527,7 @@ namespace RNAssistant.Core.Storage
             SelectedModel = selectedModel; ReasoningEnabled = reasoningEnabled;
             TitleAssignedByAgent = titleAssignedByAgent;
             AgentCreation = agentCreation == null ? null : JsonConvert.DeserializeObject<AgentThreadCreation>(JsonConvert.SerializeObject(agentCreation));
+            PreviousDocumentKeys = previousDocumentKeys?.Count > 0 ? previousDocumentKeys.ToArray() : null;
         }
     }
 

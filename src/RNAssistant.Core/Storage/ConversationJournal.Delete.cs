@@ -17,7 +17,7 @@ namespace RNAssistant.Core.Storage
             RequireTextRoot();
             using (RuntimeStorageActivity.Acquire(_paths))
             // Same lease as group membership. Do not delete the shared journal or CAS.
-            using (AcquireDeletionScope())
+            using (AcquireChatScope())
             {
                 JournalRecord deletion = null; Exception failure = null;
                 try
@@ -43,7 +43,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private IDisposable AcquireDeletionScope()
+        private IDisposable AcquireChatScope()
         {
             var separator = _scope.IndexOf(':');
             return new ResourceJournal(_paths, _protector).AcquireScope(
@@ -79,14 +79,14 @@ namespace RNAssistant.Core.Storage
             RequireChatRevision(fact.Address, current);
             if (current.Position.Hash != fact.PreviousHash)
                 throw new ChatConcurrencyException("Chat changed before deletion.");
-            RequireIdleForDeletion(db, current);
+            RequireIdleChat(db, current);
         }
 
-        private void RequireIdleForDeletion(SqliteConnection db, ConversationChatReceipt current)
+        private void RequireIdleChat(SqliteConnection db, ConversationChatReceipt current)
         {
             var run = CurrentRun(db, current.Fact.Card.ChatId);
             if (current.Fact.Run != null && (run == null || run.Fact.RunId != current.Fact.Run.RunId || !TerminalRun(run.Fact.Lifecycle)))
-                throw new InvalidOperationException("Stop or resolve the active run before deleting this chat.");
+                throw new InvalidOperationException("Stop or resolve the active run before changing this chat's binding or availability.");
         }
 
         private void ApplyChatDeletion(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position)

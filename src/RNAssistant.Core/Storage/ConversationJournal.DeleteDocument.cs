@@ -16,13 +16,13 @@ namespace RNAssistant.Core.Storage
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(key)) return false;
             RequireTextRoot();
             using (RuntimeStorageActivity.Acquire(_paths))
-            using (AcquireDeletionScope())
+            using (AcquireChatScope())
             {
                 JournalRecord deletion = null; string witness = null; Exception failure = null;
                 try
                 {
                     var found = Access((db, cursor) => {
-                        var ids = DocumentChatsForDeletion(db, host, key);
+                        var ids = DocumentChatsForChange(db, host, key);
                         if (ids.Count == 0) return false;
                         witness = ids[0];
                         var fact = new ConversationDocumentDeletion(host, key, cursor.Sequence, cursor.Hash, witness, ids.Count, DateTime.UtcNow);
@@ -45,7 +45,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private List<string> DocumentChatsForDeletion(SqliteConnection db, string host, string key)
+        private List<string> DocumentChatsForChange(SqliteConnection db, string host, string key)
         {
             var live = new List<string>();
             using (var command = Command(db, "SELECT chat FROM chat_card WHERE stream=$stream AND alias IS NOT NULL ORDER BY chat"))
@@ -55,7 +55,7 @@ namespace RNAssistant.Core.Storage
             {
                 var current = TextChat(db, id);
                 if (!MatchesAddress(current, host, key)) continue;
-                RequireIdleForDeletion(db, current);
+                RequireIdleChat(db, current);
                 selected.Add(id);
             }
             return selected;
@@ -77,10 +77,8 @@ namespace RNAssistant.Core.Storage
         {
             if (OperationExists(db, record.Operation)) throw new InvalidDataException("Duplicate document deletion.");
             var fact = DecodeDocumentDeletion(record);
-            var cursor = JournalIndex.LoadCursor(db, _scope);
-            if (cursor?.Sequence != fact.PreviousSequence || cursor.Hash != fact.PreviousHash)
-                throw new ChatConcurrencyException("Document changed before deletion.");
-            var ids = DocumentChatsForDeletion(db, fact.Host, fact.DocumentKey);
+            RequireScopeBoundary(db, record, fact.PreviousSequence, fact.PreviousHash);
+            var ids = DocumentChatsForChange(db, fact.Host, fact.DocumentKey);
             if (ids.Count != fact.ChatCount || ids[0] != fact.WitnessChat)
                 throw new ChatConcurrencyException("Document deletion set changed.");
             return ids;
@@ -110,7 +108,7 @@ namespace RNAssistant.Core.Storage
             {
                 command.Parameters.AddWithValue("$chat", chat);
                 JournalCursor position; var prior = LocatedRecord(command, out position);
-                var card = prior == null ? null : DecodeCard(prior);
+                var card = prior == null ? null : ReadChatWrite(db, prior, position, chat).Card;
                 if (card?.ChatId != chat || position.Sequence > fact.PreviousSequence ||
                     card.Address?.Host != fact.Host || card.Address.DocumentKey != fact.DocumentKey)
                     throw new InvalidDataException("Foreign document deletion locator.");

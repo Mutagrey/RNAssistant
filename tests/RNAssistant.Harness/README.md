@@ -159,6 +159,17 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal move:` covers actual Office Save As/alias reconciliation, Workspace reads,
+single/batch relocation, selection, stale/deleted/foreign identity and active-run/
+scope-lease guards. Faults cover append, flush, index, partial index and read-back;
+later metadata/creation/selection survive. Five cases include Unknown/resource proof,
+rebuild/clean restore and an empty successor header after an interrupted append
+(also exercised through DeleteDocument). Relocation reads no history bodies and
+uses a compact frame below 4 KiB in the fixture. Regressions: `journal delete:`,
+`journal document delete:`, `journal text: Office`, `journal feed: pages`,
+`journal peer: atomic`, `chat sessions: creation preserves Save As`; reuse the build.
+Default-writer cutover and Windows/Office qualification remain separate.
+
 `journal document delete:` covers atomic whole-document chat deletion, Office/Workspace
 consumers, exact address/cursor, retained groups, later creation/selection, active-run
 and scope-lease guards. Faults include before append, lost flush acknowledgement,
@@ -167,7 +178,7 @@ restore also retain Unknown and its resource proof after all target chats disapp
 Deletion hydrates no history bodies; its frame contains a predicate/count/witness,
 not a target array. Focused regressions: `journal delete:`, `journal groups:` and
 `journal text: Office`. Isolated source validation is not mixed-worktree integration
-or Windows/Office qualification. Moves and storage reclamation remain separate.
+or Windows/Office qualification. Relocation is covered above; storage reclamation remains separate.
 
 `journal delete:` covers Office ChatSessionService and WorkspaceStore, scoped logical
 deletion, catalog/alias/selection, rejected resurrection, retained groups/other chats,
@@ -187,7 +198,8 @@ acknowledgement preserves source Unknown through rebuild and clean Workspace res
 Model membership uses the native alias index (catalog access throws in the fixture).
 Targeted regressions: `agent groups:`, `journal resources:` and `journal mutation:`;
 reuse the build. The native single-chat add/delete race is covered by `journal delete:`;
-document deletion is covered by `journal document delete:`. Moves, default-writer cutover and Windows/Office qualification remain open.
+document deletion is covered by `journal document delete:` and moves by `journal move:`.
+Default-writer cutover and Windows/Office qualification remain open.
 
 `journal assignments:` checks native `agents.list` through real Office/Workspace
 model wire after Send and Resolve, plus cold 50+1 paging across 61 inputs, bounded
