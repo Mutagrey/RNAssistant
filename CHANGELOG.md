@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.22.0-dev
+
+- Agents can discover local sources and open one exact visible Browser tab, including
+  standalone Workspace chats. Duplicate and unknown opens retain scoped receipts.
+- Navigation uses local targets; internal scoped HTTPS byte transport is preserved.
+  Native execution/input/media remain unavailable pending isolation qualification.
+
 ### 16.21.0-dev
 
 - Saved Workspace HTML versions can be exported or copied to a new project, including

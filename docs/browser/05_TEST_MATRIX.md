@@ -1,5 +1,16 @@
 # Universal Browser: матрица проверок
 
+## F2b Agent open — 2026-11-13
+
+Local Browser tests cover exact visible attachment, wrong/invisible acknowledgements,
+operation reuse, closed receipts, cancellation/Unknown, reset and real Workspace
+core.find → browser.open with Plan/foreign-run/undelivered-source refusal. The Dock
+fixture checks actual attachment bounds, duplicate requests, preference sanitization
+and close-before-response cleanup. Action admission rejects external URLs and private
+synthetic HTTPS transport addresses as model locators; the existing canonical binary
+data-plane test verifies scoped in-process delivery. Mock compiles. These are not
+native input, WebRTC/worker isolation or Office qualification.
+
 ## F4c Transfer / completion — 2026-11-13
 
 HTML checkpoints verifies offline binary ZIP/copy, independent target and no chat,

@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser F2b — agent open, 2026-11-13
+
+`16.22.0-dev`: local discovery opens one exact visible Dock tab with scoped receipts;
+source-only availability remains explicit. External navigation schema and unused
+synthetic automation delivery are removed; internal byte transport is preserved.
+Focused Harness/Dock/Mock checks pass. 07 remains; B02 native execution/input/media,
+Windows evidence and UI acceptance stay open.
+[Details](../browser/06_PROGRESS.md#f2b-agent-open--2026-11-13).
+
 ## Local Browser F4c — snapshot transfer, 2026-11-13
 
 `16.21.0-dev`: offline saved Workspace export/copy, binary streaming and bounded saved

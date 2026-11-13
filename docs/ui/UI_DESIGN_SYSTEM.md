@@ -1,5 +1,11 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Agent open presentation — In Review, 2026-11-13
+
+Agent opens reuse the common Browser chrome, focus and source-only status. No new
+visual component or synthetic pointer is added while native execution is unavailable.
+Visible Dock bounds are acknowledgement evidence, not a viewport capture permission.
+
 ## Workspace transfer controls — In Review, 2026-11-13
 
 Workspace snapshot actions use the existing page menu, status and import controls;

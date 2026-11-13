@@ -1,5 +1,24 @@
 # Universal Browser: предлагаемые контракты
 
+## Agent open / local transport — F2b, 2026-11-13
+
+`browser.open` accepts an unambiguous semantic source delivered by `core.find` in
+this exact run. Runtime allocates tab/operation identity; success requires the exact
+visible Dock attachment, not merely a page allocation. Owner/run/call and receipts
+prevent cross-session reuse or duplicate dispatch. Timeout/cancellation/terminal
+failure leaves Unknown; manual close is required before another open of that source.
+Source-only success reports `executionAvailable:false`; it grants no live page read,
+input or media. Plan cannot mutate placement. Reset invalidates pending operations.
+
+`browser.navigate` takes a discovered local locator or an observed local link.
+A URI's HTTP(S) spelling alone does not imply network: `rnassistant.local-resource`
+is the existing in-process byte transport with exact owner/path/lease checks. It is
+preserved, but transport URLs/leases are not model navigation capabilities. Internal
+links must resolve to an admitted local member; loopback/LAN remain external and denied.
+Bounded click/drag/hover/scroll/key/select/check contracts are registered, with no
+held input across calls. Native dispatch, coordinates and physical-input attribution
+remain unavailable under B02; no synthetic DOM-click fallback is delivered.
+
 ## Snapshot transfer and completion — F4c, 2026-11-13
 
 `exportBrowserProject`, `copyBrowserProject`, `closeBrowserProjectTransfer` use a typed
@@ -77,7 +96,8 @@ ownerScope, browserTabId, operationId, locator; Attach подтверждает 
 operation/session. UI не передаёт транспортные origins или grants. 16 tabs,
 64 owner-bound visits/tab, 128 retained receipts; закрытие не отменяет chat run.
 LocalBrowserPageRuntime поддерживает source-only admission до закрытия B02;
-Unavailable не даёт BrowserPageHandle и не выдаётся за выполненное browser.open.
+Unavailable не даёт BrowserPageHandle. F2b подтверждает только открытие source-only UI,
+с явным executionAvailable:false.
 ReadBrowserSource материализует один разрешённый member (bounded owner read),
 выдаёт максимум 32K символов и проверяет hash при следующей странице.
 

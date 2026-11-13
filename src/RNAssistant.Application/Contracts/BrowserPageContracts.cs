@@ -156,7 +156,16 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("value")] public string Value { get; set; }
         [JsonProperty("expectedText")] public string ExpectedText { get; set; }
-        [JsonProperty("url")] public string Url { get; set; }
+        [JsonProperty("locator")] public string Locator { get; set; }
+        [JsonProperty("button")] public string Button { get; set; } = "left";
+        [JsonProperty("count")] public int Count { get; set; } = 1;
+        [JsonProperty("modifiers")] public string[] Modifiers { get; set; } = new string[0];
+        [JsonProperty("durationMs")] public int DurationMs { get; set; }
+        [JsonProperty("toName")] public string ToName { get; set; }
+        [JsonProperty("deltaX")] public int DeltaX { get; set; }
+        [JsonProperty("deltaY")] public int DeltaY { get; set; }
+        [JsonProperty("key")] public string Key { get; set; }
+        [JsonProperty("checked")] public bool? Checked { get; set; }
     }
 
     [JsonConverter(typeof(StringEnumConverter))]

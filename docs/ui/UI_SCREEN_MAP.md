@@ -1,5 +1,12 @@
 # Карта экранов, навигации и состояний
 
+## Agent open — In Review, 2026-11-13
+
+A run can open an explicitly discovered local source in the common Browser. The tool
+waits for visible attachment; duplicate requests reuse that tab. Under B02 the same
+source-only view and execution-unavailable message remain. Manual close resolves an
+unknown open before a new attempt; neither saving nor activation is implied.
+
 ## Saved Workspace transfer — In Review, 2026-11-13
 
 Saved Workspace HTML exposes «Скачать проект в файлы» and «Создать проект из снимка»

@@ -27,7 +27,7 @@
     var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell") });
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, pending = new Set();
     var sourcePage = null, loadingSource = 0, selectedMode = "source", targetGeneration = -1, homeView = null;
-    var operationId = id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
+    var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
     function discuss() {
         var binding = current && current.target && current.target.ownerScope;
         if (binding && !binding.chatId && current.target.pluginId) {
@@ -244,7 +244,10 @@
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
         session = value.sessionId; apply(value); if (target.recordVisit) RNAssistantDockWorkspace.recordNavigation(value);
         if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
-        await command("Attach");
+        var rect = mount.getBoundingClientRect();
+        await command("Attach", { bounds: { visible: active && mount.isConnected && rect.width > 0 && rect.height > 0,
+          x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.min(rect.width, innerWidth - Math.max(0, rect.x)),
+          height: Math.min(rect.height, innerHeight - Math.max(0, rect.y)), viewportWidth: innerWidth, viewportHeight: innerHeight } });
       }());
       try { await opening; } finally { opening = null; }
     }
@@ -271,7 +274,7 @@
         (route.ownerScope.chatId || "") === (owner.chatId || "")) options.browserTabId = route.browserTabId;
     });
     return RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: options && options.browserTabId || id(),
-      locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser", recordVisit: true }, options);
+      operationId: options && options.operationId, locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser", recordVisit: true }, options);
   }
   function openResource(target, options) {
     // Format a local display address from the exact runtime reference. The native
@@ -282,6 +285,10 @@
     return open(locator, { kind: "Document", scopeId: target.documentId, chatId: target.chatId }, Object.assign({ reuse: true, title: target.title }, options || {}));
   }
   window.RNAssistantBrowser = { open: open, openResource: openResource, create: create, key: key, unavailable: unavailable,
+    openRequested: function (request) {
+      if (!request || !request.operationId || !request.browserTabId || !request.ownerScope || !request.ownerScope.chatId) return false;
+      return open(request.locator, request.ownerScope, { browserTabId: request.browserTabId, operationId: request.operationId, title: request.title });
+    },
     bootstrap: function (value) { available = value === true; },
     versionsChanged: function (value) { if (value && value.target) versionViews.forEach(function (notify) { notify(value); }); },
     apply: function (value) { var fn = value && live.get(value.browserTabId); if (fn) fn(value); },

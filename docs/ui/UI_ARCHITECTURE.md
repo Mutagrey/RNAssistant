@@ -1,5 +1,12 @@
 # Архитектура UI RNAssistant
 
+## Agent-owned Browser placement — In Review, 2026-11-13
+
+Typed browserOpenRequested carries runtime-allocated identity to the existing Dock
+Browser route. The mounted view acknowledges exact operation/session with visible
+bounds; no second window owner is introduced. Transient operation/session fields
+are absent from layout preferences. Closing UI does not cancel the conversation run.
+
 ## Workspace snapshot actions — In Review, 2026-11-13
 
 Common Browser actions delegate exact Workspace export/copy to typed Application

@@ -17,8 +17,12 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private sealed class HarnessBrowserActionSource : HarnessBrowserReadSource, IBrowserActionSource
+        private sealed class HarnessBrowserActionSource : HarnessBrowserReadSource, IBrowserActionSource, IBrowserOpenSource
         {
+            public IReadOnlyList<BrowserOpenableTarget> OpenableTargetsFor(BrowserOwnerScope owner) { return new[] { new BrowserOpenableTarget {
+                Target = new BrowserTargetDescriptor { DisplayLocator = "/projects/workspace/source/index.html", OwnerScope = owner } } }; }
+            public Task<BrowserPageStateDto> OpenAgentAsync(BrowserAgentOpenRequest request, Action dispatch, CancellationToken token) { throw new NotSupportedException(); }
+            public void BlockAgentOpen(string operationId) { }
             internal int Dispatches, Preparations;
             internal Action BeforeDispatch, AfterDispatch;
             internal Action<BrowserActionEffect> OnPresent;
@@ -107,16 +111,21 @@ namespace RNAssistant.Harness
                 AssertEqual(0, journal.Unresolved().Count, "terminal closes the attempt");
                 source.BeforeDispatch = null; source.AfterDispatch = null;
                 read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
-                var navigated = execute(ExternalBrowserToolHandler.Navigate, new { target = args.target, url = "https://example.com/" }, read.ResourceEvidence);
+                AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Navigate,
+                    new { target = args.target, locator = "https://example.com/" }, read.ResourceEvidence).Outcome, "network address is rejected before native preparation");
+                AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Navigate,
+                    new { target = args.target, locator = "https://rnassistant.local-resource/v1/private-lease" }, read.ResourceEvidence).Outcome,
+                    "internal HTTPS is a scoped byte transport, not a model navigation capability");
+                var navigated = execute(ExternalBrowserToolHandler.Navigate, new { target = args.target, locator = "/projects/workspace/source/index.html" }, read.ResourceEvidence);
                 AssertEqual(ToolExecutionOutcome.Ok, navigated.Outcome, "verified navigation accepts the next generation of the same owned page");
                 AssertEqual(2L, source.Target.DocumentGeneration, "navigation intentionally advances the document generation");
                 read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
                 AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Navigate,
-                    new { target = args.target, url = "https://example.com/", linkName = "Help" }, read.ResourceEvidence).Outcome,
-                    "an explicit URL and observed link cannot compete for authority");
+                    new { target = args.target, locator = "/projects/workspace/source/index.html", linkName = "Help" }, read.ResourceEvidence).Outcome,
+                    "a local locator and observed link cannot compete for authority");
                 var followed = execute(ExternalBrowserToolHandler.Navigate, new { target = args.target, linkName = "Help" }, read.ResourceEvidence);
                 AssertEqual(ToolExecutionOutcome.Ok, followed.Outcome, "semantic link uses the existing navigation runtime");
-                AssertTrue(source.LastRequest.Url == null && source.LastRequest.Name == "Help", "model supplies a name, never an inferred hidden href");
+                AssertTrue(source.LastRequest.Locator == null && source.LastRequest.Name == "Help", "model supplies a name, never an inferred hidden href");
                 execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
                 AssertEqual(ToolExecutionOutcome.Error, execute(ExternalBrowserToolHandler.Fill, args, read.ResourceEvidence).Outcome,
                     "older delivered read cannot replace the current exact native observation");

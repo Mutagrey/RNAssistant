@@ -9,7 +9,7 @@ namespace RNAssistant.Office.WebView
         private void ReportBrowserVersionChanged(BrowserVersionStateChanged value)
         { if (!_disposed) _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(value)); }
 
-        private IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null)
+        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null)
         {
             if (owner?.Kind == BrowserOwnerKind.Document) return _controller.BrowserTargets(owner, suggestionsPrefix);
             if (Plugins == null) return new BrowserTargetDescriptor[0];

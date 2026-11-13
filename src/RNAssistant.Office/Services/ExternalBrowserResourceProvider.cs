@@ -17,7 +17,7 @@ namespace RNAssistant.Office.Services
     internal sealed partial class ExternalBrowserResourceProvider : IResourceProvider
     {
         internal const string TargetPrefix = "Browser page: ", Target = TargetPrefix + "local";
-        internal const string Kind = "browser-page";
+        internal const string Kind = "browser-page", SourceKind = "browser-source", SourcePrefix = "Browser source: ";
         internal const string ObservationKind = "browser-observation", ObservationPrefix = "Browser observation: ";
         internal const int MaximumNodes = 160, MaximumName = 160, MaximumCharacters = 16000, MaximumVisited = 3000;
         internal const int MaximumText = 2000;
@@ -51,11 +51,31 @@ namespace RNAssistant.Office.Services
             return value;
         }
 
+        internal static BrowserOwnerScope Owner(ChatSession session)
+        { return session == null ? null : !string.IsNullOrEmpty(session.DocumentAuthorityId) ?
+            new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = session.DocumentAuthorityId, ChatId = session.Id } :
+            string.IsNullOrEmpty(session.WorkspaceId) ? null : new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = session.WorkspaceId, ChatId = session.Id }; }
+        internal static ResourceRef SourceReference(ChatSession session, BrowserOpenableTarget target)
+        { return new ResourceRef(ResourceUri.Create("browser", session.Id, "source", RNAssistant.Core.Tools.TextPatternEngine.Sha256(target.Target.DisplayLocator)), "catalog"); }
+        private BrowserOpenableTarget[] Sources(ChatSession session)
+        { return (_source() as IBrowserOpenSource)?.OpenableTargetsFor(Owner(session)).ToArray() ?? new BrowserOpenableTarget[0]; }
+        private static ResourceDescriptor DescribeSource(ChatSession session, BrowserOpenableTarget target)
+        {
+            var value = new ResourceDescriptor { Provider = "browser", Kind = SourceKind, Title = target.Target.Title,
+                SnapshotTarget = target.SemanticTarget, CurrentTarget = target.SemanticTarget, Reference = SourceReference(session, target), Mutable = false };
+            value.Capabilities.Add("open"); value.Metadata["description"] = "Discovery only. Use browser.open with this exact semantic source target; it does not grant page input or data access.";
+            return value;
+        }
+
         public ResourceListPage List(ChatSession session, string kind, string cursor, int limit)
         {
             if (kind == ObservationKind) return ListObservations(session, cursor, limit);
-            var result = new ResourceListPage();
             if (!string.IsNullOrEmpty(cursor)) throw Error("Browser discovery has no continuation.", "browser_cursor_invalid");
+            var result = new ResourceListPage();
+            if (kind == SourceKind) {
+                var sources = Sources(session); result.Items.AddRange(sources.Take(Math.Max(1, limit)).Select(t => DescribeSource(session, t)));
+                result.Total = sources.Length; result.Truncated = result.Items.Count < result.Total; return result;
+            }
             var targets = Targets(session);
             if (targets.Length > 0) CheckDocument(session);
             if (kind == null || kind == Kind) result.Items.AddRange(targets.Select(item => Describe(item)).Take(Math.Max(1, limit)));
@@ -69,6 +89,8 @@ namespace RNAssistant.Office.Services
         public ResourceDescriptor Resolve(ChatSession session, string resourceUri)
         {
             if (IsObservation(session, resourceUri)) return DescribeObservation(session, resourceUri);
+            var source = Sources(session).SingleOrDefault(item => SourceReference(session, item).Uri == resourceUri);
+            if (source != null) return DescribeSource(session, source);
             var target = Targets(session).SingleOrDefault(item => UriFor(item) == resourceUri);
             if (target == null) throw Error("No ready browser page belongs to this chat. Open the page from this chat first.", "browser_page_unavailable");
             CheckDocument(session);

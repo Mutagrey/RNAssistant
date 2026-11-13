@@ -9,7 +9,7 @@ namespace RNAssistant.Application
 {
     // The host's sole local tab/session owner. No renderer is created while B02 is open.
     // Source-only navigation still has exact scope, bounded history and attach receipts.
-    public sealed class LocalBrowserPageRuntime : IBrowserPageRuntime, IDisposable
+    public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IDisposable
     {
         private sealed class Visit { public BrowserOwnerScope Owner; public string Locator; }
         private sealed class Page
@@ -27,8 +27,9 @@ namespace RNAssistant.Application
         private readonly Func<BrowserResolveRequest, BrowserResolveResult> _resolve;
         private readonly Action<BrowserPageStateDto> _publish;
         private bool _disposed;
-        public LocalBrowserPageRuntime(Func<BrowserResolveRequest, BrowserResolveResult> resolve, Action<BrowserPageStateDto> publish)
-        { _resolve = resolve ?? throw new ArgumentNullException(nameof(resolve)); _publish = publish; }
+        public LocalBrowserPageRuntime(Func<BrowserResolveRequest, BrowserResolveResult> resolve, Action<BrowserPageStateDto> publish,
+            Func<BrowserOwnerScope, IReadOnlyList<BrowserTargetDescriptor>> sourceCatalog = null, Action<BrowserDockOpenRequest> requestDockOpen = null)
+        { _resolve = resolve ?? throw new ArgumentNullException(nameof(resolve)); _publish = publish; _sourceCatalog = sourceCatalog; _requestDockOpen = requestDockOpen; }
 
         public Task<BrowserPageStateDto> ExecuteAsync(BrowserCommandPayload request, CancellationToken token)
         {
@@ -86,6 +87,7 @@ namespace RNAssistant.Application
                 }
                 result = Copy(page.State);
             }
+            ObserveAgentOpen(request, result);
             _publish?.Invoke(result);
             return Task.FromResult(result);
         }
@@ -152,9 +154,13 @@ namespace RNAssistant.Application
         public void Reset()
         {
             BrowserPageStateDto[] closed;
-            lock (_sync) { closed = _pages.Values.Select(page => { page.State.Status = BrowserPageStatus.Closed;
+            lock (_sync) { _openEpoch++;
+                foreach (var operation in _agentOpens.Values.Where(o => !o.Completion.Task.IsCompleted)) operation.Completion.TrySetException(new InvalidOperationException("The Browser owner reset."));
+                closed = _pages.Values.Select(page => { page.State.Status = BrowserPageStatus.Closed;
                     page.State.Attached = false; page.State.Revision++; return Copy(page.State); }).ToArray(); _pages.Clear(); }
-            foreach (var state in closed) _publish?.Invoke(state);
+            foreach (var state in closed) {
+                ObserveAgentOpen(new BrowserCommandPayload { Action = BrowserCommandKind.Close }, state); _publish?.Invoke(state);
+            }
         }
         public Task ResetAsync() { Reset(); return Task.CompletedTask; }
         public void Dispose() { lock (_sync) { if (_disposed) return; _disposed = true; } Reset(); }

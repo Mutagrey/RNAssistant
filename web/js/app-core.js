@@ -446,6 +446,10 @@ if (window.chrome && window.chrome.webview) {
       if (window.RNAssistantBrowser) window.RNAssistantBrowser.versionsChanged(response);
       return;
     }
+    if (response.type === "browserOpenRequested") {
+      if (window.RNAssistantBrowser) window.RNAssistantBrowser.openRequested(response);
+      return;
+    }
     if (response.type === "browserPageState") {
       if (window.RNAssistantBrowser) window.RNAssistantBrowser.apply(response.payload);
       return;

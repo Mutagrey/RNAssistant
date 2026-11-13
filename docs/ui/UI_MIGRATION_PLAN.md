@@ -1,5 +1,13 @@
 # План модернизации production UI
 
+## F2b Agent open — In Review, 2026-11-13
+
+Completed from F4c: real Workspace discovery → managed open → exact visible Dock ack.
+Review: discover a local source, open it, repeat its operation and close its tab;
+verify one source-only view, no saved runtime binding and no run cancellation.
+Harness ownership/receipt cases and Dock fixture pass. 07 follows. B02 native
+execution/input/media and Windows/Office evidence remain open.
+
 ## F4c Snapshot transfer — In Review, 2026-11-13
 
 Completed after F4b: offline binary Workspace export/copy, explicit Workspace download

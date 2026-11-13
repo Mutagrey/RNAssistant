@@ -790,6 +790,7 @@ namespace RNAssistant.Office.Services
                 else if (provider is ExternalBrowserResourceProvider)
                 {
                     yield return new ResourceIntentPlan(provider, ExternalBrowserResourceProvider.Kind, "browser");
+                    yield return new ResourceIntentPlan(provider, ExternalBrowserResourceProvider.SourceKind, "browser");
                     yield return new ResourceIntentPlan(provider, ExternalBrowserResourceProvider.ObservationKind, "browser");
                 }
                 else
@@ -906,6 +907,7 @@ namespace RNAssistant.Office.Services
                 return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
             if (type == "HTML workspace")
                 return "Read structure for member targets and binding sourceTarget metadata, then read an exact HTML file target with source. The workspace itself is not a dataset.";
+            if (type == "Browser source") return "Discovery only: use browser.open with this exact target. Opening does not imply page execution/read/input availability.";
             if (type == "HTML data")
                 return "Existing binding, not data values: read text for name/view/policy/sourceTarget. Page code already opens RN.resources.open(name). Do not bind this metadata or request table on it; use its sourceTarget for data reads or a deliberate rebind.";
             if (type == "Outlook mail")
@@ -1179,6 +1181,7 @@ namespace RNAssistant.Office.Services
             switch (kind)
             {
                 case ExternalBrowserResourceProvider.Kind: return "Browser page";
+                case ExternalBrowserResourceProvider.SourceKind: return "Browser source";
                 case ExternalBrowserResourceProvider.ObservationKind: return "Browser observation";
                 case RNAssistant.Core.Storage.DocumentArtifactStore.SharedContextKind: return "shared context";
                 case ContextResourceProvider.DataKind: return "context data";

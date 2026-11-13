@@ -1359,6 +1359,8 @@ namespace RNAssistant.Harness
                 Test("external browser: navigation and bounds admission", ExternalBrowserAdmission),
                 Test("external browser: navigation redirects and terminal evidence", ExternalBrowserNavigationEvidence),
                 Test("local browser: network access is denied", ExternalBrowserSiteAccess),
+                Test("local browser: open attachment receipts cancellation and close", BrowserOpenAttachmentReceipts),
+                Test("local browser: standalone Workspace discovery and visible open", BrowserOpenWorkspaceRuntime),
                 Test("local browser: addresses and exact scope", BrowserLocalAddressesAndScope),
                 Test("local browser: source-only sessions and exact history", BrowserLocalSessionLifecycle),
                 Test("local browser: standalone Workspace media reaches model wire once", BrowserWorkspaceMediaWire),

@@ -1,5 +1,14 @@
 # Current-to-target migration map
 
+## F2b Local agent admission — 2026-11-13
+
+BrowserPageAutomation and its unused Office script/style embeds are removed.
+ExternalBrowser-prefixed gateway/tool files retain their existing ownership rather
+than a cosmetic namespace migration. No synthetic native-action adapter remains.
+Historical JS semantic/privacy fixtures are test-only; native execution/input/media
+are unavailable under B02. A future qualified native adapter must use the existing
+IBrowserPageRuntime/IBrowserActionSource contracts, not a second renderer.
+
 ## F4c Transfer adapters — 2026-11-13
 
 The remaining Workspace Browser copy/export adapter is connected. It delegates to

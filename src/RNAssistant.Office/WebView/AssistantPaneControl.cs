@@ -230,7 +230,8 @@ namespace RNAssistant.Office.WebView
 
             var core = _webView.CoreWebView2;
             _externalBrowser = new LocalBrowserPageRuntime(request => _bridge.ResolveBrowserLocator(request),
-                value => PostBridgeMessage(JsonConvert.SerializeObject(new BrowserPageStateMessage { Payload = value })));
+                value => PostBridgeMessage(JsonConvert.SerializeObject(new BrowserPageStateMessage { Payload = value })),
+                owner => _bridge.BrowserTargets(owner, ""), request => PostBridgeMessage(JsonConvert.SerializeObject(request)));
             _bridge.Browser = _externalBrowser;
             if (_bridge.WindowHost != null)
             {

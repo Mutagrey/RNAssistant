@@ -1,5 +1,23 @@
 # Universal Browser: статус
 
+## F2b Agent open — 2026-11-13
+
+`16.22.0-dev`, continued from `add50212`. Local source discovery and `browser.open`
+now use the actual standalone Workspace/document scope, same-run discovery evidence,
+managed mutation receipts and visible Dock acknowledgement. Duplicate calls reuse
+one operation; closed receipts do not resurrect pages. Unknown requires manual close.
+Source-only availability is explicit and never claims a live semantic page.
+
+Navigation uses local locators/observed links; in-process synthetic HTTPS data routes
+are retained with their existing owner/lease checks. BrowserPageAutomation and unused
+host JS/CSS embeds are removed. Bounded input contracts replace the old HTTP schema;
+the remaining JS fixtures test historical semantic/privacy logic only.
+
+Checks: local Browser 7, delivered-read/action admission 1, canonical binary data plane
+1, actual Dock open/duplicate/close-before-reply UI; Mock compile. Native input/media,
+physical takeover, coordinate dispatch and execution isolation remain B02-blocked;
+Windows/Office delivery and UI acceptance are open. Next: 07, from this state.
+
 ## F4c Snapshot transfer and completion — 2026-11-13
 
 `16.21.0-dev`, continued from `422a9d27`. Saved Workspace HTML can be exported to ZIP
