@@ -883,6 +883,7 @@ namespace RNAssistant.Harness
                     var read=PluginRequest(service,active,PluginMethod.OpenFile,"input.txt",project).Result.Result;
                     var candidate=service.Check(item.PluginId);AssertTrue(!candidate.HasChanges,"unchanged package does not offer Apply in the UI");
                     var preview=PluginOpen(service,item.PluginId,candidate.CandidateId);
+                    AssertEqual(active.Release.ReleaseId, preview.Release.ReleaseId, "equivalent content reuses retained package metadata");
                     var sourceStamp=service.SourceState(item.PluginId).Stamp;
                     AssertEqual("project_required",PluginRequest(service,preview,PluginMethod.List).Result.ErrorCode,"preview inherits no production grant");
                     var scratch=PluginRequest(service,preview,PluginMethod.PickProject).Result.Result.Handle;
@@ -1557,9 +1558,26 @@ namespace RNAssistant.Harness
                 var call=new ToolCall("apply","plugins.apply","{}");var policy=runtime.Describe(call);
                 var pending=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,false,5),CancellationToken.None);
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,pending.Outcome,"publication requires confirmation");
-                service.Check(item.PluginId);
-                var refused=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,pending.PreparedStateJson),CancellationToken.None);
-                AssertTrue(!refused.MayHaveDispatched && refused.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"rechecking invalidates the prepared candidate without publishing another");
+                var userCheck = service.Check(item.PluginId);
+                AssertEqual(userCheck.CandidateId, service.Check(item.PluginId).CandidateId, "equivalent UI check keeps its intent");
+                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"peer-run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
+                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
+                var foreign=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"peer-run","turn","apply",DateTime.UtcNow,true,5,pending.PreparedStateJson),CancellationToken.None);
+                AssertTrue(!foreign.MayHaveDispatched && foreign.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"prepared intent cannot cross runs");
+                var applied=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,pending.PreparedStateJson),CancellationToken.None);
+                AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok, applied.Result.Status,"UI, peer and equivalent own checks preserve exact confirmation");
+                // New content invalidates the original actor's prepared intent, even if a cheap source stamp is unchanged.
+                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
+                var stale=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,false,5),CancellationToken.None);
+                var sourcePath=Path.Combine(item.SourceRoot,"commands.js");
+                var sourceTime=File.GetLastWriteTimeUtc(sourcePath);var originalSource=File.ReadAllText(sourcePath);
+                File.WriteAllText(sourcePath,new string(' ',originalSource.Length));File.SetLastWriteTimeUtc(sourcePath,sourceTime);
+                var refused=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,stale.PreparedStateJson),CancellationToken.None);
+                AssertTrue(!refused.MayHaveDispatched && refused.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"content drift refuses before dispatch regardless of mtime");
+                await runtime.ExecuteAsync(new ToolExecutionContext(checkCall,runtime.Describe(checkCall),"run","turn","check",DateTime.UtcNow,false,5),CancellationToken.None);
+                refused=await runtime.ExecuteAsync(new ToolExecutionContext(call,policy,"run","turn","apply",DateTime.UtcNow,true,5,stale.PreparedStateJson),CancellationToken.None);
+                AssertTrue(!refused.MayHaveDispatched && refused.Result.Status==RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error,"changed own intent invalidates previous preparation");
+                File.WriteAllText(sourcePath,originalSource);
                 var before=service.CaptureCommandContext(item.PluginId,project,true);await service.CloseInstanceAsync(before.Id);
                 picker.Root=Path.Combine(paths.Root,"other-data");Directory.CreateDirectory(picker.Root);await PluginRequest(service,ui,PluginMethod.PickProject);
                 PluginFailure(()=>service.CaptureCommandContext(item.PluginId,project,true),"plugin_project_changed");

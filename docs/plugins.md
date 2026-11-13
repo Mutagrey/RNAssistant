@@ -248,6 +248,9 @@ workspace в дерево без новой сессии; файлы плаги�
    протокол, состав, хеши и plugin vendor admission. Typed `hasChanges` сравнивает
    проверенный пакет с активной публикацией и учитывает отключённое состояние;
    UI показывает «Применить» только при `hasChanges=true`. Это не проверка бизнес-логики.
+   UI и каждый agent run имеют отдельный candidate intent. Equivalent-content Check
+   сохраняет handle этого actor и переиспользует immutable package (manifest,
+   source и resolved vendor bytes), не создавая новую release metadata.
 2. **Предпросмотр** открывает именно проверенный снимок; тестовые данные отделены.
 3. **Применить** сверяет исходный workspace, candidate и ожидаемый active release,
    атомарно публикует registry head и проверяет его чтением. Известная ошибка до
@@ -422,7 +425,11 @@ UI и workspace-агент вызывают один `PluginApplicationService.I
 замороженным release binding, policy, prepared state, journal/read-back evidence.
 Выбранный grant фиксируется до confirmation; его замена отклоняет продолжение.
 `plugins.check`/`plugins.apply` доступны только чату source workspace; аргументы пусты,
-candidate удерживает runtime. Новый check инвалидирует ожидающее подтверждение apply.
+candidate удерживает runtime отдельно для каждого run. Чужой Check и повторная
+проверка тех же bytes не отзывают confirmation. Изменение собственного intent,
+source bytes или active binding отклоняет Apply до dispatch. UI не может применить
+candidate другого run. До 128 process-local handles: idle handles истекают через
+час, live preview и подготовленные операции удерживают их до освобождения owner.
 Model-facing resource reads остаются `common.resources_*`; модели не выдаются
 candidate/release IDs, `ResourceRef`, paths native staging или grant tokens.
 Полезный результат команды — её доменные данные/семантические имена.

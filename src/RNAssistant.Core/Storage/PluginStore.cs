@@ -69,7 +69,8 @@ namespace RNAssistant.Core.Storage
             return Get(manifest.Id);
         }
 
-        public PluginReleaseRecord Capture(PluginSourceWorkspace source, VendorCatalog vendors)
+        public PluginReleaseRecord Capture(PluginSourceWorkspace source, VendorCatalog vendors,
+            IEnumerable<PluginReleaseRecord> reusable = null, bool retain = true)
         {
             var observedManifest = _files.ReadText(source.Workspace, "plugin.json");
             var manifest = PluginPackageFiles.ParseManifest(observedManifest.Text);
@@ -121,6 +122,11 @@ namespace RNAssistant.Core.Storage
                 Files = members.Select(file => new PluginPackageFile { Path = file.Key,
                     Payload = PayloadRef.FromBlob(_blobs.StoreBytes(file.Value, Mime(file.Key))) }).ToList() };
             record.PackageSha256 = Digest(record.Files);
+            var retainedMatch = (reusable ?? Enumerable.Empty<PluginReleaseRecord>()).FirstOrDefault(item =>
+                item.PluginId == record.PluginId && item.SourceWorkspaceId == record.SourceWorkspaceId &&
+                item.PackageSha256 == record.PackageSha256 && item.ManifestJson == record.ManifestJson);
+            if (retainedMatch != null) return retainedMatch;
+            if (!retain) return record;
             // A candidate is retained before preview. Activation is a separate head
             // switch; merely retaining a package grants no execution or data access.
             Publish(ReleaseRef(record.PluginId, record.ReleaseId), "plugin-release", record,

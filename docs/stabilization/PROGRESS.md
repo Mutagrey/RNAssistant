@@ -2,13 +2,15 @@
 
 ## Local Browser package — последовательная реализация, 2026-11-13
 
-Исходный HEAD совпал с аудитом `e9bb52c1`. В рабочем дереве уже присутствовали
-незавершённые Browser preview/automation изменения; они не считаются завершённым
-F0/native cutover и не включаются автоматически в коммиты.
+Исходный HEAD совпал с аудитом `e9bb52c1`. Существующие незавершённые Browser
+preview/automation изменения пользователь включил в scope; это ещё не F0/native cutover.
 Первый независимый срез 08 завершён: `16.14.4-dev`, LLM transport без User-Agent,
 включая custom headers. Focused Harness наблюдал 12 реальных loopback HTTP
 запросов JSON/SSE/GET; 1/1 case pass. Office/VSTO и полный suite не запускались.
-Далее candidate correctness, F0 и сквозные F1–F4 из пакета; local-only scope
+04 V1 исправляет candidate race: UI/run intents раздельны, одинаковый package
+переиспользуется, source drift отклоняется до dispatch. Три focused Harness cases
+(authority, preview/grants, published history) проходят. Далее F0 и сквозные F1–F4;
+ход срезов — [Browser Progress](../browser/06_PROGRESS.md). Local-only scope
 заменяет прежнее развитие внешнего Browser. Native network/input qualification
 и визуальное принятие остаются открытыми.
 

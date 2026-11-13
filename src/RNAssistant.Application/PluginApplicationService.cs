@@ -41,7 +41,13 @@ namespace RNAssistant.Application
         private bool _disposed;
         private Task _closing;
         private readonly PluginResultStore _results;
-        private sealed class Candidate { public PluginReleaseRecord Package; public string ExpectedRelease; }
+        private sealed class Candidate
+        {
+            public PluginReleaseRecord Package;
+            public string ExpectedRelease, Actor;
+            public DateTime UsedUtc;
+            public bool Prepared;
+        }
 
         public string StartupError { get; set; }
         public VendorCatalog Vendors { get; private set; }
@@ -273,23 +279,38 @@ namespace RNAssistant.Application
         }
 
         public PluginCandidateDto Check(string pluginId)
+        { return Check(pluginId, "user"); }
+
+        private PluginCandidateDto Check(string pluginId, string actor)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 RequireOpen(); var registration = RequireRegistration(pluginId);
-                var package = _store.Capture(Source(registration), Vendors);
-                if (package.PluginId != pluginId) throw new PluginException("plugin_identity_changed", "Changing plugin.json ID requires a new connection.");
+                PruneCandidates();
+                var previous = _candidates.SingleOrDefault(item => item.Value.Package.PluginId == pluginId && item.Value.Actor == actor);
+                if (previous.Value == null && _candidates.Count >= 128)
+                    throw new PluginException("plugin_candidate_limit", "Too many retained checks. Finish pending operations before checking another plugin.");
                 var active = registration.ActiveReleaseId == null ? null :
                     _store.ReadRelease(new PluginReleaseIdentity(pluginId, registration.ActiveReleaseId));
+                var reusable = _candidates.Values.Where(item => item.Package.PluginId == pluginId).Select(item => item.Package).ToList();
+                if (active != null) reusable.Add(active);
+                var package = _store.Capture(Source(registration), Vendors, reusable);
+                if (package.PluginId != pluginId) throw new PluginException("plugin_identity_changed", "Changing plugin.json ID requires a new connection.");
                 var hasChanges = !registration.Enabled || active == null ||
                     active.SourceWorkspaceId != package.SourceWorkspaceId ||
                     active.PackageSha256 != package.PackageSha256 || active.ManifestJson != package.ManifestJson;
                 var manifest = PluginPackageFiles.ParseManifest(package.ManifestJson);
                 if (PluginPackageFiles.IconIsSvgPath(manifest.Icon))
                     _icons.Save(manifest.Name, _store.ReadFile(package, manifest.Icon));
-                var id = Guid.NewGuid().ToString("N");
-                foreach (var old in _candidates.Where(item => item.Value.Package.PluginId == pluginId).Select(item => item.Key).ToArray()) _candidates.Remove(old);
-                _candidates.Add(id, new Candidate { Package = package, ExpectedRelease = registration.ActiveReleaseId });
+                var sameIntent = previous.Value != null && previous.Value.Package.ReleaseId == package.ReleaseId &&
+                    previous.Value.ExpectedRelease == registration.ActiveReleaseId;
+                var id = sameIntent ? previous.Key : Guid.NewGuid().ToString("N");
+                if (!sameIntent)
+                {
+                    if (previous.Value != null) _candidates.Remove(previous.Key);
+                    _candidates.Add(id, new Candidate { Package = package, ExpectedRelease = registration.ActiveReleaseId, Actor = actor });
+                }
+                _candidates[id].UsedUtc = DateTime.UtcNow;
                 return new PluginCandidateDto { PluginId = pluginId, CandidateId = id, HasChanges = hasChanges, Files = package.Files.Count,
                     Bytes = package.Files.Sum(file => file.Payload.ByteLength), Checks = new[] { "manifest", "protocol", "file-integrity", "plugin-vendor-admission" } };
             }
@@ -332,10 +353,21 @@ namespace RNAssistant.Application
         }
 
         public PluginItemDto Apply(PluginApplyRequest request)
+        { return Apply(request, "user", null); }
+
+        private PluginItemDto Apply(PluginApplyRequest request, string actor, Action onDispatch)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 RequireOpen(); var candidate = RequireCandidate(request.PluginId, request.CandidateId);
+                if (candidate.Actor != actor) throw new PluginException("plugin_candidate_owner", "Check belongs to another actor or run.");
+                var registration = RequireRegistration(request.PluginId);
+                if (registration.ActiveReleaseId != candidate.ExpectedRelease || registration.SourceWorkspaceId != candidate.Package.SourceWorkspaceId)
+                    throw new PluginException("plugin_selection_changed", "Plugin registration changed. Check again.");
+                var current = _store.Capture(Source(registration), Vendors, new[] { candidate.Package }, false);
+                if (current.ReleaseId != candidate.Package.ReleaseId)
+                    throw new PluginException("plugin_source_changed", "Source content changed after this check. Check again before applying.");
+                if (onDispatch != null) onDispatch();
                 var result = _store.Apply(candidate.Package, candidate.ExpectedRelease); _candidates.Remove(request.CandidateId);
                 _revoked.Remove(request.PluginId);
                 return Item(result);
@@ -1116,7 +1148,22 @@ namespace RNAssistant.Application
             if (!ToolSchemaSupport.ValidateArguments(value, schema, false, out error)) throw new PluginException("plugin_payload_invalid", error);
         }
         private Candidate RequireCandidate(string pluginId, string id)
-        { Candidate value; if (id == null || !_candidates.TryGetValue(id, out value) || value.Package.PluginId != pluginId) throw new PluginException("plugin_candidate_missing", "Check this plugin again before applying or previewing."); return value; }
+        {
+            PruneCandidates();
+            Candidate value;
+            if (id == null || !_candidates.TryGetValue(id, out value) || value.Package.PluginId != pluginId)
+                throw new PluginException("plugin_candidate_missing", "Check this plugin again before applying or previewing.");
+            value.UsedUtc = DateTime.UtcNow;
+            return value;
+        }
+
+        private void PruneCandidates()
+        {
+            var cutoff = DateTime.UtcNow.AddHours(-1);
+            foreach (var item in _candidates.Where(item => !item.Value.Prepared && item.Value.UsedUtc < cutoff &&
+                !_instances.Values.Any(instance => instance.Release.ReleaseId == item.Value.Package.ReleaseId)).ToArray())
+                _candidates.Remove(item.Key);
+        }
         private PluginRegistration RequireRegistration(string id)
         {
             var registration = _store.Get(id);

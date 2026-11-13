@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.14.5-dev
+
+- Plugin checks now retain separate UI/run candidates and reuse identical packages.
+  Peer checks preserve pending approval; changed source or actor binding refuses
+  activation before dispatch.
+
 ### 16.14.4-dev
 
 - LLM JSON/SSE requests and model configuration GET no longer send User-Agent,

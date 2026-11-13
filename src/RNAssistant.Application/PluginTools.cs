@@ -29,7 +29,7 @@ namespace RNAssistant.Application
                     {
                         tools.Add(Tool("plugins.check","Validate and retain this source plugin candidate. Does not activate it or verify business behavior.",
                             JObject.Parse("{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),false,new PluginTool(this,plugin.PluginId,"check",null)));
-                        tools.Add(Tool("plugins.apply","Activate this source plugin's last checked candidate. Runtime pins the candidate before confirmation; a new check invalidates that approval. Existing operations retain their old release.",
+                        tools.Add(Tool("plugins.apply","Activate this run's checked source candidate. Runtime pins the exact content before confirmation; unchanged checks preserve approval. Source or active publication changes require a new check. Existing operations retain their old release.",
                             JObject.Parse("{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"),true,new PluginTool(this,plugin.PluginId,"apply",null)));
                     }
                     if(!plugin.Enabled || plugin.ActiveReleaseId==null)continue;
@@ -69,8 +69,9 @@ namespace RNAssistant.Application
                     _service.RequireOpen();
                     if (_release == null && _command == "apply")
                     {
-                        prepared.CandidateId = _service._candidates.SingleOrDefault(item => item.Value.Package.PluginId == _plugin).Key;
-                        _service.RequireCandidate(_plugin, prepared.CandidateId);
+                        prepared.CandidateId = _service._candidates.SingleOrDefault(item => item.Value.Package.PluginId == _plugin &&
+                            item.Value.Actor == "run:" + context.Execution.RunId).Key;
+                        _service.RequireCandidate(_plugin, prepared.CandidateId).Prepared = true;
                     }
                     else if (_release != null)
                     {
@@ -93,7 +94,7 @@ namespace RNAssistant.Application
                     var prepared = JsonConvert.DeserializeObject<Prepared>(context.PreparedStateJson ?? throw new PluginException("plugin_preparation_missing", "Runtime preparation is required."));
                     if(_release==null && _command=="check")
                     {
-                        var checkedPackage = _service.Check(_plugin);
+                        var checkedPackage = _service.Check(_plugin, "run:" + context.Execution.RunId);
                         return new ToolHandlerResult(ToolResult.Ok("Candidate retained; it is not active.", JsonConvert.SerializeObject(
                             new PluginCheckSummary { Files = checkedPackage.Files, Bytes = checkedPackage.Bytes, Checks = checkedPackage.Checks })), ToolEffectEvidence.None);
                     }
@@ -101,8 +102,8 @@ namespace RNAssistant.Application
                     {
                         var candidate=prepared.CandidateId;
                         lock(_service._sync){_service.RequireCandidate(_plugin,candidate);}
-                        context.MarkDispatchPossible();possible=true;
-                        var result=_service.Apply(new PluginApplyRequest{PluginId=_plugin,CandidateId=candidate});
+                        var result=_service.Apply(new PluginApplyRequest{PluginId=_plugin,CandidateId=candidate},
+                            "run:" + context.Execution.RunId, () => { context.MarkDispatchPossible(); possible=true; });
                         return new ToolHandlerResult(ToolResult.Ok("Active publication verified.",JsonConvert.SerializeObject(new PluginPublicationSummary { Name = result.Name, Enabled = result.Enabled })),ToolEffectEvidence.VerifiedChange);
                     }
                     instance=_service.CaptureCommandContext(_plugin, prepared.ProjectId, true);

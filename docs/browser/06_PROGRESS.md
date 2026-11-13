@@ -1,5 +1,26 @@
 # Universal Browser: статус
 
+## Единый локальный Browser — реализация пакета, 2026-11-13
+
+Scope пользователя заменяет external P5/P6 roadmap ниже: один local page runtime,
+local navigation, общий Browser UI/tools, явные saved checkpoints и StartSurface.
+Ниже сохранена история прежнего внешнего Browser, не разрешение его дальнейшего развития.
+Работа последовательная на `main`, исходный HEAD `e9bb52c1`; существующий незавершённый
+preview/automation patch включён в scope по подтверждению пользователя.
+
+| Этап | Фактический результат / следующий шаг |
+|---|---|
+| 08 / `702f3d28` | `16.14.4-dev`: LLM без User-Agent; 12 loopback requests, Harness 1/1 |
+| 04 V1 | Actor/run-scoped candidates, package reuse, source guard до dispatch; три focused Harness cases (authority, preview/grants, published history) |
+| F0 | Следующий: host-neutral targets/runtime, typed bridge, local resolver и ownership; существующие unfinished preview contracts ещё не означают cutover |
+| Ранний 02 | Удалить HTML HTTP proxy, внешнюю навигацию и browser-only deployment controls |
+| F1–F4 | Local delivery + adapters, tools/media, Save/Activate/Delete, navigation/Dock; каждый срез продолжает текущий HEAD |
+| F5 / 07 | Cleanup/canonical docs, затем отдельное сокращение экранов/Inspector |
+
+Windows/WebView2 network enforcement (B02), native input и Office delivery открыты.
+Активный local preview не может заявлять strict isolation без runtime qualification;
+при неподдерживаемой границе требуется source-only с причиной. UI ещё не принят визуально.
+
 ## Подписанная конфигурация — In Review, 2026-11-12
 
 `16.13.0-dev`: generic deployment-config.bin; Developer password unlock, key path,
