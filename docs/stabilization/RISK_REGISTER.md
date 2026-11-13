@@ -354,6 +354,11 @@ UI/Office COM не менялись. Живая модель, Windows/Office и 
 
 ## Карта повторов и блокировок — аудит 2026-11-03
 
+Уточнение 2026-11-14: ограничения полезных повторов чтений/макросов и классификация
+Unknown остаются открытыми. Сохранение guards после удаления истории не закрывает
+политику recovery; scope, owner и критерии следующего среза —
+[в backlog](BACKLOG.md#политика-повторов-recovery-чтения-и-макросы--2026-11-14).
+
 Scope: production conversation loop Office/Workspace/plugin, включая model transport,
 v8 admission и tool recovery. Owners: Core ModelProtocol / AgentKernel / ToolRuntime;
 Application — acceptance и Inbox; Web — отображение причин. Это исторический аудит
