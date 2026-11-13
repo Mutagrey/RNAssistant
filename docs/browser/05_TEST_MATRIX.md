@@ -1,5 +1,17 @@
 # Universal Browser: матрица проверок
 
+## A1/A2/A5 correction evidence — 2026-11-13
+
+Local Browser 11/11 includes native history reconciliation: push/replace/Back/Forward,
+forward truncation, no generation reset before native acknowledgement and failed visit.
+Exact content verifies query/hash and shared descriptor update. Actual-controller
+`--browser-html-export-test` exports `second.html` after the production location update.
+`browser-interactive.test.js` exercises real CDP history entries with retained field
+value/query; existing semantic input/bindings/actual file:// checks still pass.
+`browser-start-surface.test.js` checks native/agent events without a Shell command,
+recents dedup/privacy, rejected/reload visits and narrow layout. Native C# execution
+and Windows compilation are still open; Chromium protocol evidence is not WebView2 qualification.
+
 ## A3 correction evidence — 2026-11-13
 
 `visual selection:` 2/2; `local browser: annotations pin saved entry` 1/1;

@@ -39,6 +39,9 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("controlRevision")] public long? ControlRevision { get; set; }
         [JsonProperty("bounds")] public BrowserBoundsDto Bounds { get; set; }
         [JsonProperty("visual")] public BrowserVisualControl Visual { get; set; }
+        // Runtime-only instruction, never accepted from Shell/model JSON.
+        [JsonIgnore] public int? NativeHistoryEntryId { get; set; }
+        [JsonIgnore] public string NativeLocator { get; set; }
     }
 
     public sealed class BrowserPageStateDto
@@ -65,6 +68,22 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("diagnostic")] public string Diagnostic { get; set; }
         [JsonProperty("visual")] public BrowserVisualEvent Visual { get; set; }
         [JsonProperty("annotationContext")] public BrowserAnnotationContext AnnotationContext { get; set; }
+        [JsonProperty("visitRevision")] public long VisitRevision { get; set; }
+        [JsonIgnore] public BrowserNativeHistory NativeHistory { get; set; }
+    }
+
+    public sealed class BrowserNativeHistory
+    {
+        public string ControllerId { get; set; }
+        public long Revision { get; set; }
+        public int CurrentEntryId { get; set; }
+        public BrowserNativeHistoryEntry[] Entries { get; set; }
+        public BrowserNativeHistory Copy() => JsonConvert.DeserializeObject<BrowserNativeHistory>(JsonConvert.SerializeObject(this));
+    }
+    public sealed class BrowserNativeHistoryEntry
+    {
+        public int Id { get; set; }
+        public string Locator { get; set; }
     }
 
     public sealed class BrowserAnnotationContext

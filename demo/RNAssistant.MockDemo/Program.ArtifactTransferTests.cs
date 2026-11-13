@@ -31,6 +31,7 @@ namespace RNAssistant.MockDemo
                 var before = controller.ListArtifactCatalog(new ArtifactCatalogRequest { ChatId = chat, Scope = "chat" });
                 var package = new ArtifactTransferPackage { Title = "Offline bindings", EntryPath = "index.html" };
                 package.Files.Add(new ArtifactTransferFile { Path = "index.html", Kind = "html", Content = "<button>Offline</button>" });
+                package.Files.Add(new ArtifactTransferFile { Path = "second.html", Kind = "html", Content = "<p>Second page</p>" });
                 package.Data.Add(new ArtifactTransferData { Name = "sales", View = "table", Json = "[{\"total\":42}]" });
                 var bytes = package.Export();
                 var upload = controller.BeginArtifactImport(new ResourceUploadOpenRequest { ChatId = chat, FileName = "project.rna-html.zip", ContentType = "application/zip", ByteLength = bytes.Length }, CancellationToken.None);
@@ -46,7 +47,7 @@ namespace RNAssistant.MockDemo
                 using (var stream = controller.HandleResourceData("GET", prepared.Source.Url + "?offset=0&count=" + prepared.Source.Payload.ByteLength, CancellationToken.None).Body)
                 using (var reader = new StreamReader(stream)) body = reader.ReadToEnd();
                 var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(body);
-                if (snapshot.Files.Single().Content != package.Files.Single().Content || prepared.Target.ResourceUri != item.ResourceUri || prepared.Target.EntryPath != "index.html")
+                if (snapshot.Files.Single(file => file.Path == "index.html").Content != package.Files.Single(file => file.Path == "index.html").Content || prepared.Target.ResourceUri != item.ResourceUri || prepared.Target.EntryPath != "index.html")
                     throw new Exception("Export changed the exact source or entry.");
                 var binding = prepared.ResourceExport.Bindings.Single();
                 using (var stream = controller.HandleResourceData("GET", binding.Lease.Url + "?offset=0&limit=10", CancellationToken.None).Body)
@@ -56,6 +57,14 @@ namespace RNAssistant.MockDemo
                 var after = controller.ListArtifactCatalog(new ArtifactCatalogRequest { ChatId = chat, Scope = "document" });
                 if (after.SessionRevision != catalog.SessionRevision || after.Items.Single(value => value.Kind == ChatArtifactKinds.HtmlWorkspace).ResourceUri != item.ResourceUri)
                     throw new Exception("Export mutated the document or active project.");
+                using (var content = controller.OpenBrowserContent(target, CancellationToken.None)) {
+                    var displayed = new BrowserPageStateDto { Target = target };
+                    content.UpdateLocation(displayed, content.Url("second.html") + "?mode=two#section");
+                }
+                var second = controller.PrepareBrowserHtmlExport(new BrowserProjectTransferRequest { Target = target }, CancellationToken.None);
+                if (second.Target.EntryPath != "second.html") throw new Exception("Local link exported the previous member.");
+                foreach (var id in new[] { second.Source.LeaseId }.Concat(second.ResourceExport.Bindings.Select(value => value.Lease.LeaseId)))
+                    controller.CloseResourceData(new ResourceDataCloseRequest { ChatId = second.ChatId, WorkspaceId = "browser", LeaseId = id });
                 target.ResourceUri += "-stale"; var rejected = false;
                 try { controller.PrepareBrowserHtmlExport(new BrowserProjectTransferRequest { Target = target }, CancellationToken.None); }
                 catch (InvalidOperationException) { rejected = true; }

@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.25.3-dev
+
+- Preserved local query/hash and native SPA history without resetting form state.
+- Export follows the currently displayed HTML member; native and agent navigation
+  now appear in recent pages without storing query payloads.
+
 ### 16.25.2-dev
 
 - Connected annotations for ordinary HTML resources and Workspace HTML projects to

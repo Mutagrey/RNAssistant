@@ -1,5 +1,10 @@
 # Архитектура UI RNAssistant
 
+## Browser navigation correction — In Review, 2026-11-13
+
+Browser apply consumes runtime VisitRevision for recents; command handlers no longer
+write a competing visit stream. Native history IDs stay outside Shell JSON.
+
 ## Universal annotation ownership — In Review, 2026-11-13
 
 BrowserContentSession provides one exact source binding for every local HTML provider.

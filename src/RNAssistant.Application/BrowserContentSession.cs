@@ -46,6 +46,36 @@ namespace RNAssistant.Application
             !path.Contains("\\") && !path.Contains(":") && !path.Contains("%") && !path.Contains("?") && !path.Contains("#") &&
             path.Split('/').All(part => part.Length > 0 && part != "." && part != ".."); }
         public string Url(string path) => Origin + "/" + string.Join("/", path.Split('/').Select(Uri.EscapeDataString));
+        public string InitialUrl(string locator)
+        {
+            BrowserLocalLocator parsed;
+            if (!BrowserLocalLocator.TryParse(locator, out parsed)) throw new InvalidOperationException("Invalid Browser address.");
+            return Url(EntryPath) + parsed.Query + parsed.Fragment;
+        }
+        public string LocalLocator(string member)
+        {
+            if (!Members.Contains(member, StringComparer.Ordinal)) throw new InvalidOperationException("Unknown Browser member.");
+            if (Target.PluginId != null) return BrowserLocalLocator.ForPlugin(Target.PluginId, member, Target.SavedVersionId);
+            if (Target.Kind == BrowserTargetKind.WorkspaceHtmlProject) return BrowserLocalLocator.ForProject(Target.WorkspaceId, member, Target.SavedVersionId);
+            BrowserLocalLocator locator;
+            if (!BrowserLocalLocator.TryParse(Target.DisplayLocator, out locator)) throw new InvalidOperationException("Invalid document address.");
+            return BrowserLocalLocator.ForResource(locator.Key, locator.VersionId, member);
+        }
+        public string Location(string url)
+        {
+            string member;
+            if (!TryMember(url, out member)) throw new InvalidOperationException("Address outside the exact Browser content.");
+            var address = new Uri(url);
+            return LocalLocator(member) + address.Query + address.Fragment;
+        }
+        public void UpdateLocation(BrowserPageStateDto state, string url)
+        {
+            BrowserLocalLocator locator;
+            if (!BrowserLocalLocator.TryParse(Location(url), out locator)) throw new InvalidOperationException("Invalid Browser location.");
+            state.Url = locator.Canonical;
+            state.Target.DisplayLocator = locator.ContentLocator;
+            state.Target.RelativePath = state.Target.EntryPath = locator.RelativePath;
+        }
         public bool TryMember(string url, out string path)
         {
             path = null; Uri uri;

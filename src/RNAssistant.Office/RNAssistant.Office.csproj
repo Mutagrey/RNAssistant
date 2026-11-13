@@ -405,6 +405,7 @@
     <Compile Include="WebView\LocalBrowserRenderer.cs" />
     <Compile Include="WebView\LocalBrowserRenderer.Actions.cs" />
     <Compile Include="WebView\LocalBrowserPage.cs" />
+    <Compile Include="WebView\LocalBrowserPage.History.cs" />
     <Compile Include="WebView\LocalBrowserPage.Automation.cs" />
     <Compile Include="WebView\LocalBrowserPage.Control.cs" />
     <Compile Include="WebView\LocalBrowserPage.Html.cs" />

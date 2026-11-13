@@ -26,7 +26,7 @@
     content.append(files, source, viewport, empty); root.appendChild(content);
     var mount = document.createElement("div"); mount.className = "browser-view";
     var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell"), onLayout: layoutNative, onEnter: function () { if (session && selectedMode === "preview" && current.status === "Ready") { command("Focus").catch(fail); return true; } return false; } });
-    var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, pending = new Set();
+    var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
     var sourcePage = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
     function discuss() {
@@ -255,6 +255,9 @@
         authorityRevision = -1; sourceInvalidated = false; sourceRefreshEpoch++;
       }
       current = value;
+      if (value.visitRevision > recordedVisit && ["Ready", "Unavailable"].includes(value.status)) {
+        RNAssistantDockWorkspace.recordNavigation(value); recordedVisit = value.visitRevision;
+      }
       annotationHost.update(value);
       if (value.status === "Closed") { session = null; stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
@@ -282,7 +285,7 @@
           if (observedAuthority === authorityRevision) sourceInvalidated = false;
           else if (sourceInvalidated) refreshSource();
         }
-        if (["Navigate", "Back", "Forward"].includes(action)) RNAssistantDockWorkspace.recordNavigation(value); }
+      }
     }
     async function open() {
       if (session || opening || disposed) return opening;
@@ -290,7 +293,7 @@
         var value = await send("browserCommand", { action: "Open", browserTabId: target.browserTabId, operationId: operationId,
           ownerScope: target.ownerScope, locator: target.locator });
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
-        session = value.sessionId; apply(value); if (target.recordVisit) RNAssistantDockWorkspace.recordNavigation(value);
+        session = value.sessionId; apply(value);
         if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
         renderer.layout(); await new Promise(function (resolve) { requestAnimationFrame(resolve); });
         var bounds = nativeBounds(true); placementKey = JSON.stringify(bounds);
@@ -322,7 +325,7 @@
         (route.ownerScope.chatId || "") === (owner.chatId || "")) options.browserTabId = route.browserTabId;
     });
     return RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: options && options.browserTabId || id(),
-      operationId: options && options.operationId, locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser", recordVisit: true }, options);
+      operationId: options && options.operationId, locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser" }, options);
   }
   function openResource(target, options) {
     // Format a local display address from the exact runtime reference. The native

@@ -1,5 +1,18 @@
 # Universal Browser: статус
 
+## Navigation, export and recents corrected — 2026-11-13
+
+`16.25.3-dev`, A1/A2/A5: native entry preserves query/hash; current member updates
+URL, display locator and export entry together. Runtime reconciles a bounded native
+entry snapshot (including replace/pop), and same-controller Back/Forward dispatch
+exact native entry IDs instead of recreating the page. IDs remain runtime-only.
+Late placement/control delivery cannot overwrite a newer native generation.
+Confirmed runtime visits feed recents once, including links and agent navigation;
+reload/failed/rejected visits do not add entries, query/fragment stay out of preferences.
+Checks: local Browser 11/11, actual-controller two-page export, Chromium history
+entry traversal with retained input, bindings/file:// and StartSurface/native recents.
+Windows native compilation/history/focus evidence remains open. Remaining: A4, A6, A7.
+
 ## Saved-entry annotation identity исправлена — 2026-11-13
 
 `16.25.2-dev`, A3: завершён общий annotation intake для raw/document/Workspace/plugin

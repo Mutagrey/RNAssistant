@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Browser navigation corrected — 2026-11-13
+
+`16.25.3-dev`: A1/A2/A5 implementation corrected: query/hash, native same-document
+history, current export member and accepted-event recents. Local Browser 11/11,
+controller export and focused Chromium history/StartSurface checks pass.
+A3 was closed in `084ce441`; A4/A6/A7 remain next. Windows compilation/qualification
+and user acceptance remain open. [Evidence](../browser/05_TEST_MATRIX.md).
+
 ## Browser annotation identity fixed — 2026-11-13
 
 `16.25.2-dev`: universal intake завершён с exact saved-entry identity. Одинаковые

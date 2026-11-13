@@ -11,7 +11,7 @@ universal intake срезом. Остальные пункты продолжа�
 
 Последовательность сквозных исправлений:
 
-1. 02/05: native query/hash, согласованная same-document history и текущий descriptor
+1. **Готово локально (16.25.3-dev):** 02/05 native query/hash, согласованная same-document history и текущий descriptor
    для export; затем 06 recents от принятого runtime visit.
 2. **Готово (16.25.2-dev):** 03/04 exact saved-entry provenance аннотаций, сохранение его в attachments/history
    и запрет reveal между v1/v3 одинакового content.

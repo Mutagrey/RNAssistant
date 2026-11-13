@@ -56,6 +56,23 @@ namespace RNAssistant.Office.WebView
                 token.ThrowIfCancellationRequested();
                 if (_closed) throw new ObjectDisposedException(nameof(LocalBrowserRenderer));
                 LocalBrowserPage page; _pages.TryGetValue(state.BrowserTabId, out page);
+                if (page != null && page.State.SessionId == state.SessionId && page.State.DocumentGeneration > state.DocumentGeneration) {
+                    if (command.Action != BrowserCommandKind.Layout && command.Action != BrowserCommandKind.Focus && command.Action != BrowserCommandKind.Stop)
+                        throw new InvalidOperationException("Browser changed before native delivery.");
+                    state = page.State;
+                }
+                if (page != null && page.State.SessionId == state.SessionId &&
+                    (command.Action == BrowserCommandKind.Layout || command.Action == BrowserCommandKind.Focus || command.Action == BrowserCommandKind.Stop ||
+                     command.Action == BrowserCommandKind.VisualControl || command.Action == BrowserCommandKind.ResumeAgent)) {
+                    page.State.ViewportRevision = Math.Max(page.State.ViewportRevision, state.ViewportRevision);
+                    state = page.State;
+                }
+                if (command.NativeHistoryEntryId.HasValue || command.NativeLocator != null) {
+                    if (page == null || page.State.SessionId != state.SessionId) throw new InvalidOperationException("Native history is unavailable.");
+                    page.State = state;
+                    await page.NavigateHistoryAsync(command.NativeHistoryEntryId, command.NativeLocator, token);
+                    state = page.State;
+                }
                 if (page != null && (state.Status == BrowserPageStatus.Closed || state.Status == BrowserPageStatus.Home ||
                     state.Target?.State != BrowserTargetState.Ready || page.State.SessionId != state.SessionId ||
                     command.Action == BrowserCommandKind.Reload || page.State.DocumentGeneration != state.DocumentGeneration)) {
@@ -88,7 +105,8 @@ namespace RNAssistant.Office.WebView
                     state.Target.Capabilities.Media = page.HasLoaded; state.Target.Capabilities.PreviewReason = BrowserRefusalCode.None;
                     state.AnnotationContext = page.AnnotationContext(); state.Target.Capabilities.Annotations = page.HasLoaded && state.AnnotationContext != null;
                     state.Target.ContentRevision = page.Content.Target.ContentRevision;
-                    state.Target.EntryPath = page.Content.EntryPath; if (state.Target.RelativePath == null) state.Target.RelativePath = page.Content.EntryPath;
+                    if (state.Target.RelativePath == null) state.Target.RelativePath = page.Content.EntryPath;
+                    state.Target.EntryPath = state.Target.RelativePath;
                 }
                 RefreshHandles(); return state;
             }).ConfigureAwait(false); }

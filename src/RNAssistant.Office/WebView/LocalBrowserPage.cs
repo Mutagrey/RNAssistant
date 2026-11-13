@@ -56,7 +56,7 @@ namespace RNAssistant.Office.WebView
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _cancel.Token)) {
                 var content = await Task.Run(() => _open(State.Target, linked.Token), linked.Token);
                 if (_closed || linked.IsCancellationRequested) { content.Dispose(); await content.Drained; linked.Token.ThrowIfCancellationRequested(); }
-                Content = content;
+                Content = content; State.Target.ContentRevision = content.Target.ContentRevision;
                 var lease = await _environment.AcquireAsync();
                 if (_closed || linked.IsCancellationRequested) { lease.Dispose(); linked.Token.ThrowIfCancellationRequested(); }
                 _environmentLease = lease; var environment = lease.Environment;
@@ -77,7 +77,7 @@ namespace RNAssistant.Office.WebView
                     Core.WebMessageReceived += PluginMessage;
                 } else { _route = _environment.Route(Core, Content.Origin, Resource); Core.WebMessageReceived += ResourceControl; }
                 Core.NavigationStarting += NavigationStarting; Core.NavigationCompleted += NavigationCompleted;
-                Core.SourceChanged += SourceChanged;
+                Core.HistoryChanged += HistoryChanged;
                 Core.DocumentTitleChanged += (sender, args) => { if (!_closed) { State.Title = Core.DocumentTitle; Publish(); } };
                 Core.FrameNavigationStarting += (sender, args) => { string path; if (!Content.TryMember(args.Uri, out path) && args.Uri != "about:blank" && !args.Uri.StartsWith("blob:" + Content.Origin + "/", StringComparison.Ordinal)) args.Cancel = true; };
                 Core.NewWindowRequested += (sender, args) => {
@@ -96,7 +96,7 @@ namespace RNAssistant.Office.WebView
                 Core.ProcessFailed += (sender, args) => { HasLoaded = false; State.Status = BrowserPageStatus.Failed; State.Message = "Процесс локальной страницы завершился. Обновите страницу."; _loaded.TrySetException(new InvalidOperationException(State.Message)); Publish(); };
                 await Core.CallDevToolsProtocolMethodAsync("Page.enable", "{}");
                 await BuildHtmlAsync(linked.Token);
-                Core.Navigate(Content.Url(Content.EntryPath));
+                Core.Navigate(Content.InitialUrl(State.Url));
                 using (linked.Token.Register(() => _loaded.TrySetCanceled())) {
                     if (await Task.WhenAny(_loaded.Task, Task.Delay(15000, linked.Token)) != _loaded.Task) throw new TimeoutException("Local Browser page did not become ready.");
                     await _loaded.Task;
@@ -119,30 +119,13 @@ namespace RNAssistant.Office.WebView
                 if (!args.IsSuccess) throw new InvalidOperationException("Локальная страница не загрузилась: " + args.WebErrorStatus);
                 await InitializeAutomationAsync();
                 if (_closed || args.NavigationId != _navigation) return;
-                HasLoaded = true; State.Status = BrowserPageStatus.Ready; State.Message = null; State.Reason = BrowserRefusalCode.None;
+                HasLoaded = true;
+                await RefreshHistoryAsync(false);
+                if (_closed || args.NavigationId != _navigation) return;
                 _loaded.TrySetResult(true); Publish();
-            } catch (Exception error) { if (!_closed) { State.Status = BrowserPageStatus.Failed; State.Message = error.Message; _loaded.TrySetException(error); Publish(); } }
+            } catch (Exception error) { if (!_closed) { State.Status = BrowserPageStatus.Failed; State.Message = error.Message; _loaded.TrySetException(error); _navigationWait?.TrySetException(error); Publish(); } }
         }
-        private async void SourceChanged(object sender, CoreWebView2SourceChangedEventArgs args)
-        {
-            if (_closed || !_loaded.Task.IsCompleted) return; string member;
-            if (!Content.TryMember(Core.Source, out member)) return;
-            var address = new Uri(Core.Source); var target = State.Target;
-            var locator = LocalLocator(member);
-            locator += address.Query + address.Fragment;
-            if (State.Url != locator) { State.Url = locator; if (!args.IsNewDocument) State.DocumentGeneration++; target.RelativePath = member; InvalidateAutomation();
-                if (!args.IsNewDocument) try { await InitializeVisualAsync(); } catch { State.Visual = null; State.AnnotationContext = null; } }
-            Publish();
-        }
-        internal string LocalLocator(string member)
-        {
-            var target = State.Target;
-            if (target.PluginId != null) return BrowserLocalLocator.ForPlugin(target.PluginId, member, target.SavedVersionId);
-            if (target.Kind == BrowserTargetKind.WorkspaceHtmlProject) return BrowserLocalLocator.ForProject(target.WorkspaceId, member, target.SavedVersionId);
-            BrowserLocalLocator locator;
-            if (!BrowserLocalLocator.TryParse(target.DisplayLocator, out locator)) throw new InvalidOperationException("The document locator is invalid.");
-            return BrowserLocalLocator.ForResource(locator.Key, locator.VersionId, member);
-        }
+        internal string LocalLocator(string member) => Content.LocalLocator(member);
         internal event Action<string> NewTabRequested;
         private async void PluginMessage(object sender, CoreWebView2WebMessageReceivedEventArgs args)
         {
@@ -195,7 +178,7 @@ namespace RNAssistant.Office.WebView
         internal void Focus() { Controller.MoveFocus(CoreWebView2MoveFocusReason.Programmatic); }
         public void Dispose()
         {
-            if (_closed) return; _closed = true; _cancel.Cancel(); _loaded.TrySetCanceled();
+            if (_closed) return; _closed = true; _cancel.Cancel(); _loaded.TrySetCanceled(); _navigationWait?.TrySetCanceled();
             _resources?.Dispose(); _route?.Dispose(); _pluginTransport?.Dispose(); Controller?.Close(); Control.Dispose();
             lock (_streamSync) { foreach (var stream in _streams.ToArray()) stream.Dispose(); _streams.Clear(); } Content?.Dispose();
             if (_pending == 0) _drained.TrySetResult(true);

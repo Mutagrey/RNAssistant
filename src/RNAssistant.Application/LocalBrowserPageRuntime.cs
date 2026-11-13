@@ -10,7 +10,7 @@ namespace RNAssistant.Application
     // The sole local tab/session/history owner; the native adapter owns rendering/input only.
     public sealed partial class LocalBrowserPageRuntime : IBrowserPageRuntime, IBrowserOpenSource, IBrowserMediaSource, IBrowserAnnotationSource, IDisposable
     {
-        private sealed class Visit { public BrowserOwnerScope Owner; public string Locator; }
+        private sealed class Visit { public BrowserOwnerScope Owner; public string Locator, NativeController; public int? NativeEntry; }
         private sealed class Page
         {
             public BrowserPageStateDto State;
@@ -41,6 +41,7 @@ namespace RNAssistant.Application
         }
         private async Task<BrowserPageStateDto> DeliverAsync(BrowserCommandPayload request, CancellationToken token)
         {
+            if (request != null) { request.NativeHistoryEntryId = null; request.NativeLocator = null; }
             var result = await ExecuteCoreAsync(request, token).ConfigureAwait(false);
             if (_renderer != null) {
                 try { result = await _renderer.UpdateAsync(request, result, token).ConfigureAwait(false); }
@@ -54,7 +55,7 @@ namespace RNAssistant.Application
                     Page page;
                     if (result.Status != BrowserPageStatus.Closed && (!_pages.TryGetValue(result.BrowserTabId, out page) || page.State.SessionId != result.SessionId || page.State.DocumentGeneration > result.DocumentGeneration))
                         throw new InvalidOperationException("Browser changed during native delivery.");
-                    if (_pages.TryGetValue(result.BrowserTabId, out page)) { result.Revision = Math.Max(result.Revision, page.State.Revision) + 1; page.State = Copy(result); }
+                    if (_pages.TryGetValue(result.BrowserTabId, out page)) result = AcceptNativeState(page, result);
                 }
             }
             ObserveAgentOpen(request, result); _publish?.Invoke(Copy(result)); return Copy(result);
@@ -65,13 +66,7 @@ namespace RNAssistant.Application
             lock (_sync) {
                 Page page;
                 if (_disposed || !_pages.TryGetValue(state.BrowserTabId, out page) || page.State.SessionId != state.SessionId || page.State.DocumentGeneration > state.DocumentGeneration) return;
-                if (page.State.Url != state.Url) {
-                    page.History.RemoveRange(page.Position + 1, page.History.Count - page.Position - 1);
-                    page.History.Add(new Visit { Owner = state.OwnerScope, Locator = state.Url });
-                    if (page.History.Count > 64) page.History.RemoveAt(0); page.Position = page.History.Count - 1;
-                }
-                value = Copy(state); value.Revision = Math.Max(value.Revision, page.State.Revision) + 1;
-                value.CanGoBack = page.Position > 0; value.CanGoForward = page.Position + 1 < page.History.Count; page.State = value;
+                value = AcceptNativeState(page, state);
             }
             _publish?.Invoke(Copy(value));
         }
@@ -113,10 +108,17 @@ namespace RNAssistant.Application
                         case BrowserCommandKind.Attach:
                             if (request.OperationId != page.State.OperationId) throw new InvalidOperationException("Подтверждение относится к другому открытию.");
                             page.State.Attached = true; break;
-                        case BrowserCommandKind.Navigate: Navigate(page, page.State.OwnerScope, request.Locator, true); break;
+                        case BrowserCommandKind.Navigate:
+                            BrowserLocalLocator next, current;
+                            if (page.State.Status == BrowserPageStatus.Ready && page.State.NativeHistory != null &&
+                                BrowserLocalLocator.TryParse(request.Locator, out next) && BrowserLocalLocator.TryParse(page.State.Url, out current) &&
+                                next.ContentLocator == current.ContentLocator && next.Query == current.Query)
+                                request.NativeLocator = next.Canonical;
+                            else Navigate(page, page.State.OwnerScope, request.Locator, true);
+                            break;
                         case BrowserCommandKind.Home: Navigate(page, page.State.OwnerScope, "/", true); break;
-                        case BrowserCommandKind.Back: Move(page, -1); break;
-                        case BrowserCommandKind.Forward: Move(page, 1); break;
+                        case BrowserCommandKind.Back: Move(page, -1, request); break;
+                        case BrowserCommandKind.Forward: Move(page, 1, request); break;
                         case BrowserCommandKind.Reload: Navigate(page, page.History[page.Position].Owner, page.History[page.Position].Locator, false); break;
                         case BrowserCommandKind.Close:
                             page.State.Status = BrowserPageStatus.Closed; page.State.Attached = false; _pages.Remove(request.BrowserTabId); break;
@@ -141,6 +143,8 @@ namespace RNAssistant.Application
             var state = page.State;
             state.OwnerScope = owner; state.Target = resolved.Target;
             state.Url = resolved.Locator; state.Title = resolved.Target.Title;
+            state.NativeHistory = null;
+            if (append) state.VisitRevision++;
             state.DocumentGeneration++; state.ControlRevision++; state.Revision++;
             state.Status = resolved.Target.Kind == BrowserTargetKind.Home ? BrowserPageStatus.Home :
                 resolved.Target.State == BrowserTargetState.Removed ? BrowserPageStatus.Removed : BrowserPageStatus.Unavailable;
@@ -159,13 +163,18 @@ namespace RNAssistant.Application
             }
             state.CanGoBack = page.Position > 0; state.CanGoForward = page.Position + 1 < page.History.Count;
         }
-        private void Move(Page page, int delta)
+        private void Move(Page page, int delta, BrowserCommandPayload request)
         {
             var index = page.Position + delta;
             if (index < 0 || index >= page.History.Count) return;
-            var visit = page.History[index]; var old = page.Position; page.Position = index;
+            var visit = page.History[index];
+            if (visit.NativeEntry.HasValue && visit.NativeController == page.State.NativeHistory?.ControllerId && page.State.Status == BrowserPageStatus.Ready) {
+                request.NativeHistoryEntryId = visit.NativeEntry; return;
+            }
+            var old = page.Position; page.Position = index;
             try { Navigate(page, visit.Owner, visit.Locator, false); }
             catch { page.Position = old; throw; }
+            page.State.VisitRevision++;
         }
         private void TrimReceipts()
         {
@@ -188,7 +197,11 @@ namespace RNAssistant.Application
         }
         private static bool SameBounds(BrowserBoundsDto a, BrowserBoundsDto b) => a != null && a.Visible == b.Visible && a.X == b.X && a.Y == b.Y &&
             a.Width == b.Width && a.Height == b.Height && a.ViewportWidth == b.ViewportWidth && a.ViewportHeight == b.ViewportHeight;
-        private static BrowserPageStateDto Copy(BrowserPageStateDto value) => Newtonsoft.Json.JsonConvert.DeserializeObject<BrowserPageStateDto>(Newtonsoft.Json.JsonConvert.SerializeObject(value));
+        private static BrowserPageStateDto Copy(BrowserPageStateDto value)
+        {
+            var copy = Newtonsoft.Json.JsonConvert.DeserializeObject<BrowserPageStateDto>(Newtonsoft.Json.JsonConvert.SerializeObject(value));
+            copy.NativeHistory = value.NativeHistory?.Copy(); return copy;
+        }
         public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId) => _renderer?.TargetsFor(chatId) ?? new BrowserPageHandle[0];
         public Task<BrowserObservation> ReadAsync(BrowserPageHandle target, CancellationToken token) => _renderer?.ReadAsync(target, token) ?? throw Unavailable();
         public Task PrepareAsync(BrowserPageHandle target, string revision, string preparation, BrowserActionRequest request, CancellationToken token) => _renderer?.PrepareAsync(target, revision, preparation, request, token) ?? throw Unavailable();

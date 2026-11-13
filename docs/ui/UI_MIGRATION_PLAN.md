@@ -1,5 +1,12 @@
 # План модернизации production UI
 
+## Browser navigation correction — In Review, 2026-11-13
+
+A1/A2/A5 corrected locally in 16.25.3-dev: open local query/hash → type a field →
+push/replace/Back/Forward → follow a second HTML link → export → inspect recents.
+Harness/controller/Chromium checks pass; Windows native verification remains open.
+Next: A4 Delete, A6 explicit context handoff, A7 user screenshot.
+
 ## Browser package audit — Incomplete, 2026-11-13
 
 A3 исправлен в 16.25.2-dev вместе с universal annotation intake.

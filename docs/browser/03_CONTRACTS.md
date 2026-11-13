@@ -1,5 +1,18 @@
 # Universal Browser: предлагаемые контракты
 
+## Navigation reconciliation — 2026-11-13
+
+LocalBrowserPageRuntime owns the bounded global history. Native pages provide typed
+controller/entry snapshots from `Page.getNavigationHistory`; IDs are runtime-only,
+not Shell/model authority or persisted preferences. Back/Forward within the current
+controller uses `Page.navigateToHistoryEntry`, preserving same-document DOM state.
+Replace/pop are reconciled by entry ID; a new entry after Back truncates forward.
+Native address acknowledgement updates Url/DisplayLocator/RelativePath/EntryPath
+atomically. Initial navigation retains query/hash. VisitRevision is the common UI
+notification for accepted visits; recents store only canonical source metadata.
+API references: [CDP Page](https://chromedevtools.github.io/devtools-protocol/1-3/Page/),
+[WebView2 HistoryChanged](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.historychanged).
+
 ## Native page find — F2c5, 2026-11-13
 
 Typed VisualControl.find uses the same bounded native semantic capture and privacy

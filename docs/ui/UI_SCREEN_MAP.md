@@ -1,5 +1,10 @@
 # Карта экранов, навигации и состояний
 
+## Browser navigation correction — In Review, 2026-11-13
+
+Browser Back/Forward within the live native page preserves SPA fields/scroll.
+Address query/hash is preserved; source/export follow the current local member.
+
 ## 07 current screen ownership — In Review, 2026-11-13
 
 | Screen | Owner / data | Commands and entry | Saved descriptor |

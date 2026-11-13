@@ -39,7 +39,7 @@
   }
   function recordNavigation(value) {
     var target = value && value.target;
-    if (!target || target.state !== "Ready" || value.status === "Removed" || value.status === "Closed") return;
+    if (!target || target.state !== "Ready" || !["Ready", "Unavailable"].includes(value.status)) return;
     var entry = recentEntry({ locator: value.url, title: value.title || target.title || "", kind: target.kind,
       scope: target.ownerScope, visitedAt: Date.now() });
     if (!entry) return;

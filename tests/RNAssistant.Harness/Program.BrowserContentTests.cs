@@ -55,14 +55,56 @@ namespace RNAssistant.Harness
             }
             AssertTrue(renderer.Disposed, "runtime disposes its sole native adapter");
         }
+        private static void BrowserNativeHistoryReconciliation()
+        {
+            var renderer = new BrowserRendererFixture(); renderer.Ready.SetResult(true);
+            var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = "project", ChatId = "chat" };
+            BrowserPageStateDto latest = null;
+            const string root = "/projects/project/source/index.html";
+            using (var runtime = new LocalBrowserPageRuntime(request => new BrowserResolveResult { Locator = request.Locator,
+                Target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.WorkspaceHtmlProject, State = BrowserTargetState.Ready,
+                    OwnerScope = owner, DisplayLocator = request.Locator, Capabilities = new BrowserTargetCapabilities() } }, value => latest = value, renderer: renderer)) {
+                var state = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "history", OperationId = "open",
+                    OwnerScope = owner, Locator = root }, CancellationToken.None).GetAwaiter().GetResult();
+                Action<BrowserCommandKind> command = action => runtime.ExecuteAsync(new BrowserCommandPayload { Action = action,
+                    BrowserTabId = "history", SessionId = state.SessionId, OperationId = "open" }, CancellationToken.None).GetAwaiter().GetResult();
+                command(BrowserCommandKind.Attach);
+                long sequence = 0;
+                Action<int, BrowserNativeHistoryEntry[]> changed = (current, entries) => {
+                    var value = latest; value.DocumentGeneration++; value.Status = BrowserPageStatus.Ready;
+                    value.Url = entries.Single(entry => entry.Id == current).Locator;
+                    value.NativeHistory = new BrowserNativeHistory { ControllerId = "native", Revision = ++sequence, CurrentEntryId = current, Entries = entries };
+                    renderer.Notify(value);
+                };
+                var first = new BrowserNativeHistoryEntry { Id = 10, Locator = root };
+                var second = new BrowserNativeHistoryEntry { Id = 20, Locator = root + "#two" };
+                var third = new BrowserNativeHistoryEntry { Id = 30, Locator = root + "#three" };
+                changed(10, new[] { first });
+                var initialVisit = latest.VisitRevision;
+                changed(30, new[] { first, second, third });
+                AssertTrue(latest.VisitRevision > initialVisit && latest.CanGoBack, "native visits reach the common accepted-visit revision");
+                var generation = latest.DocumentGeneration; command(BrowserCommandKind.Back);
+                AssertEqual((int?)20, renderer.LastCommand.NativeHistoryEntryId, "Back uses the exact native entry");
+                AssertEqual(generation, latest.DocumentGeneration, "runtime does not rebuild the same-document page before native acknowledgement");
+                changed(20, new[] { first, second, third });
+                second = new BrowserNativeHistoryEntry { Id = 20, Locator = root + "#replaced" };
+                changed(20, new[] { first, second, third }); command(BrowserCommandKind.Forward);
+                AssertEqual((int?)30, renderer.LastCommand.NativeHistoryEntryId, "replaceState retains the forward entry, not an appended duplicate");
+                changed(40, new[] { first, second, new BrowserNativeHistoryEntry { Id = 40, Locator = root + "#new" } });
+                AssertTrue(!latest.CanGoForward, "new native navigation after Back truncates forward history");
+                var beforeFailure = latest.VisitRevision; latest.Status = BrowserPageStatus.Failed; renderer.Notify(latest);
+                AssertEqual(beforeFailure, latest.VisitRevision, "failed native navigation never becomes a recent visit");
+            }
+        }
         private sealed class BrowserRendererFixture : IBrowserRenderer
         {
             internal readonly TaskCompletionSource<bool> Ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             internal bool Disposed;
+            internal BrowserCommandPayload LastCommand;
             public event Action<BrowserPageStateDto> Changed;
             internal void Notify(BrowserPageStateDto state) { Changed?.Invoke(state); }
             public async Task<BrowserPageStateDto> UpdateAsync(BrowserCommandPayload command, BrowserPageStateDto state, CancellationToken token)
-            { if (command.Action == BrowserCommandKind.Attach) { await Ready.Task; state.Status = BrowserPageStatus.Ready; state.Target.Capabilities.Preview = true; } return state; }
+            { LastCommand = command; if (command.Action == BrowserCommandKind.Attach) { await Ready.Task; state.Status = BrowserPageStatus.Ready; state.Target.Capabilities.Preview = true; } return state; }
             public Task ResetAsync() => Task.CompletedTask;
             public void Dispose() { Disposed = true; }
             public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId) => new BrowserPageHandle[0];
@@ -82,6 +124,11 @@ namespace RNAssistant.Harness
                 var target = service.Resolve(new BrowserResolveRequest { OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" },
                     Locator = BrowserLocalLocator.ForProject(imported.WorkspaceId, imported.EntryPath) }).Target;
                 using (var content = service.OpenBrowserContent(target, CancellationToken.None)) {
+                    var initial = content.InitialUrl(target.DisplayLocator + "?mode=edit#field");
+                    AssertTrue(initial.EndsWith("?mode=edit#field", StringComparison.Ordinal), "native entry preserves query and fragment");
+                    var displayed = new BrowserPageStateDto { Target = target };
+                    content.UpdateLocation(displayed, initial);
+                    AssertEqual(target.DisplayLocator + "?mode=edit#field", displayed.Url, "display locator and current native member agree");
                     string member;
                     AssertTrue(content.TryMember(content.Url(content.EntryPath) + "?query=one#section", out member) && member == content.EntryPath,
                         "local navigation resolves an exact declared member with query/fragment");

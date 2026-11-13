@@ -15,10 +15,10 @@ const {withPreviewPage}=require('./preview-session');
       }
       if(type==='readBrowserSource')return Promise.resolve({files:['index.html'],path:'index.html',text:'<h1>Exact source</h1>',offset:0,totalCharacters:21,revision:'sha',requestGeneration:p.requestGeneration});
       let value=probe.pages.get(p.browserTabId);
-      if(p.action==='Open') { value={browserTabId:p.browserTabId,sessionId:'session-'+p.browserTabId,ownerScope:p.ownerScope,revision:0,documentGeneration:1,url:p.locator,title:'Главная',status:'Home',attached:false};probe.pages.set(p.browserTabId,value); }
+      if(p.action==='Open') { value={browserTabId:p.browserTabId,sessionId:'session-'+p.browserTabId,ownerScope:p.ownerScope,visitRevision:1,revision:0,documentGeneration:1,url:p.locator,title:'Главная',status:'Home',attached:false};probe.pages.set(p.browserTabId,value); }
       else if(p.action==='Navigate') {
         if(!p.locator.startsWith('/projects/'))return Promise.reject(new Error('Локальный адрес недоступен'));
-        value.url=p.locator;value.title='Страница проекта';value.documentGeneration++;value.status='Unavailable';
+        value.visitRevision++;value.url=p.locator;value.title='Страница проекта';value.documentGeneration++;value.status='Unavailable';
         value.target={kind:'WorkspaceHtmlProject',state:'Ready',ownerScope:{kind:'Workspace',scopeId:'demo'},workspaceId:'demo',capabilities:{source:true}};
       } else if(p.action==='Home') {value.status='Home';value.url='/';value.title='Главная';value.documentGeneration++;value.target=null;}
       else if(p.action==='Reload')value.documentGeneration++;
@@ -64,6 +64,13 @@ const {withPreviewPage}=require('./preview-session');
   await address.fill('https://external.invalid');await address.press('Enter');
   await browser.getByRole('alert').filter({hasText:'Локальный'}).waitFor();
   assert.equal(await page.evaluate(()=>localStorage.getItem('rnassistant.ui.dock.s1.v1.local-recents.v1')),persisted.recent,'Rejected address does not record a visit');
+  await page.evaluate(() => {
+    const value = [...startProbe.pages.values()].find(value => value.status === 'Unavailable');
+    value.url = '/projects/demo/source/from-native.html?token=HIDDEN'; value.visitRevision++; value.documentGeneration++; value.revision++;
+    RNAssistantBrowser.apply(structuredClone(value));
+  });
+  const nativeRecent = await page.evaluate(() => localStorage.getItem('rnassistant.ui.dock.s1.v1.local-recents.v1'));
+  assert.ok(nativeRecent.includes('from-native.html') && !nativeRecent.includes('HIDDEN'), 'native/agent state events enter recents without a Shell command');
   await browser.getByRole('button',{name:'Главная',exact:true}).click();
   await home.getByRole('button',{name:'Очистить недавние страницы',exact:true}).waitFor();
   await page.screenshot({path:'docs/ui/review/browser-home-wide.png'});

@@ -1,5 +1,10 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Browser navigation correction — In Review, 2026-11-13
+
+Navigation correction reuses the existing Browser address/history controls and
+StartSurface components; no new toolbar, geometry or spacing overrides.
+
 ## Universal annotation availability — In Review, 2026-11-13
 
 The same selection button, comment editor and markers serve raw HTML, Workspace,

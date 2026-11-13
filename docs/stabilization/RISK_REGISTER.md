@@ -3,14 +3,10 @@
 ## Browser package audit — Open, 2026-11-13
 
 Owner: Browser native/runtime + existing export/annotation/version services.
-A3 исправлен в 16.25.2-dev: exact saved-entry identity включена в attachment.
-Остаток P1: native query/hash/history mismatch; export после local link выбирает предыдущий
-member.
-P2: read-only plugin viewer блокирует Delete; native/agent visits не доходят до recents.
-Manual scope handoff и screenshot UI остаются незавершёнными пунктами пакета.
-38 Harness/13 web suites проходят, но этих сценариев в них нет; A2–A4 подтверждены
-отдельными backend probes. Исправления и нужное evidence перечислены в
-[Browser Test Matrix](../browser/05_TEST_MATRIX.md#найденные-дефекты-и-незакрытые-требования).
+A3 исправлен в 16.25.2-dev; A1/A2/A5 — в 16.25.3-dev (локальная реализация и
+регрессионные проверки). Windows native history/input/isolation evidence открыт.
+Остаток: A4 read-only plugin viewer блокирует Delete; A6 manual scope handoff и
+A7 screenshot UI. [Evidence](../browser/05_TEST_MATRIX.md).
 
 ## Local Browser B02 — Open, 2026-11-13
 
