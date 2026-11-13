@@ -25,7 +25,8 @@ namespace RNAssistant.Core.Storage
             if (command.FactKind == AgentRunEventKind.ToolStarted &&
                 !SameRunValue(context, session.LastRun.KernelState.InFlightTool))
                 throw new InvalidOperationException("Dispatch requires its exact in-flight checkpoint.");
-            if (context?.Policy.MayHaveSideEffects == true && (context.Call.Name != ResourceMutationToolCatalog.Write && !IsPeerMutation(context.Call.Name) ||
+            if (context?.Policy.MayHaveSideEffects == true && (context.Call.Name != ResourceMutationToolCatalog.Write &&
+                context.Call.Name != AgentCommunicationToolCatalog.Group && !IsPeerMutation(context.Call.Name) ||
                 context.Policy.Policy?.ExecutionClass != ToolExecutionClass.ManagedMutation))
                 throw TextStoreScope();
             if (command.FactKind == AgentRunEventKind.ToolWaiting)

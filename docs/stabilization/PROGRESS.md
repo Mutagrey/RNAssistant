@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Native chat groups — 2026-11-13
+
+Группы подключены через существующий ConversationGroupService к ResourceJournal/CAS.
+Три новых checks проходят через Office/Workspace consumers и typed UI: CRUD,
+revision/scope, сохранность участников, lost ack → Unknown, rebuild и clean restore.
+Десять регрессионных checks проходят: прежние groups, native resources и mutation.
+Model alias lookup использует индекс; history участников не загружается. Новых stores,
+schema или fallback нет. Default writers прежние, Windows/Office evidence открыт.
+Native Delete/Move чатов пока не подключены: удаление должно разделять resource scope
+lease с membership и пройти add/delete race. Далее остальные Store/resource операции
+и metadata/header, включая расходы authority snapshot; P4 отложена.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-chat-groups-2026-11-13).
+
 ## Native assignment pages — 2026-11-13
 
 `agents.list(assignments=…)` подключён к journal/index через Office/Workspace.

@@ -1,5 +1,30 @@
 # Session event stream
 
+## Journal chat groups — 2026-11-13
+
+The existing ConversationGroupService now accepts native conversation/resource
+ports bound to one document/workspace. Group heads and immutable CAS bodies remain
+in ResourceJournal; no group stream, table, schema change or second store. Reads
+select the group prefix in 100-head pages, validate generation and verify payloads.
+Membership uses scoped metadata; model aliases use the existing Inbox/event index.
+It never loads member histories or changes their runs, queues or participant roster.
+
+Create/rename/add/remove/delete keep exact revision, unique name, deduplication and
+creation-key/tombstone guards. A write holds the resource scope lease across guards,
+prepared, dispatch, authority publication and exact head read-back. Model preparation
+binds the accepted call; the kernel terminal links its existing ResourceOutcomeLink.
+List/no-op return no effect. Lost publication acknowledgement leaves source Unknown
+even when the group is durable; restart, rebuild and restore do not retry or upgrade
+that terminal. Runtime authority commits are excluded from model/UI JSON.
+
+Native chat Delete/Move remain unsupported. Their future integration must share
+this lease, including the add/delete-chat race check; that race is not qualified
+for the native backend yet. Default writers still use the explicit retiring
+composition below. Whole-port P7 removes ChatStore.Groups and the legacy constructor/
+catalog branch, with no import, dual-write or fallback. Group reads still hydrate
+all group bodies in the scope; Publish's existing authority snapshot and broader
+metadata/header costs remain separate work.
+
 ## Journal assignment pages — 2026-11-13
 
 `agents.list(assignments=incoming|outgoing)` now reads native Send/Resolve/spawn
@@ -528,7 +553,7 @@ normal context restart. Canonical JSONL and user history are not changed by repa
 
 ## Named chat groups — 2026-11-05
 
-ChatStore.Groups reuses ResourceAuthorityStore append-only commits and immutable CAS:
+The retiring ChatStore.Groups path reuses ResourceAuthorityStore append-only commits and immutable CAS:
 one runtime state/chat_group_* head per group, exact document/workspace scope. Group
 payload contains name, unique member ChatIds, revision and creation operation key.
 No dedicated journal, hidden owner chat, membership dual-write or history rewrite.

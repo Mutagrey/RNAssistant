@@ -1537,3 +1537,48 @@ after-state/CAS ownership.
    are updated. P7 removes AssignmentsEvents with the explicit capability/adapters.
    This intermediate integration does not change default production behavior, so
    no product bump. One scoped commit; no push/tag.
+
+## P5 — native chat groups (2026-11-13)
+
+1. Native create/list/rename/add/remove/delete now use the existing
+   ConversationGroupService through actual Office run-service and Workspace ports,
+   plus the existing typed UI change contract. Scoped resource heads and immutable
+   group bodies remain in ResourceJournal/CAS; no group stream, table or new owner.
+2. The existing resource scope lease spans source/member checks, revision/name
+   guards, prepared, dispatch, authority commit and exact head read-back. Model
+   calls bind resource preparation to their accepted origin; only the kernel writes
+   the conversation terminal. Lost acknowledgement preserves source Unknown even
+   when the resource commit is durable. Groups do not rewrite participant history,
+   schedule runs, alter queues or reserve causal-chain membership. Tombstones cannot
+   be resurrected by reusing a creation key; no-op/list produces no resource effect.
+3. Native alias resolution uses the existing Inbox/event index and membership uses
+   conversation metadata. Reads select only group-prefix heads in 100-row pages;
+   verified change results reuse their captured group without rereading the catalog.
+   Resource outcome links reuse existing journal facts, with no schema migration.
+   ChatStore.Groups itself is unchanged; its explicit service constructor/catalog
+   branch remains only until whole-port P7. No import, dual-write or hidden fallback.
+   Production C# +250/−47 lines; the new Application partial is in its projitems.
+4. On `1e84f83e` + this slice, macOS/net8/C#7.3: three new cases pass across Office
+   and Workspace for typed UI guards, model CRUD/list/no-op, scoped aliases,
+   lease refusal, tombstones, unchanged participant histories, lost acknowledgement,
+   restart/rebuild and clean Workspace restore. Ten focused regressions pass:
+   retiring groups (3), native resource ports (3), native mutation (4). Version
+   format and diff checks pass. No full suite or VSTO/Office validation was run.
+5. Before: native tool admission rejected group mutations and the group service
+   depended on ChatStore. After: group operations use the existing resource ports
+   and canonical kernel outcomes, without loading member histories or enumerating
+   the chat catalog for model IDs (the fixture rejects that access). Group bodies
+   in the scope are still hydrated for unique-name checks; authority Publish still
+   returns its existing snapshot. No total-history cost curve, allocation reduction
+   or Windows latency claim is made for this integration slice.
+6. Next: remaining ordinary Store/resource operations, including native Delete/Move,
+   and P3 metadata/header/authority-snapshot costs. Native chat deletion must share
+   the resource scope lease and pass the add/delete-chat race; it is not qualified
+   by these group tests. P4 stays deferred. Default writers remain unchanged;
+   verified history/CAS/keys/locator backup, stopped old writers, full restore and
+   Windows/Office screen-photo evidence remain whole-port P7 gates.
+7. Conversation protocol, session events, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. P7 removes the retiring constructor, catalog branch and
+   ChatStore.Groups with its old backend. This intermediate port integration does
+   not change default production behavior, so no product bump. One scoped commit;
+   no push/tag.

@@ -149,6 +149,15 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal groups:` covers the existing typed UI owner and real Office/Workspace
+consumers: create/add/rename/remove/delete, no-op/list, exact revision/scope, name
+conflicts, tombstones, lease refusal and unchanged participant history. Lost authority
+acknowledgement preserves source Unknown through rebuild and clean Workspace restore.
+Model membership uses the native alias index (catalog access throws in the fixture).
+Targeted regressions: `agent groups:`, `journal resources:` and `journal mutation:`;
+reuse the build. Native chat Delete/Move and the add/delete-chat race remain open,
+as do default-writer cutover and Windows/Office qualification.
+
 `journal assignments:` checks native `agents.list` through real Office/Workspace
 model wire after Send and Resolve, plus cold 50+1 paging across 61 inputs, bounded
 summary/surrogate handling, local direction, stale/scope refusal, rebuild and clean

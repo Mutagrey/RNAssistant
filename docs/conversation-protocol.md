@@ -9,8 +9,16 @@ changeChatGroup с exact runtime revision. Один чат может иметь
 группу. Delete chat остаётся у прежнего владельца с его guards, без каскадного удаления
 детей. Удалённые чаты не появляются в membership после rebuild/restart.
 
-ConversationGroupService пишет через ChatStore.Groups в существующий ResourceAuthority
-journal/CAS под тем же document lock, что и удаление чатов. Конфликт/unknown не
+ConversationGroupService в native composition (2026-11-13) использует существующие
+ResourceJournal ports/CAS и scoped conversation metadata. `agents.group` связывает
+prepared/dispatch/authority commit с exact accepted call; terminal пишет kernel.
+Model membership разрешается через Inbox alias index, без полного каталога/истории.
+Typed UI сохраняет exact revision guard. Группы читаются по resource prefix страницами
+по 100 heads; тела всех групп этой области пока нужны для проверки уникальности имён.
+Retiring composition явно использует ChatStore.Groups/ResourceAuthorityStore до P7.
+Native mutation держит существующий resource scope lease; native Delete/Move чатов
+ещё не подключены. При переносе удаления тот же lease обязан охватывать проверку
+membership и удаление. Прежний backend использует общий document lock. Конфликт/unknown не
 повторяется автоматически. Группы не запускают/продолжают/останавливают Run, не
 снимают ограничения и не меняют participant roster цепочки. Дочерний чат добавляется
 явно. CreatorChatId — provenance из AgentCreation, не ParentSessionId fork истории.

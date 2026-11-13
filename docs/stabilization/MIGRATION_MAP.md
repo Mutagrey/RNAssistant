@@ -52,6 +52,18 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P5 native chat groups (2026-11-13): existing ConversationGroupService owns scoped
+metadata, ResourceJournal/CAS publication and typed UI changes. AgentCommunication
+uses the existing Inbox alias lookup; exact accepted calls bind resource preparation
+and kernel outcomes. No new store/table/registry/schema or hidden fallback. Native
+reads page only group heads, but hydrate all group bodies; authority Publish snapshot
+and metadata/header costs remain open. Owner: Application ConversationGroupService /
+existing conversation and resource ports. Whole-port P7 removes ChatStore.Groups,
+the explicit ChatStore constructor and retiring catalog branch; no data import.
+Before native chat Delete/Move is admitted, share the resource scope lease and check
+the add/delete-chat race. Default writers unchanged; Windows evidence open.
+[Contract](../session-events.md#journal-chat-groups--2026-11-13).
+
 P5 native assignment pages (2026-11-13): the existing event port projects canonical
 Send/Resolve/spawn intake into the same assignment DTO, now owned by Core. Owner:
 ConversationJournal / Application AgentCommunicationService and Inbox. Schema 21
