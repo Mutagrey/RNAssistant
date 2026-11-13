@@ -1,5 +1,14 @@
 # Current-to-target migration map
 
+## Inspector selected-context cutover — 07, 2026-11-13
+
+Owner: Diagnostics navigation/query + ConversationPanel snapshots/drafts. Removed
+Inspector global active-chat/context/usage/draft fallback, request-preview composer
+fallback, duplicate detailed activity timeline/CSS and selected-chat source switching.
+Existing bounded Journal/request readers and Advanced Diagnostics stay reachable.
+Inspector uses the existing visible-only Dock renderer; no temporary adapter, new
+store, registry or preference migrator. Windows/UI acceptance remains separate.
+
 ## Common native find — F2c5, 2026-11-13
 
 Owner: Browser/native integration. Typed find controls reuse the existing semantic

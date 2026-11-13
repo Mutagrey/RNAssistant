@@ -47,6 +47,7 @@
       inboxState: { inboxEditing: null, inboxEditDraft: null },
       loading: false, loadError: "", error: "", isCurrent: function () { return !disposed; },
       snapshot: function () { return adapter.snapshot(); },
+      draft: function () { return adapter.draft(); },
       refresh: function (options) { return Promise.resolve(adapter.refresh(options)); },
       accept: function (snapshot, options) { return adapter.accept(snapshot, options); },
       pendingUnits: function () { return adapter.pendingUnits ? adapter.pendingUnits() : []; },
@@ -83,6 +84,8 @@
         disposed = true;
         if (communication) communication.dispose();
         if (selected === component) selected = null;
+        if (window.RNAssistantChatInspector) RNAssistantChatInspector.render();
+        if (window.RNAssistantModelContext) RNAssistantModelContext.sync();
         listeners.abort(); if (adapter.dispose) adapter.dispose(); view.dispose();
         if (window.RNAssistantViewerRegistry) RNAssistantViewerRegistry.unmount(node("contextBox"));
       }

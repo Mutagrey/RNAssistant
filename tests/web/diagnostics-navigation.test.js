@@ -126,7 +126,8 @@ const { chromium } = require("playwright");
     assert.equal(await page.evaluate(() => RNAssistantDockWorkspace.isVisible('conversation')), true, 'source link opens the exact chat');
     const anotherChat = page.locator('#chatSessionList [data-tree-key="chat:preview-summary"]');
     await anotherChat.hover();
-    await anotherChat.getByRole('button', { name: 'Диагностика чата', exact: true }).click();
+    await anotherChat.getByRole('button', { name: 'Действия чата «Сводка по регионам»', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Диагностика чата', exact: true }).click();
     await page.waitForFunction(() => !document.getElementById('refreshTrajectoryButton').disabled);
     assert.match(await page.locator('#diagnosticsScope').textContent(), /Сводка по регионам/);
     assert.equal(await page.evaluate(() => state.activeChatId), 'preview-chat', 'opening another chat journal does not change the composer owner');
@@ -173,19 +174,25 @@ const { chromium } = require("playwright");
     await page.locator('#modelContextTree [data-tree-select="message:2"]').click();
     assert.equal(await page.locator("#modelContextBody .rn-json-viewer").evaluate(node => node === window.savedMessageNode), true, "preserves viewer DOM and selected message");
     await screenshot("request-json-wide");
+    async function openLayout() {
+      if (await page.locator('#workspaceLayout').isVisible()) await page.locator('#workspaceLayout').click();
+      else { await page.locator('#hostWindowMenu').click(); await page.getByRole('menuitem',{name:'Компоновка…',exact:true}).click(); }
+    }
     // Placement preserves the singleton reader, exact owner and selected message.
-    await page.locator('.dock-group-actions').first().getByRole('button', { name: 'Открыть экран справа', exact: true }).click();
+    await page.locator('.dv-groupview').filter({has:page.locator('[data-tab-panel-id="request"]')}).getByRole('button',{name:'Действия с вкладкой',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Открыть экран справа',exact:true}).click();
+    await page.locator('.dock-screen-chooser input').fill('Запрос модели');
     await page.locator('.dock-screen-chooser').getByRole('button', { name: 'Запрос модели', exact: true }).click();
     assert.equal(await page.locator('[data-tab-panel-id="request"]').count(), 1);
     assert.equal(await page.locator("#modelContextBody .rn-json-viewer").evaluate(node => node === window.savedMessageNode), true);
-    await page.locator('#workspaceLayout').click();
+    await openLayout();
     await page.getByRole('menuitem', { name: 'Сохранить раскладку', exact: true }).click();
-    await page.locator('#workspaceLayout').click();
+    await openLayout();
     await page.getByRole('menuitem', { name: 'Одна группа вкладок', exact: true }).click();
-    await page.locator('#workspaceLayout').click();
+    await openLayout();
     await page.getByRole('menuitem', { name: 'Вернуть сохранённую', exact: true }).click();
     assert.equal(await page.locator("#modelContextBody .rn-json-viewer").evaluate(node => node === window.savedMessageNode), true, 'restore keeps reader DOM');
-    await page.locator('#workspaceLayout').click();
+    await openLayout();
     await page.getByRole('menuitem', { name: 'Одна группа вкладок', exact: true }).click();
     await page.locator("#closeModelContextButton").click();
     assert.equal(await page.evaluate(() => savedJournal === document.getElementById("trajectoryEvents").firstElementChild), true, "return preserves journal");

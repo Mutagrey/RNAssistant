@@ -56,7 +56,7 @@
   }
   var views = {
     conversation: { title: "Чат", icon: "chat", section: "chat" },
-    inspector: { title: "Инспектор", icon: "panel", discovery: "contextual" },
+    inspector: { title: "Инспектор", icon: "panel", discovery: "contextual", renderer: "onlyWhenVisible" },
     request: { title: "Запрос модели", icon: "code", discovery: "contextual" },
     diagnostics: { title: "Диагностика", icon: "chart", discovery: "contextual", onVisible: function (shown) { RNAssistantDiagnostics.onVisible(shown); },
       onClose: function () { RNAssistantDiagnostics.onClose(); } },

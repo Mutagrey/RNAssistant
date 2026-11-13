@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## 07 Inspector scope — In Review, 2026-11-13
+
+Use the existing Inspector section switcher, status/info/disclosure and action controls.
+A compact scope row uses shared spacing/type tokens and wraps long chat/run labels;
+its explicit follow command separates live selection from a historical pin. Removed
+duplicate timeline row styles. [Wide](review/inspector-selected-wide.png) and
+[420px/125%](review/inspector-selected-narrow.png) show chat B with pinned evidence of
+chat A. They are Chromium UI evidence, not Windows/Office acceptance.
+
 ## Browser find row — In Review, 2026-11-13
 
 Find uses common form/icon controls, spacing/type tokens and an inline status below

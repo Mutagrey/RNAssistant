@@ -1,5 +1,33 @@
 # Диагностика: структура, владельцы и проверка
 
+## Selected Inspector and retained evidence — 2026-11-13
+
+Inspector, Diagnostics and request preview resolve one explicit InspectionContext at
+the existing Diagnostics navigation/query owner. ConversationPanel supplies the exact
+Office chat/document or Workspace/session snapshot and draft. There is no fallback
+to global activeChatId, global context/usage or a selected plugin. The context carries
+live/retained mode and optional exact run/step/request; it is a projection, not a store.
+
+Inspector defaults to «Ход работы»: status/unknown and bounded navigation (last 20
+loaded steps) link to the existing Run Journal. The duplicate detailed action timeline
+and its CSS are removed. Historical message links pin owner/run/step; selecting another
+chat or Browser does not retarget them. The visible header distinguishes pinned data
+from following the selected chat. Historical context/capabilities/usage delegate to
+the captured request; they never present the latest live state as old evidence.
+
+Live context, arsenal and usage use the same exact conversation. Late responses and
+closed/rebound contexts are rejected. Next-request preview captures that conversation's
+draft even if another chat becomes selected; closing its owner disables preview.
+Closing Inspector does not cancel a run. Hidden views stop pending heavy reads; request
+pagination, byte limits, leases, cancellation and immutable provenance stay unchanged.
+Application/storage/logs and Model Lab keep their Advanced Diagnostics entry points.
+
+Checks: scoped two-Office and Workspace/plugin Chromium fixtures; retained request
+navigation/comparison/lazy-body/state/cancellation fixture; bounded model-context unit
+suite; selective Dock layout restoration. Narrow 420px/125% Inspector uses the existing
+Dock onlyWhenVisible renderer with retained root/lifecycle, avoiding the always-rendered
+overlay's scaled width. Native Windows qualification remains separate.
+
 Дата решения: 2026-10-30. Owner: Office diagnostics services / Web diagnostics
 presentation. Основа аудита: `098b91cf8b18092f59b9497600275f98a8bde4d3`, чистый `main`.
 Это пересмотр информационной архитектуры, а не закрытие прежней qualification.

@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Selected Inspector corrected — 2026-11-13
+
+`16.25.1-dev`: 07 now uses exact Office/Workspace/plugin scope for context, capabilities,
+usage and live preview; historical run/step remains pinned. Duplicate activity details
+are replaced by existing Journal/request navigation. Focused Chromium/request/layout
+checks pass. Current-main integration remains; Windows native compilation/qualification
+and UI acceptance stay open. [Details](../browser/06_PROGRESS.md#07-scoped-inspector-and-route-reduction--2026-11-13).
+
 ## Browser page find connected — 2026-11-13
 
 `16.25.0-dev`: common find/next/highlight uses bounded semantic capture, with private

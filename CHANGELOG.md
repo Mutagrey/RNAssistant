@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.25.1-dev
+
+- Inspector and next-request preview use the exact selected chat and draft. Historical
+  run/step stays pinned; duplicate activity details route to the existing journal.
+- Corrected narrow Inspector sizing and stale/closed-source handling.
+
 ### 16.25.0-dev
 
 - Added common local page search with next/previous matches and native element

@@ -936,8 +936,8 @@
     }
     if (c.mode === "preview") {
       if (!c.preview) {
-        notice(c, state.chatReadOnly ? "Чат доступен только для чтения" : c.previewError ? "Предпросмотр недоступен" : "Подготовка предпросмотра…",
-          state.chatReadOnly ? "Для нового запроса создайте новый чат." : c.previewError || "Запрос ещё не отправляется.", c.previewError ? "error" : "loading");
+        notice(c, previewContext(c).readOnly ? "Чат доступен только для чтения" : c.previewError ? "Предпросмотр недоступен" : "Подготовка предпросмотра…",
+          previewContext(c).readOnly ? "Для нового запроса создайте новый чат." : c.previewError || "Запрос ещё не отправляется.", c.previewError ? "error" : "loading");
         return;
       }
       if (c.tab === "response") { root.textContent = "Это предпросмотр — ответа ещё нет."; return; }
@@ -1141,7 +1141,7 @@
       else {
         c.version++; operation.version = c.version;
         c.selected = null; c.detail = null; c.loading = false; c.selectionError = ""; c.cache = {}; c.pending = {};
-        c.emptyMessage = c.scope ? "Точный запрос этого " + (c.scope.stepId ? "шага" : "запуска") + " не найден в загруженной части истории." + (c.before ? " Нажмите «Ранее» для предыдущей страницы." : "") : c.workspaceId ? "В этой беседе ещё нет сохранённых запросов модели." : state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
+        c.emptyMessage = c.scope ? "Точный запрос этого " + (c.scope.stepId ? "шага" : "запуска") + " не найден в загруженной части истории." + (c.before ? " Нажмите «Ранее» для предыдущей страницы." : "") : c.workspaceId ? "В этой беседе ещё нет сохранённых запросов модели." : previewContext(c).readOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
           "Сохранённых запросов пока нет. Доступен предварительный контекст.";
         status(c, c.emptyMessage); previewAvailability(c);
         if (c.before) $("modelContextHistory").open = true;
@@ -1187,39 +1187,42 @@
       if (valid(c, version)) { await render(c); if (valid(c, version)) status(c, error.message || String(error)); }
     }
   }
-  function composerText() { return typeof officeChatDraftText === "function" ? officeChatDraftText() : $("chatInput").value; }
-  function draft() { var chat = activeChatSummary(); return JSON.stringify([composerText(), contextDraftResourceIds(), chat && (chat.revision || chat.Revision)]); }
+  function previewContext(c) { return RNAssistantDiagnostics.context(c); }
+  function draft(c) { var origin = previewContext(c); return JSON.stringify([origin.available, origin.draft.text || '', draftIds(origin), origin.snapshot.sessionRevision]); }
+  function draftIds(origin) { return (origin.draft.attachments || []).map(attachmentId).filter(Boolean); }
   function previewAvailability(c) {
     $("modelContextActions").disabled = false;
     $("modelContextDialog").classList.toggle("is-workspace", !!c.workspaceId);
     $("modelContextDialog").classList.toggle("is-preview", c.mode === "preview");
-    $("modelContextPreviewOption").disabled = !!c.workspaceId || !!state.chatReadOnly;
+    $("modelContextPreviewOption").disabled = !!c.workspaceId || !!previewContext(c).readOnly;
     $("modelContextPreviewOption").hidden = !!c.workspaceId;
     $("modelContextMode").disabled = !!c.workspaceId;
     $("modelContextMode").hidden = !!c.workspaceId;
     $("modelContextAttempt").hidden = c.mode === "preview";
-    $("modelContextPreviewOption").disabled = !!c.workspaceId || !!state.chatReadOnly || !sameSource(c);
+    $("modelContextPreviewOption").disabled = !!c.workspaceId || !!previewContext(c).readOnly || !previewContext(c).available;
 
   }
   async function preview(c) {
     if (c.workspaceId) return;
-    if (!sameSource(c)) { notice(c, "Источник предпросмотра изменён", "Откройте следующий запрос из нужного чата."); return; }
+    var origin = previewContext(c);
+    if (!origin.available) { notice(c, "Источник предпросмотра недоступен", origin.reason); return; }
     discardViews(c); c.document = null;
     c.version++; var version = c.version; c.preview = null; c.previewError = ""; clearView(c);
     c.previewVersion = version;
     previewAvailability(c);
-    if (state.chatReadOnly) {
+    if (previewContext(c).readOnly) {
       status(c, "Этот чат доступен только для чтения. Для нового запроса создайте новый чат.");
       notice(c, "Чат доступен только для чтения", "Для нового запроса создайте новый чат.");
       return;
     }
-    c.previewDraft = draft(); status(c, "Сборка предварительного контекста…");
+    c.previewDraft = draft(c); status(c, "Сборка предварительного контекста…");
     notice(c, "Подготовка предпросмотра…", "Запрос ещё не отправляется.", "loading");
     try {
-      var response = await call(c, "inspectModelContextPreview", { text: composerText(),
-        resourceDraftIds: contextDraftResourceIds(), includeRaw: true });
+      var response = await call(c, "inspectModelContextPreview", { text: origin.draft.text || "",
+        resourceDraftIds: draftIds(origin), includeRaw: true });
       var value = await download(c, response, "context-inspector", version);
       if (!valid(c, version)) return;
+      if (!previewContext(c).available || previewContext(c).component !== origin.component) throw new Error("Источник предпросмотра закрыт или изменился.");
       c.preview = value; c.previewEntries = response.resourceContextReceipt && response.resourceContextReceipt.Messages;
       c.previewStatus = "Предпросмотр, ещё не отправлено · " + dateText(response.generatedUtc) +
         "\nВложения пока представлены сведениями о файлах.";
@@ -1234,12 +1237,12 @@
   function tick(c) {
     if (!live(c)) return;
     if (c.mode === "actual" && c.follow) list(c, false);
-    if (c.mode === "preview" && c.preview && (!sameSource(c) || c.previewDraft !== draft())) status(c, c.previewStatus + " · Снимок устарел — обновите.");
+    if (c.mode === "preview" && c.preview && (!previewContext(c).available || c.previewDraft !== draft(c))) status(c, c.previewStatus + " · Снимок устарел — обновите.");
     c.timer = setTimeout(function () { tick(c); }, 2000);
   }
   function open(options) {
     var selected = source();
-    // A saved-data link carries its full owner scope; active chat is only the default entry point.
+    // Saved links carry exact scope; default entry uses the selected ConversationPanel.
     if (options && options.owner === "office" && options.chatId && !options.workspaceId || options &&
         (options.owner === "project" || options.owner === "plugin") && options.workspaceId && options.sessionId) {
       var explicit = { owner: options.owner, workspaceId: options.workspaceId || null, chatId: options.chatId || options.sessionId };
@@ -1254,7 +1257,7 @@
         options.workspaceId !== selected.workspaceId || options.sessionId !== selected.chatId) return;
     var scope = options && options.runId ? { runId: options.runId, stepId: options.stepId || "" } : null;
     if (current) dispose();
-    current = { owner: selected.owner, chatId: selected.chatId, workspaceId: selected.workspaceId, label: selected.label, documentLabel: selected.document,
+    current = { owner: selected.owner, chatId: selected.chatId, workspaceId: selected.workspaceId, label: selected.label, documentLabel: selected.document, documentId: selected.documentId,
       contents: { index: 0, format: "markdown", order: "groups", group: null, page: 0, part: 0, source: "content", jsonMode: "tree" },
       abort: new AbortController(), requests: new Set(), version: 0,
       mounts: [], cache: {}, pending: {}, viewCache: new Map(), presentation: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "summary", follow: !scope && !(options && options.requestEventId), attempts: [],
@@ -1337,7 +1340,7 @@
       var selected = $("modelContextTree").querySelector('[aria-selected="true"]'); if (selected) selected.focus({ preventScroll: true });
     });
     $("modelContextMode").addEventListener("change", function () {
-      if (!current || current.workspaceId || this.value === "preview" && !sameSource(current)) { this.value = "actual"; return; }
+      if (!current || current.workspaceId || this.value === "preview" && !previewContext(current).available) { this.value = "actual"; return; }
       var c = current; cancelReads(c); discardViews(c); c.document = null;
       c.mode = this.value; c.revision = null; c.detail = null; c.presentation = {}; c.cache = {}; c.inventory = {}; c.inventoryBusy = {};
       c.loading = false; c.emptyMessage = ""; c.selectionError = ""; clearView(c); c.tab = "summary"; c.structureTab = "summary";
@@ -1377,8 +1380,8 @@
       if (!sameSource(current)) current.follow = false;
       if (state.bridgeUnavailable) { cancelReads(current); status(current, "Нет связи с хостом. Сохранённый просмотр остаётся доступен; обновите после подключения."); }
       previewAvailability(current);
-      if (current.mode === "preview" && (!sameSource(current) || state.chatReadOnly)) {
-        cancelReads(current); current.preview = null; current.previewError = state.chatReadOnly ? "Для нового запроса создайте новый чат." : "Источник предпросмотра недоступен. Откройте его из нужного чата."; status(current, current.previewError); render(current);
+      if (current.mode === "preview" && (!previewContext(current).available || previewContext(current).readOnly)) {
+        cancelReads(current); current.preview = null; current.previewError = previewContext(current).readOnly ? "Для нового запроса создайте новый чат." : "Источник предпросмотра недоступен. Откройте его из нужного чата."; status(current, current.previewError); render(current);
       }
     } };
 }());

@@ -39,7 +39,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     setTimeout: (fn, ms) => { timers.set(++timer, { fn, ms }); return timer; }, clearTimeout: id => timers.delete(id),
     crypto: crypto.webcrypto, state: { activeChatId: "chat", draftAttachments: [] }, $: get,
     document: { querySelectorAll: () => [], querySelector: () => null, createDocumentFragment: () => new Node("fragment"), createElement: tag => new Node(tag), body: new Node(), activeElement: new Node() },
-    activeChatSummary: () => ({ revision }), contextDraftResourceIds: () => [],
+    activeChatSummary: () => ({ revision }), contextDraftResourceIds: () => [], attachmentId: item => item.id,
     cancelBridgeRequest: async () => {}, copyTextResult() {}, formatStorageBytes: n => String(n),
     send: async (type, query) => {
       calls.push({ type, query });
@@ -163,6 +163,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   get("tab-chat").classList.add("active");
   let requestVisible = false;
   c.RNAssistantDiagnostics = {
+    context(target) { return { available: !c.fixtureClosed, component: get('chatInput'), snapshot: {sessionRevision: revision}, draft: {text: get('chatInput').value, attachments: []}, readOnly: c.state.chatReadOnly }; },
     source() { const w = c.RNAssistantWorkspaceChat, owner = w ? w.owner() : "office", snapshot = owner !== "office" ? w.snapshot() : null;
       return { owner, chatId: snapshot ? snapshot.sessionId : c.state.activeChatId, workspaceId: snapshot?.project?.workspaceId || null }; },
     key(target) { return JSON.stringify([target.owner, target.workspaceId || null, target.chatId || target.sessionId || null]); },
@@ -376,7 +377,9 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   f.get("modelContextMode").value = "preview"; await f.get("modelContextMode").fire("change"); await flush();
   assert.match(f.get("modelContextStatus").textContent, /Предпросмотр/);
   f.get("chatInput").value = "changed"; await f.tick(); assert.match(f.get("modelContextStatus").textContent, /устарел/);
-  f.c.state.activeChatId = "another"; api.sync(); assert.equal(f.calls.filter(call => call.type === "inspectModelContextPreview").length, 1);
+  f.c.state.activeChatId = "another"; api.sync();
+  assert.equal(f.get("modelContextPreviewOption").disabled, false, "another selected chat does not retarget an open exact preview");
+  f.c.fixtureClosed = true; api.sync(); assert.equal(f.calls.filter(call => call.type === "inspectModelContextPreview").length, 1);
   const late = fixture(); let release;
   late.hold(new Promise(resolve => release = resolve)); await late.c.RNAssistantModelContext.open(); await flush();
   late.c.RNAssistantModelContext.close(); release(); await flush();

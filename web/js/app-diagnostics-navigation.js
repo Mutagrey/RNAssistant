@@ -5,20 +5,32 @@
   var routing = false;
   function enter() { routing = true; try { switchTab("diagnostics"); } finally { routing = false; } }
   function value(item, name) { return item && (item[name] !== undefined ? item[name] : item[name[0].toUpperCase() + name.slice(1)]); }
-  function source() {
-    var workspace = window.RNAssistantWorkspaceChat, owner = workspace ? workspace.owner() : "office";
-    if (owner !== "office") {
-      var snapshot = workspace.snapshot(), project = value(snapshot, "project"), run = value(snapshot, "state");
-      return { owner: owner, workspaceId: value(project, "workspaceId"), chatId: value(snapshot, "sessionId"),
-        label: value(run, "title") || "Проектный чат", document: value(project, "name") || value(project, "rootPath") || "Проект",
-        pluginId: owner === "plugin" && window.RNAssistantPlugins ? RNAssistantPlugins.selectedId() : null,
-        runId: value(run, "runId") };
-    }
-    var chat = typeof activeChatSummary === "function" ? activeChatSummary() : null;
-    return { owner: "office", workspaceId: null, chatId: state.activeChatId,
-      label: value(chat, "title") || "Чат", document: value(chat, "documentName") || state.title || "Документ Office",
-      runId: value(state.activeRunViewState, "runId") };
+  /** @typedef {{owner: string, chatId: string, workspaceId: string|null, documentId: string|null,
+   * available: boolean, mode: 'live'|'retained', requestedRunId: string, stepId: string,
+   * requestEventId: string, component: object, snapshot: object, draft: object}} InspectionContext */
+  /** @returns {InspectionContext} Identity is a route; ConversationPanel owns data. */
+  function context(target) {
+    var panels = window.RNAssistantConversationPanel, component = panels && (target ? panels.find({ source: target.owner === 'office' ? 'office' : 'workspace',
+      workspaceId: target.workspaceId, sessionId: target.chatId || target.sessionId }) : panels.selected());
+    var missing = Object.assign({ owner: 'office', available: false, messages: [], run: {}, live: [], snapshot: {}, draft: {}, reason: 'Выберите открытый чат.' }, target || {});
+    if (!component || !component.isCurrent() || !component.target.sessionId) return missing;
+    var address = component.target, data = component.snapshot(), office = address.source === 'office';
+    if (office ? data.activeChatId !== address.sessionId : value(data, 'sessionId') !== address.sessionId || value(value(data, 'project'), 'workspaceId') !== address.workspaceId)
+      return Object.assign(missing, { reason: 'Точный источник чата недоступен.' });
+    var snapshot = office ? data : value(data, 'state') || {}, project = office ? null : value(data, 'project');
+    var chat = office ? (state.chats || []).find(function (item) { return value(item, 'id') === address.sessionId; }) : snapshot;
+    var documentId = office ? value(chat, 'documentId') || value(chat, 'documentAuthorityId') : null;
+    if (target && target.documentId && documentId && target.documentId !== documentId) return Object.assign(missing, { reason: 'Документ выбранного чата изменился.' });
+    var run = office ? data.activeRunViewState || {} : RNAssistantRunViewState.normalize(value(snapshot, 'runViewState')) || {};
+    return Object.freeze({ owner: office ? 'office' : project && value(project, 'pluginId') ? 'plugin' : 'project', available: !component.loadError && !component.loading,
+      reason: component.loadError || (component.loading ? 'Чат загружается…' : ''), component: component, snapshot: snapshot, chat: data, project: project,
+      chatId: address.sessionId, sessionId: address.sessionId, workspaceId: office ? null : address.workspaceId, documentId: documentId,
+      label: value(chat, 'title') || address.sessionId, document: office ? value(chat, 'documentTitle') || 'Документ чата' : value(project, 'name') || address.workspaceId,
+      pluginId: value(project, 'pluginId'), runId: run.runId, run: run, messages: data.messages || [], live: office && data.liveRun && data.liveRun.activities || [],
+      draft: component.draft() || {}, readOnly: office ? !!data.chatReadOnly : RNAssistantWorkspaceChat.readOnly(data),
+      mode: target && target.runId ? 'retained' : 'live', requestedRunId: target && target.runId || '', stepId: target && target.stepId || '', requestEventId: target && target.requestEventId || '' });
   }
+  function source() { return context(); }
   function key(target) { return JSON.stringify([target.owner, target.workspaceId || null, target.chatId || target.sessionId || null]); }
   function scope(target) {
     var current = source(), next = target || current, same = key(next) === key(current);
@@ -28,7 +40,7 @@
     $("diagnosticsScope").textContent = chatId ?
       [selected.document || "Сохранённый источник", selected.label || chatId].filter(Boolean).join(" · ") :
       "Выберите чат, чтобы разобрать его сохранённые запросы и события.";
-    $("diagnosticsScope").disabled = !chatId || selected.owner === "plugin" && !selected.pluginId;
+    $("diagnosticsScope").disabled = !chatId;
     $("diagnosticsScope").title = chatId ? "Открыть чат «" + (selected.label || chatId) + "»\n" +
       [selected.owner, selected.workspaceId, chatId].filter(Boolean).join(" · ") : "Выберите чат в дереве";
     $("diagnosticsScope").setAttribute("aria-label", chatId ? "Открыть чат «" + (selected.label || chatId) + "»" : "Чат не выбран");
@@ -72,11 +84,7 @@
     if (!selected) return;
     var target = Object.assign({}, selected), chatId = target.chatId || target.sessionId;
     if (!chatId) return;
-    if (target.owner === "office") {
-      RNAssistantProjectChats.setScope("office"); switchTab("chat", { preserveChatOwner: true }); selectChat(chatId);
-    } else if (target.owner === "plugin") {
-      if (target.pluginId) RNAssistantPlugins.select(target.pluginId, chatId);
-    } else RNAssistantProjectChats.open(target.workspaceId, chatId);
+    RNAssistantConversationPanel.open({ source: target.owner === 'office' ? 'office' : 'workspace', workspaceId: target.workspaceId, sessionId: chatId });
   }
   function showRequest(target) {
     returnFocus = document.activeElement;
@@ -114,7 +122,7 @@
     $("diagnosticsScope").addEventListener("click", openSourceChat);
     state.diagnosticsTab = "runs"; scope(source()); display();
   }
-  window.RNAssistantDiagnostics = { source: source, key: key, open: open, openCurrent: openCurrent, show: show,
+  window.RNAssistantDiagnostics = { source: source, context: context, key: key, open: open, openCurrent: openCurrent, show: show,
     showRequest: showRequest, returnToJournal: returnToJournal, forgetRequest: forgetRequest, showJournal: showJournal, onVisible: onVisible, bind: bind,
     onClose: function () { if (window.RNAssistantTrajectory) RNAssistantTrajectory.dispose(); },
     isVisible: function () { return window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.isVisible("diagnostics"); },

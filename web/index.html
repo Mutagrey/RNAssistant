@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=plugin-materials-20261103">
-  <link rel="stylesheet" href="css/app-chat.css?v=unified-workspace-20261111">
+  <link rel="stylesheet" href="css/app-chat.css?v=unified-workspace-20261111-selected-inspector-20261113">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1-visuals-20261025-4">
   <link rel="stylesheet" href="css/app-composer.css?v=chat-views-20261103">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
@@ -262,15 +262,16 @@
           <aside class="chat-inspector" id="chatInspector" aria-label="Боковая панель чата" hidden>
             <div class="chat-inspector-head">
               <details class="panel-switcher chat-inspector-switcher" id="chatInspectorSwitcher">
-                <summary aria-label="Раздел боковой панели" aria-haspopup="menu"><span id="chatInspectorViewTitle">Контекст</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
+                <summary aria-label="Раздел боковой панели" aria-haspopup="menu"><span id="chatInspectorViewTitle">Ход работы</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
                 <div class="popover-menu" role="menu" aria-label="Раздел боковой панели">
                   <button type="button" role="menuitem" data-chat-inspector-view="context"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg>Контекст</button>
                   <button type="button" role="menuitem" data-chat-inspector-view="abilities"><svg data-rna-icon="tool" viewBox="0 0 24 24" aria-hidden="true"></svg>Возможности агента</button>
                   <button type="button" role="menuitem" data-chat-inspector-view="usage"><svg data-rna-icon="chart" viewBox="0 0 24 24" aria-hidden="true"></svg>Токены и прогноз</button>
-                  <button type="button" role="menuitem" data-chat-inspector-view="activity"><svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg>Текущий запуск</button>
+                  <button type="button" role="menuitem" data-chat-inspector-view="activity"><svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg>Ход работы</button>
                 </div>
               </details>
             </div>
+            <div class="chat-inspector-scope"><strong id="chatInspectorScope"></strong><small id="chatInspectorScopeMode"></small><button id="chatInspectorFollow" type="button" class="secondary" hidden>Следовать выбранному чату</button></div>
             <div class="chat-inspector-body" id="chatInspectorBody"></div>
 
           </aside>
@@ -1070,14 +1071,14 @@
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
   <script src="js/app-layout.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-window.js?v=20261112"></script>
-  <script src="js/app-chat-inspector.js?v=chat-views-20261103"></script>
+  <script src="js/app-chat-inspector.js?v=chat-views-20261103-selected-inspector-20261113"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
   <script src="js/app-settings.js?v=deployment-config-20261112"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
-  <script src="js/app-diagnostics-navigation.js?v=diagnostics-source-20261103"></script>
+  <script src="js/app-diagnostics-navigation.js?v=diagnostics-source-20261103-selected-inspector-20261113"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-model-diagnostics.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2-materials-s3b2"></script>
@@ -1092,7 +1093,7 @@
   <script src="js/app-resource-download.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-resource-upload.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1-workspace-diagnostics-20261025-1"></script>
-  <script src="js/app-trajectory.js?v=journal-loading-20261103"></script>
+  <script src="js/app-trajectory.js?v=journal-loading-20261103-selected-inspector-20261113"></script>
   <script src="js/app-prompts.js?v=navigation-s3b1-20261102-html-editors-20261103-1"></script>
   <script src="js/app-model-data.js?v=chat-models-s2a-20261102-preferences-s2b5"></script>
   <script src="js/app-model-picker.js?v=chat-views-20261103"></script>
@@ -1130,7 +1131,7 @@
   <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1-materials-s3b2-browser-s3b3b-html-editors-20261103-1-native-selection-20261113"></script>
   <script src="js/app-context.js?v=chat-views-20261103"></script>
   <script src="js/app-model-context-contents.js?v=request-dock-20261102"></script>
-  <script src="js/app-model-context.js?v=request-dock-20261102"></script>
+  <script src="js/app-model-context.js?v=request-dock-20261102-selected-inspector-20261113"></script>
   <script src="js/app-context-meter.js?v=diagnostics-20261101"></script>
   <script src="js/app-model-context-details.js?v=request-causes-20261103"></script>
   <script src="js/app-tool-result-preview.js?v=compact-tool-card-20261029-2"></script>
@@ -1159,14 +1160,14 @@
   <script src="js/app-office-chat-view.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103-native-selection-20261113"></script>
   <script src="js/app-agent-recovery.js?v=agent-recovery-20261104"></script>
   <script src="js/app-agent-communication.js?v=agent-recovery-menu-20261104"></script>
-  <script src="js/app-conversation-panel.js?v=unified-workspace-20261111"></script>
+  <script src="js/app-conversation-panel.js?v=unified-workspace-20261111-selected-inspector-20261113"></script>
   <script src="js/app-plugins.js?v=plugin-materials-20261103-html-editors-20261103-1-native-selection-20261113"></script>
   <script src="js/app-project-chats.js?v=unified-workspace-20261111"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
   <script src="js/app-material-view.js?v=plugin-materials-20261103-chat-audit-20261103"></script>
   <script src="js/app-start-surface.js"></script>
-  <script src="js/app-dock-workspace.js?v=unified-workspace-20261111"></script>
+  <script src="js/app-dock-workspace.js?v=unified-workspace-20261111-inspector-visible-20261113"></script>
   <script src="js/app-browser-actions.js"></script>
   <script src="js/app-browser-annotations.js?v=native-selection-20261113"></script>
   <script src="js/app-browser-find.js?v=native-find-20261113"></script>

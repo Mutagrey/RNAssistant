@@ -1,5 +1,19 @@
 # План модернизации production UI
 
+## 07 scoped Inspector — In Review, 2026-11-13
+
+Completed after F2c5: one selected context for Office/Workspace/plugin; exact pinned
+run/step; existing lazy request reader; removed duplicate detailed activity timeline.
+Context/arsenal/usage/next-request preview retain exact owners through selection and
+late responses. Inspector placement uses existing visible-only Dock rendering and
+retains state without a scaled overlay in narrow layouts.
+
+Review: open two Office chats → inspect A → pin an old A run → select B/Browser →
+open the captured A step → close A → return to following selection. Repeat Workspace
+and plugin. Targeted UI/request/layout checks pass; old fixtures were updated from
+retired singleton composer/iframe/direct toolbar selectors. UI acceptance and Windows
+qualification remain open. Next is integration with current main, not a new UI phase.
+
 ## F2c5 find — In Review, 2026-11-13
 
 Review: local page → Ctrl+F → type text → next/previous → switch page or Source.

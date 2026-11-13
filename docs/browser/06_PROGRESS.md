@@ -1,5 +1,19 @@
 # Universal Browser: статус
 
+## 07 scoped Inspector and route reduction — 2026-11-13
+
+`16.25.1-dev`: Inspector and request preview resolve the selected exact conversation;
+historical run/step is an explicit pin. Removed global active-chat/context/draft reads
+and the duplicate detailed Inspector timeline. Existing Journal/request owners keep
+bounded readers, evidence and advanced diagnostics. Browser focus does not change the
+conversation scope. Narrow zoom uses the existing visible-only Inspector renderer.
+
+Passed: two-Office context/arsenal/usage/preview and late/closed-owner cases;
+Workspace/plugin and retained cross-chat request; actual request navigation/comparison,
+lazy bodies, cancellation and empty/error; model-context unit suite; selective layout
+restore. No Office/VSTO build. Continue current-main integration; UI acceptance and
+Windows native compilation/qualification remain open. No push/release.
+
 ## F2c5 page find — 2026-11-13
 
 `16.25.0-dev`: common menu/Ctrl+F opens bounded native page find with next/previous

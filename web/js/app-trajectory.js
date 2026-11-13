@@ -99,16 +99,7 @@
   function latestKnownRunId() {
     var source = selectedSource();
     if (trajectoryChatId && (trajectoryChatId !== source.chatId || trajectoryWorkspaceId !== (source.workspaceId || null) || trajectoryOwner !== source.owner)) return "";
-    if (source.owner !== "office") return source.runId || "";
-    var active = state.chatRuns && state.activeChatId ? state.chatRuns[state.activeChatId] : null;
-    if (active && active.runId) return active.runId;
-    if (source.runId) return source.runId;
-    for (var index = (state.messages || []).length - 1; index >= 0; index -= 1) {
-      var message = state.messages[index] || {};
-      var runId = message.runId !== undefined ? message.runId : message.RunId;
-      if (runId && !value(message, "Local", "local", false)) return String(runId);
-    }
-    return "";
+    return source.runId || "";
   }
 
   function itemId(item) {
@@ -1166,7 +1157,7 @@
   function openRunJournal(options) {
     options = options || {};
     var exportWholeChat = options.openExport === true;
-    var source = selectedSource();
+    var source = Object.assign({}, selectedSource());
     if (options.owner === "office" && options.chatId && !options.workspaceId ||
         (options.owner === "project" || options.owner === "plugin") && options.workspaceId && options.sessionId) {
       source = { owner: options.owner, workspaceId: options.workspaceId || null, chatId: options.chatId || options.sessionId,

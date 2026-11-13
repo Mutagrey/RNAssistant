@@ -1,5 +1,16 @@
 # Universal Browser: матрица проверок
 
+## 07 Inspector / final local UI — 2026-11-13
+
+Passed: chat-inspector (two Office targets, late arsenal, exact draft preview, pinned
+run/step, closed scope, hidden reads, 420px/125%); workspace-inspector (Workspace/plugin,
+Browser focus, retained cross-chat read, closed owner); diagnostics-navigation
+(request comparison/types, exact source, lazy bodies, move/restore, cancellation,
+empty/error, keyboard/themes); model-context bounded unit suite; dock-layout-pruning
+(valid order/groups, obsolete local descriptors, failed migration preserves input).
+Existing legacy fixtures failed before the change on retired composer/tree/toolbar
+selectors and were ported to current owners. No Windows qualification is inferred.
+
 ## F2c5 find evidence — 2026-11-13
 
 Real Chromium: shared semantic capture, private-value exclusion, next/previous/wrap,

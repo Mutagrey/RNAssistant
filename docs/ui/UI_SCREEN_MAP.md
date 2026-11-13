@@ -1,5 +1,26 @@
 # Карта экранов, навигации и состояний
 
+## 07 current screen ownership — In Review, 2026-11-13
+
+| Screen | Owner / data | Commands and entry | Saved descriptor |
+|---|---|---|---|
+| Browser / Home | LocalBrowser runtime + domain source/version owners | Local links, «+», project/resource actions; common Page/Source/diff/find/annotations | Browser tab + local locator + owner; no runtime IDs |
+| Conversation | ConversationPanel + exact document/Workspace session | Tree, chat links, Browser «Обсудить»; common composer | Exact conversation route |
+| Inspector | Diagnostics.context + selected ConversationPanel snapshot/draft | Header toggle / usage; defaults to «Ход работы» | Singleton placement only; historical pin is transient |
+| Run Journal | Existing trajectory/query owner | Inspector status/step, chat actions, Diagnostics; bounded reader | Diagnostics singleton; exact scope retained in current view |
+| Captured request | ModelContext + existing trace/CAS readers | Exact run/step/request links; comparison/export | Request singleton; no live scope in preference |
+| Advanced diagnostics | Existing storage/log/performance/Model Lab owners | Diagnostics chooser/search and section navigation | Diagnostics singleton |
+| Source/editor/materials/settings | Existing domain views and commands | Common chooser, source action and rail | Existing valid descriptors retained |
+
+Inspector header identifies chat/document or project and pinned run/step. «Следовать
+выбранному чату» explicitly leaves the historical pin. Historical details open the
+captured request; «Предпросмотр следующего запроса» is live and uses that exact draft.
+Closed sources show unavailable, with retained evidence still reachable by exact scope.
+Browser focus leaves the selected conversation intact. No second activity journal.
+Known obsolete Browser/provider descriptors continue through the existing selective
+layout normalizer; valid tabs/order/groups and corrupt preferences remain preserved.
+No new layout schema/reset or preference migration is introduced by 07.
+
 ## Find on the current page — In Review, 2026-11-13
 
 «Действия страницы → Найти на странице» or Ctrl+F opens the common search row. Enter

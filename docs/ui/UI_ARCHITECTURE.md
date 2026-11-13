@@ -1,5 +1,16 @@
 # Архитектура UI RNAssistant
 
+## 07 selected Inspector — In Review, 2026-11-13
+
+Diagnostics.context resolves explicit live/retained conversation identity before reads;
+ConversationPanel remains snapshot/draft owner. Inspector context/abilities/usage and
+next-request preview no longer read global active chat/context/composer data. Pinned
+run/step remains independent of selection; unavailable scope never falls back.
+The duplicate Inspector action timeline is removed: status + bounded step navigation
+lead to the existing Journal and lazy captured-request reader. Inspector uses Dock's
+existing onlyWhenVisible renderer; its root and presentation survive hide/move, while
+hidden reads are stopped. No new registry/store, runtime or bridge contract.
+
 ## Common page find — In Review, 2026-11-13
 
 app-browser-find owns one compact presentation per Browser. Native VisualControl.find
