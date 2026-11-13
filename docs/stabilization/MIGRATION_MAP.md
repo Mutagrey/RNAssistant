@@ -1,5 +1,16 @@
 # Current-to-target migration map
 
+## Local Browser — промежуточный F0, 2026-11-13
+
+Owner: Browser package 01/02/03 в текущем последовательном чате. Существующий
+незавершённый extraction доведён до общего `BrowserPageAutomation`: native Page
+передаёт exact target/protocol, прежние gateway/tool consumers перечисляют owned
+pages и отклоняют неоднозначный semantic target. Renderer пока прежний singleton;
+это ещё не multi-tab/local-only delivery. Неиспользованный iframe-binding draft
+не становится альтернативным renderer. Остаточные ExternalBrowser names/contracts
+удаляются/переключаются в F0/F1 вместе с consumers. Guard/read/effect evidence
+сохраняет прежнего владельца; нового store/runtime нет.
+
 ## Storage/context optimization — 2026-11-10
 
 P1/P2 user Inbox delivery (2026-11-12): text acceptance/edit/removal and delivery

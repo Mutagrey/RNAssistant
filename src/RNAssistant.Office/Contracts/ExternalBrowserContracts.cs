@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -66,8 +67,11 @@ namespace RNAssistant.Office.Contracts
         public string ChatId { get; }
         public string SessionId { get; }
         public long DocumentGeneration { get; }
-        public ExternalBrowserReadTarget(string chatId, string sessionId, long documentGeneration)
-        { ChatId = chatId; SessionId = sessionId; DocumentGeneration = documentGeneration; }
+        public string Name { get; }
+        public bool CanNavigate { get; }
+        public string Target => "Browser page: " + Name;
+        public ExternalBrowserReadTarget(string chatId, string sessionId, long documentGeneration, string name = "external", bool canNavigate = true)
+        { ChatId = chatId; SessionId = sessionId; DocumentGeneration = documentGeneration; Name = name; CanNavigate = canNavigate; }
         public bool Matches(ExternalBrowserReadTarget other)
         { return other != null && ChatId == other.ChatId && SessionId == other.SessionId && DocumentGeneration == other.DocumentGeneration; }
     }
@@ -94,7 +98,7 @@ namespace RNAssistant.Office.Contracts
 
     public interface IExternalBrowserReadSource
     {
-        ExternalBrowserReadTarget TargetFor(string chatId);
+        IReadOnlyList<ExternalBrowserReadTarget> TargetsFor(string chatId);
         Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken);
     }
 

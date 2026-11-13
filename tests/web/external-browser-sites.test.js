@@ -23,6 +23,7 @@ const body = '<h1>Research page</h1><label>Search <input id="query"></label><inp
       await page.goto('https://research.example/start');
       const {frameTree} = await cdp.send('Page.getFrameTree');
       ({executionContextId:contextId} = await cdp.send('Page.createIsolatedWorld', {frameId:frameTree.frame.id,worldName:'rna-semantic-read'}));
+      await evaluate('globalThis.__rnaBrowserScope=Object.freeze({interact:true,navigate:true})');
       await read();
     }
     async function prepare(request) {

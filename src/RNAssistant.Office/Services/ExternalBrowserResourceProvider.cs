@@ -11,10 +11,10 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
-    // One live page plus immutable observations in the existing scoped CAS/authority.
+    // Owned live pages plus immutable observations in the existing scoped CAS/authority.
     internal sealed class ExternalBrowserResourceProvider : IResourceProvider
     {
-        internal const string Target = "Browser page: external";
+        internal const string TargetPrefix = "Browser page: ", Target = TargetPrefix + "external";
         internal const string Kind = "browser-page";
         internal const string ObservationKind = "browser-observation", ObservationPrefix = "Browser observation: ";
         internal const int MaximumNodes = 160, MaximumName = 160, MaximumCharacters = 16000, MaximumVisited = 3000;
@@ -40,7 +40,7 @@ namespace RNAssistant.Office.Services
 
         private static ResourceDescriptor Describe(ExternalBrowserReadTarget target, string revision = null)
         {
-            var value = new ResourceDescriptor { Provider = "browser", Kind = Kind, Title = "external",
+            var value = new ResourceDescriptor { Provider = "browser", Kind = Kind, Title = target.Name, SnapshotTarget = target.Target,
                 Reference = new ResourceRef(UriFor(target), revision ?? "document-" + target.DocumentGeneration),
                 Mutable = true, Tracking = "observed", MimeType = "text/plain; charset=utf-8" };
             value.Capabilities.Add("read"); value.Representations.Add(ResourceRepresentations.Text);
@@ -53,18 +53,21 @@ namespace RNAssistant.Office.Services
             if (kind == ObservationKind) return ListObservations(session, cursor, limit);
             var result = new ResourceListPage();
             if (!string.IsNullOrEmpty(cursor)) throw Error("Browser discovery has no continuation.", "browser_cursor_invalid");
-            var target = string.IsNullOrEmpty(session?.Id) ? null : _source()?.TargetFor(session.Id);
-            if (target != null) CheckDocument(session);
-            if (target != null && (kind == null || kind == Kind)) result.Items.Add(Describe(target));
-            result.Total = result.Items.Count; return result;
+            var targets = Targets(session);
+            if (targets.Length > 0) CheckDocument(session);
+            if (kind == null || kind == Kind) result.Items.AddRange(targets.Select(item => Describe(item)).Take(Math.Max(1, limit)));
+            result.Total = targets.Length; result.Truncated = result.Items.Count < result.Total; return result;
         }
+
+        private ExternalBrowserReadTarget[] Targets(ChatSession session)
+        { return string.IsNullOrEmpty(session?.Id) ? new ExternalBrowserReadTarget[0] :
+            _source()?.TargetsFor(session.Id).ToArray() ?? new ExternalBrowserReadTarget[0]; }
 
         public ResourceDescriptor Resolve(ChatSession session, string resourceUri)
         {
             if (IsObservation(session, resourceUri)) return DescribeObservation(session, resourceUri);
-            var target = string.IsNullOrEmpty(session?.Id) ? null : _source()?.TargetFor(session.Id);
-            if (target == null || UriFor(target) != resourceUri)
-                throw Error("No ready browser page belongs to this chat. Open the page from this chat first.", "browser_page_unavailable");
+            var target = Targets(session).SingleOrDefault(item => UriFor(item) == resourceUri);
+            if (target == null) throw Error("No ready browser page belongs to this chat. Open the page from this chat first.", "browser_page_unavailable");
             CheckDocument(session);
             return Describe(target);
         }
@@ -95,7 +98,7 @@ namespace RNAssistant.Office.Services
                 retained.Result.RawContentIncluded = true;
                 return retained;
             }
-            var source = _source(); var target = source?.TargetFor(session?.Id);
+            var source = _source(); var target = Targets(session).SingleOrDefault(item => UriFor(item) == request.Reference.Uri);
             if (target == null || UriFor(target) != request.Reference.Uri)
                 throw Error("The browser page is closed, loading or belongs to another chat.", "browser_page_unavailable");
             if (request.Representation != "auto" && request.Representation != "text" || !string.IsNullOrEmpty(request.Cursor))
@@ -104,7 +107,7 @@ namespace RNAssistant.Office.Services
             // ResourceToolHandlerBase dispatches this asynchronous native source off the UI thread.
             var content = source.ReadAsync(target, cancellationToken).GetAwaiter().GetResult();
             cancellationToken.ThrowIfCancellationRequested();
-            if (source != _source() || !target.Matches(source.TargetFor(session.Id)))
+            if (source != _source() || !source.TargetsFor(session.Id).Any(target.Matches))
                 throw Error("The page changed during capture. Read it again.", "browser_document_stale");
             CheckDocument(session);
             var text = Format(content);
@@ -174,8 +177,12 @@ namespace RNAssistant.Office.Services
 
         internal ResourceDescriptor ResolveSemanticTarget(ChatSession session, string target)
         {
-            if (target == Target) return List(session, Kind, null, 1).Items.SingleOrDefault() ??
-                throw Error("Open a ready Browser page from this chat first.", "browser_page_unavailable");
+            if (target.StartsWith(TargetPrefix, StringComparison.Ordinal)) {
+                var matches = Targets(session).Where(item => item.Target == target).ToArray();
+                if (matches.Length != 1) throw Error("The Browser page is missing or ambiguous. Use discovery to select the exact page.",
+                    matches.Length == 0 ? "browser_page_unavailable" : "resource_target_ambiguous");
+                CheckDocument(session); return Describe(matches[0]);
+            }
             DateTime timestamp;
             if (!target.StartsWith(ObservationPrefix, StringComparison.Ordinal) || !DateTime.TryParseExact(
                 target.Substring(ObservationPrefix.Length), TimestampFormat, CultureInfo.InvariantCulture,
@@ -213,12 +220,13 @@ namespace RNAssistant.Office.Services
                 Title = title, CreatedUtc = captured, Mutable = false, Tracking = "immutable", MimeType = "text/plain; charset=utf-8",
                 SnapshotTarget = target };
             descriptor.Capabilities.Add("read"); descriptor.Representations.Add("text");
-            descriptor.Metadata["description"] = "Captured page at " + url + ". Historical facts only; read Browser page: external before an action.";
+            descriptor.Metadata["description"] = "Captured page at " + url + ". Historical facts only; read the exact live Browser page before an action.";
             return descriptor;
         }
 
         internal static string SourceAddress(string url)
         {
+            if (url == "about:srcdoc") return url;
             Uri uri;
             if (url == null || url.Length > 8192 || !Uri.TryCreate(url, UriKind.Absolute, out uri) ||
                 uri.Scheme != "http" && uri.Scheme != "https") throw Error("Invalid captured page address.", "browser_capture_invalid");

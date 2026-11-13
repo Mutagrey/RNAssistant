@@ -31,6 +31,7 @@ const review = process.env.BROWSER_ACTION_REVIEW;
       await page.goto(address);
       const { frameTree } = await cdp.send('Page.getFrameTree');
       ({ executionContextId: contextId } = await cdp.send('Page.createIsolatedWorld', { frameId: frameTree.frame.id, worldName: 'rna-semantic-read' }));
+      await evaluate('globalThis.__rnaBrowserScope=Object.freeze({interact:true,navigate:true})');
       if (capture) await read();
       await evaluate(visual + ';globalThis.__rnaBrowserVisual=RNAssistantBrowserActionView.create(' + JSON.stringify(styles) + ');true');
     }

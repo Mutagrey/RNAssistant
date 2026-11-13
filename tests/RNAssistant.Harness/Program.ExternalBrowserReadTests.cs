@@ -28,7 +28,7 @@ namespace RNAssistant.Harness
                 SourceUrl = "https://example.test/form", Title = "Contact form", CapturedUtc = DateTime.UtcNow,
                 Nodes = new[] { new ExternalBrowserSemanticNode { Role = "heading", Name = "Local form" },
                     new ExternalBrowserSemanticNode { Role = "button", Name = "Save", Disabled = true } }, Visited = 4 };
-            public ExternalBrowserReadTarget TargetFor(string chatId) { return Target?.ChatId == chatId ? Target : null; }
+            public System.Collections.Generic.IReadOnlyList<ExternalBrowserReadTarget> TargetsFor(string chatId) { return Target?.ChatId == chatId ? new[] { Target } : new ExternalBrowserReadTarget[0]; }
             public Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested(); Captures++; ReadThread = Thread.CurrentThread.ManagedThreadId;

@@ -357,7 +357,7 @@ namespace RNAssistant.Office.Services
                     "resource_target_runtime_owned",
                     true);
             }
-            if (target == ExternalBrowserResourceProvider.Target || target.StartsWith(ExternalBrowserResourceProvider.ObservationPrefix, StringComparison.Ordinal))
+            if (target.StartsWith(ExternalBrowserResourceProvider.TargetPrefix, StringComparison.Ordinal) || target.StartsWith(ExternalBrowserResourceProvider.ObservationPrefix, StringComparison.Ordinal))
             {
                 var provider = _registry.All().OfType<ExternalBrowserResourceProvider>().SingleOrDefault();
                 if (provider == null) throw new ResourceRequestException("Browser provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);

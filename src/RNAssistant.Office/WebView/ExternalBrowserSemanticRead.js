@@ -102,7 +102,7 @@
     }, []);
   }
   function check(request) {
-    if (window.top !== window || !/^https?:$/.test(location.protocol)) fail('browser_action_invalid');
+    if (window.top !== window || !globalThis.__rnaBrowserScope || !globalThis.__rnaBrowserScope.interact) fail('browser_action_invalid');
     if (blocked) fail('browser_effect_unknown');
     if (control().manual) fail('browser_user_control');
     if (!observation || observation.used || observation.interaction !== control().epoch) fail('browser_observation_stale');
@@ -184,6 +184,7 @@
         observation.used = true; prepared = null;
         if (target.href === location.href) return { started: false, unchanged: true, code: 'browser_verified' };
         blocked = true; navigating = true; attempted = true;
+        if (!globalThis.__rnaBrowserScope.navigate) fail("browser_navigation_unavailable");
         location.assign(target.href);
         return { started: true };
       } catch (error) { return { started: attempted, code: error.message }; }

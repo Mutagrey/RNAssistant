@@ -1,6 +1,7 @@
 using RNAssistant.Core.Models;
 using System;
 using System.Drawing;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -26,11 +27,10 @@ namespace RNAssistant.Office.WebView
         private long _layoutRevision;
         private volatile ExternalBrowserReadTarget _readTarget;
 
-        public ExternalBrowserReadTarget TargetFor(string chatId)
-        { var target = _readTarget; return target != null && target.ChatId == chatId ? target : null; }
+        public IReadOnlyList<ExternalBrowserReadTarget> TargetsFor(string chatId)
+        { var target = _readTarget; return target != null && target.ChatId == chatId ? new[] { target } : new ExternalBrowserReadTarget[0]; }
 
         // One short native operation at a time. No gate is held across model/confirmation waits.
-        private SemaphoreSlim _semanticGate = new SemaphoreSlim(1, 1);
         public Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken token)
         { return InvokeSemanticAsync(target, (page, dispatch) => page.ReadAsync(target), token); }
 
@@ -53,68 +53,12 @@ namespace RNAssistant.Office.WebView
             catch (Exception error) { Diagnostics.RuntimeLog.Error("Browser presentation was unavailable after the terminal.", error); }
         }
 
-        private async Task<T> InvokeSemanticAsync<T>(ExternalBrowserReadTarget target,
-            Func<ExternalBrowserPage, Action, Task<T>> operation, CancellationToken token, Action beforeDispatch = null,
-            int timeoutMs = 3000, Func<T, ExternalBrowserReadTarget> resultTarget = null)
+        private Task<T> InvokeSemanticAsync<T>(ExternalBrowserReadTarget target, Func<BrowserPageAutomation, Action, Task<T>> operation,
+            CancellationToken token, Action beforeDispatch = null, int timeoutMs = 3000, Func<T, ExternalBrowserReadTarget> resultTarget = null)
         {
-            token.ThrowIfCancellationRequested();
-            if (!_parent.InvokeRequired) throw ExternalBrowserResourceProvider.Error("Browser operations require a background caller.", "browser_dispatch_invalid");
-            var gate = _semanticGate;
-            if (!await gate.WaitAsync(3000, token).ConfigureAwait(false))
-                throw ExternalBrowserResourceProvider.Error("A browser operation is still pending.", "browser_operation_busy");
-            var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var dispatchSync = new object(); bool dispatched = false; ExternalBrowserPage page = null;
-            Action dispatch = () => {
-                lock (dispatchSync)
-                {
-                    if (completion.Task.IsCompleted) throw new OperationCanceledException();
-                    token.ThrowIfCancellationRequested();
-                    beforeDispatch(); dispatched = true;
-                }
-            };
-            try
-            {
-                _parent.BeginInvoke(new Action(async () =>
-                {
-                    try
-                    {
-                        if (completion.Task.IsCompleted) return;
-                        token.ThrowIfCancellationRequested();
-                        if (_disposed || !target.Matches(_readTarget)) throw ExternalBrowserResourceProvider.Error("The browser binding is no longer current.", "browser_document_stale");
-                        page = _page;
-                        var value = await operation(page, dispatch);
-                        var after = resultTarget?.Invoke(value) ?? target;
-                        if (after.ChatId != target.ChatId || after.SessionId != target.SessionId || !after.Matches(_readTarget))
-                            throw ExternalBrowserResourceProvider.Error("The page changed during the operation.", "browser_document_stale");
-                        completion.TrySetResult(value);
-                    }
-                    catch (Exception error)
-                    {
-                        if (dispatched) page?.BlockActions();
-                        if (error is OperationCanceledException) completion.TrySetCanceled();
-                        else completion.TrySetException(error is RNAssistant.Core.Models.ResourceRequestException ? error :
-                            ExternalBrowserResourceProvider.Error("The native browser operation failed.", "browser_operation_failed"));
-                    }
-                    finally { gate.Release(); }
-                }));
-            }
-            catch { gate.Release(); throw; }
-            if (await Task.WhenAny(completion.Task, Task.Delay(timeoutMs, token)).ConfigureAwait(false) != completion.Task)
-            {
-                // Queued work cannot dispatch later. In-flight work retains the gate until it ends.
-                bool abandoned;
-                lock (dispatchSync)
-                {
-                    abandoned = completion.TrySetCanceled();
-                    if (abandoned && dispatched) page.BlockActions();
-                }
-                if (abandoned)
-                {
-                    token.ThrowIfCancellationRequested();
-                    throw ExternalBrowserResourceProvider.Error("The browser operation timed out. A dispatched effect may be unknown.", "browser_operation_timeout");
-                }
-            }
-            return await completion.Task.ConfigureAwait(false);
+            var page = _page;
+            if (page == null || page.SessionId != target?.SessionId) throw ExternalBrowserResourceProvider.Error("Browser page closed.", "browser_page_unavailable");
+            return page.Automation.InvokeAsync(target, operation, token, beforeDispatch, timeoutMs, resultTarget);
         }
 
         public ExternalBrowserDockHost(Control parent, WebView2 shell, string assets, Action<ExternalBrowserStateDto> publish,
@@ -151,7 +95,6 @@ namespace RNAssistant.Office.WebView
                 if (!_initializing.IsCompleted) throw new InvalidOperationException("Предыдущий WebView2 ещё завершает запуск. Повторите открытие через несколько секунд.");
                 if (request.ChatId != null && request.ChatId.Length > 256) throw new InvalidOperationException("Некорректный владелец Browser-вкладки.");
                 var page = new ExternalBrowserPage(_assets, request.ChatId, _requireAccess, _pauseRun);
-                _semanticGate = new SemaphoreSlim(1, 1);
                 _page = page; page.Control.Bounds = new Rectangle(0, 0, 1, 1);
                 _parent.Controls.Add(page.Control); page.Control.BringToFront();
                 page.Changed += Publish;
@@ -173,7 +116,7 @@ namespace RNAssistant.Office.WebView
 
         private async Task<ExternalBrowserStateDto> ResumeAgentAsync(ExternalBrowserCommandPayload request, ExternalBrowserPage page, CancellationToken token)
         {
-            var gate = _semanticGate;
+            var gate = page.Automation.Gate;
             if (!await gate.WaitAsync(3000, token)) throw new InvalidOperationException("Операция браузера ещё выполняется. Повторите продолжение после её завершения.");
             try
             {
