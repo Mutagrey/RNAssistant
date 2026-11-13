@@ -212,10 +212,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
             }
-            if (settings.HtmlNetworkAllowedOrigins == null)
-            {
-                settings.HtmlNetworkAllowedOrigins = new List<string>();
-            }
             settings.BaseUrl = NormalizeBaseUrl(settings.BaseUrl);
             settings.ModelsConfigUrl = string.IsNullOrWhiteSpace(settings.ModelsConfigUrl)
                 ? defaults.ModelsConfigUrl

@@ -396,7 +396,6 @@ namespace RNAssistant.Core.Models
         public int AttachmentHelperMaxTokens { get; set; }
         public int AttachmentEvidenceMaxTokens { get; set; }
         public Dictionary<string, TokenEstimateCalibrationSettings> TokenEstimateCalibrations { get; set; }
-        public List<string> HtmlNetworkAllowedOrigins { get; set; }
 
         public AppSettings()
         {
@@ -472,7 +471,6 @@ namespace RNAssistant.Core.Models
             AttachmentHelperMaxTokens = DefaultAttachmentHelperMaxTokens;
             AttachmentEvidenceMaxTokens = DefaultAttachmentEvidenceMaxTokens;
             TokenEstimateCalibrations = new Dictionary<string, TokenEstimateCalibrationSettings>(StringComparer.OrdinalIgnoreCase);
-            HtmlNetworkAllowedOrigins = new List<string>();
         }
 
         [OnDeserializing]
@@ -564,7 +562,6 @@ namespace RNAssistant.Core.Models
             {
                 clone.TokenEstimateCalibrations[pair.Key] = pair.Value == null ? null : pair.Value.Clone();
             }
-            clone.HtmlNetworkAllowedOrigins = new List<string>(HtmlNetworkAllowedOrigins ?? new List<string>());
             return clone;
         }
     }

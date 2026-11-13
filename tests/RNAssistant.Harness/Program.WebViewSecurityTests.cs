@@ -15,8 +15,6 @@ namespace RNAssistant.Harness
             AssertTrue(!WebViewSecurityPolicy.CanNavigateTopLevel("https://example.com", trusted), "external top navigation rejected");
             AssertTrue(WebViewSecurityPolicy.CanNavigateFrame("about:srcdoc#preview"), "srcdoc frame navigation");
             AssertTrue(!WebViewSecurityPolicy.CanNavigateFrame("https://example.com/frame"), "external frame navigation rejected");
-            AssertTrue(WebViewSecurityPolicy.CanOpenExternally("https://example.com"), "https external link");
-            AssertTrue(!WebViewSecurityPolicy.CanOpenExternally("file:///C:/secret.txt"), "file external link rejected");
 
             var cancellations = new BridgeRequestCancellationRegistry();
             var source = cancellations.Create("request-1", BridgeOperationCatalog.Resolve("editMessage"));

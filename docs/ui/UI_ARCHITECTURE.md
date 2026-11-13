@@ -1,5 +1,14 @@
 # Архитектура UI RNAssistant
 
+## Local Browser / Settings — In Review, 2026-11-13
+
+Scope local-only принят пакетом пользователя. HTML page→parent→bridge→host HTTP
+path и deployment editor удалены; Settings сохраняет пустой Developer disclosure.
+Общие Settings lifecycle/tokens и LLM controls сохранены. Старый signed config
+раздел ниже — superseded history. Общий native Browser/StartSurface ещё в работе;
+это не завершение миграции всех views и не визуальное принятие.
+
+
 ## Подписанная конфигурация — In Review, 2026-11-12
 
 `app-deployment-config` — presentation в существующем Settings;

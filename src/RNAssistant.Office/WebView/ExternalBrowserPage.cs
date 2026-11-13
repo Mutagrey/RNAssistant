@@ -25,8 +25,7 @@ namespace RNAssistant.Office.WebView
         private long _documentGeneration;
         private bool _documentReady;
         private readonly string _chatId;
-        private readonly Action<string, BrowserAccessKind> _requireAccess;
-        private bool _agentNetwork; // Only explicit native manual navigation can widen network admission again.
+        private readonly Action<string> _requireAccess;
         private readonly BrowserPageAutomation _automation;
         private CoreWebView2DevToolsProtocolEventReceiver _controlEvents;
         internal void BlockActions() { _automation.BlockActions(); }
@@ -38,7 +37,7 @@ namespace RNAssistant.Office.WebView
         internal BrowserPageAutomation Automation => _automation;
         public event Action Changed;
 
-        public ExternalBrowserPage(string assets, string chatId, Action<string, BrowserAccessKind> requireAccess,
+        public ExternalBrowserPage(string assets, string chatId, Action<string> requireAccess,
             Func<string, string, Task<Action>> pauseRun)
         {
             _assets = assets; _chatId = chatId; _requireAccess = requireAccess;
@@ -48,8 +47,8 @@ namespace RNAssistant.Office.WebView
             _automation = new BrowserPageAutomation(chatId, () => ReadTarget, () => Control.CoreWebView2.Source, () => Control.Visible,
                 (method, json) => Control.CoreWebView2.CallDevToolsProtocolMethodAsync(method, json), address => {
                     if (Control.CoreWebView2.Source != _url) throw ExternalBrowserResourceProvider.Error("Browser address changed.", "browser_document_stale");
-                    _requireAccess(address, BrowserAccessKind.Agent);
-                }, () => _agentNetwork = true, pauseRun, Publish, action => Control.BeginInvoke(action), () => !Control.InvokeRequired);
+                    _requireAccess(address);
+                }, pauseRun, Publish, action => Control.BeginInvoke(action), () => !Control.InvokeRequired);
         }
 
         public ExternalBrowserReadTarget ReadTarget
@@ -132,11 +131,11 @@ namespace RNAssistant.Office.WebView
             var core = Control.CoreWebView2;
             if (request.Action == ExternalBrowserAction.Navigate || request.Action == ExternalBrowserAction.Back ||
                 request.Action == ExternalBrowserAction.Forward || request.Action == ExternalBrowserAction.Reload)
-            { _agentNetwork = false; _automation.AbandonNavigation("browser_user_control"); _automation.TakeControl(); }
+            { _automation.AbandonNavigation("browser_user_control"); _automation.TakeControl(); }
             switch (request.Action)
             {
                 case ExternalBrowserAction.Navigate:
-                    _requireAccess(request.Url, BrowserAccessKind.Manual);
+                    _requireAccess(request.Url);
                     core.Navigate(ExternalBrowserPolicy.NavigationUrl(request.Url)); break;
                 case ExternalBrowserAction.Back: if (core.CanGoBack) core.GoBack(); break;
                 case ExternalBrowserAction.Forward: if (core.CanGoForward) core.GoForward(); break;
@@ -166,7 +165,7 @@ namespace RNAssistant.Office.WebView
             _navigationId = e.NavigationId; _navigationRefused = false;
             try
             {
-                _requireAccess(e.Uri, _agentNetwork ? BrowserAccessKind.Agent : BrowserAccessKind.Manual);
+                _requireAccess(e.Uri);
                 _automation.NavigationStarting(e.NavigationId, e.Uri, e.IsRedirected);
                 _message = "Загрузка…";
                 _documentReady = false; _documentGeneration++; _automation.ResetDocument();
@@ -181,7 +180,7 @@ namespace RNAssistant.Office.WebView
         }
         private void FrameNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
-            try { if (_disposed) e.Cancel = true; else _requireAccess(e.Uri, _agentNetwork ? BrowserAccessKind.Agent : BrowserAccessKind.Manual); }
+            try { if (_disposed) e.Cancel = true; else _requireAccess(e.Uri); }
             catch (Exception error) when (error is InvalidOperationException || error is ResourceRequestException)
             { e.Cancel = true; }
         }
@@ -190,7 +189,7 @@ namespace RNAssistant.Office.WebView
             try
             {
                 if (_disposed) throw new InvalidOperationException();
-                _requireAccess(e.Request.Uri, _agentNetwork ? BrowserAccessKind.Agent : BrowserAccessKind.Manual);
+                _requireAccess(e.Request.Uri);
             }
             catch (Exception error) when (error is InvalidOperationException || error is ResourceRequestException)
             { e.Response = _environment.CreateWebResourceResponse(null, 403, "Forbidden", "Content-Type: text/plain\r\nCache-Control: no-store"); }

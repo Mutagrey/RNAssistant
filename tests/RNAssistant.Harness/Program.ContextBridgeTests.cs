@@ -1833,21 +1833,19 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static void BridgeUsesTypedHtmlNetworkPayloads()
+        private static void BridgeRejectsRetiredPageNetwork()
         {
-            var controller = new AssistantController();
-            var bridge = new AssistantWebBridge(controller, null);
+            var bridge = new AssistantWebBridge(new AssistantController(), null);
             var token = BridgeToken(bridge);
-            var allow = bridge.HandleMessageAsync(
-                "{\"contractVersion\":2,\"id\":\"net1\",\"type\":\"allowHtmlNetworkOrigin\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"origin\":\"https://example.test\"}}")
-                .GetAwaiter().GetResult();
-            var fetch = bridge.HandleMessageAsync(
-                "{\"contractVersion\":2,\"id\":\"net2\",\"type\":\"htmlFetch\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"url\":\"https://example.test/data\",\"method\":\"POST\",\"headers\":{\"Content-Type\":\"application/json\"},\"body\":\"{}\"}}")
-                .GetAwaiter().GetResult();
-
-            AssertTrue(JObject.Parse(allow)["ok"].Value<bool>(), "html origin bridge response ok");
-            AssertTrue(JObject.Parse(fetch)["ok"].Value<bool>(), "html fetch bridge response ok");
-            AssertEqual(200, JObject.Parse(fetch)["payload"]["status"].Value<int>(), "html fetch status");
+            foreach (var operation in new[] { "allowHtmlNetworkOrigin", "htmlFetch", "getDeploymentConfigStatus",
+                "unlockDeveloperMode", "saveDeploymentConfig", "lockDeveloperMode", "openDeploymentConfigDirectory" })
+            {
+                var response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                    contractVersion = BridgeOperationCatalog.Version, id = "retired", type = operation,
+                    bridgeToken = token, payload = new { url = "https://example.test/", origin = "https://example.test" }
+                })).GetAwaiter().GetResult();
+                AssertTrue(!JObject.Parse(response)["ok"].Value<bool>(), "retired operation cannot grant page network access");
+            }
         }
 
         private static void BridgeCancelsAddressedChatRun()

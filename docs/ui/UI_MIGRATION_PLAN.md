@@ -1,5 +1,15 @@
 # План модернизации production UI
 
+## Local Browser package — ранний 02, In Review, 2026-11-13
+
+Удалены HTML proxy/network settings и developer site-policy flow; LLM connection
+сохранён. `local-browser-settings.test.js` проходит, wide/narrow/125% просмотрены:
+[wide](review/local-browser-settings-wide.png), [narrow](review/local-browser-settings-narrow.png).
+Runtime network qualification B02 и визуальное принятие открыты. Далее F0/F1,
+не автоматический S2. [Точный прогресс](../browser/06_PROGRESS.md).
+Порядок external P6h/deployment ниже superseded новым local-only scope.
+
+
 ## Developer: подписанная конфигурация — In Review, 2026-11-12
 
 По уточнению пользователя: обычный status, Developer password unlock, sites/manual-any,

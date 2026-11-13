@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.14.6-dev
+
+- Removed HTML HTTP proxy and external Browser grants, including obsolete
+  developer policy/issuer controls. Developer remains empty; LLM connectivity
+  is unchanged. WebView page links no longer launch the system browser.
+  Full native local-content isolation remains under qualification.
+
 ### 16.14.5-dev
 
 - Plugin checks now retain separate UI/run candidates and reuse identical packages.

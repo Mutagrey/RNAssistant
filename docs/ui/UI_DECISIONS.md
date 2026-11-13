@@ -1,5 +1,15 @@
 # Решения по UI RNAssistant
 
+## 2026-11-13 — Local-only Browser: scope Approved, UI In Review
+
+Пользователь поручил весь пакет 00–08 в одном последовательном чате, включая
+существующий незавершённый Browser patch. Внешние сайты/HTML HTTP proxy/site grants
+удаляются; Developer остаётся пустым. Один native renderer, общий Browser toolbar,
+StartSurface/Home, явные checkpoints и tools для Office/Workspace/plugin-source.
+Решение заменяет внешний policy scope от 12.11; не означает визуального принятия,
+push/release или Windows qualification. 07 следует отдельным срезом после 05/06.
+
+
 ## 2026-11-12 — Developer configuration: scope Approved, UI In Review
 
 Пользователь уточнил Developer внутри Settings: пароль открывает скрытые настройки;

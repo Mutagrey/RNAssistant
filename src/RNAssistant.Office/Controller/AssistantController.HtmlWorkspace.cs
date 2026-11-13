@@ -79,20 +79,6 @@ namespace RNAssistant.Office
             catch (InvalidOperationException) { return false; }
         }
 
-        public Task<HtmlFetchResponse> HtmlFetchAsync(HtmlFetchRequest request, CancellationToken cancellationToken)
-        {
-            return _htmlNetwork.FetchAsync(request, cancellationToken);
-        }
-
-        public HtmlOriginPermissionResponse AllowHtmlNetworkOrigin(string origin)
-        {
-            return new HtmlOriginPermissionResponse
-            {
-                Origin = _htmlNetwork.AllowOrigin(origin),
-                Allowed = true
-            };
-        }
-
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null)
         {
             var session = LoadAddressedSession(chatId);

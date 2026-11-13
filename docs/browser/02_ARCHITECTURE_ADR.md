@@ -1,5 +1,17 @@
 # Universal Browser: архитектурное решение
 
+## Local-only cutover — ранний срез 02, 2026-11-13
+
+HTML HTTP proxy удалён end-to-end, вместе с настройками origins и bridge grants.
+Browser больше не читает deployment policy/key и не открывает внешние page links
+через системный браузер. Private issuer/config файлы пользователя не удаляются.
+LLM использует прежний независимый transport. Единственный временный допустимый
+адрес старого native host — exact packaged probe с in-process ответом; это не
+общий resolver и не завершённый local renderer. F0/F1 заменяют singleton и iframe
+consumers. Полная worker/WebRTC isolation остаётся B02, не доказана этим deny.
+Ниже внешний policy/renderer scope исторический и заменён local-only решением.
+
+
 Дата: 2026-11-11. Общая архитектура — **Proposed**; P1, P2a и P2b реализованы / In Review.
 Согласованы документы + план и страницы во вкладках существующего Dockview.
 Native renderer остаётся отдельным решением по evidence. Контекст — [аудит](01_AUDIT.md).

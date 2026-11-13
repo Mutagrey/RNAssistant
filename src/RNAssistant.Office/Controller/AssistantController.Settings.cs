@@ -13,28 +13,8 @@ namespace RNAssistant.Office
     {
         public event Action<AppSettings> SettingsChanged;
 
-        public RNAssistant.Core.Models.DeploymentConfigStatus GetDeploymentConfigStatus() { return _deploymentConfig.Status(); }
-        public RNAssistant.Core.Models.DeploymentConfigEditor UnlockDeveloperMode(DeveloperUnlockRequest request)
-        {
-            if (request == null) throw new InvalidOperationException("Введите код разработчика.");
-            try { return _deploymentConfig.Unlock(request.Password); }
-            finally { request.Password = null; }
-        }
-        public RNAssistant.Core.Models.DeploymentConfigEditor SaveDeploymentConfig(DeploymentConfigSaveRequest request)
-        {
-            if (request == null || request.Sites == null) throw new InvalidOperationException("Укажите правила доступа.");
-            return _deploymentConfig.Save(request.SessionToken, request.Sites, request.AllowAnyManualSite, request.PrivateKeyPath);
-        }
-        public DeveloperLockResponse LockDeveloperMode()
-        { _deploymentConfig.Lock(); return new DeveloperLockResponse { Locked = true }; }
-        public DeploymentDirectoryResponse OpenDeploymentConfigDirectory(DeveloperSessionRequest request)
-        {
-            var path = _deploymentConfig.ConfigurationDirectory(request?.SessionToken);
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
-            return new DeploymentDirectoryResponse { Opened = true };
-        }
-        internal void RequireBrowserAccess(string url, BrowserAccessKind kind)
-        { ExternalBrowserPolicy.RequireAccess(url, uri => _deploymentConfig.Allows(uri, kind)); }
+        internal void RequireBrowserAccess(string url)
+        { ExternalBrowserPolicy.RequireAccess(url); }
 
         public SettingsResponse GetSettings()
         {

@@ -26,7 +26,6 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         internal AppDataPaths StoragePaths { get { return _paths; } }
         private readonly SettingsService _settingsService;
-        private readonly DeploymentConfigurationStore _deploymentConfig;
         private readonly ChatStore _chatStore;
         private readonly ArtifactWorkingSetService _artifactWorkingSet;
         private readonly IConversationStore _conversationStore;
@@ -70,7 +69,6 @@ namespace RNAssistant.Office
         private readonly ConversationRunOwner _activeRuns;
         private readonly ConversationInboxService _inbox;
         private readonly ConversationApplicationService _conversationApplication;
-        private readonly HtmlNetworkService _htmlNetwork;
         private readonly CancellationTokenSource _lifetimeCancellation;
         private int _disposed;
         private string _queuedQuickAction;
@@ -90,7 +88,6 @@ namespace RNAssistant.Office
             _paths = paths ?? AppDataPaths.CreateDefault();
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
-            _deploymentConfig = new DeploymentConfigurationStore(_paths);
             _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatStore.PerformanceLog = RuntimeLog.Info;
             _artifactWorkingSet = new ArtifactWorkingSetService(_chatStore.DocumentArtifacts, new ResourceMutationJournal(_paths));
@@ -158,7 +155,6 @@ namespace RNAssistant.Office
                 RemovePendingAgentToolsForSession,
                 (session, reason) => CancelPendingActivities(session, reason),
                 _chatStore.LoadArtifactBody);
-            _htmlNetwork = new HtmlNetworkService(() => _settingsService.Load(), value => _settingsService.Save(value));
             _llmClient = new LlmClient(
                 () => _settingsService.LoadApiKey(),
                 attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment),

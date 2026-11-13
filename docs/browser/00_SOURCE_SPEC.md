@@ -1,5 +1,18 @@
 # RNAssistant — Universal Browser: техническое задание агенту
 
+## Действующий scope — local-only, 2026-11-13
+
+Пакет пользователя 00–08 заменяет внешнюю часть исходного задания ниже. Один
+Browser View и native page runtime обслуживают document HTML, Workspace HTML
+project, plugin source/saved version и отдельный HTML resource. Только локальные
+locators; никаких внешних сайтов, loopback/LAN, HTML HTTP proxy и site grants.
+Check, Save checkpoint и Activate различаются; история хранит exact saved entry.
+Dock chooser и Home используют общий StartSurface. Inspector — отдельный срез 07.
+Реализация последовательная от текущего состояния; [этапы и gaps](06_PROGRESS.md).
+Старые P5/P6 external reports сохраняются как superseded history. B02 требует
+подтверждённой runtime isolation перед активным preview; иначе source-only.
+
+
 **Назначение:** передать агенту исследование, проектирование и поэтапную реализацию единого production-браузера. **Репозиторий:** `Mutagrey/RNAssistant`. Ранее изученная ревизия: `2c8de087f248bd84c80917b70ec21b032093d180`; сначала проверь актуальный HEAD. Этот документ задаёт целевое поведение, но не объявляет непроверенные детали репозитория фактом.
 
 ## 1. Твоя задача

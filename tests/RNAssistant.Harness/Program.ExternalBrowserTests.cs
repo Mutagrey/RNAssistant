@@ -17,23 +17,13 @@ namespace RNAssistant.Harness
     {
         private static void ExternalBrowserSiteAccess()
         {
-            var rule = HttpOriginPattern.Normalize("HTTPS://*.Example.COM:443/");
-            AssertEqual("https://*.example.com", rule, "default port and case normalize");
-            foreach (var url in new[] { "https://example.com/a", "https://a.example.com/", "https://deep.a.example.com/", "https://EXAMPLE.COM.:443/" })
-                AssertTrue(HttpOriginPattern.Matches(rule, new Uri(url)), "root/subdomains match across a DNS label boundary");
-            foreach (var url in new[] { "https://notexample.com/", "https://example.com.evil.test/", "http://example.com/", "https://example.com:444/", "https://user@example.com/" })
-                AssertTrue(!HttpOriginPattern.Matches(rule, new Uri(url)), "host/scheme/port/credentials cannot widen the grant");
-            AssertTrue(!HttpOriginPattern.Matches("https://example.com", new Uri("https://a.example.com")), "exact host does not grant subdomains");
-            AssertTrue(HttpOriginPattern.Matches("https://*.пример.рф:8443", new Uri("https://sub.xn--e1afmkfd.xn--p1ai:8443/")), "IDN matches punycode");
-            AssertEqual("http://[::1]:8080", HttpOriginPattern.Normalize("http://[::1]:8080/"), "explicit IPv6 origin");
-            foreach (var invalid in new[] { "*example.com", "https://*example.com", "https://*", "*://example.com", "https://*.127.0.0.1", "https://*.com", "https://example.com/path", "https://example.com/a/..", "https://example.com?x", "https://example.com#x", "https://u@example.com", "https://example.com:*", "https://example.com//", "" })
-                RuntimeThrows<InvalidOperationException>(() => HttpOriginPattern.Normalize(invalid));
-            ExternalBrowserPolicy.RequireAccess(ExternalBrowserPolicy.ProbeUrl, uri => false);
-            ExternalBrowserPolicy.RequireAccess("https://sub.example.com/any/path", uri => HttpOriginPattern.Matches(rule, uri));
-            RuntimeThrows<ResourceRequestException>(() => ExternalBrowserPolicy.RequireAccess("https://example.com", uri => false));
-            AssertEqual("https://example.com/", ExternalBrowserPolicy.NavigationUrl("https://example.com"), "URL validation is separate from signed admission");
-            AssertTrue(!JsonConvert.SerializeObject(SettingsControlsDto.From(new AppSettings())).Contains("BrowserAgentAllowedSites"),
-                "ordinary settings cannot expose or change browser policy");
+            ExternalBrowserPolicy.RequireAccess(ExternalBrowserPolicy.ProbeUrl);
+            foreach (var url in new[] { "https://example.com/", "https://sub.example.com/", "http://localhost/",
+                "http://127.0.0.1/", "http://[::1]/", "http://192.168.0.1/", "https://rna-browser-probe.invalid/other" })
+                RuntimeThrows<ResourceRequestException>(() => ExternalBrowserPolicy.RequireAccess(url));
+            var settings = JsonConvert.DeserializeObject<AppSettings>("{\"HtmlNetworkAllowedOrigins\":[\"https://example.com\"]}");
+            AssertTrue(!JsonConvert.SerializeObject(SettingsControlsDto.From(settings)).Contains("HtmlNetworkAllowedOrigins"),
+                "retired stored field cannot restore network capability");
         }
 
         private static void ExternalBrowserAdmission()

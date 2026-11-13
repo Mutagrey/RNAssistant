@@ -1,5 +1,15 @@
 # Universal Browser: план реализации
 
+## Действующий порядок local Browser — 2026-11-13
+
+Пакет 00–08 исполняется последовательно в одном чате на текущем `main`:
+08 transport → 04/V1 candidate → ранний 02 deny/proxy removal → F0 contracts →
+F1 local page/adapters → F2 tools/media → F3 checkpoints/UI → F4 Home/navigation/Dock →
+F5 cleanup; затем отдельно 07 Inspector/screens. Части 02–06 объединяются по
+сквозному поведению. Исторические P5/P6 external milestones ниже не управляют scope.
+Точный выполненный остаток и checks — [Progress](06_PROGRESS.md).
+
+
 Статус: P0 documentation подготовлен; P1, P2a и P2b **реализованы / In Review**;
 P2c automatic lifecycle — **проверен host-neutral**; P3a/P3b plugin fixes — **In Review**;
 P5a native pilot, P6a/P6b read/local actions, P6c visualization и P6d control/access — **реализованы / In Review**;

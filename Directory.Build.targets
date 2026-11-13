@@ -10,7 +10,6 @@
     <_RNAssistantVersionPrefixValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionPrefix)', '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'))</_RNAssistantVersionPrefixValid>
     <_RNAssistantVersionSuffixValid Condition="'$(RNAssistantVersionSuffix)' != ''">$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantVersionSuffix)', '^((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*$'))</_RNAssistantVersionSuffixValid>
     <_RNAssistantArchiveCommitValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(RNAssistantArchiveCommitSha)', '^([0-9a-f]{40}|[0-9a-f]{64})$'))</_RNAssistantArchiveCommitValid>
-    <RNAssistantDeploymentSigningKeyDefaultPath Condition="'$(RNAssistantDeploymentSigningKeyDefaultPath)' == '' and Exists('$(MSBuildThisFileDirectory).local/deployment/signing-key.bin')">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory).local/deployment/signing-key.bin'))</RNAssistantDeploymentSigningKeyDefaultPath>
   </PropertyGroup>
 
   <Target Name="ResolveRNAssistantBuildIdentity" BeforeTargets="GetAssemblyAttributes">
@@ -62,8 +61,6 @@
       <AssemblyMetadata Include="Configuration" Value="$(Configuration)" />
       <AssemblyMetadata Include="RuntimePlatform" Value="$(RNAssistantRuntimePlatform)" />
       <AssemblyMetadata Include="BuildEvidenceSignerSha256" Value="$(RNAssistantBuildEvidenceSignerSha256)" />
-      <AssemblyMetadata Include="DeploymentSigningKeyDefaultPath" Value="$(RNAssistantDeploymentSigningKeyDefaultPath)"
-                        Condition="'$(RNAssistantDeploymentSigningKeyDefaultPath)' != '' and ('$(MSBuildProjectName)' == 'RNAssistant.Core' or '$(MSBuildProjectName)' == 'RNAssistant.MockDemo')" />
     </ItemGroup>
   </Target>
 

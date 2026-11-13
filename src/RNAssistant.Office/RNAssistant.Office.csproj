@@ -319,7 +319,6 @@
     <Compile Include="Services\ModelDiagnosticsService.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />
-    <Compile Include="Services\HtmlNetworkService.cs" />
     <Compile Include="Services\HtmlWorkspaceArtifactService.cs" />
     <Compile Include="Services\HtmlWorkspacePublication.cs" />
     <Compile Include="Services\HtmlWorkspaceCommand.cs" />

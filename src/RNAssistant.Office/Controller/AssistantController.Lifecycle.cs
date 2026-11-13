@@ -37,7 +37,6 @@ namespace RNAssistant.Office
             StopInboxWorkers();
             _activeRuns.CancelAll();
             _resourceData.Dispose();
-            _deploymentConfig.Dispose();
             lock (_syncRoot)
             {
                 _pendingAgentTools.Clear();

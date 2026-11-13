@@ -641,29 +641,9 @@
                 <label><span>API-ключ</span><input id="apiKeyInput" type="password" autocomplete="off" placeholder="Оставьте пустым, чтобы не менять"><small id="apiKeyStatus"></small></label>
                 <details class="product-settings-advanced wide"><summary>Дополнительные параметры</summary><div>
                   <label><span>HTTP-заголовки</span><textarea id="headersInput" rows="4" placeholder="Header-Name: value"></textarea></label>
-                  <label><span>HTTP-доступ HTML-превью</span><textarea id="htmlNetworkOriginsInput" rows="3" placeholder="https://api.example.com"></textarea><small>Разрешённые адреса для HTTP-запросов HTML-превью: протокол, домен и порт, по одному на строку. Маски пока не поддерживаются. Открытие сайтов в Browser эта настройка не ограничивает. Удалите строку, чтобы отозвать доступ.</small></label>
                 </div></details>
               </div>
-              <div class="form-grid" data-deployment-config>
-                <small id="deploymentConfigStatus" role="status">Конфигурация не загружена</small>
-                <details id="deploymentConfigDeveloper" class="product-settings-advanced"><summary>Разработчик</summary><div>
-                  <div id="deploymentConfigLogin" class="form-grid">
-                    <label><span>Пароль разработчика</span><input id="deploymentConfigPassword" type="password" autocomplete="off"></label>
-                    <div><button id="deploymentConfigUnlock" class="secondary" type="button">Войти</button></div>
-                  </div>
-                  <div id="deploymentConfigEditor" class="form-grid" hidden>
-                    <label><span>Разрешённые сайты агента</span><textarea id="deploymentConfigSites" rows="4" placeholder="https://example.com&#10;https://*.example.org"></textarea><small>По одному адресу на строку. *.example.org включает домен и поддомены; протокол и порт учитываются. Укажите также адреса необходимых ресурсов сайта.</small></label>
-                    <label class="checkline"><input id="deploymentConfigManual" type="checkbox"><span>Разрешить любые HTTP(S)-сайты при ручной навигации</span></label>
-                    <small>Агент остаётся ограничен списком. Без галочки список действует и для ручной навигации.</small>
-                    <label><span>Путь к закрытому ключу</span><input id="deploymentConfigKeyPath" autocomplete="off" placeholder="C:\…\signing-key.bin"><small>Зашифрованный .bin с тем же паролем. Ключ не включается в конфигурацию.</small></label>
-                    <label><span>Файл конфигурации</span><input id="deploymentConfigPath" readonly></label>
-                    <small id="deploymentConfigVersion"></small>
-                    <div class="action-group"><button id="deploymentConfigSave" type="button">Подписать и сохранить</button><button id="deploymentConfigOpenDirectory" class="secondary" type="button">Открыть каталог</button><button id="deploymentConfigLock" class="secondary" type="button">Закрыть режим</button></div>
-                    <small>Передавайте пользователям только deployment-config.bin. Режим закрывается при уходе из настроек или через 10 минут.</small>
-                  </div>
-                  <p id="deploymentConfigEditorStatus" role="status"></p>
-                </div></details>
-              </div>
+              <details class="product-settings-advanced"><summary>Разработчик</summary><div></div></details>
             </section>
 
             <section class="settings-page model-settings-page" data-settings-page="model">
@@ -1111,7 +1091,6 @@
   <script src="js/app-editors.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
-  <script src="js/app-deployment-config.js?v=20261112"></script>
   <script src="js/app-settings.js?v=deployment-config-20261112"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics-navigation.js?v=diagnostics-source-20261103"></script>

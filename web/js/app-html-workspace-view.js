@@ -349,36 +349,6 @@
     }
   });
 
-  window.addEventListener("message", function (event) {
-    var frame = $("htmlWorkspacePreviewFrame");
-    var data = event.data || {};
-    if (!frame || event.source !== frame.contentWindow || data.type !== "rnassistant-html-fetch") return;
-    var payload = data.request || {};
-    function reply(ok, value) {
-      if (frame.contentWindow) frame.contentWindow.postMessage({ type: "rnassistant-html-fetch-result", requestId: data.requestId, ok: ok, value: value }, "*");
-    }
-    function execute() {
-      return send("htmlFetch", payload).then(function (response) { reply(true, response); });
-    }
-    execute().catch(function (error) {
-      var message = error.detail || error.message || "HTTP request failed";
-      var origin = "";
-      try { origin = new URL(payload.url).origin; } catch (ignore) {}
-      var deniedOrigin = String(message).match(/not allowed:\s*(https?:\/\/[^\s]+)/i);
-      if (deniedOrigin) origin = deniedOrigin[1].replace(/[.,;]+$/, "");
-      if (origin && /not allowed|не разреш/i.test(message) && window.confirm("HTML-превью запрашивает HTTP-доступ:\n" + origin + "\n\nРазрешить HTTP-запросы к этому адресу?")) {
-        send("allowHtmlNetworkOrigin", { origin: origin }).then(function () {
-          var list = state.settings.HtmlNetworkAllowedOrigins || state.settings.htmlNetworkAllowedOrigins || [];
-          if (list.indexOf(origin) < 0) list.push(origin);
-          state.settings.HtmlNetworkAllowedOrigins = list;
-          return execute();
-        }).catch(function (allowError) { reply(false, allowError.detail || allowError.message); });
-        return;
-      }
-      reply(false, message);
-    });
-  }, { signal: events.signal });
-
   function renderFiles() {
     var select = $("htmlWorkspaceFileSelect");
     var entries = files().map(function (file) { return { value: "file:" + fileId(file), label: filePath(file) }; })

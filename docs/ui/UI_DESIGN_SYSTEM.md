@@ -1,5 +1,13 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Local-only Settings — In Review, 2026-11-13
+
+Пустой «Разработчик» использует прежний advanced disclosure; новых tokens,
+геометрии и overrides нет. Удалены network policy controls. Shared Settings
+просмотрены при 1280×900 и 420×900/125%; пользовательское принятие открыто.
+Старое Developer authoring описание ниже superseded.
+
+
 ## Developer settings — In Review, 2026-11-12
 
 Общие product-settings-section, form-grid, advanced details, label/input/textarea,

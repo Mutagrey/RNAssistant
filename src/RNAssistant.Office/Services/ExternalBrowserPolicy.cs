@@ -20,12 +20,11 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        public static void RequireAccess(string url, Func<Uri, bool> allowed)
+        public static void RequireAccess(string url)
         {
             var uri = new Uri(NavigationUrl(url));
-            if (uri.AbsoluteUri == ProbeUrl) return; // Packaged fixture, not a network grant.
-            if (allowed == null || !allowed(uri))
-                throw ExternalBrowserResourceProvider.Error("Сайт запрещён политикой Browser. Требуется подписанный файл доступа от разработчика.", "browser_site_denied");
+            if (uri.AbsoluteUri == ProbeUrl) return; // Exact packaged fixture, answered in-process.
+            throw ExternalBrowserResourceProvider.Error("Browser поддерживает только локальные страницы. Внешняя сеть недоступна.", "browser_site_denied");
         }
 
         public static string NavigationUrl(string value)

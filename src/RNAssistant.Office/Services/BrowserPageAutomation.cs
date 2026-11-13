@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Services
         private readonly Func<bool> _visible;
         private readonly Func<string, string, Task<string>> _protocol;
         private readonly Action<string> _requireAccess;
-        private readonly Action _agentDispatch, _changed;
+        private readonly Action _changed;
         private bool _disposed;
         private string _message;
         internal bool ManualControl => _manualControl;
@@ -50,10 +50,10 @@ namespace RNAssistant.Office.Services
         internal void BlockActions() { Interlocked.Exchange(ref _abandonedAction, 1); }
 
         internal BrowserPageAutomation(string chatId, Func<ExternalBrowserReadTarget> target, Func<string> sourceUrl, Func<bool> visible,
-            Func<string, string, Task<string>> protocol, Action<string> requireAccess, Action agentDispatch,
+            Func<string, string, Task<string>> protocol, Action<string> requireAccess,
             Func<string, string, Task<Action>> pauseRun, Action changed, Action<Action> post, Func<bool> onUi)
         { _chatId = chatId; _target = target; _sourceUrl = sourceUrl; _visible = visible; _protocol = protocol;
-            _requireAccess = requireAccess; _agentDispatch = agentDispatch; _pauseRun = pauseRun; _changed = changed; _post = post; _onUi = onUi; }
+            _requireAccess = requireAccess; _pauseRun = pauseRun; _changed = changed; _post = post; _onUi = onUi; }
         internal void ResetDocument() { HideAction(); _semanticContext = 0; _visualContext = 0; _interactionEpoch = 0; _observationTarget = null; _preparationId = null; }
         internal void NavigationStarting(ulong id, string url, bool redirected) { _navigation?.Starting(id, url, redirected); }
         internal void NavigationCompleted(ulong? id, bool success, string url) { _navigation?.Completed(id, success, ReadTarget, url); }
@@ -270,7 +270,7 @@ namespace RNAssistant.Office.Services
                 !await Evaluate<bool>("globalThis.__rnaBrowserControl.resume(" + epoch + ")") || revision != _controlRevision)
                 throw new InvalidOperationException("Страница или ручной ввод изменились. Повторите продолжение.");
             _observationTarget = null; _preparationId = null;
-            _agentDispatch();
+
             _manualControl = false; _controlRevision++; _pauseTask = null; _pauseId = null;
             var releasedRevision = _controlRevision;
             try { if (resume != null) await Task.Run(resume); }
@@ -348,7 +348,7 @@ namespace RNAssistant.Office.Services
             CheckAction(target); // The animation grants no authority; act() also rechecks the exact element/user epoch.
             if (_preparedNavigationUrl != null) return await NavigateAgentAsync(target, preparationId, beforeDispatch);
             beforeDispatch();
-            _agentDispatch();
+
             _actionUnknown = true; _preparationId = null;
             var result = await Evaluate<ExternalBrowserActionResult>("globalThis.__rnaBrowser.act(" + JsonConvert.SerializeObject(preparationId) + ")", true);
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("The page changed after dispatch; its effect is unknown.", "browser_effect_unknown");
@@ -368,7 +368,7 @@ namespace RNAssistant.Office.Services
             var pending = new ExternalBrowserNavigation(target, url,
                 address => _requireAccess(address));
             var follow = _preparedLink;
-            beforeDispatch(); _agentDispatch(); _actionUnknown = true; _preparationId = null; _preparedNavigationUrl = null; _preparedLink = false; _navigation = pending;
+            beforeDispatch();  _actionUnknown = true; _preparationId = null; _preparedNavigationUrl = null; _preparedLink = false; _navigation = pending;
             try
             {
                 // The fixed isolated script checks trusted input and starts navigation atomically.

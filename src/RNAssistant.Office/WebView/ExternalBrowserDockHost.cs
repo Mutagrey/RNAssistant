@@ -18,7 +18,7 @@ namespace RNAssistant.Office.WebView
         private readonly WebView2 _shell;
         private readonly string _assets;
         private readonly Action<ExternalBrowserStateDto> _publish;
-        private readonly Action<string, BrowserAccessKind> _requireAccess;
+        private readonly Action<string> _requireAccess;
         private readonly Func<string, string, Task<Action>> _pauseRun;
         private ExternalBrowserPage _page;
         private Task _initializing = Task.CompletedTask;
@@ -62,7 +62,7 @@ namespace RNAssistant.Office.WebView
         }
 
         public ExternalBrowserDockHost(Control parent, WebView2 shell, string assets, Action<ExternalBrowserStateDto> publish,
-            Action<string, BrowserAccessKind> requireAccess, Func<string, string, Task<Action>> pauseRun)
+            Action<string> requireAccess, Func<string, string, Task<Action>> pauseRun)
         {
             _parent = parent; _shell = shell; _assets = assets; _publish = publish; _requireAccess = requireAccess; _pauseRun = pauseRun;
             _shell.SizeChanged += InvalidatePlacement;

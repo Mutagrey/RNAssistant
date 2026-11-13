@@ -21,14 +21,12 @@ var RNAssistantSettingsView = {
     this.active = true;
     if (!settingsDirty && !settingsSaveInProgress) renderSettings();
     loadSettingsModelCatalogIfNeeded();
-    RNAssistantDeploymentConfig.activate();
   },
   deactivate: function () {
     this.active = false;
     // Keep edited controls, but cancel form-derived catalog requests on leaving the view.
     // A later activation can reload that preview from the same unapplied inputs.
     discardModelCatalogPreview();
-    RNAssistantDeploymentConfig.deactivate();
   },
   canClose: function () {
     if (settingsSaveInProgress) {
@@ -393,7 +391,6 @@ function renderSettings(options) {
     renderPromptSettings(state.prompts);
   }
   $("headersInput").value = headersToText(s.CustomHeaders || s.customHeaders || {});
-  $("htmlNetworkOriginsInput").value = (s.HtmlNetworkAllowedOrigins || s.htmlNetworkAllowedOrigins || []).join("\n");
   var apiKeyStatus = $("apiKeyStatus");
   $("apiKeyInput").placeholder = state.hasApiKey
     ? "Ключ сохранён; оставьте пустым, чтобы не менять"
@@ -459,7 +456,6 @@ function readSettings() {
     ModelAudioSupportOverrides: Object.assign({}, modelAudioSupportOverrides(modelContext)),
     ModelCapabilities: modelCapabilitiesForSettings(modelContext),
     AttachmentModelPriority: attachmentModelPriorityForSettings(modelContext),
-    HtmlNetworkAllowedOrigins: $("htmlNetworkOriginsInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
 }
@@ -571,7 +567,6 @@ function resetAgentSettingsToDefaults() {
 
 
 function bindSettingsActions() {
-  RNAssistantDeploymentConfig.bind();
   var navSearch = $("settingsNavSearch");
   var navRoot = $("settingsNavTree");
   var navItems = [
@@ -580,7 +575,6 @@ function bindSettingsActions() {
   ];
 
   function selectSettingsPage(page) {
-    if (page !== "connection") RNAssistantDeploymentConfig.lock();
     Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
       item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
     });

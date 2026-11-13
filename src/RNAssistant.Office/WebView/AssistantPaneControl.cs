@@ -231,7 +231,7 @@ namespace RNAssistant.Office.WebView
             {
                 _externalBrowser = new ExternalBrowserDockHost(this, _webView, Path.Combine(_webRoot, "browser-probe"),
                     value => PostBridgeMessage(JsonConvert.SerializeObject(new ExternalBrowserStateMessage { Payload = value })),
-                    (url, kind) => _bridge.RequireBrowserAccess(url, kind), (chat, pause) => _bridge.PauseBrowserRunAsync(chat, pause));
+                    url => _bridge.RequireBrowserAccess(url), (chat, pause) => _bridge.PauseBrowserRunAsync(chat, pause));
                 _bridge.ExternalBrowser = _externalBrowser;
             }
             if (_bridge.WindowHost != null)
@@ -400,10 +400,6 @@ namespace RNAssistant.Office.WebView
 
             e.Cancel = true;
             RuntimeLog.Info("Blocked WebView top-level navigation: " + (e.Uri ?? string.Empty));
-            if (e.IsUserInitiated)
-            {
-                OpenExternalUri(e.Uri);
-            }
         }
 
         private static void OnChatPreviewFrameCreated(object sender, CoreWebView2FrameCreatedEventArgs e)
@@ -430,10 +426,6 @@ namespace RNAssistant.Office.WebView
         private void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs e)
         {
             e.Handled = true;
-            if (e.IsUserInitiated)
-            {
-                OpenExternalUri(e.Uri);
-            }
         }
 
         private static void OnPermissionRequested(object sender, CoreWebView2PermissionRequestedEventArgs e)
@@ -442,22 +434,6 @@ namespace RNAssistant.Office.WebView
             e.SavesInProfile = false;
         }
 
-        private static void OpenExternalUri(string value)
-        {
-            if (!WebViewSecurityPolicy.CanOpenExternally(value))
-            {
-                return;
-            }
-
-            try
-            {
-                Process.Start(new ProcessStartInfo(value) { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                RuntimeLog.Error("Failed to open external WebView link.", ex);
-            }
-        }
 
         private void CreateWebViewControl()
         {

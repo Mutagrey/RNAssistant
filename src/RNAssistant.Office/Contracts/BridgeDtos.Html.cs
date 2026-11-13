@@ -40,54 +40,6 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("annotationNumber")] public int AnnotationNumber { get; set; }
     }
 
-    public sealed class HtmlFetchRequest
-    {
-        [JsonProperty("url")]
-        public string Url { get; set; }
-
-        [JsonProperty("method")]
-        public string Method { get; set; }
-
-        [JsonProperty("headers")]
-        public Dictionary<string, string> Headers { get; set; }
-
-        [JsonProperty("body")]
-        public string Body { get; set; }
-    }
-
-    public sealed class HtmlOriginPayload
-    {
-        [JsonProperty("origin")]
-        public string Origin { get; set; }
-    }
-
-    public sealed class HtmlOriginPermissionResponse
-    {
-        [JsonProperty("origin")]
-        public string Origin { get; set; }
-
-        [JsonProperty("allowed")]
-        public bool Allowed { get; set; }
-    }
-
-    public sealed class HtmlFetchResponse
-    {
-        [JsonProperty("url")]
-        public string Url { get; set; }
-
-        [JsonProperty("status")]
-        public int Status { get; set; }
-
-        [JsonProperty("statusText")]
-        public string StatusText { get; set; }
-
-        [JsonProperty("headers")]
-        public Dictionary<string, string> Headers { get; set; }
-
-        [JsonProperty("body")]
-        public string Body { get; set; }
-    }
-
     public sealed class HtmlWorkspaceMutationUploadRequest : ChatPayload
     {
         [JsonProperty("byteLength", Required = Required.Always)]

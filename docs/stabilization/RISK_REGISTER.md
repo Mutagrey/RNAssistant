@@ -1,5 +1,17 @@
 # Stabilization risk register
 
+## Local Browser B02 — Open, 2026-11-13
+
+Удалены page HTTP proxy, внешняя навигация и site grants. Это не доказывает запрет
+WebRTC/STUN/TURN, worker/service-worker и всех Chromium transport channels.
+До квалификации механизма на конкретном Windows WebView2 Runtime новый активный
+local preview должен fail-closed отдавать source-only/unavailable с причиной.
+Owner: Browser 02/native host; next: typed qualification gate и network probes
+для каждого канала. Без просьб о Windows logs/files; экранная диагностика для фото.
+Старые HTML/plugin iframe consumers пока заменяются в F1, не считать ранний deny
+завершённой изоляцией. Старый `CanNavigate` Harness compile gap из раздела ниже
+больше не воспроизводится: текущие 9 Browser cases компилируются и проходят.
+
 ## Окно Excel после правки 2026-11-12
 
 Фото показали отдельный taskbar preview, дублирующую native caption и потерю

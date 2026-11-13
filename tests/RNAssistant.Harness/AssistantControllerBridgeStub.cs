@@ -289,12 +289,7 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(id, chatId));
         }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
-        public DeploymentConfigStatus GetDeploymentConfigStatus() { return new DeploymentConfigStatus { State = DeploymentConfigState.Absent }; }
-        public DeploymentConfigEditor UnlockDeveloperMode(DeveloperUnlockRequest request) { throw new InvalidOperationException("Not configured"); }
-        public DeploymentConfigEditor SaveDeploymentConfig(DeploymentConfigSaveRequest request) { throw new InvalidOperationException("Not configured"); }
-        public DeploymentDirectoryResponse OpenDeploymentConfigDirectory(DeveloperSessionRequest request) { throw new InvalidOperationException("Not configured"); }
-        public DeveloperLockResponse LockDeveloperMode() { return new DeveloperLockResponse { Locked = true }; }
-        internal void RequireBrowserAccess(string url, BrowserAccessKind kind) { Services.ExternalBrowserPolicy.RequireAccess(url, uri => false); }
+        internal void RequireBrowserAccess(string url) { Services.ExternalBrowserPolicy.RequireAccess(url); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
         public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
@@ -879,8 +874,6 @@ namespace RNAssistant.Office
             LastHtmlAction = request; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public HtmlWorkspaceResponse RedoHtmlWorkspaceSnapshot(HtmlWorkspaceRestorePayload request) {
             LastHtmlAction = request; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
-        public object AllowHtmlNetworkOrigin(string origin) { return new { origin = origin, allowed = true }; }
-        public Task<HtmlFetchResponse> HtmlFetchAsync(HtmlFetchRequest request, CancellationToken cancellationToken) { return Task.FromResult(new HtmlFetchResponse { Url = request == null ? "" : request.Url, Status = 200, Body = "ok", Headers = new Dictionary<string, string>() }); }
         public DocumentContext GetContext(string chatId = null) { return new DocumentContext { DocumentKey = chatId ?? string.Empty }; }
         public DocumentContext AddSelectionContextFromBridge(string mode, string chatId = null) { return new DocumentContext { Title = mode ?? string.Empty }; }
 

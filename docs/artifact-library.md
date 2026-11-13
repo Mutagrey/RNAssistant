@@ -1327,8 +1327,9 @@ are preview frames, never child artifacts or independently durable revisions.
   explicit import into the HTML workspace. Untrusted upload source is never
   inserted into the main DOM or granted network access.
 - HTML workspace: sandboxed rendered preview, exact HTML/CSS/JS editors,
-  ResourceRef bindings, revision/branch history and export. Hosted network access
-  retains its explicit allowlist. The unified [Resource Fabric](resource-fabric.md)
+  ResourceRef bindings, revision/branch history and export. The HTML HTTP proxy and
+  origin allowlist were removed on 2026-11-13; page code has no host network bridge.
+  The unified [Resource Fabric](resource-fabric.md)
   replaces eager dataset JSON, table aliases and independent last-good state.
   Page code opens explicit names through `RN.resources`, then reads bounded exact
   batches/streams. Refresh reconciles source authority and reopens head bindings;

@@ -1,5 +1,22 @@
 # Universal Browser: матрица проверок
 
+## Local Browser: ранний deny/proxy removal — 2026-11-13
+
+- Harness `local browser: network access is denied`: external/loopback/private
+  addresses отклонены; старый settings JSON не возвращает capability.
+- Harness `bridge: retired page network is denied`: семь прежних network/developer
+  operations получают отказ до dispatch.
+- `node tests/web/html-workspace-echarts.test.js`: 7/7; local vendors/resources и
+  standalone export сохранены, assembled preview не содержит proxy.
+- `tests/web/local-browser-settings.test.js`: production Settings, empty Developer,
+  LLM controls, 1280×900 и 420×900/125%; screenshots просмотрены.
+- Native Shell link-launch removal и WebView guards проверены статически. B02:
+  all-source requests, WebRTC, workers/service workers и native execution требуют
+  отдельного Windows evidence. Это не полная network/Office qualification.
+
+Исторические signed/external cases ниже относятся к удалённому scope.
+
+
 <a id="signed-access"></a>
 ## Подписанная конфигурация — 2026-11-12
 

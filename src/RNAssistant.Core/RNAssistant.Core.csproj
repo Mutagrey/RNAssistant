@@ -110,7 +110,6 @@
     <Compile Include="Models\ConversationInput.cs" />
     <Compile Include="Models\AgentCommunication.cs" />
     <Compile Include="Models\AppSettings.cs" />
-    <Compile Include="Models\DeploymentConfiguration.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\ResourceModels.cs" />
     <Compile Include="Models\ResourceArchitectureModels.cs" />
@@ -119,7 +118,6 @@
     <Compile Include="Models\ResourceEvidenceModels.cs" />
     <Compile Include="Models\ModelContextModels.cs" />
     <Compile Include="Models\ModelContextSnapshot.cs" />
-    <Compile Include="Services\HttpOriginPattern.cs" />
     <Compile Include="Services\EvidenceStateReducer.cs" />
     <Compile Include="Services\ResourceSchemaValidator.cs" />
     <Compile Include="Services\ResourcePdfPageSelectorContract.cs" />
@@ -383,8 +381,6 @@
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\ProtectedChatDraftStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
-    <Compile Include="Storage\DeploymentConfigurationStore.cs" />
-    <Compile Include="Services\DeploymentConfigurationCrypto.cs" />
     <Compile Include="Storage\StorageProtection.cs" />
     <Compile Include="Storage\SkillStore.cs" />
     <Compile Include="Storage\StorageFileSystem.cs" />
@@ -421,12 +417,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-    <EmbeddedResource Include="..\..\config\deployment-trust.json" Condition="Exists('..\..\config\deployment-trust.json')">
-      <LogicalName>RNAssistant.DeploymentTrust</LogicalName>
-    </EmbeddedResource>
   </ItemGroup>
-  <Target Name="ReportMissingDeploymentTrust" BeforeTargets="CoreCompile" Condition="!Exists('..\..\config\deployment-trust.json')">
-    <Warning Text="Deployment trust is absent: Developer unlock and external Browser grants are disabled. Generate the issuer with RNAssistant.DeploymentKeys, then reload the project and rebuild. The private signing key must remain outside the build." />
-  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -42,7 +42,7 @@ namespace RNAssistant.Office.WebView
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
         private IExternalBrowserHost _externalBrowser;
-        internal void RequireBrowserAccess(string url, RNAssistant.Core.Models.BrowserAccessKind kind) { _controller.RequireBrowserAccess(url, kind); }
+        internal void RequireBrowserAccess(string url) { _controller.RequireBrowserAccess(url); }
         internal Task<Action> PauseBrowserRunAsync(string chatId, string pauseId)
         { return Task.Run(() => _agentCommunication.PauseForUser(chatId, pauseId)); }
         public IExternalBrowserHost ExternalBrowser
@@ -522,12 +522,6 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.SetChatReasoning(setChatReasoning.ChatId, setChatReasoning.Enabled == true), cancellationToken).ConfigureAwait(false);
                         break;
-                    case BridgeOperationId.AllowHtmlNetworkOrigin:
-                        responsePayload = _controller.AllowHtmlNetworkOrigin(Payload<HtmlOriginPayload>(payload).Origin);
-                        break;
-                    case BridgeOperationId.HtmlFetch:
-                        responsePayload = await _controller.HtmlFetchAsync(Payload<HtmlFetchRequest>(payload), cancellationToken);
-                        break;
                     case BridgeOperationId.ClearChat:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ClearChat(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
@@ -649,23 +643,6 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.GetSettings:
                         responsePayload = _controller.GetSettings();
-                        break;
-                    case BridgeOperationId.GetDeploymentConfigStatus:
-                        responsePayload = await Task.Run(() => _controller.GetDeploymentConfigStatus(), cancellationToken).ConfigureAwait(false);
-                        break;
-                    case BridgeOperationId.UnlockDeveloperMode:
-                        var browserUnlock = Payload<DeveloperUnlockRequest>(payload);
-                        responsePayload = await Task.Run(() => _controller.UnlockDeveloperMode(browserUnlock), cancellationToken).ConfigureAwait(false);
-                        break;
-                    case BridgeOperationId.SaveDeploymentConfig:
-                        var deploymentConfig = Payload<DeploymentConfigSaveRequest>(payload);
-                        responsePayload = await Task.Run(() => _controller.SaveDeploymentConfig(deploymentConfig), cancellationToken).ConfigureAwait(false);
-                        break;
-                    case BridgeOperationId.LockDeveloperMode:
-                        responsePayload = _controller.LockDeveloperMode();
-                        break;
-                    case BridgeOperationId.OpenDeploymentConfigDirectory:
-                        responsePayload = _controller.OpenDeploymentConfigDirectory(Payload<DeveloperSessionRequest>(payload));
                         break;
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = _controller.GetCasHealth();

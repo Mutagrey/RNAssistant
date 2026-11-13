@@ -126,11 +126,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ModelCapabilities = new Dictionary<string, ModelCapabilitySettings>(StringComparer.OrdinalIgnoreCase);
             }
-            if (settings.HtmlNetworkAllowedOrigins == null)
-            {
-                settings.HtmlNetworkAllowedOrigins = new List<string>();
-            }
-
             settings.BaseUrl = _baseUrl;
             settings.ModelsConfigUrl = (settings.ModelsConfigUrl ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(settings.Model) ||

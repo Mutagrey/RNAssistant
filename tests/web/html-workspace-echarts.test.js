@@ -94,6 +94,9 @@ assert.equal(documentRuntime.echarts.version, "5.6.0");
 assert.deepEqual(JSON.parse(JSON.stringify(documentRuntime.__workspaceScriptRan)),
   { version: "5.6.0", name: "sales" });
 assert.doesNotMatch(documentChart, /rnassistant-html-fetch/);
+assert.doesNotMatch(context.RNAssistantHtmlWorkspacePreview.build({
+  activeFileId: "index.html", files: [{ id: "index.html", path: "index.html", kind: "html", content: "<main>Local</main>" }]
+}), /rnassistant-html-fetch/);
 console.log("PASS HTML ECharts: assembly installs the local runtime and resource API before workspace code");
 
 const fallbackChart = context.RNAssistantHtmlWorkspacePreview.build({

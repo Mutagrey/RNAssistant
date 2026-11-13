@@ -143,7 +143,6 @@
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.Vba.cs" Link="Testing\FakeOfficeAdapter.Vba.cs" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="..\..\config\deployment-trust.json" Condition="Exists('..\..\config\deployment-trust.json')" LogicalName="RNAssistant.DeploymentTrust" />
     <None Include="..\..\vendor\pdf-rendering\runtimes\win-x64\native\pdfium.dll"
           Link="pdfium.dll"
           CopyToOutputDirectory="PreserveNewest" />
@@ -151,8 +150,5 @@
           Link="libSkiaSharp.dll"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="ReportMissingDeploymentTrust" BeforeTargets="CoreCompile" Condition="!Exists('..\..\config\deployment-trust.json')">
-    <Warning Text="Deployment trust is absent: Developer unlock and external Browser grants are disabled. Run the standalone deployment keys utility, then rebuild." />
-  </Target>
   <Import Project="..\..\src\RNAssistant.Application\RNAssistant.Application.projitems" />
 </Project>

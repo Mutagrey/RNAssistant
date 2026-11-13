@@ -11,7 +11,6 @@ namespace RNAssistant.Core.Storage
         public string SettingsFile { get; private set; }
         public string NativeWindowStateFile { get; private set; }
         public string SecretFile { get; private set; }
-        public string DeploymentConfigFile { get; private set; }
         public string HistorySecretFile { get; private set; }
         public string HistoryProtectionSaltFile { get; private set; }
         public string ToolsDirectory { get; private set; }
@@ -45,7 +44,6 @@ namespace RNAssistant.Core.Storage
                 SettingsFile = Path.Combine(root, "settings.json"),
                 NativeWindowStateFile = Path.Combine(root, "native-window-state.json"),
                 SecretFile = Path.Combine(root, "secret.bin"),
-                DeploymentConfigFile = Path.Combine(root, "deployment-config.bin"),
                 HistorySecretFile = Path.Combine(root, "history-secret.bin"),
                 HistoryProtectionSaltFile = Path.Combine(root, "history-protection.salt"),
                 ToolsDirectory = Path.Combine(root, "tools"),

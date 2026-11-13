@@ -1,5 +1,13 @@
 # Карта экранов, навигации и состояний
 
+## Local-only Settings — In Review, 2026-11-13
+
+Подключение содержит API/model catalogue/key/HTTP headers для LLM и пустой раздел
+«Разработчик». HTML origins, site grants, password/key-path/policy publication UI
+удалены. Внешние page links не открывают системный браузер. Ранний срез не меняет
+placement и остальные views; старое описание signed access ниже superseded.
+
+
 ## Рабочая область: общее дерево и добавление — In Review, 2026-11-11
 
 Один заголовок «Рабочая область», поиск и **«+» рядом с поиском**. По уточнению

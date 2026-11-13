@@ -242,14 +242,6 @@
       "; font-src data:; media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' blob: data:; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">";
   }
 
-  function networkBridgeScript() {
-    return "<script>(function(){" +
-      "var nativeFetch=window.fetch&&window.fetch.bind(window),seq=1,pending={};" +
-      "window.addEventListener('message',function(e){var d=e.data||{};if(d.type!=='rnassistant-html-fetch-result'||!pending[d.requestId])return;var p=pending[d.requestId];delete pending[d.requestId];if(!d.ok){p.reject(new TypeError(String(d.value||'HTTP request failed')));return;}var v=d.value||{},h=v.headers||v.Headers||{};p.resolve(new Response(v.body||v.Body||'',{status:v.status||v.Status||200,statusText:v.statusText||v.StatusText||'',headers:h}));});" +
-      "window.fetch=function(input,init){init=init||{};var url=typeof input==='string'?input:(input&&input.url)||'';if(!/^https?:\\/\\//i.test(url)){return nativeFetch?nativeFetch(input,init):Promise.reject(new TypeError('Only HTTP(S) URLs are supported'));}var headers={};try{new Headers(init.headers||(input&&input.headers)||{}).forEach(function(v,k){headers[k]=v;});}catch(ignore){}var id=String(seq++);return new Promise(function(resolve,reject){pending[id]={resolve:resolve,reject:reject};window.parent.postMessage({type:'rnassistant-html-fetch',requestId:id,request:{url:url,method:init.method||(input&&input.method)||'GET',headers:headers,body:typeof init.body==='string'?init.body:''}},'*');});};" +
-      "}());<\/script>";
-  }
-
   function build(options) {
     options = options || {};
     if ((options.files || []).some(function (file) { return typeof prop(file, "Content", "content", null) !== "string"; }))
@@ -260,12 +252,11 @@
       throw new Error("RESOURCE_EXPORT_REQUIRED: capture exact resource bindings before standalone export.");
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
-    var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
     var inspector = options.inspectGeneration && options.hostBridge !== false
       ? "<script>" + safeScript(window.RNAssistantVisualInspector.script(options.inspectGeneration)) + "<\/script>\n" : "";
     var vendorRuntime = vendorHead(files);
     var headInject = '<meta charset="utf-8">' + previewContentSecurityPolicy(options.hostBridge === false) + "\n" + previewViewportReset() + "\n" +
-      inspector + vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + hostBridge + "\n" + cssBlock(files);
+      inspector + vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

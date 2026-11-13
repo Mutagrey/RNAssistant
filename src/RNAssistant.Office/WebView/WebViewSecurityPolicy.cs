@@ -42,14 +42,6 @@ namespace RNAssistant.Office.WebView
             return IsAbout(candidate, "blank") || IsAbout(candidate, "srcdoc");
         }
 
-        public static bool CanOpenExternally(string candidate)
-        {
-            Uri uri;
-            return Uri.TryCreate(candidate, UriKind.Absolute, out uri) &&
-                (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
-        }
-
         private static bool IsAbout(string candidate, string path)
         {
             Uri uri;

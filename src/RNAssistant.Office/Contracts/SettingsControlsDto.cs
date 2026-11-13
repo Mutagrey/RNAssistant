@@ -51,7 +51,6 @@ namespace RNAssistant.Office.Contracts
         public int AttachmentHelperMaxTokens { get; set; }
         public int AttachmentEvidenceMaxTokens { get; set; }
         public Dictionary<string, TokenEstimateCalibrationSettings> TokenEstimateCalibrations { get; set; }
-        public List<string> HtmlNetworkAllowedOrigins { get; set; }
 
         public static SettingsControlsDto From(AppSettings settings)
         {
@@ -102,7 +101,6 @@ namespace RNAssistant.Office.Contracts
                 AttachmentHelperMaxTokens = settings.AttachmentHelperMaxTokens,
                 AttachmentEvidenceMaxTokens = settings.AttachmentEvidenceMaxTokens,
                 TokenEstimateCalibrations = settings.TokenEstimateCalibrations,
-                HtmlNetworkAllowedOrigins = settings.HtmlNetworkAllowedOrigins,
             };
         }
 
@@ -158,7 +156,6 @@ namespace RNAssistant.Office.Contracts
             result.AttachmentHelperMaxTokens = AttachmentHelperMaxTokens;
             result.AttachmentEvidenceMaxTokens = AttachmentEvidenceMaxTokens;
             result.TokenEstimateCalibrations = TokenEstimateCalibrations;
-            result.HtmlNetworkAllowedOrigins = HtmlNetworkAllowedOrigins;
             return result;
         }
     }

@@ -12,7 +12,11 @@ preview/automation изменения пользователь включил в
 (authority, preview/grants, published history) проходят. Далее F0 и сквозные F1–F4;
 ход срезов — [Browser Progress](../browser/06_PROGRESS.md). Local-only scope
 заменяет прежнее развитие внешнего Browser. Native network/input qualification
-и визуальное принятие остаются открытыми.
+и визуальное принятие остаются открытыми. Ранний 02 (`16.14.6-dev`) удаляет HTML
+HTTP proxy и browser-only deployment/issuer flow, закрывает external launch/URL.
+9 regression + 2 denial Harness, Settings Chrome и HTML assembly 7/7 проходят.
+Бывший `CanNavigate` compile gap закрыт этим текущим Harness, native qualification
+не заявляется. Далее F0/local resolver и один native host.
 
 ## Окно Excel — исправления по фото, In Review, 2026-11-12
 

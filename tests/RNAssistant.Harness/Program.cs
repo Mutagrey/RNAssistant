@@ -1345,8 +1345,7 @@ namespace RNAssistant.Harness
                 Test("webview: restricts messages and navigation", WebViewSecurityRestrictsMessagesAndNavigation),
                 Test("external browser: navigation and bounds admission", ExternalBrowserAdmission),
                 Test("external browser: navigation redirects and terminal evidence", ExternalBrowserNavigationEvidence),
-                Test("external browser: site patterns and signed admission", ExternalBrowserSiteAccess),
-                Test("external browser: signed policy authoring and fail-closed import", ExternalBrowserSignedPolicy),
+                Test("local browser: network access is denied", ExternalBrowserSiteAccess),
                 Test("external browser: typed bridge trust", ExternalBrowserBridgeTrust),
                 Test("external browser: semantic Gateway delivery", ExternalBrowserSemanticGateway),
                 Test("external browser: retained research sources and model context", ExternalBrowserResearchObservations),
@@ -1386,7 +1385,7 @@ namespace RNAssistant.Harness
                 Test("bridge: typed html import", BridgeUsesTypedUploadedHtmlPayloads),
                 Test("bridge: typed html export", BridgeUsesTypedHtmlExportPayload),
                 Test("bridge: typed artifact viewer", BridgeUsesTypedArtifactViewerPayload),
-                Test("bridge: typed html network", BridgeUsesTypedHtmlNetworkPayloads),
+                Test("bridge: retired page network is denied", BridgeRejectsRetiredPageNetwork),
                 Test("bridge: cancels addressed run", BridgeCancelsAddressedChatRun)
             };
 

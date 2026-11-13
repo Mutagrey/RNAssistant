@@ -1,5 +1,14 @@
 # RNAssistant Harness
 
+## Local Browser cutover — 2026-11-13
+
+`local browser: network access is denied` and `bridge: retired page network is denied`
+cover URL denial and the removed proxy/developer operations. `external browser:`
+currently retains nine ownership/read/action/navigation regression cases; the name
+will move with the common runtime. Signed policy cases and issuer tools below are
+superseded and removed. UI: `tests/web/local-browser-settings.test.js`; exact offline
+HTML assembly: `tests/web/html-workspace-echarts.test.js`. No Office/VSTO validation.
+
 ## Deployment configuration — 2026-11-12
 
 `external browser:` includes 11 focused cases; signed configuration covers actual

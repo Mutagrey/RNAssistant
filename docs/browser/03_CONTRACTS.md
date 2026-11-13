@@ -1,5 +1,15 @@
 # Universal Browser: предлагаемые контракты
 
+## Действующее ограничение сети — 2026-11-13
+
+`htmlFetch`, `allowHtmlNetworkOrigin` и developer/deployment bridge operations
+удалены из typed catalog. Старые сообщения получают штатный unknown-operation
+отказ; старое settings-поле origins игнорируется. Page fetch не проксируется
+родителем/host. Внешнее navigation и системный launch из WebView заблокированы.
+LLM model/config requests сохраняются. Signed access и HTML HTTP sections ниже
+описывают удалённый контракт. Общий local target/runtime contract следует в F0.
+
+
 Статус: **Proposed**, 2026-11-04. Owner: Core contracts / Application services;
 Web и native host — consumers. Это минимальные границы будущих P2–P6, не объявление
 существующего runtime API. P1 presentation contract в конце реализован в Web,
