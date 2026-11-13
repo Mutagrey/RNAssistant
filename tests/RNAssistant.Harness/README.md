@@ -147,6 +147,17 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal peer:` covers three cases through both Office and Workspace: atomic native
+acceptance/Inbox/both chat heads; saved correlated reply; saved assignment completion.
+It covers prefix-scoped request lookup, shared feed frame, lost acknowledgement,
+exact body/provenance, cold pause, Applied without replay, rebuild and Workspace
+restore. Replies reach real Office run service and Workspace runtime ports/shared
+input channel. Publication is injected through native SendAgent after an atomic
+accepted-call checkpoint; application outbound Send/Resolve/spawn, live notification
+and peer controls are not yet connected. Pair with `journal input:`, `journal wait:`,
+`journal feed:`, native atomic delivery, existing correlated reply and assignment
+recovery checks. No production switch or Windows qualification claim.
+
 `journal feed:` covers five checks: active Workspace metadata-only reconnect and
 subscription with unavailable message CAS; actual Office/Workspace runtime notices;
 bounded pinned pages across interleaved chats, stale snapshots, rebuild and clean

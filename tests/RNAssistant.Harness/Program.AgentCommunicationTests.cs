@@ -803,6 +803,9 @@ namespace RNAssistant.Harness
 
         private sealed class AgentReceiptFailureEvents : IEventStore
         {
+            public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
+            { return _inner.ReadAgentRequests(session, ids); }
+
             public void ValidateInputDelivery(ChatSession session, System.Collections.Generic.IReadOnlyList<SessionEvent> facts,
                 System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> records)
             { _inner.ValidateInputDelivery(session, facts, records); }

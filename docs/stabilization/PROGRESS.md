@@ -253,7 +253,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После event feed — peer delivery/correlated waits и остальные Store/resource
+После native peer Inbox/correlated waits — application peer delivery/controls и остальные Store/resource
 consumers, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
@@ -313,8 +313,17 @@ scope/hash guards, backpressure и cancellation используют прежн�
 проходят. Workspace reconnect больше не загружает весь чат и использует выбранный
 event port; это активное улучшение `16.15.2-dev`. Writers ещё не переключены, Office UI
 subscription adoption остаётся открытым. [Отчёт §12](../audits/storage-context-optimization.md#p5--journal-event-feed-and-metadata-reconnect-2026-11-13).
-Остальные mutation/resource owners, correlated wait delivery,
-rewrite/move/delete, usage, peer control/feed и
+Подключены native peer Inbox и correlated reply/completion waits (2026-11-13):
+один acceptance frame сохраняет delivery/membership/input/control и оба chat cursor.
+Existing Inbox и реальные Office/Workspace runtime consumers применяют ответ один
+раз после restart; исходные call/run/deadline сохраняются. Потеря acceptance ack,
+rebuild/restore и запрет подмены тела/provenance проверены. Typed request lookup
+адресен и ограничен chat revision; common wait больше не разбирает legacy Prepared.
+Schema 18 расширяет существующие индексы. 3 новых + 19 regression checks проходят
+на изолированном baseline; промежуточный срез без bump/переключения writers.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
+Application Send/Resolve/spawn, peer controls/live notification, остальные mutation/resource owners,
+rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
 Полный restore также должен сохранить Workspace identity locators и move intents.

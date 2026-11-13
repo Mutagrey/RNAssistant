@@ -1278,5 +1278,47 @@ after-state/CAS ownership.
 7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. Patch
    16.15.2-dev records the active Workspace reconnect improvement; journal writers
    remain unchanged. Retiring readers/adapters are removed with whole-port P7
-   cutover. Version-format/diff/link checks pass; no push/tag or unrelated dirty work
-   is included.
+   cutover. Version-format/diff/link checks pass; no push/tag. After validation,
+   `59c101f9` accidentally included one unfinished plugin-test registration from
+   parallel work. `5cc30c52` removes it from the committed baseline while preserving
+   the other worker's working-tree line. The nine checks above describe the isolated
+   candidate; the corrected baseline is used for the following peer slice.
+
+## P5 — journal peer Inbox and correlated waits (2026-11-13)
+
+1. P5a integration prerequisite for F19/F22: ConversationJournal now supplies native
+   peer input and addressed request references to existing Inbox/wait consumers.
+   This does not close application Send, F18/F21 input-history costs or full P5/P7.
+2. One acceptance frame saves delivery/membership, recipient input/control and both
+   chat heads. Peer text/provenance are immutable; Applied needs its exact prior
+   message receipt. Feed cursors expose the same native frame in each affected chat.
+   Saved reply/completion waits retain run/call/deadline and consume the reply once.
+3. Common wait no longer depends on Prepared-event envelopes: typed request lookup
+   lives on the existing event port, with legacy parsing in its retiring adapter.
+   Schema 18 extends existing chat/delivery indices; no table/store/registry/facade,
+   legacy import, dual-write or fallback is added. Production C# +274/−47 lines.
+4. Three new cases and 19 regressions pass on isolated `5cc30c52` + this slice,
+   macOS/net8/C#7.3. Office run service, Workspace runtime ports/shared input channel
+   and Inbox cover cold pause, correlated reply/assignment completion, body/provenance
+   rejection, prefix/foreign lookup, lost acceptance acknowledgement, rebuild and
+   clean Workspace restore. Existing input (4), feed (5), wait (5), native delivery
+   (1), correlated reply (2), assignment correlation (1) and durable completion (1)
+   checks pass. Publication uses native SendAgent after an atomic accepted call;
+   this is not application outbound Send/Resolve or live-notification evidence.
+   After parallel Browser commit `8c5f3dae`, all slice implementations remain
+   unchanged; harness build and the three new cases pass on the combined baseline.
+5. Before this slice, managed peer input was unsupported. Acceptance now advances
+   both heads in one frame; same-operation retry adds zero bytes. Existing feed
+   fixture at H=100/1000/10000 retains page/idle/after-append reads of 5/2/4 records
+   and zero CAS hydration. No peer history cost curve, CPU/allocation comparison or
+   Windows latency was measured; full Inbox replay remains unbounded by history.
+6. Next: application Send/Resolve, spawn, peer controls and live Inbox notification,
+   then remaining Store/resource consumers. Metadata/header, ordinary Store
+   operations, attachment/Workspace steer delivery and complete backup/restore
+   remain open. P4 stays deferred. Verified history/CAS/keys/locator backup, stopped
+   old writers and Windows/Office screen-photo evidence still gate full cutover.
+7. Session events, MIGRATION_MAP, PROGRESS and Harness guide updated. Existing
+   ChatStore/event adapters are removed with whole-port P7; no new adapter. This
+   intermediate integration keeps production composition and behavior unchanged,
+   so no version bump. Tested source hashes are checked against the isolated
+   candidate and staged diff; unrelated work remains unstaged. No push/tag.

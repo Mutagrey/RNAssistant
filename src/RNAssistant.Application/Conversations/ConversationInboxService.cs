@@ -93,6 +93,12 @@ namespace RNAssistant.Application.Conversations
                 .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).ToArray();
         }
 
+        internal IReadOnlyList<AgentRequestReference> AgentRequests(ChatSession session, IReadOnlyList<string> messageIds)
+        {
+            var box = Get(session);
+            lock (box.Sync) return _events.ReadAgentRequests(ConversationMetadata.From(box.Session), messageIds);
+        }
+
         internal void AppendAgentEvent(ChatSession session, AgentCommunicationEvent change)
         {
             var box = Get(session);

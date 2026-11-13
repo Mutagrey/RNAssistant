@@ -61,6 +61,15 @@ namespace RNAssistant.Core.Storage
             if (receipt == null || receipt.Fact.Card.ChatId != chat || receipt.Fact.MessageCount !=
                 Convert.ToInt32(Scalar(db, "SELECT message_count FROM chat_state WHERE stream=$stream AND chat=$chat", chat)))
                 throw new InvalidDataException("Chat metadata disagrees with its canonical commit.");
+            var head = Scalar(db, "SELECT head_operation FROM chat_state WHERE stream=$stream AND chat=$chat", chat) as string;
+            if (head != operation)
+            {
+                var delivery = FindDelivery(db, "operation", head);
+                if (delivery?.Fact.Input == null || delivery.Position.Sequence <= receipt.Position.Sequence ||
+                    delivery.Fact.Sender != chat && delivery.Fact.Recipient != chat)
+                    throw new InvalidDataException("Chat head does not identify its peer delivery.");
+                return new ConversationChatReceipt(receipt.Fact, receipt.Operation, delivery.Position, delivery.Fact.CreatedUtc);
+            }
             return receipt;
         }
 
@@ -98,6 +107,7 @@ namespace RNAssistant.Core.Storage
             var added = 0;
             foreach (var message in fact.Messages)
             {
+                ValidatePeerMessage(db, fact.Card.ChatId, message);
                 var prior = ChatEntry(db, fact.Card.ChatId, message.Header.Id);
                 if (prior == null)
                 {
@@ -109,6 +119,7 @@ namespace RNAssistant.Core.Storage
                     !SameRunValue(prior.Reasoning, message.Reasoning) ||
                     prior.Header.Role != message.Header.Role || prior.Header.CreatedUtc != message.Header.CreatedUtc ||
                     prior.Header.ProtocolMessage != message.Header.ProtocolMessage || prior.Header.RuntimeProjection != message.Header.RuntimeProjection ||
+                    !SameRunValue(prior.Header.AgentCommunication, message.Header.AgentCommunication) ||
                     prior.Header.ResponseModelAttemptId != message.Header.ResponseModelAttemptId ||
                     prior.Header.RunId != null && prior.Header.RunId != message.Header.RunId)
                     throw new InvalidOperationException("A presentation update cannot rewrite retained text or its occurrence identity.");
@@ -165,7 +176,7 @@ namespace RNAssistant.Core.Storage
                         command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$alias", AgentChatAddress.IdFor(fact.Card.ChatId));
                         AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
                     }
-                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_state VALUES($stream,$chat,$operation,$count,$activity)", tx))
+                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_state VALUES($stream,$chat,$operation,$count,$activity,$operation)", tx))
                     {
                         command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$operation", record.Operation);
                         command.Parameters.AddWithValue("$count", fact.MessageCount);
@@ -323,7 +334,7 @@ namespace RNAssistant.Core.Storage
         {
             if (message == null || string.IsNullOrWhiteSpace(message.Id) || message.CreatedUtc.Kind != DateTimeKind.Utc ||
                 message.Role != "user" && message.Role != "assistant") throw new ArgumentException("An exact user/assistant text message is required.");
-            if (message.SyntheticResourceObservation || message.AgentCommunication != null ||
+            if (message.SyntheticResourceObservation ||
                 message.CompletedOperation != null || message.HtmlWorkspaceCheckpoint != null ||
                 message.AttachmentAnalysis != null || (message.Attachments?.Count ?? 0) != 0 ||
                 (message.ContextClaims?.Count ?? 0) != 0)
@@ -371,8 +382,9 @@ namespace RNAssistant.Core.Storage
         internal readonly ConversationChatCommit Fact;
         internal readonly string Operation;
         internal readonly JournalCursor Position;
-        internal ConversationChatReceipt(ConversationChatCommit fact, string operation, JournalCursor position)
-        { Fact = fact; Operation = operation; Position = position; }
+        internal readonly DateTime UpdatedUtc;
+        internal ConversationChatReceipt(ConversationChatCommit fact, string operation, JournalCursor position, DateTime? updatedUtc = null)
+        { Fact = fact; Operation = operation; Position = position; UpdatedUtc = updatedUtc ?? fact.CreatedUtc; }
     }
 
     internal sealed class ConversationChatSelection

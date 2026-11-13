@@ -402,6 +402,7 @@
     <Compile Include="Storage\ConversationJournal.Events.cs" />
     <Compile Include="Storage\ConversationJournal.Feed.cs" />
     <Compile Include="Storage\ConversationJournal.Input.cs" />
+    <Compile Include="Storage\ConversationJournal.PeerInput.cs" />
     <Compile Include="Storage\ConversationJournal.Delivery.cs" />
     <Compile Include="Storage\ConversationJournal.Spawn.cs" />
     <Compile Include="Storage\ConversationJournal.Run.cs" />

@@ -151,6 +151,9 @@ namespace RNAssistant.Harness
 
         private sealed class PayloadPreviewEvents : IEventStore
         {
+            public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
+            { throw new NotSupportedException(); }
+
             public void ValidateInputDelivery(ChatSession session, System.Collections.Generic.IReadOnlyList<SessionEvent> facts,
                 System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> records)
             { throw new NotSupportedException(); }
