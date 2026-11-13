@@ -54,12 +54,15 @@ namespace RNAssistant.Application
         public WorkspaceConversationService Conversations { get; private set; }
         public IPluginProjectPicker ProjectPicker { get; set; }
         public IPluginCommandExecutor Executor { get; set; }
+        public WorkspaceHtmlVersionService HtmlProjects { get; private set; }
 
         public PluginApplicationService(AppDataPaths paths, string webRoot = null, IWorkspaceWebVerifierFactory webHost = null,
             IWorkspaceOfficeCapabilities officeCapabilities = null, IBrowserCapabilityContribution browserCapabilities = null)
         {
             _paths = paths; _webRoot = webRoot; _webHost = webHost; _officeCapabilities = officeCapabilities;
             _browserCapabilities = browserCapabilities;
+            HtmlProjects = new WorkspaceHtmlVersionService(paths);
+            HtmlProjects.VersionChanged += value => VersionChanged?.Invoke(value);
             _store = new PluginStore(paths); _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
             Vendors = new VendorCatalog(paths, webRoot); _results = new PluginResultStore(paths);
             Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools, officeCapabilities,

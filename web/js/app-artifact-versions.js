@@ -87,15 +87,16 @@
       save.disabled = busy || !!pending || !state || !caps.saveVersion || !state.capabilities.saveVersion || !state.contentRevision;
       save.title = save.disabled ? "Сохранить версию: " + (busy ? "дождитесь операции" : !caps.saveVersion ?
         caps.saveReason === "ProjectDefinitionRequired" ? "задайте состав проекта" : "доступно для рабочей копии проекта" : (state && state.target && state.target.message || "обновите состояние исходников")) : "Сохранить версию проекта";
-      versions.disabled = busy || !caps.versions || !value.pluginId; apply.hidden = !value || !value.pluginId;
+      versions.disabled = busy || !caps.versions || !supported(value); apply.hidden = !value || !value.pluginId;
       apply.disabled = busy || !!pending || !state || !(value && value.savedVersionId || chosen) || value.state === "Removed";
       apply.title = apply.disabled ? "Применить: сохраните или выберите версию" : "Применить сохранённую версию";
     }
     function valid(serial) { return !disposed && context.isCurrent() && epoch === serial; }
+    function supported(value) { return value && (value.pluginId || value.kind === "WorkspaceHtmlProject"); }
     async function refresh(force) {
       if (busy && !force) return;
       var serial = ++epoch, value = target(); state = null; controls();
-      if (!value || !value.pluginId || !value.capabilities || !value.capabilities.versions) return;
+      if (!supported(value) || !value.capabilities || !value.capabilities.versions) return;
       try {
         var result = await context.request("getBrowserVersionState", { target: value });
         if (!valid(serial)) return;
@@ -136,6 +137,8 @@
     }
     function entries() {
       var value = target(), items = [];
+      if (context.configure && value.kind === "WorkspaceHtmlProject" && !value.immutable)
+        items.push({ label: "Состав проекта…", icon: "folder", onSelect: context.configure });
       if (pending) items.push({ label: "Проверить исходную операцию", icon: "refresh", onSelect: function () { return execute(pending); } });
       items.push({ label: "Рабочая копия", icon: "code", checked: !value.savedVersionId,
         onSelect: function () { return context.navigate(locator(null)); } });

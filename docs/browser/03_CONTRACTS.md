@@ -715,3 +715,13 @@ Address immutable artifact — exact URI из trusted target, read-only, label �
 материала»; Enter ничего не навигирует. Diff скрыт без capability, back/forward
 выключены. Фокус расширяет адрес, controls не меняют высоту content/iframe.
 В P1 это не полноценная навигация, новые sessions или новый version contract.
+
+## Workspace HTML version binding — 2026-11-13
+
+WorkspaceHtmlProject uses `/projects/{workspace}/source/{member}` and
+`/projects/{workspace}/versions/{savedEntry}/{member}` in the same Browser. Definition
+and saved catalog have separate revisions. `GetHtmlProjectDefinition` /
+`SetHtmlProjectDefinition` carry explicit owner/workspace and expected fingerprint;
+version Save binds both definition fingerprint and exact captured content fingerprint.
+Manual User provenance omits chat; Run requires the real active source run. The
+checkpoint record does not grant new file access or native execution.

@@ -20,7 +20,7 @@
     var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell") });
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, pending = new Set();
     var sourcePage = null, loadingSource = 0, selectedMode = "source", targetGeneration = -1, homeView = null;
-    var operationId = id();
+    var operationId = id(), definitionDialog = null;
     var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; },
       discuss: function () {
         var binding = current && current.target && current.target.ownerScope;
@@ -38,11 +38,35 @@
       target: function () { return current && current.target; }, request: request,
       isCurrent: function () { return active && !disposed; }, navigate: function (locator) { return command("Navigate", { locator: locator }); },
       removed: function () { command("Reload").catch(fail); }, error: fail,
+      configure: configureProject,
       status: function (message) { surface.waiting(label(), message); }
     });
     versionViews.set(target.browserTabId, function (change) {
-      if (current && current.target && current.target.pluginId === change.target.pluginId) versionControls.refresh();
+      var value = current && current.target, changed = change.target;
+      if (value && (value.pluginId ? value.pluginId === changed.pluginId : value.kind === changed.kind && value.workspaceId === changed.workspaceId)) versionControls.refresh();
     });
+    async function configureProject() {
+      var value = current && current.target, serial = current && current.documentGeneration;
+      if (!value || value.kind !== "WorkspaceHtmlProject" || value.immutable) return;
+      var payload = { ownerScope: value.ownerScope, workspaceId: value.workspaceId };
+      var definition = await request("getHtmlProjectDefinition", payload);
+      if (!active || disposed || !current || serial !== current.documentGeneration) return;
+      var members = definition.definition && definition.definition.members || [value.entryPath];
+      var entry = definition.definition && definition.definition.entryPath || value.entryPath;
+      function paths(text) { return text.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean); }
+      definitionDialog = RNAssistantDialog.open({ title: "Состав HTML-проекта", label: "Файлы проекта",
+        message: "По одному относительному пути в строке. Первая строка — HTML-файл запуска. Только эти файлы войдут в сохранённую версию.",
+        multiline: true, maximumLength: 524288, value: [entry].concat(members.filter(function (path) { return path !== entry; })).join("\n"), submitLabel: "Сохранить состав",
+        validate: function (text) { var list = paths(text); return !list.length || list.length > 512 ? "Укажите от 1 до 512 файлов." : null; },
+        onSubmit: async function (text) {
+          if (!active || disposed || serial !== current.documentGeneration) throw new Error("Контекст страницы изменился.");
+          var list = paths(text);
+          await request("setHtmlProjectDefinition", Object.assign({}, payload, { expectedFingerprint: definition.fingerprint,
+            definition: { entryPath: list[0], members: list } }));
+          if (active && !disposed && serial === current.documentGeneration) await command("Navigate", {
+            locator: "/projects/" + encodeURIComponent(value.workspaceId) + "/source/" + list[0].split("/").map(encodeURIComponent).join("/") });
+        }, onClose: function () { definitionDialog = null; } });
+    }
     function label() { return { title: current && current.title || target.title || "Browser", address: current && current.url || target.locator,
       storage: { kind: current && current.target && current.target.workspaceId ? "directory" : "managed" } }; }
     function fail(error) { if (!disposed) surface.fail(label(), error.detail || error.message || String(error)); }
@@ -52,6 +76,7 @@
     }
     function stopReads() {
       generation++; loadingSource = 0;
+      if (definitionDialog) definitionDialog.close(false);
       pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
     }
     function presentation() {

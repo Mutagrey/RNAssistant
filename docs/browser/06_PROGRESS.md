@@ -1,5 +1,25 @@
 # Universal Browser: статус
 
+## F3c Workspace checkpoints — 2026-11-13
+
+`16.17.0-dev`, continued from `8c5f3dae` in an isolated worktree while main has
+independent Journal work. WorkspaceHtmlVersionService coordinates definition pin →
+sorted CaptureSet handles → workspace publication lease. DocumentArtifactStore owns
+HtmlProjectVersion records, file dependencies and the same saved-entry catalog.
+User Save has no fake chat; Run provenance requires the actual active workspace run.
+One commit publishes manifest/entry/catalog/receipt. History reads only exact CAS.
+
+Common Browser now exposes Save/list/delete and a guarded «Состав проекта» form.
+Direct project resolution is independent of suggestion-page bounds. Offline roots
+keep saved history; removed entries never resolve to the latest content. Definition
+mutation remains in WorkspaceStore, outside general file-tool control-path access.
+Checks: Workspace checkpoint lifecycle, coherent definition/capture and existing
+workspace Plan ownership; Workspace UI recovery/narrow dialog and plugin picker
+regression. Screenshots reviewed at 420 px/125%. UI acceptance, Windows sharing,
+B02 native execution remain open. Document HTML migration/checkpoints, exact raw
+HTML import and saved-project compare/export adapters continue next; source files
+are never silently restored from a checkpoint.
+
 ## F3b Plugin cutover — 2026-11-13
 
 `16.16.0-dev`: Application, Bootstrap, agent tools и Browser используют один saved-entry

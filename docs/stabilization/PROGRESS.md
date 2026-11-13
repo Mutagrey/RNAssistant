@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser F3c — Workspace checkpoints, 2026-11-13
+
+`16.17.0-dev`: declared Workspace HTML files now have explicit user checkpoints in
+existing artifact authority/CAS, independent of chats and live source availability.
+Common Browser Save/list/delete and project definition recovery are wired. Three
+focused Harness cases and two Browser fixtures pass; Windows/B02 and UI acceptance
+remain open. Document HTML and raw import continue from this state.
+[Details](../browser/06_PROGRESS.md#f3c-workspace-checkpoints--2026-11-13).
+
 ## Local Browser F3b — Plugin Save/Apply cutover, 2026-11-13
 
 `16.16.0-dev`: saved plugin catalog подключён к Application/tools/common Browser;

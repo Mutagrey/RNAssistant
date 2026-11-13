@@ -1,5 +1,24 @@
 # Artifact Library and Viewers
 
+## Workspace HTML checkpoints — 2026-11-13
+
+`DocumentArtifactStore.WorkspaceHtml` extends the existing artifact owner only for
+`HtmlProjectVersion`, `html_project_<id>`, and explicit workspace ownership. A User
+record may omit SourceChatId; generic document/Plan records still require it. Run
+saves validate the real workspace/session/run before capture and publication.
+`HtmlProjectSnapshotV1` retains entry, definition fingerprint and exact file refs,
+SHA-256, length and MIME. File bytes stay separate CAS payloads with revision
+dependencies. The manifest is bounded to one MiB, 512 files and 256 MiB total input.
+
+WorkspaceHtmlVersionService holds definition → sorted files → publication scope,
+rechecks source/catalog before commit and reuses SavedVersionCatalog receipts and
+tombstones. Save does not overwrite live files. Picker rows are bounded metadata;
+historical members never fall back to disk. Missing live roots do not prevent saved
+reads or receipt reconciliation. Get/SetHtmlProjectDefinition are typed bridge
+operations with an expected fingerprint; Browser uses the existing dialog component.
+Compare/export/CreateProject from these snapshots follow in the provider adapter
+slice. Native isolation and Windows file-sharing evidence remain open.
+
 Status: current artifact/viewer contract with open Windows delivery evidence. The
 11A–11D labels below record implementation history, not the current work queue.
 11A1 and 11A2 implement the host-neutral commit-time

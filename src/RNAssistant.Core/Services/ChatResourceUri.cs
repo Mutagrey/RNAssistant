@@ -17,15 +17,16 @@ namespace RNAssistant.Core.Services
 
         public static ResourceRef CreateArtifactRevision(string chatId, ChatArtifact artifact)
         {
-            if (string.IsNullOrWhiteSpace(chatId) || artifact == null ||
+            var workspaceHtml = artifact?.Kind == ChatArtifactKinds.HtmlProjectVersion && !string.IsNullOrWhiteSpace(artifact.WorkspaceId);
+            if (string.IsNullOrWhiteSpace(chatId) && !workspaceHtml || artifact == null ||
                 string.IsNullOrWhiteSpace(artifact.Id))
             {
                 throw new InvalidOperationException("A persisted chat and artifact are required to create a resource reference.");
             }
             var revision = Math.Max(1, artifact.Revision).ToString(CultureInfo.InvariantCulture);
             if (!string.IsNullOrWhiteSpace(artifact.WorkspaceId) &&
-                (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) || artifact.Kind != ChatArtifactKinds.PlanDocument))
-                throw new InvalidOperationException("Workspace artifact ownership is supported only for unambiguous Plan snapshots.");
+                (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) || artifact.Kind != ChatArtifactKinds.PlanDocument && !workspaceHtml))
+                throw new InvalidOperationException("Workspace artifact ownership requires an explicit supported artifact kind.");
             return new ResourceRef(
                 ResourceUri.Create(ProviderName, string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
                     ? (string.IsNullOrWhiteSpace(artifact.WorkspaceId) ? chatId : artifact.WorkspaceId)

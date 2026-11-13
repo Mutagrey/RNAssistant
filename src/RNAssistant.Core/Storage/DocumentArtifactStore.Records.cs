@@ -118,12 +118,15 @@ namespace RNAssistant.Core.Storage
         private ResourceMutationReadBack RetainRecordPayload(ChatSession session, ChatArtifact artifact, PayloadRef body,
             string recordView, string recordMimeType, string attemptId, string operationKey,
             ResourceRef restoredFrom = null, IEnumerable<ResourceDependency> dependencies = null,
-            ResourceAuthorityScopeId ownerScope = null, string resultView = "text")
+            ResourceAuthorityScopeId ownerScope = null, string resultView = "text", SavedVersionActor actor = null)
         {
             var scope = ownerScope ?? Scope(session);
             if (artifact == null || artifact.Revision < 1 || string.IsNullOrEmpty(artifact.Id) || body == null ||
                 string.IsNullOrEmpty(attemptId) || string.IsNullOrEmpty(operationKey))
                 throw new InvalidDataException("An exact artifact and prepared operation are required for retention.");
+            if (string.IsNullOrWhiteSpace(session?.Id) && !(artifact.Kind == ChatArtifactKinds.HtmlProjectVersion &&
+                scope.Kind == "workspace" && ValidWorkspaceActor(actor)))
+                throw new InvalidDataException("An exact source session or workspace HTML actor is required.");
             var item = Clone(artifact);
             AssignOwner(item, scope);
             item.ContentSha256 = body.Sha256;
@@ -131,8 +134,8 @@ namespace RNAssistant.Core.Storage
             item.InlineText = null;
             item.RelativePath = null;
             var exact = ChatResourceUri.CreateArtifactRevision(session, item);
-            var json = JsonConvert.SerializeObject(new ArtifactRecord { Artifact = item, SourceChatId = session.Id,
-                MutationAttemptId = attemptId, OperationKey = operationKey });
+            var json = JsonConvert.SerializeObject(new ArtifactRecord { Artifact = item, SourceChatId = session?.Id ?? actor?.ChatId,
+                MutationAttemptId = attemptId, OperationKey = operationKey, Actor = actor });
             if (System.Text.Encoding.UTF8.GetByteCount(json) > MaximumRecordBytes)
                 throw new InvalidDataException("The artifact metadata exceeds its retention bound.");
             var metadata = PayloadRef.FromBlob(_payloads.StoreText(json, recordMimeType));
@@ -160,7 +163,8 @@ namespace RNAssistant.Core.Storage
             var record = json == null ? null : JsonConvert.DeserializeObject<ArtifactRecord>(json);
             var item = record?.Artifact;
             var body = _revisions.GetRevision(scope, reference)?.Payload;
-            if (item == null || string.IsNullOrWhiteSpace(record.SourceChatId) || string.IsNullOrWhiteSpace(record.MutationAttemptId) ||
+            if (item == null || (string.IsNullOrWhiteSpace(record.SourceChatId) && !(expectedKind == ChatArtifactKinds.HtmlProjectVersion &&
+                record.Actor?.Kind == SavedVersionActorKind.User && ValidWorkspaceActor(record.Actor))) || string.IsNullOrWhiteSpace(record.MutationAttemptId) ||
                 string.IsNullOrWhiteSpace(record.OperationKey) || body == null || item.Revision < 1 || !MatchesOwner(item, scope) ||
                 item.Kind != expectedKind || ChatResourceUri.CreateArtifactRevision(session.Id, item).Uri != reference.Uri ||
                 item.ContentSha256 != body.Sha256 || item.ContentByteLength != body.ByteLength)
@@ -183,14 +187,14 @@ namespace RNAssistant.Core.Storage
 
         private static void AssignOwner(ChatArtifact artifact, ResourceAuthorityScopeId scope)
         {
-            if (scope.Kind != "document" && (scope.Kind != "workspace" || artifact.Kind != ChatArtifactKinds.PlanDocument))
+            if (scope.Kind != "document" && (scope.Kind != "workspace" || artifact.Kind != ChatArtifactKinds.PlanDocument && artifact.Kind != ChatArtifactKinds.HtmlProjectVersion))
                 throw new InvalidDataException("This artifact kind does not support the requested owner.");
             artifact.DocumentAuthorityId = scope.Kind == "document" ? scope.Id : null;
             artifact.WorkspaceId = scope.Kind == "workspace" ? scope.Id : null;
         }
 
         private static bool MatchesOwner(ChatArtifact artifact, ResourceAuthorityScopeId scope)
-        { return scope.Kind == "workspace" ? artifact.Kind == ChatArtifactKinds.PlanDocument &&
+        { return scope.Kind == "workspace" ? (artifact.Kind == ChatArtifactKinds.PlanDocument || artifact.Kind == ChatArtifactKinds.HtmlProjectVersion) &&
                 artifact.WorkspaceId == scope.Id && string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)
             : artifact.DocumentAuthorityId == scope.Id && string.IsNullOrWhiteSpace(artifact.WorkspaceId); }
 
@@ -200,6 +204,7 @@ namespace RNAssistant.Core.Storage
             public string SourceChatId { get; set; }
             public string MutationAttemptId { get; set; }
             public string OperationKey { get; set; }
+            public SavedVersionActor Actor { get; set; }
         }
     }
 }

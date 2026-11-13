@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.17.0-dev
+
+- Local Workspace HTML projects can save explicit versions without a chat, reopen
+  retained files after the source folder disappears, and delete individual catalog
+  entries without deleting historical evidence. Save checks the exact declared files.
+- The common Browser version menu includes a small project-members form for older
+  projects. A missing definition keeps Save visible with a reason.
+
 ### 16.16.0-dev
 
 - Plugins now use Check → Save → Apply. Saved checkpoints have independent ordinals,

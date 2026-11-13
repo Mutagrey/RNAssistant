@@ -619,3 +619,13 @@ scenario ID, вариант renderer, итог, counts и причину отк�
 с приложением пользователя. Source-code ссылки относятся к baseline из аудита.
 Результат записать в [06_PROGRESS](06_PROGRESS.md). Builds/harness/Office validation
 и release/version операции в эту задачу не входят.
+
+## F3c Workspace checkpoint evidence — 2026-11-13
+
+Harness `HTML checkpoints:` covers manual no-chat Save, latest-only dedup, same-mtime
+drift, restart/offline CAS reads, exact owner, tombstones, original-operation receipts,
+monotonic ordinals and all-member dependencies. `HTML project versions:` retains the
+CaptureSet/definition fault coverage; `workspace Plan:` protects the existing kind's
+ownership rules. All pass. `workspace-html-versions.test.js` covers definition recovery,
+expected fingerprint, shared Save, no plugin Apply, focus and 420 px/125%; common
+`browser-saved-views.test.js` regression passes. Windows sharing/B02 remain open.

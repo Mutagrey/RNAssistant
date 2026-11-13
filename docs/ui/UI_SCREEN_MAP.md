@@ -1021,3 +1021,10 @@ Enter с placeholder вводит в содержимое, меню возвра
 
 Live HTML scoping закрыт следующим срезом, описанным в начале документа.
 Независимые Library/VBA object owners и Windows qualification остаются открытыми.
+
+## Workspace HTML versions — In Review, 2026-11-13
+
+Browser clock → saved entries / working copy / «Состав проекта…». Save remains visible
+when definition is missing; the small form takes entry first, then explicit members.
+Saved entries are immutable; Apply is plugin-only. Missing files/removed entries show
+their own state. No automatic live-tree restore and no chat creation during Save.

@@ -882,3 +882,10 @@ HTML/XML/CSS modes — локальные файлы уже закреплённ
 Импорт SVG сохраняет собственное поле «Название SVG»; кнопки раскрытия и добавления
 используют `button compact` и общий plus. Карточки и preview рядом с выбором цвета
 используют один renderPlugin. Новый выбор SVG возвращает режим «Исходные цвета SVG».
+
+## Project definition form — 2026-11-13
+
+The existing Dialog uses the shared form control and buttons, with an optional
+multiline field; focus trap includes textarea, Escape and stale-view cleanup remain
+shared. [420 px / 125% review](review/workspace-definition-narrow.png) and
+[checkpoint toolbar](review/workspace-versions-narrow.png); no screen-specific geometry.

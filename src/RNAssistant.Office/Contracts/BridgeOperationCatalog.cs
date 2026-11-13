@@ -86,6 +86,8 @@ namespace RNAssistant.Office.Contracts
         [BridgeOperationPolicy(true, 300)] GetBrowserVersionState,
         GetBrowserVersions,
         [BridgeOperationPolicy(true, 300)] BrowserVersionCommand,
+        [BridgeOperationPolicy(true, 300)] GetHtmlProjectDefinition,
+        [BridgeOperationPolicy(true, 300)] SetHtmlProjectDefinition,
         GetCasHealth,
         CollectCasGarbage,
         [BridgeOperationPolicy(true, 300)] GetModelCatalog,

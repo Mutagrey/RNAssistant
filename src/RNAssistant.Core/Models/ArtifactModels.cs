@@ -21,6 +21,7 @@ namespace RNAssistant.Core.Models
         public const string PlanDocument = "plan_document";
         public const string Markdown = "markdown";
         public const string HtmlWorkspace = "html_workspace";
+        public const string HtmlProjectVersion = "html_project_version";
         public const string Image = "image";
         public const string File = "file";
         public const string Attachment = "attachment";

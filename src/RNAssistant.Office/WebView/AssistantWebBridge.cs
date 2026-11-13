@@ -652,6 +652,12 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetBrowserVersionState:
                         responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersionState(Payload<BrowserVersionRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.GetHtmlProjectDefinition:
+                        responsePayload = await RunBridgeWorkAsync(() => Plugins.HtmlProjects.GetDefinition(Payload<HtmlProjectDefinitionRequest>(payload)), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.SetHtmlProjectDefinition:
+                        responsePayload = await RunBridgeWorkAsync(() => Plugins.HtmlProjects.SetDefinition(Payload<HtmlProjectDefinitionRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetBrowserVersions:
                         responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersions(Payload<BrowserVersionRequest>(payload)), cancellationToken).ConfigureAwait(false);
                         break;

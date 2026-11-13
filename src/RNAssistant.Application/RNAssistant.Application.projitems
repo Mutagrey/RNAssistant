@@ -18,6 +18,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)BrowserTargetResolver.cs" Link="Application\BrowserTargetResolver.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserTargetContracts.cs" Link="Application\Contracts\BrowserTargetContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HtmlProjectImportService.cs" Link="Application\HtmlProjectImportService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WorkspaceHtmlVersionService.cs" Link="Application\WorkspaceHtmlVersionService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\HtmlProjectDefinitionContracts.cs" Link="Application\Contracts\HtmlProjectDefinitionContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\HtmlProjectImportContracts.cs" Link="Application\Contracts\HtmlProjectImportContracts.cs" />
     <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\web\vendor-manifest.json" LogicalName="RNAssistant.HtmlVendorManifest" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationExecutionScheduler.cs" Link="Application\Conversations\ConversationExecutionScheduler.cs" />

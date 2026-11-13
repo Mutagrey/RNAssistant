@@ -37,6 +37,7 @@ namespace RNAssistant.Application
 
         public BrowserVersionState BrowserVersionState(BrowserVersionRequest request, CancellationToken token = default(CancellationToken))
         {
+            if (request?.Target?.Kind == BrowserTargetKind.WorkspaceHtmlProject) return HtmlProjects.State(request, token);
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 var target = RequirePluginVersionTarget(request?.Target);
@@ -58,6 +59,7 @@ namespace RNAssistant.Application
 
         public BrowserVersionPage BrowserVersions(BrowserVersionRequest request)
         {
+            if (request?.Target?.Kind == BrowserTargetKind.WorkspaceHtmlProject) return HtmlProjects.Versions(request);
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 var target = RequirePluginVersionTarget(request?.Target);
@@ -71,6 +73,7 @@ namespace RNAssistant.Application
 
         public BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token = default(CancellationToken))
         {
+            if (request?.Target?.Kind == BrowserTargetKind.WorkspaceHtmlProject) return HtmlProjects.Command(request, token);
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 token.ThrowIfCancellationRequested();

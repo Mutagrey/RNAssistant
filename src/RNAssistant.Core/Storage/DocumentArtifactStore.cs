@@ -145,7 +145,7 @@ namespace RNAssistant.Core.Storage
             {
                 Id = id, DocumentAuthorityId = string.IsNullOrWhiteSpace(session.DocumentAuthorityId) ? null : owner,
                 WorkspaceId = string.IsNullOrWhiteSpace(session.DocumentAuthorityId) ? owner : null, Revision = revision,
-                Kind = IsPlan(session, reference) ? ChatArtifactKinds.PlanDocument :
+                Kind = IsWorkspaceHtml(session, reference) ? ChatArtifactKinds.HtmlProjectVersion : IsPlan(session, reference) ? ChatArtifactKinds.PlanDocument :
                     HtmlWorkspaceIdentity.LogicalId(id) != null ? ChatArtifactKinds.HtmlWorkspace :
                     MarkdownDocumentIdentity.LogicalId(id) != null ? ChatArtifactKinds.Markdown : ContextLogicalId(id) != null ? SharedContextKind : ChatArtifactKinds.File,
                 CreatedUtc = default(DateTime), AvailabilityIssue = "metadata_unavailable"
@@ -156,6 +156,8 @@ namespace RNAssistant.Core.Storage
 
         public ChatArtifact Read(ConversationMetadata session, ResourceRef reference, bool includeBody = true)
         {
+            if (IsWorkspaceHtml(session, reference)) return ReadRecordSnapshot(session, reference, WorkspaceHtmlRecordView,
+                ChatArtifactKinds.HtmlProjectVersion, includeBody, WorkspaceHtmlScope(session.WorkspaceId));
             if (IsPlan(session, reference)) return ReadPlan(session, reference, includeBody);
             if (IsAuthored(session, reference))
             {
@@ -200,7 +202,7 @@ namespace RNAssistant.Core.Storage
             if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision)) return false;
             if (string.IsNullOrWhiteSpace(documentAuthorityId))
                 return !string.IsNullOrWhiteSpace(workspaceId) && owner == workspaceId &&
-                    id.StartsWith("plan_doc_", StringComparison.Ordinal);
+                    (id.StartsWith("plan_doc_", StringComparison.Ordinal) || IsWorkspaceHtmlId(id));
             return owner == documentAuthorityId && (id.StartsWith("attachment_", StringComparison.Ordinal) ||
                     id.StartsWith("plan_doc_", StringComparison.Ordinal) || HtmlWorkspaceIdentity.LogicalId(id) != null ||
                     id.StartsWith("artifact_", StringComparison.Ordinal));

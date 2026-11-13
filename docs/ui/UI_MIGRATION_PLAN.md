@@ -1,5 +1,13 @@
 # План модернизации production UI
 
+## F3c Workspace HTML — In Review, 2026-11-13
+
+Common Browser checkpoint controls now include directory HTML projects. Review:
+open an entry-only project → clock → «Состав проекта» → enter declared files → Save
+→ reopen saved version. Repeat at 420 px/125%; Save stays visible and plugin Apply
+is absent. Backend lifecycle and browser form checks pass. Document HTML adapter,
+StartSurface/recents and screen reduction remain next; B02/Windows remain open.
+
 ## F3b Plugin Browser — In Review, 2026-11-13
 
 Plugin source/saved consumers переключены на common Browser/checkpoint controls.

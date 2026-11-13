@@ -1030,3 +1030,11 @@ write during reads. Immutable registration bodies with `Appearance.IconPaths` de
 or alternate rendering path. Removal gate: an explicit storage-format reset or an
 offline migration proves that no library v1 or reachable registration body needs
 the decoder. Do not drop existing user icons merely to remove this decoder.
+
+### Workspace HTML checkpoints — 2026-11-13
+
+Workspace live/saved sources now use WorkspaceHtmlVersionService + existing artifact
+owner. The former entry-only source branch in PluginApplicationService was removed.
+The existing Browser checkpoint UI temporarily admits plugin/Workspace kinds only;
+owner: Browser/artifact integration, removal condition: document HTML checkpoint
+adapter and cutoff migration connected in the next slice. No second version store.

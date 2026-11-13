@@ -20,7 +20,10 @@
     if (options.label) {
       var field = document.createElement("label"); field.className = "rna-dialog-field";
       var caption = document.createElement("span"); caption.textContent = options.label;
-      input = document.createElement("input"); input.type = "text"; input.className = "rna-form-control compact";
+      input = document.createElement(options.multiline ? "textarea" : "input");
+      if (options.multiline) input.rows = 8; else input.type = "text";
+      input.className = "rna-form-control compact";
+      if (options.maximumLength) input.maxLength = options.maximumLength;
       input.value = options.value || ""; input.autocomplete = "off";
       field.append(caption, input); form.appendChild(field);
     }
@@ -102,7 +105,7 @@
         event.preventDefault(); event.stopPropagation(); close(true); return;
       }
       if (event.key === "Tab") {
-        var controls = Array.from(root.querySelectorAll("input:not(:disabled), button:not(:disabled)"));
+        var controls = Array.from(root.querySelectorAll("input:not(:disabled), textarea:not(:disabled), button:not(:disabled)"));
         var index = controls.indexOf(document.activeElement);
         if (index < 0 || event.shiftKey && index === 0 || !event.shiftKey && index === controls.length - 1) {
           event.preventDefault(); controls[event.shiftKey ? controls.length - 1 : 0].focus();

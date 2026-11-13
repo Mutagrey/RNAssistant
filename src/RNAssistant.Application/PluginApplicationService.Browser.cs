@@ -23,6 +23,8 @@ namespace RNAssistant.Application
                     return new BrowserResolveResult { Reason = BrowserRefusalCode.OutsideScope, Message = "Контекст Browser недоступен." };
                 if (locator.Kind == BrowserLocatorKind.Home)
                     return BrowserTargetResolver.ResolveLocalLocator(caller, "/", null);
+                if (locator.Kind == BrowserLocatorKind.ProjectSource || locator.Kind == BrowserLocatorKind.ProjectVersion)
+                    return HtmlProjects.Resolve(request);
                 if (locator.Kind != BrowserLocatorKind.PluginSource && locator.Kind != BrowserLocatorKind.PluginVersion)
                     return BrowserTargetResolver.ResolveLocalLocator(caller, request.Locator, BrowserTargets(caller));
                 var registration = _store.Get(locator.Key);
@@ -77,6 +79,7 @@ namespace RNAssistant.Application
 
         public BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
         {
+            if (target?.Kind == BrowserTargetKind.WorkspaceHtmlProject) return HtmlProjects.Source(request, target);
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
                 RequireOpen();
@@ -94,9 +97,9 @@ namespace RNAssistant.Application
                     return BrowserSourceReader.Read(target, request, release.Files.Select(file => file.Path),
                         path => SourceComparisonService.Utf8(_store.ReadFile(release, path)));
                 }
-                var workspace = target.PluginId == null ? RequireProjectWorkspace(target.WorkspaceId) : Source(RequireRegistration(target.PluginId)).Workspace;
                 if (target.Kind == BrowserTargetKind.PluginSource)
                 {
+                    var workspace = Source(RequireRegistration(target.PluginId)).Workspace;
                     var registration = RequireRegistration(target.PluginId);
                     if (registration.SourceWorkspaceId != workspace.WorkspaceId) throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
                     PluginManifestV1 manifest;
@@ -109,11 +112,7 @@ namespace RNAssistant.Application
                     return BrowserSourceReader.Read(target, request, manifest.Files.Concat(new[] { "plugin.json" }).Distinct(StringComparer.Ordinal),
                         path => files.ReadText(workspace, path).Text);
                 }
-                // The same declared member-set is used by Browser and checkpoint capture.
-                // Entry-only legacy projects stay readable with ProjectDefinitionRequired for Save.
-                var definition = _workspaces.GetHtmlProjectDefinition(workspace);
-                return BrowserSourceReader.Read(target, request, definition.Definition?.Members ?? new[] { workspace.HtmlEntryPath },
-                    path => files.ReadText(workspace, path).Text);
+                throw new PluginException("browser_source_unavailable", "Этот источник не принадлежит владельцу плагинов.");
             }
         }
 
@@ -145,6 +144,7 @@ namespace RNAssistant.Application
                         ChatId = caller.Kind == BrowserOwnerKind.Workspace ? caller.ChatId : null };
                     string entry = workspace.HtmlEntryPath;
                     BrowserRefusalCode reason = BrowserRefusalCode.ProjectDefinitionRequired;
+                    if (plugin == null && _workspaces.GetHtmlProjectDefinition(workspace).Definition != null) reason = BrowserRefusalCode.None;
                     if (plugin != null)
                     {
                         try
@@ -163,8 +163,8 @@ namespace RNAssistant.Application
                         Title = plugin?.Appearance?.Name ?? plugin?.Name ?? workspace.Name,
                         DisplayLocator = plugin == null ? BrowserLocalLocator.ForProject(workspace.WorkspaceId, entry) : BrowserLocalLocator.ForPlugin(plugin.PluginId, entry),
                         Capabilities = new BrowserTargetCapabilities { Source = true, Edit = workspace?.ReadOnly != true,
-                            Versions = plugin != null, SaveVersion = plugin != null && workspace?.ReadOnly != true, ActivateVersion = plugin != null,
-                            PreviewReason = reason, SaveReason = reason == BrowserRefusalCode.ProjectDefinitionRequired ? reason : BrowserRefusalCode.None } });
+                            Versions = true, SaveVersion = reason != BrowserRefusalCode.ProjectDefinitionRequired && workspace?.ReadOnly != true, ActivateVersion = plugin != null,
+                            PreviewReason = BrowserRefusalCode.IsolationUnqualified, SaveReason = reason == BrowserRefusalCode.ProjectDefinitionRequired ? reason : BrowserRefusalCode.None } });
                 }
                 return targets;
             }

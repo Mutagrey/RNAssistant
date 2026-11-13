@@ -1369,3 +1369,10 @@ ArtifactCatalog группирует документы по authority ID, HTML 
 из каталога/загруженных chat summaries, иначе явно показан короткий ID.
 Общий TextViewer использует instance CodeMirror для исходника; paging/copy/readers
 сохраняют прежние bounds. JSON source и Markdown source используют тот же компонент.
+
+## Workspace HTML checkpoint adapter — 2026-11-13
+
+Common Browser and ArtifactVersions now route WorkspaceHtmlProject to the typed
+WorkspaceHtmlVersionService. It coordinates existing Core owners; UI stores no
+version inventory. Source and saved paths share the same view. The existing Dialog
+supports a bounded multiline project member form and is disposed on deactivation.
