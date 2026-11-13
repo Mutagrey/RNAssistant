@@ -11,6 +11,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.25.4-dev
+
+- Allowed deleting an inactive plugin version while its read-only preview is open;
+  running commands remain protected and deleted viewers lose SDK access immediately.
+
 ### 16.25.3-dev
 
 - Preserved local query/hash and native SPA history without resetting form state.

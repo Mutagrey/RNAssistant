@@ -15,7 +15,7 @@ universal intake срезом. Остальные пункты продолжа�
    для export; затем 06 recents от принятого runtime visit.
 2. **Готово (16.25.2-dev):** 03/04 exact saved-entry provenance аннотаций, сохранение его в attachments/history
    и запрет reveal между v1/v3 одинакового content.
-3. 04/05: Delete при read-only viewer с removed invalidation, без ослабления защиты
+3. **Готово локально (16.25.4-dev):** 04/05 Delete при read-only viewer с removed invalidation, без ослабления защиты
    выполняющейся command/pending write.
 4. 01/02/05: явный manual scope handoff/rebind; общий screenshot action через
    существующий media owner.

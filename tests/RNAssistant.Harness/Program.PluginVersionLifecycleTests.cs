@@ -71,11 +71,29 @@ namespace RNAssistant.Harness
                         new BrowserSuggestionRequest { OwnerScope = caller, Prefix = "/plugins/" + plugin.PluginId + "/versions/", Limit = 12 },
                         service.BrowserTargets(caller, "/plugins/" + plugin.PluginId + "/versions/"));
                     AssertTrue(suggestions.Items.Any(s => s.DisplayLocator == savedLocator), "saved completion reads retained manifest metadata offline");
+                    var content = service.OpenBrowserContent(exact, System.Threading.CancellationToken.None);
+                    AssertTrue(service.BrowserVersions(new BrowserVersionRequest { Target = exact }).Items.Single(entry => entry.VersionId == saved.Version.VersionId).CanDelete,
+                        "an open read-only preview does not block Delete");
+                    var started = new System.Threading.Tasks.TaskCompletionSource<bool>();
+                    var finish = new System.Threading.Tasks.TaskCompletionSource<string>();
+                    service.Executor = new PluginExecutor { Execute = (operation, cancellation) => { started.SetResult(true); return finish.Task; } };
+                    var command = service.InvokeAsync(content.Plugin, "echo", "{\"text\":\"test\"}", System.Threading.CancellationToken.None);
+                    started.Task.GetAwaiter().GetResult();
+                    var blocked = service.BrowserVersionCommand(new BrowserVersionCommand { Target = exact, Action = BrowserVersionAction.Delete,
+                        VersionId = saved.Version.VersionId, ExpectedStateRevision = saved.State.StateRevision,
+                        ExpectedActiveVersionId = plugin.SavedVersionId, ExpectedActiveReleaseId = plugin.ReleaseId,
+                        OperationId = "remove-running", Confirmed = true });
+                    AssertEqual(BrowserRefusalCode.VersionInUse, blocked.Reason, "the exact running command still blocks Delete");
+                    AssertTrue(!content.Plugin.Token.IsCancellationRequested, "a refused Delete cannot revoke the viewer or command");
+                    finish.SetResult("{\"text\":\"done\"}"); command.GetAwaiter().GetResult();
                     var removed = service.BrowserVersionCommand(new BrowserVersionCommand { Target = exact, Action = BrowserVersionAction.Delete,
                         VersionId = saved.Version.VersionId, ExpectedStateRevision = saved.State.StateRevision,
                         ExpectedActiveVersionId = plugin.SavedVersionId, ExpectedActiveReleaseId = plugin.ReleaseId,
                         OperationId = "remove-offline", Confirmed = true });
                     AssertEqual(BrowserVersionOutcome.Removed, removed.Outcome, "read-only saved viewer does not retain execution authority");
+                    AssertTrue(content.Plugin.Token.IsCancellationRequested, "Delete immediately revokes the exact viewer SDK");
+                    RuntimeThrows<OperationCanceledException>(() => content.Validate());
+                    content.Dispose(); content.Drained.GetAwaiter().GetResult();
                     AssertEqual(BrowserTargetState.Removed, service.ResolveBrowserLocator(new BrowserResolveRequest {
                         OwnerScope = caller, Locator = savedLocator }).Target.State, "a deleted local address never substitutes a newer version");
                 }

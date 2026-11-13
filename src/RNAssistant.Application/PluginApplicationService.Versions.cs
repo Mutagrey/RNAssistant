@@ -101,6 +101,8 @@ namespace RNAssistant.Application
                             result = _store.DeleteVersion(target.PluginId, request.VersionId, request.ExpectedStateRevision,
                                 request.ExpectedActiveVersionId, request.ExpectedActiveReleaseId, request.OperationId,
                                 request.Confirmed, VersionInUse(target.PluginId, request.VersionId));
+                            foreach (var viewer in _instances.Values.Where(item => item.Manifest.Id == target.PluginId &&
+                                item.SavedVersionId == request.VersionId && !item.CommandOperation)) viewer.Dispose();
                             NotifyVersionChanged(target.PluginId, BrowserVersionAction.Delete, request.VersionId);
                             break;
                         default: throw new ArgumentOutOfRangeException(nameof(request.Action));
@@ -201,7 +203,7 @@ namespace RNAssistant.Application
         private bool VersionInUse(string plugin, string version)
         {
             return _instances.Values.Any(item => item.Manifest.Id == plugin && item.SavedVersionId == version &&
-                !item.Token.IsCancellationRequested) ||
+                item.CommandOperation && !item.CommandCompleted.IsCompleted) ||
                 _savedPreparations.Values.Any(item => item.Plugin == plugin && item.Version == version);
         }
 

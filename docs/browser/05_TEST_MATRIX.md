@@ -1,5 +1,12 @@
 # Universal Browser: матрица проверок
 
+## A4 correction evidence — 2026-11-13
+
+`plugin versions:` 3/3. The real service test opens the inactive saved preview,
+checks CanDelete, starts an exact saved-entry command, verifies VersionInUse without
+revoking it, completes the command, deletes, then verifies immediate SDK/content
+revocation and Removed resolution. CAS/receipt/restart regressions remain passing.
+
 ## A1/A2/A5 correction evidence — 2026-11-13
 
 Local Browser 11/11 includes native history reconciliation: push/replace/Back/Forward,

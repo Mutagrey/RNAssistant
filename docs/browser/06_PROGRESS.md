@@ -1,5 +1,15 @@
 # Universal Browser: статус
 
+## Saved viewer deletion corrected — 2026-11-13
+
+`16.25.4-dev`, A4: an open read-only plugin viewer no longer blocks Delete of its
+inactive saved entry. Exact running commands and saved preparations still block it.
+After the tombstone, the selected viewer SDK is immediately revoked; existing
+version notifications show Removed, and retained history/CAS remains intact.
+Plugin versions 3/3 includes preview-open Delete, running-command refusal without
+revocation, successful Delete after completion and closed-content invalidation.
+Next: A6 explicit scope handoff/rebind and A7 screenshot. Windows/UI evidence open.
+
 ## Navigation, export and recents corrected — 2026-11-13
 
 `16.25.3-dev`, A1/A2/A5: native entry preserves query/hash; current member updates

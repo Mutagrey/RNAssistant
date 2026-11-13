@@ -1,5 +1,11 @@
 # Stabilization progress
 
+## Browser saved-view deletion corrected — 2026-11-13
+
+`16.25.4-dev`: A4 fixed; read-only preview no longer blocks inactive-version Delete.
+Running command/preparation protection remains; deletion revokes the exact viewer.
+Plugin version checks 3/3 pass. A6/A7 and Windows/UI evidence remain open.
+
 ## Browser navigation corrected — 2026-11-13
 
 `16.25.3-dev`: A1/A2/A5 implementation corrected: query/hash, native same-document

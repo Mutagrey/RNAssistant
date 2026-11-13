@@ -1,5 +1,11 @@
 # Plugins
 
+## Saved viewer deletion — 2026-11-13
+
+A read-only saved preview does not hold VersionInUse. Exact command operations and
+saved preparations do. Delete revokes viewers of that entry immediately, then the
+existing version-state notification presents Removed; immutable evidence is retained.
+
 ## Common Browser annotations — 2026-11-13
 
 Plugins share `stageBrowserVisualSelection` with all local HTML sources. Native capture
