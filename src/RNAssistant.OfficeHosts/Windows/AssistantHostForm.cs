@@ -8,7 +8,6 @@ namespace RNAssistant.OfficeHosts.Windows
 {
     internal sealed class AssistantHostForm : Form
     {
-        private bool _integrated;
         private Rectangle _observedBounds;
         internal bool ShuttingDown;
         internal bool Interacting { get; private set; }
@@ -26,11 +25,26 @@ namespace RNAssistant.OfficeHosts.Windows
             MinimizeBox = MaximizeBox = true;
         }
 
-        internal void SetIntegratedChrome(bool enabled)
+        protected override CreateParams CreateParams
         {
-            if (_integrated == enabled) return;
-            _integrated = enabled;
-            if (IsHandleCreated) WindowNative.SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x37); // FRAMECHANGED, no move/size/z/activate
+            get
+            {
+                var value = base.CreateParams;
+                // No system title bar, including the first show and handle recreation.
+                // Keep the native sizing frame and minimize/maximize system commands.
+                value.Style &= ~0x00C00000; // WS_CAPTION
+                return value;
+            }
+        }
+
+        internal void BeginMove()
+        {
+            // Ignore a delayed Web message after the mouse was released.
+            if ((Control.MouseButtons & MouseButtons.Left) == 0 || !Visible || WindowState == FormWindowState.Minimized) return;
+            WindowNative.ReleaseCapture();
+            // Posting avoids holding the bridge response inside the native modal move loop.
+            if (!WindowNative.PostMessage(Handle, WindowNative.SysCommand, (IntPtr)0xF012, IntPtr.Zero)) // SC_MOVE | HTCAPTION
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -53,14 +67,14 @@ namespace RNAssistant.OfficeHosts.Windows
                     command == WindowNative.Minimize ? HostWindowCommand.SystemMinimize : (HostWindowCommand?)null;
                 if (action.HasValue && Command != null) { Command(action.Value); m.Result = IntPtr.Zero; return; }
             }
-            if (_integrated && m.Msg == 0x83 && m.WParam != IntPtr.Zero) // WM_NCCALCSIZE; retain native resize edges outside WebView HWND
+            if (m.Msg == 0x83 && m.WParam != IntPtr.Zero) // WM_NCCALCSIZE; retain native resize edges outside WebView HWND
             {
                 var rect = (WindowNative.Rect)Marshal.PtrToStructure(m.LParam, typeof(WindowNative.Rect));
                 var edge = WindowState == FormWindowState.Maximized ? 0 : Math.Max(1, (int)Math.Round(6 * WindowNative.Scale(Handle)));
                 rect.Left += edge; rect.Top += edge; rect.Right -= edge; rect.Bottom -= edge;
                 Marshal.StructureToPtr(rect, m.LParam, false); m.Result = IntPtr.Zero; return;
             }
-            if (_integrated && m.Msg == 0x84) // WM_NCHITTEST, signed screen coordinates
+            if (m.Msg == 0x84) // WM_NCHITTEST, signed screen coordinates
             {
                 var point = new System.Drawing.Point(unchecked((short)(long)m.LParam), unchecked((short)((long)m.LParam >> 16)));
                 var edge = Math.Max(1, (int)Math.Round(6 * WindowNative.Scale(Handle)));

@@ -803,6 +803,14 @@ namespace RNAssistant.Harness
 
         private sealed class AgentReceiptFailureEvents : IEventStore
         {
+            public bool AtomicAgentDelivery { get { return _inner.AtomicAgentDelivery; } }
+            public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { return _inner.FindAgent(source, agentId); }
+            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+                AgentDeliveryCommand command, Action dispatch) { return _inner.AcceptAgentDelivery(source, recipient, command, dispatch); }
+
+            public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
+            { return _inner.ReadAgentRequests(session, ids); }
+
             public void ValidateInputDelivery(ChatSession session, System.Collections.Generic.IReadOnlyList<SessionEvent> facts,
                 System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> records)
             { _inner.ValidateInputDelivery(session, facts, records); }

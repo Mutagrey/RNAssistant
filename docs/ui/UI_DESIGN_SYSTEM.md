@@ -138,17 +138,18 @@ Companion различаются. × означает полное закрыт�
 действия в Compact/narrow перенесены в тот же ActionMenu. Compact сохраняет общий
 composer/ленту; другие элементы Shell и group header временно скрыты владельцем.
 
-Trusted header использует app-region drag, интерактивные элементы — no-drag.
-Caption убирается сразу после capability check WebView2; Web-кнопки появляются только
-после ChromeReady от смонтированной Shell. При unsupported Runtime/сбое root UI
-остаётся native caption, а дублирующие Web-кнопки скрыты. Hover Snap не
+Trusted header использует app-region drag при `nativeDragRegions`; иначе свободная
+область header вызывает native move через typed bridge. Интерактивные элементы
+не инициируют перенос. Caption исключён из стиля формы до первого показа и не
+возвращается при старом Runtime/сбое root UI. Web-кнопки появляются после ChromeReady
+от смонтированной Shell независимо от поддержки drag regions. Hover Snap не
 имитируется и не заявляется. Companion — native 48 DIP tool window со стандартными
 системными цветами, коротким статусом и tooltip; без второго мини-чата/анимации.
 Конкретный внешний вид/Win32 delivery остаются In Review.
 
 [Compact](review/window-compact.png), [Full](review/window-full.png),
 [замеры рядом с Demo](review/window-chrome.json). Реальное Excel/Windows ревью после
-уточнения 2026-11-12 открыто.
+уточнений 2026-11-12/13 открыто.
 
 ## Предел параллельности и очередь — In Review, 2026-11-05
 

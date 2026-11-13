@@ -62,6 +62,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 - The common Browser version menu includes a small project-members form for older
   projects. A missing definition keeps Save visible with a reason.
 
+### 16.16.1-dev
+
+- The Excel-owned assistant form has no system title bar from its first appearance,
+  including WebView2 loading or failure. The existing Shell remains the single header.
+- Window controls and header dragging also work without WebView2 native drag regions.
+  Actual Windows/Excel frame and resize qualification remains open.
+
 ### 16.16.0-dev
 
 - Plugins now use Check → Save → Apply. Saved checkpoints have independent ordinals,

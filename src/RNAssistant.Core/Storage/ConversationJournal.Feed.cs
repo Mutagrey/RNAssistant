@@ -37,7 +37,7 @@ namespace RNAssistant.Core.Storage
                     if (!MatchesAnchor(db, after, current) || !MatchesAnchor(db, highWater, current))
                         return new SessionEventSlice { Reason = ConversationResyncReason.HistoryChanged };
                     var operations = new List<string>();
-                    using (var command = _journal.Command(db, "SELECT operation FROM chat_write WHERE stream=$stream AND chat=$chat AND sequence>$after AND sequence<=$through ORDER BY sequence LIMIT $limit"))
+                    using (var command = _journal.Command(db, ChatEventQuery + " ORDER BY sequence LIMIT $limit"))
                     {
                         command.Parameters.AddWithValue("$chat", _address.Id); command.Parameters.AddWithValue("$after", after.Sequence);
                         command.Parameters.AddWithValue("$through", highWater.Sequence); command.Parameters.AddWithValue("$limit", limit);
@@ -49,10 +49,16 @@ namespace RNAssistant.Core.Storage
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         var receipt = _journal.FindChatWrite(db, operation);
-                        if (receipt == null || receipt.Fact.Card.ChatId != _address.Id ||
-                            receipt.Position.Sequence <= result.Next.Sequence || receipt.Position.Sequence > highWater.Sequence)
+                        var peer = receipt == null ? _journal.FindDelivery(db, "operation", operation) : null;
+                        var position = receipt?.Position ?? peer?.Position;
+                        if ((receipt == null ? !DeliveryAffects(peer, _address.Id) : receipt.Fact.Card.ChatId != _address.Id) ||
+                            position.Sequence <= result.Next.Sequence || position.Sequence > highWater.Sequence)
                             throw new System.IO.InvalidDataException("Event locator does not identify the requested chat page.");
-                        notices.Add(FeedNotice(receipt)); result.Next = FeedPosition(receipt);
+                        if (receipt != null) notices.Add(FeedNotice(receipt));
+                        else notices.Add(new ConversationEventNotice { Sequence = position.Sequence, EventId = peer.Operation,
+                            CreatedUtc = peer.Fact.CreatedUtc, Type = peer.Fact.Recipient == _address.Id ? SessionEventTypes.ConversationInputChanged : "agent.accepted",
+                            RunId = peer.Fact.Sender == _address.Id ? peer.Fact.RunId : null, Operations = new string[0] });
+                        result.Next = new SessionEventPosition(_address.Id, position.Sequence, position.Hash);
                     }
                     if (notices.Count < limit && result.Next.Sequence != highWater.Sequence)
                         throw new System.IO.InvalidDataException("Event page does not reach its canonical high water.");
@@ -64,14 +70,8 @@ namespace RNAssistant.Core.Storage
             private bool MatchesAnchor(SqliteConnection db, SessionEventPosition anchor, ConversationChatReceipt current)
             {
                 if (anchor.Sequence == current.Position.Sequence) return anchor.Hash == current.Position.Hash;
-                using (var command = _journal.Command(db, "SELECT operation FROM chat_write WHERE stream=$stream AND chat=$chat AND sequence=$sequence"))
-                {
-                    command.Parameters.AddWithValue("$chat", _address.Id); command.Parameters.AddWithValue("$sequence", anchor.Sequence);
-                    var operation = command.ExecuteScalar() as string;
-                    var receipt = operation == null ? null : _journal.FindChatWrite(db, operation);
-                    return receipt != null && receipt.Fact.Card.ChatId == _address.Id &&
-                        receipt.Position.Sequence == anchor.Sequence && receipt.Position.Hash == anchor.Hash;
-                }
+                var position = _journal.ChatPosition(db, _address.Id, anchor.Sequence);
+                return position != null && position.Hash == anchor.Hash;
             }
         }
 

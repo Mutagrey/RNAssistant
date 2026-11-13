@@ -112,6 +112,7 @@ namespace RNAssistant.Core.Storage
         private static ConversationQueueControl DecodeControl(JournalRecord record)
         {
             if (record.Kind == "chat.committed") return DecodeChatCommit(record).Control ?? throw new InvalidDataException("Missing queue control.");
+            if (record.Kind == "agent.accepted") return DecodeDelivery(record).Control ?? throw new InvalidDataException("Missing peer input control.");
             var fact = DeliveryData<ConversationQueueControl>(record);
             if (record.Kind != "queue.control" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact)))
                 throw new InvalidDataException("Invalid queue control fact.");

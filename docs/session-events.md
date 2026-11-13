@@ -1,5 +1,65 @@
 # Session event stream
 
+## Journal outbound Send and Resolve — 2026-11-13
+
+Application Send/Resolve now use the existing event port's explicit atomic-delivery
+capability. ConversationJournal resolves the exact peer alias through its scoped
+index; the existing scope creates the endpoint without catalog enumeration. The
+registry lock is released before endpoint validation or persistence. Ordered Inbox
+locks protect both live cursors; scheduling runs after read-back and outside these
+locks. Incoming input signals the existing Inbox and cannot release a user/recovery
+pause. Closing views does not change delivery ownership.
+
+The native acceptance requires the current sender run, exact accepted call/step,
+canonical runtime entry and both observed chat revisions. Its policy comes from the
+accepted run. Membership, input/control and both heads remain one frame. A terminal
+with an effect must match that call's canonical delivery; successful intake does not
+prove recipient execution or an assignment's external effects. A lost append
+acknowledgement can return queued only after exact frame, intent and body read-back,
+without another append. Unavailable proof leaves an interrupted attempt; recovery
+retains Unknown, does not promote the outcome or schedule/replay the input.
+
+Three new Office run-service / Workspace runtime-port scenarios cover Send followed
+by Resolve, receipt loss, unavailable read-back/recovery, live notification, a stopped
+queue, restart, rebuild and clean Workspace restore. Known-address Send/Resolve use
+zero catalog reads in these fixtures. There is no CPU/latency or full input-history
+boundedness claim. Schema 18 and durable frame shapes are unchanged.
+
+The retiring event backend explicitly keeps SendEvents until whole-port P7; an
+atomic backend never falls back to Prepared/Submit/Accepted writes. No new store,
+adapter, imported history or dual-write. Spawn, peer controls, assignment/group
+projections, remaining Store/resource owners and production composition remain open.
+Windows/Office qualification is separate. [Evidence](audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
+
+## Journal peer Inbox and correlated waits — 2026-11-13
+
+For integrated Store chats, native `agent.accepted` now commits delivery/membership,
+the recipient's typed Inbox input/control and both chat cursors in one frame. The
+text remains in CAS. Schema 18 extends the existing chat head and sender/recipient
+delivery indices; no second store or event envelope is introduced. Mixed integrated
+and primitive-only chat cards are rejected. Runtime binding comes from the caller.
+
+Inbox uses its existing Pending/Delivering/Applied transitions. Peer text and
+provenance cannot be edited or dropped; Applied requires the exact persisted user
+message receipt. Cold restart pauses delivery. Lost acceptance acknowledgement
+resolves to the original receipt without another append; rebuild and clean
+Workspace restore retain that receipt. Each chat feed exposes the shared native
+frame under its own cursor: outgoing `agent.accepted`, incoming input change.
+
+The existing event port now reads typed outgoing request references by exact IDs
+(1–32), scoped to the caller's chat and revision. Common wait code no longer parses
+legacy Prepared records; their parsing stays inside the retiring event adapter.
+Saved reply/completion waits consume native peer input through real Office run
+service and Workspace runtime ports/shared input channel, preserving the original
+run/call/deadline and applying the reply once. This proves reception/correlation;
+an assignment outcome is the peer's assessment, not external effect evidence.
+
+Native publication is injected at the persistence boundary in these earlier checks;
+application Send/Resolve and live notification are covered by the slice above.
+Spawn and peer controls remain unconnected; default production writers are unchanged. Full input-history
+boundedness, metadata/header costs, remaining Store/resource owners and Windows/Office
+qualification remain open. [Evidence](audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
+
 ## Journal event feed and metadata reconnect — 2026-11-13
 
 The existing event-reader port now returns typed notices. ConversationJournal pages
@@ -27,7 +87,7 @@ Schema 17 and durable facts are unchanged; no new index/store/adapter.
 
 Patch 16.15.2-dev covers the active Workspace metadata reconnect improvement.
 Default writers remain on ChatStore; journal production composition, Office UI
-subscription adoption, peer delivery/controls and remaining resource/Store owners
+subscription adoption, application outbound peer delivery/controls and remaining resource/Store owners
 are still open. Windows/Office qualification remains separate.
 [Evidence](audits/storage-context-optimization.md#p5--journal-event-feed-and-metadata-reconnect-2026-11-13).
 
@@ -56,7 +116,8 @@ steer run through its real consumer; Workspace initial intake runs through share
 Inbox and real runtime ports. Workspace steer transport and default composition
 remain part of cutover evidence.
 
-Attachments, peer input/control/feed, correlated waits, remaining Store/resource
+Native peer input/feed and correlated waits are connected in the slice above.
+Attachments, application outbound peer delivery/controls, remaining Store/resource
 operations and P3 metadata/header costs stay open; P4 stays deferred. Production
 writers remain unchanged. Windows/Office qualification is open.
 [Evidence](audits/storage-context-optimization.md#p1p2--journal-user-inbox-delivery-2026-11-12).
@@ -75,8 +136,9 @@ and index. Input replay reads that chat's indexed control records, without scann
 message bodies. Schema 16 adds the control-page index; no new durable owner or table.
 Cold Inbox still pauses a saved wait until explicit user resume, even if an earlier
 Resume receipt survived an acknowledgement loss. User input is connected in the
-slice above; correlated reply/completion waits, peer controls and peer feed
-integration stay unsupported explicitly. This wait slice alone does not qualify delivery.
+slice above; native correlated reply/completion waits and peer feed are connected
+in the peer slice. Application outbound delivery and peer controls remain open.
+This wait slice alone does not qualify delivery.
 
 Five Office/Workspace checks cover timeout, cancellation, claim/control acknowledgement
 loss, changed deadline and pause fencing; rebuild and clean Workspace journal/CAS
@@ -99,7 +161,7 @@ Journal recovery preparation validates the observed revision; its model/tool bou
 closes with the recovery checkpoint, without a preliminary journal write. Existing
 resource receipts may be linked but cannot promote an Unknown execution to Ok.
 Restart, lost recovery acknowledgement, repeat recovery, rebuild and clean journal/CAS
-restore retain the result. Full application restore, correlated wait delivery, remaining owners/
+restore retain the result. Full application restore, application outbound peer delivery, remaining owners/
 Store/control consumers, P3 and production cutover remain open. Windows/Office is
 unqualified. [Evidence](audits/storage-context-optimization.md#p1p2--journal-interrupted-run-recovery-2026-11-12).
 
@@ -122,7 +184,7 @@ Workspace denial records NotDispatched, clears approval and cancels the run. Its
 terminal receipt can describe rejection but cannot prove a successful write.
 
 Checked scope is single-call file/VBA `core.write`, including later journal/CAS
-restore. Other mutation owners, correlated wait delivery, remaining control/Store ports
+restore. Other mutation owners, application outbound peer delivery, remaining control/Store ports
 and production cutover remain open; Windows/Office evidence is separate.
 [Report](audits/storage-context-optimization.md#p1p2--journal-mutation-confirmation-2026-11-11).
 
@@ -175,7 +237,8 @@ these projections from journals/CAS.
 
 This remains an isolated integration, not the production switch. The mutation slice
 above adds the first bound write and confirmation; interrupted-run recovery is now connected.
-Saved waits are connected above; correlated input delivery still rejects unsupported paths explicitly. Remaining Store/Inbox/control/feed consumers, P3 request preparation and
+Saved waits and native correlated input are connected above. Application outbound
+peer delivery, remaining Store/Inbox/control/feed consumers, P3 request preparation and
 full backup/cutover gates stay open. No ChatStore optimization, adapter, dual-write
 or fallback is added. [Evidence](audits/storage-context-optimization.md#p1p2--atomic-read-tool-runtime-2026-11-11).
 

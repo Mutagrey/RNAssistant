@@ -17,13 +17,10 @@ namespace RNAssistant.Core.Storage
             var current = TextChat(db, metadata.Id);
             if (current?.Position.Sequence == metadata.Revision)
             { RequireChatRevision(metadata, current); return true; }
-            using (var command = Command(db, "SELECT operation FROM chat_write WHERE stream=$stream AND chat=$chat AND sequence=$through"))
-            {
-                command.Parameters.AddWithValue("$chat", metadata.Id); command.Parameters.AddWithValue("$through", metadata.Revision);
-                var operation = command.ExecuteScalar() as string;
-                RequireChatRevision(metadata, operation == null ? null : FindChatWrite(db, operation));
-                return false;
-            }
+            var position = ChatPosition(db, metadata.Id, metadata.Revision);
+            RequireChatRevision(metadata, position == null || current == null ? null :
+                new ConversationChatReceipt(current.Fact, current.Operation, position));
+            return false;
         }
 
         private ConversationInputState PrepareChatInput(SqliteConnection db, ChatSession session,
@@ -43,11 +40,11 @@ namespace RNAssistant.Core.Storage
             if (frame.Control == null || frame.Checkpoint != null || input.Recipient != frame.Card.ChatId || header == null ||
                 string.IsNullOrWhiteSpace(header.OperationId) || string.IsNullOrWhiteSpace(header.RequestFingerprint) ||
                 !Enum.IsDefined(typeof(InputDelivery), header.Delivery)) throw new InvalidDataException("Invalid chat input identity.");
-            if ((header.Attachments?.Count ?? 0) != 0 || header.AgentCommunication?.Sender != null) throw TextStoreScope();
+            if ((header.Attachments?.Count ?? 0) != 0) throw TextStoreScope();
             var prior = InputState(db, input.MessageId);
             if (prior == null)
             {
-                if (input.Revision != 1 || !(input.Status == ConversationInputStatus.Pending ||
+                if (header.AgentCommunication != null || input.Revision != 1 || !(input.Status == ConversationInputStatus.Pending ||
                     input.Status == ConversationInputStatus.Delivering && !string.IsNullOrWhiteSpace(input.RunId)) ||
                     ChatEntry(db, input.Recipient, input.MessageId) != null)
                     throw new InvalidOperationException("A new input requires a fresh identity and accepted revision one.");
@@ -66,7 +63,7 @@ namespace RNAssistant.Core.Storage
                     throw new InvalidOperationException("Input transition does not match its accepted state.");
                 ConversationInputJournal.RequireSameIdentity(prior.Header, header);
                 if (prior.Header.CreatedUtc != header.CreatedUtc ||
-                    (prior.Status != ConversationInputStatus.Pending || input.Status != ConversationInputStatus.Pending) &&
+                    (header.AgentCommunication != null || prior.Status != ConversationInputStatus.Pending || input.Status != ConversationInputStatus.Pending) &&
                     (prior.Header.Delivery != header.Delivery || !SameRunValue(prior.Body, input.Body)))
                     throw new InvalidOperationException("Only a pending edit may change input text or delivery.");
             }
@@ -106,8 +103,14 @@ namespace RNAssistant.Core.Storage
         {
             var receipt = FindChatWrite(db, fact.EventId);
             var input = receipt?.Fact.Input;
-            if (input == null || receipt.Fact.Card.ChatId != chat || receipt.Position.Sequence != fact.Sequence ||
-                receipt.Position.Hash != fact.Hash || fact.SessionId != chat ||
+            var position = receipt?.Position;
+            if (receipt == null)
+            {
+                var peer = FindDelivery(db, "operation", fact.EventId);
+                if (peer?.Fact.Recipient == chat) { input = peer.Fact.Input; position = peer.Position; }
+            }
+            if (input == null || input.Recipient != chat || position.Sequence != fact.Sequence ||
+                position.Hash != fact.Hash || fact.SessionId != chat ||
                 !SameRunValue(fact.Payload, input.Body.ToBlobReference()))
                 throw new InvalidDataException("Input event does not identify its canonical body.");
             return input;

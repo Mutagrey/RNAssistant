@@ -8,6 +8,16 @@ OfficeToolExecutor no longer registers that retired tool. It fails before discov
 Migrate the fixture to the supported resource mutation protocol; do not restore the
 old tool. Bounded current metadata paging passes independently.
 
+## Send batch parser/fixture mismatch — 2026-11-13
+
+Owner: ModelProtocol / Harness (`AgentSendBatchProtocol`). The existing
+`agent communication: send batch protocol and policy` case fails at parser admission:
+expected false, got true. Reproduced in isolation on clean `a38e5aba` and on the
+native Send/Resolve slice; parser/schema/policy sources are unchanged by that slice.
+Identify the exact rejected batch and reconcile the fixture with the current v8
+contract; do not weaken dispatch guards to make the check green. Existing Office
+and Workspace send-batch runtime checks pass. This case is not claimed as coverage.
+
 ## Confirmation recovery fixture drift — 2026-11-12
 
 Owner: Harness (`Program.SessionEventStoreTests.cs`, `KernelConfirmationResponses`).

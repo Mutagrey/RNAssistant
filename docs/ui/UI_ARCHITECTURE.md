@@ -147,6 +147,9 @@ NativeHostCli — экспортный ABI/reflection loader. Один акти�
 `InProcessPanelSession` для точного документа. OfficeHosts разрешает старый
 `Application.Hwnd` и прямой `ActiveWindow.Hwnd` в окно активной книги; VBA launcher
 не меняется. Форма показывается с владельцем Office и без taskbar entry.
+`AssistantHostForm.CreateParams` удаляет системный caption до создания HWND;
+готовность WebView2 не управляет стилем формы. `nativeDragRegions` — отдельная
+capability переноса: при её отсутствии trusted Shell вызывает typed `BeginMove`.
 При вызове из другой книги Shell проверяет редакторы/черновики, затем старый runtime
 завершается и создаётся новый с exact HWND; C++ shim следует за successor. Run
 старого документа не переназначается. `AssistantHostForm` обрабатывает frame/system

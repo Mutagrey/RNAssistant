@@ -163,8 +163,9 @@ namespace RNAssistant.OfficeHosts.Windows
                     if (request == null || !Enum.IsDefined(typeof(HostWindowCommand), request.Command))
                         throw new ArgumentException("Unknown window command.");
                     if (_deferredRequest != null) throw new InvalidOperationException("Предыдущая оконная команда ещё выполняется.");
-                    if (request.Command == HostWindowCommand.ChromeReady && !_chromeSupported)
-                        throw new InvalidOperationException("WebView Runtime не поддерживает встроенный заголовок.");
+                    if (request.Command == HostWindowCommand.BeginMove && (!_chromeReady || !_form.Visible ||
+                        _policy.Presentation == HostWindowPresentation.Companion || _policy.Visibility != HostWindowVisibility.Visible))
+                        throw new InvalidOperationException("Окно сейчас недоступно для перемещения.");
                     if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument)
                     {
                         var pane = _session.PanelControl as AssistantPaneControl;
@@ -228,7 +229,7 @@ namespace RNAssistant.OfficeHosts.Windows
             if (_disposed || !_policy.Alive) return;
             if (command == HostWindowCommand.Shutdown)
             {
-                if (ShutdownRequested != null) { Resume(); ShutdownRequested(); }
+                if (_chromeReady && ShutdownRequested != null) { Resume(); ShutdownRequested(); }
                 else Dispose();
                 return;
             }
@@ -240,7 +241,8 @@ namespace RNAssistant.OfficeHosts.Windows
             RecordPlacement(false);
             _policy.Apply(request); _focusRevision = -1;
             if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument) { Dispose(); return; }
-            if (request.Command == HostWindowCommand.ChromeReady) { _chromeReady = true; _form.SetIntegratedChrome(true); }
+            if (request.Command == HostWindowCommand.ChromeReady) _chromeReady = true;
+            if (request.Command == HostWindowCommand.BeginMove) { _form.BeginMove(); Publish(); return; }
             if (request.Command == HostWindowCommand.ResetPlacement)
             {
                 _preferences.Full = _preferences.Compact = _preferences.Companion = null; _fullPlaced = false;
@@ -252,7 +254,7 @@ namespace RNAssistant.OfficeHosts.Windows
         }
 
         public void ConfigureChrome(bool supported)
-        { OnUi(() => { _chromeSupported = supported; _chromeReady = false; _form.SetIntegratedChrome(supported); _policy.Touch(); Publish(); }); }
+        { OnUi(() => { _chromeSupported = supported; _chromeReady = false; _policy.Touch(); Publish(); }); }
         public void InvalidateChrome()
         { OnUi(() => { if (_disposed) return; _chromeReady = false; _policy.Touch(); Publish(); }); }
 
@@ -460,7 +462,7 @@ namespace RNAssistant.OfficeHosts.Windows
         {
             var state = _policy.Snapshot(); state.ChromeReady = _chromeReady; state.AnchorAvailable = _anchor != IntPtr.Zero; state.Diagnostic = _diagnostic;
             _snapshot = new HostWindowBootstrapDto { State = state, Capabilities = new HostWindowCapabilitiesDto {
-                IntegratedChrome = _chromeSupported, CompactPresentation = true, Companion = true, Pin = true } };
+                IntegratedChrome = true, NativeDragRegions = _chromeSupported, CompactPresentation = true, Companion = true, Pin = true } };
             StateChanged?.Invoke(state);
         }
         private void Diagnostic(string message, Exception error)

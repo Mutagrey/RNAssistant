@@ -87,6 +87,27 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P5 outbound Send/Resolve (2026-11-13): existing event port exposes atomic delivery
+explicitly; native indexed alias lookup supplies the existing scope endpoint. Owner:
+Application AgentCommunicationService/Inbox and Core ConversationJournal. No catalog
+scan/global service lock during native persistence, no new store/adapter/schema.
+Exact runtime entry, receipt-linked terminal, both live cursors and Inbox signal are
+connected. Whole-port P7 removes the temporary capability branch and SendEvents
+together with the old event adapters; atomic delivery has no fallback/dual-write.
+Spawn, peer controls, assignment/group projections, other Store/resource consumers
+and default composition remain open. [Contract](../session-events.md#journal-outbound-send-and-resolve--2026-11-13).
+
+P5 peer Inbox/correlation (2026-11-13): native acceptance shares delivery, input,
+membership and both chat heads in one frame; existing Inbox consumes it. The event
+port supplies addressed request references to common saved reply/completion waits.
+Owner: Core journal / existing Inbox, AgentCommunicationService and runtime consumers.
+Schema 18 extends existing chat/delivery indices only. Legacy Prepared parsing moves
+to the existing ChatEventStoreAdapter, removed with whole-port P7; no new adapter,
+fallback or dual-write. Send/Resolve and live notification are connected above;
+spawn, controls and default composition remain unconnected. Input-history bounds,
+metadata/header and remaining Store/resource ports stay open.
+[Contract](../session-events.md#journal-peer-inbox-and-correlated-waits--2026-11-13).
+
 P5 event feed (2026-11-13): ConversationJournal implements the existing reader port
 with typed notices, exact anchors and bounded chat-write index queries. Common feed
 no longer parses legacy envelopes; that parsing remains inside the retiring reader.
@@ -103,8 +124,9 @@ message receipt for Applied. Owner: Core journal / existing Inbox and runtime
 consumers. Schema 17 adds request identity to input_state. Common input code delegates
 format-specific proof to IEventStore; legacy parsing stays only in the existing
 retiring ChatEventStoreAdapter until full-port P7 removal. No new adapter/store,
-dual-write, imported history or production switch. Attachments, peer controls/feed,
-correlated waits, other Store/resource operations, full Workspace steer transport
+dual-write, imported history or production switch. Native peer input/feed and waits
+are connected above; attachments, application peer delivery/controls, other
+Store/resource operations, full Workspace steer transport
 and metadata/header costs remain open. [Contract](../session-events.md#journal-user-inbox-delivery--2026-11-12).
 
 P1/P2 saved waits and queue control (2026-11-12): Office/Workspace `agents.wait` now
@@ -112,7 +134,8 @@ retains and explicitly claims its existing checkpoint through ConversationJourna
 Timeout/cancellation close the original call once; lost acknowledgement leaves a
 recoverable wait. User pause/resume is atomic with the chat cursor and uses existing
 control rows (schema 16 adds only a query index). Owner: Core journal / existing
-kernel and Inbox. User input is connected above; correlated waits, peer controls/feed and other
+kernel and Inbox. User input and native correlated waits/feed are connected above;
+application peer delivery/controls and other
 mutation/Store ports retain their P7 gate. No adapter, alternate scheduler/store,
 production writer switch or version bump. [Contract](../session-events.md#journal-saved-waits-and-queue-control--2026-11-12).
 
@@ -121,7 +144,7 @@ one typed kernel commit for the checkpoint, diagnostic and any synthetic termina
 Reads become Error; possible writes remain Unknown. Known terminals, pending approval
 and consumed claims retain distinct outcomes. Repeated recovery/ack loss/rebuild do
 not replay. Workspace recovery no longer writes directly to ChatStore. Owner: existing
-Application recovery / Core persistence. Correlated wait delivery, other mutation/Store/control
+Application recovery / Core persistence. Application peer delivery, other mutation/Store/control
 ports and P7 composition remain open; same old-backend removal condition, no new
 adapter. [Contract](../session-events.md#journal-interrupted-run-recovery--2026-11-12).
 
@@ -181,7 +204,8 @@ model presentation does not create a second terminal. Indexed T/E/R and ToolPack
 admissions support exact finish evidence and cross-turn reuse. Lost terminal ack,
 unknown read result, restart/rebuild/restore and citation correction are covered.
 Default production composition remains unchanged. The bound-mutation slice above
-connects the first write and confirmation; other mutations and correlated wait delivery remain unsupported by this integration.
+connects the first write and confirmation; native correlated waits are connected
+above. Other mutations and application outbound peer delivery remain unsupported.
 The same P7 removal gate applies; no additional adapter was introduced.
 [Contract](../session-events.md#atomic-read-tool-runtime-on-the-journal--2026-11-11).
 

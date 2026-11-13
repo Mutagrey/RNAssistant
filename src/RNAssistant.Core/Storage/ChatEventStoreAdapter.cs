@@ -10,6 +10,10 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class ChatEventStoreAdapter : IEventStore
     {
+        public bool AtomicAgentDelivery { get { return false; } }
+        public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { throw new NotSupportedException(); }
+        public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+            AgentDeliveryCommand command, Action dispatch) { throw new NotSupportedException(); }
         private readonly ChatStore _store;
 
         public ChatEventStoreAdapter(ChatStore store)
@@ -133,6 +137,18 @@ namespace RNAssistant.Core.Storage
             internal string Role;
             internal bool ProtocolMessage;
             internal string RunId;
+        }
+
+        public IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, IReadOnlyList<string> messageIds)
+        {
+            if (messageIds == null || messageIds.Count < 1 || messageIds.Count > 32 || messageIds.Any(string.IsNullOrWhiteSpace))
+                throw new ArgumentException("Expected 1–32 exact request identities.");
+            var ids = new HashSet<string>(messageIds, StringComparer.Ordinal);
+            return Read(session, SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
+                .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged && item.Sequence <= session.Revision &&
+                    (string)item.Data?["State"] == "Prepared" && ids.Contains((string)item.Data?["MessageId"]))
+                .Select(item => new AgentRequestReference((string)item.Data["MessageId"], item.Data["Target"]?.ToObject<AgentChatAddress>(),
+                    (bool?)item.Data["ExpectReply"] == true, (bool?)item.Data["Assignment"] == true)).ToArray();
         }
 
         public ISessionEventReader OpenReader(ConversationMetadata session)

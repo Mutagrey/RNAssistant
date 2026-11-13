@@ -76,7 +76,7 @@ namespace RNAssistant.Application.Conversations
                             State = AgentDeliveryState.SpawnPrepared, ChainId = chain.ChainId,
                             OperationId = operationId, Fingerprint = fingerprint, Target = Address(child) });
                         scope.Commit(child);
-                        var saved = scope.Endpoint(child).Load();
+                        var saved = scope.Endpoint(Address(child)).Load();
                         if (saved?.AgentCreation?.OperationId != operationId || saved.AgentCreation.Fingerprint != fingerprint)
                             throw new InvalidOperationException("Created conversation read-back failed.");
                         child = saved;

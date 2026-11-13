@@ -112,6 +112,14 @@ namespace RNAssistant.Harness
 
         private sealed class EventFeedPageStore : IEventStore, ISessionEventReader
         {
+            public bool AtomicAgentDelivery { get { return false; } }
+            public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { throw new NotSupportedException(); }
+            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
+                AgentDeliveryCommand command, Action dispatch) { throw new NotSupportedException(); }
+
+            public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
+            { throw new NotSupportedException(); }
+
             public void ValidateInputDelivery(ChatSession session, System.Collections.Generic.IReadOnlyList<SessionEvent> facts,
                 System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> records)
             { throw new NotSupportedException(); }

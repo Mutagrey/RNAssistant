@@ -58,7 +58,7 @@ namespace RNAssistant.Application.Conversations
                 {
                     var resolutionRequest = JObject.FromObject(context.Arguments).ToObject<ResolveRequest>();
                     var resolved = _service.Resolve(_inbox, _session, _limit, context.Execution.RunId, operationId,
-                        resolutionRequest.RequestId, resolutionRequest.Outcome, resolutionRequest.Text, context.MarkDispatchPossible);
+                        resolutionRequest.RequestId, resolutionRequest.Outcome, resolutionRequest.Text, context.MarkDispatchPossible, context.Execution);
                     return context.Complete(new ToolHandlerResult(RuntimeResult.Ok("Отчёт о результате поручения принят в очередь отправителя. Это не подтверждение внешних эффектов или завершения Run.",
                         JsonConvert.SerializeObject(resolved)), context.MayHaveDispatched ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange));
                 }
@@ -121,7 +121,8 @@ namespace RNAssistant.Application.Conversations
                 }
                 var request = JObject.FromObject(context.Arguments).ToObject<SendRequest>();
                 var receipt = _service.Send(_inbox, _session, _limit, context.Execution.RunId, operationId,
-                    request.AgentId, request.Text, context.MarkDispatchPossible, request.ExpectReply, request.ReplyTo, request.Assignment);
+                    request.AgentId, request.Text, context.MarkDispatchPossible, request.ExpectReply, request.ReplyTo, request.Assignment,
+                    execution: context.Execution);
                 return context.Complete(new ToolHandlerResult(RuntimeResult.Ok(
                     "Сообщение принято в очередь; выполнение поручения ещё не подтверждено.", JsonConvert.SerializeObject(receipt)),
                     context.MayHaveDispatched ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange));

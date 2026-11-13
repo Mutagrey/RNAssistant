@@ -34,7 +34,7 @@ namespace RNAssistant.Office
                     return _chatSessions.PrepareAgentChat(source, title);
                 },
                 Commit = session => _conversationStore.Commit(session, new ConversationCommit()),
-                Endpoint = session => AgentEndpoint(AgentCommunicationService.Address(session), progress, changed)
+                Endpoint = address => AgentEndpoint(address, progress, changed)
             });
         }
 

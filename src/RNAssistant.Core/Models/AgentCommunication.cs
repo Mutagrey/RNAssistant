@@ -7,6 +7,18 @@ using System.Text;
 
 namespace RNAssistant.Core.Models
 {
+    // Known outgoing request identity for correlation; this does not prove execution
+    // or completion by the recipient. The event backend owns its durable format.
+    public sealed class AgentRequestReference
+    {
+        public string MessageId { get; private set; }
+        public AgentChatAddress Target { get; private set; }
+        public bool ExpectReply { get; private set; }
+        public bool Assignment { get; private set; }
+        public AgentRequestReference(string messageId, AgentChatAddress target, bool expectReply, bool assignment)
+        { MessageId = messageId; Target = target; ExpectReply = expectReply; Assignment = assignment; }
+    }
+
     // Persisted with the accepted call, never inferred from a tool's display text.
     public sealed class AgentWaitCondition
     {

@@ -25,6 +25,7 @@ namespace RNAssistant.Harness
     {
         private static void JournalWaitParity(string scenario)
         {
+            var correlated = scenario == "reply" || scenario == "completion";
             foreach (var office in new[] { true, false })
             {
                 var settings = new AppSettings { Model = "journal-wait", MaxCollaborationAgents = 4,
@@ -44,6 +45,17 @@ namespace RNAssistant.Harness
                         resourceOrigin: (session, context) => journal.MutationOrigin(session, context));
                     var communication = new AgentCommunicationService(() => 4);
                     var inbox = new ConversationInboxService(journal);
+                    ChatSession peer = null; AgentMessageReceipt requestReceipt = null;
+                    if (correlated)
+                    {
+                        peer = store.CreateTransient(chat.Host, chat.DocumentKey, chat.DocumentTitle, "Reply peer");
+                        store.Commit(peer, new ConversationCommit());
+                        AcceptJournalPeerCall(store, chat, "request", "request-run");
+                        requestReceipt = journal.SendAgent("request", chat.Id, "request-run", "request", AgentChatAddress.IdFor(peer.Id),
+                            chat.Id, "wait-chain", 2, "Please inspect this request", expectReply: true, assignment: scenario == "completion",
+                            recipientRuntimeKey: peer.WorkspaceId ?? peer.DocumentKey);
+                        chat = RecoverJournalRun(store, store.Load(chat.Id), office);
+                    }
                     communication.Register(new AgentConversationScope { Key = scope, Contains = session => session.Id == chat.Id,
                         ReadCatalog = () => new[] { new AgentConversationEndpoint {
                             Address = AgentCommunicationService.Address(chat), Inbox = inbox, Load = () => store.Load(chat.Id) } } });
@@ -61,11 +73,15 @@ namespace RNAssistant.Harness
                                 while (true)
                                 {
                                     var request = await listener.GetContextAsync().ConfigureAwait(false);
-                                    using (var reader = new StreamReader(request.Request.InputStream)) await reader.ReadToEndAsync().ConfigureAwait(false);
+                                    string wire; using (var reader = new StreamReader(request.Request.InputStream)) wire = await reader.ReadToEndAsync().ConfigureAwait(false);
                                     AssertTrue(++requests <= 2, "wait continuation never repeats the accepted tool call");
+                                    if (correlated && requests == 2) AssertContains(wire, "Exact peer reply", "the real runtime consumes the received peer text");
                                     await SteeringReply(request, requests == 1
                                         ? ModelProtocolWire.WriteAcceptedCall("Observe incoming input", null, new ConversationToolCall {
-                                            Name = "agents.wait", Arguments = new JObject { ["timeout_seconds"] = 1 } })
+                                            Name = "agents.wait",
+                                            Arguments = correlated ? new JObject { ["timeout_seconds"] = 10,
+                                                ["requests"] = new JArray(requestReceipt.Fact.MessageId), ["mode"] = "all",
+                                                ["until"] = scenario == "completion" ? "completion" : "reply" } : new JObject { ["timeout_seconds"] = 1 } })
                                         : ModelProtocolWire.WriteAcceptedDecision("finish", "The observation ended", "Wait finished.",
                                             outcome: ConversationOutcome.UnableToComplete, results: new ConversationResultClaim[0])).ConfigureAwait(false);
                                 }
@@ -109,6 +125,21 @@ namespace RNAssistant.Harness
                             AssertEqual(0, journal.ReadWindow(chat.Id, long.MaxValue, 8).Count, "waiting is not a tool terminal");
                             AssertEqual(1, requests, "no model request while suspended");
                             AssertEqual(chat.Revision, RecoverJournalRun(store, chat, office).Revision, "restart recovery leaves a saved wait pending");
+                            if (correlated)
+                            {
+                                peer = store.Load(peer.Id);
+                                var peerInbox = new ConversationInboxService(journal); peerInbox.Resume(peer);
+                                var input = peerInbox.TakeNext(peer);
+                                PersistPeerInput(store, peer, input, "peer-run"); peerInbox.Applied(peer, input.Id);
+                                AcceptJournalPeerCall(store, peer, "reply", "peer-run",
+                                    scenario == "completion" ? AgentCommunicationToolCatalog.Resolve : AgentCommunicationToolCatalog.Send);
+                                journal.SendAgent("reply", peer.Id, "peer-run", "reply", AgentChatAddress.IdFor(chat.Id), chat.Id, "wait-chain", 2,
+                                    "Exact peer reply", replyTo: requestReceipt.Fact.MessageId,
+                                    resolution: scenario == "completion" ? (AgentAssignmentOutcome?)AgentAssignmentOutcome.Completed : null,
+                                    recipientRuntimeKey: chat.WorkspaceId ?? chat.DocumentKey);
+                                chat = store.Load(chat.Id);
+                                AssertEqual(deadline, chat.LastRun.KernelState.Summary.PendingWait.Condition.DeadlineUtc, "delivery cannot replace the saved wait");
+                            }
                             if (scenario == "timeout" && !office)
                             {
                                 var backup = Path.Combine(paths.Root, "wait-backup");
@@ -139,7 +170,11 @@ namespace RNAssistant.Harness
                                     var runtime = ports(session);
                                     var continuation = AgentRunContinuation.RestoreWait(session.LastRun.KernelState, 0,
                                         WorkspaceConversationService.RestoreAcceptedHistory(session, payloads, true));
-                                    ConversationRunCoordinator.ContinueAsync(continuation, runtime, runtime.Tools, runtime, token).GetAwaiter().GetResult();
+                                    using (var input = correlated ? new ConversationRunInputChannel(inbox, session, (incoming, ct) => {
+                                        PersistPeerInput(store, session, incoming, session.LastRun.RunId);
+                                        return Task.FromResult(AgentMessage.User(ConversationInputMessage.ModelText(session.Messages.Single(item => item.Id == incoming.Id))));
+                                    }) : null)
+                                        ConversationRunCoordinator.ContinueAsync(continuation, runtime, runtime.Tools, runtime, token, input: input).GetAwaiter().GetResult();
                                 }
                             };
                             if (scenario == "changed")
@@ -174,7 +209,9 @@ namespace RNAssistant.Harness
                             AssertEqual(pending.Context.Call.Id, terminal.Fact.Result.ToolCallId, "exact original call resolves once");
                             AssertEqual(scenario == "cancel" ? ToolExecutionOutcome.NotDispatched : ToolExecutionOutcome.Ok,
                                 terminal.Fact.Result.ExecutionProgress.Outcome, "cancel and timeout retain distinct outcomes");
-                            AssertEqual(scenario != "cancel", terminal.Fact.Result.ExecutionProgress.WaitTimedOut, "timeout proof is retained");
+                            AssertEqual(scenario != "cancel" && !correlated, terminal.Fact.Result.ExecutionProgress.WaitTimedOut, "timeout proof is retained");
+                            if (correlated) AssertEqual(ConversationInputStatus.Applied,
+                                journal.InputState(journal.AgentReceipt("reply").Fact.MessageId).Status, "reply is durably applied once");
                             AssertEqual(1, finished.LastRun.KernelState.Summary.ToolStepsUsed, "wait charges its budget once");
                             journal.Rebuild();
                             AssertEqual(terminal.Position.Hash, journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash, "rebuild cannot duplicate the terminal");

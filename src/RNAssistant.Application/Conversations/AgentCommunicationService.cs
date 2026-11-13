@@ -210,11 +210,11 @@ namespace RNAssistant.Application.Conversations
             Dictionary<string, AgentChatAddress> expected = null;
             if (requests != null)
             {
-                var facts = inbox.AgentEvents(session);
+                var facts = inbox.AgentRequests(session, requests);
                 expected = new Dictionary<string, AgentChatAddress>(StringComparer.Ordinal);
                 foreach (var id in requests)
                 {
-                    var request = facts.SingleOrDefault(item => item.State == AgentDeliveryState.Prepared && item.MessageId == id);
+                    var request = facts.SingleOrDefault(item => item.MessageId == id);
                     if (request?.Target == null || (completion ? !request.Assignment : !request.ExpectReply && !request.Assignment))
                         throw new AgentCommunicationException("agent_request_not_found", completion
                             ? "Нет собственного поручения с assignment=true и указанным message_id."
@@ -246,7 +246,20 @@ namespace RNAssistant.Application.Conversations
 
         internal AgentDeliveryReceipt Send(ConversationInboxService sourceInbox, ChatSession source, int limit,
             string runId, string operationId, string agentId, string text, Action dispatch,
-            bool expectReply = false, string replyTo = null, bool assignment = false, AgentAssignmentOutcome? resolution = null)
+            bool expectReply = false, string replyTo = null, bool assignment = false, AgentAssignmentOutcome? resolution = null,
+            RNAssistant.Core.Tools.ToolExecutionContext execution = null)
+        {
+            if (sourceInbox.AtomicAgentDelivery)
+                return SendAtomic(sourceInbox, source, limit, operationId, agentId, text, dispatch,
+                    expectReply, replyTo, assignment, resolution, execution);
+            return SendEvents(sourceInbox, source, limit, runId, operationId, agentId, text, dispatch,
+                expectReply, replyTo, assignment, resolution);
+        }
+
+        // Retired with the old event backend at whole-port P7 cutover.
+        private AgentDeliveryReceipt SendEvents(ConversationInboxService sourceInbox, ChatSession source, int limit,
+            string runId, string operationId, string agentId, string text, Action dispatch,
+            bool expectReply, string replyTo, bool assignment, AgentAssignmentOutcome? resolution)
         {
             AgentConversationEndpoint target = null;
             ChatSession recipient = null;

@@ -1,5 +1,8 @@
 # Stabilization progress
 
+Integration: Browser branch includes committed main `8e021769` (Journal Send/Resolve
+and native caption). Parallel uncommitted Journal work remains outside this branch.
+
 ## Local Browser F2b — agent open, 2026-11-13
 
 `16.22.0-dev`: local discovery opens one exact visible Dock tab with scoped receipts;
@@ -51,6 +54,13 @@ Common Browser Save/list/delete and project definition recovery are wired. Three
 focused Harness cases and two Browser fixtures pass; Windows/B02 and UI acceptance
 remain open. Document HTML and raw import continue from this state.
 [Details](../browser/06_PROGRESS.md#f3c-workspace-checkpoints--2026-11-13).
+
+## Native caption — исправление по повторному замечанию, 2026-11-13
+
+Системный заголовок исключён из CreateParams до создания HWND; conditional caption
+path удалён. Shell controls доступны и без WebView2 native drag regions, перенос
+в этом случае идёт через typed BeginMove. Focused browser fixture проходит;
+реальная рамка/resize/Alt+F4 в Windows + Excel остаются открытым evidence.
 
 ## Local Browser F3b — Plugin Save/Apply cutover, 2026-11-13
 
@@ -305,7 +315,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После event feed — peer delivery/correlated waits и остальные Store/resource
+После native Send/Resolve — spawn, peer controls/projections и остальные Store/resource
 consumers, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
@@ -365,8 +375,26 @@ scope/hash guards, backpressure и cancellation используют прежн�
 проходят. Workspace reconnect больше не загружает весь чат и использует выбранный
 event port; это активное улучшение `16.15.2-dev`. Writers ещё не переключены, Office UI
 subscription adoption остаётся открытым. [Отчёт §12](../audits/storage-context-optimization.md#p5--journal-event-feed-and-metadata-reconnect-2026-11-13).
-Остальные mutation/resource owners, correlated wait delivery,
-rewrite/move/delete, usage, peer control/feed и
+Подключены native peer Inbox и correlated reply/completion waits (2026-11-13):
+один acceptance frame сохраняет delivery/membership/input/control и оба chat cursor.
+Existing Inbox и реальные Office/Workspace runtime consumers применяют ответ один
+раз после restart; исходные call/run/deadline сохраняются. Потеря acceptance ack,
+rebuild/restore и запрет подмены тела/provenance проверены. Typed request lookup
+адресен и ограничен chat revision; common wait больше не разбирает legacy Prepared.
+Schema 18 расширяет существующие индексы. 3 новых + 19 regression checks проходят
+на изолированном baseline; промежуточный срез без bump/переключения writers.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
+Подключены application Send/Resolve и живое уведомление Inbox (2026-11-13): адрес
+разрешается через journal index без общего каталога; оба live cursor обновляются
+после точного read-back. Terminal закреплён за accepted call/runtime entry и квитанцией.
+Потеря ack с доступной квитанцией доказывает queued; при недоступном read-back recovery
+оставляет Unknown без повторной отправки. User pause сохраняется. 3 новых и 16
+регрессионных checks проходят изолированно; один прежний batch parser check также
+падает на чистом `a38e5aba` и вынесен в [backlog](BACKLOG.md#send-batch-parserfixture-mismatch--2026-11-13).
+Промежуточный срез без bump/default switch; schema 18 не меняется.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
+Spawn, peer controls, assignment/group projections, остальные mutation/resource owners,
+rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.
 Полный restore также должен сохранить Workspace identity locators и move intents.

@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
                 ReadCatalog = () => store.ListHeaders(false).Where(header => header.Host == source.Host && header.DocumentKey == source.DocumentKey)
                     .Select(header => endpoint(store.Load(header.Id))).ToArray(),
                 Prepare = (parent, title) => store.CreateTransient(parent.Host, parent.DocumentKey, parent.DocumentTitle, title),
-                Commit = child => store.Commit(child, new ConversationCommit()), Endpoint = endpoint
+                Commit = child => store.Commit(child, new ConversationCommit()), Endpoint = address => endpoint(store.Load(address.ChatId))
             };
         }
 

@@ -126,6 +126,8 @@ production Shell/Dockview with synthetic native snapshots: retained chat/edit/if
 Full placement across Compact and both state/resize orders, native visibility,
 deleted identities, initial bootstrap, dirty/failed-draft shutdown guards,
 keyboard/narrow/zoom and Demo geometry.
+It also checks header move commands and visible controls without WebView2 native
+drag regions; this is not evidence for the actual Win32 title bar.
 `RNA_WINDOW_REVIEW=/tmp/window` optionally writes two screenshots and measurements.
 Native frame/DPI/focus/capture and Windows compilation remain separate evidence.
 После уточнения 2026-11-12 браузерный сценарий также проверяет единые оконные
@@ -156,6 +158,27 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 `RNAssistantMockBridge.emit` delivers native fixture envelopes without source rewriting.
 
 ## Storage/context optimization — 2026-11-10
+
+`journal send:` covers native Application Send/Resolve through the actual Office run
+service and Workspace runtime ports: one intake receipt, exact terminal linkage,
+live Inbox notification, preserved user stop, lost acknowledgement with successful
+read-back, unavailable read-back followed by Unknown recovery, restart/rebuild and
+Workspace restore. Known-address Send/Resolve make zero catalog reads. Pair with
+`journal peer:`, native delivery, journal mutation/tool/recovery and existing
+send/spawn/assignment cases. The old `send batch protocol and policy` case fails
+identically on clean a38e5aba; see [backlog](../../docs/stabilization/BACKLOG.md#send-batch-parserfixture-mismatch--2026-11-13).
+No production composition switch or Windows qualification is implied.
+
+`journal peer:` covers three cases through both Office and Workspace: atomic native
+acceptance/Inbox/both chat heads; saved correlated reply; saved assignment completion.
+It covers prefix-scoped request lookup, shared feed frame, lost acknowledgement,
+exact body/provenance, cold pause, Applied without replay, rebuild and Workspace
+restore. Replies reach real Office run service and Workspace runtime ports/shared
+input channel. Publication is injected through native SendAgent after an atomic
+accepted-call checkpoint; application Send/Resolve/live notification are now covered
+above. Spawn and peer controls remain open. Pair with `journal input:`, `journal wait:`,
+`journal feed:`, native atomic delivery, existing correlated reply and assignment
+recovery checks. No production switch or Windows qualification claim.
 
 `journal feed:` covers five checks: active Workspace metadata-only reconnect and
 subscription with unavailable message CAS; actual Office/Workspace runtime notices;

@@ -183,15 +183,19 @@ namespace RNAssistant.Core.Storage
                     var operations = new List<string>();
                     using (var command = Command(db, mode == SessionEventReadMode.RequireCompleteInputJournal
                         ? "SELECT operation FROM control_fact WHERE stream=$stream AND chat=$chat AND sequence<=$through ORDER BY sequence"
-                        : "SELECT operation FROM chat_write WHERE stream=$stream AND chat=$chat ORDER BY sequence"))
+                        : ChatEventQuery + " ORDER BY sequence"))
                     {
                         command.Parameters.AddWithValue("$chat", session.Id);
                         command.Parameters.AddWithValue("$through", session.Revision);
+                        command.Parameters.AddWithValue("$after", 0);
                         using (var reader = command.ExecuteReader()) while (reader.Read()) operations.Add(reader.GetString(0));
                     }
-                    return operations.Select(operation => FindChatWrite(db, operation) ?? throw TextStoreScope()).ToArray();
+                    return operations.Select(operation => {
+                        var write = FindChatWrite(db, operation);
+                        return Tuple.Create(write, write == null ? FindDelivery(db, "operation", operation) : null);
+                    }).ToArray();
                 }, CancellationToken.None);
-                return receipts.Select(ProjectChatEvent).ToArray();
+                return receipts.Select(item => item.Item1 != null ? ProjectChatEvent(item.Item1) : ProjectPeerEvent(item.Item2, session.Id)).ToArray();
             }
         }
 

@@ -90,7 +90,7 @@ namespace RNAssistant.Core.Storage
                 session.ToolCallReferenceSequence = Math.Max(session.ToolCallReferenceSequence, message.ToolCallReference?.Ordinal ?? 0);
                 session.EvidenceReferenceSequence = Math.Max(session.EvidenceReferenceSequence, message.EvidenceReference?.Ordinal ?? 0);
             }
-            session.Revision = receipt.Position.Sequence; session.UpdatedUtc = receipt.Fact.CreatedUtc;
+            session.Revision = receipt.Position.Sequence; session.UpdatedUtc = receipt.UpdatedUtc;
             session.StorageHeadHash = receipt.Position.Hash; session.StorageByteLength = receipt.Position.End;
             session.StorageTailByteOffset = receipt.Position.Start;
         }
@@ -186,7 +186,7 @@ namespace RNAssistant.Core.Storage
                             Host = address.Host, DocumentKey = address.DocumentKey, WorkspaceId = address.WorkspaceId,
                             DocumentAuthorityId = address.DocumentAuthorityId, DocumentTitle = card.DocumentTitle,
                             DocumentPath = card.DocumentPath, Title = card.Title, Model = card.SelectedModel, Mode = card.Policy.Mode,
-                            ReasoningEnabled = card.ReasoningEnabled, CreatedUtc = card.CreatedUtc, UpdatedUtc = receipt.Fact.CreatedUtc,
+                            ReasoningEnabled = card.ReasoningEnabled, CreatedUtc = card.CreatedUtc, UpdatedUtc = receipt.UpdatedUtc,
                             LastActivityUtc = new DateTime(Convert.ToInt64(Scalar(db, "SELECT last_activity_ticks FROM chat_state WHERE stream=$stream AND chat=$chat", card.ChatId)), DateTimeKind.Utc),
                             MessageCount = receipt.Fact.MessageCount, RunId = receipt.Fact.Run?.RunId,
                             RunRuntimeId = receipt.Fact.Run?.RuntimeId, RunStatus = receipt.Fact.Run?.Status,

@@ -85,12 +85,49 @@ namespace RNAssistant.Application.Conversations
         private readonly string _epoch = Guid.NewGuid().ToString("N");
         internal ConversationInboxService(IEventStore events) { _events = events; }
 
+        internal bool AtomicAgentDelivery { get { return _events.AtomicAgentDelivery; } }
+        internal AgentChatAddress FindAgent(ChatSession source, string agentId)
+        { return _events.FindAgent(ConversationMetadata.From(source), agentId); }
+
+        internal RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ConversationInboxService recipientInbox,
+            ChatSession recipient, AgentDeliveryCommand command, Action dispatch)
+        {
+            if (!ReferenceEquals(_events, recipientInbox._events))
+                throw new InvalidOperationException("Atomic peer delivery requires the same event owner.");
+            var from = Get(source); var to = recipientInbox.Get(recipient);
+            var first = string.CompareOrdinal(source.Id, recipient.Id) < 0 ? from : to;
+            var second = ReferenceEquals(first, from) ? to : from;
+            lock (first.Sync) lock (second.Sync)
+            {
+                if (!ReferenceEquals(from.Session, source))
+                    throw new InvalidOperationException("The sender no longer owns this live session.");
+                var accepted = _events.AcceptAgentDelivery(from.Session, to.Session, command, dispatch);
+                var record = accepted;
+                if (!to.Accepted.ContainsKey(record.Change.Input.OperationId))
+                {
+                    // Intake cannot release a live user/recovery pause. Those live
+                    // permissions are intentionally stricter than the durable queue.
+                    Apply(to, new ConversationInputEvent { Input = record.Change.Input, Paused = to.Paused,
+                        PauseReason = to.PauseReason, AgentPause = to.AgentPause }, record.Event);
+                    to.Revision = record.Event.Sequence; to.ViewRevision++;
+                    SignalInputChanged(to);
+                }
+                return accepted;
+            }
+        }
+
         internal IReadOnlyList<AgentCommunicationEvent> AgentEvents(ChatSession session)
         {
             var box = Get(session);
             lock (box.Sync) return _events.Read(ConversationMetadata.From(box.Session), SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
                 .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged)
                 .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).ToArray();
+        }
+
+        internal IReadOnlyList<AgentRequestReference> AgentRequests(ChatSession session, IReadOnlyList<string> messageIds)
+        {
+            var box = Get(session);
+            lock (box.Sync) return _events.ReadAgentRequests(ConversationMetadata.From(box.Session), messageIds);
         }
 
         internal void AppendAgentEvent(ChatSession session, AgentCommunicationEvent change)

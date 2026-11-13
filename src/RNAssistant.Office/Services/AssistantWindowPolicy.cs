@@ -65,7 +65,7 @@ namespace RNAssistant.Office.Services
                 case HostWindowCommand.Shutdown: case HostWindowCommand.SwitchDocument:
                     Visibility = HostWindowVisibility.ShuttingDown; break;
                 // These invalidate pending focus decisions, too. Their effects are host-owned.
-                case HostWindowCommand.ChromeReady: case HostWindowCommand.ResetPlacement: break;
+                case HostWindowCommand.ChromeReady: case HostWindowCommand.ResetPlacement: case HostWindowCommand.BeginMove: break;
             }
             if (Presentation != HostWindowPresentation.Companion) ReturnFromCompanion = Presentation;
             Revision++;

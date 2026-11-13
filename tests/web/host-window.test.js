@@ -51,9 +51,31 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
         if (payload.command === 'SetPinned') current.pinned = payload.value;
         current.revision++; return {accepted: true, state: {...current}};
       };
-      RNAssistantWindow.bootstrap({capabilities: {integratedChrome: true, compactPresentation: true, companion: true, pin: true}, state: {...current}});
+      RNAssistantWindow.bootstrap({capabilities: {integratedChrome: true, nativeDragRegions: true, compactPresentation: true, companion: true, pin: true}, state: {...current}});
     });
     await page.waitForFunction(() => document.documentElement.classList.contains('integrated-window-chrome'));
+    assert.ok(await page.evaluate(() => document.documentElement.classList.contains('native-window-drag')));
+    // Older WebView2 still gets the same controls; only header dragging uses the bridge.
+    await page.evaluate(() => {
+      windowProbe.state.revision++;
+      RNAssistantWindow.bootstrap({capabilities: {integratedChrome: true, nativeDragRegions: false,
+        compactPresentation: true, companion: true, pin: true}, state: {...windowProbe.state}});
+    });
+    assert.ok(await page.locator('#hostWindowClose').isVisible());
+    assert.equal(await page.evaluate(() => document.documentElement.classList.contains('native-window-drag')), false);
+    const header = await page.locator('.workspace-context').boundingBox();
+    await page.mouse.move(header.x + 12, header.y + header.height / 2);
+    await page.mouse.down(); await page.mouse.move(header.x + 30, header.y + header.height / 2);
+    await page.waitForFunction(() => windowProbe.calls.filter(call => call.command === 'BeginMove').length === 1);
+    await page.mouse.move(header.x + 40, header.y + header.height / 2); await page.mouse.up();
+    await page.locator('#hostWindowClose').dispatchEvent('pointerdown', {button: 0, buttons: 1, clientX: 10, clientY: 10});
+    await page.locator('#hostWindowClose').dispatchEvent('pointermove', {buttons: 1, clientX: 30, clientY: 10});
+    assert.equal(await page.evaluate(() => windowProbe.calls.filter(call => call.command === 'BeginMove').length), 1, 'one drag request, buttons never initiate moving');
+    await page.evaluate(() => {
+      windowProbe.state.revision++;
+      RNAssistantWindow.bootstrap({capabilities: {integratedChrome: true, nativeDragRegions: true,
+        compactPresentation: true, companion: true, pin: true}, state: {...windowProbe.state}});
+    });
     await page.frameLocator('#windowProbeFrame').getByRole('textbox').fill('iframe retained');
     await page.waitForTimeout(200); // existing layout persistence debounce
     const before = await page.evaluate(() => ({layout: localStorage.getItem('rnassistant.ui.dock.s1.v1'), panels: document.querySelectorAll('[data-tab-panel-id]').length,
@@ -165,10 +187,17 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await cold.waitForFunction(() => !state.initializePromise && RNAssistantConversationPanel.office('preview-chat'));
     await cold.evaluate(() => {
       state.initializePromise = new Promise(resolve => { window.finishWindowInit = resolve; });
-      RNAssistantWindow.bootstrap({capabilities: {integratedChrome: false, compactPresentation: true, companion: true, pin: true},
-        state: {revision: 1, presentation: 'Compact', visibility: 'Visible'}});
+      const original = send, current = {revision: 1, presentation: 'Compact', visibility: 'Visible', chromeReady: false};
+      window.send = async (type, payload, ...rest) => {
+        if (type !== 'hostWindowCommand') return original(type, payload, ...rest);
+        current.chromeReady = payload.command === 'ChromeReady'; current.revision++;
+        return {accepted: true, state: {...current}};
+      };
+      RNAssistantWindow.bootstrap({capabilities: {integratedChrome: true, nativeDragRegions: false, compactPresentation: true, companion: true, pin: true}, state: {...current}});
     });
     assert.equal(await cold.evaluate(() => document.documentElement.dataset.hostPresentation), 'FullNormal', 'saved Compact waits for existing initial chat selection');
+    await cold.waitForFunction(() => document.documentElement.classList.contains('integrated-window-chrome'));
+    assert.ok(await cold.locator('#hostWindowClose').isVisible(), 'unsupported drag regions do not suppress controls on startup');
     await cold.evaluate(() => { state.initializePromise = null; finishWindowInit(); });
     await cold.waitForFunction(() => document.documentElement.dataset.hostPresentation === 'Compact');
     assert.ok(await cold.evaluate(() => RNAssistantConversationPanel.office('preview-chat').view.canRender()));

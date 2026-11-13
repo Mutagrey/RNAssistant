@@ -43,7 +43,9 @@ namespace RNAssistant.Core.Storage
 
         internal AgentMessageReceipt SendAgent(string operation, string sender, string run, string call, string recipientAlias,
             string root, string chain, int participantLimit, string text, bool expectReply = false, string replyTo = null,
-            bool assignment = false, AgentAssignmentOutcome? resolution = null, CancellationToken token = default(CancellationToken))
+            bool assignment = false, AgentAssignmentOutcome? resolution = null, CancellationToken token = default(CancellationToken),
+            string recipientRuntimeKey = null, Action<SqliteConnection, AgentMessageAccepted> validateDispatch = null,
+            Action dispatch = null)
         {
             if (string.IsNullOrWhiteSpace(text) || text.Length > 128 * 1024) throw new ArgumentException("Bounded nonempty agent text is required.");
             using (RuntimeStorageActivity.Acquire(_paths, token))
@@ -54,7 +56,9 @@ namespace RNAssistant.Core.Storage
                     var target = FindAgent(db, recipientAlias) ?? throw new InvalidOperationException("Agent is unavailable in this scope.");
                     var source = Card(db, sender)?.Item1 ?? throw new InvalidOperationException("Sender is unavailable in this scope.");
                     var fact = new AgentMessageAccepted(sender, target.ChatId, run, call, root, chain, participantLimit,
-                        "m-" + Guid.NewGuid().ToString("N"), body, expectReply, replyTo, assignment, resolution, source.Policy, DateTime.UtcNow);
+                        "m-" + Guid.NewGuid().ToString("N"), body, expectReply, replyTo, assignment, resolution,
+                        source.Address == null ? source.Policy : CurrentRun(db, sender)?.Fact.Policy ?? source.Policy, DateTime.UtcNow,
+                        recipientRuntimeKey: recipientRuntimeKey);
                     var fingerprint = DeliveryFingerprint(fact);
                     var prior = FindDelivery(db, "operation", operation);
                     if (prior != null)
@@ -62,8 +66,11 @@ namespace RNAssistant.Core.Storage
                         if (prior.Fingerprint != fingerprint) throw new InvalidOperationException("Delivery operation was reused with different content.");
                         return prior;
                     }
+                    fact = PreparePeerInput(db, operation, fingerprint, fact, source, target);
                     var record = DeliveryRecord(operation, "agent.accepted", fact, fingerprint);
                     ValidateDeliveryRecord(db, record);
+                    validateDispatch?.Invoke(db, fact);
+                    dispatch?.Invoke();
                     var position = Journal.Append(cursor, operation, fingerprint, record.Kind, record.Data);
                     var projected = ApplyAcceptedDelivery(db, record, position);
                     return new AgentMessageReceipt(operation, fingerprint, fact, position, projected);
@@ -176,7 +183,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private AgentChatAddress CardAddress(ConversationCard card)
-        { return new AgentChatAddress { ChatId = card.ChatId, Title = card.Title, Source = _scope.StartsWith("workspace:", StringComparison.Ordinal) ? "workspace" : "office",
+        { return new AgentChatAddress { ChatId = card.ChatId, Title = card.Title, ScopeTitle = card.DocumentTitle, Source = _scope.StartsWith("workspace:", StringComparison.Ordinal) ? "workspace" : "office",
             WorkspaceId = _scope.StartsWith("workspace:", StringComparison.Ordinal) ? _scope.Substring("workspace:".Length) : null }; }
 
         private ConversationCard FindAgent(SqliteConnection db, string alias)
@@ -219,6 +226,20 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private AgentMessageReceipt DeliveryForCall(SqliteConnection db, string sender, string run, string call)
+        {
+            using (var command = Command(db, "SELECT operation FROM agent_delivery WHERE stream=$stream AND sender=$sender AND run=$run AND call=$call"))
+            {
+                command.Parameters.AddWithValue("$sender", sender); command.Parameters.AddWithValue("$run", run);
+                command.Parameters.AddWithValue("$call", call);
+                var operation = command.ExecuteScalar() as string;
+                var receipt = operation == null ? null : FindDelivery(db, "operation", operation);
+                if (receipt != null && (receipt.Fact.Sender != sender || receipt.Fact.RunId != run || receipt.Fact.CallId != call))
+                    throw new InvalidDataException("Foreign delivery call locator.");
+                return receipt;
+            }
+        }
+
         private JournalRecord LocatedRecord(SqliteCommand command)
         { JournalCursor ignored; return LocatedRecord(command, out ignored); }
 
@@ -249,7 +270,7 @@ namespace RNAssistant.Core.Storage
             if (record.Kind == "agent.accepted" || record.Kind == "agent.spawned")
             {
                 var accepted = DecodeDelivery(record);
-                state = new ConversationInputState(accepted.Recipient, accepted.MessageId, 0, ConversationInputStatus.Pending, null);
+                state = accepted.Input ?? new ConversationInputState(accepted.Recipient, accepted.MessageId, 0, ConversationInputStatus.Pending, null);
             }
             else state = DecodeInput(record);
             if (state.MessageId != message) throw new InvalidDataException("Foreign input state.");
@@ -290,8 +311,9 @@ namespace RNAssistant.Core.Storage
                 if (FindDelivery(db, "message", fact.MessageId) != null) throw new InvalidDataException("Agent message identity is already accepted.");
                 var sender = Card(db, fact.Sender)?.Item1; var recipient = Card(db, fact.Recipient)?.Item1;
                 if (sender == null || recipient == null || Card(db, fact.Root)?.Item1 == null) throw new InvalidOperationException("Delivery scope member is unavailable.");
-                sender.Policy.RequireSame(fact.Policy);
+                (sender.Address == null ? sender.Policy : CurrentRun(db, fact.Sender)?.Fact.Policy ?? sender.Policy).RequireSame(fact.Policy);
                 recipient.Policy.ForPeerInput(new AgentCommunicationContext { Sender = new AgentChatAddress { ChatId = sender.ChatId }, Policy = fact.Policy });
+                ValidatePeerInput(db, record, fact, sender, recipient);
                 var call = FindCall(db, fact.Sender, fact.RunId, fact.CallId);
                 if (call == null || (call.Call.ToolName != AgentCommunicationToolCatalog.Send && call.Call.ToolName != AgentCommunicationToolCatalog.Resolve) ||
                     TerminalOperation(db, fact.Sender, fact.RunId, fact.CallId) != null)
@@ -390,7 +412,9 @@ namespace RNAssistant.Core.Storage
                         AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
                     }
                     SaveMembership(db, tx, fact.Root, fact.ChainId, fact.Recipient);
-                    SaveInputState(db, tx, record, position, new ConversationInputState(fact.Recipient, fact.MessageId, 0, ConversationInputStatus.Pending, null), true);
+                    SaveInputState(db, tx, record, position, fact.Input ??
+                        new ConversationInputState(fact.Recipient, fact.MessageId, 0, ConversationInputStatus.Pending, null), true);
+                    if (fact.Input != null) ApplyPeerInputRows(db, tx, record, position, fact);
         }
 
         private void SaveMembership(SqliteConnection db, SqliteTransaction tx, string root, string chain, string recipient)
@@ -443,6 +467,7 @@ namespace RNAssistant.Core.Storage
         private static ConversationInputState DecodeInput(JournalRecord record)
         {
             if (record.Kind == "chat.committed") return DecodeChatCommit(record).Input ?? throw new InvalidDataException("Missing input transition.");
+            if (record.Kind == "agent.accepted") return DecodeDelivery(record).Input ?? throw new InvalidDataException("Missing peer input.");
             var fact = DeliveryData<ConversationInputState>(record);
             if (record.Kind != "input.changed" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact))) throw new InvalidDataException("Invalid input state.");
             return fact;
@@ -452,6 +477,7 @@ namespace RNAssistant.Core.Storage
         private static string DeliveryFingerprint(AgentMessageAccepted fact)
         {
             var data = JObject.FromObject(fact); data.Remove("MessageId"); data.Remove("CreatedUtc");
+            data.Remove("Input"); data.Remove("Control"); data.Remove("SenderRevision"); data.Remove("RecipientRevision");
             return TextPatternEngine.Sha256(data.ToString(Formatting.None));
         }
     }
@@ -499,10 +525,16 @@ namespace RNAssistant.Core.Storage
         public AgentAssignmentOutcome? Resolution { get; private set; }
         public ConversationRunPolicy Policy { get; private set; }
         public DateTime CreatedUtc { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string RecipientRuntimeKey { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationInputState Input { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationQueueControl Control { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public long? SenderRevision { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public long? RecipientRevision { get; private set; }
         [JsonConstructor]
         internal AgentMessageAccepted(string sender, string recipient, string runId, string callId, string root, string chainId,
             int participantLimit, string messageId, PayloadRef body, bool expectReply, string replyTo, bool assignment,
-            AgentAssignmentOutcome? resolution, ConversationRunPolicy policy, DateTime createdUtc)
+            AgentAssignmentOutcome? resolution, ConversationRunPolicy policy, DateTime createdUtc, string recipientRuntimeKey = null,
+            ConversationInputState input = null, ConversationQueueControl control = null, long? senderRevision = null, long? recipientRevision = null)
         {
             if (new[] { sender, recipient, runId, callId, root, chainId, messageId }.Any(string.IsNullOrWhiteSpace) || sender == recipient ||
                 participantLimit < 1 || body == null || policy == null || createdUtc.Kind != DateTimeKind.Utc || replyTo != null && string.IsNullOrWhiteSpace(replyTo) ||
@@ -511,6 +543,8 @@ namespace RNAssistant.Core.Storage
             Sender = sender; Recipient = recipient; RunId = runId; CallId = callId; Root = root; ChainId = chainId;
             ParticipantLimit = participantLimit; MessageId = messageId; Body = body; ExpectReply = expectReply; ReplyTo = replyTo;
             Assignment = assignment; Resolution = resolution; Policy = policy; CreatedUtc = createdUtc;
+            RecipientRuntimeKey = recipientRuntimeKey; Input = input; Control = control;
+            SenderRevision = senderRevision; RecipientRevision = recipientRevision;
         }
     }
 

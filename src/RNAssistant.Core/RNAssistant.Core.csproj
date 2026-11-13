@@ -209,6 +209,7 @@
     <Compile Include="Persistence\IRunStore.cs" />
     <Compile Include="Persistence\ConversationFinishEvidenceAdmission.cs" />
     <Compile Include="Persistence\IEventStore.cs" />
+    <Compile Include="Persistence\AgentDeliveryCommand.cs" />
     <Compile Include="Persistence\IConversationStore.cs" />
     <Compile Include="Persistence\ConversationRunCommit.cs" />
     <Compile Include="Persistence\AgentRunState.cs" />
@@ -405,6 +406,7 @@
     <Compile Include="Storage\ConversationJournal.Events.cs" />
     <Compile Include="Storage\ConversationJournal.Feed.cs" />
     <Compile Include="Storage\ConversationJournal.Input.cs" />
+    <Compile Include="Storage\ConversationJournal.PeerInput.cs" />
     <Compile Include="Storage\ConversationJournal.Delivery.cs" />
     <Compile Include="Storage\ConversationJournal.Spawn.cs" />
     <Compile Include="Storage\ConversationJournal.Run.cs" />
