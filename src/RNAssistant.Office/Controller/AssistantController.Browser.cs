@@ -42,6 +42,30 @@ namespace RNAssistant.Office
         internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token)
         { return HtmlVersions().Command(BrowserOwner(request?.Target?.OwnerScope, request?.Action == BrowserVersionAction.Delete), request, token); }
 
+        internal HtmlProjectImportResult CopyBrowserProject(BrowserProjectTransferRequest request, CancellationToken token)
+        { return new WorkspaceHtmlVersionService(_paths).CopySavedProject(request?.Target, token); }
+        internal RNAssistant.Office.Contracts.ArtifactTransferDownload ExportBrowserProject(BrowserProjectTransferRequest request, CancellationToken token)
+        {
+            var service = new WorkspaceHtmlVersionService(_paths); var target = request?.Target;
+            HtmlProjectExport source = null;
+            var data = _resourceData.OpenWorkspaceDownload(target?.WorkspaceId,
+                () => service.TransferOwnerAvailable(target?.OwnerScope, target?.WorkspaceId), WorkspaceHtmlVersionService.MaximumExportBytes,
+                cancellation => {
+                    using (source = service.ExportSavedProject(target, cancellation)) {
+                        var content = new RNAssistant.Office.Services.ResourceDownloadContent { VerifiedStream = source.Stream,
+                            VerifiedPayload = source.Payload, ContentType = source.Payload.ContentType };
+                        source.Stream = null; return content;
+                    }
+                }, token);
+            return new RNAssistant.Office.Contracts.ArtifactTransferDownload { FileName = source.FileName,
+                ContentType = source.Payload.ContentType, Kind = "html_project", Data = data };
+        }
+        internal RNAssistant.Office.Contracts.ResourceDataCloseResponse CloseBrowserProjectTransfer(BrowserProjectTransferRequest request)
+        {
+            _resourceData.Close(null, request?.Target?.WorkspaceId, request?.LeaseId);
+            return new RNAssistant.Office.Contracts.ResourceDataCloseResponse { Closed = true };
+        }
+
         internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
         {
             var metadata = BrowserOwner(request.OwnerScope, target.Immutable);
@@ -64,10 +88,10 @@ namespace RNAssistant.Office
             return BrowserSourceReader.Read(target, request, new[] { "index.html" }, path => text);
         }
 
-        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner)
+        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null)
         {
             var metadata = BrowserOwner(owner);
-            var result = new List<BrowserTargetDescriptor>();
+            var result = new List<BrowserTargetDescriptor>(); var savedFamilies = 0;
             // Current metadata roots only: no chat replay, aggregate bodies or automatic history.
             var page = _chatStore.DocumentArtifacts.InspectCurrentMetadata(metadata, 0, 100);
             foreach (var artifact in page.Items)
@@ -79,6 +103,10 @@ namespace RNAssistant.Office
                     target.DisplayLocator = BrowserLocalLocator.ForResource(target.LogicalId);
                     target.Kind = BrowserTargetKind.HtmlWorkspace; target.Immutable = false;
                     target.Capabilities.SaveVersion = true;
+                    if (suggestionsPrefix != null && savedFamilies < 8 && BrowserTargetResolver.SuggestionFamilyMatches(suggestionsPrefix, target.Title, target.DisplayLocator)) {
+                        savedFamilies++;
+                        result.AddRange(HtmlVersions().SavedBrowserTargets(metadata, target, 8));
+                    }
                 }
                 result.Add(target);
             }

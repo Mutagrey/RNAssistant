@@ -1,5 +1,13 @@
 # План модернизации production UI
 
+## F4c Snapshot transfer — In Review, 2026-11-13
+
+Completed after F4b: offline binary Workspace export/copy, explicit Workspace download
+owner, origin metadata and bounded saved completion. Checks cover removal, cancellation,
+no chat creation, narrow common actions and raw-import regression. Review: open a
+saved Workspace version, export it, create a new project, verify the original stays
+unchanged. Local agent open/ack and 07 follow. Native execution stays B02-blocked.
+
 ## F4b Provider cutover — In Review, 2026-11-13
 
 Completed from F4a: common document/raw/editor/plugin routes, exact page actions,

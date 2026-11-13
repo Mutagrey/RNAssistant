@@ -20,6 +20,8 @@ namespace RNAssistant.Core.Models
         public string HtmlEntryPath { get; set; }
         [JsonProperty("htmlProject", NullValueHandling = NullValueHandling.Ignore)]
         public HtmlProjectDefinition HtmlProject { get; set; }
+        [JsonProperty("htmlOrigin", NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.Services.ArtifactTransferOrigin HtmlOrigin { get; set; }
     }
 
     public sealed class HtmlProjectDefinition

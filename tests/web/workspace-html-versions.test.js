@@ -2,18 +2,22 @@
 const assert=require('node:assert/strict');
 const {withPreviewPage}=require('./preview-session');
 (async()=>withPreviewPage(async({page,errors})=>{
+  page.setDefaultTimeout(7000);
   await page.setViewportSize({width:1280,height:900});
   await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
   await page.evaluate(()=>{
     const original=send, scope={kind:'Workspace',scopeId:'ws_fixture'};
     window.htmlProbe={calls:[],definition:null,version:null,page:null};const p=htmlProbe;
-    function target(url){return {kind:'WorkspaceHtmlProject',state:'Ready',workspaceId:scope.scopeId,ownerScope:scope,
-      displayLocator:url,entryPath:'index.html',relativePath:'index.html',title:'HTML project',immutable:false,
-      capabilities:{source:true,versions:true,saveVersion:!!p.definition,saveReason:p.definition?'None':'ProjectDefinitionRequired'}};}
+    function target(url){const version=(/\/versions\/([^/]+)\//.exec(url)||[])[1];return {kind:'WorkspaceHtmlProject',state:'Ready',workspaceId:scope.scopeId,ownerScope:scope,
+      displayLocator:url,entryPath:'index.html',relativePath:'index.html',title:'HTML project',immutable:!!version,savedVersionId:version,
+      capabilities:{source:true,versions:true,exportProject:!!version,createProject:!!version,saveVersion:!version&&!!p.definition,saveReason:p.definition?'None':'ProjectDefinitionRequired'}};}
     function state(t){return {target:t,capabilities:t.capabilities,stateRevision:'catalog',contentRevision:'source',definitionRevision:p.definition&&'defined'};}
     window.send=(type,payload,...rest)=>{
-      if(!['browserCommand','readBrowserSource','getBrowserVersionState','getBrowserVersions','browserVersionCommand','getHtmlProjectDefinition','setHtmlProjectDefinition'].includes(type))return original(type,payload,...rest);
+      if(!['browserCommand','readBrowserSource','getBrowserVersionState','getBrowserVersions','browserVersionCommand','getHtmlProjectDefinition','setHtmlProjectDefinition','exportBrowserProject','copyBrowserProject','closeBrowserProjectTransfer'].includes(type))return original(type,payload,...rest);
       p.calls.push({type,...structuredClone(payload)});
+      if(type==='copyBrowserProject')return Promise.resolve({status:'Rejected',message:'fixture no effect'});
+      if(type==='exportBrowserProject')return Promise.resolve({data:{leaseId:'workspace-download'}});
+      if(type==='closeBrowserProjectTransfer')return Promise.resolve({closed:true});
       if(type==='getHtmlProjectDefinition')return Promise.resolve({definition:p.definition,fingerprint:p.definition&&'defined'});
       if(type==='setHtmlProjectDefinition'){p.definition=payload.definition;return Promise.resolve({definition:p.definition,fingerprint:'defined'});}
       if(type==='getBrowserVersionState')return Promise.resolve(state(target(payload.target.displayLocator)));
@@ -24,6 +28,7 @@ const {withPreviewPage}=require('./preview-session');
       if(payload.action==='Navigate')p.page.url=payload.locator;
       p.page.target=target(p.page.url);p.page.revision++;p.page.documentGeneration++;return Promise.resolve(structuredClone(p.page));
     };
+    RNAssistantArtifactDownload.save=async(t,options)=>{p.exportTarget=structuredClone(t);const transfer=await options.open();await options.close(transfer.data.leaseId);};
     RNAssistantBrowser.open('/projects/ws_fixture/source/index.html',scope,{browserTabId:'html-definition'});
   });
   const root=page.locator('section[aria-label="Browser"]:visible'),save=root.getByRole('button',{name:'Сохранить версию проекта',exact:true});
@@ -42,6 +47,18 @@ const {withPreviewPage}=require('./preview-session');
   assert.equal(commands[0].expectedFingerprint,null);assert.deepEqual(commands[0].definition,{entryPath:'index.html',members:['index.html','assets/site.css']});
   assert.equal(commands[1].expectedDefinitionRevision,'defined');assert.equal(commands[1].action,'Save');
   await page.screenshot({path:'/tmp/rna-workspace-versions-narrow.png'});
+  await root.getByRole('combobox',{name:'Адрес материала'}).fill('/projects/ws_fixture/versions/checkpoint/index.html');
+  await root.getByRole('combobox',{name:'Адрес материала'}).press('Enter');
+  if(!await root.getByRole('button',{name:'Действия страницы',exact:true}).isVisible())await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
+  await root.getByRole('button',{name:'Действия страницы',exact:true}).click();
+  await page.getByRole('menuitem',{name:'Скачать проект в файлы',exact:true}).click();
+  await page.waitForFunction(()=>htmlProbe.calls.some(c=>c.type==='closeBrowserProjectTransfer'));
+  if(!await root.getByRole('button',{name:'Действия страницы',exact:true}).isVisible())await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
+  await root.getByRole('button',{name:'Действия страницы',exact:true}).click();
+  await page.getByRole('menuitem',{name:'Создать проект из снимка',exact:false}).click();
+  await page.waitForFunction(()=>htmlProbe.calls.some(c=>c.type==='copyBrowserProject'));
+  const transfers=await page.evaluate(()=>htmlProbe.calls.filter(c=>c.type==='copyBrowserProject'||c.type==='exportBrowserProject'||c.type==='closeBrowserProjectTransfer'));
+  assert.ok(transfers.every(c=>c.target.savedVersionId==='checkpoint'&&c.target.ownerScope.scopeId==='ws_fixture'&&!c.target.chatId),'exact saved Workspace without fake chat');
   await page.evaluate(()=>RNAssistantDockWorkspace.close('browser:html-definition'));
-  assert.deepEqual(errors,[]);console.log('PASS Workspace definition recovery, common checkpoint Save and narrow dialog');
+  assert.deepEqual(errors,[]);console.log('PASS Workspace definition recovery, common checkpoint Save, exact snapshot transfer actions and narrow dialog');
 }))().catch(error=>{console.error(error);process.exitCode=1;});

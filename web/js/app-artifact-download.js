@@ -12,7 +12,7 @@
         writable = await handle.createWritable();
       }
       status("Подготовка оригинала…");
-      var operation = options.send("exportArtifact", { chatId: target.chatId, documentId: target.documentId,
+      var operation = options.open ? options.open() : options.send("exportArtifact", { chatId: target.chatId, documentId: target.documentId,
         resourceUri: target.resourceUri, preview: false });
       transfer = await operation;
       if (!current()) return;
@@ -31,7 +31,10 @@
     } catch (error) { if (current()) status(error.name === "AbortError" ? "Сохранение отменено." : error.detail || error.message); }
     finally {
       if (writable) await writable.abort().catch(function () {});
-      if (transfer && transfer.data) options.send("closeArtifactTransfer", { chatId: target.chatId, leaseId: transfer.data.leaseId }).catch(function () {});
+      if (transfer && transfer.data) {
+        var closing = options.close ? options.close(transfer.data.leaseId) : options.send("closeArtifactTransfer", { chatId: target.chatId, leaseId: transfer.data.leaseId });
+        closing.catch(function () {});
+      }
     }
   }
   window.RNAssistantArtifactDownload = { save: save };

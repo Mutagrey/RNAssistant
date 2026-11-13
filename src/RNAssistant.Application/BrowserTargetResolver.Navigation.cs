@@ -41,6 +41,13 @@ namespace RNAssistant.Application
                     DisabledReason = item.State == BrowserTargetState.Removed ? BrowserRefusalCode.Removed : item.Reason }).ToArray();
             return new BrowserSuggestionPage { Items = items, RequestGeneration = request.RequestGeneration };
         }
+        public static bool SuggestionFamilyMatches(string prefix, string title, string family)
+        {
+            return prefix != null && (prefix.Length == 0 || family.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                prefix.StartsWith(family + "/", StringComparison.OrdinalIgnoreCase) ||
+                (title ?? "").IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                prefix.Length > 1 && (prefix[0] == 'v' || prefix[0] == 'V') && char.IsDigit(prefix[1]));
+        }
         private static bool ValidOwner(BrowserOwnerScope owner)
         { return owner != null && Enum.IsDefined(typeof(BrowserOwnerKind), owner.Kind) && !string.IsNullOrWhiteSpace(owner.ScopeId) &&
             owner.ScopeId.Length <= 256 && (owner.ChatId ?? "").Length <= 256 && (owner.Kind != BrowserOwnerKind.User || string.IsNullOrEmpty(owner.ChatId)); }

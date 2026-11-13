@@ -39,19 +39,19 @@ namespace RNAssistant.Core.Storage
         }
 
         // Import writes into a new, hidden workspace. ConnectProject publishes it after verification.
-        public WorkspaceDescriptor CreateHiddenHtmlProject(string rootPath, string name, string entryPath, string[] members = null)
+        public WorkspaceDescriptor CreateHiddenHtmlProject(string rootPath, string name, string entryPath, string[] members = null, RNAssistant.Core.Services.ArtifactTransferOrigin origin = null)
         {
             if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || !ArtifactEntryPath(entryPath))
                 throw new InvalidDataException("HTML project configuration is invalid.");
             var root = Path.GetFullPath(rootPath);
             if (Directory.Exists(root) || File.Exists(root)) throw new IOException("Project folder already exists.");
             var definition = members == null ? null : CanonicalDefinition(new HtmlProjectDefinition { EntryPath = entryPath, Members = members });
-            return OpenCore(root, true, true, null, false, name, entryPath, true, definition);
+            return OpenCore(root, true, true, null, false, name, entryPath, true, definition, origin);
         }
 
         private WorkspaceDescriptor OpenCore(string rootPath, bool createIfMissing, bool permitManifestWrite,
             string expectedWorkspaceId, bool showInProjects, string newName = null, string htmlEntryPath = null,
-            bool initiallyHidden = false, HtmlProjectDefinition htmlProject = null)
+            bool initiallyHidden = false, HtmlProjectDefinition htmlProject = null, RNAssistant.Core.Services.ArtifactTransferOrigin htmlOrigin = null)
         {
             if (string.IsNullOrWhiteSpace(rootPath)) throw new ArgumentException("A workspace path is required.", nameof(rootPath));
             var root = Path.GetFullPath(rootPath);
@@ -100,7 +100,7 @@ namespace RNAssistant.Core.Storage
                 {
                     StorageFileSystem.EnsureRegularDirectory(control);
                     manifest = new WorkspaceManifest { SchemaVersion = 1, WorkspaceId = id, Name = name, Root = ".",
-                        HtmlEntryPath = htmlProject == null ? htmlEntryPath : null, HtmlProject = htmlProject };
+                        HtmlEntryPath = htmlProject == null ? htmlEntryPath : null, HtmlProject = htmlProject, HtmlOrigin = htmlOrigin };
                     using (var stream = new FileStream(manifestPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     using (var writer = new StreamWriter(stream, Utf8)) writer.Write(JsonConvert.SerializeObject(manifest, Formatting.Indented));
                 }
@@ -126,6 +126,20 @@ namespace RNAssistant.Core.Storage
         public WorkspaceConnection[] ListConnected(IConversationStore chats)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
+            var connections = ListConnectedMetadata();
+            foreach (var item in connections)
+            {
+                item.Available = Directory.Exists(item.RootPath) && !StorageFileSystem.IsReparsePoint(item.RootPath);
+                item.Chats = chats.ListHeaders("Workspace", item.WorkspaceId, item.Name)
+                    .Where(chat => chat.WorkspaceId == item.WorkspaceId).ToArray();
+            }
+            return connections.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(item => item.WorkspaceId, StringComparer.Ordinal).ToArray();
+        }
+
+        // Existing registry projection for navigation; never loads conversation headers/bodies.
+        public WorkspaceConnection[] ListConnectedMetadata()
+        {
             WorkspaceConnection[] connections;
             using (StorageFileSystem.AcquireWriteLock(Path.Combine(_paths.WorkspaceDirectory, "catalog.lck")))
             {
@@ -144,12 +158,6 @@ namespace RNAssistant.Core.Storage
                         WorkspaceId = id, Name = association.Name, RootPath = association.RootPath
                     };
                 }).Where(item => item != null).ToArray();
-            }
-            foreach (var item in connections)
-            {
-                item.Available = Directory.Exists(item.RootPath) && !StorageFileSystem.IsReparsePoint(item.RootPath);
-                item.Chats = chats.ListHeaders("Workspace", item.WorkspaceId, item.Name)
-                    .Where(chat => chat.WorkspaceId == item.WorkspaceId).ToArray();
             }
             return connections.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(item => item.WorkspaceId, StringComparer.Ordinal).ToArray();

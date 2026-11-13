@@ -22,6 +22,8 @@ namespace RNAssistant.Core.Storage
         public SavedVersionPage ListVersions(string id, string cursor, int limit = 12)
         { using (_journal.AcquireScope(Scope, true)) { MigrateVersions(id); return VersionCatalog(id).List(cursor, limit); } }
 
+        public SavedVersionPage SuggestVersions(string id, int limit)
+        { using (_journal.AcquireScope(Scope, true)) { return VersionCatalog(id).Peek(limit); } }
         public SavedVersionRecord SavedVersion(string id, string versionId, bool allowRemoved = false)
         { using (_journal.AcquireScope(Scope, true)) { MigrateVersions(id); return VersionCatalog(id).Get(versionId, allowRemoved); } }
 

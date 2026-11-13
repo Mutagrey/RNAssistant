@@ -36,6 +36,8 @@ namespace RNAssistant.Core.Storage
         { var catalog = WorkspaceHtmlCatalog(workspaceId); return catalog.State() ?? catalog.Initialize(null); }
         public SavedVersionPage WorkspaceHtmlVersions(string workspaceId, string cursor, int limit = 12)
         { WorkspaceHtmlVersionState(workspaceId); return WorkspaceHtmlCatalog(workspaceId).List(cursor, limit); }
+        public SavedVersionPage SuggestWorkspaceHtmlVersions(string workspaceId, int limit)
+        { return WorkspaceHtmlCatalog(workspaceId).Peek(limit); }
         public SavedVersionRecord WorkspaceHtmlVersion(string workspaceId, string versionId, bool allowRemoved = false)
         { WorkspaceHtmlVersionState(workspaceId); return WorkspaceHtmlCatalog(workspaceId).Get(versionId, allowRemoved); }
         public SavedVersionOperation WorkspaceHtmlOperation(string workspaceId, string operationId, string intent)
@@ -116,6 +118,14 @@ namespace RNAssistant.Core.Storage
             if (member.ByteLength > maximumBytes) throw new InvalidDataException("The saved member exceeds this read's byte limit.");
             return _payloads.ReadBytes(WorkspaceHtmlPayload(member).ToBlobReference()) ?? throw new InvalidDataException("The exact saved member is unavailable.");
         }
+        public System.IO.Stream OpenWorkspaceHtmlMember(string workspaceId, string versionId, string path,
+            System.Threading.CancellationToken token = default(System.Threading.CancellationToken))
+        {
+            var snapshot = ReadWorkspaceHtml(workspaceId, versionId);
+            var member = snapshot.Members.SingleOrDefault(m => m.Path == path) ?? throw new InvalidDataException("The file is not a saved project member.");
+            return _payloads.OpenVerifiedRead(WorkspaceHtmlPayload(member).ToBlobReference(), WorkspaceFileService.MaximumCaptureSetBytes, token);
+        }
+
         private PayloadRef WorkspaceHtmlPayload(HtmlProjectSnapshotMember member)
         {
             var address = ResourceUri.Parse(member.ExactRef.Uri);

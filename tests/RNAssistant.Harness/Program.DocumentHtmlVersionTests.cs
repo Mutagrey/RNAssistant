@@ -62,6 +62,7 @@ namespace RNAssistant.Harness
                 var removed = service.Resolve(metadata, new BrowserResolveRequest { OwnerScope = binding, Locator = BrowserLocalLocator.ForResource(logical, older.VersionId) });
                 AssertEqual(BrowserTargetState.Removed, removed.Target.State, "saved locator never substitutes the head");
                 var afterTarget = service.Resolve(metadata, new BrowserResolveRequest { OwnerScope = binding, Locator = BrowserLocalLocator.ForResource(logical, saved.VersionId) }).Target;
+                AssertEqual(3, service.SavedBrowserTargets(metadata, afterTarget, 8).Count, "saved completion excludes removed entries without aggregate reads");
                 var comparison = new BrowserSourceComparisonRequest { Target = afterTarget, BeforeId = page.Items.First().VersionId, AfterId = saved.VersionId, Path = "index.html" };
                 var compared = service.Compare(metadata, comparison);
                 AssertEqual("<h1>3</h1>", compared.BeforeText, "checkpoint comparison resolves the selected entry");

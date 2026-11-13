@@ -75,24 +75,59 @@ namespace RNAssistant.Application
             catch (Exception error) { return new HtmlProjectImportResult {
                 Status = HtmlProjectImportStatus.Rejected, Backing = HtmlProjectBacking.Managed, Message = error.Message,
                 Reason = (error as HtmlProjectImportException)?.Reason ?? BrowserRefusalCode.InvalidContent }; }
+            return ImportFiles(project.Title, project.EntryPath, project.Origin, prepared, token);
+        }
+
+        public HtmlProjectImportResult ImportSnapshot(string title, HtmlProjectSnapshotV1 snapshot, ArtifactTransferOrigin origin,
+            Func<string, Stream> openMember, CancellationToken token)
+        {
+            try
+            {
+                if (snapshot?.Members == null || snapshot.Members.Count < 1 || snapshot.Members.Count > WorkspaceFileService.MaximumCaptureSetMembers ||
+                    snapshot.Members.Sum(m => m.ByteLength) > WorkspaceFileService.MaximumCaptureSetBytes || openMember == null)
+                    throw new InvalidDataException("Состав снимка превышает границы переноса.");
+                var files = snapshot.Members.Select(m => new PreparedFile { Path = m.Path, Sha256 = m.Sha256, Length = m.ByteLength,
+                    Open = () => openMember(m.Path) }).ToList();
+                ValidatePaths(files.Select(f => f.Path)); token.ThrowIfCancellationRequested();
+                return ImportFiles(title, snapshot.EntryPath, origin, files, token);
+            }
+            catch (Exception error) { return new HtmlProjectImportResult { Status = HtmlProjectImportStatus.Rejected,
+                Backing = HtmlProjectBacking.Managed, Reason = BrowserRefusalCode.InvalidContent, Message = error.Message }; }
+        }
+
+        private HtmlProjectImportResult ImportFiles(string title, string entryPath, ArtifactTransferOrigin origin,
+            List<PreparedFile> prepared, CancellationToken token)
+        {
             var root = Path.Combine(_paths.Root, "html-projects", Guid.NewGuid().ToString("N"));
             var result = new HtmlProjectImportResult { Status = HtmlProjectImportStatus.Unknown,
-                Backing = HtmlProjectBacking.Managed, RootPath = root, Name = project.Title, EntryPath = project.EntryPath };
+                Backing = HtmlProjectBacking.Managed, RootPath = root, Name = title, EntryPath = entryPath };
             try
             {
                 // The workspace stays hidden during writes, including after interruption.
                 StorageFileSystem.EnsureRegularDirectory(Path.GetDirectoryName(root));
-                var workspace = _workspaces.CreateHiddenHtmlProject(root, result.Name, result.EntryPath, prepared.Select(file => file.Path).ToArray());
+                var workspace = _workspaces.CreateHiddenHtmlProject(root, result.Name, result.EntryPath, prepared.Select(file => file.Path).ToArray(), origin);
                 result.WorkspaceId = workspace.WorkspaceId;
                 foreach (var file in prepared)
                 {
                     token.ThrowIfCancellationRequested();
-                    _files.CreateText(workspace, file.Path, file.Content);
+                    if (file.Open == null) _files.CreateText(workspace, file.Path, file.Content);
+                    else
+                    {
+                        var temporary = Path.Combine(Path.GetTempPath(), "rna-html-copy-" + Guid.NewGuid().ToString("N"));
+                        try
+                        {
+                            using (var source = file.Open()) using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                                CopyExact(source, output, file.Length, token);
+                            var observed = _files.CommitStagedFile(workspace, file.Path, temporary, null, WorkspaceFileService.MaximumCaptureSetBytes, token: token);
+                            if (observed.ContentSha256 != file.Sha256 || observed.ByteLength != file.Length) throw new IOException("Копия не совпадает с исходным снимком.");
+                        }
+                        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+                    }
                 }
                 foreach (var file in prepared)
                 {
                     token.ThrowIfCancellationRequested();
-                    var observed = _files.CaptureFile(workspace, file.Path, MaximumSourceBytes, token);
+                    var observed = _files.CaptureFile(workspace, file.Path, WorkspaceFileService.MaximumCaptureSetBytes, token);
                     if (observed.ContentSha256 != file.Sha256)
                         throw new IOException("Содержимое записанного файла изменилось: " + file.Path);
                 }
@@ -113,7 +148,37 @@ namespace RNAssistant.Application
         }
 
         private sealed class PreparedFile
-        { internal string Path, Content, Sha256; }
+        { internal string Path, Content, Sha256; internal long Length; internal Func<Stream> Open; }
+
+        internal static void CopyExact(Stream input, Stream output, long length, CancellationToken token)
+        {
+            var buffer = new byte[81920]; long total = 0; int count;
+            while ((count = input.Read(buffer, 0, buffer.Length)) != 0) {
+                token.ThrowIfCancellationRequested(); total += count;
+                if (total > length) throw new InvalidDataException("Размер исходника изменился.");
+                output.Write(buffer, 0, count);
+            }
+            if (total != length) throw new InvalidDataException("Исходник прочитан не полностью.");
+        }
+
+        private static void ValidatePaths(IEnumerable<string> members)
+        {
+            var files = members.ToArray(); var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var fileNames = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
+            if (fileNames.Count != files.Length) throw new InvalidDataException("Повторяющиеся пути проекта.");
+            foreach (var path in files) {
+                WorkspaceFileService.ValidateWritePath(path);
+                if (!PluginPackageFiles.ValidPath(path) || path.IndexOfAny(new[] { '<', '>', '"', '|', '*' }) >= 0 || !path.IsNormalized(NormalizationForm.FormC))
+                    throw new InvalidDataException("Непереносимый путь файла: " + path);
+                var prefix = ""; var parts = path.Split('/');
+                for (var index = 0; index < parts.Length; index++) {
+                    prefix = prefix.Length == 0 ? parts[index] : prefix + "/" + parts[index];
+                    if (paths.TryGetValue(prefix, out var existing) && existing != prefix || index < parts.Length - 1 && fileNames.Contains(prefix))
+                        throw new InvalidDataException("Файлы или каталоги конфликтуют: " + path);
+                    paths[prefix] = prefix;
+                }
+            }
+        }
 
         private static List<PreparedFile> Prepare(ArtifactTransferPackage project)
         {
@@ -125,24 +190,10 @@ namespace RNAssistant.Application
             if (!project.EntryPath.EndsWith(".html", StringComparison.OrdinalIgnoreCase) &&
                 !project.EntryPath.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Файл запуска должен иметь расширение HTML.");
-            var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var fileNames = new HashSet<string>(project.Files.Select(file => file.Path), StringComparer.OrdinalIgnoreCase);
+            ValidatePaths(project.Files.Select(file => file.Path));
             var prepared = new List<PreparedFile>(); long total = 0;
             foreach (var file in project.Files)
             {
-                WorkspaceFileService.ValidateWritePath(file.Path);
-                if (!PluginPackageFiles.ValidPath(file.Path) || file.Path.IndexOfAny(new[] { '<', '>', '"', '|', '*' }) >= 0 ||
-                    !file.Path.IsNormalized(NormalizationForm.FormC))
-                    throw new InvalidDataException("Непереносимый путь файла: " + file.Path);
-                var prefix = ""; var parts = file.Path.Split('/');
-                for (var index = 0; index < parts.Length; index++)
-                {
-                    prefix = prefix.Length == 0 ? parts[index] : prefix + "/" + parts[index];
-                    if (paths.TryGetValue(prefix, out var existing) && existing != prefix ||
-                        index < parts.Length - 1 && fileNames.Contains(prefix))
-                        throw new InvalidDataException("Файлы или каталоги конфликтуют: " + file.Path);
-                    paths[prefix] = prefix;
-                }
                 total += Utf8.GetByteCount(file.Content);
                 if (total > MaximumSourceBytes) throw new InvalidDataException("Проект превышает лимит переноса 16 МиБ.");
                 if (HostReference.IsMatch(file.Content) || file.Kind != "css" && VendorReferences.Value.Any(pattern => pattern.IsMatch(file.Content)))

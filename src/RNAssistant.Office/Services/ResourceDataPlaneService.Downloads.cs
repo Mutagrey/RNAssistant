@@ -38,6 +38,20 @@ namespace RNAssistant.Office.Services
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(workspaceId) || capture == null ||
                 _ownerIsActive != null && !_ownerIsActive(session.Id, workspaceId))
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit live owner is required for a download.");
+            return OpenDownloadCore(session.Id, workspaceId, null, maximumBytes, capture, token);
+        }
+
+        internal ResourceDownloadOpenResponse OpenWorkspaceDownload(string workspaceId, Func<bool> ownerIsActive, long maximumBytes,
+            Func<CancellationToken, ResourceDownloadContent> capture, CancellationToken token)
+        {
+            if (string.IsNullOrWhiteSpace(workspaceId) || ownerIsActive == null || !ownerIsActive() || capture == null)
+                throw Error("RESOURCE_ACCESS_DENIED", "An explicit Workspace owner is required for a download.");
+            return OpenDownloadCore(null, workspaceId, ownerIsActive, maximumBytes, capture, token);
+        }
+
+        private ResourceDownloadOpenResponse OpenDownloadCore(string chatId, string workspaceId, Func<bool> workspaceIsActive,
+            long maximumBytes, Func<CancellationToken, ResourceDownloadContent> capture, CancellationToken token)
+        {
             if (maximumBytes < 1)
                 throw Error("RESOURCE_BATCH_TOO_LARGE", "The download reservation exceeds the transfer budget.");
             Download access;
@@ -47,7 +61,7 @@ namespace RNAssistant.Office.Services
                 if (LeaseCount >= 64 || _downloads.Count >= 2) throw Error("RESOURCE_LEASE_LIMIT", "Close existing downloads before creating another.");
                 if (OpeningCount >= 4 || TransferBytes + MaximumDownloadChunkBytes > MaximumInFlightTransferBytes)
                     throw Error("RESOURCE_BACKPRESSURE", "The shared capture or transfer budget is occupied.");
-                access = new Download { Id = NewLeaseId(), ChatId = session.Id, WorkspaceId = workspaceId,
+                access = new Download { Id = NewLeaseId(), ChatId = chatId, WorkspaceId = workspaceId, WorkspaceIsActive = workspaceIsActive,
                     ReservedBytes = MaximumDownloadChunkBytes, Capturing = true, Busy = true, ExpiresUtc = _utcNow().AddMinutes(10) };
                 _downloads.Add(access.Id, access);
             }
@@ -145,7 +159,8 @@ namespace RNAssistant.Office.Services
         private void RequireDownloadActive(Download access, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            if (access.Cancelled || access.ExpiresUtc <= _utcNow() || _ownerIsActive != null && !_ownerIsActive(access.ChatId, access.WorkspaceId))
+            if (access.Cancelled || access.ExpiresUtc <= _utcNow() ||
+                (access.WorkspaceIsActive != null ? !access.WorkspaceIsActive() : _ownerIsActive != null && !_ownerIsActive(access.ChatId, access.WorkspaceId)))
                 throw Error("RESOURCE_LEASE_EXPIRED", "The download lease or its owner has closed.");
         }
 
@@ -168,6 +183,7 @@ namespace RNAssistant.Office.Services
         private sealed class Download
         {
             internal string Id, ChatId, WorkspaceId;
+            internal Func<bool> WorkspaceIsActive;
             internal DateTime ExpiresUtc;
             internal bool Capturing, Busy;
             internal byte[] Bytes;

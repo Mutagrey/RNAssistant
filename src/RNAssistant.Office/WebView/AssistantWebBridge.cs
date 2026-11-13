@@ -875,6 +875,15 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.GetArtifactLibraryHistory(libraryHistory), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.ExportBrowserProject:
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ExportBrowserProject(Payload<BrowserProjectTransferRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.CopyBrowserProject:
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.CopyBrowserProject(Payload<BrowserProjectTransferRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.CloseBrowserProjectTransfer:
+                        responsePayload = _controller.CloseBrowserProjectTransfer(Payload<BrowserProjectTransferRequest>(payload));
+                        break;
                     case BridgeOperationId.ExportArtifact:
                         responsePayload = _controller.ExportArtifact(Payload<ArtifactTransferRequest>(payload), cancellationToken);
                         break;

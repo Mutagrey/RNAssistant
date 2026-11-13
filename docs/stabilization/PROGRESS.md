@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Local Browser F4c — snapshot transfer, 2026-11-13
+
+`16.21.0-dev`: offline saved Workspace export/copy, binary streaming and bounded saved
+completion are connected to existing owners. Manual transfer has no synthetic chat;
+copy preserves provenance and read-back. Focused lifecycle/download/import/UI checks
+pass. Local agent tools and 07 remain; B02/Windows/UI acceptance stay open.
+[Details](../browser/06_PROGRESS.md#f4c-snapshot-transfer-and-completion--2026-11-13).
+
 ## Local Browser F4b — provider cutover, 2026-11-13
 
 `16.20.0-dev`: common Browser replaces document/raw/plugin presentation routes and

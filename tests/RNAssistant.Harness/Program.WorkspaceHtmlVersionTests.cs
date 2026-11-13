@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.IO.Compression;
+using Newtonsoft.Json;
 using System.Linq;
 using System.Threading;
 using RNAssistant.Application;
@@ -17,6 +19,13 @@ namespace RNAssistant.Harness
             WithPluginPaths(paths => {
                 var imported = new HtmlProjectImportService(paths).Import(HtmlProjectSourceFixture(), CancellationToken.None);
                 AssertEqual(HtmlProjectImportStatus.Created, imported.Status, imported.Message);
+                var workspaces = new WorkspaceStore(paths); var workspace = workspaces.OpenConnected(imported.WorkspaceId);
+                var definition = workspaces.GetHtmlProjectDefinition(workspace);
+                var binary = new byte[] { 0xff, 0, 1, 2, 0x80 };
+                Directory.CreateDirectory(Path.Combine(imported.RootPath, "assets"));
+                File.WriteAllBytes(Path.Combine(imported.RootPath, "assets/image.bin"), binary);
+                workspaces.SetHtmlProjectDefinition(workspace, definition.Fingerprint, new HtmlProjectDefinition {
+                    EntryPath = definition.Definition.EntryPath, Members = definition.Definition.Members.Concat(new[] { "assets/image.bin" }).ToArray() });
                 var service = new WorkspaceHtmlVersionService(paths);
                 var user = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" };
                 var source = service.Resolve(new BrowserResolveRequest { OwnerScope = user,
@@ -45,16 +54,41 @@ namespace RNAssistant.Harness
                 var exact = restart.Resolve(new BrowserResolveRequest { OwnerScope = user, Locator = savedLocator }).Target;
                 AssertEqual(original, restart.Source(new BrowserSourceRequest { OwnerScope = user, Locator = savedLocator,
                     Count = 32000, RequestGeneration = 1 }, exact).Text, "saved source comes only from CAS without live root");
+                var suggestions = restart.SavedBrowserTargets(exact.OwnerScope, exact.Title, 8);
+                AssertTrue(suggestions.Any(s => s.SavedVersionId == first.Version.VersionId), "saved metadata completion works with an offline root");
                 AssertEqual(2, restart.Versions(new BrowserVersionRequest { Target = exact }).Items.Count, "metadata history survives offline root");
                 var comparison = new BrowserSourceComparisonRequest { Target = exact, BeforeId = second.Version.VersionId, AfterId = first.Version.VersionId, Path = imported.EntryPath };
                 var compared = restart.Compare(comparison);
                 AssertEqual("<h1>different bytes</h1>", compared.BeforeText, "comparison reads the saved member without live files");
                 AssertEqual(original, compared.AfterText, "comparison keeps the exact other snapshot");
+                using (var export = restart.ExportSavedProject(exact, CancellationToken.None))
+                using (var zip = new ZipArchive(export.Stream, ZipArchiveMode.Read, true)) {
+                    using (var file = zip.GetEntry("assets/image.bin").Open()) using (var bytes = new MemoryStream()) {
+                        file.CopyTo(bytes); AssertTrue(binary.SequenceEqual(bytes.ToArray()), "export streams exact binary CAS member offline");
+                    }
+                    using (var file = new StreamReader(zip.GetEntry(imported.EntryPath).Open())) AssertEqual(original, file.ReadToEnd(), "export never borrows current source");
+                    AssertEqual(definition.Definition.Members.Length + 1, zip.Entries.Count, "only declared members exported");
+                }
+                var copied = restart.CopySavedProject(exact, CancellationToken.None);
+                AssertEqual(HtmlProjectImportStatus.Created, copied.Status, copied.Message);
+                AssertTrue(copied.WorkspaceId != imported.WorkspaceId, "copy creates an independent project");
+                AssertTrue(binary.SequenceEqual(File.ReadAllBytes(Path.Combine(copied.RootPath, "assets/image.bin"))), "binary bytes preserved by existing file mutation owner");
+                AssertEqual(original, File.ReadAllText(Path.Combine(copied.RootPath, copied.EntryPath)), "copied exact old source");
+                var config = JsonConvert.DeserializeObject<WorkspaceManifest>(File.ReadAllText(Path.Combine(copied.RootPath, ".rnassistant", "workspace.json")));
+                AssertTrue(config.HtmlOrigin.ResourceUri.Contains(imported.WorkspaceId), "source provenance retained in project config");
+                AssertEqual(0, new ChatStore(paths).ListHeaders().Count, "copy/export never invent a chat");
+                using (var cancellation = new CancellationTokenSource()) {
+                    cancellation.Cancel(); RuntimeThrows<OperationCanceledException>(() => restart.ExportSavedProject(exact, cancellation.Token));
+                    AssertEqual(HtmlProjectImportStatus.Rejected, restart.CopySavedProject(exact, cancellation.Token).Status, "cancelled copy does not publish");
+                }
                 var removed = restart.Command(new BrowserVersionCommand { Target = exact, Action = BrowserVersionAction.Delete,
                     VersionId = first.Version.VersionId, ExpectedStateRevision = second.State.StateRevision, Confirmed = true, OperationId = "delete-first" });
                 AssertEqual(BrowserVersionOutcome.Removed, removed.Outcome, removed.Message);
                 AssertEqual(BrowserTargetState.Removed, restart.Resolve(new BrowserResolveRequest { OwnerScope = user, Locator = savedLocator }).Target.State, "no latest fallback");
                 SavedFailure(() => restart.Compare(comparison), "version_removed");
+                AssertTrue(!restart.SavedBrowserTargets(exact.OwnerScope, exact.Title, 8).Any(s => s.SavedVersionId == first.Version.VersionId), "removed entry omitted from completion");
+                RuntimeThrows<InvalidOperationException>(() => restart.ExportSavedProject(exact, CancellationToken.None));
+                RuntimeThrows<InvalidOperationException>(() => restart.CopySavedProject(exact, CancellationToken.None));
                 Directory.Move(imported.RootPath + "-offline", imported.RootPath);
                 AssertTrue(restart.Command(firstCommand).Version.Removed, "original receipt reports subsequent tombstone");
                 File.WriteAllText(entry, original);

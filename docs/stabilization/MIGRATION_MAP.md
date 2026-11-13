@@ -1,5 +1,13 @@
 # Current-to-target migration map
 
+## F4c Transfer adapters — 2026-11-13
+
+The remaining Workspace Browser copy/export adapter is connected. It delegates to
+DocumentArtifactStore CAS members, HtmlProjectImportService and ResourceDataPlane;
+there is no extra content store or fake ChatSession. The same download component
+accepts provider open/close callbacks. Existing workspace catalog exposes metadata
+without loading conversation lists. Saved suggestions use read-only catalog pages.
+
 ## F4b Provider cutover — 2026-11-13
 
 HtmlArtifactView/BrowserObjectView and the editor's Browser preview mount are removed.

@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.21.0-dev
+
+- Saved Workspace HTML versions can be exported or copied to a new project, including
+  binary assets and an unavailable original folder. Transfers preserve exact bytes,
+  source provenance and existing download limits; the original stays unchanged.
+- Browser completion includes bounded saved versions and uses registry metadata
+  without loading chats or capturing working files.
+
 ### 16.20.0-dev
 
 - HTML materials, raw HTML, source-editor Preview and plugin rail share one Browser.

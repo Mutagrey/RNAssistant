@@ -90,6 +90,13 @@ namespace RNAssistant.Application
                 return new BrowserVersionPage { StateRevision = page.StateRevision, Cursor = page.Cursor, Items = page.Items.Select(item => Entry(item, current)).ToArray() };
             }
         }
+        public System.Collections.Generic.IReadOnlyList<BrowserTargetDescriptor> SavedBrowserTargets(ConversationMetadata owner, BrowserTargetDescriptor target, int limit)
+        {
+            RequireOwner(owner, target.OwnerScope);
+            using (Lease(owner)) return _artifacts.SuggestHtmlVersions(owner, target.LogicalId, limit).Items.Select(entry =>
+                new BrowserTargetDescriptor { Kind = BrowserTargetKind.HtmlArtifact, State = BrowserTargetState.Ready, OwnerScope = target.OwnerScope,
+                    SavedVersionId = entry.VersionId, DisplayLocator = BrowserLocalLocator.ForResource(target.LogicalId, entry.VersionId), Title = target.Title + " · v" + entry.Ordinal }).ToArray();
+        }
         public SourceComparisonDto Compare(ConversationMetadata owner, BrowserSourceComparisonRequest request)
         {
             SourceComparisonService.Validate(request);

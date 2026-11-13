@@ -1,5 +1,20 @@
 # Universal Browser: предлагаемые контракты
 
+## Snapshot transfer and completion — F4c, 2026-11-13
+
+`exportBrowserProject`, `copyBrowserProject`, `closeBrowserProjectTransfer` use a typed
+Browser target and exact saved Workspace ID. Export returns the existing chunked
+download DTO; its owner is the actual Workspace, with independent expiry/revocation.
+The shared download budget/concurrency/ordered-offset/hash checks remain in force.
+Copy uses the existing hidden-project/file-mutation/import owner, verifies every
+member and stores origin metadata. Source files are never substituted or overwritten.
+A removed version refuses new transfer; in-progress file reads retain exact CAS bytes.
+
+Navigation completion reads bounded current metadata and saved-entry/manifest
+metadata. `Peek` never creates a catalog/migration or loads member bodies. At most
+8 matching families × 8 saved entries are considered before the 12/20 response cap.
+Direct locators are resolved independently of this suggestion window.
+
 ## Common provider actions — F4b, 2026-11-13
 
 `compareBrowserSources` accepts `BrowserSourceComparisonRequest` with a resolved

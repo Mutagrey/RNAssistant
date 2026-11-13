@@ -1,5 +1,6 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Reference Include="System.IO.Compression" Condition="'$(TargetFramework)' == '' Or '$(TargetFrameworkIdentifier)' == '.NETFramework'" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserIsolationPolicy.cs" Link="Application\BrowserIsolationPolicy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserSourceReader.cs" Link="Application\BrowserSourceReader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\BrowserResourceSchema.cs" Link="Application\Workspace\BrowserResourceSchema.cs" />
@@ -18,6 +19,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)BrowserTargetResolver.cs" Link="Application\BrowserTargetResolver.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserTargetContracts.cs" Link="Application\Contracts\BrowserTargetContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HtmlProjectImportService.cs" Link="Application\HtmlProjectImportService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WorkspaceHtmlVersionService.Transfer.cs" Link="Application\WorkspaceHtmlVersionService.Transfer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceHtmlVersionService.cs" Link="Application\WorkspaceHtmlVersionService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)DocumentHtmlVersionService.cs" Link="Application\DocumentHtmlVersionService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\HtmlProjectDefinitionContracts.cs" Link="Application\Contracts\HtmlProjectDefinitionContracts.cs" />

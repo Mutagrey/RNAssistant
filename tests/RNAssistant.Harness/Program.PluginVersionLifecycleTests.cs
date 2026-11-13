@@ -67,6 +67,10 @@ namespace RNAssistant.Harness
                     var text = service.ReadBrowserSource(new BrowserSourceRequest { OwnerScope = caller, Locator = savedLocator,
                         Count = 32000, RequestGeneration = 1 }, exact).Text;
                     AssertEqual(original.Replace("Plugin", "Draft!"), text, "saved Browser source reads retained CAS after source root disappears");
+                    var suggestions = BrowserTargetResolver.QueryNavigationSuggestions(caller,
+                        new BrowserSuggestionRequest { OwnerScope = caller, Prefix = "/plugins/" + plugin.PluginId + "/versions/", Limit = 12 },
+                        service.BrowserTargets(caller, "/plugins/" + plugin.PluginId + "/versions/"));
+                    AssertTrue(suggestions.Items.Any(s => s.DisplayLocator == savedLocator), "saved completion reads retained manifest metadata offline");
                     var removed = service.BrowserVersionCommand(new BrowserVersionCommand { Target = exact, Action = BrowserVersionAction.Delete,
                         VersionId = saved.Version.VersionId, ExpectedStateRevision = saved.State.StateRevision,
                         ExpectedActiveVersionId = plugin.SavedVersionId, ExpectedActiveReleaseId = plugin.ReleaseId,

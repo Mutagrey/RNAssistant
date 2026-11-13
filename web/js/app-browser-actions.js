@@ -25,8 +25,8 @@
       var accepted = capture(target), copy = { pending: true }; copies.set(key(target), copy); refresh();
       context.status("Создание проекта из точного источника…");
       try {
-        var result = await send("createHtmlProjectFromArtifact", { chatId: target.chatId, documentId: target.documentId,
-          resourceUri: target.resourceUri, backing: "Managed" });
+        var result = target.kind === "WorkspaceHtmlProject" ? await send("copyBrowserProject", { target: target }) :
+          await send("createHtmlProjectFromArtifact", { chatId: target.chatId, documentId: target.documentId, resourceUri: target.resourceUri, backing: "Managed" });
         if (result.status === "Rejected") { copies.delete(key(target)); throw new Error(result.message || "Проект не создан."); }
         if (result.status !== "Created" || !result.workspaceId) throw new Error(result.message || "Создание проекта не подтверждено.");
         copy.result = result;
@@ -46,8 +46,10 @@
       var caps = target.capabilities, copy = operation(target), items = [];
       if (caps.edit && target.kind === "HtmlWorkspace") items.push({ label: "Редактировать исходники", icon: "code", onSelect: function () {
         return RNAssistantHtmlWorkspaceSurface.open(target.chatId, { mode: "edit" }); } });
-      if (caps.exportProject && target.ownerScope.kind === "Document") items.push({ label: "Скачать проект в файлы", icon: "folder", onSelect: function () {
-        return RNAssistantArtifactDownload.save(target, { send: send, fetch: window.fetch.bind(window), signal: abort.signal, isCurrent: capture(target), status: context.status }); } });
+      if (caps.exportProject) items.push({ label: "Скачать проект в файлы", icon: "folder", onSelect: function () {
+        return RNAssistantArtifactDownload.save(target, { send: send, fetch: window.fetch.bind(window), signal: abort.signal, isCurrent: capture(target), status: context.status,
+          open: target.kind === "WorkspaceHtmlProject" ? function () { return send("exportBrowserProject", { target: target }); } : null,
+          close: target.kind === "WorkspaceHtmlProject" ? function (lease) { return send("closeBrowserProjectTransfer", { target: target, leaseId: lease }); } : null }); } });
       if (caps.createProject || copy) items.push(copy && copy.result ? { label: "Открыть созданный проект", icon: "folder", onSelect: function () { return RNAssistantProjectChats.open(copy.result.workspaceId); } } :
         { label: "Создать проект из снимка", icon: "copy", status: copy && copy.issue || (copy && copy.pending ? "Проект создаётся…" : "Копия точных исходников в приложении"), disabled: !!copy || !caps.createProject,
           onSelect: function () { return createProject(target); } });

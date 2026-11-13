@@ -1,5 +1,12 @@
 # Карта экранов, навигации и состояний
 
+## Saved Workspace transfer — In Review, 2026-11-13
+
+Saved Workspace HTML exposes «Скачать проект в файлы» and «Создать проект из снимка»
+in the common page menu. Both work when the original folder is offline. Copy creates
+an independent project; pending/unknown results block automatic repetition. Completion
+can select saved document, plugin and Workspace entries; Removed is never substituted.
+
 ## Browser provider routes — In Review, 2026-11-13
 
 Material HTML/raw HTML, editor Preview and plugin rail open Browser. Reopening the

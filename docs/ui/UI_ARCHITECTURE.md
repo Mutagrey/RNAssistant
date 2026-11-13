@@ -1,5 +1,12 @@
 # Архитектура UI RNAssistant
 
+## Workspace snapshot actions — In Review, 2026-11-13
+
+Common Browser actions delegate exact Workspace export/copy to typed Application
+operations and the existing download/import owners. Transfer/download callbacks reuse
+app-artifact-download; hidden/closed targets suppress late navigation. Completion uses
+bounded metadata only, with no renderer, current-source capture or transcript load.
+
 ## Common Browser providers — In Review, 2026-11-13
 
 Material HTML routes through Browser; HtmlArtifactView/BrowserObjectView are removed.

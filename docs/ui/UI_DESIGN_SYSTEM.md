@@ -1,5 +1,11 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Workspace transfer controls — In Review, 2026-11-13
+
+Workspace snapshot actions use the existing page menu, status and import controls;
+no provider-specific geometry was added. The Workspace fixture checks the actions at
+420 px/125%. The F4b source-action screenshots remain the component reference.
+
 ## Browser provider controls — In Review, 2026-11-13
 
 All provider routes use PreviewSurface tokens and the common toolbar, including raw

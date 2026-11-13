@@ -295,6 +295,9 @@ namespace RNAssistant.Office
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
         { return RNAssistant.Application.BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)); }
         internal BrowserVersionState BrowserVersionState(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
+        internal HtmlProjectImportResult CopyBrowserProject(BrowserProjectTransferRequest request, CancellationToken token) { throw new NotSupportedException(); }
+        internal ArtifactTransferDownload ExportBrowserProject(BrowserProjectTransferRequest request, CancellationToken token) { throw new NotSupportedException(); }
+        internal ResourceDataCloseResponse CloseBrowserProjectTransfer(BrowserProjectTransferRequest request) { throw new NotSupportedException(); }
         internal SourceComparisonDto CompareBrowserSources(BrowserSourceComparisonRequest request) { throw new InvalidOperationException("Document comparison is not configured by this fixture."); }
         internal BrowserVersionPage BrowserVersions(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
         internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
@@ -670,7 +673,7 @@ namespace RNAssistant.Office
         }
         public ResourceDataOpenResponse OpenResourceData(ResourceDataOpenRequest request, CancellationToken cancellationToken = default(CancellationToken)) { return new ResourceDataOpenResponse(); }
         public ResourceDataCloseResponse CloseResourceData(ResourceDataCloseRequest request) { return new ResourceDataCloseResponse { Closed = true }; }
-        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner)
+        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null)
         { return new BrowserTargetDescriptor[0]; }
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public Task<HtmlWorkspaceSourceResponse> ReadHtmlWorkspaceSourceAsync(HtmlWorkspaceSourceRequest request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return Task.FromResult(new HtmlWorkspaceSourceResponse { ChatId = request.ChatId, Resource = request.Resource }); }

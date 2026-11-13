@@ -1,5 +1,31 @@
 # Universal Browser: статус
 
+## F4c Snapshot transfer and completion — 2026-11-13
+
+`16.21.0-dev`, continued from `422a9d27`. Saved Workspace HTML can be exported to ZIP
+or copied to a new managed project, including binary members and an offline source
+root. Only declared CAS members are streamed, with cancellation/256-MiB capture
+budget; the temporary ZIP has a 257-MiB bound and is removed when its lease closes.
+The existing data plane has an explicit Workspace download owner, without a fake
+chat. Common download/actions reuse the same UI and stale-result rules.
+
+HtmlProjectImportService retains one publication path: hidden project, existing
+file mutation/read-back, then visible registration. Copies preserve exact bytes and
+source provenance in workspace config. Partial/unknown writes are not replayed or
+deleted. No overwrite/restore of the original source is offered.
+
+Completion uses bounded saved metadata pages (up to 8 families × 8 entries, final
+12/default or 20/max), including offline plugin/Workspace versions. Document entries
+use checkpoint metadata, not aggregates. Existing workspace registry has a metadata
+projection without chat-header enumeration. Completion neither Check/captures current
+files nor initializes/migrates a version catalog; first explicit domain use still
+owns legacy migration. Removed entries are excluded; selection re-resolves.
+
+Checks: Workspace/document checkpoints 3, plugin lifecycle/completion 3, downloads 4,
+import 4 and local Browser 5; Workspace transfer UI and raw-import regression, Mock
+build. B02/native/Windows evidence and UI acceptance remain open. Remaining: local
+agent open/ack/input admission and 07; no push/release.
+
 ## F4b Common provider routes — 2026-11-13
 
 `16.20.0-dev`, continued from `831756c0`. Material HTML/raw HTML, the live document

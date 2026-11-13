@@ -11,8 +11,9 @@ using RNAssistant.Core.Storage;
 namespace RNAssistant.Application
 {
     // Coordinates existing definition, file and artifact owners. Holds no history.
-    public sealed class WorkspaceHtmlVersionService
+    public sealed partial class WorkspaceHtmlVersionService
     {
+        private readonly AppDataPaths _paths;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
         private readonly ChatStore _chats;
@@ -21,7 +22,7 @@ namespace RNAssistant.Application
         public event Action<BrowserVersionStateChanged> VersionChanged;
         public WorkspaceHtmlVersionService(AppDataPaths paths)
         {
-            _workspaces = new WorkspaceStore(paths); _files = new WorkspaceFileService(paths); _chats = new ChatStore(paths);
+            _paths = paths; _workspaces = new WorkspaceStore(paths); _files = new WorkspaceFileService(paths); _chats = new ChatStore(paths);
             _journal = new ResourceMutationJournal(paths);
             var authority = new ResourceAuthorityStore(paths);
             _artifacts = new DocumentArtifactStore(authority, authority, new ChatBlobStore(paths));
@@ -59,6 +60,7 @@ namespace RNAssistant.Application
                             var snapshot = _artifacts.ReadWorkspaceHtml(locator.Key, locator.VersionId);
                             if (!snapshot.Members.Any(m => m.Path == locator.RelativePath)) throw new InvalidDataException("Файла нет в сохранённой версии.");
                             target.EntryPath = snapshot.EntryPath; target.ContentRevision = entry.ContentFingerprint;
+                            target.Capabilities.ExportProject = target.Capabilities.CreateProject = true;
                         }
                     }
                 }
@@ -100,6 +102,18 @@ namespace RNAssistant.Application
             var definition = _workspaces.GetHtmlProjectDefinition(workspace);
             return BrowserSourceReader.Read(target, request, definition.Definition?.Members ?? new[] { workspace.HtmlEntryPath },
                 path => _files.ReadText(workspace, path).Text);
+        }
+
+        public System.Collections.Generic.IReadOnlyList<BrowserTargetDescriptor> SavedBrowserTargets(BrowserOwnerScope owner, string title, int limit)
+        {
+            RequireOwner(owner, owner.ScopeId);
+            using (_journal.AcquireScope(DocumentArtifactStore.WorkspaceHtmlScope(owner.ScopeId), true))
+                return _artifacts.SuggestWorkspaceHtmlVersions(owner.ScopeId, limit).Items.Select(entry => {
+                    var snapshot = _artifacts.ReadWorkspaceHtml(owner.ScopeId, entry.VersionId);
+                    return new BrowserTargetDescriptor { Kind = BrowserTargetKind.WorkspaceHtmlProject, State = BrowserTargetState.Ready,
+                        OwnerScope = owner, WorkspaceId = owner.ScopeId, SavedVersionId = entry.VersionId, Immutable = true,
+                        DisplayLocator = BrowserLocalLocator.ForProject(owner.ScopeId, snapshot.EntryPath, entry.VersionId), Title = title + " · v" + entry.Ordinal };
+                }).ToArray();
         }
 
         public SourceComparisonDto Compare(BrowserSourceComparisonRequest request)

@@ -53,6 +53,12 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("limit")] public int Limit { get; set; } = 12;
     }
 
+    public sealed class BrowserProjectTransferRequest
+    {
+        [JsonProperty("target", Required = Required.Always)] public BrowserTargetDescriptor Target { get; set; }
+        [JsonProperty("leaseId")] public string LeaseId { get; set; }
+    }
+
     public sealed class BrowserVersionCommand
     {
         [JsonProperty("action", Required = Required.Always)] public BrowserVersionAction Action { get; set; }

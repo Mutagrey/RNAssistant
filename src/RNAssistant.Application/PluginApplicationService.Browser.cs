@@ -69,7 +69,7 @@ namespace RNAssistant.Application
                         target.Capabilities.SaveReason = BrowserRefusalCode.TargetUnavailable; target.Message = error.Message;
                         return new BrowserResolveResult { Locator = locator.Canonical, Target = target };
                     }
-                    if (manifest.Id != registration.PluginId || !manifest.Files.Contains(locator.RelativePath))
+                    if (manifest.Id != registration.PluginId || locator.RelativePath != "plugin.json" && !manifest.Files.Contains(locator.RelativePath))
                         return new BrowserResolveResult { Reason = BrowserRefusalCode.TargetUnavailable, Message = "Файл не входит в состав плагина." };
                 }
                 target.EntryPath = manifest.Entry;
@@ -129,7 +129,7 @@ namespace RNAssistant.Application
                 BeforeId = request.BeforeId, AfterId = request.AfterId, Path = request.Path });
         }
 
-        public IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope caller)
+        public IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope caller, string suggestionsPrefix = null)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
@@ -137,46 +137,47 @@ namespace RNAssistant.Application
                 if (caller == null || caller.Kind != BrowserOwnerKind.User && caller.Kind != BrowserOwnerKind.Workspace ||
                     caller.Kind == BrowserOwnerKind.User && (caller.ScopeId != "local" || !string.IsNullOrEmpty(caller.ChatId)))
                     throw new PluginException("browser_owner_invalid", "Выберите локальный контекст Browser.");
-                var roots = caller.Kind == BrowserOwnerKind.User
-                    ? Conversations.ListConnectedWorkspaces().Where(item => item.Available).Take(200)
-                        .Select(item => _workspaces.OpenConnected(item.WorkspaceId)).ToArray()
-                    : new[] { RequireProjectWorkspace(caller.ScopeId) };
                 if (caller.Kind == BrowserOwnerKind.Workspace && !string.IsNullOrEmpty(caller.ChatId) &&
-                    new ChatStore(_paths).ReadMetadata(caller.ChatId)?.WorkspaceId != roots[0].WorkspaceId)
+                    new ChatStore(_paths).ReadMetadata(caller.ChatId)?.WorkspaceId != caller.ScopeId)
                     throw new PluginException("browser_owner_changed", "Чат не принадлежит выбранному проекту.");
                 var plugins = _store.List().Where(item => !item.Hidden).ToArray();
-                if (caller.Kind == BrowserOwnerKind.User)
-                    roots = roots.Concat(plugins.Take(200).Select(item => Source(item).Workspace)).GroupBy(item => item.WorkspaceId).Select(group => group.First()).ToArray();
-                var files = new WorkspaceFileService(_paths);
-                var targets = new List<BrowserTargetDescriptor>();
-                foreach (var workspace in roots)
+                var ids = caller.Kind == BrowserOwnerKind.User ? _workspaces.ListConnectedMetadata().Take(200).Select(w => w.WorkspaceId)
+                    .Concat(plugins.Take(200).Select(p => p.SourceWorkspaceId)).Distinct(StringComparer.Ordinal).ToArray() : new[] { caller.ScopeId };
+                var targets = new List<BrowserTargetDescriptor>(); var savedFamilies = 0;
+                foreach (var workspaceId in ids)
                 {
-                    var plugin = plugins.FirstOrDefault(item => item.SourceWorkspaceId == workspace.WorkspaceId);
-                    var scope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = workspace.WorkspaceId,
+                    WorkspaceDescriptor workspace;
+                    try { workspace = _workspaces.OpenConnectedHistory(workspaceId); }
+                    catch (Exception error) when (error is System.IO.IOException || error is PluginException || error is ArgumentException) { continue; }
+                    var plugin = plugins.FirstOrDefault(item => item.SourceWorkspaceId == workspaceId);
+                    var scope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = workspaceId,
                         ChatId = caller.Kind == BrowserOwnerKind.Workspace ? caller.ChatId : null };
-                    string entry = workspace.HtmlEntryPath;
-                    BrowserRefusalCode reason = BrowserRefusalCode.ProjectDefinitionRequired;
-                    if (plugin == null && _workspaces.GetHtmlProjectDefinition(workspace).Definition != null) reason = BrowserRefusalCode.None;
-                    if (plugin != null)
+                    var title = plugin?.Appearance?.Name ?? plugin?.Name ?? workspace.Name;
+                    var family = plugin == null ? "/projects/" + Uri.EscapeDataString(workspaceId) : "/plugins/" + Uri.EscapeDataString(plugin.PluginId);
+                    if (suggestionsPrefix != null && savedFamilies < 8 && BrowserTargetResolver.SuggestionFamilyMatches(suggestionsPrefix, title, family))
                     {
-                        try
+                        savedFamilies++;
+                        if (plugin == null) targets.AddRange(HtmlProjects.SavedBrowserTargets(scope, title, 8));
+                        else foreach (var entry in _store.SuggestVersions(plugin.PluginId, 8).Items)
                         {
-                            var manifest = PluginPackageFiles.ParseManifest(files.ReadText(workspace, "plugin.json").Text);
-                            if (manifest.Id != plugin.PluginId) continue;
-                            entry = manifest.Entry; reason = BrowserRefusalCode.IsolationUnqualified;
+                            var release = _store.ReadSavedRelease(plugin.PluginId, entry.VersionId); // manifest metadata only, no member bytes
+                            var manifest = PluginPackageFiles.ParseManifest(release.ManifestJson);
+                            targets.Add(new BrowserTargetDescriptor { Kind = BrowserTargetKind.PluginRelease, State = BrowserTargetState.Ready,
+                                OwnerScope = scope, PluginId = plugin.PluginId, WorkspaceId = workspaceId, SavedVersionId = entry.VersionId,
+                                DisplayLocator = BrowserLocalLocator.ForPlugin(plugin.PluginId, manifest.Entry, entry.VersionId), Title = title + " · v" + entry.Ordinal });
                         }
-                        catch (Exception error) when (error is PluginException || error is WorkspaceFileException)
-                        { continue; }
                     }
-                    if (string.IsNullOrEmpty(entry)) continue;
+                    string entryPath = plugin == null ? null : "plugin.json";
+                    try { if (plugin == null) entryPath = _workspaces.GetHtmlProjectDefinition(_workspaces.OpenConnected(workspaceId)).Definition?.EntryPath; }
+                    catch (Exception error) when (error is System.IO.IOException || error is PluginException || error is InvalidOperationException) { }
+                    if (entryPath == null) continue;
+                    var sourceAvailable = System.IO.Directory.Exists(workspace.RootPath) && !StorageFileSystem.IsReparsePoint(workspace.RootPath);
                     targets.Add(new BrowserTargetDescriptor { Kind = plugin == null ? BrowserTargetKind.WorkspaceHtmlProject : BrowserTargetKind.PluginSource,
-                        State = BrowserTargetState.Ready, OwnerScope = scope, WorkspaceId = workspace.WorkspaceId, ChatId = scope.ChatId,
-                        PluginId = plugin?.PluginId, EntryPath = entry, RelativePath = entry,
-                        Title = plugin?.Appearance?.Name ?? plugin?.Name ?? workspace.Name,
-                        DisplayLocator = plugin == null ? BrowserLocalLocator.ForProject(workspace.WorkspaceId, entry) : BrowserLocalLocator.ForPlugin(plugin.PluginId, entry),
-                        Capabilities = new BrowserTargetCapabilities { Source = true, Edit = workspace?.ReadOnly != true,
-                            Versions = true, SaveVersion = reason != BrowserRefusalCode.ProjectDefinitionRequired && workspace?.ReadOnly != true, ActivateVersion = plugin != null,
-                            PreviewReason = BrowserRefusalCode.IsolationUnqualified, SaveReason = reason == BrowserRefusalCode.ProjectDefinitionRequired ? reason : BrowserRefusalCode.None } });
+                        State = sourceAvailable ? BrowserTargetState.Ready : BrowserTargetState.Unavailable,
+                        Reason = sourceAvailable ? BrowserRefusalCode.None : BrowserRefusalCode.TargetUnavailable, OwnerScope = scope, WorkspaceId = workspaceId, ChatId = scope.ChatId,
+                        PluginId = plugin?.PluginId, EntryPath = entryPath, RelativePath = entryPath, Title = title,
+                        DisplayLocator = plugin == null ? BrowserLocalLocator.ForProject(workspaceId, entryPath) : BrowserLocalLocator.ForPlugin(plugin.PluginId, entryPath),
+                        Capabilities = new BrowserTargetCapabilities { Source = true, Versions = true, PreviewReason = BrowserRefusalCode.IsolationUnqualified } });
                 }
                 return targets;
             }

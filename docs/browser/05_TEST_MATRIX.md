@@ -1,5 +1,16 @@
 # Universal Browser: матрица проверок
 
+## F4c Transfer / completion — 2026-11-13
+
+HTML checkpoints verifies offline binary ZIP/copy, independent target and no chat,
+origin metadata, cancelled/removed transfer, saved suggestions and tombstones.
+Plugin lifecycle verifies offline manifest-only saved completion despite broken live
+source. Existing download ownership tests add Workspace-only ownership and revocation
+with conversation access disabled. Existing 4 import cases preserve raw UTF-8,
+preflight and unknown-write behavior. Workspace UI exercises exact saved target for
+export/copy/close at 420 px/125%; raw HTML UI regression passes. Mock compile passes.
+These checks do not establish native rendering/network/input or Windows file sharing.
+
 ## F4b Provider cutover — 2026-11-13
 
 Chromium: html-editor-views (dirty buffers, exact writes, scoped notices, hidden reads,

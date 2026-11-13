@@ -71,6 +71,12 @@ namespace RNAssistant.Core.Storage
             return entry;
         }
 
+        internal SavedVersionPage Peek(int limit)
+        {
+            var state = State();
+            return state == null || !state.MigrationComplete ? new SavedVersionPage { Items = new SavedVersionRecord[0] } : List(null, limit);
+        }
+
         internal SavedVersionPage List(string cursor, int limit = 12)
         {
             var state = RequireState(null, false); var offset = 0;

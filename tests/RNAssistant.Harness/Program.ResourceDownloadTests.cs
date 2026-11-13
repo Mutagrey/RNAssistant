@@ -142,6 +142,17 @@ namespace RNAssistant.Harness
                 data.Dispose();
                 RuntimeThrows<ObjectDisposedException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime));
             }
+            using (var data = new ResourceDataPlaneService(new ResourceGatewayService(), (_, __) => false)) {
+                var workspaceActive = true;
+                var lease = data.OpenWorkspaceDownload("workspace-user", () => workspaceActive, 2,
+                    token => new ResourceDownloadContent { Bytes = new byte[] { 65, 66 }, ContentType = "application/zip" }, CancellationToken.None);
+                string mime;
+                RuntimeThrows<ResourceRequestException>(() => data.Close("invented-chat", "workspace-user", lease.LeaseId));
+                RuntimeThrows<ResourceRequestException>(() => data.Close(null, "other-workspace", lease.LeaseId));
+                AssertEqual(65, (int)data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime)[0], "manual Workspace download has no conversation owner");
+                workspaceActive = false;
+                RuntimeThrows<ResourceRequestException>(() => data.ReadDownload(lease.LeaseId, 1, 1, CancellationToken.None, out mime));
+            }
         }
 
         private static void ModelContextLargeVerifiedDownload()

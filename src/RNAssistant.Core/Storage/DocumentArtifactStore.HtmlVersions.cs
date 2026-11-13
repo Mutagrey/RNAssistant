@@ -37,6 +37,8 @@ namespace RNAssistant.Core.Storage
         }
         public SavedVersionPage HtmlVersions(ConversationMetadata owner, string logicalId, string cursor, int limit = 12)
         { MigrateHtmlVersions(owner, logicalId); return HtmlCatalog(owner, logicalId).List(cursor, limit); }
+        public SavedVersionPage SuggestHtmlVersions(ConversationMetadata owner, string logicalId, int limit)
+        { return HtmlCatalog(owner, logicalId).Peek(limit); }
         public SavedVersionRecord HtmlVersion(ConversationMetadata owner, string logicalId, string versionId, bool allowRemoved = false)
         { MigrateHtmlVersions(owner, logicalId); return HtmlCatalog(owner, logicalId).Get(versionId, allowRemoved); }
 
