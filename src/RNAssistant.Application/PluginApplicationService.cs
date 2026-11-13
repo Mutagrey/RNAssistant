@@ -373,21 +373,6 @@ namespace RNAssistant.Application
             }
         }
 
-        public PluginReleaseHistoryDto ReleaseHistory(PluginReleaseHistoryRequest request)
-        {
-            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
-            {
-                RequireOpen();
-                if (request == null) throw new PluginException("plugin_history_invalid", "Укажите плагин.");
-                var page = _store.ListVersions(request.PluginId, request.Cursor);
-                var active = RequireRegistration(request.PluginId);
-                return new PluginReleaseHistoryDto { Items = page.Items.Select(entry => new PluginPublishedVersionDto {
-                    VersionId = entry.VersionId, Ordinal = entry.Ordinal, ReleaseId = Uri.UnescapeDataString(entry.ContentReference.Uri.Split('/').Last()),
-                    Name = active.Name, Version = entry.ManifestVersion, CapturedUtc = entry.CreatedUtc,
-                    Active = active.ActiveSavedVersionId == entry.VersionId }).ToArray(), NextCursor = page.Cursor };
-            }
-        }
-
         public SourceComparisonDto CompareSources(PluginSourceComparisonRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
@@ -398,8 +383,8 @@ namespace RNAssistant.Application
                 var before = _store.ReadSavedRelease(request.PluginId, request.BeforeId);
                 var after = _store.ReadSavedRelease(request.PluginId, request.AfterId);
                 return SourceComparisonService.Read(request,
-                    "v" + JsonConvert.DeserializeObject<PluginManifestV1>(before.ManifestJson).Version + " · " + before.ReleaseId,
-                    "v" + JsonConvert.DeserializeObject<PluginManifestV1>(after.ManifestJson).Version + " · " + after.ReleaseId,
+                    "v" + _store.SavedVersion(request.PluginId, request.BeforeId).Ordinal,
+                    "v" + _store.SavedVersion(request.PluginId, request.AfterId).Ordinal,
                     PluginComparisonMembers(before), PluginComparisonMembers(after));
             }
         }

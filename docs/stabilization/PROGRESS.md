@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Local Browser F4b — provider cutover, 2026-11-13
+
+`16.20.0-dev`: common Browser replaces document/raw/plugin presentation routes and
+owns source comparison/actions. Old view and history API paths are removed; exact
+revision reading and scoped current refresh are checked. Remaining snapshot transfer,
+completion, local agent open/ack and 07 continue from this state. B02/Windows and UI
+acceptance remain open. [Details](../browser/06_PROGRESS.md#f4b-common-provider-routes--2026-11-13).
+
 ## Local Browser F4a — StartSurface, 2026-11-13
 
 `16.19.0-dev`: shared chooser/Home, bounded scoped local recents and direct Shell/Dock

@@ -1,5 +1,26 @@
 # Universal Browser: статус
 
+## F4b Common provider routes — 2026-11-13
+
+`16.20.0-dev`, continued from `831756c0`. Material HTML/raw HTML, the live document
+editor and plugin rail now open the same Browser. The editor owns dirty buffers and
+writes only; preview delegates to Browser. Source-only execution remains B02-blocked.
+Common page actions expose exact export, raw/project copy and return to the editor.
+Pending/unknown copy is not repeated, stale completion never changes placement.
+
+SourceComparison takes a typed Browser target and exact saved IDs for document,
+Workspace and plugin providers. Metadata paging, lazy selected member reads, byte
+bounds, binary refusal, cancellation and immutable source semantics are retained.
+Old HTML views, iframe appearance transport and provider-specific history/comparison
+bridge operations/DTOs are removed. Current document notices defer hidden reads;
+deleted saved entries invalidate their exact ID, not all entries with the same bytes.
+
+Checks: HTML editor, import, common saved versions and source diff pass in Chromium;
+exact comparison 3/3, paged plugin history 1/1, paged document checkpoints 1/1, independent
+package Worker and Mock build pass. Old Shell iframe fixtures are retired/replaced;
+they do not qualify native execution. UI remains In Review. Workspace snapshot
+export/copy, saved completion, agent local open/ack and 07 continue next. No push/release.
+
 ## F4a StartSurface and UI preferences — 2026-11-13
 
 `16.19.0-dev`, continued from `06a98d26`. One presentational StartSurface is shared by

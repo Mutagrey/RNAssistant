@@ -1,5 +1,16 @@
 # Universal Browser: матрица проверок
 
+## F4b Provider cutover — 2026-11-13
+
+Chromium: html-editor-views (dirty buffers, exact writes, scoped notices, hidden reads,
+stale/closed views, 420 px/125%), html-project-import (pending/unknown/refused/stale
+copy, raw HTML action), browser-source-diff (common plugin/Workspace request, binary
+refusal, close cancellation), browser-saved-views and plugin-browser. Package Worker
+checks remain in plugins.test.js; its old executable Shell UI assumptions are removed.
+Harness: source comparison 3, paged saved HTML 1 (52 explicit checkpoints, automatic
+revision excluded, stale cursor), paged plugin restore 1; Mock 0 errors. Native
+renderer, trusted input, airspace and Windows/Office qualification remain open.
+
 ## F4a StartSurface — 2026-11-13
 
 `browser-start-surface`, `dock-workspace`, `dock-layout-pruning`, `shell-navigation`

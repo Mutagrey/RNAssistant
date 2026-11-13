@@ -49,7 +49,7 @@ namespace RNAssistant.Application
                 var target = BrowserTargetResolver.Saved(owner, artifact, exact.Uri);
                 target.DisplayLocator = locator.ContentLocator; target.SavedVersionId = entry?.VersionId;
                 if (logical != null && entry == null)
-                { target.Kind = BrowserTargetKind.HtmlWorkspace; target.Immutable = false; target.Capabilities.SaveVersion = true; }
+                { target.Kind = BrowserTargetKind.HtmlWorkspace; target.Immutable = false; target.Capabilities.SaveVersion = true; target.Capabilities.Edit = true; }
                 if (entry?.Removed == true || _artifacts.IsRemoved(owner, artifact))
                 {
                     target.State = BrowserTargetState.Removed; target.Reason = BrowserRefusalCode.Removed; target.Message = "Сохранённая запись удалена.";
@@ -88,6 +88,25 @@ namespace RNAssistant.Application
                 var current = _artifacts.CurrentHtmlSnapshot(owner, logical);
                 var page = _artifacts.HtmlVersions(owner, logical, request.Cursor, request.Limit);
                 return new BrowserVersionPage { StateRevision = page.StateRevision, Cursor = page.Cursor, Items = page.Items.Select(item => Entry(item, current)).ToArray() };
+            }
+        }
+        public SourceComparisonDto Compare(ConversationMetadata owner, BrowserSourceComparisonRequest request)
+        {
+            SourceComparisonService.Validate(request);
+            var target = Target(owner, request.Target); var logical = Logical(target);
+            using (Lease(owner))
+            {
+                var before = _artifacts.HtmlVersion(owner, logical, request.BeforeId);
+                var after = target.SavedVersionId == null ? null : _artifacts.HtmlVersion(owner, logical, target.SavedVersionId);
+                if (request.AfterId != (after?.VersionId ?? target.ResourceUri)) throw new InvalidOperationException("Открытая версия изменилась.");
+                var left = _artifacts.Read(owner, before.ContentReference, false);
+                var afterRef = after?.ContentReference ?? ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri));
+                var right = _artifacts.Read(owner, afterRef, false);
+                if (left.ContentByteLength > 16 * 1024 * 1024 || right.ContentByteLength > 16 * 1024 * 1024)
+                    throw new InvalidOperationException("Снимок превышает лимит сравнения 16 МиБ.");
+                left = _artifacts.Read(owner, before.ContentReference); right = _artifacts.Read(owner, afterRef);
+                return SourceComparisonService.Read(request, "v" + before.Ordinal, after == null ? "Открытый снимок" : "v" + after.Ordinal,
+                    SourceComparisonService.HtmlMembers(left), SourceComparisonService.HtmlMembers(right));
             }
         }
         public BrowserVersionResult Command(ConversationMetadata owner, BrowserVersionCommand request, CancellationToken token)

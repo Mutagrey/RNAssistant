@@ -104,6 +104,18 @@
     });
     return true;
   }
+  async function openBrowser(chatId) {
+    var editor = view(chatId);
+    if (editor) { if (await editor.ready()) return editor.openBrowser(); return false; }
+    var placement = RNAssistantDockWorkspace.activeTarget(), generation = state.chatNavigationVersion;
+    try {
+      var response = await send("getHtmlWorkspace", { chatId: chatId });
+      if (state.chatNavigationVersion !== generation || RNAssistantDockWorkspace.activeTarget() !== placement) return false;
+      var value = RNAssistantBrowserTarget.accept(response.browserTarget, { chatId: chatId }, "HtmlWorkspace");
+      if (value.state !== "Ready") throw new Error(value.message || "Сначала создайте HTML-проект.");
+      return RNAssistantBrowser.open(value.displayLocator, value.ownerScope, { reuse: true, title: value.title });
+    } catch (error) { RNAssistantShellLayout.notice(error.detail || error.message); return false; }
+  }
   function selectHtmlWorkspaceItem(type, id) {
     state.htmlWorkspaceSelection = { type: type, id: id };
     return open(state.activeChatId, { selection: { type: type, id: id }, mode: "edit" });
@@ -129,18 +141,22 @@
   window.RNAssistantArtifactThumbnailRuntime = { load: thumbnails.loadArtifactImageThumbnail, state: thumbnails.artifactImageThumbnailState };
   window.renderHtmlWorkspace = renderHtmlWorkspace;
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
-  window.handleResourceAuthorityChanged = function (notice) { RNAssistantDockWorkspace.eachView("html-editor", function (editor) { editor.authorityChanged(notice); }); };
+  window.handleResourceAuthorityChanged = function (notice) {
+    RNAssistantDockWorkspace.eachView("html-editor", function (editor) { editor.authorityChanged(notice); });
+    RNAssistantDockWorkspace.eachView("browser", function (view) { view.authorityChanged(notice); });
+  };
   window.RNAssistantHtmlWorkspaceSurface = {
     register: function (dock) { dock.registerView("html-editor", { perObject: true, maximumInstances: 4, renderer: "onlyWhenVisible",
       accepts: function (target) { return target && target.view === "html-editor" && typeof target.chatId === "string" && !!target.chatId &&
         target.chatId.length <= 256 && typeof target.title === "string" && target.title.length <= 1024; },
       key: RNAssistantHtmlWorkspaceView.key, create: RNAssistantHtmlWorkspaceView.create, titleFor: function (target) { return target.title; } }); },
     open: open,
-    openCurrent: function () { return open(state.activeChatId, { mode: "preview" }); },
+    openCurrent: function () { return openBrowser(state.activeChatId); },
     openArtifact: function (artifact, options) {
       if (!artifact) return false;
       var kind = artifactKind(artifact);
       if (kind === "html_workspace" && artifactId(artifact) !== state.activeHtmlArtifactId) return false;
+      if (kind === "html_workspace" && (!options || options.purpose !== "edit")) return openBrowser(state.activeChatId);
       return open(state.activeChatId, { mode: options && options.purpose === "edit" ? "edit" : "preview",
         selection: kind === "html_workspace" ? null : { type: kind === "plan" ? "plan" : "artifact", id: artifactId(artifact) } });
     },

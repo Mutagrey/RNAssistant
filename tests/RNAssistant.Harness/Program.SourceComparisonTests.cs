@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
@@ -45,7 +46,7 @@ namespace RNAssistant.Harness
                     new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths)),
                     new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
                 AssertTrue(WriteSharedHtmlFixture(executor, session, "<h1>before</h1>").Success, "first saved source");
-                var first = ChatResourceUri.CreateArtifactRevisionUri(session, session.Artifacts.Single(a => a.Id == session.ActiveHtmlArtifactId));
+                var first = SaveHtmlCheckpoint(chats.DocumentArtifacts, session, "before");
                 executor.MutateLocalResources(session, "html.source.write", new Dictionary<string, object>(), () => {
                     session.HtmlWorkspace.DataSources.Add(new HtmlWorkspaceDataSource { Name = "unavailable", Binding = new HtmlWorkspaceDataBinding {
                         Resource = new ResourceRef(ResourceUri.Create("excel", session.DocumentAuthorityId, "range", "Sheet1", "A1"), "missing"), Policy = "exact", View = "text" } });
@@ -53,9 +54,13 @@ namespace RNAssistant.Harness
                 });
                 var after = ChatResourceUri.CreateArtifactRevisionUri(session, session.Artifacts.Single(a => a.Id == session.ActiveHtmlArtifactId));
                 var selected = session.ActiveHtmlArtifactId; var revision = session.Revision;
-                var request = new HtmlSourceComparisonRequest { ChatId = session.Id, DocumentId = session.DocumentAuthorityId,
-                    BeforeId = first, AfterId = after, Path = "index.html" };
-                var result = catalog.CompareHtmlSources(session, request);
+                var service = new DocumentHtmlVersionService(paths, chats.DocumentArtifacts);
+                var metadata = ConversationMetadata.From(session);
+                var target = service.Resolve(metadata, new BrowserResolveRequest {
+                    OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = session.DocumentAuthorityId, ChatId = session.Id },
+                    Locator = BrowserLocalLocator.ForResource(HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId)) }).Target;
+                var request = new BrowserSourceComparisonRequest { Target = target, BeforeId = first.VersionId, AfterId = after, Path = "index.html" };
+                var result = service.Compare(metadata, request);
                 AssertEqual("<h1>before</h1>", result.BeforeText, "exact old source despite missing preview data");
                 AssertEqual("<h1>after</h1>", result.AfterText, "exact new source");
                 AssertEqual(SourceFileChange.Changed, result.Files.Single().Change, "source change marked");
@@ -63,13 +68,14 @@ namespace RNAssistant.Harness
                 AssertEqual(revision, session.Revision, "read does not mutate the chat");
                 var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
                 AssertTrue(WriteSharedHtmlFixture(executor, other, "other project").Success, "another project");
-                request.BeforeId = ChatResourceUri.CreateArtifactRevisionUri(other, other.Artifacts.Single(a => a.Id == other.ActiveHtmlArtifactId));
-                RuntimeThrows<InvalidOperationException>(() => catalog.CompareHtmlSources(session, request));
-                request.BeforeId = first + "/source"; RuntimeThrows<InvalidOperationException>(() => catalog.CompareHtmlSources(session, request));
-                request.BeforeId = first; request.ChatId = "foreign"; RuntimeThrows<InvalidOperationException>(() => catalog.CompareHtmlSources(session, request));
-                request.ChatId = session.Id;
-                request.DocumentId = documents.Resolve("word", "other", Path.Combine(paths.Root, "other.docx")).Id;
-                RuntimeThrows<InvalidDataException>(() => catalog.CompareHtmlSources(session, request));
+                request.BeforeId = SaveHtmlCheckpoint(chats.DocumentArtifacts, other, "other").VersionId;
+                SavedFailure(() => service.Compare(metadata, request), "version_unavailable");
+                request.BeforeId = first.VersionId; request.AfterId = after + "/source";
+                RuntimeThrows<InvalidOperationException>(() => service.Compare(metadata, request));
+                request.AfterId = after; request.Target.OwnerScope.ChatId = "foreign";
+                RuntimeThrows<InvalidOperationException>(() => service.Compare(metadata, request));
+                request.Target.OwnerScope.ChatId = session.Id; request.Target.OwnerScope.ScopeId = "foreign-document";
+                RuntimeThrows<InvalidOperationException>(() => service.Compare(metadata, request));
             });
         }
 
@@ -101,7 +107,7 @@ namespace RNAssistant.Harness
                 request.Path = "empty.txt"; result = service.CompareSources(request);
                 AssertTrue(result.Complete && result.AfterText == "" && result.Files.Single(f => f.Path == request.Path).Change == SourceFileChange.Added,
                     "added empty file remains a file-level change");
-                AssertEqual(item.ReleaseId, service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId }).Items.Single(v => v.Active).ReleaseId,
+                AssertEqual(item.ReleaseId, PluginVersions(service, item.PluginId).Items.Single(v => v.Active).ReleaseId,
                     "active release is unchanged");
                 AssertEqual("dirty working source", File.ReadAllText(source), "comparison never restores source files");
             } });

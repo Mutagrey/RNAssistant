@@ -744,6 +744,14 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static BrowserVersionPage PluginVersions(PluginApplicationService service, string pluginId, string cursor = null)
+        {
+            var target = service.ResolveBrowserLocator(new BrowserResolveRequest {
+                OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" },
+                Locator = BrowserLocalLocator.ForPlugin(pluginId, "index.html") }).Target;
+            return service.BrowserVersions(new BrowserVersionRequest { Target = target, Cursor = cursor });
+        }
+
         private static void PluginsPublishedHistoryAndRestore()
         {
             WithPluginPaths(paths => {
@@ -755,7 +763,7 @@ namespace RNAssistant.Harness
                     var original = File.ReadAllText(sourceFile);
                     File.WriteAllText(sourceFile, "revision 2");
                     var unpublished = service.Check(item.PluginId);
-                    AssertEqual(1, service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId }).Items.Count,
+                    AssertEqual(1, PluginVersions(service, item.PluginId).Items.Count,
                         "checked candidate does not appear among published versions");
                     var preview = service.Open(new PluginOpenRequest { PluginId = item.PluginId, CandidateId = unpublished.CandidateId });
                     SavedFailure(() => service.Open(new PluginOpenRequest { PluginId = item.PluginId, VersionId = "sv_0000000000000000001_" + new string('0',32) }),
@@ -769,14 +777,13 @@ namespace RNAssistant.Harness
                         item = SaveAndActivatePlugin(service, item.PluginId);
                     }
                     var latestSource = File.ReadAllText(sourceFile);
-                    var firstPage = service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId });
+                    var firstPage = PluginVersions(service, item.PluginId);
                     AssertEqual(12, firstPage.Items.Count, "history reads one bounded page of metadata");
-                    AssertTrue(!string.IsNullOrEmpty(firstPage.NextCursor), "older publications have a cursor");
-                    var secondPage = service.ReleaseHistory(new PluginReleaseHistoryRequest {
-                        PluginId = item.PluginId, Cursor = firstPage.NextCursor });
+                    AssertTrue(!string.IsNullOrEmpty(firstPage.Cursor), "older publications have a cursor");
+                    var secondPage = PluginVersions(service, item.PluginId, firstPage.Cursor);
                     AssertEqual(2, secondPage.Items.Count, "history loads only requested older metadata");
                     AssertEqual(firstRelease, secondPage.Items.Last().ReleaseId, "oldest published version is available");
-                    AssertTrue(secondPage.NextCursor == null, "final page has no cursor");
+                    AssertTrue(secondPage.Cursor == null, "final page has no cursor");
                     var historicalView = service.Open(new PluginOpenRequest { PluginId = item.PluginId, VersionId = firstVersion });
                     AssertTrue(historicalView.Preview, "historical version uses isolated preview authority");
                     var instance = service.FindInstance(new Uri(historicalView.EntryUrl).GetLeftPart(UriPartial.Authority));
@@ -790,11 +797,10 @@ namespace RNAssistant.Harness
                         ExpectedActiveRevision = item.ActiveRevision, OperationId = "restore-old" });
                     AssertEqual(firstRelease, restored.ReleaseId, "restore switches the active publication to the selected release");
                     AssertEqual(latestSource, File.ReadAllText(sourceFile), "restore leaves editable source files untouched");
-                    SavedFailure(() => service.ReleaseHistory(new PluginReleaseHistoryRequest {
-                        PluginId = item.PluginId, Cursor = firstPage.NextCursor }), "version_state_changed");
-                    var restoredPage = service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId });
+                    SavedFailure(() => PluginVersions(service, item.PluginId, firstPage.Cursor), "version_state_changed");
+                    var restoredPage = PluginVersions(service, item.PluginId);
                     AssertEqual(item.SavedVersionId, restoredPage.Items.First().VersionId, "activation does not reorder saved ordinals");
-                    AssertTrue(service.ReleaseHistory(new PluginReleaseHistoryRequest { PluginId = item.PluginId, Cursor = restoredPage.NextCursor }).Items.Last().Active, "menu marks the restored entry active");
+                    AssertTrue(PluginVersions(service, item.PluginId, restoredPage.Cursor).Items.Last().Active, "menu marks the restored entry active");
                     AssertTrue(service.Check(item.PluginId).HasChanges, "current source still differs from restored publication");
                 }
             });

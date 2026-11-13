@@ -45,8 +45,8 @@
 [data-html-node="htmlWorkspacePreviewLink"][hidden] { display:none; }
 
 /* Addressed saved content uses the same Browser surface and existing controls. */
-.browser-object-view, .browser-object-content, .browser-html-document { display:flex; flex-direction:column; min-width:0; min-height:0; }
-.browser-object-content, .browser-html-document { flex:1; overflow:hidden; }
+.browser-object-view, .browser-object-content { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.browser-object-content { flex:1; overflow:hidden; }
 .browser-object-content [hidden] { display:none; }
 .browser-document-file { flex:none; margin:var(--space-2); }
 .browser-document-source { flex:1; min-height:0; overflow:hidden; }

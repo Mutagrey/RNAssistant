@@ -46,10 +46,15 @@ namespace RNAssistant.Harness
                 AssertEqual(original, restart.Source(new BrowserSourceRequest { OwnerScope = user, Locator = savedLocator,
                     Count = 32000, RequestGeneration = 1 }, exact).Text, "saved source comes only from CAS without live root");
                 AssertEqual(2, restart.Versions(new BrowserVersionRequest { Target = exact }).Items.Count, "metadata history survives offline root");
+                var comparison = new BrowserSourceComparisonRequest { Target = exact, BeforeId = second.Version.VersionId, AfterId = first.Version.VersionId, Path = imported.EntryPath };
+                var compared = restart.Compare(comparison);
+                AssertEqual("<h1>different bytes</h1>", compared.BeforeText, "comparison reads the saved member without live files");
+                AssertEqual(original, compared.AfterText, "comparison keeps the exact other snapshot");
                 var removed = restart.Command(new BrowserVersionCommand { Target = exact, Action = BrowserVersionAction.Delete,
                     VersionId = first.Version.VersionId, ExpectedStateRevision = second.State.StateRevision, Confirmed = true, OperationId = "delete-first" });
                 AssertEqual(BrowserVersionOutcome.Removed, removed.Outcome, removed.Message);
                 AssertEqual(BrowserTargetState.Removed, restart.Resolve(new BrowserResolveRequest { OwnerScope = user, Locator = savedLocator }).Target.State, "no latest fallback");
+                SavedFailure(() => restart.Compare(comparison), "version_removed");
                 Directory.Move(imported.RootPath + "-offline", imported.RootPath);
                 AssertTrue(restart.Command(firstCommand).Version.Removed, "original receipt reports subsequent tombstone");
                 File.WriteAllText(entry, original);

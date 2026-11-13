@@ -1,5 +1,16 @@
 # План модернизации production UI
 
+## F4b Provider cutover — In Review, 2026-11-13
+
+Completed from F4a: common document/raw/editor/plugin routes, exact page actions,
+three-provider source comparison and old view/bridge removal. Run html-editor-views,
+html-project-import, browser-source-diff, browser-saved-views and plugin-browser.
+Review: open an HTML material, compare a checkpoint, return to the source editor;
+open raw HTML and create a project; switch two plugin rail entries at narrow width.
+Historical browser-views/plugin-view-selection/plugin-source-failure iframe fixtures
+are retired; current tests assert source-only behavior. Remaining Workspace transfer,
+saved completion, local agent open/ack and 07 follow; B02/Windows stays open.
+
 ## F4a StartSurface — In Review, 2026-11-13
 
 Review: «+» → Open chat (existing tree search), then «+» → Browser → Home → local

@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -132,46 +134,54 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static SavedVersionRecord SaveHtmlCheckpoint(DocumentArtifactStore store, ChatSession chat, string operation)
+        {
+            var owner = ConversationMetadata.From(chat); var logical = HtmlWorkspaceIdentity.LogicalId(chat.ActiveHtmlArtifactId);
+            return store.SaveHtmlVersion(owner, logical, store.HtmlVersionState(owner, logical).StateRevision,
+                store.CurrentHtmlSnapshot(owner, logical).Uri, operation, new SavedVersionActor { Kind = SavedVersionActorKind.User }).Version;
+        }
+
         private static void SharedHtmlSavedHistoryFollowsDocument()
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
-            {
-                var paths = FixturePaths.Value;
-                var chats = new ChatStore(paths);
-                var registry = new DocumentAuthorityRegistry(paths);
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) => {
+                var paths = FixturePaths.Value; var chats = new ChatStore(paths); var registry = new DocumentAuthorityRegistry(paths);
                 var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths));
                 var catalog = new ArtifactCatalogService(registry, chats.DocumentArtifacts, links, new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
                 var author = NewSession(adapter);
                 author.DocumentAuthorityId = registry.Resolve("word", "source", System.IO.Path.Combine(paths.Root, "source.docx")).Id;
                 AssertTrue(WriteSharedHtmlFixture(executor, author, "<h1>first</h1>").Success, "initial publication");
-                var first = author.Artifacts.Single(item => item.Id == author.ActiveHtmlArtifactId);
-                var reference = ChatResourceUri.CreateArtifactRevision(author, first);
+                var first = SaveHtmlCheckpoint(chats.DocumentArtifacts, author, "first");
                 var reader = NewSession(adapter);
                 reader.DocumentAuthorityId = registry.Resolve("word", "reader", System.IO.Path.Combine(paths.Root, "reader.docx")).Id;
-                var request = new SavedHtmlHistoryRequest { ChatId = reader.Id, DocumentId = author.DocumentAuthorityId, ResourceUri = reference.Uri };
-                AssertEqual(1, catalog.SavedHtmlHistory(reader, request).TotalCount, "single revision available without a captured library head");
+                var metadata = catalog.SourceMetadata(ConversationMetadata.From(reader), author.DocumentAuthorityId);
+                var service = new DocumentHtmlVersionService(paths, chats.DocumentArtifacts);
+                var target = service.Resolve(metadata, new BrowserResolveRequest {
+                    OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = author.DocumentAuthorityId, ChatId = reader.Id },
+                    Locator = BrowserLocalLocator.ForResource(HtmlWorkspaceIdentity.LogicalId(author.ActiveHtmlArtifactId), first.VersionId) }).Target;
+                var request = new BrowserVersionRequest { Target = target, Limit = 50 };
+                AssertEqual(1, service.Versions(metadata, request).Items.Count, "exact saved entry readable from another document without replay");
                 var writer = NewSession(adapter); writer.DocumentAuthorityId = author.DocumentAuthorityId;
-                links.Change(writer, LinkRequest(writer, reference.Uri, false), chats.Save);
-                for (var i = 2; i <= 51; i++)
-                    AssertTrue(WriteSharedHtmlFixture(executor, writer, "<h1>version " + i + "</h1>").Success, "other agent publishes " + i);
-                reader.Revision += 5;
-                var page = catalog.SavedHtmlHistory(reader, request);
-                AssertEqual(51, page.TotalCount, "new publications appear without reopening the saved snapshot");
-                AssertEqual(50, page.Items.Count, "history remains paged");
-                AssertEqual(writer.ActiveHtmlArtifactId, page.HeadArtifactId, "head comes from document authority");
-                AssertTrue(page.Items[0].IsHead && page.Items[0].Revision == 51, "current revision is labelled");
-                AssertEqual(reference.Uri, page.ResourceUri, "selected immutable snapshot is echoed unchanged");
-                request.Cursor = page.NextCursor;
-                var tail = catalog.SavedHtmlHistory(reader, request);
-                AssertEqual(first.Id, tail.Items.Single().ArtifactId, "old snapshot remains in document history");
-                AssertTrue(WriteSharedHtmlFixture(executor, writer, "<h1>new head</h1>").Success, "publication during paging");
-                RuntimeThrows<InvalidOperationException>(() => catalog.SavedHtmlHistory(reader, request));
-                request.Cursor = null;
-                AssertEqual(52, catalog.SavedHtmlHistory(reader, request).TotalCount, "restarting reads fresh history");
-                AssertEqual(first.Id, author.ActiveHtmlArtifactId, "read never retargets the old author's selection");
-                AssertTrue(reader.Artifacts.Count == 0 && reader.ActiveHtmlArtifactId == null, "foreign history read never attaches or selects snapshots");
-                request.DocumentId = reader.DocumentAuthorityId;
-                RuntimeThrows<System.IO.InvalidDataException>(() => catalog.SavedHtmlHistory(reader, request));
+                links.Change(writer, LinkRequest(writer, first.ContentReference.Uri, false), chats.Save);
+                for (var i = 2; i <= 51; i++) {
+                    AssertTrue(WriteSharedHtmlFixture(executor, writer, "<h1>version " + i + "</h1>").Success, "publication " + i);
+                    SaveHtmlCheckpoint(chats.DocumentArtifacts, writer, "checkpoint-" + i);
+                }
+                var page = service.Versions(metadata, request);
+                AssertEqual(50, page.Items.Count, "bounded checkpoint metadata page");
+                AssertTrue(page.Items[0].Current && page.Items[0].Ordinal == 51, "current exact checkpoint is labelled");
+                request.Cursor = page.Cursor;
+                AssertEqual(first.VersionId, service.Versions(metadata, request).Items.Single().VersionId, "old saved entry remains addressable");
+                AssertTrue(WriteSharedHtmlFixture(executor, writer, "<h1>automatic head</h1>").Success, "automatic publication");
+                AssertEqual(1, service.Versions(metadata, request).Items.Count, "technical revision does not change checkpoint cursor");
+                SaveHtmlCheckpoint(chats.DocumentArtifacts, writer, "checkpoint-52");
+                SavedFailure(() => service.Versions(metadata, request), "version_state_changed");
+                request.Cursor = null; page = service.Versions(metadata, request); request.Cursor = page.Cursor;
+                AssertEqual(2, service.Versions(metadata, request).Items.Count, "restarting sees the new checkpoint");
+                AssertEqual(first.ContentReference.Uri, target.ResourceUri, "history never retargets the displayed snapshot");
+                AssertTrue(reader.Artifacts.Count == 0 && reader.ActiveHtmlArtifactId == null, "metadata read never attaches content or changes selection");
+                target.OwnerScope.ScopeId = reader.DocumentAuthorityId;
+                RuntimeThrows<InvalidOperationException>(() => service.Versions(metadata, request));
+                RuntimeThrows<InvalidOperationException>(() => catalog.SourceMetadata(ConversationMetadata.From(reader), "missing-document"));
             });
         }
 

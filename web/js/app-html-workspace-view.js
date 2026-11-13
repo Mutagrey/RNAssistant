@@ -8,9 +8,8 @@
   refs.htmlWorkspaceEditor = root;
   function $(id) { return refs[id] || null; }
   RNAssistantIcons.hydrate(root); root.dataset.chatId = target.chatId;
-  var modeSwitcher = root.querySelector('.html-workspace-mode-toggle'), modeHost = modeSwitcher.parentElement;
+  var modeSwitcher = root.querySelector('.html-workspace-mode-toggle');
   var modeButtons = Array.prototype.slice.call(modeSwitcher.querySelectorAll('button'));
-  var exportButton = $("exportHtmlWorkspaceButton"), exportHost = exportButton.parentElement, exportNext = exportButton.nextSibling;
   $("htmlWorkspacePreviewFrame").dataset.chatId = target.chatId;
   var active = false, disposed = false, loading = null, loadGeneration = 0, loaded = false, sourceConflict = false;
   var sourceGeneration = 0, checkedSourceGeneration = 0, authorityGeneration = -1;
@@ -204,26 +203,11 @@
       openSource: function () { RNAssistantDockWorkspace.openTarget(target); setHtmlWorkspaceMode("preview"); return true; },
       status: function (message) { setAttachmentStatus(target.chatId, message, "warning"); }
     } });
-  var previewSurface = window.RNAssistantPreviewSurface.attach($("htmlWorkspacePreview"), {
-    storage: { kind: "managed" },
-    reload: async function () {
-      var revision = state.activeHtmlArtifactId;
-      if (await reloadHtmlWorkspaceSources()) { if (revision === state.activeHtmlArtifactId) workspaceEditor.reloadPreview(); }
-      else if (!disposed && state.chatDetailError) throw new Error(state.chatDetailError);
-    },
-    canReload: function () { return loaded && !loading && !state.htmlWorkspaceDirty && !workspaceActions.isBusy(); },
-    discuss: function () { if (!disposed) return RNAssistantConversationPanel.open({ source: "office", sessionId: target.chatId },
-      { referencePanel: key(target), beside: true }); },
-    reloadLabel: "Обновить HTML"
-  });
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
     state: state, node: $, root: root, code: code,
     changed: renderHtmlWorkspace,
     previewVisible: function () { return active && state.htmlWorkspaceMode === "preview"; },
-    modeChanged: syncBrowser,
     model: workspaceModel,
-    preview: htmlPreview,
-    previewSurface: previewSurface,
     inspector: visualInspector,
     source: workspaceSource,
     closeResources: closePreviewResources,
@@ -300,7 +284,17 @@
   var markHtmlWorkspaceDirty = workspaceEditor.markDirty;
   var confirmDiscardHtmlChanges = workspaceEditor.confirmDiscard;
   var updateHtmlWorkspaceStatus = workspaceEditor.updateStatus;
-  var setHtmlWorkspaceMode = workspaceEditor.setMode;
+  function openBrowser() {
+    var value = state.browserTarget;
+    if (!value || value.state !== "Ready") { log("Сохраните HTML-проект перед открытием Browser.", "error"); return false; }
+    if (state.htmlWorkspaceDirty || sourceConflict) { log("Сначала сохраните правки или обновите исходники.", "error"); return false; }
+    return RNAssistantBrowser.open(value.displayLocator, value.ownerScope, { reuse: true, title: value.title, referencePanel: key(target) });
+  }
+  function setHtmlWorkspaceMode(mode) {
+    var selection = selectedItem();
+    if (mode === "preview" && selection && (selection.type === "file" || selection.type === "data")) return openBrowser();
+    return workspaceEditor.setMode(mode);
+  }
   var applyHtmlWorkspaceMode = workspaceEditor.applyMode;
   var renderHtmlWorkspaceEditor = workspaceEditor.render;
   workspaceActions = window.RNAssistantHtmlWorkspaceActions.create({
@@ -536,24 +530,11 @@
     showHtmlWorkspaceCreate("data", "data");
   }
 
-  function syncBrowser() {
-    if (!browserView) return;
-    var selected = selectedItem(), shown = active && state.htmlWorkspaceMode === "preview" &&
-      selected && (selected.type === "file" || selected.type === "data");
-    root.classList.toggle("is-browser-preview", !!shown);
-    if (shown && modeSwitcher.parentElement !== previewSurface.actions) {
-      previewSurface.actions.prepend(modeSwitcher); exportButton.classList.add("compact"); previewSurface.actions.appendChild(exportButton);
-    } else if (!shown && modeSwitcher.parentElement !== modeHost) {
-      modeHost.prepend(modeSwitcher); exportButton.classList.remove("compact"); exportHost.insertBefore(exportButton, exportNext);
-    }
-    if (shown) browserView.activate(); else { browserView.deactivate(); visualInspector.deactivate(); visualAnnotations.collapseEditor(); }
-    browserView.layout();
-  }
   function renderHtmlWorkspace() {
     if (disposed || !active) return;
     if (loaded && !loading && sourceGeneration !== checkedSourceGeneration && !workspaceActions.isBusy()) ready(true);
     workspace(); ensureSelection(); renderFiles(); visualInspector.refresh();
-    renderHtmlWorkspaceEditor(); applyHtmlWorkspaceMode(); updateHtmlWorkspaceStatus(); previewSurface.refresh(); syncBrowser();
+    renderHtmlWorkspaceEditor(); applyHtmlWorkspaceMode(); updateHtmlWorkspaceStatus();
     if (sourceConflict) log("HTML изменился в чате. Правки сохранены в этой вкладке; обновите исходники перед записью.", "error");
   }
   function refreshChat() { var panel = chatPanel(); if (panel) panel.refresh(); }
@@ -584,7 +565,7 @@
         return true;
       } catch (error) { if (!disposed && generation === loadGeneration) { checkedSourceGeneration = sourceGeneration; state.chatDetailError = error.detail || error.message; log(state.chatDetailError, "error"); } return false; }
       finally { if (generation === loadGeneration) { loading = null; state.chatDetailPending = false; renderHtmlWorkspace(); } }
-    })(); previewSurface.refresh(); return loading;
+    })(); return loading;
   }
   async function reloadHtmlWorkspaceSources() {
     if (loading) await loading;
@@ -692,7 +673,6 @@
     modeButtons.forEach(function (button) {
       button.addEventListener("click", function () {
         setHtmlWorkspaceMode(button.getAttribute("data-html-mode"));
-        if (button.getAttribute("data-html-mode") === "preview") workspaceActions.refreshAuto();
       });
     });
     $("copyHtmlWorkspaceButton").addEventListener("click", function () {
@@ -702,14 +682,11 @@
         .catch(function () { status.textContent = "Не удалось скопировать"; });
     });
   }
-  var previewRoot = $("htmlWorkspacePreview"), browserMount = $("htmlWorkspacePreviewLink");
   var detail = $("artifactDetailPreview"); detail.classList.add("html-workspace-view"); detail.dataset.htmlView = "preview";
-  previewRoot.before(detail); previewRoot.classList.remove("html-workspace-view"); previewRoot.classList.add("preview-side-panel");
-  browserMount.replaceChildren();
-  previewSurface.setAnnotation($("inspectHtmlWorkspaceButton")); previewRoot.appendChild($("htmlWorkspaceInspectStatus"));
-  var browserView = RNAssistantViewerRegistry.mount("browser", browserMount, { surface: previewRoot, portalHost: document.querySelector(".shell") });
+  $("htmlWorkspacePreview").before(detail); $("htmlWorkspacePreview").hidden = true;
+  $("htmlWorkspacePreviewLink").remove();
   bindHtmlWorkspaceActions();
-  var controller = { element: root, target: target, ready: ready, annotations: visualAnnotations,
+  var controller = { element: root, target: target, ready: ready, annotations: visualAnnotations, openBrowser: openBrowser,
     select: selectHtmlWorkspaceItem, remove: deleteHtmlWorkspaceTreeItem, mode: setHtmlWorkspaceMode,
     createItem: function (kind) { if (kind === "plan") return workspaceActions.createPlan(); if (kind === "data") addHtmlWorkspaceData(); else addHtmlWorkspaceFile(kind); },
     dirty: function () { return state.htmlWorkspaceDirty; }, busy: function () { return stagingVisualSelection || workspaceActions.isBusy(); },
@@ -738,13 +715,13 @@
     },
     authorityChanged: handleResourceAuthorityChanged,
     activate: function () { active = true; ready(sourceGeneration !== checkedSourceGeneration || sourceConflict && !state.htmlWorkspaceDirty); renderHtmlWorkspace(); updateDrafts(); },
-    deactivate: function () { active = false; previewSurface.collapse(); browserView.deactivate(); visualInspector.deactivate(); visualAnnotations.collapseEditor(); },
-    layout: function () { browserView.layout(); code.refresh(); },
+    deactivate: function () { active = false; visualInspector.deactivate(); visualAnnotations.collapseEditor(); },
+    layout: function () { code.refresh(); },
     dispose: function () {
       if (disposed) return; disposed = true; active = false; loadGeneration++; events.abort();
       workspaceSource.release(); workspaceActions.cancelWrite(); workspaceActions.closeArtifactViewers();
       visualAnnotations.dispose(); visualInspector.dispose(); workspaceEditor.dispose();
-      RNAssistantViewerRegistry.unmount(browserMount); previewSurface.clear(); code.destroy(); root.remove(); updateDrafts();
+      code.destroy(); root.remove(); updateDrafts();
     }
   };
   return controller;

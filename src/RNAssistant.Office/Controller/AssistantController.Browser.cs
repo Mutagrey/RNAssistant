@@ -14,10 +14,11 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        private ConversationMetadata BrowserOwner(BrowserOwnerScope owner)
+        private ConversationMetadata BrowserOwner(BrowserOwnerScope owner, bool allowCatalogRead = false)
         {
             if (owner?.Kind != BrowserOwnerKind.Document || string.IsNullOrEmpty(owner.ChatId)) throw new InvalidOperationException("Выберите точный документ и чат Browser.");
             var metadata = LoadDiagnosticsMetadata(owner.ChatId, null);
+            if (allowCatalogRead) return ArtifactCatalog().SourceMetadata(metadata, owner.ScopeId);
             if (metadata.DocumentAuthorityId != owner.ScopeId) throw new InvalidOperationException("Контекст документа Browser изменился.");
             return metadata;
         }
@@ -25,23 +26,28 @@ namespace RNAssistant.Office
         { return new DocumentHtmlVersionService(_paths, _chatStore.DocumentArtifacts); }
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
         {
-            var owner = BrowserOwner(request?.OwnerScope);
+            BrowserLocalLocator locator;
+            var exact = BrowserLocalLocator.TryParse(request?.Locator, out locator) &&
+                (locator.VersionId != null || locator.Kind == BrowserLocatorKind.Resource && locator.Key.Contains("~"));
+            var owner = BrowserOwner(request?.OwnerScope, exact);
             if (request.Locator == "/") return BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, "/", null);
             return HtmlVersions().Resolve(owner, request);
         }
         internal BrowserVersionState BrowserVersionState(BrowserVersionRequest request)
-        { return HtmlVersions().State(BrowserOwner(request?.Target?.OwnerScope), request); }
+        { return HtmlVersions().State(BrowserOwner(request?.Target?.OwnerScope, true), request); }
+        internal SourceComparisonDto CompareBrowserSources(BrowserSourceComparisonRequest request)
+        { return HtmlVersions().Compare(BrowserOwner(request?.Target?.OwnerScope, true), request); }
         internal BrowserVersionPage BrowserVersions(BrowserVersionRequest request)
-        { return HtmlVersions().Versions(BrowserOwner(request?.Target?.OwnerScope), request); }
+        { return HtmlVersions().Versions(BrowserOwner(request?.Target?.OwnerScope, true), request); }
         internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token)
-        { return HtmlVersions().Command(BrowserOwner(request?.Target?.OwnerScope), request, token); }
+        { return HtmlVersions().Command(BrowserOwner(request?.Target?.OwnerScope, request?.Action == BrowserVersionAction.Delete), request, token); }
 
         internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
         {
-            var metadata = BrowserOwner(request.OwnerScope);
+            var metadata = BrowserOwner(request.OwnerScope, target.Immutable);
             if (target.OwnerScope.ScopeId != metadata.DocumentAuthorityId || target.ChatId != metadata.Id ||
                 target.State != BrowserTargetState.Ready) throw new InvalidOperationException("Контекст исходника Browser изменился.");
-            var reference = new ResourceRef(target.ResourceUri);
+            var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri));
             var artifact = _chatStore.DocumentArtifacts.Read(metadata, reference, false);
             if (_chatStore.DocumentArtifacts.IsRemoved(metadata, artifact)) throw new InvalidOperationException("Источник удалён из каталога.");
             if (artifact.ContentByteLength > 8 * 1024 * 1024) throw new InvalidOperationException("Исходник превышает лимит просмотра.");

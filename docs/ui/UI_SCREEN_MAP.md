@@ -1,5 +1,14 @@
 # Карта экранов, навигации и состояний
 
+## Browser provider routes — In Review, 2026-11-13
+
+Material HTML/raw HTML, editor Preview and plugin rail open Browser. Reopening the
+same rail source reuses its exact tab; sibling tabs remain independent. Raw HTML
+shows Create project; project Save stays visible with its reason. Page actions offer
+exact export/copy, source editor and source chat as capabilities permit. Comparison
+selects saved checkpoints, including Workspace versions. Binary/oversized members
+show a refusal. Removed entries stay Removed; no latest substitution.
+
 ## StartSurface / Shell — In Review, 2026-11-13
 
 «+» opens the existing choose-N tab: Browser, Materials, Library, available VBA and

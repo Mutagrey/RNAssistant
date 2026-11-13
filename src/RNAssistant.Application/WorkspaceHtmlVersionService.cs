@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using RNAssistant.Application.Contracts;
@@ -101,6 +102,23 @@ namespace RNAssistant.Application
                 path => _files.ReadText(workspace, path).Text);
         }
 
+        public SourceComparisonDto Compare(BrowserSourceComparisonRequest request)
+        {
+            SourceComparisonService.Validate(request);
+            var target = request.Target;
+            RequireOwner(target?.OwnerScope, target?.WorkspaceId);
+            if (target.Kind != BrowserTargetKind.WorkspaceHtmlProject || string.IsNullOrEmpty(target.SavedVersionId) || request.AfterId != target.SavedVersionId)
+                throw new InvalidOperationException("Выберите сохранённую версию проекта для сравнения.");
+            var before = _artifacts.ReadWorkspaceHtml(target.WorkspaceId, request.BeforeId);
+            var after = _artifacts.ReadWorkspaceHtml(target.WorkspaceId, request.AfterId);
+            Func<HtmlProjectSnapshotV1, string, IEnumerable<SourceComparisonMember>> members = (snapshot, version) => snapshot.Members.Select(member =>
+                new SourceComparisonMember { Path = member.Path, Fingerprint = member.Sha256, Length = member.ByteLength,
+                    Read = () => SourceComparisonService.Utf8(_artifacts.ReadWorkspaceHtmlMember(target.WorkspaceId, version, member.Path, SourceComparisonService.MaximumText)) });
+            var a = _artifacts.WorkspaceHtmlVersion(target.WorkspaceId, request.BeforeId);
+            var b = _artifacts.WorkspaceHtmlVersion(target.WorkspaceId, request.AfterId);
+            return SourceComparisonService.Read(request, "v" + a.Ordinal, "v" + b.Ordinal, members(before, request.BeforeId), members(after, request.AfterId));
+        }
+
         public BrowserVersionState State(BrowserVersionRequest request, CancellationToken token = default(CancellationToken))
         {
             var target = Target(request?.Target);
@@ -141,7 +159,7 @@ namespace RNAssistant.Application
                     using (_journal.AcquireScope(DocumentArtifactStore.WorkspaceHtmlScope(target.WorkspaceId), true, token))
                         result = _artifacts.DeleteWorkspaceHtml(target.WorkspaceId, request.VersionId, request.ExpectedStateRevision, request.OperationId, request.Confirmed);
                 else throw new SavedVersionException("version_read_only", "Эта операция не поддерживается для HTML-проекта.");
-                try { VersionChanged?.Invoke(new BrowserVersionStateChanged { Target = target, Reason = request.Action }); } catch { }
+                try { VersionChanged?.Invoke(new BrowserVersionStateChanged { Target = target, Reason = request.Action, VersionId = result.VersionId }); } catch { }
                 return new BrowserVersionResult { Outcome = (BrowserVersionOutcome)Enum.Parse(typeof(BrowserVersionOutcome), result.Outcome),
                     Version = Entry(result.Version), State = State(new BrowserVersionRequest { Target = target }, token) };
             }

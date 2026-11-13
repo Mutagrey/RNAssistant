@@ -10,14 +10,13 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("afterId", Required = Required.Always)] public string AfterId { get; set; }
         [JsonProperty("path")] public string Path { get; set; }
     }
-    public sealed class HtmlSourceComparisonRequest : SourceComparisonRequest
-    {
-        [JsonProperty("chatId", Required = Required.Always)] public string ChatId { get; set; }
-        [JsonProperty("documentId", Required = Required.Always)] public string DocumentId { get; set; }
-    }
     public sealed class PluginSourceComparisonRequest : SourceComparisonRequest
     {
         [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
+    }
+    public sealed class BrowserSourceComparisonRequest : SourceComparisonRequest
+    {
+        [JsonProperty("target", Required = Required.Always)] public BrowserTargetDescriptor Target { get; set; }
     }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum SourceFileChange { Added, Removed, Changed, Unchanged }

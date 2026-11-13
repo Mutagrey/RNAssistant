@@ -1,5 +1,14 @@
 # Current-to-target migration map
 
+## F4b Provider cutover — 2026-11-13
+
+HtmlArtifactView/BrowserObjectView and the editor's Browser preview mount are removed.
+Materials/editor/plugin rail route to app-browser; editor remains the sole dirty/write
+owner. Common BrowserSourceComparison replaces provider-specific UI bridges and DTOs.
+The getPluginVersions/getSavedHtmlHistory temporary adapters below are now removed.
+Workspace snapshot copy/export is the remaining provider action adapter (owner:
+Browser/Application); it must use the existing CAS/data plane/import owners.
+
 ## F4a StartSurface / Shell — 2026-11-13
 
 Flat chooser + all-chat enumeration and watermark screen list are replaced by one
@@ -14,9 +23,8 @@ completion belong to F4b (Browser adapters), not this presentation component.
 
 Candidate Apply and PublishedRelease writer/listing were removed. Plugin tools,
 bootstrap, Browser sources/history/compare use exact saved entries. The old
-getPluginVersions DTO is a thin metadata adapter for SourceComparison over that same
-catalog, not a second listing/store (owner 04/05; remove when source diff takes the
-common BrowserVersionRequest). Old plugin/plugin-release UI routes and executable
+getPluginVersions adapter was removed in F4b after SourceComparison switched to the
+common BrowserVersionRequest. Old plugin/plugin-release UI routes and executable
 transport are gone; existing Dock owner prunes those descriptors individually.
 Generic Browser checkpoint controls currently admit plugin providers; document and
 Workspace HTML adapters are the next F3c slice (owner 04/05). B02 remains source-only.
@@ -1052,8 +1060,7 @@ adapter and cutoff migration connected in the next slice. No second version stor
 ### Document checkpoint cutover — 2026-11-13
 
 The ArtifactVersions provider guard now includes document HTML; its old savedHtml
-history-picker path is removed. HtmlArtifactView temporarily mounts the same common
-controls until F4 route cutover (owner: Browser UI). getSavedHtmlHistory remains only
-for explicit technical source comparison; automatic revision durability is retained.
+history-picker path is removed. HtmlArtifactView and getSavedHtmlHistory were removed in F4b; common Browser owns
+checkpoint history/comparison. Automatic revision durability is retained.
 Raw HTML import is implemented at the existing artifact/import owners; remaining
 common UI action/provider wiring is F4, not another import pipeline.

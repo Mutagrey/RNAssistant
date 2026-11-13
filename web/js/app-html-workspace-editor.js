@@ -14,25 +14,17 @@
     var syncCodeEditors = code ? function () {} : window.syncCodeEditors;
     var refreshCodeEditors = code ? code.refresh : window.refreshCodeEditors;
     var model = options.model;
-    var htmlPreview = options.preview;
     var source = options.source;
     var renderedFile = null, renderedSourceKey = null;
     var workspaceArtifacts = options.artifacts;
     var htmlPreviewRefreshTimer = 0;
-    var renderedPreviewKey = null;
-    var renderedPreviewContents = null;
     var previewCleared = false;
-    var previewEpoch = 0;
 
     function invalidatePreview() {
-      previewEpoch++;
-      renderedPreviewKey = null;
-      renderedPreviewContents = null;
       if (options.inspector) options.inspector.reset();
       if (options.closeResources) options.closeResources();
     }
     function clearPreview(frame) {
-      if (options.previewSurface) options.previewSurface.clear();
       if (previewCleared) return;
       invalidatePreview();
       frame.replaceChildren();
@@ -63,16 +55,6 @@
     var setDataJson = model.setDataJson;
     var selectedItem = model.selectedItem;
     var snapshotLabel = model.snapshotLabel;
-    function previewLabel(selected) {
-      var root = (state.artifacts || []).find(function (item) {
-        return model.artifactId(item) === state.activeHtmlArtifactId;
-      });
-      var title = root ? artifactTitle(root) : "HTML";
-      var file = selected && selected.type === "file" ? selected.item : null, sourceRef = file && model.prop(file, "Source", "source", null);
-      return { title: title, path: file ? filePath(file) : "", address: sourceRef && (sourceRef.uri || sourceRef.Uri) || root && model.prop(root, "ResourceUri", "resourceUri", ""),
-        details: root ? [{ label: "Рабочий проект", status: "Версия " + model.prop(root, "Revision", "revision", ""), icon: "clock", disabled: true }] : [] };
-    }
-
     function renderRedoBranches(selected) {
       var select = $("redoHtmlWorkspaceBranchSelect");
       if (!select) return;
@@ -169,7 +151,7 @@
         } else if (state.chatDetailPending) {
           status.textContent = "Загрузка чата…";
         } else if (state.chatDetailError) {
-          status.textContent = "Не удалось загрузить чат. Повторите загрузку в истории сообщений.";
+          status.textContent = state.chatDetailError + " Обновите исходники.";
         } else if (blocked) {
           status.textContent = "HTML workspace требует восстановления.";
         } else if (!files().length && !dataSources().length && !(state.artifacts || []).length) {
@@ -433,13 +415,12 @@
       if (!options.previewVisible || !options.previewVisible() || state.htmlWorkspaceDirty) return;
       clearPreview(frame); frame.classList.add("hidden");
       detail.classList.remove("hidden"); detail.textContent = RNAssistantBrowser.unavailable;
-      if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), RNAssistantBrowser.unavailable);
     }
 
     return {
       dispose: function () { clearTimeout(htmlPreviewRefreshTimer); clearPreview($("htmlWorkspacePreviewFrame")); },
       suspendPreview: function () { clearPreview($("htmlWorkspacePreviewFrame")); },
-      reloadPreview: function () { renderedPreviewKey = null; renderedPreviewContents = null; renderHtmlWorkspacePreview(); },
+      reloadPreview: renderHtmlWorkspacePreview,
       applyMode: applyHtmlWorkspaceMode,
       confirmDiscard: confirmDiscardHtmlWorkspaceChanges,
       markDirty: markHtmlWorkspaceDirty,

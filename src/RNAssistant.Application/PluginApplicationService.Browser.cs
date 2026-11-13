@@ -117,6 +117,18 @@ namespace RNAssistant.Application
         }
 
         // Metadata query. Does not Check, launch plugin scripts or capture project files.
+        public SourceComparisonDto CompareBrowserSources(BrowserSourceComparisonRequest request)
+        {
+            SourceComparisonService.Validate(request);
+            if (request.Target?.Kind == BrowserTargetKind.WorkspaceHtmlProject) return HtmlProjects.Compare(request);
+            var target = ResolveBrowserLocator(new BrowserResolveRequest { OwnerScope = request.Target?.OwnerScope, Locator = request.Target?.DisplayLocator }).Target;
+            if (target?.Kind != BrowserTargetKind.PluginRelease || target.State != BrowserTargetState.Ready ||
+                target.PluginId != request.Target.PluginId || target.SavedVersionId != request.AfterId)
+                throw new InvalidOperationException("Выберите точную сохранённую версию плагина.");
+            return CompareSources(new PluginSourceComparisonRequest { PluginId = target.PluginId,
+                BeforeId = request.BeforeId, AfterId = request.AfterId, Path = request.Path });
+        }
+
         public IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope caller)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)

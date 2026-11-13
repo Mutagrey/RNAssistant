@@ -10,16 +10,6 @@
   function sourcePlugin(){var snapshot=RNAssistantProjectChats.snapshot();return RNAssistantWorkspaceChat.owner()==='plugin'&&snapshot&&snapshot.project&&items.find(function(value){return value.sourceWorkspaceId===snapshot.project.workspaceId;});}
   function selectedId(){var target=RNAssistantDockWorkspace.activeTarget();var match=target&&target.view==='browser'&&/^\/plugins\/([^/]+)\//.exec(target.locator||'');return match?decodeURIComponent(match[1]):((sourcePlugin()||{}).pluginId)||null;}
   function button(label,action){var node=document.createElement('button');node.type='button';node.textContent=label;node.onclick=action;return node;}
-  function applyAppearance(frame){
-    if(!frame||!frame.contentWindow)return;
-    var root=document.documentElement,style=getComputedStyle(root);
-    var names={panel:'--surface',secondary:'--surface-subtle',secondaryHover:'--surface-hover',
-      text:'--ink',muted:'--ink-muted',line:'--line',lineStrong:'--line-strong',
-      accent:'--accent',accentHover:'--accent-hover',accentInk:'--accent-ink',
-      accentSoft:'--accent-soft',danger:'--danger',success:'--success'};
-    var colors={};Object.keys(names).forEach(function(key){colors[key]=style.getPropertyValue(names[key]).trim();});
-    frame.contentWindow.postMessage({type:'rna.appearance',theme:root.dataset.theme==='dark'?'dark':'light',colors:colors},'*');
-  }
   async function refresh(){if(refreshTask)return refreshTask;refreshTask=loadPlugins();try{return await refreshTask;}finally{refreshTask=null;}}
   async function loadPlugins(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
     if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
@@ -56,7 +46,7 @@
     if(sessionId)return openSourceChat(sessionId,plugin);
     if(!document.getElementById('tab-chat').classList.contains('active')&&!document.getElementById('tab-artifacts').classList.contains('active'))switchTab('chat',{preserveChatOwner:true});
     return RNAssistantBrowser.open('/plugins/'+encodeURIComponent(id)+'/source/'+(plugin.entryPath||'plugin.json').split('/').map(encodeURIComponent).join('/'),
-      {kind:'User',scopeId:'local'}, {title:plugin.name});
+      {kind:'User',scopeId:'local'}, {title:plugin.name,reuse:true});
   }
 
   function updateSourceLocation(){var connecting=el('Connect').checked,manual=connecting||customSource;
@@ -174,7 +164,7 @@
       if(!plugin||!await openSourceChat(target.sessionId,plugin)||!await select(plugin.pluginId))return;
       status('Просмотр аннотации требует подтверждённого native Browser.',true);
     },
-    applyAppearance:applyAppearance,openSourceChat:openSourceChat,
+    openSourceChat:openSourceChat,
     onChatSnapshot:function(){},
     isChatBusy:function(){return busy;},
     sourceWorkspaceId:function(){var source=sourcePlugin();return source&&source.sourceWorkspaceId;},selectedId:selectedId};

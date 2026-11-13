@@ -37,6 +37,15 @@ namespace RNAssistant.Office.Services
         }
         private static string Title(DocumentAuthorityEntry entry)
         { return string.IsNullOrEmpty(entry.Locator) ? entry.Host + " · " + entry.AuthorityId.Substring(0, Math.Min(8, entry.AuthorityId.Length)) : Path.GetFileName(entry.Locator); }
+        internal ConversationMetadata SourceMetadata(ConversationMetadata actor, string documentId)
+        {
+            if (actor == null) throw new InvalidOperationException("Контекст чтения недоступен.");
+            if (string.IsNullOrEmpty(documentId) || documentId == actor.DocumentAuthorityId) return actor;
+            var entry = _documents.List().SingleOrDefault(d => d.AuthorityId == documentId);
+            if (entry == null) throw new InvalidOperationException("Документ отсутствует в локальном каталоге.");
+            return new ConversationMetadata(actor.Id, actor.Revision, entry.Host, null, documentAuthorityId: entry.AuthorityId);
+        }
+
         internal ChatSession Source(ChatSession actor, string documentId)
         {
             if (string.IsNullOrEmpty(documentId) || documentId == actor.DocumentAuthorityId) return actor;
@@ -100,67 +109,6 @@ namespace RNAssistant.Office.Services
                 Items = items.Skip(offset).Take(50).ToArray(), NextCursor = items.Count > offset + 50 ? stamp + "." + (offset + 50) : null,
                 Documents = documents.Select(d => new ArtifactCatalogDocument { Id = d.AuthorityId, Title = Title(d) }).ToArray() };
         }
-        internal SavedHtmlHistoryResponse SavedHtmlHistory(ChatSession actor, SavedHtmlHistoryRequest request)
-        {
-            if (actor == null || request == null || request.ChatId != actor.Id || string.IsNullOrWhiteSpace(request.ResourceUri) || request.ResourceUri.Length > 4096)
-                throw new InvalidOperationException("Требуется точная ссылка сохранённого HTML.");
-            var source = Source(actor, request.DocumentId);
-            var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(request.ResourceUri));
-            if (reference.Uri != request.ResourceUri) throw new InvalidOperationException("Требуется ссылка проекта, а не его файла.");
-            var selected = _artifacts.Read(ConversationMetadata.From(source), reference, false);
-            var logicalId = HtmlWorkspaceIdentity.LogicalId(selected.Id);
-            if (selected.Kind != ChatArtifactKinds.HtmlWorkspace || logicalId == null || _artifacts.IsRemoved(ConversationMetadata.From(source), selected))
-                throw new InvalidOperationException("История сохранённого HTML недоступна.");
-            var identity = HtmlWorkspaceIdentity.Identity(source, logicalId);
-            var current = _artifacts.CurrentSnapshot(source, identity);
-            if (current == null) throw new InvalidOperationException("Текущая версия проекта недоступна.");
-            var head = _artifacts.Read(ConversationMetadata.From(source), current, false);
-            // A read-only projection of existing document metadata; never change the actor's selection or links.
-            var projection = new ChatSession { Id = actor.Id, DocumentAuthorityId = source.DocumentAuthorityId,
-                ActiveHtmlArtifactId = head.Id, Artifacts = _artifacts.SnapshotHistory(ConversationMetadata.From(source), logicalId).ToList() };
-            if (!projection.Artifacts.Any(item => item.Id == selected.Id))
-                throw new InvalidOperationException("Выбранный снимок отсутствует в истории проекта.");
-            var history = ArtifactLibraryProjectionService.History(projection, new ArtifactLibraryHistoryRequest {
-                ChatId = actor.Id, ExpectedSessionRevision = projection.Revision, HeadArtifactId = head.Id, Cursor = request.Cursor });
-            var after = _artifacts.CurrentSnapshot(source, identity);
-            if (after == null || after.Uri != current.Uri || after.Revision != current.Revision)
-                throw new InvalidOperationException("История изменилась во время чтения. Обновите список версий.");
-            return new SavedHtmlHistoryResponse { ChatId = actor.Id, DocumentId = source.DocumentAuthorityId,
-                ResourceUri = request.ResourceUri, HeadArtifactId = history.HeadArtifactId,
-                TotalCount = history.TotalCount, Items = history.Items, NextCursor = history.NextCursor };
-        }
-
-        internal RNAssistant.Application.Contracts.SourceComparisonDto CompareHtmlSources(ChatSession actor,
-            RNAssistant.Application.Contracts.HtmlSourceComparisonRequest request)
-        {
-            RNAssistant.Application.SourceComparisonService.Validate(request);
-            if (actor == null || request.ChatId != actor.Id || string.IsNullOrWhiteSpace(request.DocumentId))
-                throw new InvalidOperationException("Требуется исходный чат и документ HTML-проекта.");
-            var before = ReadTransferArtifact(actor, request.DocumentId, request.BeforeId, out var source, out var beforeRef);
-            var after = ReadTransferArtifact(actor, request.DocumentId, request.AfterId, out var afterSource, out var afterRef);
-            var logicalId = HtmlWorkspaceIdentity.LogicalId(before.Id);
-            if (before.Kind != ChatArtifactKinds.HtmlWorkspace || after.Kind != ChatArtifactKinds.HtmlWorkspace ||
-                logicalId == null || logicalId != HtmlWorkspaceIdentity.LogicalId(after.Id))
-                throw new InvalidOperationException("Выберите две версии одного HTML-проекта.");
-            if (before.ContentByteLength > 16 * 1024 * 1024 || after.ContentByteLength > 16 * 1024 * 1024)
-                throw new InvalidOperationException("Снимок превышает лимит просмотра 16 МиБ.");
-            var a = _artifacts.Read(ConversationMetadata.From(source), beforeRef);
-            var b = _artifacts.Read(ConversationMetadata.From(afterSource), afterRef);
-            return RNAssistant.Application.SourceComparisonService.Read(request, "v" + a.Revision, "v" + b.Revision,
-                HtmlComparisonMembers(a), HtmlComparisonMembers(b));
-        }
-
-        private static IEnumerable<RNAssistant.Application.SourceComparisonMember> HtmlComparisonMembers(ChatArtifact artifact)
-        {
-            var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText ?? "null");
-            if (snapshot?.Files == null || snapshot.Files.Count > 100)
-                throw new InvalidDataException("Исходники HTML-снимка недоступны.");
-            // Deliberately do not resolve DataSources, current heads or preview values.
-            return snapshot.Files.Select(file => new RNAssistant.Application.SourceComparisonMember {
-                Path = file.Path, Fingerprint = TextPatternEngine.Sha256(file.Content ?? ""),
-                Length = (file.Content ?? "").Length, Read = () => file.Content ?? "" });
-        }
-
         private static bool CanTransfer(ChatArtifact item)
         { return string.IsNullOrEmpty(item.AvailabilityIssue) && (item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.File || item.OriginalAttachment != null); }
 

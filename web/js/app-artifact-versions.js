@@ -78,6 +78,7 @@
     function target() { return context.target(); }
     function controls() {
       var value = target(), caps = state && state.capabilities || value && value.capabilities || {};
+      save.hidden = value && value.kind === "HtmlResource";
       save.disabled = busy || !!pending || !state || !caps.saveVersion || !state.capabilities.saveVersion || !state.contentRevision;
       save.title = save.disabled ? "Сохранить версию: " + (busy ? "дождитесь операции" : !caps.saveVersion ?
         caps.saveReason === "ProjectDefinitionRequired" ? "задайте состав проекта" : "доступно для рабочей копии проекта" : (state && state.target && state.target.message || "обновите состояние исходников")) : "Сохранить версию проекта";

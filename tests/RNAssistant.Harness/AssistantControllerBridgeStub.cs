@@ -295,6 +295,7 @@ namespace RNAssistant.Office
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
         { return RNAssistant.Application.BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)); }
         internal BrowserVersionState BrowserVersionState(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
+        internal SourceComparisonDto CompareBrowserSources(BrowserSourceComparisonRequest request) { throw new InvalidOperationException("Document comparison is not configured by this fixture."); }
         internal BrowserVersionPage BrowserVersions(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
         internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
@@ -683,11 +684,6 @@ namespace RNAssistant.Office
         { LastChatId = request.ChatId; return new ArtifactLibraryPageResponse { ChatId = request.ChatId }; }
         public ArtifactLibraryHistoryResponse GetArtifactLibraryHistory(ArtifactLibraryHistoryRequest request)
         { LastChatId = request.ChatId; return new ArtifactLibraryHistoryResponse { ChatId = request.ChatId }; }
-        public SavedHtmlHistoryResponse GetSavedHtmlHistory(SavedHtmlHistoryRequest request)
-        { LastChatId = request.ChatId; LastArtifactViewerDocumentId = request.DocumentId; LastArtifactViewerResourceUri = request.ResourceUri;
-            return new SavedHtmlHistoryResponse { ChatId = request.ChatId, DocumentId = request.DocumentId, ResourceUri = request.ResourceUri }; }
-        public RNAssistant.Application.Contracts.SourceComparisonDto CompareHtmlSources(RNAssistant.Application.Contracts.HtmlSourceComparisonRequest request)
-        { return new RNAssistant.Application.Contracts.SourceComparisonDto { BeforeId = request.BeforeId, AfterId = request.AfterId }; }
         public ArtifactTransferDownload ExportArtifact(ArtifactTransferRequest request, System.Threading.CancellationToken token)
         { LastChatId = request.ChatId; return new ArtifactTransferDownload(); }
         public RNAssistant.Application.Contracts.HtmlProjectImportResult CreateHtmlProjectFromArtifact(

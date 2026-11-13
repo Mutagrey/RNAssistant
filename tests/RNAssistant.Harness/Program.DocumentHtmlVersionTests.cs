@@ -61,6 +61,13 @@ namespace RNAssistant.Harness
                 var binding = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = chat.DocumentAuthorityId, ChatId = chat.Id };
                 var removed = service.Resolve(metadata, new BrowserResolveRequest { OwnerScope = binding, Locator = BrowserLocalLocator.ForResource(logical, older.VersionId) });
                 AssertEqual(BrowserTargetState.Removed, removed.Target.State, "saved locator never substitutes the head");
+                var afterTarget = service.Resolve(metadata, new BrowserResolveRequest { OwnerScope = binding, Locator = BrowserLocalLocator.ForResource(logical, saved.VersionId) }).Target;
+                var comparison = new BrowserSourceComparisonRequest { Target = afterTarget, BeforeId = page.Items.First().VersionId, AfterId = saved.VersionId, Path = "index.html" };
+                var compared = service.Compare(metadata, comparison);
+                AssertEqual("<h1>3</h1>", compared.BeforeText, "checkpoint comparison resolves the selected entry");
+                AssertEqual("<h1>4</h1>", compared.AfterText, "checkpoint comparison retains the displayed exact publication");
+                comparison.BeforeId = older.VersionId;
+                SavedFailure(() => service.Compare(metadata, comparison), "version_removed");
                 var fifth = publish(5);
                 AssertEqual(3, owner.HtmlVersions(metadata, logical, null).Items.Count, "new automatic revision does not enter default checkpoints");
                 var replay = owner.SaveHtmlVersion(metadata, logical, state.StateRevision, current.Uri, "save-fourth", new SavedVersionActor { Kind = SavedVersionActorKind.User });

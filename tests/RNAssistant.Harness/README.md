@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+## Local Browser provider cutover — 2026-11-13
+
+Current UI checks: `html-editor-views`, `html-project-import`, `browser-source-diff`,
+`browser-saved-views`, `plugin-browser`. The old browser-views/plugin-view-selection/
+plugin-source-failure Shell iframe tests below are historical and removed. plugins
+now checks package Worker/data RPC independently of Shell execution admission.
+Harness filters: `source comparison:`, `shared HTML: saved history`,
+`plugins: paged published`. These verify exact saved sources, paging/current/removal
+and immutable restore without live-source overwrite. Windows/B02 remains open.
+
 Local Browser F2a: `local browser:` has five cases including real Workspace media
 wire delivery, non-vision refusal and retained capture provenance. `external browser:`
 has nine guard/action cases; `workspace: Office target` verifies the Office boundary.

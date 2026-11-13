@@ -11,14 +11,14 @@ namespace RNAssistant.Application
     public sealed partial class PluginApplicationService
     {
         public event Action<BrowserVersionStateChanged> VersionChanged;
-        private void NotifyVersionChanged(string plugin, BrowserVersionAction action)
+        private void NotifyVersionChanged(string plugin, BrowserVersionAction action, string versionId = null)
         {
             try
             {
                 var registration = _store.Get(plugin);
                 var message = new BrowserVersionStateChanged { Target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.PluginSource, State = BrowserTargetState.Ready, PluginId = plugin,
                     WorkspaceId = registration.SourceWorkspaceId, OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = registration.SourceWorkspaceId } },
-                    StateRevision = _store.VersionState(plugin).StateRevision, Reason = action };
+                    StateRevision = _store.VersionState(plugin).StateRevision, Reason = action, VersionId = versionId };
                 // Publication is already verified. A dropped UI notification cannot undo it.
                 VersionChanged?.Invoke(message);
             } catch { }
@@ -101,7 +101,7 @@ namespace RNAssistant.Application
                             result = _store.DeleteVersion(target.PluginId, request.VersionId, request.ExpectedStateRevision,
                                 request.ExpectedActiveVersionId, request.ExpectedActiveReleaseId, request.OperationId,
                                 request.Confirmed, VersionInUse(target.PluginId, request.VersionId));
-                            NotifyVersionChanged(target.PluginId, BrowserVersionAction.Delete);
+                            NotifyVersionChanged(target.PluginId, BrowserVersionAction.Delete, request.VersionId);
                             break;
                         default: throw new ArgumentOutOfRangeException(nameof(request.Action));
                     }

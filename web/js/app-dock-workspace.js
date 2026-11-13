@@ -78,7 +78,7 @@
     var descriptor = target && views[target.view];
     if (!descriptor || !descriptor.accepts || !descriptor.accepts(target)) return false;
     target = Object.freeze(Object.assign({}, target));
-    if (descriptor.targetRoute) return descriptor.open(target);
+    if (descriptor.targetRoute) return descriptor.open(target, options);
     if (!api || !descriptor.perObject) return false;
     var chooser = api.activePanel && /^choose-\d+$/.test(api.activePanel.id) ? api.activePanel : null;
     var id = descriptor.key(target), item = panel(id);

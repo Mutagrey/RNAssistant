@@ -91,26 +91,6 @@ namespace RNAssistant.Application.Contracts
         public long Size { get; set; }
     }
     public sealed class PluginVisualDraftDiscardDto { public bool Discarded { get; set; } }
-    public sealed class PluginReleaseHistoryRequest
-    {
-        [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
-        [JsonProperty("cursor")] public string Cursor { get; set; }
-    }
-    public sealed class PluginPublishedVersionDto
-    {
-        [JsonProperty("versionId")] public string VersionId { get; set; }
-        [JsonProperty("ordinal")] public long Ordinal { get; set; }
-        [JsonProperty("releaseId")] public string ReleaseId { get; set; }
-        [JsonProperty("name")] public string Name { get; set; }
-        [JsonProperty("version")] public string Version { get; set; }
-        [JsonProperty("capturedUtc")] public DateTime CapturedUtc { get; set; }
-        [JsonProperty("active")] public bool Active { get; set; }
-    }
-    public sealed class PluginReleaseHistoryDto
-    {
-        [JsonProperty("items")] public IReadOnlyList<PluginPublishedVersionDto> Items { get; set; }
-        [JsonProperty("nextCursor")] public string NextCursor { get; set; }
-    }
     public sealed class PluginCatalogDto
     {
         [JsonProperty("error")] public string Error { get; set; }

@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  // Read-only presentation for the two existing immutable version owners.
+  // Read-only presentation over the common checkpoint catalog and existing source owners.
   function create(target) {
     var root = document.createElement("section"); root.className = "browser-source-diff"; root.hidden = true;
     root.setAttribute("aria-label", "Сравнение сохранённых исходников");
@@ -17,6 +17,7 @@
     var status = document.createElement("div"); status.className = "browser-source-diff-status"; status.setAttribute("role", "status");
     status.textContent = "Выберите вторую сохранённую версию.";
     controls.append(choose, files); root.append(controls, pair, note, status, output);
+    var afterId = target.savedVersionId || target.resourceUri;
     var active = false, disposed = false, epoch = 0, before = null, ready = false, menu = null, menuEpoch = 0;
     var pending = new Set(), filePath = null, head = null;
     var changes = { Added: "добавлен", Removed: "удалён", Changed: "изменён", Unchanged: "без изменений" };
@@ -31,13 +32,11 @@
     }
     function current(version) { return active && !disposed && epoch === version; }
     function compare(path) {
-      var payload = { beforeId: before.id, afterId: target.afterId, path: path };
-      if (target.kind === "html") { payload.chatId = target.chatId; payload.documentId = target.documentId; }
-      else payload.pluginId = target.pluginId;
-      return request(target.kind === "html" ? "compareHtmlSources" : "comparePluginSources", payload);
+      return request("compareBrowserSources", { target: target, beforeId: before.id, afterId: afterId, path: path });
     }
+
     function accept(value, path) {
-      if (!value || value.beforeId !== before.id || value.afterId !== target.afterId || value.path !== path ||
+      if (!value || value.beforeId !== before.id || value.afterId !== afterId || value.path !== path ||
           !Array.isArray(value.files) || value.files.length > 1024 || value.files.some(function (f) { return !f.path || !changes[f.change]; }))
         throw new Error("Ответ сравнения не соответствует выбранной паре.");
       return value;
@@ -83,20 +82,15 @@
       function accepted() { return active && !disposed && menuEpoch === version && menu === owner && owner.isOpen(); }
       owner.update([{ label: "Загрузка версий…", disabled: true, icon: false }]);
       try {
-        var value = await request(target.kind === "html" ? "getSavedHtmlHistory" : "getPluginVersions", target.kind === "html"
-          ? { chatId: target.chatId, documentId: target.documentId, resourceUri: target.afterId, cursor: cursor }
-          : { pluginId: target.pluginId, cursor: cursor });
+        var value = await request("getBrowserVersions", { target: target, cursor: cursor, limit: 12 });
         if (!accepted()) return;
-        if (target.kind === "html") {
-          if (value.chatId !== target.chatId || value.documentId !== target.documentId || value.resourceUri !== target.afterId ||
-              !value.headArtifactId || head && value.headArtifactId !== head) throw new Error("История изменилась. Откройте выбор версий снова.");
-          head = value.headArtifactId;
-        }
+        if (head && value.stateRevision !== head) throw new Error("Каталог изменился. Откройте выбор версий снова.");
+        head = value.stateRevision;
         var entries = (value.items || []).map(function (item) {
-          var id = target.kind === "html" ? item.resourceUri : item.versionId;
-          var label = "v" + (target.kind === "html" ? item.revision : item.ordinal), date = new Date(item.createdUtc || item.capturedUtc);
-          return { key: id, label: label, icon: "clock", disabled: id === target.afterId,
-            status: id === target.afterId ? "Открытая версия" : !isNaN(date.getTime()) ? date.toLocaleString() : "",
+          var id = item.versionId;
+          var label = "v" + item.ordinal, date = new Date(item.createdUtc || item.capturedUtc);
+          return { key: id, label: label, icon: "clock", disabled: id === afterId,
+            status: id === afterId ? "Открытая версия" : !isNaN(date.getTime()) ? date.toLocaleString() : "",
             checked: before && before.id === id, onSelect: function () {
               if (!active || disposed) return;
               before = { id: id, label: label }; choose.textContent = "Сравнить с " + label;
@@ -104,7 +98,7 @@
             } };
         });
         if (!entries.length) entries.push({ label: "Сохранённых версий нет.", disabled: true, icon: false });
-        if (value.nextCursor) entries.push({ label: "Следующая страница версий", icon: "right", keepOpen: true, onSelect: function () { history(value.nextCursor); } });
+        if (value.cursor) entries.push({ label: "Следующая страница версий", icon: "right", keepOpen: true, onSelect: function () { history(value.cursor); } });
         if (cursor) entries.push({ label: "В начало истории", icon: "left", keepOpen: true, onSelect: function () { history(null); } });
         owner.update(entries);
       } catch (error) {

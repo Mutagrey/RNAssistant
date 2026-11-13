@@ -11,6 +11,15 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.20.0-dev
+
+- HTML materials, raw HTML, source-editor Preview and plugin rail share one Browser.
+  Page actions create projects from exact sources; comparison supports saved document,
+  Workspace and plugin versions with scoped paging and explicit unavailable states.
+- Removed duplicate HTML views and old Browser history APIs. Fixed exact snapshot
+  revision reads and deferred refresh for hidden document pages. Execution remains
+  unavailable until native network isolation is qualified.
+
 ### 16.19.0-dev
 
 - Dock «+» and Browser Home share one searchable start surface. Opening a chat

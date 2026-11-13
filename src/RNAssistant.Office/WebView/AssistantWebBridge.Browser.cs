@@ -30,12 +30,15 @@ namespace RNAssistant.Office.WebView
             if (request.Target?.OwnerScope?.Kind != BrowserOwnerKind.Document) return Plugins.BrowserVersionCommand(request, token);
             var result = _controller.BrowserVersionCommand(request, token);
             if (result.Outcome != BrowserVersionOutcome.Unknown && result.Outcome != BrowserVersionOutcome.Rejected)
-                try { ReportBrowserVersionChanged(new BrowserVersionStateChanged { Target = result.State.Target, Reason = request.Action, StateRevision = result.State.StateRevision }); } catch { }
+                try { ReportBrowserVersionChanged(new BrowserVersionStateChanged { Target = result.State.Target, Reason = request.Action, StateRevision = result.State.StateRevision, VersionId = result.Version?.VersionId }); } catch { }
             return result;
         }
 
         private BrowserSuggestionPage BrowserSuggestions(BrowserSuggestionRequest request)
         { return BrowserTargetResolver.QueryNavigationSuggestions(request.OwnerScope, request, BrowserTargets(request.OwnerScope)); }
+
+        private SourceComparisonDto BrowserComparison(BrowserSourceComparisonRequest request)
+        { return request.Target?.OwnerScope?.Kind == BrowserOwnerKind.Document ? _controller.CompareBrowserSources(request) : Plugins.CompareBrowserSources(request); }
 
         private BrowserSourcePage BrowserSource(BrowserSourceRequest request)
         {

@@ -1,5 +1,19 @@
 # Universal Browser: предлагаемые контракты
 
+## Common provider actions — F4b, 2026-11-13
+
+`compareBrowserSources` accepts `BrowserSourceComparisonRequest` with a resolved
+owner/target, before saved-entry ID and exact displayed after ID. Each domain verifies
+membership/removal; the bounded common diff reads only the selected member. Document
+working snapshots retain exact revision references; raw HTML has no fabricated history.
+`getBrowserVersions` is the only Browser picker/comparison inventory. The old
+getSavedHtmlHistory/getPluginVersions/compareHtmlSources/comparePluginSources bridge
+operations and UI DTOs are removed. Automatic HTML revisions remain in the editor's
+technical undo/redo history. Delete notifications include the saved entry ID.
+Cross-document immutable reads use registered source metadata and the addressed real
+chat; they do not create a chat or change its selection. Working editing stays with
+the exact document's editor. Browser route data is presentation, never authority.
+
 ## StartSurface / UI preferences — F4a, 2026-11-13
 
 StartSurface takes a model (title/search/sections/entries/loading/error/empty) and

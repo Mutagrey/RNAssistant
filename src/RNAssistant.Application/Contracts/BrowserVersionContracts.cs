@@ -83,5 +83,6 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("target")] public BrowserTargetDescriptor Target { get; set; }
         [JsonProperty("stateRevision")] public string StateRevision { get; set; }
         [JsonProperty("reason")] public BrowserVersionAction Reason { get; set; }
+        [JsonProperty("versionId")] public string VersionId { get; set; }
     }
 }

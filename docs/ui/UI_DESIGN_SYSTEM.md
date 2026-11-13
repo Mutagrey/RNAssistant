@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Browser provider controls — In Review, 2026-11-13
+
+All provider routes use PreviewSurface tokens and the common toolbar, including raw
+Create project and persistent Save. The source editor no longer has parallel Browser
+chrome. At 420 px/125% the address occupies its own row and actions use the existing
+page menu. [Source actions wide](review/browser-provider-wide.png),
+[narrow](review/browser-provider-narrow.png). Synthetic review does not qualify native
+input/rendering and is not user acceptance.
+
 ## Shared StartSurface — In Review, 2026-11-13
 
 Chooser/Home use one token-based title, search, section and entry component; entries

@@ -1,5 +1,14 @@
 # Архитектура UI RNAssistant
 
+## Common Browser providers — In Review, 2026-11-13
+
+Material HTML routes through Browser; HtmlArtifactView/BrowserObjectView are removed.
+HtmlWorkspace editor owns source buffers, guards and saves, delegating preview to the
+common Browser. Provider actions are in app-browser-actions; comparison consumes one
+typed target and metadata inventory across document/Workspace/plugin. No authored
+Shell iframe or appearance transport remains. Exact document authority notices defer
+hidden reads and preserve dirty editor buffers. Native execution stays unavailable.
+
 ## F4a StartSurface — In Review, 2026-11-13
 
 `app-start-surface` renders only a supplied model/callbacks; Dock chooser and Browser

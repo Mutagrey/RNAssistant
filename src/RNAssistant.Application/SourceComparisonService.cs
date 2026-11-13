@@ -17,6 +17,14 @@ namespace RNAssistant.Application
     internal static class SourceComparisonService
     {
         internal const int MaximumText = 256000, MaximumFiles = 1024;
+        internal static IEnumerable<SourceComparisonMember> HtmlMembers(RNAssistant.Core.Models.ChatArtifact artifact)
+        {
+            var snapshot = Newtonsoft.Json.JsonConvert.DeserializeObject<RNAssistant.Core.Models.HtmlWorkspaceSnapshot>(artifact.InlineText ?? "null");
+            if (snapshot?.Files == null || snapshot.Files.Count > 100) throw new System.IO.InvalidDataException("Исходники HTML-снимка недоступны.");
+            return snapshot.Files.Select(file => new SourceComparisonMember { Path = file.Path,
+                Fingerprint = RNAssistant.Core.Tools.TextPatternEngine.Sha256(file.Content ?? ""), Length = (file.Content ?? "").Length,
+                Read = () => file.Content ?? "" });
+        }
         internal static void Validate(SourceComparisonRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.BeforeId) || request.BeforeId.Length > 4096 ||

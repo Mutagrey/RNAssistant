@@ -1711,15 +1711,6 @@ namespace RNAssistant.Harness
                 "text pages use the data plane, never bridge body transport");
 
             response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
-                contractVersion = BridgeOperationCatalog.Version, id = "saved-history", type = "getSavedHtmlHistory", bridgeToken = token,
-                payload = new SavedHtmlHistoryRequest { ChatId = "chat-view", DocumentId = "source-document", ResourceUri = uri }
-            })).GetAwaiter().GetResult();
-            envelope = JObject.Parse(response);
-            AssertTrue(envelope["ok"].Value<bool>(), "saved history uses the typed bridge operation");
-            AssertEqual("source-document", (string)envelope["payload"]["documentId"], "history keeps source document scope");
-            AssertEqual(uri, (string)envelope["payload"]["resourceUri"], "history echoes the immutable viewed resource");
-
-            response = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
                 contractVersion = BridgeOperationCatalog.Version, id = "html-project-import", type = "createHtmlProjectFromArtifact", bridgeToken = token,
                 payload = new HtmlProjectImportRequest { ChatId = "chat-view", DocumentId = "source-document", ResourceUri = uri,
                     Backing = RNAssistant.Application.Contracts.HtmlProjectBacking.Managed }

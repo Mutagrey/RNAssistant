@@ -7,20 +7,22 @@
     if (text) result.textContent = text;
     return result;
   }
-  function accepts(target) {
-    return !!target && target.view === "material" && typeof target.chatId === "string" && !!target.chatId &&
+  function html(target) { return target && (target.kind === "html_workspace" || readers.isHtmlFileArtifact(artifactFor(target))); }
+  function valid(target) {
+    return !!target && ["material", "browser-resource"].includes(target.view) && typeof target.chatId === "string" && !!target.chatId &&
       target.chatId.length <= 256 && typeof target.documentId === "string" && target.documentId.length <= 256 && typeof target.resourceUri === "string" &&
       /^rna:\/\//.test(target.resourceUri) && target.resourceUri.length <= 4096 &&
       typeof target.kind === "string" && typeof target.title === "string" && target.title.length <= 1024 &&
       typeof target.mimeType === "string" && target.mimeType.length <= 200;
   }
+  function accepts(target) { return valid(target) && !html(target); }
   function key(target) { return "material:" + encodeURIComponent(JSON.stringify([target.chatId, target.documentId, target.resourceUri])); }
   function artifactFor(target) { return { ResourceUri: target.resourceUri, Kind: target.kind, Title: target.title, MimeType: target.mimeType }; }
   function targetFor(artifact, context) {
     context = context || {};
     var prop = readers.prop, head = context.head || readers.libraryHead(artifact);
     var actor = (state.chats || []).find(function (chat) { return prop(chat, "Id", "id", "") === (context.chatId || state.activeChatId); });
-    return { view: "material", chatId: context.chatId || state.activeChatId,
+    var result = { view: "material", chatId: context.chatId || state.activeChatId,
       documentId: context.documentId || prop(artifact, "DocumentId", "documentId", "") || "",
       documentTitle: context.documentTitle || prop(artifact, "DocumentTitle", "documentTitle", "") || prop(actor, "DocumentTitle", "documentTitle", ""),
       chatTitle: context.chatTitle !== undefined ? context.chatTitle : prop(actor, "Title", "title", ""), resourceUri: readers.exactArtifactUri(artifact),
@@ -30,9 +32,9 @@
       head: head ? { artifactId: head.artifactId, resourceUri: head.resourceUri, revision: head.revision,
         historyCount: head.historyCount, resourceClass: head.resourceClass } : null,
       sessionRevision: context.sessionRevision || (state.artifactLibrary || {}).sessionRevision || null };
+    if (html(result)) result.view = "browser-resource"; return result;
   }
   function create(target) {
-    if (target.kind === "html_workspace") return RNAssistantHtmlArtifactView.create(target);
     var root = node("section", "material-object-view"), header = node("header", "resource-editor-head");
     root.dataset.resourceUri = target.resourceUri; root.setAttribute("aria-label", target.title);
     var titleBox = node("div", "resource-editor-titlebox"), buttons = node("div", "resource-editor-actions");
@@ -64,12 +66,6 @@
       try {
         var result = await request;
         if (!current(version)) { closeLate(result); throw new Error("Чтение отменено."); }
-        if (command === "readArtifactViewerPage" && readers.isHtmlFileArtifact(artifactFor(target))) {
-          try {
-            var resolved = RNAssistantBrowserTarget.accept(result.browserTarget, target, "HtmlResource");
-            if (!resolved.capabilities.source) throw new Error("Исходник HTML недоступен.");
-          } catch (error) { closeLate(result); throw error; }
-        }
         return result;
       } finally { requests.delete(request.requestId); }
     }
@@ -145,14 +141,16 @@
       element: function () { return document.getElementById("artifactCatalog"); },
       prepare: function () { RNAssistantArtifactCatalog.show(); renderHtmlWorkspace(); },
       onVisible: function (visible) { if (visible) renderHtmlWorkspace(); } });
+    dock.registerTargetRoute("browser-resource", { accepts: function (target) { return valid(target) && html(target); },
+      open: function (target, options) { return RNAssistantBrowser.openResource(target, Object.assign({ referencePanel: "materials" }, options || {})); } });
     dock.registerView("material", { perObject: true, accepts: accepts, key: key, create: create,
-      maximumInstances: maximumInstances, renderer: function (target) { return target.kind === "html_workspace" ? "onlyWhenVisible" : "always"; }, titleFor: function (target) { return target.title + (target.kind === "html_workspace" && target.revision ? " · v" + target.revision : ""); } });
+      maximumInstances: maximumInstances, renderer: "always", titleFor: function (target) { return target.title; } });
   }
   window.RNAssistantMaterialView = { register: register, target: targetFor, accepts: accepts, key: key,
     openArtifact: function (artifact, context) {
       if (!readers.exactArtifactUri(artifact)) return false;
       var target = targetFor(artifact, context);
-      if (!accepts(target)) return false;
+      if (!valid(target)) return false;
       if (!RNAssistantDockWorkspace.sectionView(document.querySelector(".panel.active").id.slice(4))) switchTab("chat", { preserveChatOwner: true });
       return RNAssistantDockWorkspace.openTarget(target, { referencePanel: context && context.referencePanel || "conversation" });
     } };

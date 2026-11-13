@@ -16,14 +16,14 @@ const { chromium } = require('playwright');
     await page.goto(base + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     await page.evaluate(() => {
-      window.htmlTest = { calls: [], versions: {}, contents: {}, uploads: {} };
+      window.htmlTest = { calls: [], versions: {}, contents: {}, uploads: {}, pages: new Map() };
       state.chats.push(...['html-a','html-b'].map(Id=>({Id,DocumentAuthorityId:'html-document'})));
       const original = send;
       function response(id) {
         const version = htmlTest.versions[id] || 1, artifact = id + '-r' + version, uri = 'rna://chat/' + id + '/html/file1';
         const content = htmlTest.contents[id] || '<main><h1>' + id + '</h1><input value="initial"></main>';
         return { activeChatId: id, sessionRevision: version, activeHtmlArtifactId: artifact,
-          browserTarget: {kind:'HtmlWorkspace',state:'Ready',chatId:id,documentId:htmlTest.wrongDocument?'foreign':'html-document',resourceUri:'rna://chat/'+id+'/artifact/'+artifact+'/revision/'+version,artifactId:artifact,revision:version,capabilities:{preview:true,source:true,edit:!htmlTest.readOnly,versions:true,restore:!htmlTest.readOnly,exportProject:true,createProject:false,annotations:!htmlTest.readOnly}},
+          browserTarget: {kind:'HtmlWorkspace',state:'Ready',chatId:id,title:id,logicalId:id,immutable:false,displayLocator:'/resources/'+id,ownerScope:{kind:'Document',scopeId:'html-document',chatId:id},documentId:htmlTest.wrongDocument?'foreign':'html-document',resourceUri:'rna://chat/'+id+'/artifact/'+artifact+'/revision/'+version,artifactId:artifact,revision:version,capabilities:{preview:false,source:true,edit:!htmlTest.readOnly,versions:true,saveVersion:!htmlTest.readOnly,restore:!htmlTest.readOnly,exportProject:true,createProject:false,annotations:false}},
           artifacts: [{ Id: artifact, Kind: 'html_workspace', Title: id, Revision: version }], workspace: {
             revisionArtifactId: artifact, activeFileId: 'file1', files: [{ id: 'file1', path: 'index.html', kind: 'html', content,
               source: { uri, revision: 'r' + version }, sourceReadKey: uri + '@r' + version, sha256: 'a'.repeat(64), byteLength: content.length, characters: content.length }],
@@ -32,6 +32,17 @@ const { chromium } = require('playwright');
       RNAssistantResourceUpload.write = async (lease, blob) => { htmlTest.uploads[lease.leaseId] = await blob.text(); };
       send = function (command, payload) {
         htmlTest.calls.push({ command, payload });
+        if (command === 'browserCommand') {
+          let value=htmlTest.pages.get(payload.browserTabId);
+          if(payload.action==='Open') { value={browserTabId:payload.browserTabId,sessionId:'session-'+payload.browserTabId,ownerScope:payload.ownerScope,revision:1,documentGeneration:1,
+            status:'Unavailable',url:payload.locator,title:payload.ownerScope.chatId,target:response(payload.ownerScope.chatId).browserTarget};htmlTest.pages.set(payload.browserTabId,value); }
+          else if(payload.action==='Reload') {value.target=response(value.ownerScope.chatId).browserTarget;value.documentGeneration++;}
+          else if(payload.action==='Close')value.status='Closed';value.revision++;return Promise.resolve(structuredClone(value));
+        }
+        if(command==='resolveLocalLocator')return Promise.resolve({locator:payload.locator,target:response(payload.ownerScope.chatId).browserTarget});
+        if(command==='readBrowserSource') {const text=htmlTest.contents[payload.ownerScope.chatId]||'<h1>'+payload.ownerScope.chatId+'</h1>';return Promise.resolve({files:['index.html'],path:'index.html',text,offset:0,totalCharacters:text.length,revision:'sha',requestGeneration:payload.requestGeneration});}
+        if(command==='getBrowserVersionState')return Promise.resolve({target:payload.target,capabilities:payload.target.capabilities,contentRevision:payload.target.resourceUri,stateRevision:'catalog'});
+        if(command==='getBrowserVersions')return Promise.resolve({items:[],stateRevision:'catalog'});
         if (command === 'getHtmlWorkspace') {
           if (payload.chatId === 'late') return new Promise(resolve => { htmlTest.release = () => resolve(response('late')); });
           if (htmlTest.deferNext === payload.chatId) {
@@ -51,75 +62,35 @@ const { chromium } = require('playwright');
         return original(command, payload);
       };
       window.editorView = id => RNAssistantDockWorkspace.getView(RNAssistantHtmlWorkspaceView.key({ chatId: id }));
-      RNAssistantHtmlWorkspaceSurface.open('html-a', { mode: 'preview' });
+      RNAssistantHtmlWorkspaceSurface.open('html-a', { mode: 'edit' });
     });
     const root = id => page.locator('[data-html-node="htmlWorkspaceEditor"][data-chat-id="' + id + '"]');
-    // Browser surfaces live in a stable portal; anchors/editors live in Dockview.
-    await page.waitForFunction(() => [...document.querySelectorAll('[data-html-node="htmlWorkspacePreviewFrame"]')].some(f => f.srcdoc.includes('html-a')));
-    const a = page.frameLocator('[data-html-node="htmlWorkspacePreviewFrame"][data-chat-id="html-a"]');
-    await a.getByRole('heading', { name: 'html-a', exact: true }).waitFor();
-    await a.getByRole('textbox').fill('retained');
-    await page.evaluate(() => { htmlTest.frame = document.querySelector('[data-html-node="htmlWorkspacePreviewFrame"]'); htmlTest.document = htmlTest.frame.contentDocument; RNAssistantHtmlWorkspaceSurface.open('html-b', { mode: 'edit' }); });
-    await root('html-b').locator('.CodeMirror').waitFor();
-    await root('html-b').locator('.CodeMirror').evaluate(node => { node.CodeMirror.execCommand('selectAll'); node.CodeMirror.replaceSelection('<main>draft B</main>', 'end', '+input'); });
+    const a = root('html-a');
+    await a.locator('.CodeMirror').waitFor();
     await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.open('html-a', { mode: 'preview' }));
-    assert.equal(await a.getByRole('textbox').inputValue(), 'retained');
-    async function layout(name) { await page.locator('#workspaceLayout').click(); await page.getByRole('menuitem', { name, exact: true }).click(); }
-    await layout('Сохранить раскладку'); await layout('Вернуть сохранённую');
-    assert.equal(await page.evaluate(() => htmlTest.frame.contentDocument === htmlTest.document), true, 'restore retains live iframe');
-    assert.equal(await a.getByRole('textbox').inputValue(), 'retained');
-    const toolbar=page.locator('.browser-view-surface:visible .preview-surface-toolbar');
-    assert.equal(await toolbar.getByRole('button',{name:'Аннотировать: выбрать элемент',exact:true}).count(),1);
-    if(process.env.HTML_EDITOR_SCREENSHOT)await page.screenshot({path:process.env.HTML_EDITOR_SCREENSHOT+'-preview.png'});
-    await toolbar.getByRole('button',{name:'Исходник',exact:true}).click();
-    await root('html-a').locator('.CodeMirror').waitFor();
-    await root('html-a').getByRole('button',{name:'Страница',exact:true}).click();
-    assert.equal(await a.getByRole('textbox').inputValue(),'retained','moving the shared mode controls does not reload the page');
-    // Annotate A while the global selected chat is another chat. No shell interception.
-    await page.locator('[data-html-node="inspectHtmlWorkspaceButton"]:visible').click();
-    await a.getByRole('heading', { name: 'html-a', exact: true }).click();
-    await page.locator('.visual-annotation-editor:visible textarea').fill('Комментарий A');
-    await page.locator('.visual-annotation-editor:visible .primary').click();
-    await page.waitForFunction(() => (readOfficeDraft('html-a')?.attachments || []).some(item => item.Id === 'annotation-html-a'));
-    assert.deepEqual(await page.evaluate(() => { const p = htmlTest.calls.find(c => c.command === 'stageHtmlVisualSelection').payload; return [p.chatId, p.artifactId, p.artifactRevision]; }), ['html-a', 'html-a-r1', 1]);
-    assert.equal(await page.evaluate(() => state.activeChatId), 'preview-chat');
-    assert.equal(await page.evaluate(() => (readOfficeDraft('preview-chat')?.attachments || []).length), 0);
-    // Reload reads the current publication, even without the source Chat View.
-    await page.evaluate(()=>{htmlTest.versions['html-a']=2;htmlTest.contents['html-a']='<h1>agent v2</h1>';});
-    await toolbar.getByRole('button',{name:'Обновить HTML',exact:true}).click();
-    await a.getByRole('heading',{name:'agent v2',exact:true}).waitFor();
-    await page.evaluate(()=>{htmlTest.versions['html-a']=3;htmlTest.contents['html-a']='<h1>agent v3</h1>';
-      handleResourceAuthorityChanged({scope:'document:html-document',generation:3,resources:[],allInScope:true});});
-    await a.getByRole('heading',{name:'agent v3',exact:true}).waitFor();
-    assert.ok(await toolbar.getByRole('button',{name:'Обновить HTML',exact:true}).isEnabled(),'reload stays available after an automatic refresh');
-    const readCount=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace').length);
-    await page.evaluate(()=>{
-      handleResourceAuthorityChanged({scope:'document:other-document',generation:4,resources:[],allInScope:true});
-      handleResourceAuthorityChanged({scope:'document:html-document',generation:3,resources:[],allInScope:true});
-    });
-    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace').length),readCount,'other scopes and duplicate generations do not reload');
-    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-b',{mode:'edit'}));
-    const hiddenReads=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length);
-    await page.evaluate(()=>{htmlTest.versions['html-a']=4;htmlTest.contents['html-a']='<h1>agent v4</h1>';
-      handleResourceAuthorityChanged({scope:'document:html-document',generation:4,resources:[],allInScope:true});});
-    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length),hiddenReads,'hidden view defers refresh');
-    assert.equal(await root('html-b').locator('.CodeMirror').evaluate(n=>n.CodeMirror.getValue()),'<main>draft B</main>','another project publication preserves the dirty buffer');
-    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'preview'}));
-    await a.getByRole('heading',{name:'agent v4',exact:true}).waitFor();
-    await page.evaluate(()=>{htmlTest.deferNext='html-a';htmlTest.versions['html-a']=5;htmlTest.contents['html-a']='<h1>agent v5</h1>';
-      handleResourceAuthorityChanged({scope:'document:html-document',generation:5,resources:[],allInScope:true});});
-    await page.waitForFunction(()=>!!htmlTest.releaseRefresh);
-    await page.evaluate(()=>{htmlTest.versions['html-a']=6;htmlTest.contents['html-a']='<h1>agent v6</h1>';
-      handleResourceAuthorityChanged({scope:'document:html-document',generation:6,resources:[],allInScope:true});htmlTest.releaseRefresh();});
-    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
+    const browserSource=page.locator('.browser-object-view:visible .browser-document-source');
+    await browserSource.getByText('html-a',{exact:false}).waitFor();
+    assert.equal(await page.locator('.browser-object-view iframe').count(),0,'source-only Browser never creates an authored iframe');
+    assert.equal(await a.locator('.preview-surface-toolbar').count(),0,'editor no longer has its own Browser chrome');
     await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.open('html-b', { mode: 'edit' }));
-    assert.equal(await root('html-b').locator('.CodeMirror').evaluate(node => node.CodeMirror.getValue()), '<main>draft B</main>');
-    page.once('dialog', dialog => dialog.dismiss());
-    await page.evaluate(() => RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key({ chatId: 'html-b' })));
-    assert.equal(await page.evaluate(() => !!editorView('html-b')), true, 'dirty close is cancelled');
+    await root('html-b').locator('.CodeMirror').evaluate(node=>{node.CodeMirror.execCommand('selectAll');node.CodeMirror.replaceSelection('<main>draft B</main>','end','+input');});
+    const hiddenReads=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='readBrowserSource').length);
+    await page.evaluate(()=>{htmlTest.versions['html-a']=2;htmlTest.contents['html-a']='<h1>agent v2</h1>';handleResourceAuthorityChanged({scope:'document:html-document',generation:2,resources:[],allInScope:true});});
+    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='readBrowserSource').length),hiddenReads,'hidden Browser defers source refresh');
+    assert.equal(await root('html-b').locator('.CodeMirror').evaluate(n=>n.CodeMirror.getValue()),'<main>draft B</main>');
+    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'preview'}));
+    await browserSource.getByText('agent v2',{exact:false}).waitFor();
+    const reads=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='readBrowserSource').length);
+    await page.evaluate(()=>{handleResourceAuthorityChanged({scope:'document:other',generation:3,resources:[],allInScope:true});handleResourceAuthorityChanged({scope:'document:html-document',generation:2,resources:[],allInScope:true});});
+    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='readBrowserSource').length),reads,'other scope and duplicate generation do not read');
+    await page.evaluate(()=>{htmlTest.versions['html-a']=3;htmlTest.contents['html-a']='<h1>agent v3</h1>';handleResourceAuthorityChanged({scope:'document:html-document',generation:3,resources:[],allInScope:true});});
+    await browserSource.getByText('agent v3',{exact:false}).waitFor();
+    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-b',{mode:'edit'}));
+    page.once('dialog',dialog=>dialog.dismiss());await page.evaluate(()=>RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key({chatId:'html-b'})));
+    assert.equal(await page.evaluate(()=>!!editorView('html-b')),true,'dirty close is cancelled');
     await root('html-b').locator('[data-html-node="saveHtmlWorkspaceButton"]').click();
-    await page.waitForFunction(() => !editorView('html-b').dirty() && !editorView('html-b').busy());
-    assert.deepEqual(await page.evaluate(() => { const p = htmlTest.calls.find(c => c.command === 'saveHtmlWorkspaceFile').payload; return [p.chatId, p.expectedActiveHtmlArtifactId, htmlTest.contents[p.chatId]]; }), ['html-b', 'html-b-r1', '<main>draft B</main>']);
+    await page.waitForFunction(()=>!editorView('html-b').dirty()&&!editorView('html-b').busy());
+    assert.deepEqual(await page.evaluate(()=>{const p=htmlTest.calls.find(c=>c.command==='saveHtmlWorkspaceFile').payload;return [p.chatId,p.expectedActiveHtmlArtifactId,htmlTest.contents[p.chatId]];}),['html-b','html-b-r1','<main>draft B</main>']);
     // A changed source cannot replace an unsaved editor buffer or accept its stale write.
     await root('html-b').locator('.CodeMirror').evaluate(node => { node.CodeMirror.execCommand('selectAll'); node.CodeMirror.replaceSelection('unsaved B', 'end', '+input'); });
     await page.evaluate(() => {htmlTest.versions['html-b']=3;
@@ -140,31 +111,12 @@ const { chromium } = require('playwright');
     await page.evaluate(async()=>{document.body.style.zoom='';document.documentElement.dataset.theme='light';
       htmlTest.readOnly=true;RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'edit'});await editorView('html-a').ready(true);});
     assert.equal(await root('html-a').locator('.CodeMirror').evaluate(node=>node.CodeMirror.getOption('readOnly')),true,'revoked edit capability makes the existing editor read-only');
-    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'preview'}));
-    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
-    const liveSurface=page.locator('[data-html-node="htmlWorkspacePreview"]').filter({has:page.locator('[data-html-node="htmlWorkspacePreviewFrame"][data-chat-id="html-a"]')});
-    assert.equal(await liveSurface.locator('[data-html-node="inspectHtmlWorkspaceButton"]').isDisabled(),true,'read-only target cannot start annotations');
-    if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-live-readonly.png'});
-    assert.equal(await page.evaluate(async()=>{htmlTest.wrongDocument=true;htmlTest.contents['html-a']='<h1>FOREIGN</h1>';return editorView('html-a').ready(true);}),false,'foreign response is rejected');
-    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
-    assert.equal(await a.getByRole('heading',{name:'FOREIGN',exact:true}).count(),0,'foreign source never replaces the retained preview');
-    const beforeReopenReads=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length);
-    await page.evaluate(()=>{htmlTest.closedView=editorView('html-a');
-      htmlTest.closedFrame=document.querySelector('[data-html-node="htmlWorkspacePreviewFrame"][data-chat-id="html-a"]');
-      RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key({chatId:'html-a'}));});
-    await page.waitForFunction(()=>!editorView('html-a')&&!htmlTest.closedFrame.isConnected);
-    assert.equal(await root('html-a').count(),0,'clean close releases the editor and its preview');
-    await page.evaluate(()=>{htmlTest.wrongDocument=false;htmlTest.contents['html-a']='<h1>agent v6</h1>';
-      RNAssistantHtmlWorkspaceSurface.open('html-a',{mode:'preview'});});
-    await a.getByRole('heading',{name:'agent v6',exact:true}).waitFor();
-    assert.equal(await page.evaluate(()=>editorView('html-a')!==htmlTest.closedView&&
-      document.querySelector('[data-html-node="htmlWorkspacePreviewFrame"][data-chat-id="html-a"]')!==htmlTest.closedFrame),true,'reopen creates a new editor and iframe');
-    assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='getHtmlWorkspace'&&c.payload.chatId==='html-a').length),beforeReopenReads+1,'reopen reads the addressed source once');
-    await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.open('html-b',{mode:'edit'}));
-    assert.equal(await root('html-b').locator('.CodeMirror').evaluate(node=>node.CodeMirror.getValue()),'unsaved B','closing another editor preserves the dirty buffer');
-    assert.equal(await page.evaluate(()=>htmlTest.calls.some(c=>/^(cancelChatRun|cancelProjectChat|stopActiveChatRun|stopChatInbox|cancelAgentWait)$/.test(c.command))),false,'editor close never sends Run cancellation');
-    await page.evaluate(()=>{delete htmlTest.closedView;delete htmlTest.closedFrame;});
+    await page.evaluate(async()=>{htmlTest.wrongDocument=true;await editorView('html-a').ready(true);});
+    await root('html-a').getByText(/Цель Browser не подтверждена/).waitFor();
+    await page.evaluate(()=>RNAssistantDockWorkspace.close(RNAssistantHtmlWorkspaceView.key({chatId:'html-a'})));
+    assert.equal(await root('html-a').count(),0,'clean close releases the editor without closing Browser');
+    assert.ok(await page.locator('.browser-object-view').count()>0);
     assert.deepEqual(errors, []);
-    console.log('HTML editor views: buffers, scoped annotation, reload/current publication, hidden and concurrent refresh, dirty guards, restore, narrow/zoom, late close and clean close/reopen OK');
+    console.log('PASS HTML editor: exact dirty buffers, shared source-only Browser, scoped current refresh, hidden deferral, narrow bounds, stale reads and independent close');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
