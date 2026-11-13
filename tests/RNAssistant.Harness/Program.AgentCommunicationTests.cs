@@ -809,8 +809,8 @@ namespace RNAssistant.Harness
                 AgentDeliveryCommand command, Action dispatch) { return _inner.AcceptAgentDelivery(source, recipient, command, dispatch); }
             public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
                 AgentSpawnCommand command, Action dispatch) { return _inner.AcceptAgentSpawn(source, child, command, dispatch); }
-            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentPause(ChatSession source, ChatSession target,
-                AgentPauseCommand command, Action dispatch) { return _inner.AcceptAgentPause(source, target, command, dispatch); }
+            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentControl(ChatSession source, ChatSession target,
+                AgentControlCommand command, Action dispatch) { return _inner.AcceptAgentControl(source, target, command, dispatch); }
 
             public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
             { return _inner.ReadAgentRequests(session, ids); }

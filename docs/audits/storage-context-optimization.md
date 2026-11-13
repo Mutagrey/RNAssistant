@@ -1451,3 +1451,46 @@ after-state/CAS ownership.
    SendEvents/SpawnEvents/retiring adapters. This intermediate integration does not
    change default production behavior, so no product bump. One scoped commit;
    no push/tag.
+
+## P5 — native peer cancellation (2026-11-13)
+
+1. Native `agents.cancel` now uses real Office/Workspace runtime consumers and the
+   same Application service/Inbox/RunOwner and Core journal control port. Saved
+   cancellation remains owned by AgentKernel/ConversationWaitCancellation/CommitRun.
+   This advances P5; assignment/group projections remain separate work.
+2. A single `queue.control` pins the exact source accepted call/runtime entry, both
+   heads, target run/checkpoint and live lifetime or reserved saved wait. Verified
+   read-back precedes signalling; Requested does not prove target termination.
+   Only terminal read-back permits Cancelled. Live pause cancellation signals under
+   the existing Inbox locks before a continuation can observe cleared peer authority.
+   Cold wait/pause cancellation retains history, input, run, budgets and unknown
+   effects without model/tool dispatch. Competing cold ownership refuses before append.
+3. The existing control DTO/port now handles Pause/Resume/Cancel, replacing its
+   pause-only signature. Native cancellation avoids legacy CancelPrepared/Recorded
+   and catalog enumeration; the explicit CancelEvents branch serves only the
+   retiring backend. Cold terminal projection is shared with existing user/legacy
+   cancellation. No new store, registry, schema, import, dual-write or fallback.
+   Production C# +172/−60 lines; no new source/project entries.
+4. On `abacb894` + this slice, macOS/net8/C#7.3: seven new cases pass through both
+   actual runtime consumers: live cancellation/queued input, lost request ack,
+   unavailable read-back, cold wait/restart/rebuild/clean Workspace restore, lost
+   target terminal ack, competing cold lease and live/saved peer pause. Seventeen
+   targeted regressions pass: native pause/resume (7), retiring cancellation (4),
+   native Send/Resolve (3), primitive controls (1), Office saved-pause cancellation
+   (1) and native wait cancellation (1). No full suite or VSTO/Office validation.
+5. Before: native application cancellation was unsupported. After: zero catalog
+   reads and one native cancel request per accepted call in these fixtures. Lost
+   request ack reconciles the same frame; unavailable proof sends no signal, and
+   lost terminal ack keeps source Unknown even when target cancellation is durable.
+   Restart/rebuild/restore neither repeat cancellation nor resume queued work.
+   These are operation/behavior checks; no CPU/allocation/history-cost curve or
+   Windows latency measurement. Metadata/header and full Inbox replay costs remain open.
+6. Next: assignment/group projections, other Store/resource operations and P3
+   metadata/header costs; P4 stays deferred. Default writers are unchanged. Whole-port
+   P7 still needs verified history/CAS/keys/locator backup, stopped old writers,
+   full restore and Windows/Office screen-photo evidence.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. Whole-port P7 removes CancelEvents with the other retiring control/
+   delivery paths and capability/adapters. This is intermediate integration without
+   a default production behavior change, so no product bump. One scoped commit;
+   no push/tag.

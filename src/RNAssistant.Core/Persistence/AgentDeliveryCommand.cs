@@ -33,7 +33,9 @@ namespace RNAssistant.Core.Persistence
         public bool Assignment { get; set; }
     }
 
-    public sealed class AgentPauseCommand
+    public enum AgentControlAction { Pause, Resume, Cancel }
+
+    public sealed class AgentControlCommand
     {
         public string OperationId { get; set; }
         public ToolExecutionContext Execution { get; set; }
@@ -42,6 +44,6 @@ namespace RNAssistant.Core.Persistence
         public string LiveInvocationId { get; set; }
         public string RuntimeKey { get; set; }
         public string PauseId { get; set; }
-        public bool Resume { get; set; }
+        public AgentControlAction Action { get; set; }
     }
 }

@@ -90,7 +90,7 @@ namespace RNAssistant.Application.Conversations
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Cancel)
                 {
                     var cancel = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
-                    var cancelReceipt = _service.Cancel(_inbox, _session, _limit, operationId, cancel.AgentId, context.MarkDispatchPossible);
+                    var cancelReceipt = _service.Cancel(_inbox, _session, _limit, operationId, cancel.AgentId, context.MarkDispatchPossible, context.Execution);
                     var data = JsonConvert.SerializeObject(cancelReceipt);
                     var unknown = cancelReceipt.Status == AgentCancellationStatus.Unconfirmed;
                     var rejected = cancelReceipt.Status == AgentCancellationStatus.Changed || cancelReceipt.Status == AgentCancellationStatus.Unavailable;

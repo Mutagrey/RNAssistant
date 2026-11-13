@@ -52,6 +52,18 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P5 native cancel (2026-11-13): the same control port/DTO now accepts pause/resume/
+cancel. One `queue.control` pins source call, both heads and exact live lifetime
+or saved wait. Owner: existing Application service/Inbox/RunOwner, journal and
+ConversationWaitCancellation; no new store/table/schema. Read-back precedes the
+live signal; cold termination reuses the same kernel/CommitRun helper as retiring
+cancel and user recovery. Source Unknown survives a lost target terminal receipt.
+Whole-port P7 removes explicit CancelEvents with PauseEvents/SendEvents/SpawnEvents
+and the capability/adapters. No replay, import, fallback or dual-write. Next:
+assignment/group projections, other Store/resource operations and metadata/header;
+default writers and Windows/Office qualification remain unchanged.
+[Contract](../session-events.md#journal-peer-cancellation--2026-11-13).
+
 P5 native pause/resume (2026-11-13): typed event-port control commits one existing
 `queue.control` with source-call proof and both heads. Owner: Application
 AgentCommunicationService/Inbox, Core journal and existing runtime consumers.
@@ -62,7 +74,7 @@ RunOwner lifetime survives checkpoint invocation changes, never restart. Read-ba
 safe acknowledgement, protected user pause, stale release and Unknown keep their
 existing authorities. `PauseEvents` remains only behind the explicit retiring-backend
 capability; whole-port P7 removes it with SendEvents/SpawnEvents/adapters. Native
-cancel is next, followed by assignment/group projections, other Store/resource
+cancel is connected above; next are assignment/group projections, other Store/resource
 operations and metadata/header costs. Default writers are unchanged.
 [Contract](../session-events.md#journal-peer-pause-and-resume--2026-11-13).
 
@@ -74,7 +86,7 @@ registry. Common metadata writing/runtime-entry checks are shared with chat/Send
 `SpawnEvents` is explicitly retained only for the retiring backend; whole-port P7
 removes it and the capability branch with SendEvents/adapters. Native creation has
 no separate root reservation, Store commit, initial Send, import or fallback.
-Native cancel/projections, remaining Store/resource operations, metadata/header
+Peer projections, remaining Store/resource operations, metadata/header
 costs and default composition remain open.
 [Contract](../session-events.md#journal-application-spawn--2026-11-13).
 
@@ -85,7 +97,7 @@ scan/global service lock during native persistence, no new store/adapter/schema.
 Exact runtime entry, receipt-linked terminal, both live cursors and Inbox signal are
 connected. Whole-port P7 removes the temporary capability branch and SendEvents
 together with the old event adapters; atomic delivery has no fallback/dual-write.
-Spawn and pause/resume are connected above; native cancel, assignment/group projections, other
+Spawn and peer controls are connected above; assignment/group projections, other
 Store/resource consumers and default composition remain open. [Contract](../session-events.md#journal-outbound-send-and-resolve--2026-11-13).
 
 P5 peer Inbox/correlation (2026-11-13): native acceptance shares delivery, input,
@@ -95,7 +107,7 @@ Owner: Core journal / existing Inbox, AgentCommunicationService and runtime cons
 Schema 18 extends existing chat/delivery indices only. Legacy Prepared parsing moves
 to the existing ChatEventStoreAdapter, removed with whole-port P7; no new adapter,
 fallback or dual-write. Send/Resolve and live notification are connected above;
-spawn and pause/resume are connected above; native cancel and default composition remain open. Input-history bounds,
+spawn and peer controls are connected above; default composition remains open. Input-history bounds,
 metadata/header and remaining Store/resource ports stay open.
 [Contract](../session-events.md#journal-peer-inbox-and-correlated-waits--2026-11-13).
 
@@ -116,7 +128,7 @@ consumers. Schema 17 adds request identity to input_state. Common input code del
 format-specific proof to IEventStore; legacy parsing stays only in the existing
 retiring ChatEventStoreAdapter until full-port P7 removal. No new adapter/store,
 dual-write, imported history or production switch. Native peer input/feed and waits
-are connected above; attachments, native cancel/peer projections, other
+are connected above; attachments, peer projections, other
 Store/resource operations, full Workspace steer transport
 and metadata/header costs remain open. [Contract](../session-events.md#journal-user-inbox-delivery--2026-11-12).
 

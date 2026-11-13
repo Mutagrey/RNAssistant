@@ -1,5 +1,38 @@
 # Session event stream
 
+## Journal peer cancellation — 2026-11-13
+
+Native `agents.cancel` uses the existing typed control port and `queue.control`
+frame. Source call/runtime entry, both observed heads, target run/checkpoint and
+the live owner lifetime (or reserved cold wait) are pinned before acceptance.
+Canonical read-back pauses the existing Inbox before signalling that exact live
+owner. Requested proves the signal, never target termination or external effects.
+The kernel owns live termination; saved effect-free waits/peer pauses use the
+existing ConversationWaitCancellation and CommitRun under the exact lease/CAS.
+Only target terminal read-back permits Cancelled. Queued input, history, run identity,
+budget and uncertain effects remain; cancellation never resumes the model/tools.
+
+Lost request acknowledgement resolves to the same frame within that invocation.
+Unavailable read-back sends no signal and recovers Unknown. A lost target-terminal
+acknowledgement retains Unknown at the source even when target cancellation is
+durable. Existing requests, replay/rebuild/restore cannot dispatch cancellation again.
+Competing cold owners refuse before acceptance. Cancellation of a live peer pause
+signals its CTS while holding the existing Inbox locks, before clearing pause
+authority could wake a continuation. View notification follows proof outside locks.
+
+The existing native pause/resume DTO/port is now AgentControlCommand/AcceptAgentControl;
+no second control path, table, registry or schema bump. Source terminal links its
+exact request through the existing control index. Seven scenarios cover both real
+Office and Workspace consumers, including live/saved peer pauses and receipt faults.
+Native cancellation uses zero catalog reads in these fixtures; no CPU/history-cost
+or Windows latency claim is made.
+
+Default writers are unchanged. CancelEvents remains explicit only for the retiring
+backend; whole-port P7 removes it with the other event adapters/control branches.
+Next: assignment/group projections, remaining Store/resource operations and
+metadata/header costs. P4 remains deferred; Windows/Office evidence stays open.
+[Evidence](audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
+
 ## Journal peer pause and resume — 2026-11-13
 
 The existing Application service/Inbox and journal event port now accept native
@@ -33,7 +66,7 @@ history cost curve, CPU/allocation or Windows latency claim is made.
 
 Default writers are unchanged. Explicit `PauseEvents` exists only for the retiring
 backend and is removed with the capability branch/adapters at whole-port P7; native
-controls have no fallback. Next: native cancel, assignment/group projections, other
+controls have no fallback. Native cancel is connected above; next are assignment/group projections, other
 Store/resource consumers and metadata/header costs. P4 remains deferred; Windows/
 Office qualification stays open.
 [Evidence](audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
@@ -68,7 +101,7 @@ curve, CPU/allocation or Windows latency claim is made.
 
 Default production composition is unchanged. The explicit atomic capability keeps
 `SpawnEvents` only for the retiring backend until whole-port P7; the native branch
-never invokes it, a separate Store commit or a second initial Send. Native cancel,
+never invokes it, a separate Store commit or a second initial Send. Remaining work:
 assignment/group projections, ordinary Store/resource operations, metadata/header
 costs and Windows/Office qualification remain open.
 [Evidence](audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
@@ -101,7 +134,7 @@ boundedness claim. Schema 18 and durable frame shapes are unchanged.
 The retiring event backend explicitly keeps SendEvents until whole-port P7; an
 atomic backend never falls back to Prepared/Submit/Accepted writes. No new store,
 adapter, imported history or dual-write. Spawn and pause/resume are connected above;
-native cancel, assignment/group projections, remaining Store/resource owners and production
+assignment/group projections, remaining Store/resource owners and production
 composition remain open.
 Windows/Office qualification is separate. [Evidence](audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
 
@@ -130,8 +163,8 @@ an assignment outcome is the peer's assessment, not external effect evidence.
 
 Native publication is injected at the persistence boundary in these earlier checks;
 application Send/Resolve and live notification are covered by the slice above.
-Application spawn and pause/resume are connected above; native cancel and default
-production composition remain open. Full input-history
+Application spawn, pause/resume and cancel are connected above; default production
+composition remains open. Full input-history
 boundedness, metadata/header costs, remaining Store/resource owners and Windows/Office
 qualification remain open. [Evidence](audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
 
@@ -193,7 +226,7 @@ Inbox and real runtime ports. Workspace steer transport and default composition
 remain part of cutover evidence.
 
 Native peer input/feed and correlated waits are connected in the slice above.
-Attachments, native cancel/peer projections, remaining Store/resource
+Attachments, peer projections, remaining Store/resource
 operations and P3 metadata/header costs stay open; P4 stays deferred. Production
 writers remain unchanged. Windows/Office qualification is open.
 [Evidence](audits/storage-context-optimization.md#p1p2--journal-user-inbox-delivery-2026-11-12).
@@ -215,7 +248,7 @@ Cold Inbox still pauses a saved wait until explicit user resume, even if an earl
 Resume receipt survived an acknowledgement loss. User input is connected in the
 slice above; native correlated reply/completion waits and peer feed are connected
 in the peer slice. Application delivery and pause/resume are connected above;
-native cancel remains open.
+native cancel is connected above.
 This wait slice alone does not qualify delivery.
 
 Five Office/Workspace checks cover timeout, cancellation, claim/control acknowledgement

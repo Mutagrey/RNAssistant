@@ -149,6 +149,16 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal cancel:` reuses the shared real Office/Workspace control fixture in seven
+cases: live run with queued input; lost request acknowledgement; unavailable proof;
+cold wait/restart/rebuild/restore; lost target terminal acknowledgement; competing
+cold lease; live and saved peer pause. It checks exact run/count preservation,
+one request, zero catalog reads, no model continuation, paused retained input and
+Unknown without retry even when target cancellation is durable. Targeted regressions:
+`journal control:`, `agent cancel:`, `journal send:`, primitive durable controls,
+Office persisted pause cancellation and `journal wait: cancellation` (17 checks).
+Reuse the Harness build; Windows/Office qualification remains separate.
+
 `journal control:` covers seven native pause/resume scenarios through both real
 Office run-service and Workspace runtime ports: pending peer input; lost acceptance
 acknowledgement; protected user Stop; restart/rebuild/clean Workspace restore;
@@ -189,7 +199,7 @@ exact body/provenance, cold pause, Applied without replay, rebuild and Workspace
 restore. Replies reach real Office run service and Workspace runtime ports/shared
 input channel. Publication is injected through native SendAgent after an atomic
 accepted-call checkpoint; application Send/Resolve/live notification are now covered
-above. Spawn and pause/resume are also connected; native cancel remains open. Pair with `journal input:`, `journal wait:`,
+above. Spawn and peer controls are also connected. Pair with `journal input:`, `journal wait:`,
 `journal feed:`, native atomic delivery, existing correlated reply and assignment
 recovery checks. No production switch or Windows qualification claim.
 

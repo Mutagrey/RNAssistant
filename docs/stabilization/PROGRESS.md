@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Native cancel — 2026-11-13
+
+Отмена подключена к существующему typed control port и `queue.control`. Живой
+сигнал закреплён за exact RunOwner lifetime; saved wait/peer pause закрывает прежний
+kernel/CommitRun owner под lease и CAS. Потеря terminal ack сохраняет source Unknown,
+restart не повторяет отмену; queued input остаётся paused. Семь новых сценариев
+и 17 regression checks проходят через Office/Workspace consumers. Default writers прежние,
+Windows/Office evidence открыт. Далее assignment/group projections, остальные
+Store/resource операции и metadata/header; P4 отложена.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
+
 ## Native pause/resume — 2026-11-13
 
 Peer pause/resume подключены к `queue.control` через реальные Office/Workspace
@@ -280,7 +291,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После native Send/Resolve/spawn/pause/resume — cancel/projections, остальные Store/resource
+После native Send/Resolve/spawn/pause/resume/cancel — peer projections, остальные Store/resource
 consumers и metadata/header, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
@@ -373,7 +384,14 @@ run и бюджет, не снимает user/recovery pause. Живой lifetim
 invocation, cold replay сохраняет паузу. 7 новых и 23 regression checks проходят; промежуточный
 срез без bump/default switch.
 [Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
-Native cancel, assignment/group projections, остальные mutation/resource owners,
+Подключён native cancel (2026-11-13): один control request до exact live signal или
+kernel cancellation сохранённого ожидания под lease/CAS. Source-call linkage,
+оба head и очередь остаются в существующем journal/control index без нового schema.
+Lost request ack разрешается по исходному frame; недоступное proof и lost terminal
+ack не превращаются в успех или повтор. Live/saved peer pause отменяется без модели.
+7 новых и 17 regression checks проходят; default writers не переключены, product bump не нужен.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
+Assignment/group projections, остальные mutation/resource owners,
 rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.

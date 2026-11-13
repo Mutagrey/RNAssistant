@@ -73,10 +73,16 @@ namespace RNAssistant.Core.Storage
                 if (!SameControlState(fact, prior?.Fact)) throw new InvalidOperationException("Input cannot replace queue authority.");
                 return;
             }
-            if (!fact.PeerControl) return;
+            if (!fact.PeerControl && !fact.Cancellation) return;
             var run = CurrentRun(db, fact.ChatId);
             if (run == null || run.Position.Hash != fact.RunHash || run.Fact.RunId != fact.RunId || run.Fact.InvocationId != fact.InvocationId ||
                 TerminalRun(run.Fact.Lifecycle)) throw new InvalidOperationException("Control does not address the exact current invocation.");
+            if (fact.Cancellation)
+            {
+                if (fact.LiveInvocationId == null && run.Fact.Lifecycle != RunLifecycle.Waiting)
+                    throw new InvalidOperationException("Cold cancellation requires a saved wait.");
+                return;
+            }
             if (fact.Action == QueueControlAction.AgentPauseRequested)
             {
                 var userReplacement = fact.RequiresUserResume && prior?.Fact.PeerControl == true &&
@@ -139,7 +145,7 @@ namespace RNAssistant.Core.Storage
         }
     }
 
-    internal enum QueueControlAction { UserPause, RecoveryPause, UserResume, AgentPauseRequested, AgentPauseAcknowledged, AgentPauseReleased }
+    internal enum QueueControlAction { UserPause, RecoveryPause, UserResume, AgentPauseRequested, AgentPauseAcknowledged, AgentPauseReleased, AgentCancelRequested }
 
     internal sealed class ConversationQueueControl
     {
@@ -162,6 +168,7 @@ namespace RNAssistant.Core.Storage
         [JsonIgnore] internal DateTime ChangedUtc { get { return Origin?.CreatedUtc ?? CreatedUtc.Value; } }
         [JsonIgnore] internal bool Paused { get { return Action != QueueControlAction.UserResume && Action != QueueControlAction.AgentPauseReleased; } }
         [JsonIgnore] internal bool PeerControl { get { return Action == QueueControlAction.AgentPauseRequested || Action == QueueControlAction.AgentPauseAcknowledged || Action == QueueControlAction.AgentPauseReleased; } }
+        [JsonIgnore] internal bool Cancellation { get { return Action == QueueControlAction.AgentCancelRequested; } }
         [JsonConstructor]
         internal ConversationQueueControl(string chatId, long revision, string previousHash, QueueControlAction action,
             string runId, string invocationId, string pauseId, string runHash, string reason = null,
@@ -172,9 +179,11 @@ namespace RNAssistant.Core.Storage
             ChatRevision = chatRevision; CreatedUtc = createdUtc;
             if (string.IsNullOrWhiteSpace(chatId) || revision < 1 || !Enum.IsDefined(typeof(QueueControlAction), action) ||
                 (revision == 1 ? previousHash != null : string.IsNullOrWhiteSpace(previousHash)) ||
-                (PeerControl ? string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(invocationId) || string.IsNullOrWhiteSpace(pauseId) || string.IsNullOrWhiteSpace(runHash)
+                (PeerControl || Cancellation ? string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(invocationId) ||
+                    string.IsNullOrWhiteSpace(runHash) || (Cancellation ? pauseId != null || origin == null || requiresUserResume : string.IsNullOrWhiteSpace(pauseId))
                     : runId != null || invocationId != null || pauseId != null || runHash != null || liveInvocationId != null || requiresUserResume) ||
-                origin != null && (chatRevision.HasValue || liveInvocationId == null || requiresUserResume || action != QueueControlAction.AgentPauseRequested && action != QueueControlAction.AgentPauseReleased) ||
+                origin != null && (chatRevision.HasValue || !Cancellation && liveInvocationId == null || requiresUserResume ||
+                    !Cancellation && action != QueueControlAction.AgentPauseRequested && action != QueueControlAction.AgentPauseReleased) ||
                 chatRevision.HasValue != createdUtc.HasValue || chatRevision.HasValue && (chatRevision < 1 || createdUtc.Value.Kind != DateTimeKind.Utc))
                 throw new ArgumentException("Invalid queue control metadata.");
             ChatId = chatId; Revision = revision; PreviousHash = previousHash; RunId = runId; InvocationId = invocationId; PauseId = pauseId; RunHash = runHash;

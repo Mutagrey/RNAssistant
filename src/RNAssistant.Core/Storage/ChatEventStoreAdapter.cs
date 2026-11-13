@@ -16,8 +16,8 @@ namespace RNAssistant.Core.Storage
             AgentDeliveryCommand command, Action dispatch) { throw new NotSupportedException(); }
         public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
             AgentSpawnCommand command, Action dispatch) { throw new NotSupportedException(); }
-        public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentPause(ChatSession source, ChatSession target,
-            AgentPauseCommand command, Action dispatch) { throw new NotSupportedException(); }
+        public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentControl(ChatSession source, ChatSession target,
+            AgentControlCommand command, Action dispatch) { throw new NotSupportedException(); }
         private readonly ChatStore _store;
 
         public ChatEventStoreAdapter(ChatStore store)

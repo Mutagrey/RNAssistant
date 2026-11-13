@@ -105,7 +105,7 @@ Unknown без повтора. User controls/ack пишут отдельный c
 незафиксированного run; checkpoint и control разделяют существующий Inbox lock.
 Индекс сохраняет authority при новых inputs и восстанавливает cold pause. Default
 backend не переключён; `PauseEvents` удаляется с ним на whole-port P7. Native cancel
-остаётся следующим срезом. [Контракт](session-events.md#journal-peer-pause-and-resume--2026-11-13).
+подключён следующим срезом ниже. [Контракт](session-events.md#journal-peer-pause-and-resume--2026-11-13).
 
 Owner — Application/Conversations (`AgentCommunicationService`), общий Inbox и
 существующий ConversationRunService/AgentKernel. Срез 2026-11-04 использует сохранённый
@@ -278,13 +278,24 @@ Run. Ошибка одного участника не блокирует ост
 не получает как `agents.resume`; pause/resume control tools остаются следующим этапом.
 
 `agents.cancel(agent_id)` v1 отменяет один другой чат этой области, независимо от
-creator и вкладки. Runtime сохраняет exact target Run в CancelPrepared до dispatch;
+creator и вкладки. Retiring backend сохраняет exact target Run в CancelPrepared до dispatch;
 живой сигнал закреплён за конкретной cancellation lifetime. Requested означает
 принятый сигнал, Cancelled — подтверждённую журналом отмену, AlreadyStopped — ранее
 завершённый Run, Changed — сменившийся запуск, Unavailable — недоступный owner/тип
 checkpoint, Unconfirmed — неподтверждённый результат. Повтор операции возвращает
 прежний receipt; Prepared без receipt не исполняется повторно. Ошибки сохраняются
 через обычный ToolRuntime. Живой Run завершает его kernel, сохраняя unknown effects.
+
+Native journal (2026-11-13) вместо CancelPrepared/CancelRecorded принимает один
+`queue.control` через общий typed control port: exact source call, оба head,
+target Run/checkpoint и live lifetime либо cold lease. После read-back очередь
+paused; live CTS сигнализируется до освобождения Inbox locks. Lost request ack
+разрешается по тому же frame внутри текущего вызова; недоступное proof не посылает
+сигнал. Lost terminal ack оставляет source Unknown даже при сохранённой отмене
+target. Прочитанный после restart запрос не исполняется снова. Отдельной отмены
+через модель, нового store или второго terminal owner нет. Default writers прежние;
+`CancelEvents` удаляется на whole-port P7.
+[Контракт](session-events.md#journal-peer-cancellation--2026-11-13).
 
 Effect-free Waiting отменяется после restart без resume/модели/tools: kernel формирует
 terminal fact, общий Application owner закрывает прежний call/Run через CommitRun,

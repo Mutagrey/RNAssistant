@@ -118,8 +118,8 @@ namespace RNAssistant.Harness
                 AgentDeliveryCommand command, Action dispatch) { throw new NotSupportedException(); }
             public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
                 AgentSpawnCommand command, Action dispatch) { throw new NotSupportedException(); }
-            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentPause(ChatSession source, ChatSession target,
-                AgentPauseCommand command, Action dispatch) { throw new NotSupportedException(); }
+            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentControl(ChatSession source, ChatSession target,
+                AgentControlCommand command, Action dispatch) { throw new NotSupportedException(); }
 
             public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
             { throw new NotSupportedException(); }

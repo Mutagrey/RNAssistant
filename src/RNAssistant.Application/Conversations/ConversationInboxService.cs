@@ -119,23 +119,30 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
-        internal void AcceptAgentPause(ChatSession source, ConversationInboxService targetInbox, ChatSession target,
-            AgentPauseCommand command, Action dispatch)
+        internal void AcceptAgentControl(ChatSession source, ConversationInboxService targetInbox, ChatSession target,
+            AgentControlCommand command, Action dispatch, Action<ChatSession> cancelAccepted = null)
         {
             if (!ReferenceEquals(_events, targetInbox._events)) throw new InvalidOperationException("Peer control requires the same event owner.");
+            var cancel = command.Action == AgentControlAction.Cancel;
+            if (cancel != (cancelAccepted != null)) throw new InvalidOperationException("Cancellation requires its exact live or reserved owner.");
             var from = Get(source); var to = targetInbox.Get(target);
             var first = string.CompareOrdinal(source.Id, target.Id) < 0 ? from : to;
             var second = ReferenceEquals(first, from) ? to : from;
             lock (first.Sync) lock (second.Sync)
             {
-                if (!ReferenceEquals(from.Session, source) || !to.Running || !to.Accepting ||
-                    to.AgentPause?.RequiresUserResume == true || to.AgentPause == null && to.Paused ||
-                    command.Resume && (to.AgentPause?.PauseId != command.PauseId || to.AgentPause.LiveInvocationId != command.LiveInvocationId))
+                if (!ReferenceEquals(from.Session, source) || (cancel
+                    ? to.Session.LastRun?.RunId != command.TargetRunId || (command.LiveInvocationId == null
+                        ? to.Running || to.Worker || !HasPendingWait(to.Session) : !to.Running)
+                    : !to.Running || !to.Accepting || to.AgentPause?.RequiresUserResume == true || to.AgentPause == null && to.Paused ||
+                        command.Action == AgentControlAction.Resume && (to.AgentPause?.PauseId != command.PauseId || to.AgentPause.LiveInvocationId != command.LiveInvocationId)))
                     throw new InvalidOperationException("Peer control no longer owns the observed live queue.");
-                var accepted = _events.AcceptAgentPause(source, to.Session, command, dispatch);
+                var accepted = _events.AcceptAgentControl(source, to.Session, command, dispatch);
                 Apply(to, accepted.Change, accepted.Event);
                 to.Revision = accepted.Event.Sequence; to.ViewRevision++;
-                SignalInputChanged(to);
+                // A cancel clears peer pause authority, but must signal its exact
+                // run owner before a paused continuation could observe that change.
+                if (cancel) cancelAccepted(to.Session);
+                else SignalInputChanged(to);
             }
         }
 

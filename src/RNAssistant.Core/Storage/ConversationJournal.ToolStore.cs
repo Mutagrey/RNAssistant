@@ -111,10 +111,11 @@ namespace RNAssistant.Core.Storage
                 var progress = tools.Terminal.Result.ExecutionProgress;
                 var peer = IsPeerDelivery(tools.ToolName) ? DeliveryForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
                 var spawn = tools.ToolName == AgentCommunicationToolCatalog.Spawn ? SpawnForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
-                var control = IsPeerPause(tools.ToolName) ? ControlForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
+                var control = IsPeerControl(tools.ToolName) ? ControlForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
                 if (control != null && (control.Position.Sequence > fact.ExpectedRevision || tools.NoEffect ||
                     progress.Outcome == ToolExecutionOutcome.NotDispatched || (control.Fact.Action == QueueControlAction.AgentPauseReleased) !=
-                        (tools.ToolName == AgentCommunicationToolCatalog.Resume)))
+                        (tools.ToolName == AgentCommunicationToolCatalog.Resume) ||
+                    control.Fact.Cancellation != (tools.ToolName == AgentCommunicationToolCatalog.Cancel)))
                     throw new InvalidDataException("Peer control terminal contradicts its exact acceptance.");
                 if (spawn != null && (spawn.Fact.Chat == null || spawn.Position.Sequence > fact.ExpectedRevision ||
                     tools.NoEffect || progress.Outcome == ToolExecutionOutcome.NotDispatched))

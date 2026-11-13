@@ -38,20 +38,23 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        ConversationInputRecord IEventStore.AcceptAgentPause(ChatSession source, ChatSession target, AgentPauseCommand command, Action dispatch)
+        ConversationInputRecord IEventStore.AcceptAgentControl(ChatSession source, ChatSession target, AgentControlCommand command, Action dispatch)
         {
             if (command == null || dispatch == null) throw new ArgumentNullException(nameof(command));
-            command = JsonConvert.DeserializeObject<AgentPauseCommand>(JsonConvert.SerializeObject(command));
+            command = JsonConvert.DeserializeObject<AgentControlCommand>(JsonConvert.SerializeObject(command));
             var context = command.Execution;
+            var cancel = command.Action == AgentControlAction.Cancel;
+            var resume = command.Action == AgentControlAction.Resume;
+            var tool = cancel ? AgentCommunicationToolCatalog.Cancel : resume ? AgentCommunicationToolCatalog.Resume : AgentCommunicationToolCatalog.Pause;
             if (source?.LastRun?.KernelState == null || target?.LastRun?.KernelState == null || source.Id == target.Id ||
-                context?.Call.Name != (command.Resume ? AgentCommunicationToolCatalog.Resume : AgentCommunicationToolCatalog.Pause) ||
+                !Enum.IsDefined(typeof(AgentControlAction), command.Action) || context?.Call.Name != tool ||
                 !SameRunValue(source.LastRun.KernelState.InFlightTool, context) || source.LastRun.RunId != context.RunId ||
                 source.LastRun.TurnId != context.TurnId || target.LastRun.RunId != command.TargetRunId ||
-                command.AgentId != AgentChatAddress.IdFor(target.Id) || string.IsNullOrWhiteSpace(command.LiveInvocationId) ||
-                string.IsNullOrWhiteSpace(command.RuntimeKey) || command.Resume && string.IsNullOrWhiteSpace(command.PauseId))
+                command.AgentId != AgentChatAddress.IdFor(target.Id) || !cancel && string.IsNullOrWhiteSpace(command.LiveInvocationId) ||
+                string.IsNullOrWhiteSpace(command.RuntimeKey) || resume && string.IsNullOrWhiteSpace(command.PauseId))
                 throw new InvalidOperationException("Peer control requires its exact entered call and live target.");
-            var action = command.Resume ? QueueControlAction.AgentPauseReleased : QueueControlAction.AgentPauseRequested;
-            var pause = command.Resume ? command.PauseId : TextPatternEngine.Sha256(_scope + "\n" + target.Id + "\n" + command.OperationId);
+            var action = cancel ? QueueControlAction.AgentCancelRequested : resume ? QueueControlAction.AgentPauseReleased : QueueControlAction.AgentPauseRequested;
+            var pause = cancel ? null : resume ? command.PauseId : TextPatternEngine.Sha256(_scope + "\n" + target.Id + "\n" + command.OperationId);
             QueueControlReceipt accepted;
             using (RuntimeStorageActivity.Acquire(_paths))
             {
@@ -59,6 +62,7 @@ namespace RNAssistant.Core.Storage
                 {
                     accepted = Access((db, cursor) => {
                         var own = FindControl(db, command.OperationId);
+                        if (own != null && cancel) throw new InvalidOperationException("A recorded cancel request cannot be dispatched again.");
                         if (own != null) return own;
                         RequireChatRevision(ConversationMetadata.From(source), TextChat(db, source.Id));
                         RequireChatRevision(ConversationMetadata.From(target), TextChat(db, target.Id));
@@ -68,6 +72,7 @@ namespace RNAssistant.Core.Storage
                             source.Revision, target.Revision, command.RuntimeKey, DateTime.UtcNow);
                         var fact = new ConversationQueueControl(target.Id, (previous?.Fact.Revision ?? 0) + 1, previous?.Position.Hash,
                             action, command.TargetRunId, run?.Fact.InvocationId, pause, run?.Position.Hash,
+                            reason: cancel ? "Остановлено другим агентом" : null,
                             liveInvocationId: command.LiveInvocationId, origin: origin);
                         var record = DeliveryRecord(command.OperationId, "queue.control", fact, TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact)));
                         ValidateControl(db, record.Operation, fact); ValidatePeerControl(db, record, fact);
@@ -126,7 +131,8 @@ namespace RNAssistant.Core.Storage
                 target.Position.Sequence != proof.TargetRevision || ControlForCall(db, proof.Sender, proof.RunId, proof.CallId) != null)
                 throw new ChatConcurrencyException("Peer control requires both observed heads and an unused accepted call.");
             RequirePeerEntry(db, proof.Sender, proof.RunId, proof.CallId, proof.StepId,
-                fact.Action == QueueControlAction.AgentPauseReleased ? AgentCommunicationToolCatalog.Resume : AgentCommunicationToolCatalog.Pause);
+                fact.Cancellation ? AgentCommunicationToolCatalog.Cancel :
+                    fact.Action == QueueControlAction.AgentPauseReleased ? AgentCommunicationToolCatalog.Resume : AgentCommunicationToolCatalog.Pause);
         }
 
         private void ApplyPeerControlHeads(SqliteConnection db, SqliteTransaction tx, JournalRecord record,

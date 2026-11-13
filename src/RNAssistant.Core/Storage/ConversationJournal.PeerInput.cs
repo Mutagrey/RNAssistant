@@ -97,10 +97,10 @@ namespace RNAssistant.Core.Storage
         { return tool == AgentCommunicationToolCatalog.Send || tool == AgentCommunicationToolCatalog.Resolve; }
 
         private static bool IsPeerMutation(string tool)
-        { return IsPeerDelivery(tool) || tool == AgentCommunicationToolCatalog.Spawn || IsPeerPause(tool); }
+        { return IsPeerDelivery(tool) || tool == AgentCommunicationToolCatalog.Spawn || IsPeerControl(tool); }
 
-        private static bool IsPeerPause(string tool)
-        { return tool == AgentCommunicationToolCatalog.Pause || tool == AgentCommunicationToolCatalog.Resume; }
+        private static bool IsPeerControl(string tool)
+        { return tool == AgentCommunicationToolCatalog.Pause || tool == AgentCommunicationToolCatalog.Resume || tool == AgentCommunicationToolCatalog.Cancel; }
 
         private void RequirePeerEntry(SqliteConnection db, string sender, ToolExecutionContext context)
         { RequirePeerEntry(db, sender, context.RunId, context.Call.Id, context.StepId, context.Call.Name); }
