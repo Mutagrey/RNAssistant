@@ -27,6 +27,7 @@ namespace RNAssistant.Core.Persistence
 
         public IReadOnlyList<ConversationMessageWrite> Messages { get; protected set; }
         public IReadOnlyList<string> RemovedMessageIds { get; private set; }
+        public bool RewritesHistory { get; private set; }
 
         public ConversationCommit(IEnumerable<ChatMessage> updated = null, IEnumerable<string> removed = null)
         {
@@ -59,7 +60,7 @@ namespace RNAssistant.Core.Persistence
         {
             var messages = remaining.ToArray();
             var retained = new HashSet<string>(messages.Select(message => message.Id), StringComparer.OrdinalIgnoreCase);
-            return new ConversationCommit(messages, previousIds.Where(id => !retained.Contains(id)));
+            return new ConversationCommit(messages, previousIds.Where(id => !retained.Contains(id))) { RewritesHistory = true };
         }
     }
 

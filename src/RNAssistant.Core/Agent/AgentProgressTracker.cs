@@ -57,6 +57,16 @@ namespace RNAssistant.Core.Agent
         // Reconstructed from terminal facts; never clears unknown replay guards.
         internal bool InspectionRequired => _inspections.Count != 0;
 
+        internal void RetainReplayGuard(ToolCall call, ToolExecutionProgress progress)
+        {
+            if (progress == null) return;
+            if (progress.Outcome != ToolExecutionOutcome.Unknown || progress.OpaqueActionCompleted)
+                throw new InvalidOperationException("A replay guard must identify an unresolved dispatch.");
+            var key = Signature(call);
+            _unknown.Add(key);
+            if (progress.OpaqueAction) _opaqueUnknown.Add(key);
+        }
+
         internal bool CanDispatch(ToolCall call, out string reason, out string message, out int delayMilliseconds,
             ToolPolicySnapshot policy = null)
         {

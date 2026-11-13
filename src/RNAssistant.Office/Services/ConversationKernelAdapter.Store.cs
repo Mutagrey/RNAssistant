@@ -19,6 +19,15 @@ namespace RNAssistant.Office.Services
 {
     internal sealed partial class ConversationKernelAdapter
     {
+        public Task<ToolExecutionProgress> ReadReplayGuardAsync(ToolCall call,
+            long expectedRevision, CancellationToken cancellationToken)
+        {
+            if (expectedRevision != _cursor) throw new InvalidOperationException("Stale replay-guard cursor.");
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(_eventStore.RetainedReplayGuards
+                ? _eventStore.ReadReplayGuard(ConversationMetadata.From(_session), call) : null);
+        }
+
         public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
             IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,
             long expectedRevision, CancellationToken cancellationToken)

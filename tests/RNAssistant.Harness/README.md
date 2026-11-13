@@ -159,6 +159,16 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal history:` covers actual Office text edit/clear/resource observer, Workspace
+message deletion and a real Workspace kernel retry after Unknown: only the repeated
+call is denied; independent read succeeds. It includes a 160-message rewrite,
+one-body page, canonical/effect retention, rebuild/Workspace restore, append/flush/
+index/partial-index faults, idempotent retry and fresh explicit opaque confirmation.
+Office documents.json remains an explicit full-backup gap (refusal is checked).
+Regressions: `journal runtime:`, `journal mutation: Office and Workspace write`,
+`journal confirmation: Office and Workspace resume`, `journal confirmation: lost claim`,
+`kernel: unknown call remains`. Reuse the same build; no Windows qualification.
+
 `journal usage:` covers actual Office/Workspace catalogs, unique logical vs stored
 CAS sizes, missing-body warnings, metadata-only reads and per-chat/shared-frame
 attribution. Acceptance/flush/index/partial-usage-index faults, retry, rebuild/restore

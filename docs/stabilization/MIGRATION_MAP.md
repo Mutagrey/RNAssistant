@@ -142,6 +142,18 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 visible history (2026-11-14): ConversationJournal now accepts explicit text
+edit/delete/clear via a CAS membership manifest and the existing message index.
+Office mutation read-back and Workspace deletion consume the Store port; canonical
+Unknown/call/result/effect facts survive. IEventStore/IRunStore supply an exact
+replay-guard query to AgentProgressTracker before dispatch, without a second store.
+Temporary capability: RetainedReplayGuards, owner Core event port; consumers Office
+kernel adapter and WorkspacePorts. Legacy adapter explicitly declares unsupported;
+remove that branch/capability together with ChatEventStoreAdapter at P7. Native
+query failures never select the legacy path. Fork and resource-bearing history,
+resource-state consumers, P3 and full backup ownership remain open.
+[Contract](../session-events.md#journal-visible-history-and-retained-replay-guards--2026-11-14).
+
 P1/P2 native catalog usage (2026-11-13): ConversationJournal removes the unsupported
 usage catalog branch. Schema 23 adds counters to existing chat_state and one
 disposable chat_blob index; typed reducers update usage atomically with each fact.

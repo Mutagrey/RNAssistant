@@ -99,7 +99,8 @@ namespace RNAssistant.Core.Storage
                 // chat frame carries its metadata/context plus bounded message delta.
                 changes.Add(SessionOperationTypes.SessionMetadataSet); changes.Add(SessionOperationTypes.ContextSet);
                 if (fact.Messages.Count > 0) changes.Add(SessionOperationTypes.MessageUpdated);
-                if (fact.Run != null) changes.Add(SessionOperationTypes.RunUpdated);
+                if (fact.History != null) changes.Add(SessionOperationTypes.MessageRemove);
+                if (fact.Run != null || fact.History != null) changes.Add(SessionOperationTypes.RunUpdated);
             }
             return new ConversationEventNotice {
                 Sequence = receipt.Position.Sequence, EventId = receipt.Operation, CreatedUtc = fact.CreatedUtc,

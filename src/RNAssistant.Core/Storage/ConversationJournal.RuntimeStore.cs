@@ -39,9 +39,9 @@ namespace RNAssistant.Core.Storage
                 summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId)) throw TextStoreScope();
         }
 
-        private string ChatMessageOperation(SqliteConnection db, string chat, string id)
+        private string ChatMessageOperation(SqliteConnection db, string chat, string id, bool includeHidden = false)
         {
-            using (var command = Command(db, "SELECT operation FROM chat_message WHERE stream=$stream AND chat=$chat AND id=$id"))
+            using (var command = Command(db, "SELECT operation FROM chat_message WHERE stream=$stream AND chat=$chat AND id=$id" + (includeHidden ? "" : " AND ordinal>=0")))
             {
                 command.Parameters.AddWithValue("$chat", chat); command.Parameters.AddWithValue("$id", id);
                 return command.ExecuteScalar() as string;

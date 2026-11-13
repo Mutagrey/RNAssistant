@@ -1,5 +1,16 @@
 # RNAssistant backlog
 
+## Native Office identity backup — 2026-11-14
+
+Owner: DocumentAuthorityRegistry + existing CasMaintenanceService backup (P6/P7).
+Actual Office history edit/clear writes its existing resource-authority/documents.json
+identity binding. BackupJournals currently refuses that root rather than exporting
+an incomplete closure; the new history fixture verifies the refusal. Include and
+verify this owner's identity data, together with Workspace locators/move intents
+and keys, before the production switch. Do not delete the registry, silently skip
+it or create another identity store. Workspace journal/Unknown restore is covered;
+this does not qualify complete Office/application restore.
+
 ## Native session-summary storage attribution — 2026-11-13
 
 Owner: Core conversation projection / Office summary consumer (P3/P7).

@@ -1756,3 +1756,42 @@ after-state/CAS ownership.
    the validated archive; version-format/diff checks pass.
    ChatStore/adapters retire at whole-port P7; no additional adapter is
    introduced. This intermediate native integration has no product bump, push or tag.
+
+## P1/P2 — visible history and retained replay guards (2026-11-14)
+
+1. Native text edit/delete/clear closes another existing Store operation. Office
+   ChatHistoryEditService uses its mutation observer; Workspace deletion now commits
+   through IConversationStore. This is not completion of resource-bearing history/fork.
+2. A CAS membership manifest preserves ordered canonical locators and exact removals;
+   the bounded frame carries only changed/new user text. Existing chat_message rows
+   retain hidden IDs, preventing resurrection. Runtime facts/effect links/CAS roots
+   and reference sequences are never removed. Active/pending runs cannot be erased.
+3. IEventStore/IRunStore address one retained Unknown by exact proposed signature;
+   AgentProgressTracker applies existing repeat/opaque-confirmation policy before
+   dispatch. Native lookup failure has no fallback. RetainedReplayGuards explicitly
+   separates the retiring adapter's transcript path until P7; no new store/schema.
+   Feed invalidation includes removals/cleared run. Removed generic rewrite rejection
+   for this scope and the concrete Workspace Commit calls on deletion/edit submission.
+4. Four new checks and eight selected regressions pass, macOS/net8/C#7.3, isolated
+   `e107add2` plus owned sources, excluding concurrent Browser commits. New checks:
+   real Office/Workspace consumers, 160-message rewrite, one-body page, CAS/index
+   recovery, append/flush/index/partial-index faults, duplicate/conflicting retry,
+   actual Unknown write then deleted exchange, independent read and opaque approval.
+   Workspace restore keeps the original Unknown terminal and action guard. Regressions:
+   native runtime (4), Office/Workspace mutation (1), confirmation/resume (1), lost
+   confirmation claim (1), existing kernel unknown guard (1). No full suite or VSTO.
+5. Before: explicit rewrite failed and the indexed replay guard had no runtime
+   consumer. After: more than 128 retained messages use one manifest; healthy page
+   hydration remains one selected body. Only the uncertain exact operation is denied;
+   unrelated read/finish works. Rewrites still cost O(selected history); no allocation,
+   CPU, Windows latency or full P3 improvement is claimed.
+6. Actual Office binding creates documents.json in the existing authority registry.
+   Journal backup correctly refuses that mixed root: complete Office/application
+   backup remains open, recorded in BACKLOG. No registry deletion/skip or data import.
+   Remaining: fork/resource-bearing history, resource-state/attachment consumers,
+   P3 metadata/header/context selection, P6/P7 complete backup/writer shutdown/cutover;
+   P4 deferred and Windows/Office evidence separate. Default writer stays ChatStore.
+7. Session events, Resource Fabric, MIGRATION_MAP, BACKLOG, PROGRESS and Harness guide
+   updated. This is an intermediate native integration, without product bump/tag/push.
+   All owned source files and registrations match the tested archive; required
+   version-format and diff checks are performed before commit.

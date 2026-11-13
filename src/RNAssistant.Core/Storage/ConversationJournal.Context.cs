@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
@@ -109,20 +110,32 @@ namespace RNAssistant.Core.Storage
             CancellationToken token = default(CancellationToken))
         {
             if (string.IsNullOrWhiteSpace(chat) || call == null) throw new ArgumentException("An exact chat and proposed call are required.");
-            var signature = AgentProgressTracker.Signature(call);
+            return Access((db, cursor) => FindContextReplayGuard(db, chat, call), token);
+        }
+
+        bool IEventStore.RetainedReplayGuards { get { return true; } }
+        ToolExecutionProgress IEventStore.ReadReplayGuard(ConversationMetadata session, ToolCall call)
+        {
+            if (call == null) throw new ArgumentNullException(nameof(call));
             return Access((db, cursor) => {
-                using (var command = Command(db, "SELECT operation FROM context_required WHERE stream=$stream AND chat=$chat AND signature=$signature AND repeat_guard=1 ORDER BY sequence DESC LIMIT 1"))
-                {
-                    command.Parameters.AddWithValue("$chat", chat); command.Parameters.AddWithValue("$signature", signature);
-                    var operation = command.ExecuteScalar() as string;
-                    if (operation == null) return null;
-                    var item = RequireContextOperation(db, chat, operation);
-                    if (item.Result.Fact.Result.ExecutionProgress.Outcome != ToolExecutionOutcome.Unknown ||
-                        item.Result.Fact.Result.ExecutionProgress.OpaqueActionCompleted || item.Call.ToolName != call.Name)
-                        throw new InvalidDataException("Repeat guard disagrees with its canonical terminal.");
-                    return item;
-                }
-            }, token);
+                RequireChatRevision(session, TextChat(db, session.Id));
+                return FindContextReplayGuard(db, session.Id, call)?.Result.Fact.Result.ExecutionProgress;
+            }, CancellationToken.None);
+        }
+
+        private ConversationContextOperation FindContextReplayGuard(SqliteConnection db, string chat, ToolCall call)
+        {
+            using (var command = Command(db, "SELECT operation FROM context_required WHERE stream=$stream AND chat=$chat AND signature=$signature AND repeat_guard=1 ORDER BY sequence DESC LIMIT 1"))
+            {
+                command.Parameters.AddWithValue("$chat", chat); command.Parameters.AddWithValue("$signature", AgentProgressTracker.Signature(call));
+                var operation = command.ExecuteScalar() as string;
+                if (operation == null) return null;
+                var item = RequireContextOperation(db, chat, operation);
+                if (item.Result.Fact.Result.ExecutionProgress.Outcome != ToolExecutionOutcome.Unknown ||
+                    item.Result.Fact.Result.ExecutionProgress.OpaqueActionCompleted || item.Call.ToolName != call.Name)
+                    throw new InvalidDataException("Repeat guard disagrees with its canonical terminal.");
+                return item;
+            }
         }
 
         private ConversationContextOperation RequireContextOperation(SqliteConnection db, string chat, string operation)

@@ -13,6 +13,9 @@ namespace RNAssistant.Core.Persistence
         // means no run facts exist. Return a strictly newer cursor only after
         // durability. Stale continuations must fail before another dispatch.
         Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken);
+        // Exact proposed call only: history length must not disable ordinary work.
+        Task<RNAssistant.Core.Tools.ToolExecutionProgress> ReadReplayGuardAsync(ToolCall call,
+            long expectedRevision, CancellationToken cancellationToken);
         // Read canonical durable outcomes for this exact run/session before a
         // model-authored finish can be accepted. Never infer them from a prompt.
         Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,

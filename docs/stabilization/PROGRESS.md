@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Native visible-history rewrites — 2026-11-14
+
+Text edit/delete/clear подключены к CAS-manifest и существующему индексу, через
+Office resource observer и Workspace Store-порт. Удаление видимой истории сохраняет
+Unknown/call/result/authority; kernel адресно блокирует повтор неопределённого вызова,
+оставляя обычное чтение и свежее явное подтверждение opaque-действия доступными.
+Четыре новых checks и восемь выбранных регрессий проходят на `e107add2` + owned
+changes, отдельно от Browser. Rebuild/Workspace restore и lost ack проверены.
+Остались fork/resource-bearing history, resource-state consumers и P3; backup Office
+пока явно отказывает на documents.json — включить существующий owner до P7.
+Default writers прежние, P4 отложена, Windows/Office evidence открыт.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--visible-history-and-retained-replay-guards-2026-11-14).
+
 ## Browser audit corrections complete locally — 2026-11-14
 
 `16.27.0-dev`: исправлены A1–A7 аудита пакета 00–08 отдельными срезами; последний —

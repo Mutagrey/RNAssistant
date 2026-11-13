@@ -287,6 +287,11 @@ namespace RNAssistant.Core.Persistence
 
     public interface IEventStore
     {
+        // Explicit migration capability. The old backend uses transcript guards;
+        // the journal also retains guards outside the visible history.
+        bool RetainedReplayGuards { get; }
+        RNAssistant.Core.Tools.ToolExecutionProgress ReadReplayGuard(ConversationMetadata session,
+            RNAssistant.Core.Agent.ToolCall call);
         // Explicit migration capability; an atomic backend never falls back to
         // source Prepared / destination Submit / source Accepted event writes.
         bool AtomicAgentDelivery { get; }

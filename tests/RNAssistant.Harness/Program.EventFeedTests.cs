@@ -112,6 +112,9 @@ namespace RNAssistant.Harness
 
         private sealed class EventFeedPageStore : IEventStore, ISessionEventReader
         {
+            public bool RetainedReplayGuards { get { return false; } }
+            public RNAssistant.Core.Tools.ToolExecutionProgress ReadReplayGuard(ConversationMetadata session,
+                RNAssistant.Core.Agent.ToolCall call) { throw new NotSupportedException(); }
             public bool AtomicAgentDelivery { get { return false; } }
             public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { throw new NotSupportedException(); }
             public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,

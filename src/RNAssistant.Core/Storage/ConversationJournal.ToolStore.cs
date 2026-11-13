@@ -275,9 +275,10 @@ namespace RNAssistant.Core.Storage
 
         private static void ApplyMessageReferences(ConversationCommit command, ConversationChatReceipt receipt)
         {
-            foreach (var write in command.Messages)
+            foreach (var entry in receipt.Fact.Messages)
             {
-                var saved = receipt.Fact.Messages.Single(item => item.Header.Id == write.Message.Id).Header;
+                var saved = entry.Header;
+                var write = command.Messages.Single(item => item.Message.Id == saved.Id);
                 write.Message.ToolCallReference = saved.ToolCallReference; write.Message.EvidenceReference = saved.EvidenceReference;
                 write.Message.ResourceModelReferences = saved.ResourceModelReferences;
             }

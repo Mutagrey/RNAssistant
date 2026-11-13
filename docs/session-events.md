@@ -1,5 +1,46 @@
 # Session event stream
 
+## Journal visible history and retained replay guards — 2026-11-14
+
+Explicit text edit/delete/clear now use the existing ConversationCommit.RewriteHistory
+command and ConversationJournal. A CAS manifest names ordered visible message
+locators and exact removals; only changed/new user text enters the bounded frame.
+More than 128 retained messages therefore does not overflow the frame limit. The
+existing chat_message index keeps removed IDs with a null ordinal, preventing their
+resurrection. Pages still address original frames directly; normal page reads do
+not hydrate the membership manifest. Explicit rewrites remain proportional to the
+selected history. No store, registry, index schema or protocol version is added.
+
+Rewrites require an exact chat revision and an idle accepted run. They may reset
+visible run/context projections; accepted calls, results, authority links, aliases,
+Unknown requirements and CAS roots remain canonical. Reordered occurrences, runtime
+text edits, peer-provenance edits and active/pending runs are rejected. Workspace
+text replacement may append one new user occurrence. A retry with the same command
+returns its exact receipt; changed content conflicts. The manifest and projection
+cursor apply atomically, including recovery after acknowledgement/index failure.
+Feed notices invalidate message pages and cleared run presentation.
+
+Before each proposed tool dispatch, Office/Workspace run ports query the exact
+call signature through IEventStore/IRunStore. The existing context index selects
+one canonical unresolved terminal; AgentProgressTracker applies the same policy.
+Clearing visible history cannot authorize an uncertain repeat. Other work remains
+available; opaque actions still require a fresh explicit confirmation, never auto
+approval. This is an action guard, not a history-length limit or a second runtime.
+
+RetainedReplayGuards is an explicit migration capability: ConversationJournal owns
+it; ChatEventStoreAdapter declares unsupported and keeps the existing transcript
+path. Remove the capability branch with that adapter at P7. No fallback is taken
+when a native lookup fails. UI-only history commands continue through the existing
+Office mutation observer; Workspace deletion uses its existing Store port.
+
+Checked: Office editor/clear plus resource read-back, Workspace deletion and an
+actual kernel repeat after an Unknown file write, bounded pages, fault/retry,
+rebuild/Workspace restore and opaque confirmation. Fork, resource/attachment-bearing
+history and other resource-state consumers remain open. Office documents.json is
+still outside the new journal backup, which correctly refuses that mixed root;
+[the existing backup owner must include it](stabilization/BACKLOG.md#native-office-identity-backup--2026-11-14).
+Default writers and Windows/Office qualification are unchanged.
+
 ## Journal catalog storage usage — 2026-11-13
 
 ConversationJournal now supports both catalog overloads including storage usage.
@@ -30,8 +71,8 @@ Physical size enumeration remains proportional to referenced hashes/CAS prefixes
 broader metadata/header optimization remains P3. Session-based summaries still use
 the scope cursor length; their per-chat attribution remains an explicit P3/P7 gap
 in [BACKLOG](stabilization/BACKLOG.md#native-session-summary-storage-attribution--2026-11-13).
-History rewrites/resource consumers, production cutover and Windows evidence remain
-open. History edits must preserve indexed unresolved effects and action guards.
+Text history rewrites are connected above; resource-bearing history/consumers,
+production cutover and Windows evidence remain open.
 
 ## Journal chat relocation — 2026-11-13
 
@@ -586,7 +627,7 @@ introduced; this slice does not alter `ChatStore` itself.
 
 No-tool runtime/protocol messages and `CommitRun` are now connected as described
 above. Single-chat deletion is connected by `chat.deleted`. Other resource/attachment
-owners and history rewrites remain open; relocation and catalog usage are covered above. Reading an unconnected tool/
+owners and resource-bearing history/forks remain open; text rewrites, relocation and catalog usage are covered above. Reading an unconnected tool/
 agent chat must not return an apparently complete text history. Remaining operations must move to
 the same owner before P7 removes the old backend; verified backup, stopped legacy
 writers and Windows/Office photo evidence still gate that switch. Existing journal

@@ -369,6 +369,9 @@ namespace RNAssistant.Harness
         }
         private sealed class InboxFailingEvents : IEventStore
         {
+            public bool RetainedReplayGuards { get { return Inner.RetainedReplayGuards; } }
+            public RNAssistant.Core.Tools.ToolExecutionProgress ReadReplayGuard(ConversationMetadata session,
+                RNAssistant.Core.Agent.ToolCall call) { return Inner.ReadReplayGuard(session, call); }
             public bool AtomicAgentDelivery { get { return Inner.AtomicAgentDelivery; } }
             public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { return Inner.FindAgent(source, agentId); }
             public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,

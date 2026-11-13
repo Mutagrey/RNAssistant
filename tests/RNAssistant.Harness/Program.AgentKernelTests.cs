@@ -1651,6 +1651,14 @@ namespace RNAssistant.Harness
             internal int FailedAppends;
             private long _revision;
 
+            internal Func<ToolCall, ToolExecutionProgress> ReplayGuard;
+            public Task<ToolExecutionProgress> ReadReplayGuardAsync(ToolCall call, long expectedRevision, CancellationToken token)
+            {
+                if (expectedRevision != _revision) throw new InvalidOperationException("Stale replay-guard cursor.");
+                token.ThrowIfCancellationRequested();
+                return Task.FromResult(ReplayGuard?.Invoke(call));
+            }
+
             public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
                 IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,
                 long expectedRevision, CancellationToken token)

@@ -273,30 +273,35 @@ namespace RNAssistant.Runtime
                 if (!session.UsesCurrentProtocol)
                     throw new InvalidOperationException("Old-format history is read-only.");
                 RequireIdleSession(workspace, sessionId);
-                var index = session.Messages.FindIndex(message => message != null &&
-                    string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
-                if (index < 0) throw new InvalidOperationException("Message was not found.");
-                var previousIds = session.Messages.Select(message => message.Id).ToArray();
-                var removed = ToolProtocolMessages.SelectMessagesForDeletion(session.Messages, index);
-                session.Messages.RemoveAll(message => removed.Contains(message));
-                session.LastRun = null;
-                session.LastContextReceipt = null;
-                session.ContextCheckpoints = new List<ContextCheckpoint>();
-                session.ActiveContextCheckpointId = null;
-                session.ActiveTaskListArtifactId = null;
-                session.ActivePlanDocumentArtifactId = null;
-                session.ArtifactLinks = new List<ChatArtifactLink>();
-                var retainedIds = WorkspaceMessageArtifactIds(session.Messages, session);
-                session.Artifacts = (session.Artifacts ?? new List<ChatArtifact>())
-                    .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id)).ToList();
-                var retainedReferences = new HashSet<string>(session.Messages
-                    .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
-                    .Select(reference => reference.ExactKey), StringComparer.Ordinal);
-                session.ResourceReferenceIndex = (session.ResourceReferenceIndex ?? new List<ModelResourceReference>())
-                    .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
-                _chats.Commit(session, ConversationCommit.RewriteHistory(previousIds, session.Messages));
+                DeleteHistoryMessage(_conversationStore, session, messageId);
                 return session;
             }
+        }
+
+        internal static void DeleteHistoryMessage(IConversationStore store, ChatSession session, string messageId)
+        {
+            var index = session.Messages.FindIndex(message => message != null &&
+                string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
+            if (index < 0) throw new InvalidOperationException("Message was not found.");
+            var previousIds = session.Messages.Select(message => message.Id).ToArray();
+            var removed = ToolProtocolMessages.SelectMessagesForDeletion(session.Messages, index);
+            session.Messages.RemoveAll(message => removed.Contains(message));
+            session.LastRun = null;
+            session.LastContextReceipt = null;
+            session.ContextCheckpoints = new List<ContextCheckpoint>();
+            session.ActiveContextCheckpointId = null;
+            session.ActiveTaskListArtifactId = null;
+            session.ActivePlanDocumentArtifactId = null;
+            session.ArtifactLinks = new List<ChatArtifactLink>();
+            var retainedIds = WorkspaceMessageArtifactIds(session.Messages, session);
+            session.Artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id)).ToList();
+            var retainedReferences = new HashSet<string>(session.Messages
+                .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
+                .Select(reference => reference.ExactKey), StringComparer.Ordinal);
+            session.ResourceReferenceIndex = (session.ResourceReferenceIndex ?? new List<ModelResourceReference>())
+                .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
+            store.Commit(session, ConversationCommit.RewriteHistory(previousIds, session.Messages));
         }
 
         private static ChatMessage PrepareWorkspaceMessageEdit(ChatSession session,
@@ -647,7 +652,7 @@ namespace RNAssistant.Runtime
                         }
                     LinkInputAttachments(session, userMessage);
                 }
-                _chats.Commit(session, editedSource == null ? ConversationCommit.UserInput(userMessage) :
+                _conversationStore.Commit(session, editedSource == null ? ConversationCommit.UserInput(userMessage) :
                     ConversationCommit.RewriteHistory(editedPreviousIds, session.Messages));
                 if (drafts.Count > 0 && queuedInput == null) attachmentStore.DeleteDrafts(userMessage);
                 input.Status = ConversationInputStatus.Applied; input.Revision++;
@@ -2044,6 +2049,15 @@ namespace RNAssistant.Runtime
             }
 
             private IReadOnlyList<string> _deliveredEvidenceReferences = new string[0];
+
+            public Task<ToolExecutionProgress> ReadReplayGuardAsync(ToolCall call,
+                long expectedRevision, CancellationToken cancellationToken)
+            {
+                if (expectedRevision != _cursor) throw new InvalidOperationException("Stale replay-guard cursor.");
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(_events.RetainedReplayGuards
+                    ? _events.ReadReplayGuard(ConversationMetadata.From(_session), call) : null);
+            }
 
             public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
                 IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,

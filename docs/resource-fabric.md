@@ -1886,6 +1886,17 @@ replacement or an invented empty body.
 
 ## Context and storage
 
+### Native text history consumers — 2026-11-14
+
+Office chat edit/clear uses the existing ResourceMutationAuthorityObserver with the
+new Store port. Workspace message deletion persists through IConversationStore.
+Only visible membership and explicit user text change; resource read-back and
+canonical effect/Unknown evidence retain their existing owners. The kernel's exact
+replay guard survives deleting the visible call/result pair. Fork and resource-bearing
+history remain unconnected; this does not enable all Plan/Task/HTML/attachment owners.
+Office's existing document identity registry also remains a P6/P7 backup dependency.
+[History contract](session-events.md#journal-visible-history-and-retained-replay-guards--2026-11-14).
+
 ### Accepted mutation origin — 2026-11-11
 
 The new-root composition supplies `ResourceMutationOrigin` through existing

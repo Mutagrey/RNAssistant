@@ -10,6 +10,9 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class ChatEventStoreAdapter : IEventStore
     {
+        public bool RetainedReplayGuards { get { return false; } }
+        public RNAssistant.Core.Tools.ToolExecutionProgress ReadReplayGuard(ConversationMetadata session,
+            RNAssistant.Core.Agent.ToolCall call) { throw new NotSupportedException("Retained replay guards require the journal backend."); }
         public bool AtomicAgentDelivery { get { return false; } }
         public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { throw new NotSupportedException(); }
         public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,

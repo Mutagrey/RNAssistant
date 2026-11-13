@@ -803,6 +803,9 @@ namespace RNAssistant.Harness
 
         private sealed class AgentReceiptFailureEvents : IEventStore
         {
+            public bool RetainedReplayGuards { get { return _inner.RetainedReplayGuards; } }
+            public RNAssistant.Core.Tools.ToolExecutionProgress ReadReplayGuard(ConversationMetadata session,
+                RNAssistant.Core.Agent.ToolCall call) { return _inner.ReadReplayGuard(session, call); }
             public bool AtomicAgentDelivery { get { return _inner.AtomicAgentDelivery; } }
             public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { return _inner.FindAgent(source, agentId); }
             public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,

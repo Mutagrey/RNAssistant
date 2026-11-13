@@ -599,7 +599,9 @@ namespace RNAssistant.Core.Agent
             }
             string progressReason, progressMessage;
             int retryDelay = 0;
-            if (!confirmed && !state.Progress.CanDispatch(call, out progressReason, out progressMessage, out retryDelay, policy))
+            var retainedGuard = await _store.ReadReplayGuardAsync(call, state.Revision, cancellationToken).ConfigureAwait(false);
+            state.Progress.RetainReplayGuard(call, retainedGuard);
+            if ((!confirmed || retainedGuard != null) && !state.Progress.CanDispatch(call, out progressReason, out progressMessage, out retryDelay, policy))
             {
                 await RecordNotDispatchedAsync(state, call, policy, stepId, progressMessage,
                     code: progressReason).ConfigureAwait(false);
