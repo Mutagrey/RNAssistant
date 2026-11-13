@@ -357,6 +357,7 @@
     <Compile Include="Storage\DocumentArtifactStore.Plans.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Records.cs" />
     <Compile Include="Storage\DocumentArtifactStore.WorkspaceHtml.cs" />
+    <Compile Include="Storage\DocumentArtifactStore.HtmlVersions.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Text.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Files.cs" />
     <Compile Include="Storage\DocumentArtifactStore.FilePatches.cs" />

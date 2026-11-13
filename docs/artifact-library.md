@@ -1,5 +1,30 @@
 # Artifact Library and Viewers
 
+## Document HTML explicit checkpoints — 2026-11-13
+
+DocumentArtifactStore.HtmlVersions reuses immutable HtmlWorkspace snapshots. Save
+publishes metadata, catalog head and operation receipt; it does not republish source
+or change undo/redo durability. A generation cutoff is persisted before migration;
+all earlier published snapshots become Legacy entries with original exact refs and
+dates. Both new mutation preparation and import initialize the catalog before their
+first publication, so later automatic revisions stay technical history. Interrupted
+migration resumes by operation receipt. Current exact-head checkpoints cannot be
+tombstoned; older tombstones never remove aggregate bytes or chat evidence.
+
+DocumentHtmlVersionService validates the addressed document/chat via metadata and
+binds Save/Delete to the observed exact current publication. The common Browser
+flushes a matching dirty editor via its existing owner, then refreshes this binding.
+Saved HTML uses the common checkpoint picker. The existing saved-history API remains
+for explicit source comparison/technical history and never becomes another store.
+
+Raw HTML import has a separate exact-provider-byte adapter. It checks bounded UTF-8
+round-trip (including BOM/newlines), original hash, declared encoding and recognizable
+unsupported dependencies, then passes one index.html and exact origin to the existing
+import service. No neighboring paths or URLs are read. Created proves a verified
+source copy; this conservative scan does not qualify arbitrary JavaScript portability
+or execution. UnsupportedEncoding/UnsupportedDependency are typed refusals. The
+common raw Browser action is wired with the remaining provider adapters.
+
 ## Workspace HTML checkpoints — 2026-11-13
 
 `DocumentArtifactStore.WorkspaceHtml` extends the existing artifact owner only for

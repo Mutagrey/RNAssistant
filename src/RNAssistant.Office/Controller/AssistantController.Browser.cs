@@ -7,18 +7,41 @@ using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Persistence;
+using System.Threading;
 
 namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        private ConversationMetadata BrowserOwner(BrowserOwnerScope owner)
+        {
+            if (owner?.Kind != BrowserOwnerKind.Document || string.IsNullOrEmpty(owner.ChatId)) throw new InvalidOperationException("Выберите точный документ и чат Browser.");
+            var metadata = LoadDiagnosticsMetadata(owner.ChatId, null);
+            if (metadata.DocumentAuthorityId != owner.ScopeId) throw new InvalidOperationException("Контекст документа Browser изменился.");
+            return metadata;
+        }
+        private DocumentHtmlVersionService HtmlVersions()
+        { return new DocumentHtmlVersionService(_paths, _chatStore.DocumentArtifacts); }
+        internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
+        {
+            var owner = BrowserOwner(request?.OwnerScope);
+            if (request.Locator == "/") return BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, "/", null);
+            return HtmlVersions().Resolve(owner, request);
+        }
+        internal BrowserVersionState BrowserVersionState(BrowserVersionRequest request)
+        { return HtmlVersions().State(BrowserOwner(request?.Target?.OwnerScope), request); }
+        internal BrowserVersionPage BrowserVersions(BrowserVersionRequest request)
+        { return HtmlVersions().Versions(BrowserOwner(request?.Target?.OwnerScope), request); }
+        internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token)
+        { return HtmlVersions().Command(BrowserOwner(request?.Target?.OwnerScope), request, token); }
+
         internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
         {
-            var session = LoadAddressedSession(request.OwnerScope.ChatId);
-            if (target.OwnerScope.ScopeId != (session.DocumentAuthorityId ?? session.Id) || target.ChatId != session.Id ||
+            var metadata = BrowserOwner(request.OwnerScope);
+            if (target.OwnerScope.ScopeId != metadata.DocumentAuthorityId || target.ChatId != metadata.Id ||
                 target.State != BrowserTargetState.Ready) throw new InvalidOperationException("Контекст исходника Browser изменился.");
             var reference = new ResourceRef(target.ResourceUri);
-            var metadata = RNAssistant.Core.Persistence.ConversationMetadata.From(session);
             var artifact = _chatStore.DocumentArtifacts.Read(metadata, reference, false);
             if (_chatStore.DocumentArtifacts.IsRemoved(metadata, artifact)) throw new InvalidOperationException("Источник удалён из каталога.");
             if (artifact.ContentByteLength > 8 * 1024 * 1024) throw new InvalidOperationException("Исходник превышает лимит просмотра.");
@@ -30,7 +53,8 @@ namespace RNAssistant.Office
                     path => snapshot.Files.Single(file => file.Path == path).Content);
             }
             if (!BrowserTargetResolver.IsHtmlResource(artifact)) throw new InvalidOperationException("Источник не является HTML.");
-            var text = new UTF8Encoding(false, true).GetString(_chatStore.DocumentArtifacts.ExportBytes(session, reference));
+            var text = new UTF8Encoding(false, true).GetString(_toolExecutor.Payloads.ReadBytes(
+                new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, artifact.MimeType).ToBlobReference()));
             return BrowserSourceReader.Read(target, request, new[] { "index.html" }, path => text);
         }
 

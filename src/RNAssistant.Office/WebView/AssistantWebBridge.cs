@@ -650,7 +650,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = BrowserSuggestions(Payload<BrowserSuggestionRequest>(payload));
                         break;
                     case BridgeOperationId.GetBrowserVersionState:
-                        responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersionState(Payload<BrowserVersionRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        responsePayload = await RunBridgeWorkAsync(() => ReadBrowserVersionState(Payload<BrowserVersionRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetHtmlProjectDefinition:
                         responsePayload = await RunBridgeWorkAsync(() => Plugins.HtmlProjects.GetDefinition(Payload<HtmlProjectDefinitionRequest>(payload)), cancellationToken).ConfigureAwait(false);
@@ -659,10 +659,10 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(() => Plugins.HtmlProjects.SetDefinition(Payload<HtmlProjectDefinitionRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetBrowserVersions:
-                        responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersions(Payload<BrowserVersionRequest>(payload)), cancellationToken).ConfigureAwait(false);
+                        responsePayload = await RunBridgeWorkAsync(() => ReadBrowserVersions(Payload<BrowserVersionRequest>(payload)), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.BrowserVersionCommand:
-                        responsePayload = await RunBridgeWorkAsync(() => Plugins.BrowserVersionCommand(Payload<BrowserVersionCommand>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
+                        responsePayload = await RunBridgeWorkAsync(() => WriteBrowserVersion(Payload<BrowserVersionCommand>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadBrowserSource:
                         responsePayload = BrowserSource(Payload<BrowserSourceRequest>(payload));

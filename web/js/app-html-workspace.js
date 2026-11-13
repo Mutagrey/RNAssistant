@@ -149,6 +149,7 @@
       var editor = view(chatId); if (await editor.ready()) editor.annotations.showSent(item);
     },
     isDirty: function (chatId) { var editor = view(chatId); return !!editor && editor.dirty(); },
+    flushForCheckpoint: function (target) { var editor = view(target.chatId); return editor ? editor.flushForCheckpoint(target) : Promise.resolve(false); },
     canDelete: function (scope) {
       if (!affected(scope).some(function (editor) { return editor.dirty() || editor.busy(); })) return true;
       window.alert("Сохраните правки или закройте HTML-редактор перед удалением его чата."); return false;

@@ -39,11 +39,21 @@
       isCurrent: function () { return active && !disposed; }, navigate: function (locator) { return command("Navigate", { locator: locator }); },
       removed: function () { command("Reload").catch(fail); }, error: fail,
       configure: configureProject,
+      beforeSave: async function (value) {
+        var serial = current && current.documentGeneration;
+        if (value.kind !== "HtmlWorkspace") return;
+        if (await RNAssistantHtmlWorkspaceSurface.flushForCheckpoint(value)) {
+          if (!active || disposed || serial !== current.documentGeneration) throw new Error("Контекст страницы изменился после сохранения файла.");
+          await command("Reload");
+          return true;
+        }
+      },
       status: function (message) { surface.waiting(label(), message); }
     });
     versionViews.set(target.browserTabId, function (change) {
       var value = current && current.target, changed = change.target;
-      if (value && (value.pluginId ? value.pluginId === changed.pluginId : value.kind === changed.kind && value.workspaceId === changed.workspaceId)) versionControls.refresh();
+      if (value && (value.pluginId ? value.pluginId === changed.pluginId : value.logicalId ? value.documentId === changed.documentId && value.logicalId === changed.logicalId :
+        value.kind === changed.kind && value.workspaceId === changed.workspaceId)) versionControls.refresh();
     });
     async function configureProject() {
       var value = current && current.target, serial = current && current.documentGeneration;

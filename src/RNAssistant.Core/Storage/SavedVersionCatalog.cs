@@ -41,10 +41,10 @@ namespace RNAssistant.Core.Storage
             return state;
         }
 
-        internal SavedVersionCatalogState Initialize(ResourceRef cutoff)
+        internal SavedVersionCatalogState Initialize(ResourceRef cutoff, long? generation = null)
         {
             var state = State(); if (state != null) return state;
-            state = new SavedVersionCatalogState { MigrationCutoff = cutoff?.Copy(), MigrationComplete = cutoff == null };
+            state = new SavedVersionCatalogState { MigrationCutoff = cutoff?.Copy(), MigrationGeneration = generation, MigrationComplete = cutoff == null };
             Commit(state, null, new List<ResourceHeadChange>(), null);
             return State();
         }
@@ -199,7 +199,8 @@ namespace RNAssistant.Core.Storage
             if (state != null)
             {
                 var next = CatalogRef("cat_" + Guid.NewGuid().ToString("N"));
-                Stage(next, state, current?.Revision);
+                Stage(next, state, current?.Revision, state.MigrationCutoff == null ? null :
+                    new[] { new ResourceDependency(state.MigrationCutoff, kind: "migration-cutoff") });
                 changes.Add(new ResourceHeadChange(next.Identity, current, ResourceHeadState.Known(next, frozen.Generation + 1)));
             }
             if (receipt != null)

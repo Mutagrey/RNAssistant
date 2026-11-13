@@ -26,7 +26,8 @@ namespace RNAssistant.Application.Contracts
     {
         None, InvalidLocator, OutsideScope, TargetUnavailable, AmbiguousTarget, Removed,
         ReadOnly, ProjectDefinitionRequired, IsolationUnqualified, NativeUnavailable,
-        StaleBinding, SavedVersionRequired, ActiveVersion, VersionInUse, OperationUnknown
+        StaleBinding, SavedVersionRequired, ActiveVersion, VersionInUse, OperationUnknown,
+        UnsupportedEncoding, UnsupportedDependency, InvalidContent
     }
 
     public sealed class BrowserTargetCapabilities
@@ -45,6 +46,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("media")] public bool Media { get; set; }
         [JsonProperty("previewReason")] public BrowserRefusalCode PreviewReason { get; set; }
         [JsonProperty("saveReason")] public BrowserRefusalCode SaveReason { get; set; }
+        [JsonProperty("createProjectReason")] public BrowserRefusalCode CreateProjectReason { get; set; }
     }
 
     public sealed class BrowserTargetDescriptor
@@ -55,6 +57,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("documentId")] public string DocumentId { get; set; }
         [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }
+        [JsonProperty("logicalId")] public string LogicalId { get; set; }
         [JsonProperty("revision")] public int Revision { get; set; }
         [JsonProperty("ownerScope")] public BrowserOwnerScope OwnerScope { get; set; }
         [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }

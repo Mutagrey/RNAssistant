@@ -1038,3 +1038,12 @@ owner. The former entry-only source branch in PluginApplicationService was remov
 The existing Browser checkpoint UI temporarily admits plugin/Workspace kinds only;
 owner: Browser/artifact integration, removal condition: document HTML checkpoint
 adapter and cutoff migration connected in the next slice. No second version store.
+
+### Document checkpoint cutover — 2026-11-13
+
+The ArtifactVersions provider guard now includes document HTML; its old savedHtml
+history-picker path is removed. HtmlArtifactView temporarily mounts the same common
+controls until F4 route cutover (owner: Browser UI). getSavedHtmlHistory remains only
+for explicit technical source comparison; automatic revision durability is retained.
+Raw HTML import is implemented at the existing artifact/import owners; remaining
+common UI action/provider wiring is F4, not another import pipeline.

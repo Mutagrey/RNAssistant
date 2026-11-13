@@ -33,6 +33,7 @@ namespace RNAssistant.Core.Models
         public string LatestAvailableVersionId { get; set; }
         public string LastSavedFingerprint { get; set; }
         public ResourceRef MigrationCutoff { get; set; }
+        public long? MigrationGeneration { get; set; }
         public bool MigrationComplete { get; set; }
         [JsonIgnore] public string StateRevision { get; internal set; }
     }

@@ -1,5 +1,31 @@
 # Universal Browser: статус
 
+## F3d Document HTML checkpoints — 2026-11-13
+
+`16.18.0-dev`, continued from `7149ad64`. DocumentArtifactStore.HtmlVersions stores
+checkpoint metadata over existing immutable aggregates. A durable migration cutoff
+imports every formerly visible revision with original refs/order/time, resumes after
+a lost receipt, and excludes later automatic revisions. Existing mutation preparation
+and import initialize the marker before new publications; file durability is unchanged.
+The current exact head is protected from deletion; removed entries retain evidence.
+
+DocumentHtmlVersionService uses metadata-only addressed owners; the common Browser
+and saved-HTML adapter share ArtifactVersions. The old HTML default-picker branch
+was removed. `getSavedHtmlHistory` remains a technical-history source for explicit
+comparison, not the checkpoint inventory. Dirty editor buffers save through their
+existing owner before a checkpoint is captured; failed file saves stop the checkpoint.
+
+Exact raw HTML has a real ArtifactCatalog → HtmlProjectImportService branch: bounded
+UTF-8 round-trip, exact origin/hash, one declared index.html; no neighbor enumeration,
+download or source overwrite. Unsupported encoding/dependencies produce typed refusals.
+The common raw-resource action and Workspace snapshot copy/export/compare are F4 adapters.
+Checks: HTML checkpoints 3, import 4, exact Browser target 1, plugin catalog regression 3,
+shared HTML publication regressions 2; Mock build 0 errors. Document dirty-buffer UI
+and existing import lifecycle/source-only fixtures pass. Narrow screenshot reviewed.
+UI acceptance, B02/native execution and Windows/Office qualification remain open.
+Next: unified provider navigation/actions, StartSurface/recents and local tool gates,
+then 07. No push/release.
+
 ## F3c Workspace checkpoints — 2026-11-13
 
 `16.17.0-dev`, continued from `8c5f3dae` in an isolated worktree while main has

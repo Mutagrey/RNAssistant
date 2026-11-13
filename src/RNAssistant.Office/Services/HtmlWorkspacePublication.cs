@@ -41,6 +41,7 @@ namespace RNAssistant.Office.Services
                 if (command == null) throw new ToolMutationPreparationException("html_preparation_required", "Prepare an explicit HTML workspace command.");
                 var mutation = command.Load(session, owner, authority);
                 var logicalId = command.LogicalId;
+                owner.BeginHtmlVersionCutover(RNAssistant.Core.Persistence.ConversationMetadata.From(session), logicalId);
                 var includeAllFiles = operation == "html.workspace.restore" ||
                     operation == "html.workspace.redo" ||
                     operation == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ImportAssetToolId;

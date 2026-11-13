@@ -292,6 +292,11 @@ namespace RNAssistant.Office
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
         internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
         { throw new InvalidOperationException("Source is not configured by this fixture."); }
+        internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
+        { return RNAssistant.Application.BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)); }
+        internal BrowserVersionState BrowserVersionState(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
+        internal BrowserVersionPage BrowserVersions(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
+        internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
         public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }

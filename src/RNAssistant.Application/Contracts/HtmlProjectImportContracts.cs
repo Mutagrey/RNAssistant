@@ -18,5 +18,6 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("rootPath")] public string RootPath { get; set; }
         [JsonProperty("entryPath")] public string EntryPath { get; set; }
         [JsonProperty("message")] public string Message { get; set; }
+        [JsonProperty("reason")] public BrowserRefusalCode Reason { get; set; }
     }
 }

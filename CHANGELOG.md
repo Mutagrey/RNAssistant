@@ -11,6 +11,16 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.18.0-dev
+
+- Document HTML now has explicit project checkpoints, separate from automatically
+  retained edits. All previously published versions migrate with their exact links
+  and timestamps; deleting a checkpoint keeps historical evidence.
+- Browser Save first saves a dirty buffer through its existing HTML editor owner.
+  The current checkpoint cannot be deleted, and stale publications are rejected.
+- The HTML import backend accepts an exact single UTF-8 resource as a new one-file
+  project, preserving bytes and refusing unsupported encodings/dependencies.
+
 ### 16.17.0-dev
 
 - Local Workspace HTML projects can save explicit versions without a chat, reopen

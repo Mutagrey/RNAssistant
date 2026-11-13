@@ -222,6 +222,13 @@ namespace RNAssistant.Office.Services
         {
             if (string.IsNullOrWhiteSpace(documentId)) throw new InvalidDataException("Требуется исходный документ проекта.");
             var artifact = ReadTransferArtifact(actor, documentId, resourceUri, out var source, out var reference);
+            if (RNAssistant.Application.BrowserTargetResolver.IsHtmlResource(artifact))
+            {
+                if (artifact.ContentByteLength > RNAssistant.Application.HtmlProjectImportService.MaximumSourceBytes)
+                    throw new RNAssistant.Application.HtmlProjectImportException(RNAssistant.Application.Contracts.BrowserRefusalCode.InvalidContent, "HTML превышает лимит переноса 16 МиБ.");
+                return RNAssistant.Application.HtmlProjectImportService.FromHtmlResource(_artifacts.ExportBytes(source, reference), artifact.Title,
+                    new ArtifactTransferOrigin { ResourceUri = reference.Uri, ContentSha256 = artifact.ContentSha256 });
+            }
             if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace)
                 throw new InvalidDataException("Для создания проекта выберите сохранённый HTML.");
             if (artifact.ContentByteLength > 2L * RNAssistant.Application.HtmlProjectImportService.MaximumSourceBytes)

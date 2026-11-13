@@ -37,7 +37,7 @@ namespace RNAssistant.Office
             }
             catch (Exception error) { return new RNAssistant.Application.Contracts.HtmlProjectImportResult {
                 Status = RNAssistant.Application.Contracts.HtmlProjectImportStatus.Rejected, Backing = request.Backing,
-                Message = error.Message }; }
+                Message = error.Message, Reason = (error as RNAssistant.Application.HtmlProjectImportException)?.Reason ?? RNAssistant.Application.Contracts.BrowserRefusalCode.InvalidContent }; }
             return new RNAssistant.Application.HtmlProjectImportService(_paths).Import(source, token);
         }
 

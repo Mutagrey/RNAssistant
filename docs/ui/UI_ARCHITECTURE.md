@@ -1376,3 +1376,11 @@ Common Browser and ArtifactVersions now route WorkspaceHtmlProject to the typed
 WorkspaceHtmlVersionService. It coordinates existing Core owners; UI stores no
 version inventory. Source and saved paths share the same view. The existing Dialog
 supports a bounded multiline project member form and is disposed on deactivation.
+
+## Document checkpoints — 2026-11-13
+
+DocumentHtmlVersionService coordinates metadata-only document ownership and the
+existing artifact catalog. Common Browser and the temporary saved HTML adapter share
+ArtifactVersions and its lifecycle. BrowserObjectView forwards action activate/
+deactivate/dispose; no parallel history store. Dirty HTML writes stay with the
+existing editor controller before checkpoint Save observes a new exact publication.

@@ -713,6 +713,14 @@
     select: selectHtmlWorkspaceItem, remove: deleteHtmlWorkspaceTreeItem, mode: setHtmlWorkspaceMode,
     createItem: function (kind) { if (kind === "plan") return workspaceActions.createPlan(); if (kind === "data") addHtmlWorkspaceData(); else addHtmlWorkspaceFile(kind); },
     dirty: function () { return state.htmlWorkspaceDirty; }, busy: function () { return stagingVisualSelection || workspaceActions.isBusy(); },
+    flushForCheckpoint: async function (value) {
+      if (!state.browserTarget || value.documentId !== state.browserTarget.documentId || value.logicalId !== state.browserTarget.logicalId) return false;
+      if (disposed || sourceConflict || workspaceActions.isBusy() || stagingVisualSelection) throw new Error("Сначала завершите операцию или обновите HTML-редактор.");
+      if (!state.htmlWorkspaceDirty) return false;
+      await workspaceActions.saveSelection();
+      if (state.htmlWorkspaceDirty || sourceConflict || disposed) throw new Error("Правки редактора не сохранены. Версия проекта не создана.");
+      return true;
+    },
     canClose: function () {
       if (workspaceActions.isBusy() || stagingVisualSelection) { log("Дождитесь завершения операции.", "error"); return false; }
       return confirmDiscardHtmlChanges("Закрыть вкладку");

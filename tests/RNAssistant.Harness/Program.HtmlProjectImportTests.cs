@@ -22,6 +22,45 @@ namespace RNAssistant.Harness
             return package;
         }
 
+        private static void RawHtmlCreatesExactSingleFileProject()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) => {
+                var paths = FixturePaths.Value; var chats = new ChatStore(paths); var blobs = new ChatBlobStore(paths);
+                var actor = NewSession(adapter); var store = chats.DocumentArtifacts;
+                var registry = new DocumentAuthorityRegistry(paths);
+                actor.DocumentAuthorityId = registry.Resolve("word", "raw-html", Path.Combine(paths.Root, "raw.docx")).Id;
+                var catalog = new ArtifactCatalogService(registry, store,
+                    new ArtifactWorkingSetService(store, new ResourceMutationJournal(paths)), new ResourceAuthorityStore(paths), blobs);
+                var text = "\uFEFF<!doctype html><meta charset=\"utf-8\"><style>p{color:green}</style>\r\n<p>Пример</p>";
+                var bytes = new System.Text.UTF8Encoding(false, true).GetBytes(text);
+                var raw = store.ImportOriginal(actor, "original.html", "text/html", bytes, Guid.NewGuid().ToString("N"));
+                var exact = ChatResourceUri.CreateArtifactRevision(actor, raw);
+                var package = catalog.ReadHtmlProjectSource(actor, actor.DocumentAuthorityId, exact.Uri);
+                AssertEqual(exact.Uri, package.Origin.ResourceUri, "exact immutable original provenance");
+                AssertEqual(raw.ContentSha256, package.Origin.ContentSha256, "exact original hash");
+                AssertEqual(1, package.Files.Count, "no neighboring files inferred");
+                var result = new HtmlProjectImportService(paths).Import(package, CancellationToken.None);
+                AssertEqual(HtmlProjectImportStatus.Created, result.Status, result.Message);
+                AssertTrue(File.ReadAllBytes(Path.Combine(result.RootPath, "index.html")).SequenceEqual(bytes), "UTF-8 BOM, newlines and original bytes round-trip");
+                AssertTrue(store.ExportBytes(actor, exact).SequenceEqual(bytes), "original never changes");
+                var workspace = new WorkspaceStore(paths).OpenConnected(result.WorkspaceId);
+                AssertTrue(new WorkspaceStore(paths).GetHtmlProjectDefinition(workspace).Definition.Members.SequenceEqual(new[] { "index.html" }), "explicit single-file definition");
+                foreach (var content in new[] { "<script src='neighbor.js'></script>", "<img src='https://example.invalid/x'>", "<style>@import 'site.css'</style>",
+                    "<img src='&#x2f;&#x2f;host/a'>", "<script>fetch('./data.json')</script>" })
+                {
+                    var input = System.Text.Encoding.UTF8.GetBytes(content); var payload = blobs.StoreBytes(input, "text/html");
+                    try { HtmlProjectImportService.FromHtmlResource(input, "unsupported", new ArtifactTransferOrigin { ResourceUri = exact.Uri, ContentSha256 = payload.Sha256 }); throw new Exception("Unsupported dependency accepted."); }
+                    catch (HtmlProjectImportException error) { AssertEqual(BrowserRefusalCode.UnsupportedDependency, error.Reason, "typed dependency refusal"); }
+                }
+                foreach (var input in new[] { new byte[] { 0xff, 0xfe, 0x41, 0 }, System.Text.Encoding.UTF8.GetBytes("<meta charset='windows-1251'>text") })
+                {
+                    var payload = blobs.StoreBytes(input, "text/html");
+                    try { HtmlProjectImportService.FromHtmlResource(input, "unsupported", new ArtifactTransferOrigin { ResourceUri = exact.Uri, ContentSha256 = payload.Sha256 }); throw new Exception("Unsupported encoding accepted."); }
+                    catch (HtmlProjectImportException error) { AssertEqual(BrowserRefusalCode.UnsupportedEncoding, error.Reason, "typed encoding refusal"); }
+                }
+            });
+        }
+
         private static void HtmlProjectImportExactAndIndependent()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>

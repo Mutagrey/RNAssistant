@@ -1,5 +1,14 @@
 # План модернизации production UI
 
+## F3d Document HTML — In Review, 2026-11-13
+
+Document live Browser and saved HTML use the same checkpoint controls. Review:
+open the current project → edit a file → Save version → reopen it from clock →
+try deleting the current checkpoint. Failed editor Save must leave the version
+catalog untouched. Existing automatic history remains in undo/explicit comparison.
+Dirty-owner and import lifecycle fixtures pass; [narrow review](review/document-checkpoints-narrow.png).
+F4 still replaces remaining provider routes and adds StartSurface/navigation actions.
+
 ## F3c Workspace HTML — In Review, 2026-11-13
 
 Common Browser checkpoint controls now include directory HTML projects. Review:

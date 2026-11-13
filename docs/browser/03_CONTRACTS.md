@@ -725,3 +725,13 @@ and saved catalog have separate revisions. `GetHtmlProjectDefinition` /
 version Save binds both definition fingerprint and exact captured content fingerprint.
 Manual User provenance omits chat; Run requires the real active source run. The
 checkpoint record does not grant new file access or native execution.
+
+## Document checkpoint binding — 2026-11-13
+
+A live document project uses `/resources/{logicalId}`, a checkpoint uses
+`/resources/{logicalId}/versions/{savedEntry}`. Immutable artifact locators remain
+exact evidence, without implying a checkpoint. `logicalId` is runtime-owned metadata.
+Save pins current aggregate URI and catalog revision; Delete additionally pins the
+current aggregate URI through expectedActiveRevision. Browser versions are metadata
+reads over DocumentArtifactStore, with the exact document/chat checked independently
+of the active UI selection. Raw HTML still has no SaveVersion/history capability.

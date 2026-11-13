@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 
 namespace RNAssistant.Application
@@ -23,10 +24,14 @@ namespace RNAssistant.Application
 
         public static BrowserTargetDescriptor Saved(ChatSession source, ChatArtifact artifact, string exactUri)
         {
-            RequireScope(source);
+            return Saved(ConversationMetadata.From(source), artifact, exactUri);
+        }
+        public static BrowserTargetDescriptor Saved(ConversationMetadata source, ChatArtifact artifact, string exactUri)
+        {
+            if (string.IsNullOrWhiteSpace(source?.Id)) throw new InvalidOperationException("Для Browser требуется явный чат источника.");
             if (artifact == null || artifact.Revision < 1 || !string.IsNullOrEmpty(artifact.WorkspaceId) ||
                 !string.IsNullOrEmpty(artifact.DocumentAuthorityId) && artifact.DocumentAuthorityId != source.DocumentAuthorityId ||
-                ChatResourceUri.CreateArtifactRevisionUri(source, artifact) != exactUri ||
+                ChatResourceUri.CreateArtifactRevision(source.Id, artifact).Uri != exactUri ||
                 ChatResourceUri.ArtifactSnapshot(new ResourceRef(exactUri)).Uri != exactUri)
                 throw new InvalidOperationException("Цель Browser не совпадает с точным источником документа.");
             var project = artifact.Kind == ChatArtifactKinds.HtmlWorkspace;
@@ -38,12 +43,14 @@ namespace RNAssistant.Application
                 Kind = project ? BrowserTargetKind.HtmlArtifact : BrowserTargetKind.HtmlResource,
                 State = BrowserTargetState.Ready, ChatId = source.Id, DocumentId = source.DocumentAuthorityId ?? "",
                 ResourceUri = exactUri, ArtifactId = artifact.Id, Revision = artifact.Revision,
+                LogicalId = project ? HtmlWorkspaceIdentity.LogicalId(artifact.Id) : null,
                 OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = source.DocumentAuthorityId ?? source.Id, ChatId = source.Id },
                 ContentRevision = artifact.Id + ":" + artifact.Revision, Immutable = true, Title = artifact.Title,
                 DisplayLocator = BrowserLocalLocator.ForResource(artifact.Id + "~" + artifact.Revision),
                 Capabilities = new BrowserTargetCapabilities { Source = true, Preview = project,
                     Versions = project && !string.IsNullOrEmpty(source.DocumentAuthorityId), ExportProject = project,
-                    CreateProject = project && !string.IsNullOrEmpty(source.DocumentAuthorityId) }
+                    CreateProject = !string.IsNullOrEmpty(source.DocumentAuthorityId) && (project || artifact.ContentByteLength <= HtmlProjectImportService.MaximumSourceBytes),
+                    CreateProjectReason = !project && artifact.ContentByteLength > HtmlProjectImportService.MaximumSourceBytes ? BrowserRefusalCode.InvalidContent : BrowserRefusalCode.None }
             });
         }
 
@@ -67,11 +74,11 @@ namespace RNAssistant.Application
             result = Saved(source, artifact, ChatResourceUri.CreateArtifactRevisionUri(source, artifact));
             result.Kind = BrowserTargetKind.HtmlWorkspace;
             result.Immutable = false;
-            result.DisplayLocator = BrowserLocalLocator.ForResource("working-" + source.Id);
+            result.DisplayLocator = BrowserLocalLocator.ForResource(HtmlWorkspaceIdentity.LogicalId(artifact.Id));
             var files = source.HtmlWorkspace?.Files;
             result.Capabilities = new BrowserTargetCapabilities {
                 Source = files != null && files.Count != 0, Preview = files != null && files.Any(file => file.Kind == "html"),
-                Edit = mutable, Versions = true, Restore = mutable, ExportProject = true,
+                Edit = mutable, Versions = true, SaveVersion = mutable, Restore = mutable, ExportProject = true,
                 Annotations = mutable && files != null && files.Any(file => file.Kind == "html")
             };
             return BrowserIsolationPolicy.SourceOnly(result);

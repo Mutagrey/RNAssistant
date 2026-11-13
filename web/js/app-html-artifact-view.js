@@ -114,15 +114,16 @@
         more.onclick = function () { RNAssistantActionMenu.open(more, [{ label: "Копировать точную ссылку", icon: "link", onSelect: function () {
           return copyTextResult(target.resourceUri).then(function () { context.status("Ссылка скопирована"); }).catch(context.error);
         } }].concat(RNAssistantArtifactCatalog.commands(target))); };
-        var history = RNAssistantArtifactVersions.append(root, target.head, { resourceUri: target.resourceUri, revision: target.revision }, function (revision) {
-          return RNAssistantDockWorkspace.openTarget(Object.assign({}, target, { resourceUri: revision.resourceUri, revision: revision.revision,
-            title: revision.title || target.title }), { referencePanel: RNAssistantMaterialView.key(target) });
-        }, { compact: true, savedHtml: true, chatId: target.chatId, documentId: target.documentId, isCurrent: context.isCurrent, send: send });
+        var versions = RNAssistantArtifactVersions.mountBrowser(root, { target: function () { return resolution; }, request: send,
+          isCurrent: context.isCurrent, status: context.status, error: context.error,
+          navigate: function (locator) { return RNAssistantBrowser.open(locator, resolution.ownerScope, { referencePanel: RNAssistantMaterialView.key(target) }); },
+          removed: function () { context.error(new Error("Сохранённая версия удалена.")); } });
         root.appendChild(more);
         updateActions = function () {
           publication.hidden = !resolution || !resolution.capabilities.exportProject && !resolution.capabilities.createProject;
-          if (history) history.hidden = !resolution || !resolution.capabilities.versions;
+          versions.refresh();
         }; updateActions();
+        return versions;
       }
     });
   }

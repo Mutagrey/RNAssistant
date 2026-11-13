@@ -14,6 +14,11 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Application
 {
+    public sealed class HtmlProjectImportException : IOException
+    {
+        public BrowserRefusalCode Reason { get; private set; }
+        public HtmlProjectImportException(BrowserRefusalCode reason, string message) : base(message) { Reason = reason; }
+    }
     // Copies exact source into the existing file/workspace authority. No browser/session store.
     public sealed class HtmlProjectImportService
     {
@@ -30,12 +35,46 @@ namespace RNAssistant.Application
         { _paths = paths ?? throw new ArgumentNullException(nameof(paths)); _workspaces = new WorkspaceStore(paths);
             _files = files ?? new WorkspaceFileService(paths); }
 
+        // Exact provider bytes only. No directory discovery, download or encoding conversion.
+        public static ArtifactTransferPackage FromHtmlResource(byte[] bytes, string title, ArtifactTransferOrigin origin)
+        {
+            string hash = null;
+            if (bytes != null && bytes.Length <= MaximumSourceBytes)
+                using (var digest = System.Security.Cryptography.SHA256.Create()) hash = BitConverter.ToString(digest.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
+            if (bytes == null || bytes.Length > MaximumSourceBytes || origin == null || string.IsNullOrWhiteSpace(origin.ResourceUri) ||
+                origin.ContentSha256 != hash)
+                throw new HtmlProjectImportException(BrowserRefusalCode.InvalidContent, "Точный HTML-источник недоступен или превышает лимит 16 МиБ.");
+            string text;
+            try { text = Utf8.GetString(bytes); }
+            catch (DecoderFallbackException) { throw new HtmlProjectImportException(BrowserRefusalCode.UnsupportedEncoding, "Поддерживается только исходный UTF-8 HTML без преобразования кодировки."); }
+            if (!Utf8.GetBytes(text).SequenceEqual(bytes) || text.IndexOf('\0') >= 0 ||
+                Regex.IsMatch(text, @"\bcharset\s*=\s*['""\s]*(?!utf-8\b|utf8\b)[a-z0-9_-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(300)))
+                throw new HtmlProjectImportException(BrowserRefusalCode.UnsupportedEncoding, "HTML объявляет неподдерживаемую кодировку.");
+            var decoded = System.Net.WebUtility.HtmlDecode(text);
+            // Conservative source admission. Runtime network isolation remains a
+            // separate gate; this check never declares arbitrary script portable.
+            var dependency = Regex.IsMatch(decoded, @"@import\b|\bsrcset\s*=|\b(?:import|require|fetch|XMLHttpRequest|WebSocket|EventSource|Worker|SharedWorker|serviceWorker)\b|<base\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(300));
+            var references = Regex.Matches(decoded, @"\b(?:src|href|poster|action|data)\s*=\s*(?:""(?<value>[^""]*)""|'(?<value>[^']*)'|(?<value>[^\s>]+))|url\s*\(\s*(?:""(?<value>[^""]*)""|'(?<value>[^']*)'|(?<value>[^\s)]+))\s*\)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(300));
+            foreach (Match reference in references)
+            {
+                var value = reference.Groups["value"].Value.Trim();
+                dependency |= value.Length != 0 && !value.StartsWith("#", StringComparison.Ordinal) && !value.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+            }
+            if (dependency || HostReference.IsMatch(text))
+                throw new HtmlProjectImportException(BrowserRefusalCode.UnsupportedDependency, "HTML использует внешние или необъявленные зависимости. Они не будут скачаны или взяты из соседней папки.");
+            return new ArtifactTransferPackage { Title = title, EntryPath = "index.html", Origin = origin,
+                Files = new List<ArtifactTransferFile> { new ArtifactTransferFile { Path = "index.html", Kind = "html", Content = text } } };
+        }
+
         public HtmlProjectImportResult Import(ArtifactTransferPackage project, CancellationToken token)
         {
             List<PreparedFile> prepared;
             try { prepared = Prepare(project); token.ThrowIfCancellationRequested(); }
             catch (Exception error) { return new HtmlProjectImportResult {
-                Status = HtmlProjectImportStatus.Rejected, Backing = HtmlProjectBacking.Managed, Message = error.Message }; }
+                Status = HtmlProjectImportStatus.Rejected, Backing = HtmlProjectBacking.Managed, Message = error.Message,
+                Reason = (error as HtmlProjectImportException)?.Reason ?? BrowserRefusalCode.InvalidContent }; }
             var root = Path.Combine(_paths.Root, "html-projects", Guid.NewGuid().ToString("N"));
             var result = new HtmlProjectImportResult { Status = HtmlProjectImportStatus.Unknown,
                 Backing = HtmlProjectBacking.Managed, RootPath = root, Name = project.Title, EntryPath = project.EntryPath };

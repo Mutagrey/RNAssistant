@@ -889,3 +889,9 @@ The existing Dialog uses the shared form control and buttons, with an optional
 multiline field; focus trap includes textarea, Escape and stale-view cleanup remain
 shared. [420 px / 125% review](review/workspace-definition-narrow.png) and
 [checkpoint toolbar](review/workspace-versions-narrow.png); no screen-specific geometry.
+
+## Shared checkpoint controls — 2026-11-13
+
+Document and Workspace reuse plugin checkpoint controls; labels avoid duplicate vN.
+Save remains visible with a specific disabled/error reason. Source-file saving and
+project checkpoints remain separate actions. [Dirty-buffer refusal at 420 px/125%](review/document-checkpoints-narrow.png).

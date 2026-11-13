@@ -56,16 +56,16 @@
     }
     function clearComparison() { if (comparison) { comparison.dispose(); comparison.element.remove(); comparison = null; } selectedMode = null; content.hidden = false; }
     function reload() { stop(); clearComparison(); surface.clearDocument(); disposeValue(value); value = null; content.replaceChildren(); return load(); }
-    if (options.actions) options.actions(surface.actions, { status: status, error: function (error) { if (!disposed) surface.fail(options.label, error.detail || error.message); }, signal: function () { return abort && abort.signal; }, isCurrent: function () { return active && !disposed; },
+    var actionLifecycle = options.actions && options.actions(surface.actions, { status: status, error: function (error) { if (!disposed) surface.fail(options.label, error.detail || error.message); }, signal: function () { return abort && abort.signal; }, isCurrent: function () { return active && !disposed; },
       captureCurrent: function () { var version = generation; return function () { return current(version); }; } });
     surface.waiting(options.label, "Откройте вкладку для загрузки.");
     var events = new AbortController();
     window.addEventListener("pagehide", function (event) { if (!event.persisted) result.dispose(); }, { signal: events.signal });
     var result = { element: host, layout: renderer.layout,
-      activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (comparison && selectedMode === "diff") comparison.activate(); load(); },
-      deactivate: function () { if (!active) return; active = false; stop(); if (comparison) comparison.deactivate(); surface.collapse(); renderer.deactivate(); RNAssistantActionMenu.closeWithin(root); },
+      activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (actionLifecycle) actionLifecycle.refresh(); if (comparison && selectedMode === "diff") comparison.activate(); load(); },
+      deactivate: function () { if (!active) return; active = false; stop(); if (actionLifecycle) actionLifecycle.deactivate(); if (comparison) comparison.deactivate(); surface.collapse(); renderer.deactivate(); RNAssistantActionMenu.closeWithin(root); },
       dispose: function () { if (disposed) return; disposed = true; active = false; events.abort(); stop(); disposeValue(value); value = null;
-        clearComparison(); surface.clear(); RNAssistantActionMenu.closeWithin(root); RNAssistantViewerRegistry.unmount(host); root.replaceChildren(); }
+        if (actionLifecycle) actionLifecycle.dispose(); clearComparison(); surface.clear(); RNAssistantActionMenu.closeWithin(root); RNAssistantViewerRegistry.unmount(host); root.replaceChildren(); }
     };
     return result;
   }

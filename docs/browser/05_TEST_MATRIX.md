@@ -629,3 +629,16 @@ CaptureSet/definition fault coverage; `workspace Plan:` protects the existing ki
 ownership rules. All pass. `workspace-html-versions.test.js` covers definition recovery,
 expected fingerprint, shared Save, no plugin Apply, focus and 420 px/125%; common
 `browser-saved-views.test.js` regression passes. Windows sharing/B02 remain open.
+
+## F3d Document checkpoint evidence — 2026-11-13
+
+`HTML checkpoints:` 3/3: Workspace regression plus document migration with lost cutoff
+ack, publication after cutoff/restart, old exact refs/dates, current deletion refusal,
+tombstones/old receipts, and new automatic revisions excluded from checkpoints.
+`HTML project import:` 4/4 includes exact raw UTF-8/BOM/newlines and typed dependency/
+encoding refusal. `browser target:` 1/1; `plugin versions:` 3/3;
+`shared HTML: publication` 2/2. Mock build has 0 errors.
+`document-html-checkpoints.test.js` checks exact dirty-editor owner, publication before
+checkpoint and refusal after failed file Save. `html-project-import.test.js` retains
+pending/unknown/stale/close/narrow behavior and now asserts source-only (no iframe).
+These checks do not qualify native execution or Windows Office delivery.

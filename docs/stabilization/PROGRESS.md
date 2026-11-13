@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser F3d — Document checkpoints, 2026-11-13
+
+`16.18.0-dev`: document HTML checkpoints retain all pre-cutoff history and separate
+new automatic revisions; common Browser guards dirty buffers/current head. Exact
+single-file UTF-8 import backend is implemented. Focused lifecycle/import/publication
+checks and two UI fixtures pass. F4 provider/navigation/actions and 07 remain;
+Windows/B02 and visual acceptance stay open.
+[Details](../browser/06_PROGRESS.md#f3d-document-html-checkpoints--2026-11-13).
+
 ## Local Browser F3c — Workspace checkpoints, 2026-11-13
 
 `16.17.0-dev`: declared Workspace HTML files now have explicit user checkpoints in

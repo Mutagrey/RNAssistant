@@ -2,10 +2,9 @@
   "use strict";
 
   function append(root, head, selectedRevision, onSelect, context) {
-    var savedHtml = context && context.savedHtml;
-    if (!savedHtml && (!head || head.historyCount < 2 ||
-        ["versioned_document", "versioned_aggregate"].indexOf(head.resourceClass) < 0)) return;
-    var aggregate = savedHtml || head.resourceClass === "versioned_aggregate";
+    if (!head || head.historyCount < 2 ||
+        ["versioned_document", "versioned_aggregate"].indexOf(head.resourceClass) < 0) return;
+    var aggregate = head.resourceClass === "versioned_aggregate";
     var chatId = context ? context.chatId : state.activeChatId, navigation = state.chatNavigationVersion;
     var sessionRevision = context ? context.sessionRevision : state.artifactLibrary.sessionRevision;
     var selected = selectedRevision || head;
@@ -15,8 +14,8 @@
     if (!context || !context.compact) { trigger.className = "button compact artifact-version-menu"; trigger.appendChild(document.createTextNode(label)); }
     root.appendChild(trigger);
     var menu = null, loaded = false, pending = false, cursor = null, ids = new Set(), revisions = [], errorMessage = "";
-    var generation = 0, currentHead = null, currentDocument = context && context.documentId;
-    function reset() { loaded = false; pending = false; cursor = null; ids.clear(); revisions = []; errorMessage = ""; currentHead = null; currentDocument = context && context.documentId; }
+    var generation = 0;
+    function reset() { loaded = false; pending = false; cursor = null; ids.clear(); revisions = []; errorMessage = ""; }
     function current() {
       if (!trigger.isConnected || !menu || !menu.isOpen()) return false;
       if (context) return context.isCurrent();
@@ -46,16 +45,11 @@
       function accepted() { return requestGeneration === generation && current(); }
       pending = true; errorMessage = ""; menu.update(entries());
       try {
-        var result = await (context ? context.send : send)(savedHtml ? "getSavedHtmlHistory" : "getArtifactLibraryHistory", savedHtml
-          ? { chatId: chatId, documentId: context.documentId, resourceUri: selected.resourceUri, cursor: cursor }
-          : { chatId: chatId, expectedSessionRevision: sessionRevision, headArtifactId: head.artifactId, cursor: cursor });
+        var result = await (context ? context.send : send)("getArtifactLibraryHistory",
+          { chatId: chatId, expectedSessionRevision: sessionRevision, headArtifactId: head.artifactId, cursor: cursor });
         if (!accepted()) return;
-        if (result.chatId !== chatId || (savedHtml
-          ? !result.documentId || (currentDocument && result.documentId !== currentDocument) || result.resourceUri !== selected.resourceUri || !result.headArtifactId || (currentHead && result.headArtifactId !== currentHead)
-          : result.sessionRevision !== sessionRevision || result.headArtifactId !== head.artifactId))
+        if (result.chatId !== chatId || result.sessionRevision !== sessionRevision || result.headArtifactId !== head.artifactId)
           throw new Error("История изменилась. Обновите список артефактов.");
-        currentHead = result.headArtifactId;
-        if (savedHtml) currentDocument = result.documentId;
         (result.items || []).forEach(function (revision) {
           if (!revision.artifactId || !revision.resourceUri || ids.has(revision.artifactId)) return;
           ids.add(revision.artifactId); revisions.push(revision);
@@ -67,7 +61,7 @@
     trigger.onclick = function () {
       if (menu && menu.isOpen()) { generation++; pending = false; menu.close(); return; }
       generation++;
-      if (savedHtml || !loaded) reset();
+      if (!loaded) reset();
       menu = RNAssistantActionMenu.open(trigger, entries());
       if (!loaded) load();
     };
@@ -92,7 +86,7 @@
       apply.title = apply.disabled ? "Применить: сохраните или выберите версию" : "Применить сохранённую версию";
     }
     function valid(serial) { return !disposed && context.isCurrent() && epoch === serial; }
-    function supported(value) { return value && (value.pluginId || value.kind === "WorkspaceHtmlProject"); }
+    function supported(value) { return value && (value.pluginId || value.kind === "WorkspaceHtmlProject" || value.kind === "HtmlArtifact" || value.kind === "HtmlWorkspace"); }
     async function refresh(force) {
       if (busy && !force) return;
       var serial = ++epoch, value = target(); state = null; controls();
@@ -129,9 +123,22 @@
           else { context.error(error); await refresh(true); } } }
       finally { busy = false; controls(); }
     }
-    save.onclick = function () { if (!save.disabled && !pending) execute(command("Save")); };
+    save.onclick = async function () {
+      if (save.disabled || pending || busy) return;
+      if (context.beforeSave) {
+        busy = true; controls();
+        var changed;
+        try { changed = await context.beforeSave(target()); }
+        catch (error) { context.error(error); return; }
+        finally { busy = false; controls(); }
+        if (disposed || !context.isCurrent()) return;
+        if (changed) await refresh(); if (save.disabled || pending) return;
+      }
+      execute(command("Save"));
+    };
     apply.onclick = function () { if (!apply.disabled && !pending && window.confirm("Применить выбранную сохранённую версию плагина? Исходники останутся без изменений.")) execute(command("Activate")); };
     function locator(version) {
+      if (target().logicalId) return "/resources/" + encodeURIComponent(target().logicalId) + (version ? "/versions/" + encodeURIComponent(version) : "");
       var value = target(), base = value.pluginId ? "/plugins/" + encodeURIComponent(value.pluginId) : "/projects/" + encodeURIComponent(value.workspaceId);
       return base + (version ? "/versions/" + encodeURIComponent(version) : "/source") + "/" + (value.entryPath || value.relativePath).split("/").map(encodeURIComponent).join("/");
     }
@@ -143,7 +150,7 @@
       items.push({ label: "Рабочая копия", icon: "code", checked: !value.savedVersionId,
         onSelect: function () { return context.navigate(locator(null)); } });
       rows.forEach(function (entry) {
-        items.push({ key: entry.versionId, label: "v" + entry.ordinal + (entry.label ? " · " + entry.label : ""), icon: "clock",
+        items.push({ key: entry.versionId, label: "v" + entry.ordinal + (entry.label && entry.label !== "v" + entry.ordinal ? " · " + entry.label : ""), icon: "clock",
           checked: value.savedVersionId === entry.versionId, status: entry.active ? "Активная" : entry.current ? "Совпадает с рабочей копией" : new Date(entry.createdUtc).toLocaleString(),
           onSelect: function () { return context.navigate(locator(entry.versionId)); },
           secondary: { label: "Удалить версию " + entry.ordinal, icon: "trash", disabled: !entry.canDelete,

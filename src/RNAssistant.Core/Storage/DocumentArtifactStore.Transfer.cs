@@ -39,6 +39,7 @@ namespace RNAssistant.Core.Storage
             var root = new ChatArtifact { Id = logicalId + "_r1_" + hash.Substring(0, 8), Revision = 1,
                 DocumentAuthorityId = scope.Id, Title = title, Kind = kind, InlineText = text,
                 MimeType = kind == ChatArtifactKinds.Markdown ? "text/markdown; charset=utf-8" : "application/json", MetadataJson = "{}" };
+            if (project != null) BeginHtmlVersionCutover(ConversationMetadata.From(session), logicalId);
             var before = _authority.Capture(scope);
             var rootRef = ChatResourceUri.CreateArtifactRevision(session, root);
             if (before.GetHead(rootRef.Identity) != null) throw new InvalidOperationException("Этот перенос уже опубликован. Найдите копию в каталоге.");

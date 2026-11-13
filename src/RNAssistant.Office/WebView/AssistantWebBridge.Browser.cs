@@ -18,8 +18,21 @@ namespace RNAssistant.Office.WebView
 
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
         { return request.OwnerScope?.Kind == BrowserOwnerKind.Document ?
-            BrowserTargetResolver.ResolveLocalLocator(request.OwnerScope, request.Locator, BrowserTargets(request.OwnerScope)) :
+            _controller.ResolveBrowserLocator(request) :
             Plugins.ResolveBrowserLocator(request); }
+
+        private BrowserVersionState ReadBrowserVersionState(BrowserVersionRequest request, System.Threading.CancellationToken token)
+        { return request.Target?.OwnerScope?.Kind == BrowserOwnerKind.Document ? _controller.BrowserVersionState(request) : Plugins.BrowserVersionState(request, token); }
+        private BrowserVersionPage ReadBrowserVersions(BrowserVersionRequest request)
+        { return request.Target?.OwnerScope?.Kind == BrowserOwnerKind.Document ? _controller.BrowserVersions(request) : Plugins.BrowserVersions(request); }
+        private BrowserVersionResult WriteBrowserVersion(BrowserVersionCommand request, System.Threading.CancellationToken token)
+        {
+            if (request.Target?.OwnerScope?.Kind != BrowserOwnerKind.Document) return Plugins.BrowserVersionCommand(request, token);
+            var result = _controller.BrowserVersionCommand(request, token);
+            if (result.Outcome != BrowserVersionOutcome.Unknown && result.Outcome != BrowserVersionOutcome.Rejected)
+                try { ReportBrowserVersionChanged(new BrowserVersionStateChanged { Target = result.State.Target, Reason = request.Action, StateRevision = result.State.StateRevision }); } catch { }
+            return result;
+        }
 
         private BrowserSuggestionPage BrowserSuggestions(BrowserSuggestionRequest request)
         { return BrowserTargetResolver.QueryNavigationSuggestions(request.OwnerScope, request, BrowserTargets(request.OwnerScope)); }

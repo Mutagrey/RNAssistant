@@ -19,7 +19,8 @@ const {chromium}=require('playwright');
         projectTest.calls.push({command,payload});
         if(command==='exportArtifact'&&payload.resourceUri.includes('/project-import-'))return Promise.resolve({browserTarget:{kind:'HtmlArtifact',state:'Ready',chatId:payload.chatId,documentId:payload.documentId,resourceUri:payload.resourceUri,artifactId:'import',revision:1,capabilities:{preview:true,source:true,edit:false,versions:true,restore:false,exportProject:true,createProject:true,annotations:false}},data:{importFixture:true,leaseId:payload.resourceUri}});
         if(command==='closeArtifactTransfer')return Promise.resolve({closed:true});
-        if(command==='getSavedHtmlHistory')return Promise.resolve({items:[],hasMore:false,totalCount:1});
+        if(command==='getBrowserVersionState')return Promise.resolve({target:payload.target,stateRevision:'catalog',contentRevision:payload.target.resourceUri,capabilities:payload.target.capabilities});
+        if(command==='getBrowserVersions')return Promise.resolve({items:[],stateRevision:'catalog'});
         if(command==='createHtmlProjectFromArtifact')return new Promise(resolve=>{projectTest.pending[payload.resourceUri]=resolve;});
         if(command==='getProjectChats')return original(command,payload).then(value=>Object.assign({},value,{projects:value.projects.concat(projectTest.created)}));
         return original(command,payload);
@@ -45,9 +46,9 @@ const {chromium}=require('playwright');
     }
     async function open(id){
       await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-      await page.evaluate(id=>projectTest.open(id),id);await surface(id).locator('iframe').waitFor({state:'attached'});
+      await page.evaluate(id=>projectTest.open(id),id);await surface(id).locator('.browser-document-source').waitFor({state:'visible'});
+      assert.equal(await surface(id).locator('iframe').count(),0,'unqualified authored execution stays source-only');
       await surface(id).waitFor({state:'visible'});
-      // Import/menu behavior is independent of the separately tracked Chromium pointer gap above iframe.
       const source=surface(id).getByRole('button',{name:'Исходник',exact:true,includeHidden:true});
       if(await source.getAttribute('aria-pressed')!=='true')await action(id,'Исходник');
     }

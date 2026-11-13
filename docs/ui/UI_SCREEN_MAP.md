@@ -1028,3 +1028,11 @@ Browser clock → saved entries / working copy / «Состав проекта�
 when definition is missing; the small form takes entry first, then explicit members.
 Saved entries are immutable; Apply is plugin-only. Missing files/removed entries show
 their own state. No automatic live-tree restore and no chat creation during Save.
+
+## Document checkpoint navigation — 2026-11-13
+
+Browser working project → Save version; clock lists explicit checkpoints. Current
+checkpoint has a disabled trash action with a reason. Saved entries open immutable
+source; deletion shows Removed without selecting another version. Dirty editor Save
+must finish before a checkpoint is created. Technical revisions remain in undo and
+explicit comparison, rather than the default checkpoint picker.
