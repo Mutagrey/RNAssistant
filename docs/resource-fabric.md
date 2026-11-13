@@ -1886,6 +1886,21 @@ replacement or an invented empty body.
 
 ## Context and storage
 
+### Native Plan consumers — 2026-11-14
+
+The native conversation resource manifest now includes published Plan references,
+working-set links and exact active selection. Office keeps its existing mutation
+observer; WorkspacePlanService uses injected authority/revision/mutation ports
+instead of constructing legacy stores inside the native composition. Both preserve
+accepted-call origin, publication barrier and exact resource-outcome links.
+
+Plan metadata/Markdown stay with DocumentArtifactStore and ResourceJournal. Chat
+load/pages hydrate metadata only, including off-page removal for visible Plan
+families. Restore appends a revision; clear does not resurrect a tombstone or
+delete shared lineage. Unknown recovery never replays the mutation. Remaining
+Task/HTML/context-state owners, fork, P3 and default cutover are separate work.
+[Storage contract](session-events.md#journal-plan-resources--2026-11-14).
+
 ### Native attachment consumers — 2026-11-14
 
 Office ChatResourceIngestionService publishes originals through the existing

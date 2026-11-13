@@ -179,7 +179,7 @@ namespace RNAssistant.Core.Storage
         {
             return new ConversationChatCommit(MoveCard(prior.Card, move.Host, move.DocumentKey, move.DocumentTitle, move.DocumentPath),
                 move.PreviousSequence, prior.MessageCount, new ConversationTextEntry[0], prior.Context, move.MovedUtc,
-                prior.Run, prior.RunState, contextReceipt: prior.ContextReceipt, attachments: prior.Attachments);
+                prior.Run, prior.RunState, contextReceipt: prior.ContextReceipt, resources: prior.Resources);
         }
 
         private static ConversationCard MoveCard(ConversationCard prior, string host, string key, string title, string path)

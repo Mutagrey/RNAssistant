@@ -142,6 +142,15 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 Plan (2026-11-14): native resource membership/selection extends the existing
+attachment manifest; no new store, index schema or adapter. Original metadata/body
+ownership is unchanged. WorkspacePlanService now accepts existing authority,
+revision and mutation ports with runtime origin; WorkspacePorts supplies the same
+owners already used by its native resource composition. Removed Plan-only native
+rejections; unrelated owners still fail explicitly. Legacy default constructors
+remain only until whole-port P7 composition removal.
+[Contract](../session-events.md#journal-plan-resources--2026-11-14).
+
 P1/P2 attachments (2026-11-14): native messages/queued input retain CAS originals,
 extractions and analysis; existing Office ingestion and Workspace resource provider
 consume the restored metadata. Attachment membership is a reference-only manifest;

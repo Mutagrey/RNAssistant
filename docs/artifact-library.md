@@ -331,6 +331,15 @@ existing ordered authority projection before reading metadata (see below). Picke
 history enumeration remain separate slice-3 work; authored and uploaded text views
 are implemented below.
 
+### Native journal Plan integration — 2026-11-14
+
+The isolated native composition uses the existing Plan publication owner and
+persists only exact working-set references/selection in the conversation journal.
+Historical message pages retain removal semantics even when the tombstone is off
+page. Published bodies and lineage survive chat clear and Workspace restore.
+[Native contract](session-events.md#journal-plan-resources--2026-11-14).
+Default production composition and Windows qualification are unchanged.
+
 ### Implemented Plan publication slice
 
 `PlanDocumentService` applies domain rules to a disposable selected projection.

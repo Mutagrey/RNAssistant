@@ -1834,3 +1834,42 @@ after-state/CAS ownership.
    Owned source files match the validation archive; version-format and scoped diff/link
    checks run before commit. Concurrent Browser work is excluded. This intermediate
    native integration has no product bump, tag or push.
+
+## P1/P2 — native Plan consumers (2026-11-14)
+
+1. Native Plan selection/membership closes the next resource consumer under P1/P2.
+   Real Office/Workspace kernel publication now reaches the existing Plan owner
+   and exact resource-outcome link instead of the unsupported-owner rejection.
+2. The attachment manifest becomes the same owner's resource manifest, adding an
+   optional exact active Plan reference. Its existing serialized field name stays
+   stable; no parallel format, fallback, store, registry or index schema is added.
+   Plan metadata/Markdown/lineage remain in DocumentArtifactStore / ResourceJournal.
+3. WorkspacePlanService uses authority/revision/mutation ports supplied by
+   WorkspacePorts, including accepted-call origin. Office retains its observer.
+   Both use existing preparation/publication/recovery. Removed only Plan-specific
+   native denials. The shared Store state helper is separated from attachment
+   binding to avoid duplicating manifest/load/page logic for another resource owner.
+4. Three Plan checks pass: actual kernel creation on both hosts; shared lifecycle,
+   metadata pages, off-page tombstone, index failure, lost chat acknowledgement,
+   rebuild and Workspace restore; real Workspace Unknown reconciliation with
+   independent chat input. Six selected regressions pass: attachments (3), native
+   file/VBA mutation (1), confirmation (1), default Workspace scoped Plan read (1).
+   Tests use macOS/net8/C#7.3 in an isolated 9955637e archive plus owned sources;
+   no full-suite or VSTO/Office validation. The prior unsupported-Plan test is
+   replaced by the connected runtime case, not retained as a stale requirement.
+5. Before: native Store rejected active Plan state and Workspace used legacy
+   resource owners. After: load/pages retain exact selection without Markdown
+   hydration; the selected page reads one message and one reference manifest.
+   At most one latest retained metadata snapshot per on-page Plan family adds
+   removal semantics. Full working-set metadata scans and authority lookups remain
+   P3 costs; no CPU/allocation/Windows latency improvement is claimed.
+6. Remaining: Task/HTML/context-state consumers, fork and remaining history paths;
+   P3 metadata/header/context/summary usage; complete per-owner backup, old writer
+   shutdown and default cutover with ChatStore/adapter deletion. Default writer
+   stays ChatStore, Office identity backup and Windows evidence remain open, P4
+   remains deferred. Plan publication survives a lost chat receipt; Unknown never
+   grants a repeat or becomes a verified effect through presentation state.
+7. Session events, Resource Fabric, Artifact Library, MIGRATION_MAP, PROGRESS and
+   Harness guide updated. Owned sources match the validation archive; scoped
+   diff/links and mandatory version-format check run before commit. Intermediate
+   native integration: no product bump, tag or push.

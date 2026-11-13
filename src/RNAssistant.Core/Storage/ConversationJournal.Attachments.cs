@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
@@ -115,70 +114,11 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private DocumentArtifactStore OriginalStore()
-        {
-            var resources = new ResourceJournal(_paths, _protector);
-            return new DocumentArtifactStore(resources, resources, _bodies);
-        }
-
-        private ConversationAttachmentSet ReadAttachmentSet(PayloadRef reference, ConversationMetadata metadata)
-        {
-            var state = reference == null ? new ConversationAttachmentSet(new ResourceRef[0], new ChatArtifactLink[0]) :
-                JsonConvert.DeserializeObject<ConversationAttachmentSet>(ReadChatBody(reference));
-            if (state?.References == null || state.Links == null || state.References.Any(item => !IsOriginal(metadata, item)) ||
-                state.References.Select(item => item.Uri).Distinct(StringComparer.Ordinal).Count() != state.References.Count ||
-                state.Links.Any(item => item == null || !IsOriginal(metadata, item.Reference) ||
-                    !item.Reference.Identity.Equals(item.Identity)))
-                throw new InvalidDataException("Invalid attachment working set.");
-            ArtifactWorkingSet.Validate(metadata, state.Links);
-            return state;
-        }
-
-        private PayloadRef PrepareAttachmentSet(ChatSession session)
-        {
-            if (session.Artifacts.Any(item => item == null || item.AvailabilityIssue == null &&
-                item.Kind != ChatArtifactKinds.Attachment && item.Kind != ChatArtifactKinds.Image)) throw TextStoreScope();
-            var metadata = ConversationMetadata.From(session);
-            var references = session.Artifacts.Select(item => ChatResourceUri.CreateArtifactRevision(session, item)).ToArray();
-            if (references.Any(item => !IsOriginal(metadata, item)) || session.ArtifactLinks.Any(item => !IsOriginal(metadata, item?.Reference)))
-                throw TextStoreScope();
-            ArtifactWorkingSet.Validate(session);
-            if (references.Length == 0 && session.ArtifactLinks.Count == 0) return null;
-            return StoreChatJson(new ConversationAttachmentSet(references, session.ArtifactLinks));
-        }
-
-        // Called outside the conversation transaction: document authority uses its
-        // own existing journal. No chat projection may become authority for it.
-        private void ValidateDocumentOriginals(ChatSession session, IEnumerable<ConversationTextEntry> messages)
-        {
-            if (session.DocumentAuthorityId == null || session.Artifacts.Count == 0 &&
-                !messages.Any(item => item.Header.Attachments?.Count > 0)) return;
-            var originals = OriginalStore(); var metadata = ConversationMetadata.From(session);
-            foreach (var artifact in session.Artifacts.Where(item => item.AvailabilityIssue == null))
-                RequireOriginalProjection(artifact, originals.Read(metadata, ChatResourceUri.CreateArtifactRevision(session, artifact), false));
-            foreach (var message in messages.Select(item => item.Header))
-            foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
-            {
-                var retained = originals.Read(metadata, AttachmentReference(metadata, message, attachment), false);
-                if (!SameRunValue(attachment, retained.OriginalAttachment))
-                    throw new InvalidDataException("Message attachment disagrees with its document original.");
-            }
-        }
-
         private static ChatArtifact LocalOriginal(ChatMessage message, ChatAttachment attachment)
         {
             var artifact = ChatMessageAttachmentService.CreateArtifact(message, attachment);
             artifact.CreatedUtc = attachment.CreatedUtc;
             return artifact;
-        }
-
-        private static void RequireOriginalProjection(ChatArtifact actual, ChatArtifact expected)
-        {
-            // Local creation time was presentation metadata in the retiring Store.
-            // It is now derived from the upload, never a second persisted artifact.
-            var copy = JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(actual));
-            copy.CreatedUtc = expected.CreatedUtc;
-            if (!SameRunValue(copy, expected)) throw new InvalidDataException("Attachment projection differs from its immutable original.");
         }
 
         private void ValidateLocalOriginals(SqliteConnection db, ChatSession session, ConversationTextEntry[] messages)
@@ -189,19 +129,20 @@ namespace RNAssistant.Core.Storage
             if (unavailable.Length != 0)
             {
                 var current = TextChat(db, session.Id);
-                var retained = ReadAttachmentSet(current?.Fact.Attachments, ConversationMetadata.From(session));
+                var retained = ReadResourceSet(current?.Fact.Resources, ConversationMetadata.From(session));
                 if (unavailable.Any(item => !retained.References.Any(reference =>
                     SameRunValue(reference, ChatResourceUri.CreateArtifactRevision(session, item)))))
                     throw new InvalidDataException("Unavailable original has no prior accepted membership.");
             }
             if (session.WorkspaceId == null) return;
-            foreach (var artifact in session.Artifacts)
+            foreach (var artifact in session.Artifacts.Where(item => IsOriginal(ConversationMetadata.From(session),
+                ChatResourceUri.CreateArtifactRevision(session, item))))
             {
                 var id = artifact.Id.Substring("attachment_".Length);
                 var source = messages.FirstOrDefault(item => item.Header.Id == artifact.SourceMessageId &&
                     item.Header.Attachments.Any(attachment => attachment.Id == id)) ?? AttachmentEntry(db, session.Id, id);
                 if (source == null) throw new InvalidDataException("Local original has no accepted source message.");
-                RequireOriginalProjection(artifact, LocalOriginal(source.Header, source.Header.Attachments.Single(item => item.Id == id)));
+                RequireArtifactProjection(artifact, LocalOriginal(source.Header, source.Header.Attachments.Single(item => item.Id == id)));
             }
         }
 
@@ -216,30 +157,7 @@ namespace RNAssistant.Core.Storage
             return LocalOriginal(entry.Header, entry.Header.Attachments.Single(item => "attachment_" + item.Id == id));
         }
 
-        private ChatArtifact[] ReadOriginals(ConversationMetadata metadata, IEnumerable<ResourceRef> references)
-        {
-            var selected = references.Where(item => IsOriginal(metadata, item))
-                .GroupBy(item => item.Uri, StringComparer.Ordinal).Select(group => group.First()).ToArray();
-            if (selected.Length == 0) return new ChatArtifact[0];
-            if (metadata.DocumentAuthorityId != null)
-            {
-                var originals = OriginalStore();
-                return selected.Select(item => originals.InspectMetadata(metadata, item)).ToArray();
-            }
-            return Access((db, cursor) => {
-                RequireChatRevision(metadata, TextChat(db, metadata.Id));
-                return selected.Select(item => ReadLocalOriginal(db, metadata, item)).ToArray();
-            }, CancellationToken.None);
-        }
+
     }
 
-    // Only membership is chat-owned. Original metadata comes from its accepted
-    // message (Workspace) or DocumentArtifactStore; all file bodies stay in CAS.
-    internal sealed class ConversationAttachmentSet
-    {
-        public IReadOnlyList<ResourceRef> References { get; private set; }
-        public IReadOnlyList<ChatArtifactLink> Links { get; private set; }
-        [JsonConstructor] internal ConversationAttachmentSet(IReadOnlyList<ResourceRef> references, IReadOnlyList<ChatArtifactLink> links)
-        { References = references; Links = links; }
-    }
 }

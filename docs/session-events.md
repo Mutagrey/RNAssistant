@@ -1,5 +1,35 @@
 # Session event stream
 
+## Journal Plan resources — 2026-11-14
+
+ConversationJournal now retains Plan membership and exact active selection through
+its existing reference-only resource manifest. The former attachment-only helper
+is extended in the same owner; the serialized frame field keeps its existing name
+`Attachments`, with no alternate format or fallback. The optional ActivePlan is
+an exact snapshot reference. Metadata and Markdown remain in DocumentArtifactStore /
+ResourceJournal; chat events do not become another Plan store. Schema 24 is unchanged.
+
+Office and Workspace native compositions publish through the same Plan owner.
+WorkspacePlanService consumes the supplied authority/revision/mutation ports and
+passes accepted-call origin to the resource journal. Native managed write/patch/
+delete/restore retain exact outcome proof; other unconnected owners remain rejected.
+Published metadata/body mismatches, foreign snapshots, detached active selections
+and active tombstones fail before chat acceptance. Message-link presentation fields
+do not overwrite resource provenance.
+
+Load and message pages restore selection, metadata and tombstone semantics without
+Plan-body hydration. For Plan families on a page, the latest retained snapshot
+metadata is addressed too, so an off-page tombstone cannot revive an old card.
+User history rewrites retain shared Plan lineage. Resource publication survives
+a lost chat acknowledgement; its operation receipt prevents redispatch. Interrupted
+Plan dispatch is reconciled as Unknown while independent chat input remains usable.
+
+Checked host-neutral: actual Office/Workspace kernel creation, shared lifecycle
+publication/restore/delete, page selection, lost ack/index failure, rebuild,
+Workspace recovery and backup/restore. Task/HTML/context-state consumers, fork, P3
+and whole-port cutover remain open. Default writers and Windows qualification
+are unchanged.
+
 ## Journal attachments and queued originals — 2026-11-14
 
 Native ConversationJournal accepts committed user attachments and queued input files.

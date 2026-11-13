@@ -473,7 +473,7 @@ namespace RNAssistant.Office.Services
             if (AgentCommunicationToolCatalog.Owns(context.Call.Name) || context.Call.Name == ChatRenameToolHandler.ToolId) return null;
             var route = ResourceMutationToolCatalog.Owns(context.Call.Name) ? RNAssistant.Office.Tools.ResourceMutationPrepared.Read(preparedStateJson) : null;
             var operation = route?.Operation ?? context.Call.Name;
-            if (_origin != null && operation != RNAssistant.Office.Tools.VbaToolCatalog.WriteModule)
+            if (_origin != null && operation != RNAssistant.Office.Tools.VbaToolCatalog.WriteModule && !PlanDocumentToolCatalog.Owns(operation))
                 throw new ToolMutationPreparationException("journal_mutation_owner_unavailable", "Journal mutation owner is not connected for this target.");
             if (route != null) { arguments = route.RoutingArguments; preparedStateJson = route.OwnerState; }
             var scope = ResourceMutationDomains.Scope(_authority, _session, operation);

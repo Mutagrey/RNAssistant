@@ -1215,7 +1215,11 @@ namespace RNAssistant.Runtime
                 var projection = office?.ModelProjection ?? browserSet?.ModelProjection;
                 _compiler = new ModelContextCompiler(payloads, projection);
                 _taskLists = new WorkspaceTaskListObserver(paths, conversations, payloads, session);
-                _plans = new WorkspacePlanService(paths, conversations, payloads, workspace, session, artifacts);
+                if ((resourceAuthority == null) != (resourceMutations == null))
+                    throw new ArgumentException("Resource authority and mutation journal must be supplied together.");
+                var authorityStore = resourceAuthority ?? new ResourceAuthorityStore(paths);
+                var mutations = resourceMutations ?? new ResourceMutationJournal(paths);
+                _plans = new WorkspacePlanService(paths, conversations, payloads, workspace, session, artifacts, authorityStore, mutations, mutationOrigin);
                 _modelTrace = new ModelTracePersistenceService(events);
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
@@ -1234,11 +1238,10 @@ namespace RNAssistant.Runtime
                 var registry = new ToolHandlerRegistry();
                 var chatCatalog = new ConversationCatalogAccess(agentCommunication, session, _settings.MaxCollaborationAgents);
                 var entries = new List<ToolCatalogEntry>();
-                var authorityStore = resourceAuthority ?? new ResourceAuthorityStore(paths);
                 _catalogAuthority = authorityStore;
                 _skillPublications = new SkillPublicationService(authorityStore,
                     authorityStore as IResourceRevisionStore ?? throw new ArgumentException("Resource owner must provide revisions.", nameof(resourceAuthority)),
-                    resourceMutations ?? new ResourceMutationJournal(paths), payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
+                    mutations, payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
                 Register(registry, entries, SkillLoadToolHandler.Entry(),
                     new SkillLoadToolHandler(session, () => _skills, () => _toolPack, _settings, AdmitSkillSelection));
@@ -2163,9 +2166,9 @@ namespace RNAssistant.Runtime
 
             public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken token)
             {
-                if (_mutationOrigin != null && (PlanSourceDocument.IsTarget(Value(context, "target")) || IsOffice(context)))
-                    return Task.FromResult(new ToolPreparationResult(ToolResult.Error("Journal mutation owner is not connected for this target.")));
                 if (PlanSourceDocument.IsTarget(Value(context, "target")) && _plan != null) return _plan.PrepareAsync(context, token);
+                if (_mutationOrigin != null && IsOffice(context))
+                    return Task.FromResult(new ToolPreparationResult(ToolResult.Error("Journal mutation owner is not connected for this target.")));
                 if (_workspace.ReadOnly) return Task.FromResult(new ToolPreparationResult(ToolResult.Error("This workspace is read-only; only Plan source edits are available.")));
                 if (IsOffice(context) && _office is IPreparableToolHandler preparable) return preparable.PrepareAsync(context, token);
                 try

@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Native Plan consumers — 2026-11-14
+
+Plan подключён к native journal: общий reference-only manifest хранит рабочий набор
+и точный выбор версии, DocumentArtifactStore / ResourceJournal — metadata и Markdown.
+Настоящий kernel Office/Workspace создаёт Plan с exact outcome proof; restore/delete,
+страницы с off-page tombstone, lost ack, rebuild и Workspace restore проверены.
+Workspace использует переданные resource ports; Unknown не запускает повтор записи.
+Остались Task/HTML/context-state consumers и fork, P3, полный backup и переключение
+с удалением ChatStore/adapters. Default writer прежний; P4 отложена; Windows/Office
+evidence открыт.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-plan-consumers-2026-11-14).
+
 ## Native attachment consumers — 2026-11-14
 
 Вложения сообщений и очереди подключены к native journal через существующие

@@ -32,8 +32,8 @@ namespace RNAssistant.Harness
         private static void JournalMutationTerminalReceipt()
         { JournalMutationTurn(false, "terminal-ack"); }
 
-        private static void JournalMutationUnsupportedOwner()
-        { JournalMutationTurn(true, "unsupported-owner"); JournalMutationTurn(false, "unsupported-owner"); }
+        private static void JournalPlanRuntime()
+        { JournalMutationTurn(true, "plan"); JournalMutationTurn(false, "plan"); }
 
         private static void JournalConfirmationParity()
         { foreach (var office in new[] { true, false }) JournalMutationTurn(office, "confirm"); }
@@ -100,12 +100,12 @@ namespace RNAssistant.Harness
                 var target = office ? "VBA module: JournalModule" : "created.txt";
                 var content = office ? "Sub Main()\nDebug.Print 17\nEnd Sub" : "Written exactly once.";
                 var uncertain = fault == "unknown" || fault == "resource-ack";
-                var unsupported = fault == "unsupported-owner";
+                var plan = fault == "plan";
                 var recover = fault?.StartsWith("recovery-", StringComparison.Ordinal) == true;
-                if (unsupported)
+                if (plan)
                 {
                     target = "plan: Journal Plan";
-                    content = "---\ntitle: \"Journal Plan\"\nstatus: draft\n---\nNot yet connected.";
+                    content = "---\ntitle: \"Journal Plan\"\nstatus: draft\n---\nPublished through native journal.";
                 }
                 var dispatched = 0;
                 files.FaultPoint = point => {
@@ -146,7 +146,7 @@ namespace RNAssistant.Harness
                                 var response = number == 1
                                     ? ModelProtocolWire.WriteAcceptedCall("Create the requested source.", null,
                                         new ConversationToolCall { Name = "core.write", Arguments = new JObject { ["target"] = target, ["content"] = content } })
-                                    : uncertain || unsupported
+                                    : uncertain
                                         ? ModelProtocolWire.WriteAcceptedDecision("finish", "The write outcome is uncertain.", "Inspect before retrying.",
                                             outcome: ConversationOutcome.UnableToComplete, results: new[] {
                                                 new ConversationResultClaim("Write not proven.", new[] { "E1" }, ConversationAssessment.Unverified) })
@@ -302,23 +302,25 @@ namespace RNAssistant.Harness
                     journal.Rebuild(); AssertEqual(terminal.Position.Hash, journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash, "denial rebuild retains one terminal");
                     return;
                 }
-                if (unsupported)
-                {
-                    AssertEqual(ToolExecutionOutcome.Error, terminal.Fact.Result.ExecutionProgress.Outcome, "unconnected owner rejects before dispatch");
-                    AssertContains(ToolResultPersistence.ReadContent(terminal.Fact.Result, payloads), "Journal mutation owner is not connected", "explicit owner boundary");
-                    AssertEqual(0, resources.Unresolved().Count, "unconnected owner cannot prepare an attempt");
-                    AssertEqual(0, restored.Artifacts.Count, "unconnected owner does not create an artifact");
-                    AssertEqual(0, dispatched, "unconnected owner does not write a file");
-                    AssertEqual(2, calls, "refusal is reported without retry");
-                    return;
-                }
                 AssertEqual(uncertain ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok, terminal.Fact.Result.ExecutionProgress.Outcome,
                     "the kernel terminal is never promoted by a late receipt");
                 AssertEqual(1, uncertain ? restored.LastRun.KernelState.Summary.ToolCounts.WriteUnknown : restored.LastRun.KernelState.Summary.ToolCounts.WriteOk,
                     "exactly one mutation is counted");
                 if (uncertain) AssertEqual("repeated_finish_no_progress", restored.LastRun.KernelState.Summary.Reason,
                     "unverified model prose cannot bypass the existing post-unknown inspection requirement");
-                if (office) AssertContains(adapter.GetVbaModuleCode("JournalModule"), "Print 17", "Office source was changed by the actual owner");
+                if (plan)
+                {
+                    var artifact = new DocumentArtifactStore(resources, resources, payloads)
+                        .ReadPlanSelection(restored, restored.ActivePlanDocumentArtifactId);
+                    AssertEqual("Published through native journal.", artifact.InlineText, "real kernel publishes exact Plan bytes");
+                    AssertEqual(1, restored.Artifacts.Count, "journal retains one exact Plan selection");
+                    AssertTrue(restored.Artifacts.Single().InlineText == null, "journal does not hydrate Plan bodies");
+                    if (!office) AssertEqual(artifact.InlineText,
+                        new WorkspacePlanService(paths, store, payloads, workspace, restored,
+                            new DocumentArtifactStore(resources, resources, payloads), resources, resources)
+                            .Read("plan: Journal Plan", 1, representation: "text").Result.Text, "real Workspace Plan consumer");
+                }
+                else if (office) AssertContains(adapter.GetVbaModuleCode("JournalModule"), "Print 17", "Office source was changed by the actual owner");
                 else { AssertEqual(content, File.ReadAllText(Path.Combine(workspace.RootPath, target)), "actual file write survives"); AssertEqual(1, dispatched, "exactly one file invocation"); }
                 var outcome = resources.CallOutcome(origin);
                 if (fault == "unknown")

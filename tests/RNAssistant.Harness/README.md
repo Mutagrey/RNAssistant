@@ -159,6 +159,15 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal Plan:` covers actual Office/Workspace kernel publication plus shared
+Plan lifecycle, exact selection, metadata-only pages, off-page tombstones,
+publication/chat receipt loss, index failure, rebuild, Workspace restore and
+interrupted Plan recovery without replay. The former unsupported-Plan check now
+proves the connected consumer. Regressions: `journal attachments:`,
+`journal mutation: Office and Workspace write`, `journal confirmation: Office and Workspace resume`,
+and `workspace Plan: scoped reads preserve publication barrier`. Reuse one build;
+Windows/default cutover remains separate.
+
 `journal attachments:` covers real Office ingestion and Workspace attachment reads,
 queued-only CAS closure, exact input delivery, lost acknowledgement, index failure,
 restart/rebuild, detach, relocation, analysis hydration, immutable originals, history
@@ -305,7 +314,7 @@ No cold-rebuild/Windows latency or production journal-switch claim.
 `journal input:` covers four focused checks: real Office queue/steer and Workspace
 intake/runtime ports; FIFO edits/removal, immutable text/receipt identity and stale
 cursor reads; lost acceptance/message/Applied acknowledgements; exact message/body
-proof and explicit unsupported-owner rejection. Restart remains read-only until
+proof. The former Plan rejection is now covered by `journal Plan:`. Restart remains read-only until
 explicit delivery/reconciliation; rebuild and clean Workspace journal/CAS restore
 retain the same receipt. Pair with `journal wait:`, `inbox: durable FIFO edit and recovery`,
 `inbox: recovery reconciles Office and Workspace receipts` and

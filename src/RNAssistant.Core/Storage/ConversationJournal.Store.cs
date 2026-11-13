@@ -135,12 +135,15 @@ namespace RNAssistant.Core.Storage
                 }, CancellationToken.None);
                 if (selected == null) return null;
                 var metadata = ChatMetadata(selected.Item1);
-                var artifacts = ReadOriginals(metadata, selected.Item2.SelectMany(item => item.Header.ResourceRefs ?? new List<ResourceRef>()));
-                var state = artifacts.Length == 0 ? null : ReadAttachmentSet(selected.Item1.Fact.Attachments, metadata);
+                var state = ReadResourceSet(selected.Item1.Fact.Resources, metadata);
+                var artifacts = ReadPageArtifacts(metadata, state, selected.Item2.SelectMany(item => item.Header.ResourceRefs ?? new List<ResourceRef>()));
+                var sourceIds = new HashSet<string>(selected.Item2.Select(entry => entry.Header.Id));
                 return new ConversationMessageWindow { Metadata = metadata,
                     PageMessages = selected.Item2.Select(ReadText).ToArray(), Artifacts = artifacts,
                     DetachedArtifactIds = new HashSet<string>(artifacts.Where(item => ArtifactWorkingSet.IsDetached(metadata, state?.Links, item)).Select(item => item.Id)),
-                    ApplicableTombstoneIds = new HashSet<string>(),
+                    ApplicableTombstoneIds = new HashSet<string>(artifacts.Where(item => PlanDocumentService.IsApplicableTombstone(metadata,
+                        sourceIds, item)).Select(item => item.Id)),
+                    ActivePlanDocumentArtifactId = state.ActivePlan == null ? null : ResourceUri.Parse(state.ActivePlan.Uri).Segments[2],
                     StartIndex = Math.Max(0, beforeIndex - pageSize), TotalCount = selected.Item1.Fact.MessageCount };
             }
         }
@@ -175,9 +178,10 @@ namespace RNAssistant.Core.Storage
                     if (before == receipt.Fact.MessageCount) break;
                 }
                 ApplyChatReceipt(session, receipt);
-                var attachmentSet = ReadAttachmentSet(receipt.Fact.Attachments, ChatMetadata(receipt));
-                session.Artifacts = ReadOriginals(ChatMetadata(receipt), attachmentSet.References).ToList();
-                session.ArtifactLinks = attachmentSet.Links.ToList();
+                var resourceSet = ReadResourceSet(receipt.Fact.Resources, ChatMetadata(receipt));
+                session.Artifacts = ReadArtifacts(ChatMetadata(receipt), resourceSet.References).ToList();
+                session.ArtifactLinks = resourceSet.Links.ToList();
+                session.ActivePlanDocumentArtifactId = resourceSet.ActivePlan == null ? null : ResourceUri.Parse(resourceSet.ActivePlan.Uri).Segments[2];
                 LoadChatReferences(session); return session;
             }
         }

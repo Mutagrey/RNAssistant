@@ -19,8 +19,10 @@ namespace RNAssistant.Runtime
         private readonly ChatSession _session;
         private readonly IConversationStore _chats;
         private readonly ChatBlobStore _payloads;
-        private readonly ResourceAuthorityStore _authority;
-        private readonly ResourceMutationJournal _journal;
+        private readonly IResourceAuthorityStore _authority;
+        private readonly IResourceRevisionStore _revisions;
+        private readonly Func<ToolExecutionContext, ResourceMutationOrigin> _origin;
+        private readonly IResourceMutationJournal _journal;
         private readonly DocumentArtifactStore _owner;
         private MutationAttempt _attempt;
         private IDisposable _lease;
@@ -30,12 +32,17 @@ namespace RNAssistant.Runtime
         internal ResourceAuthorityScopeId Scope { get { return new ResourceAuthorityScopeId("workspace", _workspace.WorkspaceId); } }
 
         internal WorkspacePlanService(AppDataPaths paths, IConversationStore chats, ChatBlobStore payloads,
-            WorkspaceDescriptor workspace, ChatSession session, DocumentArtifactStore artifacts)
+            WorkspaceDescriptor workspace, ChatSession session, DocumentArtifactStore artifacts,
+            IResourceAuthorityStore authority = null, IResourceMutationJournal mutations = null,
+            Func<ToolExecutionContext, ResourceMutationOrigin> origin = null)
         {
             if (session != null && (session.WorkspaceId != workspace.WorkspaceId || !string.IsNullOrWhiteSpace(session.DocumentAuthorityId)))
                 throw new InvalidOperationException("Plan access requires this workspace's independent session.");
             _workspace = workspace; _session = session; _chats = chats; _payloads = payloads;
-            _authority = new ResourceAuthorityStore(paths); _journal = new ResourceMutationJournal(paths);
+            if ((authority == null) != (mutations == null)) throw new ArgumentException("Plan authority and mutation journal must be supplied together.");
+            _authority = authority ?? new ResourceAuthorityStore(paths);
+            _revisions = _authority as IResourceRevisionStore ?? throw new ArgumentException("Plan authority must provide revisions.", nameof(authority));
+            _journal = mutations ?? new ResourceMutationJournal(paths); _origin = origin;
             _owner = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
         }
 
@@ -47,7 +54,7 @@ namespace RNAssistant.Runtime
             foreach (var pending in _journal.Unresolved().Where(item => item.ScopeId.Equals(Scope) && PlanDocumentToolCatalog.Owns(item.Operation)))
             {
                 if (pending.State == MutationAttemptState.Prepared) _journal.AbandonBeforeDispatch(pending.AttemptId);
-                else PlanDocumentPublication.Publish(_authority, _authority, _journal, pending, null);
+                else PlanDocumentPublication.Publish(_authority, _revisions, _journal, pending, null);
             }
         }
 
@@ -64,7 +71,7 @@ namespace RNAssistant.Runtime
                 _operationKey = PlanDocumentService.CreationId(_session, context);
                 _attempt = _journal.Prepare(Scope, prepared.Operation, impacts[0].Identity,
                     snapshot.GetHead(impacts[0].Identity)?.Revision?.Revision,
-                    PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json")), intendedImpacts: impacts);
+                    PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json")), intendedImpacts: impacts, origin: _origin?.Invoke(context));
                 return _attempt.AttemptId;
             }
             catch { Release(); throw; }
@@ -83,7 +90,7 @@ namespace RNAssistant.Runtime
                 ResourceAuthorityCommit commit = null;
                 for (var retry = 0; retry < 8; retry++)
                 {
-                    try { commit = PlanDocumentPublication.Publish(_authority, _authority, _journal, _attempt, record, readBack); break; }
+                    try { commit = PlanDocumentPublication.Publish(_authority, _revisions, _journal, _attempt, record, readBack); break; }
                     catch (ResourceAuthorityConflictException) when (retry < 7) { /* Publication only; never repeat mutation. */ }
                 }
                 if (changed)
@@ -197,8 +204,8 @@ namespace RNAssistant.Runtime
                 var frozen = _authority.Capture(Scope);
                 var logical = frozen.GetHead(DocumentArtifactStore.PlanIdentity(_session, planId));
                 var body = representation == "source" ? PlanSourceDocument.Serialize(artifact) : artifact.InlineText;
-                var payload = representation == "source" ? PayloadRef.FromBlob(_payloads.StoreText(body, "text/plain")) : _authority.GetRevision(Scope, reference).Payload;
-                _authority.RegisterView(Scope, new ResourceRevisionView(reference, representation, payload.Sha256, payload, ResourceCoverage.Whole()));
+                var payload = representation == "source" ? PayloadRef.FromBlob(_payloads.StoreText(body, "text/plain")) : _revisions.GetRevision(Scope, reference).Payload;
+                _revisions.RegisterView(Scope, new ResourceRevisionView(reference, representation, payload.Sha256, payload, ResourceCoverage.Whole()));
                 var evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), Scope, reference,
                     representation, ResourceCoverage.Whole(), true, frozen.Generation, payload,
                     version.HasValue ? null : new[] { new ResourceDependency(logical.Revision, kind: "current-plan") },
@@ -241,7 +248,7 @@ namespace RNAssistant.Runtime
                 var artifact = _owner.ReadPlanSelection(_session, _session.ActivePlanDocumentArtifactId, false);
                 var head = frozen.Get(Scope).GetHead(DocumentArtifactStore.PlanIdentity(_session, DocumentArtifactStore.PlanIdFromArtifact(artifact)));
                 var reference = ChatResourceUri.CreateArtifactRevision(_session, artifact);
-                var dependencies = head?.Knowledge == HeadKnowledge.Known ? _authority.GetRevision(Scope, head.Revision)?.Dependencies : null;
+                var dependencies = head?.Knowledge == HeadKnowledge.Known ? _revisions.GetRevision(Scope, head.Revision)?.Dependencies : null;
                 var available = !PlanDocumentService.IsTombstone(artifact) && dependencies?.Any(item =>
                     item.Kind == "immutable-snapshot" && item.Resource.Uri == reference.Uri && item.Resource.Revision == reference.Revision) == true;
                 return available ? new WorkspacePlanState { Available = true, Title = artifact.Title,
