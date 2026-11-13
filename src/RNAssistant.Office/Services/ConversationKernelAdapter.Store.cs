@@ -140,13 +140,19 @@ namespace RNAssistant.Office.Services
             // revision between kernel appends. The private cursor guards this port;
             // The conversation store guards against other sessions/processes with
             // the canonical backend revision CAS behind its adapter.
-            var view = RunViewStateProjector.StampCurrentRun(_session);
-            var projected = _session.Messages.LastOrDefault(message => view != null && ReferenceEquals(message.RunViewState, view));
-            if (projected != null) _pendingMessageUpdates.Add(projected);
-            if (fact == null) _conversations.Commit(_session, ConversationCommit.UserInput(appended.Single(), _pendingMessageUpdates));
-            else new ConversationRunCommit(_session, fact, appended, activity,
-                resultProjection, _pendingMessageUpdates).Persist(_conversations.CommitRun, _session);
-            _pendingMessageUpdates.Clear();
+            // Native control and checkpoint construction share the existing Inbox
+            // lock, including publication of the live CAS cursor. No wait/callback
+            // runs under it; without an Inbox this port is the session's sole writer.
+            lock (_eventStore.AtomicAgentDelivery && _inbox != null ? _inbox.Get(_session).Sync : _session)
+            {
+                var view = RunViewStateProjector.StampCurrentRun(_session);
+                var projected = _session.Messages.LastOrDefault(message => view != null && ReferenceEquals(message.RunViewState, view));
+                if (projected != null) _pendingMessageUpdates.Add(projected);
+                if (fact == null) _conversations.Commit(_session, ConversationCommit.UserInput(appended.Single(), _pendingMessageUpdates));
+                else new ConversationRunCommit(_session, fact, appended, activity,
+                    resultProjection, _pendingMessageUpdates).Persist(_conversations.CommitRun, _session);
+                _pendingMessageUpdates.Clear();
+            }
             if (_saved != null) _saved(_session);
         }
 

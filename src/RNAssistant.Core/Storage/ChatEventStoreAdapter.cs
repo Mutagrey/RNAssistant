@@ -14,6 +14,10 @@ namespace RNAssistant.Core.Storage
         public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { throw new NotSupportedException(); }
         public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
             AgentDeliveryCommand command, Action dispatch) { throw new NotSupportedException(); }
+        public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
+            AgentSpawnCommand command, Action dispatch) { throw new NotSupportedException(); }
+        public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentControl(ChatSession source, ChatSession target,
+            AgentControlCommand command, Action dispatch) { throw new NotSupportedException(); }
         private readonly ChatStore _store;
 
         public ChatEventStoreAdapter(ChatStore store)
@@ -138,6 +142,9 @@ namespace RNAssistant.Core.Storage
             internal bool ProtocolMessage;
             internal string RunId;
         }
+
+        public AgentAssignmentPage ReadAgentAssignments(ConversationMetadata session, bool incoming, string afterRequest)
+        { throw new NotSupportedException("The retiring backend uses its explicit assignment-event projection."); }
 
         public IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, IReadOnlyList<string> messageIds)
         {

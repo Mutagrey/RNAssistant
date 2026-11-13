@@ -28,6 +28,7 @@ namespace RNAssistant.Core.Storage
 
         private static ConversationChatCommit DecodeChatCommit(JournalRecord record)
         {
+            if (record.Kind == "agent.spawned") return DecodeSpawn(record).Chat ?? throw new InvalidDataException("Spawn has no integrated chat.");
             var fact = DeliveryData<ConversationChatCommit>(record);
             if (record.Kind != "chat.committed" || fact == null || record.Fingerprint != ChatFingerprint(fact))
                 throw new InvalidDataException("Invalid chat commit.");
@@ -65,6 +66,19 @@ namespace RNAssistant.Core.Storage
             if (head != operation)
             {
                 var delivery = FindDelivery(db, "operation", head);
+                if (delivery == null)
+                {
+                    var control = FindControl(db, head);
+                    if (ControlAffects(control, chat))
+                    {
+                        if (control.Position.Sequence <= receipt.Position.Sequence) throw new InvalidDataException("Control head is not newer than chat metadata.");
+                        return new ConversationChatReceipt(receipt.Fact, receipt.Operation, control.Position, control.Fact.ChangedUtc);
+                    }
+                    var spawn = FindSpawn(db, head);
+                    if (spawn?.Fact.Chat == null || spawn.Fact.Sender != chat || spawn.Position.Sequence <= receipt.Position.Sequence)
+                        throw new InvalidDataException("Chat head does not identify its child creation.");
+                    return new ConversationChatReceipt(receipt.Fact, receipt.Operation, spawn.Position, spawn.Fact.Child.CreatedUtc);
+                }
                 if (delivery?.Fact.Input == null || delivery.Position.Sequence <= receipt.Position.Sequence ||
                     delivery.Fact.Sender != chat && delivery.Fact.Recipient != chat)
                     throw new InvalidDataException("Chat head does not identify its peer delivery.");
@@ -96,6 +110,8 @@ namespace RNAssistant.Core.Storage
             }
             var fact = DecodeChatCommit(record); ValidateChatAddress(fact.Card);
             var current = TextChat(db, fact.Card.ChatId);
+            if (!SameRunValue(current?.Fact.Card.AgentCreation, fact.Card.AgentCreation))
+                throw new InvalidOperationException("Only native spawn can establish immutable child provenance.");
             if (fact.ExpectedRevision != (current?.Position.Sequence ?? 0))
                 throw new ChatConcurrencyException("Chat changed before the journal commit.");
             if (current == null && (Card(db, fact.Card.ChatId) != null ||
@@ -128,9 +144,9 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidOperationException("Chat message count does not match its exact append/update delta.");
             if (fact.Control != null)
             {
-                if (fact.Control.ChatId != fact.Card.ChatId || fact.Control.PeerControl || fact.Checkpoint != null || fact.ModelEvent != null || fact.Tools != null)
+                if (fact.Control.ChatId != fact.Card.ChatId || fact.Control.NativeChat || fact.Checkpoint != null || fact.ModelEvent != null || fact.Tools != null)
                     throw new InvalidDataException("Queue control must identify its exact chat and separate user intent.");
-                ValidateControl(db, record.Operation, fact.Control);
+                ValidateControl(db, record.Operation, fact.Control, preservePause: fact.Input != null && fact.Control.PeerControl);
             }
             ValidateChatInput(db, record, fact);
             ValidateChatRun(db, record, fact);
@@ -169,19 +185,7 @@ namespace RNAssistant.Core.Storage
                 else
                 {
                     var fact = committed;
-                    using (var command = Command(db, "INSERT INTO chat_write VALUES($stream,$chat,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
-                    { command.Parameters.AddWithValue("$chat", fact.Card.ChatId); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery(); }
-                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_card VALUES($stream,$chat,$alias,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
-                    {
-                        command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$alias", AgentChatAddress.IdFor(fact.Card.ChatId));
-                        AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
-                    }
-                    using (var command = Command(db, "INSERT OR REPLACE INTO chat_state VALUES($stream,$chat,$operation,$count,$activity,$operation)", tx))
-                    {
-                        command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$operation", record.Operation);
-                        command.Parameters.AddWithValue("$count", fact.MessageCount);
-                        command.Parameters.AddWithValue("$activity", lastActivity); command.ExecuteNonQuery();
-                    }
+                    SaveChatMetadata(db, tx, record, position, fact, lastActivity);
                     foreach (var message in fact.Messages)
                         using (var command = Command(db, "INSERT INTO chat_message VALUES($stream,$chat,$id,$ordinal,$operation) ON CONFLICT(stream,chat,id) DO UPDATE SET operation=$operation", tx))
                         {
@@ -198,6 +202,23 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        private void SaveChatMetadata(SqliteConnection db, SqliteTransaction tx, JournalRecord record,
+            JournalCursor position, ConversationChatCommit fact, long lastActivity)
+        {
+            using (var command = Command(db, "INSERT INTO chat_write VALUES($stream,$chat,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
+            { command.Parameters.AddWithValue("$chat", fact.Card.ChatId); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery(); }
+            using (var command = Command(db, "INSERT OR REPLACE INTO chat_card VALUES($stream,$chat,$alias,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
+            {
+                command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$alias", AgentChatAddress.IdFor(fact.Card.ChatId));
+                AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
+            }
+            using (var command = Command(db, "INSERT OR REPLACE INTO chat_state VALUES($stream,$chat,$operation,$count,$activity,$operation)", tx))
+            {
+                command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$operation", record.Operation);
+                command.Parameters.AddWithValue("$count", fact.MessageCount); command.Parameters.AddWithValue("$activity", lastActivity); command.ExecuteNonQuery();
+            }
+        }
+
         private ConversationChatReceipt CommitChat(ChatSession session, ConversationCommit commit, ConversationModelEvent modelEvent = null, ConversationInputEvent queueControl = null, PayloadRef inputBody = null)
         {
             RequireTextSession(session, commit); commit.BindJournal(session);
@@ -205,7 +226,8 @@ namespace RNAssistant.Core.Storage
             {
                 var card = new ConversationCard(session.Id, session.Title, ConversationRunPolicy.ForSession(session), session.CreatedUtc,
                     address: new ConversationMetadata(session.Id, 0, session.Host, session.DocumentKey, session.WorkspaceId, session.DocumentAuthorityId),
-                    documentTitle: session.DocumentTitle, documentPath: session.DocumentPath, selectedModel: session.Model, reasoningEnabled: session.ReasoningEnabled);
+                    documentTitle: session.DocumentTitle, documentPath: session.DocumentPath, selectedModel: session.Model, reasoningEnabled: session.ReasoningEnabled,
+                    titleAssignedByAgent: session.TitleAssignedByAgent, agentCreation: session.AgentCreation);
                 ValidateChatAddress(card);
                 var messages = commit.Messages.Select(write => PublishText(write.Message)).ToArray();
                 ResourceJournalReceipt outcome;
@@ -229,11 +251,8 @@ namespace RNAssistant.Core.Storage
                     var checkpoint = commit is ConversationRunCommit runtime
                         ? PrepareStoreCheckpoint(db, runtime, session, runBody, prior?.Fact.Checkpoint) : null;
                     var priorControl = queueControl == null ? null : QueueControl(db, session.Id);
-                    var control = queueControl == null ? null : new ConversationQueueControl(session.Id,
-                        prior?.Fact.Control?.Revision ?? (priorControl?.Fact.Revision ?? 0) + 1,
-                        prior == null ? priorControl?.Position.Hash : prior.Fact.Control?.PreviousHash,
-                        queueControl.Paused ? QueueControlAction.UserPause : QueueControlAction.UserResume,
-                        null, null, null, null, queueControl.PauseReason);
+                    var control = queueControl == null ? null : prior?.Fact.Control ??
+                        PrepareChatControl(db, session, queueControl, priorControl);
                     var input = queueControl?.Input == null ? null : PrepareChatInput(db, session, queueControl.Input, inputBody);
                     var fact = new ConversationChatCommit(card, commit.JournalRevision, commit.JournalMessageCount, messages, context, DateTime.UtcNow,
                         run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control, input: input);
@@ -294,10 +313,9 @@ namespace RNAssistant.Core.Storage
             if (session == null || commit == null || !session.UsesCurrentProtocol) throw new ArgumentException("A current chat and exact commit are required.");
             if (commit.RemovedMessageIds.Count != 0 ||
                 session.ParentSessionId != null || session.ParentSessionRevision != null || session.ForkedThroughMessageId != null ||
-                session.TitleAssignedByAgent || session.PreviousDocumentKeys.Count != 0 ||
+                session.PreviousDocumentKeys.Count != 0 ||
                 session.ActiveContextCheckpointId != null || session.ActiveHtmlArtifactId != null ||
                 session.ActiveTaskListArtifactId != null || session.ActivePlanDocumentArtifactId != null ||
-                session.AgentCreation != null ||
                 session.Artifacts.Count != 0 || session.ArtifactLinks.Count != 0 || session.ContextCheckpoints.Count != 0 ||
                 session.ResourceCopies.Count != 0 || session.Context.Notes.Count != 0 ||
                 session.HtmlWorkspace.Files.Count != 0 || session.HtmlWorkspace.DataSources.Count != 0 ||

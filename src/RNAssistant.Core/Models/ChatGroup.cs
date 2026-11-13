@@ -35,5 +35,6 @@ namespace RNAssistant.Core.Models
     {
         public bool Changed { get; set; }
         public ChatGroup Group { get; set; }
+        [JsonIgnore] public ResourceAuthorityCommit AuthorityCommit { get; set; }
     }
 }

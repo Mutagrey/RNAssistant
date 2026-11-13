@@ -1,5 +1,166 @@
 # Session event stream
 
+## Journal chat groups — 2026-11-13
+
+The existing ConversationGroupService now accepts native conversation/resource
+ports bound to one document/workspace. Group heads and immutable CAS bodies remain
+in ResourceJournal; no group stream, table, schema change or second store. Reads
+select the group prefix in 100-head pages, validate generation and verify payloads.
+Membership uses scoped metadata; model aliases use the existing Inbox/event index.
+It never loads member histories or changes their runs, queues or participant roster.
+
+Create/rename/add/remove/delete keep exact revision, unique name, deduplication and
+creation-key/tombstone guards. A write holds the resource scope lease across guards,
+prepared, dispatch, authority publication and exact head read-back. Model preparation
+binds the accepted call; the kernel terminal links its existing ResourceOutcomeLink.
+List/no-op return no effect. Lost publication acknowledgement leaves source Unknown
+even when the group is durable; restart, rebuild and restore do not retry or upgrade
+that terminal. Runtime authority commits are excluded from model/UI JSON.
+
+Native chat Delete/Move remain unsupported. Their future integration must share
+this lease, including the add/delete-chat race check; that race is not qualified
+for the native backend yet. Default writers still use the explicit retiring
+composition below. Whole-port P7 removes ChatStore.Groups and the legacy constructor/
+catalog branch, with no import, dual-write or fallback. Group reads still hydrate
+all group bodies in the scope; Publish's existing authority snapshot and broader
+metadata/header costs remain separate work.
+
+## Journal assignment pages — 2026-11-13
+
+`agents.list(assignments=incoming|outgoing)` now reads native Send/Resolve/spawn
+intake through the existing event port and Application/Inbox owners. The same
+assignment DTO/excerpt contract lives in Core; no separate assignment store or
+durable projection. Schema 21 adds an assignment flag and two directional partial
+indices to existing `agent_delivery`, rebuilt from canonical acceptance facts.
+Queries select at most 51 IDs to return 50 rows and NextRequest. Each page validates
+the exact current chat revision/scope and canonical request, resolution and local
+input locators. The request-ID cursor does not pin a snapshot across later pages.
+
+Cold listing does not create/replay an Inbox or enumerate chat catalog. Only request
+bodies on the returned page are verified/read for the existing trim and 160-character
+surrogate-safe excerpt. Report bodies stay behind Inbox FIFO/policy; outgoing input
+status describes this chat's received report, never the recipient's private queue.
+Native Open/ResolutionReceived means canonical intake, not successful external work
+or an upgrade of an Unknown source tool terminal. Partial legacy Prepared states are
+not fabricated from native frames. Listing never changes a chat or schedules work.
+
+Two checks cover real Office/Workspace `agents.list` model wire, 50+1 paging, scope/
+stale guards, restart/rebuild and clean Workspace restore. A cold incoming page with
+61 retained inputs reads 103 canonical records and exactly 50 request bodies in both
+hosts; unrelated input bodies and report bodies are not hydrated. This is logical
+I/O evidence, not a history cost curve or Windows latency qualification.
+
+Default writers remain unchanged. AssignmentsEvents explicitly serves the retiring
+backend and is removed with the capability/adapters at whole-port P7. Next: group
+operations, other Store/resource consumers and metadata/header costs; P4 stays deferred.
+[Evidence](audits/storage-context-optimization.md#p5--native-assignment-pages-2026-11-13).
+
+## Journal peer cancellation — 2026-11-13
+
+Native `agents.cancel` uses the existing typed control port and `queue.control`
+frame. Source call/runtime entry, both observed heads, target run/checkpoint and
+the live owner lifetime (or reserved cold wait) are pinned before acceptance.
+Canonical read-back pauses the existing Inbox before signalling that exact live
+owner. Requested proves the signal, never target termination or external effects.
+The kernel owns live termination; saved effect-free waits/peer pauses use the
+existing ConversationWaitCancellation and CommitRun under the exact lease/CAS.
+Only target terminal read-back permits Cancelled. Queued input, history, run identity,
+budget and uncertain effects remain; cancellation never resumes the model/tools.
+
+Lost request acknowledgement resolves to the same frame within that invocation.
+Unavailable read-back sends no signal and recovers Unknown. A lost target-terminal
+acknowledgement retains Unknown at the source even when target cancellation is
+durable. Existing requests, replay/rebuild/restore cannot dispatch cancellation again.
+Competing cold owners refuse before acceptance. Cancellation of a live peer pause
+signals its CTS while holding the existing Inbox locks, before clearing pause
+authority could wake a continuation. View notification follows proof outside locks.
+
+The existing native pause/resume DTO/port is now AgentControlCommand/AcceptAgentControl;
+no second control path, table, registry or schema bump. Source terminal links its
+exact request through the existing control index. Seven scenarios cover both real
+Office and Workspace consumers, including live/saved peer pauses and receipt faults.
+Native cancellation uses zero catalog reads in these fixtures; no CPU/history-cost
+or Windows latency claim is made.
+
+Default writers are unchanged. CancelEvents remains explicit only for the retiring
+backend; whole-port P7 removes it with the other event adapters/control branches.
+Next: group operations, remaining Store/resource operations and
+metadata/header costs. P4 remains deferred; Windows/Office evidence stays open.
+[Evidence](audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
+
+## Journal peer pause and resume — 2026-11-13
+
+The existing Application service/Inbox and journal event port now accept native
+`agents.pause` / `agents.resume`. One `queue.control` frame binds the source's exact
+accepted call/runtime entry, both observed chat heads, target run, live run-owner
+lifetime and PauseId. Indexed alias lookup avoids catalog enumeration. Exact frame
+read-back precedes live cursor publication and notification. Lost acknowledgement
+resolves to that receipt; unavailable proof retains Unknown without another request.
+
+Requested does not prove safe pause. The current model/tool/read-back or pending
+wait finishes its safe boundary before the kernel writes `Waiting + PauseId` and
+Inbox acknowledges. Resume releases only the matching live peer pause; it preserves
+run budget/counts and cannot release user Stop, recovery or a newer user pause.
+The live owner lifetime survives internal checkpoint invocation changes but not
+restart. Cold replay drops peer authority and pauses even an unacknowledged request.
+Inputs remain FIFO and preserve control authority; they cannot implicitly resume.
+
+Input-less user controls and safe-pause acknowledgements also use direct control
+frames, bound to one observed chat head. They no longer copy mutable run metadata or
+write chat/context bodies. Input changes retain their atomic input/control snapshot.
+Office/Workspace checkpoint construction and cursor publication share the existing
+Inbox lock with native controls; model/user waits and UI callbacks remain outside.
+Schema 20 extends existing `control_fact` with source-call provenance and native
+notice indices. Feed/read/rebuild/restore consume the same frames without a second
+store or CAS body hydration for the controls.
+
+Seven cases exercise both real runtime consumers: pause/resume with pending input,
+lost ack, Stop, restart/rebuild/restore, Unknown, pending wait and user takeover with
+stale release. Native peer controls use zero catalog reads in these fixtures; no
+history cost curve, CPU/allocation or Windows latency claim is made.
+
+Default writers are unchanged. Explicit `PauseEvents` exists only for the retiring
+backend and is removed with the capability branch/adapters at whole-port P7; native
+controls have no fallback. Native cancel is connected above; next are group operations, other
+Store/resource consumers and metadata/header costs. P4 remains deferred; Windows/
+Office qualification stays open.
+[Evidence](audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
+
+## Journal application spawn — 2026-11-13
+
+The existing native `agent.spawned` frame now creates a normal Store chat: child
+metadata/context, immutable creation provenance, chain membership, optional initial
+Inbox input/control and both chat heads share one acceptance. The child inherits
+mode/mutation restrictions, effective model and reasoning preference; it receives
+no history, resource aliases, run or approval. Idle creation does not select a tab
+or start a run. The initial input uses the same native Inbox/Resolve path as Send.
+
+The existing Application service, Inbox and journal/event port own the flow. Dispatch
+requires the exact accepted call, runtime entry and source revision. Verified frame,
+intent and CAS read-back precede live cursors and fresh Inbox adoption. Only that
+fresh adoption permits scheduling; an already loaded or recovered queue keeps its
+pause/worker. Lost append acknowledgement resolves to the original child; unavailable
+read-back recovers Unknown without scheduling or another creation. Notification or
+scheduler failure after proof cannot erase creation/intake evidence.
+
+Schema 19 adds a sender/sequence index to `agent_spawn`. Its Store metadata is located
+through existing `chat_write`/`chat_state`; input/control/delivery retain their existing
+indices. Source and child feeds expose one notice each, without duplicate delivery
+rows or CAS hydration. Backup reachability includes the child's empty context body.
+
+Four new scenarios use real Office run service and Workspace runtime ports, covering
+idle creation, Plan/Deny inheritance, effective model, native child Resolve, Store
+rename, receipt loss, Unknown, restart/rebuild and clean Workspace restore. They
+record zero catalog reads and one shared acceptance frame. No spawn history cost
+curve, CPU/allocation or Windows latency claim is made.
+
+Default production composition is unchanged. The explicit atomic capability keeps
+`SpawnEvents` only for the retiring backend until whole-port P7; the native branch
+never invokes it, a separate Store commit or a second initial Send. Remaining work:
+group operations, ordinary Store/resource operations, metadata/header
+costs and Windows/Office qualification remain open.
+[Evidence](audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
+
 ## Journal outbound Send and Resolve — 2026-11-13
 
 Application Send/Resolve now use the existing event port's explicit atomic-delivery
@@ -27,8 +188,9 @@ boundedness claim. Schema 18 and durable frame shapes are unchanged.
 
 The retiring event backend explicitly keeps SendEvents until whole-port P7; an
 atomic backend never falls back to Prepared/Submit/Accepted writes. No new store,
-adapter, imported history or dual-write. Spawn, peer controls, assignment/group
-projections, remaining Store/resource owners and production composition remain open.
+adapter, imported history or dual-write. Spawn and pause/resume are connected above;
+group operations, remaining Store/resource owners and production
+composition remain open.
 Windows/Office qualification is separate. [Evidence](audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
 
 ## Journal peer Inbox and correlated waits — 2026-11-13
@@ -56,7 +218,8 @@ an assignment outcome is the peer's assessment, not external effect evidence.
 
 Native publication is injected at the persistence boundary in these earlier checks;
 application Send/Resolve and live notification are covered by the slice above.
-Spawn and peer controls remain unconnected; default production writers are unchanged. Full input-history
+Application spawn, pause/resume and cancel are connected above; default production
+composition remains open. Full input-history
 boundedness, metadata/header costs, remaining Store/resource owners and Windows/Office
 qualification remain open. [Evidence](audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
 
@@ -94,7 +257,8 @@ are still open. Windows/Office qualification remains separate.
 ## Journal user Inbox delivery — 2026-11-12
 
 Text user input now uses the existing journal owner: acceptance/edit/removal,
-delivery state and queue control share one `chat.committed` frame and cursor.
+delivery state and its queue-control snapshot share one `chat.committed` frame and
+cursor. Input-less controls use direct `queue.control` frames as described above.
 Text lives in CAS. Schema 17 adds request identity to the existing input index;
 no new durable store or projection is introduced. Initial Pending (Office queue)
 and Delivering with an accepted run (Workspace) preserve the existing intake contract.
@@ -117,7 +281,7 @@ Inbox and real runtime ports. Workspace steer transport and default composition
 remain part of cutover evidence.
 
 Native peer input/feed and correlated waits are connected in the slice above.
-Attachments, application outbound peer delivery/controls, remaining Store/resource
+Attachments, peer projections, remaining Store/resource
 operations and P3 metadata/header costs stay open; P4 stays deferred. Production
 writers remain unchanged. Windows/Office qualification is open.
 [Evidence](audits/storage-context-optimization.md#p1p2--journal-user-inbox-delivery-2026-11-12).
@@ -131,13 +295,15 @@ kernel continuation claim changes invocation under CAS while retaining Waiting. 
 cannot replace the saved deadline/budget or bypass a paused queue. Timeout and cancel
 resolve the original call once; shutdown and lost claim acknowledgement retain the wait.
 
-Inbox user pause/resume now shares a chat frame with the existing queue-control fact
-and index. Input replay reads that chat's indexed control records, without scanning
+Inbox user pause/resume initially shared a chat frame with the queue-control fact;
+the peer-control slice above replaces input-less writes with direct control frames.
+Input replay reads that chat's indexed control records, without scanning
 message bodies. Schema 16 adds the control-page index; no new durable owner or table.
 Cold Inbox still pauses a saved wait until explicit user resume, even if an earlier
 Resume receipt survived an acknowledgement loss. User input is connected in the
 slice above; native correlated reply/completion waits and peer feed are connected
-in the peer slice. Application outbound delivery and peer controls remain open.
+in the peer slice. Application delivery and pause/resume are connected above;
+native cancel is connected above.
 This wait slice alone does not qualify delivery.
 
 Five Office/Workspace checks cover timeout, cancellation, claim/control acknowledgement
@@ -387,7 +553,7 @@ normal context restart. Canonical JSONL and user history are not changed by repa
 
 ## Named chat groups — 2026-11-05
 
-ChatStore.Groups reuses ResourceAuthorityStore append-only commits and immutable CAS:
+The retiring ChatStore.Groups path reuses ResourceAuthorityStore append-only commits and immutable CAS:
 one runtime state/chat_group_* head per group, exact document/workspace scope. Group
 payload contains name, unique member ChatIds, revision and creation operation key.
 No dedicated journal, hidden owner chat, membership dual-write or history rewrite.

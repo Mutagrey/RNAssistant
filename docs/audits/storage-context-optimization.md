@@ -1364,3 +1364,221 @@ after-state/CAS ownership.
    branch/SendEvents with the existing retiring adapters. This intermediate slice
    changes no default production behavior, so no product bump. Scoped staging
    preserves parallel window/UI changes. No push/tag.
+
+## P5 — application spawn on the journal (2026-11-13)
+
+1. Native spawn now reaches the same Store/Inbox/runtime consumers as Send/Resolve.
+   Owners remain Application AgentCommunicationService/Inbox and Core journal/event
+   port. This advances F19/P5; peer controls, assignment/group projections and
+   history-sized input/metadata/header work are not declared closed.
+2. One `agent.spawned` frame accepts child metadata/context/provenance, membership,
+   optional input/control and both heads. Runtime-entry/source-revision guards run
+   before dispatch. Frame/intent/CAS read-back precedes live projection and fresh
+   scheduling. Idle creation preserves selection and has no run/input; inheritance
+   preserves mode/mutation restrictions/effective model without history or approval.
+   Lost acknowledgement resolves to the same child; unavailable proof recovers
+   Unknown without replay. A detached view cannot erase proven creation.
+3. Native spawn omits root reservations, standalone Store commits and a separate
+   initial Send. Existing chat metadata writing and runtime-entry validation are
+   shared. Schema 19 adds sender/sequence lookup to existing `agent_spawn`; the
+   child's metadata uses existing chat indices. Feed union avoids duplicate spawn
+   deliveries; backup reachability includes child context. No new store, registry,
+   import, dual-write or fallback. Production C# +401/−75 lines plus one csproj entry.
+4. On `8e021769` + this slice, macOS/net8/C#7.3: four new cases pass through real
+   Office run service and Workspace runtime ports. They cover idle Plan/Deny/model
+   inheritance, catalog creator, ordinary Store rename, initial assignment/Resolve,
+   notification failure, native feeds, lost ack, Unknown, restart/rebuild and clean
+   Workspace restore. Fourteen targeted regressions pass: Send/Resolve (3), peer
+   Inbox/waits (3), feed (5), primitive atomic spawn (1), retiring spawn identity and
+   initial failure (2). No full suite or VSTO/Office validation was run.
+5. Before: application spawn could not create an integrated native Store chat.
+   After: zero catalog reads, one shared acceptance frame, and no additional creation
+   or automatic scheduling after restart/rebuild/restore in these fixtures. The
+   existing feed cost curve still reads 5/2/4 canonical records for page/idle/after
+   append at H=100/1000/10000, with zero CAS body hydration. These are logical I/O
+   and operation counts; spawn CPU/allocations/history curve and Windows latency
+   were not measured. Metadata/header and full Inbox replay costs remain open.
+6. Next: native peer controls and assignment/group projections, remaining ordinary
+   Store/resource operations and P3 metadata/header costs. P4 remains deferred.
+   Production writers are unchanged. Full P7 still needs verified history/CAS/keys/
+   locator backup, stopped old writers, full restore and Windows/Office screen-photo
+   evidence; host-neutral tests do not qualify controller/Office delivery.
+7. Canonical session events/protocol, MIGRATION_MAP, PROGRESS and Harness guide are
+   updated. Whole-port P7 removes `SpawnEvents` and the explicit capability branch
+   with SendEvents/retiring adapters. This intermediate integration changes no
+   default production behavior, so no product bump. One scoped commit; no push/tag.
+
+## P5 — native peer pause and resume (2026-11-13)
+
+1. Native pause/resume now reaches real Office run-service and Workspace runtime
+   consumers. Owners remain Application AgentCommunicationService/Inbox and Core
+   journal/event port. This advances P5; native cancel and peer projections remain
+   separate work. No new store, registry or intermediate facade.
+2. One `queue.control` records the exact source call/runtime entry, both heads,
+   target run, live owner lifetime and PauseId. Read-back precedes notification;
+   lost acknowledgement resolves to the same receipt, unavailable proof retains
+   Unknown without replay. Requested does not claim safe pause: the kernel reaches
+   `Waiting + PauseId` before acknowledgement. Resume retains run/counts/budget and
+   cannot release user Stop, cold recovery or a replacement user pause. Pending wait
+   retains its original deadline; incoming peer input preserves pause and FIFO.
+3. Input-less local user controls/ack now write direct control facts, removing
+   mutable run snapshot copying and chat/context serialization. The actual consumer
+   checkpoint commits share the existing Inbox lock through cursor publication;
+   model/user waits and UI callbacks stay outside. Schema 20 extends existing
+   `control_fact` and source-call/page indices. Native feed/rebuild/restore use the
+   same proof. `PauseEvents` explicitly serves only the retiring backend; native
+   controls never fall back, import history or dual-write.
+4. On `bdad05b3` + this slice, macOS/net8/C#7.3: seven new cases pass through both
+   consumers: pause/resume with input, lost ack, Stop, restart/rebuild/clean Workspace
+   restore, unavailable read-back/Unknown, pending wait, user takeover/stale release.
+   Twenty-three targeted regressions pass: Send/Resolve (3), spawn (4), peer (3),
+   saved waits (5), feed (5), primitive durable controls (1), retiring pause authority
+   and Workspace wire (2). The takeover case exposed and now guards the live cursor
+   race between checkpoint and control. No full suite or Office/VSTO validation.
+5. Before: native application peer controls were unsupported; local controls copied
+   aggregate run data. After: addressed peer controls enumerate zero catalogs in
+   these fixtures and direct control frames need no CAS bodies. Existing wait/user
+   discovery keeps its catalog reads. Feed cost checks retain 5/2/4 canonical reads
+   for page/idle/after append at H=100/1000/10000, with zero CAS hydration. These are
+   logical I/O/operation counts, not a pause history curve or CPU/Windows latency
+   measurement. Full Inbox replay and metadata/header costs remain open.
+6. Next: native cancel, assignment/group projections, other Store/resource
+   operations and P3 metadata/header costs. P4 stays deferred. Default writers are
+   unchanged. Whole-port P7 still requires verified history/CAS/keys/locator backup,
+   stopped old writers, full restore and Windows/Office screen-photo evidence.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. P7 removes PauseEvents and the explicit capability branch with
+   SendEvents/SpawnEvents/retiring adapters. This intermediate integration does not
+   change default production behavior, so no product bump. One scoped commit;
+   no push/tag.
+
+## P5 — native peer cancellation (2026-11-13)
+
+1. Native `agents.cancel` now uses real Office/Workspace runtime consumers and the
+   same Application service/Inbox/RunOwner and Core journal control port. Saved
+   cancellation remains owned by AgentKernel/ConversationWaitCancellation/CommitRun.
+   This advances P5; assignment/group projections remain separate work.
+2. A single `queue.control` pins the exact source accepted call/runtime entry, both
+   heads, target run/checkpoint and live lifetime or reserved saved wait. Verified
+   read-back precedes signalling; Requested does not prove target termination.
+   Only terminal read-back permits Cancelled. Live pause cancellation signals under
+   the existing Inbox locks before a continuation can observe cleared peer authority.
+   Cold wait/pause cancellation retains history, input, run, budgets and unknown
+   effects without model/tool dispatch. Competing cold ownership refuses before append.
+3. The existing control DTO/port now handles Pause/Resume/Cancel, replacing its
+   pause-only signature. Native cancellation avoids legacy CancelPrepared/Recorded
+   and catalog enumeration; the explicit CancelEvents branch serves only the
+   retiring backend. Cold terminal projection is shared with existing user/legacy
+   cancellation. No new store, registry, schema, import, dual-write or fallback.
+   Production C# +172/−60 lines; no new source/project entries.
+4. On `abacb894` + this slice, macOS/net8/C#7.3: seven new cases pass through both
+   actual runtime consumers: live cancellation/queued input, lost request ack,
+   unavailable read-back, cold wait/restart/rebuild/clean Workspace restore, lost
+   target terminal ack, competing cold lease and live/saved peer pause. Seventeen
+   targeted regressions pass: native pause/resume (7), retiring cancellation (4),
+   native Send/Resolve (3), primitive controls (1), Office saved-pause cancellation
+   (1) and native wait cancellation (1). No full suite or VSTO/Office validation.
+5. Before: native application cancellation was unsupported. After: zero catalog
+   reads and one native cancel request per accepted call in these fixtures. Lost
+   request ack reconciles the same frame; unavailable proof sends no signal, and
+   lost terminal ack keeps source Unknown even when target cancellation is durable.
+   Restart/rebuild/restore neither repeat cancellation nor resume queued work.
+   These are operation/behavior checks; no CPU/allocation/history-cost curve or
+   Windows latency measurement. Metadata/header and full Inbox replay costs remain open.
+6. Next: assignment/group projections, other Store/resource operations and P3
+   metadata/header costs; P4 stays deferred. Default writers are unchanged. Whole-port
+   P7 still needs verified history/CAS/keys/locator backup, stopped old writers,
+   full restore and Windows/Office screen-photo evidence.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. Whole-port P7 removes CancelEvents with the other retiring control/
+   delivery paths and capability/adapters. This is intermediate integration without
+   a default production behavior change, so no product bump. One scoped commit;
+   no push/tag.
+
+## P5 — native assignment pages (2026-11-13)
+
+1. `agents.list(assignments=incoming|outgoing)` now reads native intake through the
+   existing event port and Application service/Inbox. The existing page/view/state
+   DTO and excerpt helper move to Core; no second assignment store or durable read
+   model. Group operations remain the next separate owner/dependency slice.
+2. Each page checks current chat scope/revision, canonical request/resolution and
+   this chat's own input state. It returns at most 50 rows with a request-ID cursor;
+   separate pages do not share a pinned snapshot. Cold listing skips Inbox replay
+   and catalog enumeration. Only page request bodies are read for the existing
+   bounded/surrogate-safe summary; report bodies remain behind FIFO/policy. Canonical
+   Open/ResolutionReceived never changes a source Unknown or proves external effects.
+3. Schema 21 adds an assignment flag and directional partial indices to existing
+   `agent_delivery`; rebuild derives them from accepted facts. Shared input lookup
+   accepts a revision fence. Explicit AssignmentsEvents remains only for the retiring
+   backend until whole-port P7. No import, dual-write, fallback or new store/registry.
+   Production C# +159/−45 lines; new Core model/partial files are included in the
+   old-style csproj.
+4. On `37170720` + this slice, macOS/net8/C#7.3: two new cases pass through actual
+   Office run-service and Workspace ports/model wire, plus 50+1 paging, local
+   direction, summary bounds, stale/scope refusal, rebuild and clean Workspace
+   restore. Sixteen focused regressions pass: Send/Resolve (3), native peer (3),
+   spawn (4), retiring assignments (5), feed page/rebuild (1). One further retiring
+   Workspace assignment-wire case failed once at run persistence and passed a
+   targeted trace rerun; its cause remains [open](../stabilization/BACKLOG.md#intermittent-workspace-assignment-wire-failure--2026-11-13).
+   This is not a clean 17-case pass or a claimed fix. The Unknown fixture
+   recreates its lost Inbox owner after recovery; stale live cursors still fail.
+   No full suite or Office/VSTO validation was run.
+5. Before: native assignment listing used unsupported legacy event projections.
+   After: a cold 50-row incoming page with 61 retained inputs reads 103 canonical
+   records and exactly 50 request bodies in both hosts; it enumerates no catalog
+   and hydrates no report/unrelated input bodies. This proves bounded page selection,
+   not a history cost curve, CPU/allocation reduction or Windows latency. Request
+   body size, full Inbox replay and metadata/header costs remain separate concerns.
+6. Next: groups through their existing resource owner, other Store/resource
+   operations and P3 metadata/header costs. P4 stays deferred. Default writers are
+   unchanged; verified history/CAS/keys/locator backup, stopped old writers, full
+   restore and Windows/Office screen-photo evidence still gate whole-port P7.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. P7 removes AssignmentsEvents with the explicit capability/adapters.
+   This intermediate integration does not change default production behavior, so
+   no product bump. One scoped commit; no push/tag.
+
+## P5 — native chat groups (2026-11-13)
+
+1. Native create/list/rename/add/remove/delete now use the existing
+   ConversationGroupService through actual Office run-service and Workspace ports,
+   plus the existing typed UI change contract. Scoped resource heads and immutable
+   group bodies remain in ResourceJournal/CAS; no group stream, table or new owner.
+2. The existing resource scope lease spans source/member checks, revision/name
+   guards, prepared, dispatch, authority commit and exact head read-back. Model
+   calls bind resource preparation to their accepted origin; only the kernel writes
+   the conversation terminal. Lost acknowledgement preserves source Unknown even
+   when the resource commit is durable. Groups do not rewrite participant history,
+   schedule runs, alter queues or reserve causal-chain membership. Tombstones cannot
+   be resurrected by reusing a creation key; no-op/list produces no resource effect.
+3. Native alias resolution uses the existing Inbox/event index and membership uses
+   conversation metadata. Reads select only group-prefix heads in 100-row pages;
+   verified change results reuse their captured group without rereading the catalog.
+   Resource outcome links reuse existing journal facts, with no schema migration.
+   ChatStore.Groups itself is unchanged; its explicit service constructor/catalog
+   branch remains only until whole-port P7. No import, dual-write or hidden fallback.
+   Production C# +250/−47 lines; the new Application partial is in its projitems.
+4. On `1e84f83e` + this slice, macOS/net8/C#7.3: three new cases pass across Office
+   and Workspace for typed UI guards, model CRUD/list/no-op, scoped aliases,
+   lease refusal, tombstones, unchanged participant histories, lost acknowledgement,
+   restart/rebuild and clean Workspace restore. Ten focused regressions pass:
+   retiring groups (3), native resource ports (3), native mutation (4). Version
+   format and diff checks pass. No full suite or VSTO/Office validation was run.
+5. Before: native tool admission rejected group mutations and the group service
+   depended on ChatStore. After: group operations use the existing resource ports
+   and canonical kernel outcomes, without loading member histories or enumerating
+   the chat catalog for model IDs (the fixture rejects that access). Group bodies
+   in the scope are still hydrated for unique-name checks; authority Publish still
+   returns its existing snapshot. No total-history cost curve, allocation reduction
+   or Windows latency claim is made for this integration slice.
+6. Next: remaining ordinary Store/resource operations, including native Delete/Move,
+   and P3 metadata/header/authority-snapshot costs. Native chat deletion must share
+   the resource scope lease and pass the add/delete-chat race; it is not qualified
+   by these group tests. P4 stays deferred. Default writers remain unchanged;
+   verified history/CAS/keys/locator backup, stopped old writers, full restore and
+   Windows/Office screen-photo evidence remain whole-port P7 gates.
+7. Conversation protocol, session events, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. P7 removes the retiring constructor, catalog branch and
+   ChatStore.Groups with its old backend. This intermediate port integration does
+   not change default production behavior, so no product bump. One scoped commit;
+   no push/tag.

@@ -1134,6 +1134,7 @@ namespace RNAssistant.Runtime
         {
             private readonly IConversationStore _conversations;
             private readonly IEventStore _events;
+            private readonly ConversationInboxService _agentInbox;
             private readonly ChatBlobStore _payloads;
             private readonly WorkspaceFileService _files;
             private readonly WorkspaceWebSnapshotStore _webSnapshots;
@@ -1191,6 +1192,7 @@ namespace RNAssistant.Runtime
                 IBrowserCapabilityContribution browser = null, string browserRunId = null)
             {
                 _conversations = conversations; _events = events; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
+                _agentInbox = agentInbox;
                 _webSnapshots = webSnapshots;
                 _settings = settings.Clone(); _progress = progress; _modelProgress = modelProgress; _acceptance = acceptance; _office = office;
                 _pluginSource = pluginSource;
@@ -2007,8 +2009,11 @@ namespace RNAssistant.Runtime
                 var projected = _session.Messages.LastOrDefault(message => runView != null &&
                     ReferenceEquals(message.RunViewState, runView));
                 var appended = _session.Messages.GetRange(firstMessage, _session.Messages.Count - firstMessage);
-                new ConversationRunCommit(_session, fact, appended,
-                    activity, updated: _mediaUpdates.Concat(projected == null ? new ChatMessage[0] : new[] { projected })).Persist(_conversations.CommitRun, _session);
+                // Serialize native checkpoint construction/cursor publication with
+                // the existing live Inbox controls; model/UI waits stay outside.
+                lock (_events.AtomicAgentDelivery && _agentInbox != null ? _agentInbox.Get(_session).Sync : _session)
+                    new ConversationRunCommit(_session, fact, appended,
+                        activity, updated: _mediaUpdates.Concat(projected == null ? new ChatMessage[0] : new[] { projected })).Persist(_conversations.CommitRun, _session);
                 _mediaUpdates.Clear();
                 if (fact.Kind == AgentRunEventKind.ToolCompleted &&
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation && _callable != null)

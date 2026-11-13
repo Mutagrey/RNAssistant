@@ -9,8 +9,16 @@ changeChatGroup с exact runtime revision. Один чат может иметь
 группу. Delete chat остаётся у прежнего владельца с его guards, без каскадного удаления
 детей. Удалённые чаты не появляются в membership после rebuild/restart.
 
-ConversationGroupService пишет через ChatStore.Groups в существующий ResourceAuthority
-journal/CAS под тем же document lock, что и удаление чатов. Конфликт/unknown не
+ConversationGroupService в native composition (2026-11-13) использует существующие
+ResourceJournal ports/CAS и scoped conversation metadata. `agents.group` связывает
+prepared/dispatch/authority commit с exact accepted call; terminal пишет kernel.
+Model membership разрешается через Inbox alias index, без полного каталога/истории.
+Typed UI сохраняет exact revision guard. Группы читаются по resource prefix страницами
+по 100 heads; тела всех групп этой области пока нужны для проверки уникальности имён.
+Retiring composition явно использует ChatStore.Groups/ResourceAuthorityStore до P7.
+Native mutation держит существующий resource scope lease; native Delete/Move чатов
+ещё не подключены. При переносе удаления тот же lease обязан охватывать проверку
+membership и удаление. Прежний backend использует общий document lock. Конфликт/unknown не
 повторяется автоматически. Группы не запускают/продолжают/останавливают Run, не
 снимают ограничения и не меняют participant roster цепочки. Дочерний чат добавляется
 явно. CreatorChatId — provenance из AgentCreation, не ParentSessionId fork истории.
@@ -95,6 +103,17 @@ User Stop и recovery не снимаются агентом. Replay всегд�
 чата области. `agents.cancel` может завершить сохранённую паузу без model/tool call.
 Close вкладки не меняет выполнение. Межпроцессный peer control
 не добавлен; пользовательский UI описан выше. Точные схемы — AgentCommunicationToolCatalog, skill v10.0.0.
+
+Native journal pause/resume (2026-11-13): тот же Application/Inbox принимает один
+`queue.control` с exact accepted call источника, обоими chat heads, target Run,
+PauseId и lifetime живого RunOwner. Этот lifetime сохраняется при внутренних сменах
+checkpoint invocation, но не после restart. Read-back предшествует уведомлению;
+потеря подтверждения разрешается по исходному receipt, недоступное proof оставляет
+Unknown без повтора. User controls/ack пишут отдельный control-факт без копирования
+незафиксированного run; checkpoint и control разделяют существующий Inbox lock.
+Индекс сохраняет authority при новых inputs и восстанавливает cold pause. Default
+backend не переключён; `PauseEvents` удаляется с ним на whole-port P7. Native cancel
+подключён следующим срезом ниже. [Контракт](session-events.md#journal-peer-pause-and-resume--2026-11-13).
 
 Owner — Application/Conversations (`AgentCommunicationService`), общий Inbox и
 существующий ConversationRunService/AgentKernel. Срез 2026-11-04 использует сохранённый
@@ -182,8 +201,18 @@ Removed — входящее поручение убрано из очереди
 input_status отдельно показывает Pending/Applied/Removed. Локальные наблюдения двух
 сторон могут различаться при потере source receipt. Проекция не читает чужие чаты,
 не запускает Run, не выдаёт queued result body; сводка исходного запроса до 160
-символов плюс многоточие. Выход ограничен; чтение старого metadata journal ещё не
+символов плюс многоточие. Выход ограничен; чтение retiring metadata journal ещё не
 является bounded indexed scan. Нет отдельного durable assignment projection.
+
+Native journal (2026-11-13): страница выбирается из существующего delivery index
+по chat/direction/request_id; максимум 51 locator для 50 строк. Scope/revision и
+request/resolution/input проверяются по canonical frames. Холодное чтение не
+восстанавливает весь Inbox; читаются только тела запросов текущей страницы для
+прежней сводки. Тела отчётов не выдаются и не обходят FIFO. Open/ResolutionReceived
+означают доказанный intake; source Unknown и оценка внешнего результата не меняются.
+Cursor задаёт следующую request_id, а не общий snapshot нескольких страниц.
+Default backend прежний; AssignmentsEvents удаляется с ним на whole-port P7.
+[Контракт](session-events.md#journal-assignment-pages--2026-11-13).
 
 Сообщения остаются role=user с прежним escaping/provenance. Runtime добавляет в
 однострочный заголовок только assignment=true либо reported_outcome и reply_to.
@@ -267,13 +296,24 @@ Run. Ошибка одного участника не блокирует ост
 не получает как `agents.resume`; pause/resume control tools остаются следующим этапом.
 
 `agents.cancel(agent_id)` v1 отменяет один другой чат этой области, независимо от
-creator и вкладки. Runtime сохраняет exact target Run в CancelPrepared до dispatch;
+creator и вкладки. Retiring backend сохраняет exact target Run в CancelPrepared до dispatch;
 живой сигнал закреплён за конкретной cancellation lifetime. Requested означает
 принятый сигнал, Cancelled — подтверждённую журналом отмену, AlreadyStopped — ранее
 завершённый Run, Changed — сменившийся запуск, Unavailable — недоступный owner/тип
 checkpoint, Unconfirmed — неподтверждённый результат. Повтор операции возвращает
 прежний receipt; Prepared без receipt не исполняется повторно. Ошибки сохраняются
 через обычный ToolRuntime. Живой Run завершает его kernel, сохраняя unknown effects.
+
+Native journal (2026-11-13) вместо CancelPrepared/CancelRecorded принимает один
+`queue.control` через общий typed control port: exact source call, оба head,
+target Run/checkpoint и live lifetime либо cold lease. После read-back очередь
+paused; live CTS сигнализируется до освобождения Inbox locks. Lost request ack
+разрешается по тому же frame внутри текущего вызова; недоступное proof не посылает
+сигнал. Lost terminal ack оставляет source Unknown даже при сохранённой отмене
+target. Прочитанный после restart запрос не исполняется снова. Отдельной отмены
+через модель, нового store или второго terminal owner нет. Default writers прежние;
+`CancelEvents` удаляется на whole-port P7.
+[Контракт](session-events.md#journal-peer-cancellation--2026-11-13).
 
 Effect-free Waiting отменяется после restart без resume/модели/tools: kernel формирует
 terminal fact, общий Application owner закрывает прежний call/Run через CommitRun,
@@ -319,6 +359,15 @@ queued receipt содержит message_id для requests в agents.wait. Recei
 резерв также занимает место; закрытие вкладки и удаление чата не освобождают его.
 Корневой чат должен оставаться доступным для проверки состава. Повтор exact operation
 возвращает прежний подтверждённый receipt, несовпадение fingerprint отклоняется.
+
+Native journal composition (2026-11-13) подключает spawn через существующий event port:
+один `agent.spawned` содержит обычный Store-чат, membership и optional initial input,
+без отдельных `ParticipantReserved`/Store commit/Send. Начальный ввод использует общие
+Inbox/Resolve consumers; source и child cursor обновляются после точного read-back.
+Lost ack возвращает того же ребёнка, недоступный proof оставляет Unknown без replay.
+Idle не запускает Run; ошибка уведомления/планирования после proof не отменяет создание.
+Прежняя последовательность выше остаётся только в явном `SpawnEvents` до whole-port P7;
+default backend ещё не переключён. [Контракт](session-events.md#journal-application-spawn--2026-11-13).
 
 `AgentCommunicationContext` переносит runtime provenance, policy ceiling, root и chain identity из Inbox
 в durable user message. Модель видит пометку другого агента, короткий адрес и название;

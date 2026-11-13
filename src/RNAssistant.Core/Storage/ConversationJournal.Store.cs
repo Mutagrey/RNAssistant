@@ -155,6 +155,7 @@ namespace RNAssistant.Core.Storage
                     WorkspaceId = address.WorkspaceId, DocumentAuthorityId = address.DocumentAuthorityId,
                     Title = card.Title, DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath,
                     CreatedUtc = card.CreatedUtc, Model = card.SelectedModel, ReasoningEnabled = card.ReasoningEnabled,
+                    TitleAssignedByAgent = card.TitleAssignedByAgent, AgentCreation = card.AgentCreation,
                     Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
                     Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)),
                     LastRun = LoadChatRun(receipt.Fact),
@@ -188,7 +189,8 @@ namespace RNAssistant.Core.Storage
                             DocumentPath = card.DocumentPath, Title = card.Title, Model = card.SelectedModel, Mode = card.Policy.Mode,
                             ReasoningEnabled = card.ReasoningEnabled, CreatedUtc = card.CreatedUtc, UpdatedUtc = receipt.UpdatedUtc,
                             LastActivityUtc = new DateTime(Convert.ToInt64(Scalar(db, "SELECT last_activity_ticks FROM chat_state WHERE stream=$stream AND chat=$chat", card.ChatId)), DateTimeKind.Utc),
-                            MessageCount = receipt.Fact.MessageCount, RunId = receipt.Fact.Run?.RunId,
+                            MessageCount = receipt.Fact.MessageCount, CreatorChatId = card.AgentCreation?.Creator?.ChatId,
+                            RunId = receipt.Fact.Run?.RunId,
                             RunRuntimeId = receipt.Fact.Run?.RuntimeId, RunStatus = receipt.Fact.Run?.Status,
                             RunPhase = receipt.Fact.Run?.Phase, RunStartedUtc = receipt.Fact.Run?.StartedUtc };
                     }).OrderByDescending(header => header.UpdatedUtc).ToArray();

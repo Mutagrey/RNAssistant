@@ -1,5 +1,14 @@
 # Universal Browser: статус
 
+## Current-main integration checks — 2026-11-13
+
+Browser branch incorporates main `35a1defe` (native spawn/control/assignment/group
+Journal consumers). Documentation conflicts preserve both work streams; code merges
+without manual conflict resolution. Combined local Browser Harness: 9/9; actual
+controller Mock compile: zero errors. Native Office/WebView2 is not built on macOS.
+Main working changes belong to the separate Journal task and remain uncommitted.
+Advance main only with those changes preserved; no push/release.
+
 ## 07 scoped Inspector and route reduction — 2026-11-13
 
 `16.25.1-dev`: Inspector and request preview resolve the selected exact conversation;

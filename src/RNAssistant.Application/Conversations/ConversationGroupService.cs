@@ -5,22 +5,26 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Application.Conversations
 {
     // Common metadata owner. It neither wakes participants nor changes their contexts.
-    public sealed class ConversationGroupService
+    public sealed partial class ConversationGroupService
     {
         private readonly ChatStore _store;
         public ConversationGroupService(ChatStore store) { _store = store ?? throw new ArgumentNullException(nameof(store)); }
+        internal bool IsNative { get { return _store == null; } }
+        private ChatGroupSnapshot Capture(ChatSession scope)
+        { return IsNative ? CaptureNative(scope) : _store.CaptureChatGroups(scope); }
         public IReadOnlyList<ConversationGroupView> Read(ChatSession scope)
-        { return _store.ReadChatGroups(scope).Select(View).ToArray(); }
-        private static ConversationGroupView View(ChatGroup group)
+        { return Capture(scope).Groups.Select(View).ToArray(); }
+        internal static ConversationGroupView View(ChatGroup group)
         { return new ConversationGroupView { Id = group.Id, Name = group.Name, Revision = group.Revision, Members = group.Members.ToArray() }; }
 
         public ConversationGroupScopeView Snapshot(ChatSession scope)
         {
-            var snapshot = _store.CaptureChatGroups(scope);
+            var snapshot = Capture(scope);
             return new ConversationGroupScopeView { Host = scope.Host, DocumentKey = scope.DocumentKey,
                 WorkspaceId = scope.WorkspaceId, Generation = snapshot.Generation, Groups = snapshot.Groups.Select(View).ToArray() };
         }
@@ -47,7 +51,8 @@ namespace RNAssistant.Application.Conversations
                 }).ToArray();
         }
 
-        public ChatGroupChangeResult Change(ChatSession scope, ChatGroupChange command, string operationId, Action dispatch = null)
-        { return _store.ChangeChatGroup(scope, command, operationId, dispatch); }
+        public ChatGroupChangeResult Change(ChatSession scope, ChatGroupChange command, string operationId, Action dispatch = null,
+            ToolExecutionContext execution = null)
+        { return IsNative ? ChangeNative(scope, command, operationId, dispatch, execution) : _store.ChangeChatGroup(scope, command, operationId, dispatch); }
     }
 }

@@ -65,16 +65,16 @@ namespace RNAssistant.Application.Conversations
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Group)
                 {
                     var groupRequest = JObject.FromObject(context.Arguments).ToObject<AgentGroupRequest>();
-                    var result = _service.Group(_session, _limit, groupRequest, operationId, context.MarkDispatchPossible);
+                    var result = _service.Group(_session, _limit, groupRequest, operationId, context.MarkDispatchPossible, _inbox, context.Execution);
                     return context.Complete(new ToolHandlerResult(RuntimeResult.Ok("Группы — ссылки на чаты. История и выполнение участников сохранены.",
                         JsonConvert.SerializeObject(result)), groupRequest.Action == "list" ? ToolEffectEvidence.VerifiedNoChange :
-                        result.Changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange));
+                        result.Changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange, authorityCommit: result.AuthorityCommit));
                 }
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Pause || context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume)
                 {
                     var control = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
                     var pauseReceipt = _service.Pause(_inbox, _session, _limit, operationId, control.AgentId,
-                        context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume, context.MarkDispatchPossible);
+                        context.Execution.Call.Name == AgentCommunicationToolCatalog.Resume, context.MarkDispatchPossible, context.Execution);
                     var data = JsonConvert.SerializeObject(pauseReceipt);
                     var unknown = pauseReceipt.Status == AgentPauseStatus.Unconfirmed;
                     var rejected = pauseReceipt.Status == AgentPauseStatus.Changed || pauseReceipt.Status == AgentPauseStatus.Unavailable || pauseReceipt.Status == AgentPauseStatus.Protected;
@@ -90,7 +90,7 @@ namespace RNAssistant.Application.Conversations
                 if (context.Execution.Call.Name == AgentCommunicationToolCatalog.Cancel)
                 {
                     var cancel = JObject.FromObject(context.Arguments).ToObject<ListRequest>();
-                    var cancelReceipt = _service.Cancel(_inbox, _session, _limit, operationId, cancel.AgentId, context.MarkDispatchPossible);
+                    var cancelReceipt = _service.Cancel(_inbox, _session, _limit, operationId, cancel.AgentId, context.MarkDispatchPossible, context.Execution);
                     var data = JsonConvert.SerializeObject(cancelReceipt);
                     var unknown = cancelReceipt.Status == AgentCancellationStatus.Unconfirmed;
                     var rejected = cancelReceipt.Status == AgentCancellationStatus.Changed || cancelReceipt.Status == AgentCancellationStatus.Unavailable;
@@ -108,7 +108,7 @@ namespace RNAssistant.Application.Conversations
                 {
                     var spawn = JObject.FromObject(context.Arguments).ToObject<SpawnRequest>();
                     var created = _service.Spawn(_inbox, _session, _limit, context.Execution.RunId,
-                        operationId, spawn.Title, spawn.InitialMessage, context.MarkDispatchPossible, spawn.ExpectReply, spawn.Assignment);
+                        operationId, spawn.Title, spawn.InitialMessage, context.MarkDispatchPossible, spawn.ExpectReply, spawn.Assignment, context.Execution);
                     var data = JsonConvert.SerializeObject(created);
                     var unknown = created.InitialMessage == "unknown";
                     var result = unknown ? (context.MayHaveDispatched

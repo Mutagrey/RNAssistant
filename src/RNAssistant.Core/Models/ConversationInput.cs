@@ -41,6 +41,9 @@ namespace RNAssistant.Core.Models
         public string RunId { get; set; }
         public string PauseId { get; set; }
         public bool RequiresUserResume { get; set; }
+        // Live run-owner lifetime, distinct from journal continuation checkpoints.
+        [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string LiveInvocationId { get; set; }
     }
 
     // One immutable event per accepted transition; replay is the queue authority.

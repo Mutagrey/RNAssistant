@@ -256,15 +256,20 @@ namespace RNAssistant.Core.Storage
             return record;
         }
 
-        private JournalRecord InputRecord(SqliteConnection db, string message)
+        private JournalRecord InputRecord(SqliteConnection db, string message, long? through = null)
         {
             using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM input_state WHERE stream=$stream AND message=$message"))
-            { command.Parameters.AddWithValue("$message", message); return LocatedRecord(command); }
+            {
+                command.Parameters.AddWithValue("$message", message);
+                JournalCursor position; var record = LocatedRecord(command, out position);
+                if (through.HasValue && position?.Sequence > through.Value) throw new InvalidDataException("Input is beyond the observed chat revision.");
+                return record;
+            }
         }
 
-        private ConversationInputState InputState(SqliteConnection db, string message)
+        private ConversationInputState InputState(SqliteConnection db, string message, long? through = null)
         {
-            var record = InputRecord(db, message);
+            var record = InputRecord(db, message, through);
             if (record == null) return null;
             ConversationInputState state;
             if (record.Kind == "agent.accepted" || record.Kind == "agent.spawned")
@@ -403,8 +408,9 @@ namespace RNAssistant.Core.Storage
 
         private void SaveDelivery(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position, AgentMessageAccepted fact)
         {
-                    using (var command = Command(db, "INSERT INTO agent_delivery VALUES($stream,$operation,$message,$sender,$recipient,$run,$call,$chain,$reply,$resolution,$created,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
+                    using (var command = Command(db, "INSERT INTO agent_delivery VALUES($stream,$operation,$message,$sender,$recipient,$run,$call,$chain,$reply,$resolution,$created,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,$assignment)", tx))
                     {
+                        command.Parameters.AddWithValue("$assignment", fact.Assignment ? 1 : 0);
                         command.Parameters.AddWithValue("$message", fact.MessageId); command.Parameters.AddWithValue("$sender", fact.Sender);
                         command.Parameters.AddWithValue("$recipient", fact.Recipient); command.Parameters.AddWithValue("$run", fact.RunId); command.Parameters.AddWithValue("$call", fact.CallId);
                         command.Parameters.AddWithValue("$chain", fact.ChainId); command.Parameters.AddWithValue("$reply", (object)fact.ReplyTo ?? DBNull.Value);
@@ -467,7 +473,7 @@ namespace RNAssistant.Core.Storage
         private static ConversationInputState DecodeInput(JournalRecord record)
         {
             if (record.Kind == "chat.committed") return DecodeChatCommit(record).Input ?? throw new InvalidDataException("Missing input transition.");
-            if (record.Kind == "agent.accepted") return DecodeDelivery(record).Input ?? throw new InvalidDataException("Missing peer input.");
+            if (record.Kind == "agent.accepted" || record.Kind == "agent.spawned") return DecodeDelivery(record).Input ?? throw new InvalidDataException("Missing peer input.");
             var fact = DeliveryData<ConversationInputState>(record);
             if (record.Kind != "input.changed" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact))) throw new InvalidDataException("Invalid input state.");
             return fact;
@@ -494,10 +500,13 @@ namespace RNAssistant.Core.Storage
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string DocumentPath { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string SelectedModel { get; private set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ReasoningEnabled { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool TitleAssignedByAgent { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public AgentThreadCreation AgentCreation { get; private set; }
         [JsonConstructor]
         internal ConversationCard(string chatId, string title, ConversationRunPolicy policy, DateTime createdUtc, ModelRunMetadata model = null,
             ConversationMetadata address = null, string documentTitle = null, string documentPath = null,
-            string selectedModel = null, bool reasoningEnabled = false)
+            string selectedModel = null, bool reasoningEnabled = false, bool titleAssignedByAgent = false,
+            AgentThreadCreation agentCreation = null)
         {
             if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(title) || title.Length > 512 || policy == null || createdUtc.Kind != DateTimeKind.Utc)
                 throw new ArgumentException("Invalid conversation metadata.");
@@ -505,6 +514,8 @@ namespace RNAssistant.Core.Storage
             Model = model == null ? null : JsonConvert.DeserializeObject<ModelRunMetadata>(JsonConvert.SerializeObject(model));
             Address = address; DocumentTitle = documentTitle; DocumentPath = documentPath;
             SelectedModel = selectedModel; ReasoningEnabled = reasoningEnabled;
+            TitleAssignedByAgent = titleAssignedByAgent;
+            AgentCreation = agentCreation == null ? null : JsonConvert.DeserializeObject<AgentThreadCreation>(JsonConvert.SerializeObject(agentCreation));
         }
     }
 

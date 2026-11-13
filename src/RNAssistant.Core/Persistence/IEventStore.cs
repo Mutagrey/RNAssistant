@@ -293,10 +293,17 @@ namespace RNAssistant.Core.Persistence
         AgentChatAddress FindAgent(ConversationMetadata source, string agentId);
         RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
             AgentDeliveryCommand command, Action dispatch);
+        // Advances the prepared child and source after read-back; null means an
+        // accepted idle child without an initial input, never a backend fallback.
+        RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
+            AgentSpawnCommand command, Action dispatch);
+        RNAssistant.Core.Services.ConversationInputRecord AcceptAgentControl(ChatSession source, ChatSession target,
+            AgentControlCommand command, Action dispatch);
         SessionEvent Append(ChatSession session, SessionEventWrite write);
         IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs);
         IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode);
         IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, IReadOnlyList<string> messageIds);
+        AgentAssignmentPage ReadAgentAssignments(ConversationMetadata session, bool incoming, string afterRequest);
         // Verified canonical boundaries for the current run and selected same-chat
         // aliases. The disposable locator index is never accepted as evidence.
         FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references);

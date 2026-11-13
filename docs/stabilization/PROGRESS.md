@@ -111,6 +111,63 @@ focused Harness cases and two Browser fixtures pass; Windows/B02 and UI acceptan
 remain open. Document HTML and raw import continue from this state.
 [Details](../browser/06_PROGRESS.md#f3c-workspace-checkpoints--2026-11-13).
 
+## Native chat groups — 2026-11-13
+
+Группы подключены через существующий ConversationGroupService к ResourceJournal/CAS.
+Три новых checks проходят через Office/Workspace consumers и typed UI: CRUD,
+revision/scope, сохранность участников, lost ack → Unknown, rebuild и clean restore.
+Десять регрессионных checks проходят: прежние groups, native resources и mutation.
+Model alias lookup использует индекс; history участников не загружается. Новых stores,
+schema или fallback нет. Default writers прежние, Windows/Office evidence открыт.
+Native Delete/Move чатов пока не подключены: удаление должно разделять resource scope
+lease с membership и пройти add/delete race. Далее остальные Store/resource операции
+и metadata/header, включая расходы authority snapshot; P4 отложена.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-chat-groups-2026-11-13).
+
+## Native assignment pages — 2026-11-13
+
+`agents.list(assignments=…)` подключён к journal/index через Office/Workspace.
+Страница ограничена 50 назначениями; cold read не загружает весь Inbox, тела
+отчётов остаются за FIFO. Shared DTO сохранён, schema 21 расширяет существующий
+delivery index. Два новых checks проходят: model wire, paging, scope/stale,
+rebuild/restore; 16 regression checks проходят. Один прежний Workspace wire case
+прошёл только при адресном повторе после ошибки записи run — [открытый риск](BACKLOG.md#intermittent-workspace-assignment-wire-failure--2026-11-13).
+На странице из 50 записей — 103 canonical reads и 50 request bodies
+при 61 retained inputs; Windows performance не заявляется. Default writers прежние.
+Далее группы, остальные Store/resource операции и metadata/header; P4 отложена.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-assignment-pages-2026-11-13).
+
+## Native cancel — 2026-11-13
+
+Отмена подключена к существующему typed control port и `queue.control`. Живой
+сигнал закреплён за exact RunOwner lifetime; saved wait/peer pause закрывает прежний
+kernel/CommitRun owner под lease и CAS. Потеря terminal ack сохраняет source Unknown,
+restart не повторяет отмену; queued input остаётся paused. Семь новых сценариев
+и 17 regression checks проходят через Office/Workspace consumers. Default writers прежние,
+Windows/Office evidence открыт. Далее assignment/group projections, остальные
+Store/resource операции и metadata/header; P4 отложена.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
+
+## Native pause/resume — 2026-11-13
+
+Peer pause/resume подключены к `queue.control` через реальные Office/Workspace
+consumers. Exact live lifetime сохраняется при checkpoint continuation; user Stop,
+takeover и устаревший release защищены. Local user controls/ack больше не копируют
+run snapshot; checkpoint и control используют существующий Inbox lock. Семь новых
+и 23 regression checks проходят, включая lost ack, Unknown без повтора, pending wait и
+restart/rebuild/restore. Default writers не переключены; Windows/Office evidence
+открыт. Далее native cancel, assignment/group projections, остальные Store/resource
+операции и metadata/header. [Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
+
+## Native spawn — 2026-11-13
+
+Создание обычного чата, membership и начальный Inbox input подключены к одному
+`agent.spawned` через реальные Office/Workspace runtime consumers. Четыре новых
+и 14 регрессионных checks проходят; lost ack, Unknown без replay, restart/rebuild
+и чистый Workspace restore проверены. Default writers не переключены, Windows/Office
+evidence открыт. Далее peer controls/projections, остальные Store/resource операции
+и metadata/header. [Отчёт §12](../audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
+
 ## Native caption — исправление по повторному замечанию, 2026-11-13
 
 Системный заголовок исключён из CreateParams до создания HWND; conditional caption
@@ -371,8 +428,8 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После native Send/Resolve — spawn, peer controls/projections и остальные Store/resource
-consumers, затем полное переключение. P4 остаётся отложенной по прежнему решению.
+После native Send/Resolve/spawn/pause/resume/cancel и assignment pages — группы, остальные Store/resource
+consumers и metadata/header, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
 зависит от конкретного `ChatStore`. Семь адресных checks проходят, включая реальные
@@ -449,7 +506,36 @@ Schema 18 расширяет существующие индексы. 3 новы
 падает на чистом `a38e5aba` и вынесен в [backlog](BACKLOG.md#send-batch-parserfixture-mismatch--2026-11-13).
 Промежуточный срез без bump/default switch; schema 18 не меняется.
 [Отчёт §12](../audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
-Spawn, peer controls, assignment/group projections, остальные mutation/resource owners,
+Подключён application spawn (2026-11-13): обычный Store-чат, membership и initial input
+сохраняются одним frame. Child наследует effective model/policy без истории и approval;
+idle не меняет selection и не запускает Run. Source/child feeds не дублируют acceptance.
+Потеря ack разрешается по исходному receipt, недоступный read-back остаётся Unknown;
+холодная очередь сохраняет паузу. Schema 19, 4 новых + 14 regression checks проходят;
+промежуточный срез без bump/default switch.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
+Подключены native pause/resume (2026-11-13): source-call proof и оба chat head
+сохраняются в одном `queue.control`; безопасный ack остаётся отдельной границей.
+Schema 20 расширяет существующий control index, user controls/ack не сериализуют
+chat/run bodies. Requested не отменяет текущий model/tool/wait; release сохраняет
+run и бюджет, не снимает user/recovery pause. Живой lifetime отделён от checkpoint
+invocation, cold replay сохраняет паузу. 7 новых и 23 regression checks проходят; промежуточный
+срез без bump/default switch.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
+Подключён native cancel (2026-11-13): один control request до exact live signal или
+kernel cancellation сохранённого ожидания под lease/CAS. Source-call linkage,
+оба head и очередь остаются в существующем journal/control index без нового schema.
+Lost request ack разрешается по исходному frame; недоступное proof и lost terminal
+ack не превращаются в успех или повтор. Live/saved peer pause отменяется без модели.
+7 новых и 17 regression checks проходят; default writers не переключены, product bump не нужен.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
+Подключены native assignment pages (2026-11-13): bounded directional lookup в
+существующем delivery index, exact scope/revision и canonical receipts. DTO/сводка
+общие; холодный запрос не поднимает весь Inbox и не читает тела отчётов. Schema 21,
+2 новых и 16 regression checks проходят, включая реальные Office/Workspace consumers
+и restore; разовая ошибка прежнего Workspace wire case остаётся в backlog.
+Default writers не переключены, промежуточный срез без product bump.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-assignment-pages-2026-11-13).
+Группы, остальные mutation/resource owners,
 rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.

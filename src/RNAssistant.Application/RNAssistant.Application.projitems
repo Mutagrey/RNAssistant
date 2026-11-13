@@ -33,6 +33,7 @@
     <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\web\vendor-manifest.json" LogicalName="RNAssistant.HtmlVendorManifest" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationExecutionScheduler.cs" Link="Application\Conversations\ConversationExecutionScheduler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationGroupService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationGroupService.Native.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationCatalogAccess.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Assignments.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\AgentCommunicationService.Groups.cs" />

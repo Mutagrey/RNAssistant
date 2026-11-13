@@ -89,6 +89,63 @@ namespace RNAssistant.Application.Conversations
         internal AgentChatAddress FindAgent(ChatSession source, string agentId)
         { return _events.FindAgent(ConversationMetadata.From(source), agentId); }
 
+        internal ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child, AgentSpawnCommand command, Action dispatch)
+        {
+            var from = Get(source);
+            lock (from.Sync)
+            {
+                if (!ReferenceEquals(from.Session, source)) throw new InvalidOperationException("The sender no longer owns this live session.");
+                return _events.AcceptAgentSpawn(source, child, command, dispatch);
+            }
+        }
+
+        internal bool AdoptSpawn(ConversationInboxService sourceInbox, ChatSession child, ConversationInputRecord initial)
+        {
+            if (!ReferenceEquals(_events, sourceInbox._events)) throw new InvalidOperationException("Atomic spawn requires the same event owner.");
+            if (initial == null) return false;
+            if (child.Revision != initial.Event.Sequence || initial.Event.SessionId != child.Id)
+                throw new InvalidOperationException("Spawn intake requires its exact proven child head.");
+            lock (_sync)
+            {
+                var key = ScopeKey(child);
+                // Only this fresh, read-back-proven intake may start immediately.
+                // An already observed/recovered queue retains its own pause/worker.
+                if (_inboxes.ContainsKey(key)) return false;
+                var box = new Inbox { Session = child, Revision = initial.Event.Sequence, ViewRevision = 1 };
+                Apply(box, initial.Change, initial.Event);
+                _inboxes.Add(key, box);
+                SignalInputChanged(box);
+                return true;
+            }
+        }
+
+        internal void AcceptAgentControl(ChatSession source, ConversationInboxService targetInbox, ChatSession target,
+            AgentControlCommand command, Action dispatch, Action<ChatSession> cancelAccepted = null)
+        {
+            if (!ReferenceEquals(_events, targetInbox._events)) throw new InvalidOperationException("Peer control requires the same event owner.");
+            var cancel = command.Action == AgentControlAction.Cancel;
+            if (cancel != (cancelAccepted != null)) throw new InvalidOperationException("Cancellation requires its exact live or reserved owner.");
+            var from = Get(source); var to = targetInbox.Get(target);
+            var first = string.CompareOrdinal(source.Id, target.Id) < 0 ? from : to;
+            var second = ReferenceEquals(first, from) ? to : from;
+            lock (first.Sync) lock (second.Sync)
+            {
+                if (!ReferenceEquals(from.Session, source) || (cancel
+                    ? to.Session.LastRun?.RunId != command.TargetRunId || (command.LiveInvocationId == null
+                        ? to.Running || to.Worker || !HasPendingWait(to.Session) : !to.Running)
+                    : !to.Running || !to.Accepting || to.AgentPause?.RequiresUserResume == true || to.AgentPause == null && to.Paused ||
+                        command.Action == AgentControlAction.Resume && (to.AgentPause?.PauseId != command.PauseId || to.AgentPause.LiveInvocationId != command.LiveInvocationId)))
+                    throw new InvalidOperationException("Peer control no longer owns the observed live queue.");
+                var accepted = _events.AcceptAgentControl(source, to.Session, command, dispatch);
+                Apply(to, accepted.Change, accepted.Event);
+                to.Revision = accepted.Event.Sequence; to.ViewRevision++;
+                // A cancel clears peer pause authority, but must signal its exact
+                // run owner before a paused continuation could observe that change.
+                if (cancel) cancelAccepted(to.Session);
+                else SignalInputChanged(to);
+            }
+        }
+
         internal RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ConversationInboxService recipientInbox,
             ChatSession recipient, AgentDeliveryCommand command, Action dispatch)
         {
@@ -122,6 +179,21 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync) return _events.Read(ConversationMetadata.From(box.Session), SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
                 .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged)
                 .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).ToArray();
+        }
+
+        internal AgentAssignmentPage AgentAssignments(ChatSession session, bool incoming, string afterRequest)
+        {
+            Inbox box;
+            lock (_sync) _inboxes.TryGetValue(ScopeKey(session), out box);
+            // A cold metadata query must not replay/hydrate the entire Inbox.
+            if (box == null) return _events.ReadAgentAssignments(ConversationMetadata.From(session), incoming, afterRequest);
+            lock (box.Sync)
+            {
+                // Recovery may supply a newer observed session to an idle Inbox.
+                // Prefer it without creating/replaying or rebinding the queue.
+                var observed = !box.Running && !box.Worker && session.Revision >= box.Session.Revision ? session : box.Session;
+                return _events.ReadAgentAssignments(ConversationMetadata.From(observed), incoming, afterRequest);
+            }
         }
 
         internal IReadOnlyList<AgentRequestReference> AgentRequests(ChatSession session, IReadOnlyList<string> messageIds)
@@ -196,8 +268,9 @@ namespace RNAssistant.Application.Conversations
                         box.Revision = record.Event.Sequence;
                         box.ViewRevision++;
                     }
+                    var lostLivePause = box.AgentPause?.LiveInvocationId != null;
                     box.AgentPause = null;
-                    if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
+                    if (lostLivePause || box.Inputs.Any(IsPending) || HasPendingWait(box.Session)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
                     _inboxes.Add(key, box);
                 }
             }
@@ -533,7 +606,7 @@ namespace RNAssistant.Application.Conversations
 
         // The caller pins the exact live invocation and serializes control with this Inbox.
         internal AgentPauseStatus ControlPause(ChatSession session, string runId, string pauseId, bool resume, out bool changed,
-            bool userControl = false)
+            bool userControl = false, string liveInvocationId = null)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -553,7 +626,7 @@ namespace RNAssistant.Application.Conversations
                 if (box.AgentPause != null && (!userControl || box.AgentPause.PauseId == pauseId))
                     return box.Paused ? AgentPauseStatus.Paused : AgentPauseStatus.Requested;
                 Write(box, null, agentPause: new ConversationAgentPause { RunId = runId, PauseId = pauseId,
-                    RequiresUserResume = userControl }, agentControl: true);
+                    RequiresUserResume = userControl, LiveInvocationId = AtomicAgentDelivery ? liveInvocationId : null }, agentControl: true);
                 changed = true;
                 return AgentPauseStatus.Requested;
             }
@@ -660,9 +733,10 @@ namespace RNAssistant.Application.Conversations
                 box.Revision = record.Event.Sequence;
                 box.ViewRevision++;
             }
+            var lostLivePause = box.AgentPause?.LiveInvocationId != null;
             box.AgentPause = null;
             // A recovered claim is never a license to dispatch another run.
-            if (box.Inputs.Any(IsPending) || HasPendingWait(box.Session))
+            if (lostLivePause || box.Inputs.Any(IsPending) || HasPendingWait(box.Session))
             {
                 box.Paused = true;
                 box.PauseReason = "После перезапуска";

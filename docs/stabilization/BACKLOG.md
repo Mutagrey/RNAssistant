@@ -8,6 +8,30 @@ OfficeToolExecutor no longer registers that retired tool. It fails before discov
 Migrate the fixture to the supported resource mutation protocol; do not restore the
 old tool. Bounded current metadata paging passes independently.
 
+## Intermittent Workspace assignment wire failure — 2026-11-13
+
+Owner: Workspace runtime / Harness (`AgentCorrelatedWorkspaceWire`). During the
+native assignment-page slice on `37170720`, the existing
+`agent assignments: Workspace spawn resolve wait wire` case once stopped with
+`Run evidence could not be appended. Execution stopped; replay is required.`
+A targeted rerun with `RNA_HARNESS_TRACE=1` passed, so the underlying append error
+and relation to this slice are not established. The fixture exercises spawn/
+resolve/wait, not assignment listing. No claim of a fix or stable qualification.
+Retain the next failing inner exception and identify the competing writer/guard
+before changing storage behavior; do not hide this by repeated full-suite runs.
+
+## JS tools on WebView2 — 2026-11-13
+
+Согласованное направление, реализация не начата. Owner: Application execution /
+native WebView2 adapter. После интерактивного native Browser перенести `js.run` и
+`executor=js` packages с отдельного `RNAssistant.JsWorker.exe`/Jint на скрытый
+WebView2 с отдельным Web Worker, сохранив существующий Resource Data Plane и права.
+[Контракт, этапы и условия удаления старого пути](../tool-library.md#planned-webview2-executor--2026-11-13).
+До переключения проверить runaway/cancel/OOM, сеть, lease cleanup, отсутствие влияния
+на Shell/Browser и явно определить замену Jint budgets. Не считать общий JS-движок
+гарантией общей изоляции или сохранения прежнего memory limit. Docs-only фиксация
+направления не запускает реализацию, сборку или release.
+
 ## Send batch parser/fixture mismatch — 2026-11-13
 
 Owner: ModelProtocol / Harness (`AgentSendBatchProtocol`). The existing

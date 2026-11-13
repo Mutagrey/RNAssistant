@@ -159,6 +159,59 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal groups:` covers the existing typed UI owner and real Office/Workspace
+consumers: create/add/rename/remove/delete, no-op/list, exact revision/scope, name
+conflicts, tombstones, lease refusal and unchanged participant history. Lost authority
+acknowledgement preserves source Unknown through rebuild and clean Workspace restore.
+Model membership uses the native alias index (catalog access throws in the fixture).
+Targeted regressions: `agent groups:`, `journal resources:` and `journal mutation:`;
+reuse the build. Native chat Delete/Move and the add/delete-chat race remain open,
+as do default-writer cutover and Windows/Office qualification.
+
+`journal assignments:` checks native `agents.list` through real Office/Workspace
+model wire after Send and Resolve, plus cold 50+1 paging across 61 inputs, bounded
+summary/surrogate handling, local direction, stale/scope refusal, rebuild and clean
+Workspace restore. A cold 50-row page reads 103 canonical records and 50 request
+bodies; no full Inbox replay or report-body hydration. Native Send/spawn fixtures
+also verify canonical Open/ResolutionReceived without upgrading a source Unknown.
+Pair with `journal send:`, `journal peer:`, `journal spawn:`, `agent assignments:`
+and the feed page/rebuild check; reuse the build. No Windows/Office qualification.
+The legacy Workspace assignment-wire case had one persistence failure followed by
+a successful targeted trace rerun; [cause remains open](../../docs/stabilization/BACKLOG.md#intermittent-workspace-assignment-wire-failure--2026-11-13).
+
+`journal cancel:` reuses the shared real Office/Workspace control fixture in seven
+cases: live run with queued input; lost request acknowledgement; unavailable proof;
+cold wait/restart/rebuild/restore; lost target terminal acknowledgement; competing
+cold lease; live and saved peer pause. It checks exact run/count preservation,
+one request, zero catalog reads, no model continuation, paused retained input and
+Unknown without retry even when target cancellation is durable. Targeted regressions:
+`journal control:`, `agent cancel:`, `journal send:`, primitive durable controls,
+Office persisted pause cancellation and `journal wait: cancellation` (17 checks).
+Reuse the Harness build; Windows/Office qualification remains separate.
+
+`journal control:` covers seven native pause/resume scenarios through both real
+Office run-service and Workspace runtime ports: pending peer input; lost acceptance
+acknowledgement; protected user Stop; restart/rebuild/clean Workspace restore;
+unavailable proof/Unknown without replay; pending wait's original safe boundary;
+user takeover with stale release. It checks live lifetime across checkpoint claims,
+exact native source notices/feed anchors, retained budgets/counts and cold authority
+loss. Peer controls use zero catalog reads; the wait discovery/user UI gestures
+retain their existing catalog calls. Pair with `journal send:`, `journal spawn:`,
+`journal peer:`, `journal wait:`, `journal feed:`, the primitive durable pause case
+and targeted `agent pause:` authority/Workspace checks. Reuse the build; these are
+host-neutral checks, not Windows/Office qualification or production cutover.
+
+`journal spawn:` reuses the real Office/Workspace runtime fixture in four cases:
+normal creation and child Resolve; idle Plan/Deny/model inheritance and Store rename;
+lost acknowledgement; unavailable read-back/Unknown recovery. Checks include one
+shared frame, zero catalog reads, unchanged active chat, no copied history/child run,
+source/child feeds, fresh-vs-cold Inbox scheduling, detached-view notification,
+restart/rebuild and clean Workspace restore with child context/provenance.
+Targeted regressions: `journal send:`, `journal peer:`, `journal feed:`,
+`storage optimization: atomic spawn`, `agent communication: spawn durable identity`
+and `agent communication: spawn initial failure` (14 checks). Build once, then
+`--no-build`; no VSTO/Office build or production cutover qualification.
+
 `journal send:` covers native Application Send/Resolve through the actual Office run
 service and Workspace runtime ports: one intake receipt, exact terminal linkage,
 live Inbox notification, preserved user stop, lost acknowledgement with successful
@@ -176,7 +229,7 @@ exact body/provenance, cold pause, Applied without replay, rebuild and Workspace
 restore. Replies reach real Office run service and Workspace runtime ports/shared
 input channel. Publication is injected through native SendAgent after an atomic
 accepted-call checkpoint; application Send/Resolve/live notification are now covered
-above. Spawn and peer controls remain open. Pair with `journal input:`, `journal wait:`,
+above. Spawn and peer controls are also connected. Pair with `journal input:`, `journal wait:`,
 `journal feed:`, native atomic delivery, existing correlated reply and assignment
 recovery checks. No production switch or Windows qualification claim.
 

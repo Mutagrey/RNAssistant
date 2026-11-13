@@ -109,6 +109,7 @@
   <ItemGroup>
     <Compile Include="Models\ConversationInput.cs" />
     <Compile Include="Models\AgentCommunication.cs" />
+    <Compile Include="Models\AgentAssignment.cs" />
     <Compile Include="Models\AppSettings.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\HtmlProjectSnapshot.cs" />
@@ -409,9 +410,12 @@
     <Compile Include="Storage\ConversationJournal.PeerInput.cs" />
     <Compile Include="Storage\ConversationJournal.Delivery.cs" />
     <Compile Include="Storage\ConversationJournal.Spawn.cs" />
+    <Compile Include="Storage\ConversationJournal.SpawnStore.cs" />
     <Compile Include="Storage\ConversationJournal.Run.cs" />
     <Compile Include="Storage\ConversationJournal.Context.cs" />
     <Compile Include="Storage\ConversationJournal.Control.cs" />
+    <Compile Include="Storage\ConversationJournal.PeerControl.cs" />
+    <Compile Include="Storage\ConversationJournal.Assignments.cs" />
     <Compile Include="Storage\JournalIndex.cs" />
     <Compile Include="Storage\JournalIndex.Maintenance.cs" />
     <Compile Include="Storage\JournalIndexAdmission.cs" />
