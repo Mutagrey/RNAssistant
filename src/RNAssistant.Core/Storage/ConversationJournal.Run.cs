@@ -159,7 +159,7 @@ namespace RNAssistant.Core.Storage
             {
                 RegisterOperation(db, tx, record.Operation, record.Kind);
                 ApplyRunRows(db, tx, record, position, fact);
-                SaveCursor(db, position, tx); tx.Commit();
+                SaveCursor(db, position, tx, record); tx.Commit();
             }
         }
 

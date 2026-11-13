@@ -210,7 +210,7 @@ namespace RNAssistant.Core.Storage
                 if (committed?.Checkpoint != null) ApplyRunRows(db, tx, record, position, committed.Checkpoint);
                 if (committed?.Control != null) ApplyControlRows(db, tx, record, position, committed.Control);
                 if (committed?.Input != null) ApplyChatInputRows(db, tx, record, position, committed.Input);
-                SaveCursor(db, position, tx); tx.Commit();
+                SaveCursor(db, position, tx, record); tx.Commit();
             }
         }
 
@@ -224,7 +224,7 @@ namespace RNAssistant.Core.Storage
                 command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$alias", AgentChatAddress.IdFor(fact.Card.ChatId));
                 AddDeliveryPosition(command, record, position); command.ExecuteNonQuery();
             }
-            using (var command = Command(db, "INSERT OR REPLACE INTO chat_state VALUES($stream,$chat,$operation,$count,$activity,$operation)", tx))
+            using (var command = Command(db, "INSERT INTO chat_state VALUES($stream,$chat,$operation,$count,$activity,$operation,0,0,0) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation,message_count=$count,last_activity_ticks=$activity,head_operation=$operation", tx))
             {
                 command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$operation", record.Operation);
                 command.Parameters.AddWithValue("$count", fact.MessageCount); command.Parameters.AddWithValue("$activity", lastActivity); command.ExecuteNonQuery();
@@ -338,7 +338,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private static NotSupportedException TextStoreScope()
-        { return new NotSupportedException("Journal Store does not yet support this resource, agent, history-rewrite or usage operation."); }
+        { return new NotSupportedException("Journal Store does not yet support this resource, agent or history-rewrite operation."); }
 
         private static ConversationChatSelection DecodeChatSelection(JournalRecord record)
         {

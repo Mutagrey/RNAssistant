@@ -95,7 +95,7 @@ namespace RNAssistant.Core.Storage
                     RemoveLiveChat(db, tx, record, position, id);
                     Fault?.Invoke("after_document_delete_row");
                 }
-                SaveCursor(db, position, tx); tx.Commit();
+                SaveCursor(db, position, tx, record); tx.Commit();
             }
         }
 

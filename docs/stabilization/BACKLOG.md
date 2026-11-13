@@ -1,5 +1,15 @@
 # RNAssistant backlog
 
+## Native session-summary storage attribution — 2026-11-13
+
+Owner: Core conversation projection / Office summary consumer (P3/P7).
+Native Store catalogs now use per-chat indexed usage, but ChatSessionHeaderFactory
+still obtains JsonlByteLength from ChatSession.StorageByteLength, which native
+receipt/peer cursors set to the current scope segment end. Session-based summaries
+can therefore differ from the catalog and include unrelated chat bytes. Replace
+that presentation input through the existing metadata owner before cutover; retain
+the exact cursor separately. No second store or weakening of revision guards.
+
 ## Retired Markdown discovery fixture — 2026-11-13
 
 Owner: Harness resource-discovery tests. `resources: document discovery follows exact

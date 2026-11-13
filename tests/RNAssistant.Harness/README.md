@@ -159,6 +159,14 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal usage:` covers actual Office/Workspace catalogs, unique logical vs stored
+CAS sizes, missing-body warnings, metadata-only reads and per-chat/shared-frame
+attribution. Acceptance/flush/index/partial-usage-index faults, retry, rebuild/restore
+and actual Unknown/resource outcomes retain counters without body hydration.
+Regressions: `journal text: Office`, `journal text: lost`, `journal peer: atomic`,
+`journal move: successor-header`, `journal delete: Office` and `journal spawn:`.
+Use the same build. These checks do not qualify Windows or the default-writer switch.
+
 `journal move:` covers actual Office Save As/alias reconciliation, Workspace reads,
 single/batch relocation, selection, stale/deleted/foreign identity and active-run/
 scope-lease guards. Faults cover append, flush, index, partial index and read-back;

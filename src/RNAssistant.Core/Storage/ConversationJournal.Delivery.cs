@@ -412,7 +412,7 @@ namespace RNAssistant.Core.Storage
                     }
                     SaveInputState(db, tx, record, position, fact, false);
                 }
-                SaveCursor(db, position, tx); tx.Commit();
+                SaveCursor(db, position, tx, record); tx.Commit();
             }
         }
 

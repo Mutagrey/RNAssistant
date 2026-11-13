@@ -175,9 +175,10 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null)
+        private IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null, bool includeStorageUsage = false)
         {
             RequireTextRoot();
+            var sizes = includeStorageUsage ? _bodies.CreateStorageSizeSnapshot() : null;
             return Access((db, cursor) => {
                 var ids = new List<string>();
                 using (var command = Command(db, "SELECT chat FROM chat_card WHERE stream=$stream AND alias IS NOT NULL ORDER BY chat"))
@@ -185,7 +186,7 @@ namespace RNAssistant.Core.Storage
                 return (IReadOnlyList<ChatSessionHeader>)ids.Select(id => TextChat(db, id))
                     .Where(receipt => receipt != null && (host == null || MatchesAddress(receipt, host, key))).Select(receipt => {
                         var card = receipt.Fact.Card; var address = card.Address;
-                        return new ChatSessionHeader { Id = card.ChatId, Revision = receipt.Position.Sequence,
+                        var header = new ChatSessionHeader { Id = card.ChatId, Revision = receipt.Position.Sequence,
                             Host = address.Host, DocumentKey = address.DocumentKey, WorkspaceId = address.WorkspaceId,
                             DocumentAuthorityId = address.DocumentAuthorityId, DocumentTitle = card.DocumentTitle,
                             DocumentPath = card.DocumentPath, Title = card.Title, Model = card.SelectedModel, Mode = card.Policy.Mode,
@@ -195,13 +196,14 @@ namespace RNAssistant.Core.Storage
                             RunId = receipt.Fact.Run?.RunId,
                             RunRuntimeId = receipt.Fact.Run?.RuntimeId, RunStatus = receipt.Fact.Run?.Status,
                             RunPhase = receipt.Fact.Run?.Phase, RunStartedUtc = receipt.Fact.Run?.StartedUtc };
+                        ReadStorageUsage(db, header, sizes); return header;
                     }).OrderByDescending(header => header.UpdatedUtc).ToArray();
             }, CancellationToken.None);
         }
 
         IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(bool includeStorageUsage)
-        { if (includeStorageUsage) throw TextStoreScope(); return ReadChatHeaders(); }
-        IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(string host, string key, string title) { return ReadChatHeaders(host, key); }
+        { return ReadChatHeaders(includeStorageUsage: includeStorageUsage); }
+        IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(string host, string key, string title) { return ReadChatHeaders(host, key, true); }
         void IConversationStore.SetTitle(ChatSession session, string title) { session.Title = title; ((IConversationStore)this).Commit(session, new ConversationCommit()); }
         void IConversationStore.SetModel(ChatSession session, string model) { session.Model = model; ((IConversationStore)this).Commit(session, new ConversationCommit()); }
         void IConversationStore.SetReasoningEnabled(ChatSession session, bool enabled) { session.ReasoningEnabled = enabled; ((IConversationStore)this).Commit(session, new ConversationCommit()); }

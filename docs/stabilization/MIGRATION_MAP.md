@@ -142,6 +142,17 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 native catalog usage (2026-11-13): ConversationJournal removes the unsupported
+usage catalog branch. Schema 23 adds counters to existing chat_state and one
+disposable chat_blob index; typed reducers update usage atomically with each fact.
+Office and Workspace catalogs read the existing Store DTOs; physical sizes reuse
+ChatBlobStore metadata without decoding bodies. No new store/registry/adapter.
+Owner: Core journal/CAS. Retiring ChatStore/adapters still leave at whole-port P7.
+History rewrites must preserve indexed Unknown/action guards; remaining resource
+consumers and P3 metadata/header/physical enumeration costs stay open. Default
+writers and Windows qualification are unchanged.
+[Contract](../session-events.md#journal-catalog-storage-usage--2026-11-13).
+
 P1/P2 native relocation (2026-11-13): existing ConversationJournal implements
 Move/MoveDocument through compact scoped facts and one index transaction. Stable
 chat/authority IDs, history, group membership and Unknown/resource proof survive;

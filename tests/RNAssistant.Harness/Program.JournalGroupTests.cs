@@ -75,7 +75,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void JournalGroupConsumers(bool loseAcknowledgement, bool deleteSource = false, bool deleteDocument = false, bool moveDocument = false)
+        private static void JournalGroupConsumers(bool loseAcknowledgement, bool deleteSource = false, bool deleteDocument = false, bool moveDocument = false, bool checkUsage = false)
         {
             foreach (var office in new[] { true, false }) WithJournalInput(office, (paths, journal, source, scope) => {
                 IConversationStore store = journal;
@@ -180,6 +180,7 @@ namespace RNAssistant.Harness
                             "changed results link exact resource outcomes; list and no-op add have no effect");
                         AssertEqual(memberHead, store.Load(member.Id).StorageHeadHash, "group consumers never start or rewrite participants");
                         var terminalHashes = terminals.Select(item => item.Position.Hash).ToArray();
+                        var usage = checkUsage ? store.ListHeaders().Single(item => item.Id == source.Id) : null;
                         if (moveDocument)
                         {
                             store.MoveDocument(source.Host, source.DocumentKey, source.Host,
@@ -195,6 +196,7 @@ namespace RNAssistant.Harness
                                 WorkspaceId = source.WorkspaceId, DocumentAuthorityId = source.DocumentAuthorityId };
                         }
                         journal.Rebuild(); resources = new ResourceJournal(paths);
+                        if (checkUsage) AssertSameJournalUsage(usage, store.ListHeaders().Single(item => item.Id == source.Id));
                         if (moveDocument) AssertEqual(source.DocumentKey, store.Load(source.Id).DocumentKey, "relocation survives rebuild with Unknown evidence");
                         groups = NativeGroups(paths, journal, source, resources);
                         if (deleteSource || deleteDocument) AssertTrue(store.ReadMetadata(source.Id) == null, "retained resource proof cannot resurrect its source chat");
@@ -207,6 +209,7 @@ namespace RNAssistant.Harness
                             var backup = Path.Combine(paths.Root, "group-backup"); JournalCasService(paths, StorageProtector.None).BackupJournals(backup);
                             var restored = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "group-restore"), _ => StorageProtector.None);
                             var copy = new ConversationJournal(restored, scope); var copyResources = new ResourceJournal(restored);
+                            if (checkUsage) AssertSameJournalUsage(usage, ((IConversationStore)copy).ListHeaders().Single(item => item.Id == source.Id));
                             AssertEqual(loseAcknowledgement ? 1 : 0, NativeGroups(restored, copy, source, copyResources).Read(groupScope).Count,
                                 "clean restore retains group CAS and tombstones");
                             if (deleteSource || deleteDocument) AssertTrue(((IConversationStore)copy).ReadMetadata(source.Id) == null, "restore preserves deletion alongside resource evidence");

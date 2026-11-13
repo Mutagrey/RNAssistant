@@ -1,5 +1,38 @@
 # Session event stream
 
+## Journal catalog storage usage — 2026-11-13
+
+ConversationJournal now supports both catalog overloads including storage usage.
+The existing index (schema 23) keeps retained frame-byte, unique CAS-count and
+logical-byte counters in chat_state, plus the chat_blob reference index. Every
+accepted fact updates these in the same transaction as its other projections and
+cursor. Native reducers reuse the accepted frame; primitive reducers address only
+that new frame. No history/body hydration or second durable source is introduced.
+
+Frame bytes are attributed to each participating chat; a shared move/delivery frame
+can therefore appear in several cards. Segment headers and resource-journal bytes
+are not charged to a chat. CAS is deduplicated per chat across retained facts, not
+globally across cards. These are advisory per-chat figures, not an exclusive disk
+total or a promise of space reclaimed by clearing/deleting a visible conversation.
+Resource-owned bodies remain owned by the existing resource journal/closure path.
+
+Logical counters are read directly. A usage catalog reads indexed hashes through
+the existing ChatBlobStore size snapshot: compressed/encrypted file lengths and
+missing bodies are observed without decoding payloads. `includeStorageUsage:false`
+omits filesystem size reads but retains logical counters. A fresh catalog snapshot
+does not preserve stale missing-file warnings. Sizes never authorize execution,
+read integrity, garbage collection or restore; canonical closure checks still do.
+
+Office ChatSessionService.GetChatSummaries and WorkspaceStore.ListSessions consume
+these fields through their existing Store port. Lost acknowledgement, failed index
+application, rebuild/restore and Unknown/resource outcomes retain exact counters.
+Physical size enumeration remains proportional to referenced hashes/CAS prefixes;
+broader metadata/header optimization remains P3. Session-based summaries still use
+the scope cursor length; their per-chat attribution remains an explicit P3/P7 gap
+in [BACKLOG](stabilization/BACKLOG.md#native-session-summary-storage-attribution--2026-11-13).
+History rewrites/resource consumers, production cutover and Windows evidence remain
+open. History edits must preserve indexed unresolved effects and action guards.
+
 ## Journal chat relocation — 2026-11-13
 
 The existing ConversationJournal implements both `IConversationStore.Move` and
@@ -533,7 +566,8 @@ backup requires their migration. No Windows/Office/DPAPI qualification is implie
 The existing `ConversationJournal` directly implements `IConversationStore` in an
 isolated, exact document/workspace root. This first slice supports plain user/assistant
 text creation and append, scalar preferences, active selection, metadata, catalog
-headers without storage usage, bounded message windows and explicit full loading.
+headers, bounded message windows and explicit full loading. Indexed catalog usage
+is now connected as described above.
 `chat.committed` atomically retains address/card, expected revision, append delta and
 CAS body/context references; `chat.selected` retains the active chat. The existing
 shared disposable index (schema 12) holds current locators, message ordinals/counts
@@ -552,7 +586,7 @@ introduced; this slice does not alter `ChatStore` itself.
 
 No-tool runtime/protocol messages and `CommitRun` are now connected as described
 above. Single-chat deletion is connected by `chat.deleted`. Other resource/attachment
-owners, history rewrites and storage usage remain open; relocation is covered above. Reading an unconnected tool/
+owners and history rewrites remain open; relocation and catalog usage are covered above. Reading an unconnected tool/
 agent chat must not return an apparently complete text history. Remaining operations must move to
 the same owner before P7 removes the old backend; verified backup, stopped legacy
 writers and Windows/Office photo evidence still gate that switch. Existing journal

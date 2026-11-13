@@ -117,7 +117,7 @@ namespace RNAssistant.Core.Storage
                 RegisterOperation(db, tx, record.Operation, record.Kind);
                 ApplyControlRows(db, tx, record, position, fact);
                 if (fact.NativeChat) ApplyPeerControlHeads(db, tx, record, position, fact);
-                SaveCursor(db, position, tx); tx.Commit();
+                SaveCursor(db, position, tx, record); tx.Commit();
             }
         }
 

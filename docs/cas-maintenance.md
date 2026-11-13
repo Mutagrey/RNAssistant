@@ -43,6 +43,14 @@ or production format switch is claimed by these internal APIs.
 
 ## Reachability audit
 
+Native catalog usage is a disposable projection of retained conversation facts:
+chat-local unique hashes/logical counters, plus advisory physical sizes from the
+existing ChatBlobStore snapshot. Shared blobs/frames can be attributed to several
+chats; catalog totals are not exclusive disk ownership. Neither chat_blob nor a
+missing-file warning participates in closure/GC authority. Rebuild and backup/restore
+still validate canonical journals and payloads independently.
+See [catalog usage](session-events.md#journal-catalog-storage-usage--2026-11-13).
+
 Settings → Diagnostics → CAS storage runs a repository-wide audit under the cross-window maintenance gate. It:
 
 1. Enumerates canonical chat streams, VBA/resource mutation journals, resource authority records and managed Outlook archive-cache references.

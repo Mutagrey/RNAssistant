@@ -142,7 +142,7 @@ namespace RNAssistant.Core.Storage
                 if (move.ChatId != null)
                     using (var command = Command(db, "INSERT OR REPLACE INTO chat_selection VALUES($stream,$chat)", tx))
                     { command.Parameters.AddWithValue("$chat", move.ChatId); command.ExecuteNonQuery(); }
-                SaveCursor(db, position, tx); tx.Commit();
+                SaveCursor(db, position, tx, record); tx.Commit();
             }
         }
 

@@ -76,7 +76,8 @@ namespace RNAssistant.Harness
                     Content = ModelProtocolWire.WriteAcceptedDecision("finish", "Answer ready.", "Unaccepted runtime message",
                         results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) };
                 RuntimeThrows<InvalidOperationException>(() => store.Commit(loaded, new ConversationCommit(new[] { protocol })));
-                RuntimeThrows<NotSupportedException>(() => store.ListHeaders(true));
+                AssertTrue(store.ListHeaders(true).All(header => header.JsonlByteLength > 0 && header.CasBlobCount > 0),
+                    "native catalog exposes retained storage usage");
                 AssertTrue(before.All(item => item.Value.SequenceEqual(File.ReadAllBytes(item.Key))), "unsupported operations do not append");
                 journal.CreateChat("unconnected", "agent-card", "Agent", ConversationRunPolicy.For(ChatModes.Agent));
                 RuntimeThrows<NotSupportedException>(() => store.ListHeaders(false));

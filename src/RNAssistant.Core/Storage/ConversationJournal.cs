@@ -564,8 +564,13 @@ namespace RNAssistant.Core.Storage
                 throw new ChatConcurrencyException("Document changed before the scoped operation.");
         }
 
-        private void SaveCursor(SqliteConnection db, JournalCursor cursor, SqliteTransaction transaction)
-        { JournalIndex.SaveCursor(db, _scope, cursor, transaction); }
+        private void SaveCursor(SqliteConnection db, JournalCursor cursor, SqliteTransaction transaction, JournalRecord record = null)
+        {
+            // Native reducers already have the accepted frame. Primitive callers
+            // read only that new frame; a header-only cursor has no chat usage.
+            if (cursor.Start != 0) ApplyStorageUsage(db, transaction, record ?? Journal.Read(cursor), cursor);
+            JournalIndex.SaveCursor(db, _scope, cursor, transaction);
+        }
 
         private void RegisterOperation(SqliteConnection db, SqliteTransaction tx, string operation, string kind)
         {

@@ -1719,3 +1719,40 @@ after-state/CAS ownership.
    are updated. ChatStore/adapters retire at whole-port P7; this is an intermediate
    native integration without a product bump. One scoped commit; no push/tag.
    Parallel Browser changes are preserved outside this slice.
+
+## P1/P2 — native catalog storage usage (2026-11-13)
+
+1. Existing ConversationJournal closes unsupported usage catalogs under P1/P2;
+   overall metadata/header findings remain open. Office GetChatSummaries and
+   Workspace ListSessions now consume native storage fields through their Store port.
+2. Accepted facts atomically update retained frame bytes, unique CAS count and
+   logical bytes with their projection/cursor. Physical sizes and missing warnings
+   use the existing ChatBlobStore metadata snapshot, including compressed files.
+   Shared frame/blob attribution is per chat; resource-owned closure is unchanged.
+3. Removed the usage rejection and updated its old test. Schema 23 adds counters
+   to existing chat_state and one disposable chat_blob index, not another store.
+   Native reducers reuse accepted records; primitives address only the new frame.
+   Metadata upserts preserve accumulated counters. No import, fallback or dual write.
+4. Three new cases and nine regressions pass on `6fbb7b65` plus owned changes,
+   macOS/net8/C#7.3: real catalog consumers, deduplication, missing files, append/
+   flush/index/partial-index faults, retries, relocation, rebuild/clean restore and
+   actual Unknown/resource proof. Regressions cover text Store (2), peer Inbox (1),
+   header recovery (1), deletion consumers (1), native spawn (4). Parallel Browser
+   edits, including its changing Harness registration, are excluded from validation.
+   No VSTO/Office or full-suite run; default-writer composition is unchanged.
+5. Before: native usage catalogs threw NotSupportedException. After: the 16-message
+   fixture hydrates zero retained bodies and reads at most eight journal records
+   for its one healthy-index card. Repeated body references add one blob; unrelated
+   chat writes do not grow that card's counters. Physical enumeration still depends
+   on retained hashes/prefixes. No CPU/allocation/Windows latency claim is made.
+6. History rewrites and remaining resource consumers are still open. Enabling
+   edit/delete/clear must preserve indexed unresolved effects and bind the existing
+   replay guard to runtime admission; hiding transcript rows cannot authorize a
+   retry. P3 metadata/header/transient-summary/authority costs, cutover backup,
+   writer shutdown, restore and Windows evidence remain; P4 stays deferred.
+7. Session events, CAS maintenance, MIGRATION_MAP, PROGRESS and Harness guide are
+   updated; BACKLOG records the separate session-summary/cursor attribution gap.
+   Fourteen owned source/project files and the owned Harness registrations match
+   the validated archive; version-format/diff checks pass.
+   ChatStore/adapters retire at whole-port P7; no additional adapter is
+   introduced. This intermediate native integration has no product bump, push or tag.

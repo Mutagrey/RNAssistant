@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Native catalog storage usage — 2026-11-13
+
+Обычные каталоги Office/Workspace читают native usage через существующий Store-порт.
+Счётчики retained frames/CAS обновляются атомарно в общем индексе; размеры и missing
+warnings используют файловые метаданные без загрузки тел. Три новых checks и девять
+регрессий проходят на `6fbb7b65` + owned changes, отдельно от параллельного Browser.
+Rebuild/restore и Unknown/resource proof сохраняются. Default writers прежние.
+Далее — history rewrites с сохранением indexed Unknown/action guards и оставшиеся
+resource consumers. Metadata/header/physical enumeration и P3 ещё не закрыты;
+P4 отложена, Windows/Office qualification остаётся отдельной.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-catalog-storage-usage-2026-11-13).
+
 ## Browser saved-view deletion corrected — 2026-11-13
 
 `16.25.4-dev`: A4 fixed; read-only preview no longer blocks inactive-version Delete.
