@@ -140,7 +140,7 @@
     };
   }
   function register(dock) {
-    dock.registerView("materials", { title: "Материалы", icon: "files", section: "artifacts", placement: "within",
+    dock.registerView("materials", { title: "Материалы", icon: "files", discovery: "primary", order: 20, section: "artifacts", placement: "within",
       layout: function () { return document.getElementById("htmlWorkspaceLayout"); },
       element: function () { return document.getElementById("artifactCatalog"); },
       prepare: function () { RNAssistantArtifactCatalog.show(); renderHtmlWorkspace(); },

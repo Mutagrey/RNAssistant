@@ -284,7 +284,7 @@ function bindVbaActions() {
 }
 
 window.RNAssistantVbaView = { register: function (dock) {
-  dock.registerView("vba", { title: "VBA", icon: "code", section: "vba", placement: "within", renderer: "onlyWhenVisible",
+  dock.registerView("vba", { title: "VBA", icon: "code", discovery: "primary", order: 40, available: function () { return !state.bridgeUnavailable && ["Excel", "Word", "PowerPoint"].includes(state.host); }, section: "vba", placement: "within", renderer: "onlyWhenVisible",
     layout: function () { return $("vbaLayout"); },
     element: function () { var root = document.querySelector(".vba-editor"); root.id = "vbaEditorView"; return root; },
     onVisible: function (visible) {

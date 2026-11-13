@@ -45,20 +45,20 @@
 .dock-group-actions .icon-btn svg { width: var(--shell-group-action-icon); height: var(--shell-group-action-icon); }
 .dock-group-menu { --menu-width: var(--shell-group-menu-width); --menu-row-padding: var(--space-2); }
 .dock-group-actions .icon-btn > .dock-split-icon { fill: currentColor; stroke: none; }
-.dock-empty { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 10px; width: 100%; height: 100%; color: var(--ink-muted); }
-.dock-empty > p { flex: 0 0 100%; text-align: center; font-size: 12px; }
-.dock-empty > button { display: flex; gap: 6px; width: auto; padding: 6px 12px; font-size: 12px; }
-
-/* The chooser is Shell chrome; its grid/spacing follows the frozen P1/P2 reference. */
-.dock-screen-chooser { width: 100%; height: 100%; overflow: auto; color: var(--ink); background: var(--surface); font: var(--text-sm)/1.5 var(--font); }
-.dock-screen-chooser-body { width: 100%; max-width: var(--shell-chooser-width); margin-inline: auto; padding: var(--space-5); }
-.dock-screen-chooser h2 { font-size: var(--shell-chooser-title); font-weight: 600; line-height: var(--line-height-heading); margin: 0 0 var(--space-4); }
-.dock-screen-chooser input { width: 100%; height: var(--shell-tab-height); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--shell-radius); background: var(--surface-subtle); color: inherit; font: inherit; }
-.dock-screen-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(var(--shell-chooser-item-width), 100%), 1fr)); gap: var(--space-1); margin-top: var(--space-3); }
-.dock-screen-list button { display: flex; align-items: center; gap: var(--space-2); min-width: 0; width: 100%; min-height: var(--shell-rail-control); height: auto; padding: var(--space-2); border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink); font: inherit; text-align: left; }
-.dock-screen-list button:hover { background: var(--surface-hover); }
-.dock-screen-list button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dock-screen-list button[hidden] { display: none; }
-.dock-screen-list svg { flex: none; width: var(--shell-icon); height: var(--shell-icon); }
-.dock-screen-list small { margin-left: auto; color: var(--accent); font-size: var(--text-xs); }
-.dock-screen-chooser p { font-size: var(--text-xs); line-height: 1.5; color: var(--ink-muted); margin: var(--space-4) 0 0; }
+.dock-screen-chooser { width: 100%; height: 100%; }
+.start-surface { width: 100%; height: 100%; overflow: auto; color: var(--ink); background: var(--surface); font: var(--text-sm)/1.5 var(--font); }
+.start-surface-body { width: 100%; max-width: var(--shell-chooser-width); margin-inline: auto; padding: var(--space-5); }
+.start-surface h2 { font-size: var(--shell-chooser-title); font-weight: 600; line-height: var(--line-height-heading); margin: 0 0 var(--space-4); }
+.start-surface input { width: 100%; height: var(--shell-tab-height); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--shell-radius); background: var(--surface-subtle); color: inherit; font: inherit; }
+.start-surface-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(var(--shell-chooser-item-width), 100%), 1fr)); gap: var(--space-1); margin-top: var(--space-3); }
+.start-surface-list button { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); min-width: 0; width: 100%; min-height: var(--shell-rail-control); height: auto; padding: var(--space-2); border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink); font: inherit; text-align: left; }
+.start-surface-list button:hover { background: var(--surface-hover); }
+.start-surface-list button > span { display: flex; flex-direction: column; min-width: 0; }
+.start-surface-list button > span > :is(span, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.start-surface-list button[hidden] { display: none; }
+.start-surface-list svg { flex: none; width: var(--shell-icon); height: var(--shell-icon); }
+.start-surface-list small { color: var(--ink-muted); font-size: var(--text-xs); }
+.start-surface h3 { margin: var(--space-4) 0 0; font-size: var(--text-xs); font-weight: 600; color: var(--ink-muted); }
+.start-surface button:disabled { opacity: var(--disabled-opacity, 0.55); }
+.browser-local-content > .browser-home { padding: 0; text-align: left; }
+.start-surface p { font-size: var(--text-xs); line-height: 1.5; color: var(--ink-muted); margin: var(--space-4) 0 0; }

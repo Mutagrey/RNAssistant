@@ -659,7 +659,7 @@
   window.renderInstructionEditor = renderInstructionEditor;
   window.syncSelectedLibraryItem = syncSelectedInstruction;
   window.RNAssistantLibraryView = { register: function (dock) {
-    dock.registerView("library", { title: "Библиотека", icon: "book", section: "instructions", placement: "within", renderer: "onlyWhenVisible",
+    dock.registerView("library", { title: "Библиотека", icon: "book", discovery: "primary", order: 30, section: "instructions", placement: "within", renderer: "onlyWhenVisible",
       layout: function () { return $("instructionsLayout"); },
       element: function () {
         var root = document.createElement("div"); root.id = "libraryEditorView"; root.className = "library-editor-view";

@@ -1,5 +1,16 @@
 # Universal Browser: матрица проверок
 
+## F4a StartSurface — 2026-11-13
+
+`browser-start-surface`, `dock-workspace`, `dock-layout-pruning`, `shell-navigation`
+and `settings-dock` pass. Coverage includes bounded primary DOM with 1000 available
+chats, same shared Home, no source/iframe on Home, late query rejection, accepted-only
+recents, exact 200 cap, scope privacy, no query/native sessions in preferences, clear,
+storage failure, singleton move, split/maximize and narrow focus/restore. Current
+metadata paging Harness passes; Mock compiles. Legacy discovery-head fixture requests
+a retired Markdown tool before exercising discovery (BACKLOG). Native execution and
+Windows qualification remain separate.
+
 ## F3b Plugin consumers — 2026-11-13
 
 `plugin versions:` — 3 cases, включая manual User без чата, direct locator/scope refusal,

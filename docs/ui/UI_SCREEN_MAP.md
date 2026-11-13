@@ -1,5 +1,16 @@
 # Карта экранов, навигации и состояний
 
+## StartSurface / Shell — In Review, 2026-11-13
+
+«+» opens the existing choose-N tab: Browser, Materials, Library, available VBA and
+«Открыть чат». The latter focuses the existing navigation search; it creates no chat.
+Technical views and Settings are searchable contextual entries. Successful selection
+closes the chooser; refused opens retain it. Singleton selection moves the same view.
+Browser Home uses the same surface for local catalog results and scoped recents.
+Clear history affects UI metadata only. The top Panels and group-maximize buttons
+are removed: split/maximize are in group «⋯»; rare presets remain in Layout. Native
+window Menu calls the same owner commands directly. Window maximize is distinct.
+
 ## Plugin Browser — In Review, 2026-11-13
 
 Rail plugin → Browser source. Save создаёт checkpoint, clock выбирает working/saved

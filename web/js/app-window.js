@@ -87,8 +87,8 @@
       { separator: true },
       { label: "Навигация", icon: "panel", onSelect: function () { inFull(function () { RNAssistantShellLayout.setNavigationOpen(!RNAssistantShellLayout.isNavigationOpen()); }); } },
       { label: "Инспектор", icon: "panel", onSelect: function () { inFull(function () { RNAssistantDockWorkspace.toggleTools(); }); } },
-      { label: "Панели…", icon: "layers", onSelect: function () { inFull(function () { document.getElementById("workspacePanels").onclick.call(trigger); }); } },
-      { label: "Компоновка…", icon: "panel", onSelect: function () { inFull(function () { document.getElementById("workspaceLayout").onclick.call(trigger); }); } },
+      { label: "Открыть…", icon: "layers", onSelect: function () { inFull(function () { RNAssistantShellLayout.command("chooser", trigger); }); } },
+      { label: "Компоновка…", icon: "panel", onSelect: function () { inFull(function () { RNAssistantShellLayout.command("layout", trigger); }); } },
       { separator: true },
       { label: current.presentation + " · " + current.visibility, informational: true }
     ];

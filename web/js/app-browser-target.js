@@ -33,5 +33,18 @@
     }
     return value;
   }
-  window.RNAssistantBrowserTarget = { accept: accept };
+  // Preference hygiene only; every restored/selected address still goes to the resolver.
+  function preferenceLocator(value) {
+    if (typeof value !== "string" || value.length > 2048 || /[\\\u0000-\u001f\u007f]/.test(value)) return null;
+    var path = value.split(/[?#]/)[0];
+    if (path === "/") return path;
+    try {
+      var parts = path.slice(1).split("/").map(decodeURIComponent);
+      if (path[0] !== "/" || parts.length > 64 || parts.some(function (part) { return !part || part.length > 256 || part === "." || part === ".." || /[\\/:%?#\u0000-\u001f\u007f]/.test(part); })) return null;
+      if (parts[0] === "resources" ? !(parts.length === 2 || parts.length === 4 && parts[2] === "versions") :
+          !(["projects", "plugins"].includes(parts[0]) && (parts[2] === "source" && parts.length >= 4 || parts[2] === "versions" && parts.length >= 5))) return null;
+      return path;
+    } catch (_) { return null; }
+  }
+  window.RNAssistantBrowserTarget = { accept: accept, preferenceLocator: preferenceLocator };
 }());

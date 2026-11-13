@@ -1,5 +1,13 @@
 # RNAssistant backlog
 
+## Retired Markdown discovery fixture — 2026-11-13
+
+Owner: Harness resource-discovery tests. `resources: document discovery follows exact
+current heads` calls `GetControllerTools().Single(MarkdownDocumentToolCatalog.SaveToolId)`;
+OfficeToolExecutor no longer registers that retired tool. It fails before discovery.
+Migrate the fixture to the supported resource mutation protocol; do not restore the
+old tool. Bounded current metadata paging passes independently.
+
 ## Confirmation recovery fixture drift — 2026-11-12
 
 Owner: Harness (`Program.SessionEventStoreTests.cs`, `KernelConfirmationResponses`).

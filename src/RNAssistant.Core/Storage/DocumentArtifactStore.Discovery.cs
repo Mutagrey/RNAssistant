@@ -26,6 +26,9 @@ namespace RNAssistant.Core.Storage
         // Page only discovery roots. Immutable history and operation receipts are
         // outside these ordered ranges and require no metadata IO for discovery.
         public DocumentArtifactDiscovery InspectCurrentMetadata(ChatSession session, int offset = 0, int limit = 50)
+        { return InspectCurrentMetadata(ConversationMetadata.From(session), offset, limit); }
+
+        public DocumentArtifactDiscovery InspectCurrentMetadata(ConversationMetadata session, int offset = 0, int limit = 50)
         {
             var scope = PlanScope(session);
             var roots = ResourceUri.Create("state", scope.Kind, scope.Id) + "/";
@@ -69,7 +72,7 @@ namespace RNAssistant.Core.Storage
                             throw new InvalidDataException("The artifact head points to a different lineage.");
                     }
                     if (!IsSnapshotReference(reference)) continue;
-                    var artifact = InspectMetadata(ConversationMetadata.From(session), reference);
+                    var artifact = InspectMetadata(session, reference);
                     if (artifact.AvailabilityIssue != null) unavailable++;
                     else items.Add(artifact);
                 }

@@ -19,11 +19,7 @@
       text("workspaceHostStatus", model.context.hostStatus);
     }
     if (model.layout) {
-      var layout = model.layout, max = document.getElementById("workspaceMaximize");
-      max.disabled = !layout.canMaximize; max.setAttribute("aria-pressed", String(layout.maximized));
-      max.title = layout.maximized ? "Восстановить компоновку" : "Развернуть группу";
-      max.setAttribute("aria-label", max.title); icon(max, layout.maximized ? "compress" : "fit");
-      max.hidden = !layout.visible;
+      var layout = model.layout;
       document.getElementById("workspaceViewActions").hidden = !layout.visible;
       document.getElementById("toggleChatInspectorButton").hidden = !layout.visible;
       text("workspaceLayoutStatus", layout.visible ? "Вкладки: " + layout.panels + " · группы: " + layout.groups : "");
@@ -140,12 +136,14 @@
     }
   }
 
+  var workspaceCommands;
   window.RNAssistantShellLayout = {
+    command: function (name, trigger) { if (workspaceCommands && workspaceCommands[name]) return workspaceCommands[name](trigger); },
     renderWorkspace: renderWorkspaceChrome,
     notice: workspaceNotice,
     bindWorkspace: function (actions) {
-      workspaceLayoutChanged = actions.onLayoutChanged;
-      [["workspacePanels", actions.panels], ["workspaceLayout", actions.layout], ["workspaceMaximize", actions.maximize]].forEach(function (entry) {
+      workspaceLayoutChanged = actions.onLayoutChanged; workspaceCommands = actions;
+      [["workspaceLayout", actions.layout]].forEach(function (entry) {
         document.getElementById(entry[0]).onclick = function () { entry[1](this); };
       });
     },

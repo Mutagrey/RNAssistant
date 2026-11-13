@@ -7,7 +7,14 @@
   function accepts(target) {
     return target && target.view === "browser" && typeof target.browserTabId === "string" && target.browserTabId.length <= 256 &&
       target.ownerScope && ["Document", "Workspace", "User"].includes(target.ownerScope.kind) && typeof target.ownerScope.scopeId === "string" &&
-      typeof target.locator === "string" && target.locator.length <= 2048 && /^\/(?!\/)/.test(target.locator);
+      target.ownerScope.scopeId.length > 0 && target.ownerScope.scopeId.length <= 256 && !!RNAssistantBrowserTarget.preferenceLocator(target.locator);
+  }
+  function preferenceTarget(target) {
+    if (!accepts(target)) return null;
+    var scope = target.ownerScope;
+    return { view: "browser", browserTabId: target.browserTabId, locator: RNAssistantBrowserTarget.preferenceLocator(target.locator),
+      ownerScope: { kind: scope.kind, scopeId: scope.scopeId, chatId: typeof scope.chatId === "string" && scope.chatId.length <= 256 ? scope.chatId : null },
+      title: String(target.title || "Browser").slice(0, 160) };
   }
   function create(target) {
     var root = document.createElement("section"); root.className = "browser-object-view"; root.setAttribute("aria-label", "Browser");
@@ -89,6 +96,44 @@
       if (definitionDialog) definitionDialog.close(false);
       pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
     }
+    async function suggestions(prefix, epoch) {
+      var scope = current && current.ownerScope || target.ownerScope;
+      var result = await request("queryNavigationSuggestions", { ownerScope: scope, prefix: prefix, requestGeneration: epoch, limit: 12 });
+      var seen = new Set();
+      return { requestGeneration: result.requestGeneration, items: (result.items || []).concat(RNAssistantDockWorkspace.recentNavigation(scope, prefix, 8))
+        .filter(function (entry) { if (!RNAssistantBrowserTarget.preferenceLocator(entry.displayLocator) || seen.has(entry.displayLocator)) return false; seen.add(entry.displayLocator); return true; }).slice(0, 20) };
+    }
+    function createHome(parent) {
+      var query = "", epoch = 0, shown = false, dead = false, entries = [], loading = false, error = "", view;
+      function model() {
+        var scope = current.ownerScope, recent = RNAssistantDockWorkspace.recentNavigation(scope, query, 8), seen = new Set();
+        function rows(items) { return items.filter(function (entry) { if (seen.has(entry.displayLocator)) return false; seen.add(entry.displayLocator); return true; }).map(function (entry) {
+          return { key: entry.displayLocator, title: entry.title || entry.displayLocator, icon: "globe", description: entry.sourceLabel + " · " + entry.displayLocator,
+            disabledReason: entry.disabledReason && !["None", "IsolationUnqualified", "ProjectDefinitionRequired"].includes(entry.disabledReason) ? entry.disabledReason === "Removed" ? "Версия удалена" : "Источник недоступен" : "",
+            payload: { locator: entry.displayLocator } };
+        }); }
+        var sections = [{ title: "Недавно", entries: rows(recent) }, { title: "Локальные страницы", entries: rows(entries.slice(0, 12)) }];
+        if (recent.length && !query) sections.push({ title: "История", entries: [{ key: "clear", title: "Очистить недавние страницы", icon: "trash", description: "Только список посещений в этом окне", payload: { clear: true } }] });
+        return { title: "Главная", placeholder: "Найти локальную страницу…", search: query, sections: sections, loading: loading, error: error,
+          empty: "Нет локальных страниц. Откройте HTML из материалов или добавьте проект.", note: RNAssistantDockWorkspace.recentNavigationNotice() };
+      }
+      async function refresh() {
+        var serial = ++epoch; loading = true; error = ""; view.update(model());
+        try {
+          var result = await request("queryNavigationSuggestions", { ownerScope: current.ownerScope, prefix: query, requestGeneration: serial, limit: 12 });
+          if (dead || !shown || serial !== epoch || result.requestGeneration !== serial) return;
+          entries = (result.items || []).filter(function (entry) { return !!RNAssistantBrowserTarget.preferenceLocator(entry.displayLocator); }).slice(0, 12);
+        } catch (failure) { if (!dead && shown && serial === epoch) error = failure.detail || failure.message; }
+        finally { if (!dead && shown && serial === epoch) { loading = false; view.update(model()); } }
+      }
+      view = RNAssistantStartSurface.mount(parent, model(), {
+        onSearch: function (value) { query = value.slice(0, 256); entries = []; refresh(); },
+        onSelect: function (payload) { if (payload.clear) { RNAssistantDockWorkspace.clearRecentNavigation(); view.update(model()); }
+          else return command("Navigate", { locator: payload.locator }); }
+      });
+      return { activate: function () { if (shown || dead) return; shown = true; refresh(); },
+        deactivate: function () { shown = false; epoch++; }, dispose: function () { dead = true; epoch++; view.dispose(); } };
+    }
     function presentation() {
       surface.setDocument({ address: current && current.url || target.locator,
         mode: selectedMode, supportedModes: current && current.status !== "Home" ? ["preview", "source"] : [],
@@ -96,8 +141,7 @@
         back: function () { return command("Back"); }, forward: function () { return command("Forward"); },
         home: function () { return command("Home"); }, stop: function () { stopReads(); return command("Stop"); },
         navigate: function (locator) { return command("Navigate", { locator: locator }); },
-        suggest: function (prefix, epoch) { return request("queryNavigationSuggestions", { ownerScope: current && current.ownerScope || target.ownerScope,
-          prefix: prefix, requestGeneration: epoch, limit: 12 }); }
+        suggest: suggestions
       }, selectMode);
     }
     function selectMode(mode) { selectedMode = mode; presentation(); render(); }
@@ -106,12 +150,10 @@
       var home = current.status === "Home", removed = current.status === "Removed";
       empty.hidden = !home && !removed && selectedMode === "source";
       source.hidden = files.hidden = home || removed || selectedMode !== "source";
+      empty.classList.toggle("browser-home", home);
       if (home) {
-        if (window.RNAssistantStartSurface) {
-          if (!homeView) homeView = RNAssistantStartSurface.mount(empty, { kind: "browser", ownerScope: current.ownerScope,
-            navigate: function (locator) { return command("Navigate", { locator: locator }); } });
-          homeView.activate();
-        } else empty.textContent = "Локальные проекты и материалы. Выберите адрес из подсказок.";
+        if (!homeView) { empty.replaceChildren(); homeView = createHome(empty); }
+        homeView.activate();
       } else {
         if (homeView) { homeView.dispose(); homeView = null; }
         empty.textContent = current.message || unavailable;
@@ -153,7 +195,7 @@
       if (!session) throw new Error("Страница ещё не открыта.");
       var binding = session, value = await send("browserCommand", Object.assign({ action: action, browserTabId: target.browserTabId,
         sessionId: binding, operationId: operationId }, extra || {}));
-      if (!disposed && binding === session) apply(value);
+      if (!disposed && binding === session) { apply(value); if (["Navigate", "Back", "Forward"].includes(action)) RNAssistantDockWorkspace.recordNavigation(value); }
     }
     async function open() {
       if (session || opening || disposed) return opening;
@@ -161,7 +203,7 @@
         var value = await send("browserCommand", { action: "Open", browserTabId: target.browserTabId, operationId: operationId,
           ownerScope: target.ownerScope, locator: target.locator });
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
-        session = value.sessionId; apply(value);
+        session = value.sessionId; apply(value); if (target.recordVisit) RNAssistantDockWorkspace.recordNavigation(value);
         if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
         await command("Attach");
       }());
@@ -178,13 +220,13 @@
   }
   function open(locator, owner, options) {
     return RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: options && options.browserTabId || id(),
-      locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser" }, options);
+      locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser", recordVisit: true }, options);
   }
   window.RNAssistantBrowser = { open: open, create: create, key: key, unavailable: unavailable,
     bootstrap: function (value) { available = value === true; },
     versionsChanged: function (value) { if (value && value.target) versionViews.forEach(function (notify) { notify(value); }); },
     apply: function (value) { var fn = value && live.get(value.browserTabId); if (fn) fn(value); },
-    register: function (dock) { dock.registerView("browser", { title: "Browser", icon: "globe", perObject: true, menu: true, maximumInstances: 16, renderer: "onlyWhenVisible",
-      accepts: accepts, key: key, create: create, titleFor: function (target) { return target.title || "Browser"; } }); }
+    register: function (dock) { dock.registerView("browser", { title: "Browser", icon: "globe", discovery: "primary", order: 10, perObject: true, menu: true, maximumInstances: 16, renderer: "onlyWhenVisible",
+      accepts: accepts, key: key, create: create, preferenceTarget: preferenceTarget, titleFor: function (target) { return target.title || "Browser"; } }); }
   };
 }());

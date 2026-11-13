@@ -1,5 +1,16 @@
 # Universal Browser: предлагаемые контракты
 
+## StartSurface / UI preferences — F4a, 2026-11-13
+
+StartSurface takes a model (title/search/sections/entries/loading/error/empty) and
+onSearch/onSelect callbacks, returning element/update/focus/dispose. It reads no domain
+catalog, active chat or bridge. Dock descriptors own discovery/order; adapters own
+queries, bounded results and accepted navigation. Local recents schema 1 under the
+existing Dock preference namespace stores only locator/title/kind/visitedAt/scope,
+maximum 200, with no chat/native session or query/fragment. Browser layout retains
+only tab identity, local content locator, bounded title and exact domain owner.
+These are preferences, never execution authority. Corrupt recents do not reset layout.
+
 ## Plugin saved-version consumers — 2026-11-13
 
 Typed bridge: GetBrowserVersionState / GetBrowserVersions / BrowserVersionCommand

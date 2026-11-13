@@ -9,13 +9,58 @@
   var objectViews = Object.create(null);
   var inspectorWidth;
   var storageKey = "rnassistant.ui.dock.s1.v1", savedKey = storageKey + ".saved", nextChooser = 1;
+  var recentKey = storageKey + ".local-recents.v1", recents = null, recentMemoryOnly = false;
+  function recentEntry(value) {
+    var scope = value && value.scope, locator = value && RNAssistantBrowserTarget.preferenceLocator(value.locator);
+    if (!scope || !["User", "Document", "Workspace"].includes(scope.kind) || typeof scope.scopeId !== "string" || !scope.scopeId || scope.scopeId.length > 256 ||
+        !locator || locator === "/" || !["HtmlWorkspace", "HtmlArtifact", "HtmlResource", "PluginSource", "PluginRelease", "WorkspaceHtmlProject"].includes(value.kind) ||
+        !Number.isSafeInteger(value.visitedAt) || value.visitedAt < 0 || typeof value.title !== "string") return null;
+    return { locator: locator, title: value.title.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 160), kind: value.kind,
+      visitedAt: value.visitedAt, scope: { kind: scope.kind, scopeId: scope.scopeId } };
+  }
+  function recentIdentity(value) { return value.scope.kind + ":" + value.scope.scopeId + ":" + value.locator; }
+  function writeRecents() {
+    if (recentMemoryOnly) return;
+    try { localStorage.setItem(recentKey, JSON.stringify({ version: 1, entries: recents })); }
+    catch (_) { recentMemoryOnly = true; notice("Недавние страницы доступны только до закрытия окна: хранилище недоступно."); }
+  }
+  function readRecents() {
+    if (recents) return recents;
+    recents = [];
+    try {
+      var raw = localStorage.getItem(recentKey);
+      if (raw && raw.length <= 1024 * 1024) {
+        var saved = JSON.parse(raw), seen = new Set();
+        if (saved.version === 1 && Array.isArray(saved.entries)) recents = saved.entries.slice(0, 200).map(recentEntry).filter(Boolean)
+          .sort(function (a, b) { return b.visitedAt - a.visitedAt; }).filter(function (entry) { var key = recentIdentity(entry); if (seen.has(key)) return false; seen.add(key); return true; });
+      }
+    } catch (error) { if (!(error instanceof SyntaxError)) { recentMemoryOnly = true; notice("Недавние страницы доступны только до закрытия окна: хранилище недоступно."); } }
+    return recents;
+  }
+  function recordNavigation(value) {
+    var target = value && value.target;
+    if (!target || target.state !== "Ready" || value.status === "Removed" || value.status === "Closed") return;
+    var entry = recentEntry({ locator: value.url, title: value.title || target.title || "", kind: target.kind,
+      scope: target.ownerScope, visitedAt: Date.now() });
+    if (!entry) return;
+    recents = [entry].concat(readRecents().filter(function (other) { return recentIdentity(other) !== recentIdentity(entry); })).slice(0, 200); writeRecents();
+  }
+  function recentNavigation(scope, prefix, limit) {
+    if (!scope) return [];
+    prefix = String(prefix || "").toLocaleLowerCase();
+    return readRecents().filter(function (entry) {
+      return (scope.kind === "User" ? entry.scope.kind !== "Document" : scope.kind === entry.scope.kind && scope.scopeId === entry.scope.scopeId) &&
+        (entry.locator.toLocaleLowerCase().includes(prefix) || entry.title.toLocaleLowerCase().includes(prefix));
+    }).slice(0, Math.min(20, limit || 8)).map(function (entry) { return { title: entry.title, displayLocator: entry.locator, kind: entry.kind,
+      sourceLabel: "Недавно · " + entry.scope.kind, disabledReason: "None" }; });
+  }
   var views = {
     conversation: { title: "Чат", icon: "chat", section: "chat" },
-    inspector: { title: "Инспектор", icon: "panel" },
-    request: { title: "Запрос модели", icon: "code" },
-    diagnostics: { title: "Диагностика", icon: "chart", onVisible: function (shown) { RNAssistantDiagnostics.onVisible(shown); },
+    inspector: { title: "Инспектор", icon: "panel", discovery: "contextual" },
+    request: { title: "Запрос модели", icon: "code", discovery: "contextual" },
+    diagnostics: { title: "Диагностика", icon: "chart", discovery: "contextual", onVisible: function (shown) { RNAssistantDiagnostics.onVisible(shown); },
       onClose: function () { RNAssistantDiagnostics.onClose(); } },
-    settings: { title: "Настройки", icon: "settings", renderer: "onlyWhenVisible", canClose: function () { return RNAssistantSettingsView.canClose(); } }
+    settings: { title: "Настройки", icon: "settings", discovery: "contextual", renderer: "onlyWhenVisible", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
   function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && (!views[id].perObject || views[id].menu) && (!views[id].available || views[id].available()); }); }
   // Temporary section adapters live in this catalog, not a second navigation registry.
@@ -203,7 +248,7 @@
   function persist() {
     if (preservePreference) return;
     if (hostCompact) return; // transient group maximize never replaces the durable Full layout
-    try { localStorage.setItem(storageKey, JSON.stringify({ version: 2, layout: compact && wideLayout || api.toJSON() })); }
+    try { localStorage.setItem(storageKey, JSON.stringify({ version: 2, layout: preferenceLayout(compact && wideLayout || api.toJSON()) })); }
     catch (error) { notice("Компоновка не сохранена: хранилище недоступно"); }
   }
   function changed() {
@@ -242,7 +287,7 @@
   }
   function show(id, group, direction) {
     if (id !== "conversation" && window.RNAssistantWindow && RNAssistantWindow.inFull(function () { show(id, group, direction); })) return;
-    if (!api || !views[id] || views[id].targetRoute) return;
+    if (!api || !views[id] || views[id].targetRoute) return false;
     if (id === "browser") return RNAssistantBrowser.open("/", null, { group: group, direction: direction });
     if (id === "conversation" && views[id].perObject) {
       var selected = RNAssistantConversationPanel.selected();
@@ -265,7 +310,7 @@
       item = add(id, position);
       if (!compact && id === "inspector" && !direction) item.api.setSize({ width: inspectorWidth });
     }
-    item.group.api.setVisible(true); item.api.setActive(); changed();
+    item.group.api.setVisible(true); item.api.setActive(); changed(); return true;
   }
   function toolGroups() {
     return api ? api.groups.filter(function (group) { return group.panels.length && group.panels.every(function (item) { return item.id === "inspector"; }); }) : [];
@@ -316,37 +361,32 @@
     return { element: tab.element, init: function (params) { tab.init(params); },
       dispose: function () { tab.element.removeEventListener("click", click, true); tab.dispose(); } };
   }
-  function createChooser(id) {
-    var root = element("div", "dock-screen-chooser"), body = element("div", "dock-screen-chooser-body");
-    var input = element("input"), list = element("div", "dock-screen-list");
-    var empty = element("p", "", "Ничего не найдено"); empty.hidden = true; empty.setAttribute("role", "status");
-    input.type = "search"; input.placeholder = "Найти экран…"; input.setAttribute("aria-label", "Найти экран");
-    body.append(element("h2", "", "Что открыть?"), input, list, empty);
-    body.appendChild(element("p", "", "Выберите экран или откройте другой чат из дерева навигации."));
-    root.appendChild(body); root.dataset.chooserId = id;
-    viewIds().forEach(function (viewId) {
-      var row = button(views[viewId].title, views[viewId].icon, function () {
-        var chooserPanel = panel(id); if (!chooserPanel) return;
-        show(viewId, chooserPanel.group, "within"); if (panel(id)) chooserPanel.api.close(); changed();
-      });
-      row.appendChild(element("span", "", views[viewId].title)); list.appendChild(row);
-      if (panel(viewId)) row.appendChild(element("small", "", "Открыт"));
+  function createStartChooser(id) {
+    var root = element("div", "dock-screen-chooser"), query = "", surface;
+    if (id) root.dataset.chooserId = id;
+    function model() {
+      var ids = viewIds().filter(function (viewId) { return views[viewId].discovery === "primary" || query && views[viewId].discovery === "contextual"; })
+        .filter(function (viewId) { return (views[viewId].discoveryTitle || views[viewId].title).toLocaleLowerCase().includes(query.toLocaleLowerCase()); })
+        .sort(function (a, b) { return (views[a].order || 100) - (views[b].order || 100); }).slice(0, 12);
+      return { title: "Что открыть?", placeholder: "Найти экран…", search: query, note: "Чаты доступны в дереве рабочей области.",
+        sections: [{ title: query ? "Результаты" : "Основное", entries: ids.map(function (viewId) {
+          var view = views[viewId]; return { key: viewId, title: view.discoveryTitle || view.title, icon: view.icon,
+            description: viewId === "conversation" ? "Выбрать в дереве рабочей области" : panel(viewId) ? "Уже открыт" : "", payload: viewId };
+        }) }] };
+    }
+    surface = RNAssistantStartSurface.mount(root, model(), {
+      onSearch: function (value) { query = value.trim().slice(0, 256); surface.update(model()); },
+      onSelect: function (viewId) {
+        var chooser = id && panel(id), view = views[viewId];
+        if (id && !chooser) return;
+        var result = view.discover ? view.discover() : show(viewId, chooser && chooser.group, "within");
+        if (result === false) throw new Error("Экран сейчас недоступен. Закройте лишнюю вкладку и повторите.");
+        if (chooser && panel(id)) chooser.api.close(); changed();
+      }
     });
-    var chatTargets = (state.chats || []).map(function (chat) { return { title: chatTitle(chat), target: { view: "conversation", source: "office", sessionId: chatId(chat) } }; });
-    if (window.RNAssistantProjectChats) chatTargets = chatTargets.concat(RNAssistantProjectChats.targets());
-    chatTargets.forEach(function (entry) {
-      var row = button(entry.title, "chat", function () {
-        var chooserPanel = panel(id); if (chooserPanel) openTarget(entry.target, { group: chooserPanel.group });
-      });
-      row.appendChild(element("span", "", entry.title)); list.appendChild(row);
-    });
-    input.addEventListener("input", function () {
-      Array.from(list.children).forEach(function (row) { row.hidden = !row.getAttribute("aria-label").toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()); });
-      empty.hidden = !!list.querySelector("button:not([hidden])");
-    });
-    input.addEventListener("keydown", function (event) { if (event.key === "Enter") { event.preventDefault(); var first = list.querySelector("button:not([hidden])"); if (first) first.click(); } });
-    return { element: root, init: function () {}, focus: function () { input.focus({ preventScroll: true }); } };
+    return { element: root, init: function () {}, focus: surface.focus, dispose: surface.dispose };
   }
+  function createChooser(id) { return createStartChooser(id); }
   function openChooser(group, direction) {
     if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { openChooser(group, direction); })) return;
     RNAssistantActionMenu.closeAll(); wideLayout = null; api.exitMaximizedGroup();
@@ -382,27 +422,26 @@
       hostStatus: window.PrototypeFixtures ? "Mock · без подключения к Office" : state.bridgeUnavailable ? "Нет связи с хостом" : "Локальное пространство" } });
   }
   function header(group) {
-    var root = element("div", "dock-group-actions"), splitButtons = []; root.dataset.groupId = group.id;
-    function updateButtons() { splitButtons.forEach(function (entry) {
-      entry.button.disabled = compact || host.clientWidth < 560 || (entry.direction === "right" ? group.api.width < 560 : group.api.height < 420);
-      entry.button.title = entry.button.disabled ? "Недостаточно места для ещё одной области" : entry.button.getAttribute("aria-label");
-    }); }
-    [["Выбрать экран", "plus", "within"], ["Открыть экран справа", "split-right", "right"], ["Открыть экран снизу", "split-below", "below"]].forEach(function (item) {
-      var control = button(item[0], item[1], function () { openChooser(group, item[2]); }); root.appendChild(control);
-      if (item[2] !== "within") splitButtons.push({ button: control, direction: item[2] });
-    });
+    var root = element("div", "dock-group-actions"); root.dataset.groupId = group.id;
+    root.appendChild(button("Выбрать экран", "plus", function () { openChooser(group, "within"); }));
     var actions = button("Действия с вкладкой", "more", function () {
-      menu(actions, [
+      var canSplit = !compact && host.clientWidth >= 560;
+      RNAssistantActionMenu.open(actions, [
+        { label: "Открыть экран справа", icon: "split-right", disabled: !canSplit || group.api.width < 560, onSelect: function () { openChooser(group, "right"); } },
+        { label: "Открыть экран снизу", icon: "split-below", disabled: !canSplit || group.api.height < 420, onSelect: function () { openChooser(group, "below"); } },
+        { label: api.hasMaximizedGroup() ? "Восстановить группу" : "Развернуть группу", icon: api.hasMaximizedGroup() ? "compress" : "fit",
+          onSelect: function () { if (api.hasMaximizedGroup()) api.exitMaximizedGroup(); else if (group.activePanel) group.activePanel.api.maximize(); changed(); } },
+        { separator: true }
+      ].concat([
         ["Собрать в одну группу", "layers", function () { join(); }],
         ["Закрыть вкладку", "close", function () { if (group.activePanel) close(group.activePanel.id); }],
         ["Закрыть группу", "close", function () {
           var items = group.panels.slice(); if (!canClose(items)) return;
           wideLayout = null; api.exitMaximizedGroup(); items.forEach(function (item) { item.api.close(); }); changed();
         }]
-      ]);
+      ].map(function (item) { return { label: item[0], icon: item[1], onSelect: item[2] }; })), { className: "dock-group-menu" });
     }); actions.setAttribute("aria-haspopup", "menu"); root.appendChild(actions);
-    var dimensions = group.api.onDidDimensionsChange(updateButtons); updateButtons();
-    return { element: root, init: function () {}, dispose: function () { dimensions.dispose(); RNAssistantActionMenu.closeWithin(root); } };
+    return { element: root, init: function () {}, dispose: function () { RNAssistantActionMenu.closeWithin(root); } };
   }
   function validateLayout(layout) {
     if (!layout || !layout.grid || !layout.panels) return false;
@@ -420,7 +459,7 @@
   function normalizeLayout(input) {
     if (!input || !input.grid || !input.panels || JSON.stringify(input).length > 1024 * 1024 || Object.keys(input.panels).length > 128)
       throw new Error("Формат раскладки недоступен");
-    var layout = JSON.parse(JSON.stringify(input)), counts = Object.create(null), seen = new Set(), groups = new Set(), nodes = 0, pruned = 0;
+    var layout = preferenceLayout(input), counts = Object.create(null), seen = new Set(), groups = new Set(), nodes = 0, pruned = 0;
     Object.keys(layout.panels).forEach(function (id) {
       var spec = layout.panels[id], view = spec && Object.prototype.hasOwnProperty.call(views, spec.contentComponent) && views[spec.contentComponent];
       var single = {}; single[id] = spec;
@@ -450,6 +489,14 @@
     if (layout.maximizedGroup && !groups.has(layout.maximizedGroup)) delete layout.maximizedGroup;
     if (!validateLayout(layout)) throw new Error("Не удалось проверить преобразованную раскладку");
     return { layout: layout, pruned: pruned };
+  }
+  function preferenceLayout(input) {
+    var layout = JSON.parse(JSON.stringify(input));
+    Object.keys(layout.panels).forEach(function (id) {
+      var spec = layout.panels[id], view = spec && views[spec.contentComponent];
+      if (view && view.preferenceTarget && spec.params) spec.params = { target: view.preferenceTarget(spec.params.target) };
+    });
+    return layout;
   }
   function reset() {
     if (window.RNAssistantWindow && RNAssistantWindow.inFull(reset)) return;
@@ -539,11 +586,7 @@
       messages: { closeTab: function (title) { return "Закрыть «" + title + "»"; }, closeTabPlain: "Закрыть вкладку" },
       createComponent: createComponent, createRightHeaderActionComponent: header,
       defaultTabComponent: "guarded", createTabComponent: createTab,
-      createWatermarkComponent: function () {
-        var empty = element("div", "dock-empty"); empty.appendChild(element("p", "", "Выберите экран"));
-        viewIds().forEach(function (id) { var b = button(views[id].title, views[id].icon, function () { show(id); }); b.appendChild(element("span", "", views[id].title)); empty.appendChild(b); });
-        return { element: empty, init: function () {} };
-      }
+      createWatermarkComponent: function () { return createStartChooser(null); }
     });
     function endDrag() { document.documentElement.classList.remove("workspace-dragging"); }
     api.onWillDragPanel(function () { document.documentElement.classList.add("workspace-dragging"); });
@@ -571,15 +614,10 @@
     api.onDidRemovePanel(function () { if (!restoring) wideLayout = null; });
     RNAssistantShellLayout.bindWorkspace({
       onLayoutChanged: sync,
-      panels: function (trigger) {
-        RNAssistantActionMenu.open(trigger, viewIds().map(function (id) {
-          return { label: views[id].title, icon: views[id].icon, status: panel(id) ? "Открыт" : "", onSelect: function () { show(id); } };
-        }));
-      },
-      maximize: function () { if (api.hasMaximizedGroup()) api.exitMaximizedGroup(); else if (api.activePanel) api.activePanel.api.maximize(); changed(); },
+      chooser: function () { openChooser(api.activeGroup || api.groups[0], "within"); },
       layout: function (trigger) {
         menu(trigger, [["Чат и инспектор", "panel", reset], ["Одна группа вкладок", "layers", join],
-          ["Сохранить раскладку", "check", function () { try { localStorage.setItem(savedKey, JSON.stringify(api.toJSON())); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
+          ["Сохранить раскладку", "check", function () { try { localStorage.setItem(savedKey, JSON.stringify(preferenceLayout(api.toJSON()))); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
           ["Вернуть сохранённую", "refresh", function () { try { var layout = normalizeLayout(JSON.parse(localStorage.getItem(savedKey))).layout; if (validateLayout(layout)) {
             if (!canClose(api.panels.filter(function (item) { return !layout.panels[item.id]; }))) return;
             restoring = true; wideLayout = null; restoreLayout(layout); preservePreference = false; restoring = false; changed(); notice("Раскладка восстановлена");
@@ -671,6 +709,9 @@
     sync();
   }
   window.RNAssistantDockWorkspace = {
+    recordNavigation: recordNavigation, recentNavigation: recentNavigation,
+    clearRecentNavigation: function () { recents = []; writeRecents(); },
+    recentNavigationNotice: function () { return recentMemoryOnly ? "Недавние страницы доступны только до закрытия окна." : ""; },
     setHostWindow: setHostWindow,
     canCloseAll: function () { return !api || canClose(api.panels); },
     registerConversation: function (descriptor) { views.conversation = descriptor; },

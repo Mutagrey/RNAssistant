@@ -1,5 +1,15 @@
 # Архитектура UI RNAssistant
 
+## F4a StartSurface — In Review, 2026-11-13
+
+`app-start-surface` renders only a supplied model/callbacks; Dock chooser and Browser
+Home provide separate adapters. The existing Dock registry adds discovery metadata;
+there is no second screen registry or full chat enumeration. Dock owns bounded local
+recents beside its layout preference. Browser records only accepted visits and
+resolver-confirmed metadata; history never grants access. Layout serialization drops
+query/fragment and runtime fields. Document suggestions read bounded current metadata
+roots, without loading a conversation or automatic snapshot history.
+
 ## Plugin saved versions — In Review, 2026-11-13
 
 Plugin rail открывает общий app-browser; app-plugin-view/app-plugin-release-view,

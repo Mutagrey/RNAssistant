@@ -60,20 +60,21 @@ namespace RNAssistant.Office
 
         internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner)
         {
-            if (owner == null || owner.Kind != BrowserOwnerKind.Document || string.IsNullOrEmpty(owner.ChatId))
-                throw new InvalidOperationException("Выберите точный документ и чат Browser.");
-            var session = LoadAddressedSession(owner.ChatId);
-            if ((session.DocumentAuthorityId ?? session.Id) != owner.ScopeId)
-                throw new InvalidOperationException("Контекст документа Browser изменился.");
+            var metadata = BrowserOwner(owner);
             var result = new List<BrowserTargetDescriptor>();
-            var live = BrowserTargetResolver.Live(session);
-            if (live.State != BrowserTargetState.Empty) result.Add(live);
-            foreach (var artifact in session.Artifacts)
+            // Current metadata roots only: no chat replay, aggregate bodies or automatic history.
+            var page = _chatStore.DocumentArtifacts.InspectCurrentMetadata(metadata, 0, 100);
+            foreach (var artifact in page.Items)
             {
-                if (result.Count >= 200) break;
                 if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace && !BrowserTargetResolver.IsHtmlResource(artifact)) continue;
-                if (!string.IsNullOrEmpty(artifact.AvailabilityIssue)) continue;
-                result.Add(BrowserTargetResolver.Saved(session, artifact, ChatResourceUri.CreateArtifactRevisionUri(session, artifact)));
+                var target = BrowserTargetResolver.Saved(metadata, artifact, ChatResourceUri.CreateArtifactRevision(metadata.Id, artifact).Uri);
+                if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
+                {
+                    target.DisplayLocator = BrowserLocalLocator.ForResource(target.LogicalId);
+                    target.Kind = BrowserTargetKind.HtmlWorkspace; target.Immutable = false;
+                    target.Capabilities.SaveVersion = true;
+                }
+                result.Add(target);
             }
             return result;
         }

@@ -1,5 +1,31 @@
 # Universal Browser: статус
 
+## F4a StartSurface and UI preferences — 2026-11-13
+
+`16.19.0-dev`, continued from `06a98d26`. One presentational StartSurface is shared by
+choose-N and Browser Home. Existing registry discovery metadata controls 4–5 primary
+entries; Open chat focuses the navigation owner. Contextual technical screens remain
+searchable. Dock owns 200 scoped/deduplicated recent records with bounded titles and
+known kinds. Accepted visits only; query/fragment/native sessions are excluded from
+recents and persisted Browser routes. Invalid entries are pruned independently;
+storage failure preserves in-memory use and explains the limitation. Selecting a
+recent always invokes runtime navigation/resolution again. Home creates no renderer.
+
+Shell Panels / top group-maximize and direct split buttons are removed. Existing
+group overflow and one Layout menu own these commands; native window menu no longer
+calls deleted DOM handlers. Current document suggestions now read at most 100 current
+metadata roots, without a full chat/aggregate/history read. Existing domain catalogs
+remain the only source; no second index or browser history stack.
+
+Checks: browser-start-surface (including stale search, 200 cap, storage failure,
+privacy and narrow bounds), Dock placement/restore, selective layout pruning,
+Shell/Demo metrics and Settings lifecycle pass. Bounded metadata-page Harness 1/1;
+Mock build 0 errors. The older current-head discovery fixture fails before discovery
+because it requests the retired Markdown save tool; recorded in BACKLOG, not counted
+as evidence. Visual review screenshots are in UI docs; user acceptance remains open.
+Remaining: provider actions/routes, saved-version completion and local tool open/ack
+contracts, then 07. B02/Windows stays open. No push/release.
+
 ## F3d Document HTML checkpoints — 2026-11-13
 
 `16.18.0-dev`, continued from `7149ad64`. DocumentArtifactStore.HtmlVersions stores

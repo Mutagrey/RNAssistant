@@ -1,5 +1,15 @@
 # Current-to-target migration map
 
+## F4a StartSurface / Shell — 2026-11-13
+
+Flat chooser + all-chat enumeration and watermark screen list are replaced by one
+StartSurface. Existing registry is extended; no adapter store is added. Panels/top
+maximize and direct split DOM are removed; app-window calls Shell owner commands,
+with group actions in the existing overflow. Browser Home placeholder is removed.
+Document completion no longer loads a ChatSession; current metadata discovery has a
+ConversationMetadata overload. Remaining old provider routes/actions and saved-entry
+completion belong to F4b (Browser adapters), not this presentation component.
+
 ## Version catalog — F3b Plugin cutover, 2026-11-13
 
 Candidate Apply and PublishedRelease writer/listing were removed. Plugin tools,

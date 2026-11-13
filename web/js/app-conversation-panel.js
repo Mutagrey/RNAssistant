@@ -189,7 +189,7 @@
   }
   function register(workspace) {
     prepare(); bindAttachmentActions();
-    workspace.registerConversation({ title: "Чат", icon: "chat", section: "chat", menu: true, perObject: true,
+    workspace.registerConversation({ title: "Чат", icon: "chat", discovery: "primary", discoveryTitle: "Открыть чат", order: 50, discover: function () { RNAssistantWorkspaceNavigation.focusSearch(); return true; }, section: "chat", menu: true, perObject: true,
       maximumInstances: 12, renderer: "onlyWhenVisible", key: key, create: create,
       titleFor: function (target) {
         if (target.source === "office") {

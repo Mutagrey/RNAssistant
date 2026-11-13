@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser F4a — StartSurface, 2026-11-13
+
+`16.19.0-dev`: shared chooser/Home, bounded scoped local recents and direct Shell/Dock
+commands are implemented. Preferences exclude transient addresses/runtime bindings;
+metadata discovery avoids whole-chat loading. Focused UI, paging and Mock checks pass;
+a retired-tool Harness fixture is tracked separately. Provider routes/actions and
+local tool admission continue, then 07. B02/Windows and UI acceptance remain open.
+[Details](../browser/06_PROGRESS.md#f4a-startsurface-and-ui-preferences--2026-11-13).
+
 ## Local Browser F3d — Document checkpoints, 2026-11-13
 
 `16.18.0-dev`: document HTML checkpoints retain all pre-cutoff history and separate

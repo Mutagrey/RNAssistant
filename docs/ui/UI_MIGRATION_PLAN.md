@@ -1,5 +1,15 @@
 # План модернизации production UI
 
+## F4a StartSurface — In Review, 2026-11-13
+
+Review: «+» → Open chat (existing tree search), then «+» → Browser → Home → local
+page → Home. Check recents, search and clear at wide / 420 px / 125%; move an existing
+singleton through a split chooser and restore layout. StartSurface, Dock placement,
+Shell/Demo geometry, Settings guards, scoped recents/storage failure and stale search
+checks pass. Old flat chooser, all-chat DOM enumeration and Panels/maximize DOM
+entrypoints are removed. Provider actions/route cutover and 07 continue; native B02,
+Windows evidence and visual user acceptance remain open.
+
 ## F3d Document HTML — In Review, 2026-11-13
 
 Document live Browser and saved HTML use the same checkpoint controls. Review:

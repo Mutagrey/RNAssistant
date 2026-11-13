@@ -98,6 +98,7 @@
     if (focusKey) focusPending = false;
   }
   window.RNAssistantWorkspaceNavigation = { update: update, select: select,
+    focusSearch: function () { switchTab("chat"); RNAssistantShellLayout.setNavigationOpen(true); if (pane) pane.focusSearch(); },
     notice: function (source, message, retry, error) { notices[source] = message || ""; errors[source] = !!error;
       if (retry) retries[source] = retry; else delete retries[source]; status(); } };
 }());

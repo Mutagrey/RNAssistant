@@ -3,8 +3,7 @@
   // Presentation only: adapters own data, scope, selection and command authority.
   var searches = new WeakMap(), panes = new WeakMap();
   function bindSearch(button, input, heading, signal) {
-    if (searches.has(button)) return;
-    searches.set(button, true);
+    if (searches.has(button)) return searches.get(button);
     var title = button.title || button.getAttribute("aria-label") || "Поиск";
     function update() {
       var query = input.value.trim();
@@ -17,13 +16,17 @@
       input.hidden = true; heading.classList.remove("searching");
       button.setAttribute("aria-expanded", "false"); update();
     }
+    function open() {
+      if (input.disabled) return false;
+      input.hidden = false; heading.classList.add("searching");
+      button.setAttribute("aria-expanded", "true"); input.focus(); return true;
+    }
     var events = signal ? { signal: signal } : undefined;
     button.addEventListener("pointerdown", function (event) { if (document.activeElement === input) event.preventDefault(); }, events);
     button.addEventListener("click", function () {
       if (input.disabled) { close(true); return; }
       if (!input.hidden) { close(true); button.focus(); return; }
-      input.hidden = false; heading.classList.add("searching");
-      button.setAttribute("aria-expanded", "true"); input.focus();
+      open();
     }, events);
     input.addEventListener("input", update, events);
     input.addEventListener("blur", function () { close(false); }, events);
@@ -32,6 +35,7 @@
     }, events);
     if (signal) signal.addEventListener("abort", function () { searches.delete(button); }, { once: true });
     update();
+    var control = { open: open }; searches.set(button, control); return control;
   }
   function node(tag, className, text) {
     var element = document.createElement(tag); element.className = className;
@@ -67,7 +71,7 @@
     var retry = node("button", "button compact secondary", "Повторить загрузку"); retry.type = "button"; retry.hidden = true;
     var more = options.more || node("button", "link-button", "Показать ещё"); more.type = "button"; more.hidden = true;
     footer.append(message, retry, more); root.appendChild(footer);
-    bindSearch(search, input, heading, controller.signal);
+    var searchControl = bindSearch(search, input, heading, controller.signal);
     input.addEventListener("input", function () {
       clearTimeout(timer);
       if (adapter.onQueryPending) adapter.onQueryPending();
@@ -77,6 +81,7 @@
     retry.addEventListener("click", function () { if (adapter.onRetry) adapter.onRetry(); }, events);
     more.addEventListener("click", function () { if (adapter.onMore) adapter.onMore(); }, events);
     var pane = {
+      focusSearch: searchControl.open,
       render: function (nodes, treeOptions) {
         RNAssistantNavigationTree.render(tree, nodes, Object.assign({ label: options.title, positionKey: tree.id }, treeOptions));
       },

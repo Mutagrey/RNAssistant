@@ -1,5 +1,13 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Shared StartSurface — In Review, 2026-11-13
+
+Chooser/Home use one token-based title, search, section and entry component; entries
+have an icon, title and secondary source/location. Existing Demo chooser width,
+spacing, search/title metrics and control geometry remain; group chrome now has two
+buttons. Search supports arrows/Enter/Escape and retains stable focused entries on
+refresh. [Wide](review/browser-home-wide.png), [420 px / 125%](review/browser-home-narrow.png).
+
 ## Checkpoint controls — In Review, 2026-11-13
 
 Общие compact Save (shared save icon), clock и Apply используют PreviewSurface и

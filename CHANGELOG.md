@@ -11,6 +11,15 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.19.0-dev
+
+- Dock «+» and Browser Home share one searchable start surface. Opening a chat
+  focuses the existing tree; technical screens remain contextual search results.
+- Browser keeps up to 200 scoped local visits, excluding query strings and runtime
+  sessions, with a clear-history action and a usable in-memory storage fallback.
+- Split/maximize moved into group actions; Shell and native window menus invoke
+  the same layout commands directly. Current document completion reads metadata only.
+
 ### 16.18.0-dev
 
 - Document HTML now has explicit project checkpoints, separate from automatically

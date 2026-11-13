@@ -106,6 +106,14 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.setViewportSize({width: 1280, height: 900});
     await page.waitForTimeout(250);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout), 'late native resize preserves full placement');
+    await page.locator('#hostWindowMenu').click();
+    await page.getByRole('menuitem', {name: 'Открыть…', exact: true}).click();
+    await page.locator('.dock-screen-chooser input').waitFor();
+    await page.locator('[data-tab-panel-id^="choose-"]').getByRole('button').click();
+    await page.locator('#hostWindowMenu').click();
+    await page.getByRole('menuitem', {name: 'Компоновка…', exact: true}).click();
+    await page.getByRole('menuitem', {name: 'Сохранить раскладку', exact: true}).waitFor();
+    await page.keyboard.press('Escape');
     // Opening a complex tool from Compact goes through the native Full command first.
     await page.evaluate(() => windowProbe.set('Compact'));
     await page.evaluate(() => RNAssistantDockWorkspace.show('settings'));
