@@ -38,8 +38,11 @@ namespace RNAssistant.Application
                     return BrowserSourceReader.Read(target, request, manifest.Files.Concat(new[] { "plugin.json" }).Distinct(StringComparer.Ordinal),
                         path => files.ReadText(workspace, path).Text);
                 }
-                // Entry-only legacy projects are readable; saving awaits an explicit member-set.
-                return BrowserSourceReader.Read(target, request, new[] { workspace.HtmlEntryPath }, path => files.ReadText(workspace, path).Text);
+                // The same declared member-set is used by Browser and checkpoint capture.
+                // Entry-only legacy projects stay readable with ProjectDefinitionRequired for Save.
+                var definition = _workspaces.GetHtmlProjectDefinition(workspace);
+                return BrowserSourceReader.Read(target, request, definition.Definition?.Members ?? new[] { workspace.HtmlEntryPath },
+                    path => files.ReadText(workspace, path).Text);
             }
         }
 

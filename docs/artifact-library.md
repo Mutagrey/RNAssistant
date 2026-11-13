@@ -149,13 +149,32 @@ archive refusal, exact bytes, upload/download and late UI responses. MockDemo br
 layout was inspected at 420 px without horizontal overflow. Windows/Office/WebView2
 qualification remains open; these checks are host-neutral.
 
+## Explicit HTML members and coherent capture — 2026-11-13
+
+WorkspaceStore owns Get/SetHtmlProjectDefinition and its pinned definition lease.
+Set requires the expected canonical fingerprint; members are unique relative paths,
+include the HTML entry and exclude file-tool control paths. No-op definitions keep
+the fingerprint. The control file stays outside WorkspaceFileService content input.
+Browser source and future checkpoints use this same definition (no recursive export).
+
+WorkspaceFileService CaptureSet holds sorted existing file scopes and all read
+handles (FileShare.Read) through the caller's publication, streaming exact bytes
+into existing CAS. It shares CaptureOpened with the single-file path. Bounds are
+512 files and a maximum 256 MiB aggregate runtime budget; faults/cancellation release
+all handles. Definition/root/locator/content checks precede aggregate publication.
+Host-neutral tests cover guards, drift and cleanup; Windows sharing/editor/reparse
+qualification remains open. This is the F3 prerequisite; checkpoint catalog and
+manual/agent version commands are the next slice.
+
 ## Saved HTML to managed workspace — In Review, 2026-11-10
 
 `createHtmlProjectFromArtifact` takes an exact source chat/document/resource and
 `Managed` backing. `ArtifactCatalogService` resolves the retained snapshot;
 Application `HtmlProjectImportService` copies source files into a new workspace under
 `<AppData>/html-projects/<id>`. Source files are authoritative; WorkspaceFileService
-keeps existing journal/CAS history. Optional manifest `htmlEntryPath` is configuration.
+keeps existing journal/CAS history. New imports persist `htmlProject {entryPath,members}`
+from the exact transfer package. Legacy `htmlEntryPath` alone never implies a
+member-set or checkpoint capability.
 No new project catalog, revision store, chat or Run is created. The source is unchanged.
 
 Preflight accepts up to 100 HTML/CSS/JS files and 16 MiB UTF-8, checks portable paths,

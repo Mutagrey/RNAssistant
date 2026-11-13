@@ -321,7 +321,9 @@
     <Compile Include="Storage\PluginStore.cs" />
     <Compile Include="Storage\VendorCatalog.cs" />
     <Compile Include="Storage\WorkspaceStore.cs" />
+    <Compile Include="Storage\WorkspaceStore.HtmlProject.cs" />
     <Compile Include="Storage\WorkspaceFileService.cs" />
+    <Compile Include="Storage\WorkspaceFileService.CaptureSet.cs" />
     <Compile Include="Storage\WorkspaceFileService.TextEdits.cs" />
     <Compile Include="Storage\WorkspaceFileService.StreamWrite.cs" />
     <Compile Include="Storage\TabularProjectStore.cs" />

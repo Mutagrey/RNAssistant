@@ -999,6 +999,7 @@ namespace RNAssistant.Harness
                 Test("source comparison: exact HTML without preview data", SourceComparisonHtmlExactSources),
                 Test("source comparison: published plugin sources", SourceComparisonPluginPublishedPair),
                 Test("HTML project import: exact source and independent workspace", HtmlProjectImportExactAndIndependent),
+                Test("HTML project versions: pinned definition and coherent member capture", HtmlProjectDefinitionAndCaptureSet),
                 Test("HTML project import: preflight paths dependencies and bounds", HtmlProjectImportValidatesBeforeWrites),
                 Test("HTML project import: unknown effect read-back and no replay", HtmlProjectImportUnknownIsNotPublishedOrReplayed),
                 Test("artifact transfer: saved Office data", ArtifactTransferSavedOfficeData),

@@ -18,6 +18,20 @@ namespace RNAssistant.Core.Models
         public string Root { get; set; }
         [JsonProperty("htmlEntryPath", NullValueHandling = NullValueHandling.Ignore)]
         public string HtmlEntryPath { get; set; }
+        [JsonProperty("htmlProject", NullValueHandling = NullValueHandling.Ignore)]
+        public HtmlProjectDefinition HtmlProject { get; set; }
+    }
+
+    public sealed class HtmlProjectDefinition
+    {
+        [JsonProperty("entryPath")] public string EntryPath { get; set; }
+        [JsonProperty("members")] public string[] Members { get; set; }
+    }
+
+    public sealed class HtmlProjectDefinitionState
+    {
+        [JsonProperty("definition")] public HtmlProjectDefinition Definition { get; set; }
+        [JsonProperty("fingerprint")] public string Fingerprint { get; set; }
     }
 
     public sealed class WorkspaceDescriptor

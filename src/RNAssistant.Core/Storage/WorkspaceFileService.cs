@@ -397,45 +397,52 @@ namespace RNAssistant.Core.Storage
                 using (var source = new FileStream(path, FileMode.Open, FileAccess.Read,
                     FileShare.Read, 81920, FileOptions.SequentialScan))
                 {
-                    if (source.Length > maximumBytes)
-                    {
-                        if (markUnknownOnSizeRefusal) ObserveUnknown(scope, id, "file_too_large");
-                        throw new WorkspaceFileException("file_too_large", "Source exceeds this operation's byte budget.");
-                    }
-                    long length;
-                    var hash = ChatBlobStore.HashFile(source, out length, token, progress);
-                    var state = _authority.Capture(scope);
-                    var previous = state.GetHead(Identity(id));
-                    var retained = previous?.Knowledge == HeadKnowledge.Known
-                        ? _revisions.GetRevision(scope, previous.Revision) : null;
-                    ResourceRef exact;
-                    if (retained?.ContentSha256 == hash)
-                    {
-                        // A live match cannot silently repair a missing/corrupt
-                        // historical body. Validate its retained content first.
-                        using (OpenRetainedStream(retained.Payload, maximumBytes, token, progress)) { }
-                        exact = previous.Revision.Copy();
-                        _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
-                            hash, retained.Payload, ResourceCoverage.Whole()));
-                    }
-                    else
-                    {
-                        var payload = PayloadRef.FromBlob(_blobs.StoreHashedFile(source, hash, length,
-                            "application/octet-stream", token, progress));
-                        token.ThrowIfCancellationRequested();
-                        exact = NewRevision(id);
-                        _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
-                        _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
-                            hash, payload, ResourceCoverage.Whole()));
-                        token.ThrowIfCancellationRequested();
-                        _authority.Publish(ResourceAuthorityCommit.Create(scope, state.Generation, null,
-                            new[] { new ResourceHeadChange(Identity(id), previous,
-                                ResourceHeadState.Known(exact, state.Generation + 1)) },
-                            previous == null ? AuthorityCommitReason.InitialObservation : AuthorityCommitReason.ExternalDrift));
-                    }
-                    return new WorkspaceFileSnapshot(relativePath, PublishedEvidence(exact, ResourceRepresentations.Raw));
+                    return CaptureOpened(relativePath, source, id, scope, maximumBytes, token, progress, markUnknownOnSizeRefusal);
                 }
             }
+        }
+
+        private WorkspaceFileSnapshot CaptureOpened(string relativePath, FileStream source, string id,
+            ResourceAuthorityScopeId scope, long maximumBytes, CancellationToken token,
+            Action<FileTransferProgress> progress = null, bool markUnknownOnSizeRefusal = false)
+        {
+            if (source.Length > maximumBytes)
+            {
+                if (markUnknownOnSizeRefusal) ObserveUnknown(scope, id, "file_too_large");
+                throw new WorkspaceFileException("file_too_large", "Source exceeds this operation's byte budget.");
+            }
+            long length;
+            var hash = ChatBlobStore.HashFile(source, out length, token, progress);
+            var state = _authority.Capture(scope);
+            var previous = state.GetHead(Identity(id));
+            var retained = previous?.Knowledge == HeadKnowledge.Known
+                ? _revisions.GetRevision(scope, previous.Revision) : null;
+            ResourceRef exact;
+            if (retained?.ContentSha256 == hash)
+            {
+                // A live match cannot silently repair a missing/corrupt
+                // historical body. Validate its retained content first.
+                using (OpenRetainedStream(retained.Payload, maximumBytes, token, progress)) { }
+                exact = previous.Revision.Copy();
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
+                    hash, retained.Payload, ResourceCoverage.Whole()));
+            }
+            else
+            {
+                var payload = PayloadRef.FromBlob(_blobs.StoreHashedFile(source, hash, length,
+                    "application/octet-stream", token, progress));
+                token.ThrowIfCancellationRequested();
+                exact = NewRevision(id);
+                _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, hash, payload, previous?.Revision));
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw,
+                    hash, payload, ResourceCoverage.Whole()));
+                token.ThrowIfCancellationRequested();
+                _authority.Publish(ResourceAuthorityCommit.Create(scope, state.Generation, null,
+                    new[] { new ResourceHeadChange(Identity(id), previous,
+                        ResourceHeadState.Known(exact, state.Generation + 1)) },
+                    previous == null ? AuthorityCommitReason.InitialObservation : AuthorityCommitReason.ExternalDrift));
+            }
+            return new WorkspaceFileSnapshot(relativePath, PublishedEvidence(exact, ResourceRepresentations.Raw));
         }
 
         // The caller owns/disposes the stream and schedules this work off the UI

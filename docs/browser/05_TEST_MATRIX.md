@@ -1,5 +1,15 @@
 # Universal Browser: матрица проверок
 
+## F3a capture prerequisite — 2026-11-13
+
+`HTML project` — 4/4: exact import/member definition, stale/config/control-path guards,
+binary CAS, pinned definition vs concurrent Set, held-source drift, injected capture
+failure/cleanup, aggregate byte budget. Plugin immutable publication, actor guards,
+vendor admission и existing exact-file snapshots — ещё 4 focused cases (4/4).
+Sharing semantics/reparse/editor races остаются отдельным Windows evidence; тест на
+macOS допускает OS refusal либо обнаруженный in-place drift, не доказывает Windows.
+
+
 ## F2a common capability / media — 2026-11-13
 
 `local browser:` — 5/5. Новый standalone plugin-source fixture проходит настоящий

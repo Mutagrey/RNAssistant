@@ -9,7 +9,7 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Core.Storage
 {
     // Workspace association only. ResourceAuthorityStore owns content heads; IConversationStore owns sessions.
-    public sealed class WorkspaceStore
+    public sealed partial class WorkspaceStore
     {
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
         private readonly AppDataPaths _paths;
@@ -39,18 +39,19 @@ namespace RNAssistant.Core.Storage
         }
 
         // Import writes into a new, hidden workspace. ConnectProject publishes it after verification.
-        public WorkspaceDescriptor CreateHiddenHtmlProject(string rootPath, string name, string entryPath)
+        public WorkspaceDescriptor CreateHiddenHtmlProject(string rootPath, string name, string entryPath, string[] members = null)
         {
             if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || !ArtifactEntryPath(entryPath))
                 throw new InvalidDataException("HTML project configuration is invalid.");
             var root = Path.GetFullPath(rootPath);
             if (Directory.Exists(root) || File.Exists(root)) throw new IOException("Project folder already exists.");
-            return OpenCore(root, true, true, null, false, name, entryPath, true);
+            var definition = members == null ? null : CanonicalDefinition(new HtmlProjectDefinition { EntryPath = entryPath, Members = members });
+            return OpenCore(root, true, true, null, false, name, entryPath, true, definition);
         }
 
         private WorkspaceDescriptor OpenCore(string rootPath, bool createIfMissing, bool permitManifestWrite,
             string expectedWorkspaceId, bool showInProjects, string newName = null, string htmlEntryPath = null,
-            bool initiallyHidden = false)
+            bool initiallyHidden = false, HtmlProjectDefinition htmlProject = null)
         {
             if (string.IsNullOrWhiteSpace(rootPath)) throw new ArgumentException("A workspace path is required.", nameof(rootPath));
             var root = Path.GetFullPath(rootPath);
@@ -98,7 +99,8 @@ namespace RNAssistant.Core.Storage
                 if (manifest == null && permitManifestWrite)
                 {
                     StorageFileSystem.EnsureRegularDirectory(control);
-                    manifest = new WorkspaceManifest { SchemaVersion = 1, WorkspaceId = id, Name = name, Root = ".", HtmlEntryPath = htmlEntryPath };
+                    manifest = new WorkspaceManifest { SchemaVersion = 1, WorkspaceId = id, Name = name, Root = ".",
+                        HtmlEntryPath = htmlProject == null ? htmlEntryPath : null, HtmlProject = htmlProject };
                     using (var stream = new FileStream(manifestPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     using (var writer = new StreamWriter(stream, Utf8)) writer.Write(JsonConvert.SerializeObject(manifest, Formatting.Indented));
                 }
@@ -113,7 +115,7 @@ namespace RNAssistant.Core.Storage
                 StorageFileSystem.WriteAllTextAtomic(byPath, JsonConvert.SerializeObject(association), Utf8);
                 return new WorkspaceDescriptor
                 {
-                    WorkspaceId = id, Name = name, RootPath = root, HtmlEntryPath = manifest?.HtmlEntryPath,
+                    WorkspaceId = id, Name = name, RootPath = root, HtmlEntryPath = manifest?.HtmlProject?.EntryPath ?? manifest?.HtmlEntryPath,
                     ReadOnly = !permitManifestWrite || manifest == null,
                     Mounts = new[] { new WorkspaceMountDescriptor
                     { Id = "root", Kind = "directory", RootPath = root, ReadOnly = !permitManifestWrite || manifest == null } }
@@ -287,6 +289,12 @@ namespace RNAssistant.Core.Storage
                 string.IsNullOrWhiteSpace(value.Name) || value.Name.Length > 200 || value.Root != "." ||
                 value.HtmlEntryPath != null && !ArtifactEntryPath(value.HtmlEntryPath))
                 throw new InvalidDataException("Workspace manifest is invalid or unsupported.");
+            if (value.HtmlProject != null)
+            {
+                var definition = CanonicalDefinition(value.HtmlProject);
+                if (value.HtmlEntryPath != null && value.HtmlEntryPath != definition.EntryPath)
+                    throw new InvalidDataException("Conflicting HTML project entry paths.");
+            }
         }
 
         private static bool ArtifactEntryPath(string path)

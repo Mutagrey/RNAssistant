@@ -44,6 +44,8 @@ namespace RNAssistant.Harness
                 AssertTrue(reader.ArtifactLinks.Count == 0 && reader.ActiveHtmlArtifactId == null, "copy does not attach to the reader chat");
                 var store = new WorkspaceStore(paths); var reopened = store.OpenConnected(result.WorkspaceId);
                 AssertEqual("index.html", reopened.HtmlEntryPath, "entry configuration survives reopen");
+                AssertTrue(store.GetHtmlProjectDefinition(reopened).Definition.Members.SequenceEqual(source.Files.Select(file => file.Path).OrderBy(path => path, StringComparer.Ordinal)),
+                    "import persists only the exact transferred member-set");
                 AssertEqual(source.Title, reopened.Name, "project has the source title, not its private directory ID");
                 AssertEqual(source.Files.Single().Content, File.ReadAllText(Path.Combine(reopened.RootPath, "index.html")), "exact source bytes copied");
                 AssertEqual(result.WorkspaceId, store.ListConnected(ConversationStore(chats)).Single().WorkspaceId, "one existing workspace catalog entry");

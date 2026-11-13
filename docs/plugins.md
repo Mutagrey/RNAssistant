@@ -1,5 +1,15 @@
 # Plugins
 
+Local Browser package status (2026-11-13): B02 keeps authored page execution,
+commands and native preview source-only/unavailable; older iframe descriptions
+below are historical until the shared Browser route cutover. Plugin Check now uses
+WorkspaceFileService CaptureSet: pinned plugin.json, the complete declared member-set,
+streamed CAS payloads and sorted file scopes/held read handles through publication.
+The resolved package is bounded to 512 files/256 MiB; vendor bytes remain exact CAS
+references. No sequential re-read/mtime scan is treated as an atomic snapshot.
+Check still creates no user version; Check→Save→Apply cutover is the next F3 slice.
+
+
 Статус: основа v1, 2026-10-19. Владелец — application plugin services;
 причина решения — [ADR-0015](decisions/ADR-0015-plugins.md).
 Это canonical contract установки, публикации, допуска и протокола плагинов.

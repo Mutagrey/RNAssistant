@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Local Browser F3a — coherent capture prerequisite, 2026-11-13
+
+CaptureSet/явный состав HTML-проекта подключены к Plugin Check, import и Browser
+source. 8 focused cases проходят. Промежуточный invariant commit без version bump;
+дальше durable saved-entry catalog и UI/agent Save→Apply. B02/Windows evidence открыт.
+[Подробности](../browser/06_PROGRESS.md#f3a--member-set-capture-prerequisite-2026-11-13).
+
+
 ## Local Browser F2a — capability/media, 2026-11-13
 
 `16.15.1-dev`: independent Workspace Browser contribution и one-shot media delivery

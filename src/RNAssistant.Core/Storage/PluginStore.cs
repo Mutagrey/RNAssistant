@@ -70,68 +70,64 @@ namespace RNAssistant.Core.Storage
         }
 
         public PluginReleaseRecord Capture(PluginSourceWorkspace source, VendorCatalog vendors,
-            IEnumerable<PluginReleaseRecord> reusable = null, bool retain = true)
+            IEnumerable<PluginReleaseRecord> reusable = null, bool retain = true,
+            Action<PluginReleaseRecord> onCaptured = null, System.Threading.CancellationToken token = default(System.Threading.CancellationToken))
         {
-            var observedManifest = _files.ReadText(source.Workspace, "plugin.json");
-            var manifest = PluginPackageFiles.ParseManifest(observedManifest.Text);
-            var members = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
-            var sourcePins = new List<WorkspaceFileSnapshot>();
-            long totalBytes = 0;
-            foreach (var path in manifest.Files)
+            using (var capture = _files.CaptureSetFromDefinition(source.Workspace, "plugin.json",
+                json => PluginPackageFiles.ParseManifest(json).Files, token))
             {
-                var pin = _files.CaptureFile(source.Workspace, path, PluginPackageFiles.MaximumFileBytes);
-                if ((totalBytes += pin.ByteLength) > PluginPackageFiles.MaximumPackageBytes)
-                    throw new PluginException("package_limit", "Plugin package exceeds its byte limit.");
-                using (var stream = _files.OpenExactRead(source.Workspace, path, pin.Reference, PluginPackageFiles.MaximumFileBytes))
-                using (var buffer = new MemoryStream()) { stream.CopyTo(buffer); members.Add(path, buffer.ToArray()); }
-                sourcePins.Add(pin);
-            }
-            if (PluginPackageFiles.IconIsSvgPath(manifest.Icon)) PluginPackageFiles.ReadIconSvg(members[manifest.Icon]);
-            if (!members["plugin.json"].SequenceEqual(PluginPackageFiles.Utf8.GetBytes(observedManifest.Text)))
-                throw new PluginException("plugin_source_changed", "The plugin manifest changed while capturing its files.");
-            foreach (var dependency in manifest.Vendors)
-            {
-                var package = vendors.Resolve(dependency.Id, dependency.Version);
-                VendorAdmission.RequirePlugin(package.Manifest);
-                if (package.Manifest.Dependencies.Any(required => !manifest.Vendors.Any(value => value.Id == required.Id && value.Version == required.Version)))
-                    throw new PluginException("vendor_dependency_missing", "Declare mounts for every exact transitive dependency.");
-                foreach (var member in package.Files)
+                var manifest = PluginPackageFiles.ParseManifest(capture.DefinitionText);
+                var members = new SortedDictionary<string, PayloadRef>(StringComparer.Ordinal);
+                foreach (var pin in capture.Files)
                 {
-                    var path = dependency.Mount + "/" + member.Key;
-                    byte[] existing;
-                    if (members.TryGetValue(path, out existing) && !existing.SequenceEqual(member.Value))
-                        throw new PluginException("vendor_collision", "Source and resolved vendor differ: " + path);
-                    if (!members.ContainsKey(path))
+                    var payload = pin.Evidence.Payload;
+                    members.Add(pin.RelativePath, new PayloadRef(payload.Sha256, payload.ByteLength,
+                        Mime(pin.RelativePath), payload.Encryption, payload.ProtectionKeyId));
+                }
+                if (PluginPackageFiles.IconIsSvgPath(manifest.Icon))
+                    PluginPackageFiles.ReadIconSvg(_blobs.ReadBytes(members[manifest.Icon].ToBlobReference()));
+                long totalBytes = members.Values.Sum(payload => payload.ByteLength);
+                foreach (var dependency in manifest.Vendors)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var package = vendors.Resolve(dependency.Id, dependency.Version);
+                    VendorAdmission.RequirePlugin(package.Manifest);
+                    if (package.Manifest.Dependencies.Any(required => !manifest.Vendors.Any(value => value.Id == required.Id && value.Version == required.Version)))
+                        throw new PluginException("vendor_dependency_missing", "Declare mounts for every exact transitive dependency.");
+                    foreach (var member in package.Files)
                     {
-                        if (!PluginPackageFiles.ValidPath(path) || members.Count >= PluginPackageFiles.MaximumFiles ||
-                            (totalBytes += member.Value.Length) > PluginPackageFiles.MaximumPackageBytes)
-                            throw new PluginException("package_limit", "Resolved package exceeds its path/file/byte limits.");
-                        members.Add(path, member.Value);
+                        token.ThrowIfCancellationRequested();
+                        var path = dependency.Mount + "/" + member.Key;
+                        var payload = PayloadRef.FromBlob(_blobs.StoreBytes(member.Value, Mime(path)));
+                        PayloadRef existing;
+                        if (members.TryGetValue(path, out existing) && existing.Sha256 != payload.Sha256)
+                            throw new PluginException("vendor_collision", "Source and resolved vendor differ: " + path);
+                        if (!members.ContainsKey(path))
+                        {
+                            if (!PluginPackageFiles.ValidPath(path) || members.Count >= PluginPackageFiles.MaximumFiles ||
+                                payload.ByteLength > WorkspaceFileService.MaximumCaptureSetBytes - totalBytes)
+                                throw new PluginException("package_limit", "Resolved package exceeds its path/file/byte limits.");
+                            totalBytes += payload.ByteLength; members.Add(path, payload);
+                        }
                     }
                 }
+                if (members.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != members.Count)
+                    throw new PluginException("package_limit", "Plugin package has colliding paths.");
+                var record = new PluginReleaseRecord { PluginId = manifest.Id, ReleaseId = "rel_" + Guid.NewGuid().ToString("N"),
+                    SourceWorkspaceId = source.SourceWorkspaceId, ManifestJson = capture.DefinitionText,
+                    Files = members.Select(file => new PluginPackageFile { Path = file.Key, Payload = file.Value }).ToList() };
+                record.PackageSha256 = Digest(record.Files);
+                var retainedMatch = (reusable ?? Enumerable.Empty<PluginReleaseRecord>()).FirstOrDefault(item =>
+                    item.PluginId == record.PluginId && item.SourceWorkspaceId == record.SourceWorkspaceId &&
+                    item.PackageSha256 == record.PackageSha256 && item.ManifestJson == record.ManifestJson);
+                capture.Validate();
+                if (retainedMatch != null) record = retainedMatch;
+                else if (retain) Publish(ReleaseRef(record.PluginId, record.ReleaseId), "plugin-release", record,
+                    record.Files.Select(file => file.Payload), null);
+                // Save may publish its catalog while these exact definition/content handles remain held.
+                onCaptured?.Invoke(record);
+                return record;
             }
-            if (members.Count > PluginPackageFiles.MaximumFiles || members.Sum(file => (long)file.Value.Length) > PluginPackageFiles.MaximumPackageBytes ||
-                members.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != members.Count)
-                throw new PluginException("package_limit", "Plugin package exceeds its file/byte limit or has colliding paths.");
-            // Detect ordinary concurrent edits. Later execution never returns to live files.
-            foreach (var pin in sourcePins)
-                if (_files.CaptureFile(source.Workspace, pin.RelativePath, PluginPackageFiles.MaximumFileBytes).ContentSha256 != pin.ContentSha256)
-                    throw new PluginException("plugin_source_changed", "Plugin source changed during capture. Check it again.");
-            var record = new PluginReleaseRecord { PluginId = manifest.Id, ReleaseId = "rel_" + Guid.NewGuid().ToString("N"),
-                SourceWorkspaceId = source.SourceWorkspaceId, ManifestJson = observedManifest.Text,
-                Files = members.Select(file => new PluginPackageFile { Path = file.Key,
-                    Payload = PayloadRef.FromBlob(_blobs.StoreBytes(file.Value, Mime(file.Key))) }).ToList() };
-            record.PackageSha256 = Digest(record.Files);
-            var retainedMatch = (reusable ?? Enumerable.Empty<PluginReleaseRecord>()).FirstOrDefault(item =>
-                item.PluginId == record.PluginId && item.SourceWorkspaceId == record.SourceWorkspaceId &&
-                item.PackageSha256 == record.PackageSha256 && item.ManifestJson == record.ManifestJson);
-            if (retainedMatch != null) return retainedMatch;
-            if (!retain) return record;
-            // A candidate is retained before preview. Activation is a separate head
-            // switch; merely retaining a package grants no execution or data access.
-            Publish(ReleaseRef(record.PluginId, record.ReleaseId), "plugin-release", record,
-                record.Files.Select(file => file.Payload), null);
-            return record;
         }
 
         public PluginRegistration Apply(PluginReleaseRecord candidate, string expectedReleaseId)

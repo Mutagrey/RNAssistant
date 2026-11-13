@@ -43,7 +43,7 @@ namespace RNAssistant.Application
             {
                 // The workspace stays hidden during writes, including after interruption.
                 StorageFileSystem.EnsureRegularDirectory(Path.GetDirectoryName(root));
-                var workspace = _workspaces.CreateHiddenHtmlProject(root, result.Name, result.EntryPath);
+                var workspace = _workspaces.CreateHiddenHtmlProject(root, result.Name, result.EntryPath, prepared.Select(file => file.Path).ToArray());
                 result.WorkspaceId = workspace.WorkspaceId;
                 foreach (var file in prepared)
                 {

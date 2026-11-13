@@ -1,5 +1,20 @@
 # Universal Browser: статус
 
+## F3a — member-set capture prerequisite, 2026-11-13
+
+WorkspaceStore теперь владеет explicit HTML definition, expected fingerprint и
+pinned config lease. Import записывает известный состав; Browser source использует
+его. Старый HtmlEntryPath без состава читается; Save требует ProjectDefinitionRequired.
+WorkspaceFileService CaptureSet удерживает sorted scopes/все read handles до commit,
+использует общий CaptureOpened и existing CAS; 512 members/256 MiB, без всего проекта
+в RAM. Plugin Check переключён с последовательных повторных чтений на этот путь.
+
+Проверки: HTML project 4/4, plugin immutable/actors/vendor по 1/1, file snapshots 1/1.
+Fault/cancellation/definition lock, binary CAS, stale config и content drift проверены.
+Windows sharing/editor/reparse evidence открыт. Это промежуточный invariant commit
+без product bump; дальше F3b catalog + Save/Activate/Delete, без смены исходной базы.
+
+
 ## F2a — common capability и media delivery, 2026-11-13
 
 `16.15.1-dev`: Workspace/plugin-source получает Browser отдельно от Office target;
