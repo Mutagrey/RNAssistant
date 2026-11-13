@@ -142,6 +142,15 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 attachments (2026-11-14): native messages/queued input retain CAS originals,
+extractions and analysis; existing Office ingestion and Workspace resource provider
+consume the restored metadata. Attachment membership is a reference-only manifest;
+chat_attachment is a disposable locator in existing JournalIndex (schema 24).
+Exact input delivery, immutable originals, detach, history and relocation are
+covered. No adapter added; default ChatStore/adapters still retire at whole-port P7.
+Plan/Task/HTML/context-state consumers, fork, P3 and complete backup remain open.
+[Contract](../session-events.md#journal-attachments-and-queued-originals--2026-11-14).
+
 P1/P2 visible history (2026-11-14): ConversationJournal now accepts explicit text
 edit/delete/clear via a CAS membership manifest and the existing message index.
 Office mutation read-back and Workspace deletion consume the Store port; canonical

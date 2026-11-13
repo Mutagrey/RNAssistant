@@ -144,11 +144,11 @@ namespace RNAssistant.Harness
                 AssertTrue(inbox.Snapshot(chat).Paused, "abandoned input is paused");
                 inbox.Update(chat, new ConversationInputUpdate { InputId = input.Id, ExpectedRevision = 1 }, "remove");
                 AssertEqual(ConversationInputStatus.Removed, inbox.ReadAccepted(chat, input.OperationId).Current.Status, "explicit removal of undelivered input survives restart");
-                var attachment = InboxInput("attachment", "unsupported", InputDelivery.Queue);
+                var attachment = InboxInput("attachment", "uncommitted", InputDelivery.Queue);
                 attachment.Attachments.Add(new ChatAttachment());
                 var revision = chat.Revision;
-                RuntimeThrows<NotSupportedException>(() => inbox.Submit(chat, attachment));
-                AssertEqual(revision, store.Load(chat.Id).Revision, "unsupported owners fail before accepting input");
+                RuntimeThrows<InvalidDataException>(() => inbox.Submit(chat, attachment));
+                AssertEqual(revision, store.Load(chat.Id).Revision, "uncommitted originals fail before accepting input");
             });
         }
     }

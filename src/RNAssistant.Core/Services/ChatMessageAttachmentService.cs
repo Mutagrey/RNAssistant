@@ -44,19 +44,7 @@ namespace RNAssistant.Core.Services
                     ? ChatArtifactKinds.Image : ChatArtifactKinds.Attachment;
                 if (artifact == null)
                 {
-                    artifact = new ChatArtifact
-                    {
-                        Id = id, Kind = expectedKind,
-                        Title = string.IsNullOrWhiteSpace(attachment.FileName) ? "Вложение" : attachment.FileName,
-                        MimeType = attachment.ContentType, SourceMessageId = message.Id,
-                        RelativePath = attachment.RelativePath,
-                        ContentSha256 = attachment.ContentSha256, ContentByteLength = attachment.ContentByteLength,
-                        MetadataJson = JsonConvert.SerializeObject(new
-                        {
-                            attachmentId = attachment.Id, attachment.Kind, attachment.Size,
-                            attachment.PageCount, attachment.ExtractedCharCount, attachment.TextTruncated
-                        })
-                    };
+                    artifact = CreateArtifact(message, attachment);
                     session.Artifacts.Add(artifact);
                 }
                 else if (!string.Equals(artifact.Kind, expectedKind, StringComparison.OrdinalIgnoreCase) ||
@@ -74,6 +62,25 @@ namespace RNAssistant.Core.Services
                 if (!message.ResourceRefs.Any(item => item != null && item.Uri == reference.Uri &&
                     item.Revision == reference.Revision)) message.ResourceRefs.Add(reference);
             }
+        }
+
+        internal static ChatArtifact CreateArtifact(ChatMessage message, ChatAttachment attachment)
+        {
+            return new ChatArtifact
+            {
+                Id = "attachment_" + attachment.Id,
+                Kind = string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)
+                    ? ChatArtifactKinds.Image : ChatArtifactKinds.Attachment,
+                Title = string.IsNullOrWhiteSpace(attachment.FileName) ? "Вложение" : attachment.FileName,
+                MimeType = attachment.ContentType, SourceMessageId = message.Id,
+                RelativePath = attachment.RelativePath,
+                ContentSha256 = attachment.ContentSha256, ContentByteLength = attachment.ContentByteLength,
+                MetadataJson = JsonConvert.SerializeObject(new
+                {
+                    attachmentId = attachment.Id, attachment.Kind, attachment.Size,
+                    attachment.PageCount, attachment.ExtractedCharCount, attachment.TextTruncated
+                })
+            };
         }
 
         public sealed class Binding

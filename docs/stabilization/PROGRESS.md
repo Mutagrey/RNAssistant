@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Native attachment consumers — 2026-11-14
+
+Вложения сообщений и очереди подключены к native journal через существующие
+Office ingestion / Workspace resource provider. CAS хранит оригиналы, extraction
+и analysis; рабочий набор — только ссылки и attach/detach. Доставка доказывает
+совпадение файлов, а не только текста. Lost ack, index failure, restart/rebuild,
+перемещение документа и Workspace restore проверены host-neutral.
+Остаток существенный: Plan/Task/HTML/context-state consumers и fork; P3 (включая
+metadata/header, summary usage и размеры working-set metadata); полный backup
+всех owners, остановка старых writers, переключение и удаление ChatStore/adapters.
+P4 отложена; default writer прежний; Windows/Office evidence открыт.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-attachment-consumers-2026-11-14).
+
 ## Native visible-history rewrites — 2026-11-14
 
 Text edit/delete/clear подключены к CAS-manifest и существующему индексу, через

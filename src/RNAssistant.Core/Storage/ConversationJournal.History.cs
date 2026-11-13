@@ -140,7 +140,7 @@ namespace RNAssistant.Core.Storage
             if (message.Role != "user" || message.ProtocolMessage || message.RuntimeProjection || message.Activity != null ||
                 message.ToolCallId != null || message.AcceptedCallOrigin != null || message.AgentCommunication != null ||
                 prior != null && (prior.Header.Role != "user" || prior.Header.ProtocolMessage || prior.Header.AgentCommunication != null ||
-                    prior.Header.CreatedUtc != message.CreatedUtc || !SameRunValue(prior.Header.ResourceRefs, message.ResourceRefs) ||
+                    prior.Header.CreatedUtc != message.CreatedUtc || !SameRunValue(prior.Header.Attachments, message.Attachments) || !SameRunValue(prior.Header.ResourceRefs, message.ResourceRefs) ||
                     !SameRunValue(prior.Header.ResourceModelReferences, message.ResourceModelReferences)))
                 throw new InvalidOperationException("History can edit user text, never runtime evidence or peer provenance.");
         }

@@ -75,7 +75,7 @@ namespace RNAssistant.Core.Storage
 
         private static IEnumerable<PayloadRef> MessageReferences(ChatMessage message)
         {
-            return CallReferences(message).Concat(ResultReferences(message));
+            return CallReferences(message).Concat(ResultReferences(message)).Concat(AttachmentReferences(message?.Attachments));
         }
 
         private static ContextCallKey LookupCallKey(Dictionary<string, ContextCallKey> keys, string fingerprint)

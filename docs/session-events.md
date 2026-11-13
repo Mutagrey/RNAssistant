@@ -1,5 +1,29 @@
 # Session event stream
 
+## Journal attachments and queued originals — 2026-11-14
+
+Native ConversationJournal accepts committed user attachments and queued input files.
+Headers retain immutable upload metadata and original/extraction CAS addresses;
+inline extraction previews are omitted, and analysis text has its own CAS reference.
+Pending inputs root their files before a user message exists. Input transitions
+preserve accepted files, and Applied proves the exact attachments as well as text.
+Staged-only, missing-CAS and rebound originals fail before acceptance.
+
+Attachment working-set membership and attach/detach decisions are a reference-only
+CAS manifest. Original metadata remains with the accepted Workspace message or
+DocumentArtifactStore. Schema 24 adds only a disposable chat_attachment locator to
+JournalIndex, updated atomically with the message and cursor. Pages address source
+headers without hydrating old message/analysis/file bodies; catalogs hydrate none.
+A page with original references additionally reads the working-set manifest. Its
+metadata size and repeated authority/working-set reads remain P3 costs.
+
+Existing Office ingestion and Workspace attachment providers consume this path.
+Retry, index failure, restart, rebuild, document relocation, attachment-bearing
+text edits/clear and Workspace backup/restore retain exact originals. Clearing
+chat history does not remove document publications. Plan/Task/HTML/context-state
+consumers and fork remain open. Default composition still uses ChatStore; complete
+Office backup and Windows qualification are separate gates.
+
 ## Journal visible history and retained replay guards — 2026-11-14
 
 Explicit text edit/delete/clear now use the existing ConversationCommit.RewriteHistory
@@ -35,8 +59,8 @@ Office mutation observer; Workspace deletion uses its existing Store port.
 
 Checked: Office editor/clear plus resource read-back, Workspace deletion and an
 actual kernel repeat after an Unknown file write, bounded pages, fault/retry,
-rebuild/Workspace restore and opaque confirmation. Fork, resource/attachment-bearing
-history and other resource-state consumers remain open. Office documents.json is
+rebuild/Workspace restore and opaque confirmation. Attachment scope is connected
+above; fork and remaining resource-state/history consumers stay open. Office documents.json is
 still outside the new journal backup, which correctly refuses that mixed root;
 [the existing backup owner must include it](stabilization/BACKLOG.md#native-office-identity-backup--2026-11-14).
 Default writers and Windows/Office qualification are unchanged.

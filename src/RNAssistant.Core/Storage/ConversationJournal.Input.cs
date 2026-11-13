@@ -40,7 +40,9 @@ namespace RNAssistant.Core.Storage
             if (frame.Control == null || frame.Checkpoint != null || input.Recipient != frame.Card.ChatId || header == null ||
                 string.IsNullOrWhiteSpace(header.OperationId) || string.IsNullOrWhiteSpace(header.RequestFingerprint) ||
                 !Enum.IsDefined(typeof(InputDelivery), header.Delivery)) throw new InvalidDataException("Invalid chat input identity.");
-            if ((header.Attachments?.Count ?? 0) != 0) throw TextStoreScope();
+            AttachmentHeaders(header.Attachments);
+            if (header.Attachments?.Any(item => item.ExtractedText != null) == true)
+                throw new InvalidDataException("Input metadata cannot contain extracted text.");
             var prior = InputState(db, input.MessageId);
             if (prior == null)
             {
@@ -62,7 +64,7 @@ namespace RNAssistant.Core.Storage
                          input.Status == ConversationInputStatus.Removed && frame.Control.Paused)))
                     throw new InvalidOperationException("Input transition does not match its accepted state.");
                 ConversationInputJournal.RequireSameIdentity(prior.Header, header);
-                if (prior.Header.CreatedUtc != header.CreatedUtc ||
+                if (!SameRunValue(prior.Header.Attachments, header.Attachments) || prior.Header.CreatedUtc != header.CreatedUtc ||
                     (header.AgentCommunication != null || prior.Status != ConversationInputStatus.Pending || input.Status != ConversationInputStatus.Pending) &&
                     (prior.Header.Delivery != header.Delivery || !SameRunValue(prior.Body, input.Body)))
                     throw new InvalidOperationException("Only a pending edit may change input text or delivery.");
@@ -85,7 +87,8 @@ namespace RNAssistant.Core.Storage
             if (frame.Card.ChatId != input.Recipient || entry == null || !SameRunValue(entry.Body, input.Body) ||
                 entry.Header.Role != "user" || entry.Header.ProtocolMessage ||
                 input.RunId != null && entry.Header.RunId != input.RunId ||
-                !SameRunValue(entry.Header.AgentCommunication, input.Header.AgentCommunication))
+                !SameRunValue(entry.Header.AgentCommunication, input.Header.AgentCommunication) ||
+                !SameRunValue(entry.Header.Attachments, input.Header.Attachments))
                 throw new InvalidDataException("Input receipt does not identify the accepted user message.");
         }
 

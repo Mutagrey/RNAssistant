@@ -1886,6 +1886,22 @@ replacement or an invented empty body.
 
 ## Context and storage
 
+### Native attachment consumers — 2026-11-14
+
+Office ChatResourceIngestionService publishes originals through the existing
+DocumentArtifactStore backed by ResourceJournal; ConversationJournal accepts only
+matching original metadata. Workspace keeps its accepted message as the source,
+with an addressed disposable locator for later resource-reference pages. The
+existing WorkspaceChatAttachmentResourceProvider reads the same CAS files after
+restart/restore. No parallel resource owner or attachment store is introduced.
+
+Chat-owned membership stores exact references and attach/detach decisions; it
+does not copy artifact authority. Original/extraction/analysis payloads and queued
+input files participate in canonical CAS closure. Delivery without the accepted
+files is rejected, even if user text matches. Remaining resource-state owners,
+fork, P3 and production cutover remain open.
+[Storage contract](session-events.md#journal-attachments-and-queued-originals--2026-11-14).
+
 ### Native text history consumers — 2026-11-14
 
 Office chat edit/clear uses the existing ResourceMutationAuthorityObserver with the
@@ -1893,7 +1909,7 @@ new Store port. Workspace message deletion persists through IConversationStore.
 Only visible membership and explicit user text change; resource read-back and
 canonical effect/Unknown evidence retain their existing owners. The kernel's exact
 replay guard survives deleting the visible call/result pair. Fork and resource-bearing
-history remain unconnected; this does not enable all Plan/Task/HTML/attachment owners.
+history remain unconnected; this does not enable the remaining Plan/Task/HTML/context owners.
 Office's existing document identity registry also remains a P6/P7 backup dependency.
 [History contract](session-events.md#journal-visible-history-and-retained-replay-guards--2026-11-14).
 

@@ -159,6 +159,15 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal attachments:` covers real Office ingestion and Workspace attachment reads,
+queued-only CAS closure, exact input delivery, lost acknowledgement, index failure,
+restart/rebuild, detach, relocation, analysis hydration, immutable originals, history
+and clean Workspace restore. A referenced page reads one message plus its working-set
+manifest; catalogs do not hydrate those bodies. Pair with `journal input:`,
+`journal runtime:`, `journal history: Office edit clear` and
+`attachments: message targets isolate exact originals`; reuse one build.
+No default-writer switch or Windows/Office qualification is implied.
+
 `journal history:` covers actual Office text edit/clear/resource observer, Workspace
 message deletion and a real Workspace kernel retry after Unknown: only the repeated
 call is denied; independent read succeeds. It includes a 160-message rewrite,

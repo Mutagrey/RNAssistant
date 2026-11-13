@@ -1795,3 +1795,42 @@ after-state/CAS ownership.
    updated. This is an intermediate native integration, without product bump/tag/push.
    All owned source files and registrations match the tested archive; required
    version-format and diff checks are performed before commit.
+
+## P1/P2 — native attachment consumers (2026-11-14)
+
+1. ConversationJournal now accepts message/queued attachments through the existing
+   Office ingestion and Workspace resource provider. This closes one resource
+   consumer under P1/P2; default composition and the remaining owners are unchanged.
+2. Original/extraction/analysis bytes live in CAS. Headers omit extracted previews;
+   analysis has a separate reference. Pending input roots files before delivery.
+   Transitions cannot swap files, and Applied requires the same text and originals.
+   Immutable upload metadata cannot be rebound by normal updates or text rewrites.
+3. Attachment membership/attach-detach decisions use one reference-only CAS manifest.
+   Original metadata remains in the accepted Workspace message or document authority.
+   Schema 24 adds a disposable locator to existing JournalIndex; rows and cursor
+   commit atomically. Existing artifact construction is reused, with no new store,
+   registry, adapter, import, dual-write or fallback. Metadata-only text commits do
+   not open a resource owner. Relocation preserves the working-set reference.
+4. Three new checks and ten selected regressions pass on macOS/net8/C#7.3 in an
+   isolated c71598d8 archive plus owned changes. New cases cover real Office ingestion
+   and Workspace reads, queued-only files, exact delivery, missing CAS, lost ack,
+   index failure, restart/rebuild, detach, relocation, history and Workspace restore.
+   Regressions: native input (4), runtime (4), Office history consumer (1), existing
+   attachment targets (1). Only the affected runtime/input failures were rerun after
+   removing unnecessary resource-owner construction. No full suite or VSTO run.
+5. Before: native Store rejected attachments/analysis and queued files. After: a
+   later reference-only page resolves its original from a source-header locator or
+   document authority, without hydrating the earlier message, 70 KB analysis or file.
+   That page reads one selected message plus the working-set manifest; catalog body
+   reads remain zero. Working-set metadata size, full-load repetition and authority
+   reads remain P3 costs; no CPU/allocation/Windows latency improvement is claimed.
+6. Remaining: Plan/Task/HTML/context-state consumers, fork and their history paths;
+   P3 metadata/header/context/summary usage; complete per-owner backup/restore, old
+   writer shutdown, default cutover and ChatStore/adapter removal. Office identity
+   backup remains open; only Workspace restore is qualified here. P4 is deferred;
+   Windows/Office photo evidence remains separate. Retry-policy follow-up is recorded
+   in BACKLOG (c71598d8), not implemented or added as a mandatory storage phase.
+7. Session events, Resource Fabric, MIGRATION_MAP, PROGRESS and Harness guide updated.
+   Owned source files match the validation archive; version-format and scoped diff/link
+   checks run before commit. Concurrent Browser work is excluded. This intermediate
+   native integration has no product bump, tag or push.

@@ -134,9 +134,13 @@ namespace RNAssistant.Core.Storage
                     return Tuple.Create(current, entries);
                 }, CancellationToken.None);
                 if (selected == null) return null;
-                return new ConversationMessageWindow { Metadata = ChatMetadata(selected.Item1),
-                    PageMessages = selected.Item2.Select(ReadText).ToArray(), Artifacts = new ChatArtifact[0],
-                    DetachedArtifactIds = new HashSet<string>(), ApplicableTombstoneIds = new HashSet<string>(),
+                var metadata = ChatMetadata(selected.Item1);
+                var artifacts = ReadOriginals(metadata, selected.Item2.SelectMany(item => item.Header.ResourceRefs ?? new List<ResourceRef>()));
+                var state = artifacts.Length == 0 ? null : ReadAttachmentSet(selected.Item1.Fact.Attachments, metadata);
+                return new ConversationMessageWindow { Metadata = metadata,
+                    PageMessages = selected.Item2.Select(ReadText).ToArray(), Artifacts = artifacts,
+                    DetachedArtifactIds = new HashSet<string>(artifacts.Where(item => ArtifactWorkingSet.IsDetached(metadata, state?.Links, item)).Select(item => item.Id)),
+                    ApplicableTombstoneIds = new HashSet<string>(),
                     StartIndex = Math.Max(0, beforeIndex - pageSize), TotalCount = selected.Item1.Fact.MessageCount };
             }
         }
@@ -171,6 +175,9 @@ namespace RNAssistant.Core.Storage
                     if (before == receipt.Fact.MessageCount) break;
                 }
                 ApplyChatReceipt(session, receipt);
+                var attachmentSet = ReadAttachmentSet(receipt.Fact.Attachments, ChatMetadata(receipt));
+                session.Artifacts = ReadOriginals(ChatMetadata(receipt), attachmentSet.References).ToList();
+                session.ArtifactLinks = attachmentSet.Links.ToList();
                 LoadChatReferences(session); return session;
             }
         }
