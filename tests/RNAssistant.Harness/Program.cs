@@ -704,6 +704,8 @@ namespace RNAssistant.Harness
                 Test("journal spawn: lost acknowledgement restart and restore", () => JournalSendParity(true, spawn: true)),
                 Test("journal spawn: unavailable read-back recovers Unknown without replay", () => JournalSendParity(false, true, spawn: true)),
                 Test("journal send: native Send and Resolve through consumers", () => JournalSendParity(false)),
+                Test("journal assignments: Office and Workspace model wire", () => JournalSendParity(false, assignments: true)),
+                Test("journal assignments: bounded pages scope rebuild and restore", JournalAssignmentPages),
                 Test("journal send: lost acknowledgement restart and restore", () => JournalSendParity(true)),
                 Test("journal send: unavailable read-back recovers Unknown without replay", () => JournalSendParity(false, true)),
                 Test("journal peer: atomic Inbox heads and recovery", JournalPeerAtomicInbox),

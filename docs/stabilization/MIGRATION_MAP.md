@@ -52,6 +52,17 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P5 native assignment pages (2026-11-13): the existing event port projects canonical
+Send/Resolve/spawn intake into the same assignment DTO, now owned by Core. Owner:
+ConversationJournal / Application AgentCommunicationService and Inbox. Schema 21
+extends only existing `agent_delivery` with a flag and directional partial indices.
+Cold listing skips Inbox replay/catalog enumeration; it reads only page request
+bodies, never report bodies. Exact scope/revision and canonical locators guard each
+page. No new store, durable read model, import, dual-write or fallback. Whole-port
+P7 removes explicit AssignmentsEvents and the capability branch/retiring adapters.
+Group operations are next; Store/resource consumers and metadata/header stay open.
+[Contract](../session-events.md#journal-assignment-pages--2026-11-13).
+
 P5 native cancel (2026-11-13): the same control port/DTO now accepts pause/resume/
 cancel. One `queue.control` pins source call, both heads and exact live lifetime
 or saved wait. Owner: existing Application service/Inbox/RunOwner, journal and
@@ -60,7 +71,7 @@ live signal; cold termination reuses the same kernel/CommitRun helper as retirin
 cancel and user recovery. Source Unknown survives a lost target terminal receipt.
 Whole-port P7 removes explicit CancelEvents with PauseEvents/SendEvents/SpawnEvents
 and the capability/adapters. No replay, import, fallback or dual-write. Next:
-assignment/group projections, other Store/resource operations and metadata/header;
+group operations, other Store/resource operations and metadata/header;
 default writers and Windows/Office qualification remain unchanged.
 [Contract](../session-events.md#journal-peer-cancellation--2026-11-13).
 
@@ -74,7 +85,7 @@ RunOwner lifetime survives checkpoint invocation changes, never restart. Read-ba
 safe acknowledgement, protected user pause, stale release and Unknown keep their
 existing authorities. `PauseEvents` remains only behind the explicit retiring-backend
 capability; whole-port P7 removes it with SendEvents/SpawnEvents/adapters. Native
-cancel is connected above; next are assignment/group projections, other Store/resource
+cancel is connected above; next are group operations, other Store/resource
 operations and metadata/header costs. Default writers are unchanged.
 [Contract](../session-events.md#journal-peer-pause-and-resume--2026-11-13).
 
@@ -97,7 +108,7 @@ scan/global service lock during native persistence, no new store/adapter/schema.
 Exact runtime entry, receipt-linked terminal, both live cursors and Inbox signal are
 connected. Whole-port P7 removes the temporary capability branch and SendEvents
 together with the old event adapters; atomic delivery has no fallback/dual-write.
-Spawn and peer controls are connected above; assignment/group projections, other
+Spawn and peer controls are connected above; group operations, other
 Store/resource consumers and default composition remain open. [Contract](../session-events.md#journal-outbound-send-and-resolve--2026-11-13).
 
 P5 peer Inbox/correlation (2026-11-13): native acceptance shares delivery, input,

@@ -1,34 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Application.Conversations
 {
-    [JsonConverter(typeof(StringEnumConverter))]
-    internal enum AgentAssignmentState { Open, DeliveryUnknown, Removed, ResolutionPrepared, ResolutionReceived }
-
-    internal sealed class AgentAssignmentView
-    {
-        [JsonProperty("request_id")] public string RequestId { get; set; }
-        [JsonProperty("agent_id")] public string AgentId { get; set; }
-        public string Summary { get; set; }
-        public AgentAssignmentState State { get; set; }
-        [JsonProperty("reported_outcome", NullValueHandling = NullValueHandling.Ignore)] public AgentAssignmentOutcome? ReportedOutcome { get; set; }
-        [JsonProperty("resolution_message_id", NullValueHandling = NullValueHandling.Ignore)] public string ResolutionMessageId { get; set; }
-        [JsonProperty("input_status", NullValueHandling = NullValueHandling.Ignore)] public ConversationInputStatus? InputStatus { get; set; }
-    }
-
-    internal sealed class AgentAssignmentPage
-    {
-        public string Direction { get; set; }
-        public IReadOnlyList<AgentAssignmentView> Items { get; set; }
-        public bool Truncated { get; set; }
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string NextRequest { get; set; }
-    }
-
     internal sealed partial class AgentCommunicationService
     {
         // Only an applied recipient can report a result. The original public message
@@ -73,9 +49,18 @@ namespace RNAssistant.Application.Conversations
             {
                 RequireEnabled(limit);
                 Scope(source);
-                if ((direction != "incoming" && direction != "outgoing") ||
-                    afterRequest != null && (string.IsNullOrWhiteSpace(afterRequest) || afterRequest.Length > 64))
-                    throw new AgentCommunicationException("agent_assignment_query_invalid", "Укажите incoming/outgoing и при необходимости NextRequest предыдущей страницы.");
+            }
+            if ((direction != "incoming" && direction != "outgoing") ||
+                afterRequest != null && (string.IsNullOrWhiteSpace(afterRequest) || afterRequest.Length > 64))
+                throw new AgentCommunicationException("agent_assignment_query_invalid", "Укажите incoming/outgoing и при необходимости NextRequest предыдущей страницы.");
+            return inbox.AtomicAgentDelivery ? inbox.AgentAssignments(source, direction == "incoming", afterRequest)
+                : AssignmentsEvents(inbox, source, direction, afterRequest);
+        }
+
+        private AgentAssignmentPage AssignmentsEvents(ConversationInboxService inbox, ChatSession source, string direction, string afterRequest)
+        {
+            lock (_sync)
+            {
                 var box = inbox.Get(source);
                 lock (box.Sync)
                 {
@@ -90,7 +75,7 @@ namespace RNAssistant.Application.Conversations
                         views = box.Inputs.Where(input => input.AgentCommunication?.Assignment == true).Select(input => {
                             var report = resolutions[input.AgentCommunication.MessageId].SingleOrDefault();
                             return new AgentAssignmentView { RequestId = input.AgentCommunication.MessageId,
-                                AgentId = input.AgentCommunication.Sender.AgentId, Summary = AssignmentExcerpt(input.Text), InputStatus = input.Status,
+                                AgentId = input.AgentCommunication.Sender.AgentId, Summary = AgentAssignmentView.Excerpt(input.Text), InputStatus = input.Status,
                                 State = report != null ? accepted.Contains(report.OperationId) ? AgentAssignmentState.ResolutionReceived : AgentAssignmentState.ResolutionPrepared
                                     : input.Status == ConversationInputStatus.Removed ? AgentAssignmentState.Removed : AgentAssignmentState.Open,
                                 ReportedOutcome = report?.Resolution, ResolutionMessageId = report?.MessageId };
@@ -122,11 +107,6 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
-        private static string AssignmentExcerpt(string text)
-        {
-            text = (text ?? "").Trim();
-            if (text.Length <= 160) return text;
-            return text.Substring(0, char.IsHighSurrogate(text[159]) ? 159 : 160) + "…";
-        }
+
     }
 }

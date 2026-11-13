@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Native assignment pages — 2026-11-13
+
+`agents.list(assignments=…)` подключён к journal/index через Office/Workspace.
+Страница ограничена 50 назначениями; cold read не загружает весь Inbox, тела
+отчётов остаются за FIFO. Shared DTO сохранён, schema 21 расширяет существующий
+delivery index. Два новых checks проходят: model wire, paging, scope/stale,
+rebuild/restore; 16 regression checks проходят. Один прежний Workspace wire case
+прошёл только при адресном повторе после ошибки записи run — [открытый риск](BACKLOG.md#intermittent-workspace-assignment-wire-failure--2026-11-13).
+На странице из 50 записей — 103 canonical reads и 50 request bodies
+при 61 retained inputs; Windows performance не заявляется. Default writers прежние.
+Далее группы, остальные Store/resource операции и metadata/header; P4 отложена.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-assignment-pages-2026-11-13).
+
 ## Native cancel — 2026-11-13
 
 Отмена подключена к существующему typed control port и `queue.control`. Живой
@@ -291,7 +304,7 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После native Send/Resolve/spawn/pause/resume/cancel — peer projections, остальные Store/resource
+После native Send/Resolve/spawn/pause/resume/cancel и assignment pages — группы, остальные Store/resource
 consumers и metadata/header, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
@@ -391,7 +404,14 @@ Lost request ack разрешается по исходному frame; недо�
 ack не превращаются в успех или повтор. Live/saved peer pause отменяется без модели.
 7 новых и 17 regression checks проходят; default writers не переключены, product bump не нужен.
 [Отчёт §12](../audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
-Assignment/group projections, остальные mutation/resource owners,
+Подключены native assignment pages (2026-11-13): bounded directional lookup в
+существующем delivery index, exact scope/revision и canonical receipts. DTO/сводка
+общие; холодный запрос не поднимает весь Inbox и не читает тела отчётов. Schema 21,
+2 новых и 16 regression checks проходят, включая реальные Office/Workspace consumers
+и restore; разовая ошибка прежнего Workspace wire case остаётся в backlog.
+Default writers не переключены, промежуточный срез без product bump.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--native-assignment-pages-2026-11-13).
+Группы, остальные mutation/resource owners,
 rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.

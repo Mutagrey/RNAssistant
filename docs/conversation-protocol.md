@@ -193,8 +193,18 @@ Removed — входящее поручение убрано из очереди
 input_status отдельно показывает Pending/Applied/Removed. Локальные наблюдения двух
 сторон могут различаться при потере source receipt. Проекция не читает чужие чаты,
 не запускает Run, не выдаёт queued result body; сводка исходного запроса до 160
-символов плюс многоточие. Выход ограничен; чтение старого metadata journal ещё не
+символов плюс многоточие. Выход ограничен; чтение retiring metadata journal ещё не
 является bounded indexed scan. Нет отдельного durable assignment projection.
+
+Native journal (2026-11-13): страница выбирается из существующего delivery index
+по chat/direction/request_id; максимум 51 locator для 50 строк. Scope/revision и
+request/resolution/input проверяются по canonical frames. Холодное чтение не
+восстанавливает весь Inbox; читаются только тела запросов текущей страницы для
+прежней сводки. Тела отчётов не выдаются и не обходят FIFO. Open/ResolutionReceived
+означают доказанный intake; source Unknown и оценка внешнего результата не меняются.
+Cursor задаёт следующую request_id, а не общий snapshot нескольких страниц.
+Default backend прежний; AssignmentsEvents удаляется с ним на whole-port P7.
+[Контракт](session-events.md#journal-assignment-pages--2026-11-13).
 
 Сообщения остаются role=user с прежним escaping/provenance. Runtime добавляет в
 однострочный заголовок только assignment=true либо reported_outcome и reply_to.

@@ -181,6 +181,21 @@ namespace RNAssistant.Application.Conversations
                 .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).ToArray();
         }
 
+        internal AgentAssignmentPage AgentAssignments(ChatSession session, bool incoming, string afterRequest)
+        {
+            Inbox box;
+            lock (_sync) _inboxes.TryGetValue(ScopeKey(session), out box);
+            // A cold metadata query must not replay/hydrate the entire Inbox.
+            if (box == null) return _events.ReadAgentAssignments(ConversationMetadata.From(session), incoming, afterRequest);
+            lock (box.Sync)
+            {
+                // Recovery may supply a newer observed session to an idle Inbox.
+                // Prefer it without creating/replaying or rebinding the queue.
+                var observed = !box.Running && !box.Worker && session.Revision >= box.Session.Revision ? session : box.Session;
+                return _events.ReadAgentAssignments(ConversationMetadata.From(observed), incoming, afterRequest);
+            }
+        }
+
         internal IReadOnlyList<AgentRequestReference> AgentRequests(ChatSession session, IReadOnlyList<string> messageIds)
         {
             var box = Get(session);

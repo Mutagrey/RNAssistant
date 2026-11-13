@@ -1,5 +1,35 @@
 # Session event stream
 
+## Journal assignment pages — 2026-11-13
+
+`agents.list(assignments=incoming|outgoing)` now reads native Send/Resolve/spawn
+intake through the existing event port and Application/Inbox owners. The same
+assignment DTO/excerpt contract lives in Core; no separate assignment store or
+durable projection. Schema 21 adds an assignment flag and two directional partial
+indices to existing `agent_delivery`, rebuilt from canonical acceptance facts.
+Queries select at most 51 IDs to return 50 rows and NextRequest. Each page validates
+the exact current chat revision/scope and canonical request, resolution and local
+input locators. The request-ID cursor does not pin a snapshot across later pages.
+
+Cold listing does not create/replay an Inbox or enumerate chat catalog. Only request
+bodies on the returned page are verified/read for the existing trim and 160-character
+surrogate-safe excerpt. Report bodies stay behind Inbox FIFO/policy; outgoing input
+status describes this chat's received report, never the recipient's private queue.
+Native Open/ResolutionReceived means canonical intake, not successful external work
+or an upgrade of an Unknown source tool terminal. Partial legacy Prepared states are
+not fabricated from native frames. Listing never changes a chat or schedules work.
+
+Two checks cover real Office/Workspace `agents.list` model wire, 50+1 paging, scope/
+stale guards, restart/rebuild and clean Workspace restore. A cold incoming page with
+61 retained inputs reads 103 canonical records and exactly 50 request bodies in both
+hosts; unrelated input bodies and report bodies are not hydrated. This is logical
+I/O evidence, not a history cost curve or Windows latency qualification.
+
+Default writers remain unchanged. AssignmentsEvents explicitly serves the retiring
+backend and is removed with the capability/adapters at whole-port P7. Next: group
+operations, other Store/resource consumers and metadata/header costs; P4 stays deferred.
+[Evidence](audits/storage-context-optimization.md#p5--native-assignment-pages-2026-11-13).
+
 ## Journal peer cancellation — 2026-11-13
 
 Native `agents.cancel` uses the existing typed control port and `queue.control`
@@ -29,7 +59,7 @@ or Windows latency claim is made.
 
 Default writers are unchanged. CancelEvents remains explicit only for the retiring
 backend; whole-port P7 removes it with the other event adapters/control branches.
-Next: assignment/group projections, remaining Store/resource operations and
+Next: group operations, remaining Store/resource operations and
 metadata/header costs. P4 remains deferred; Windows/Office evidence stays open.
 [Evidence](audits/storage-context-optimization.md#p5--native-peer-cancellation-2026-11-13).
 
@@ -66,7 +96,7 @@ history cost curve, CPU/allocation or Windows latency claim is made.
 
 Default writers are unchanged. Explicit `PauseEvents` exists only for the retiring
 backend and is removed with the capability branch/adapters at whole-port P7; native
-controls have no fallback. Native cancel is connected above; next are assignment/group projections, other
+controls have no fallback. Native cancel is connected above; next are group operations, other
 Store/resource consumers and metadata/header costs. P4 remains deferred; Windows/
 Office qualification stays open.
 [Evidence](audits/storage-context-optimization.md#p5--native-peer-pause-and-resume-2026-11-13).
@@ -102,7 +132,7 @@ curve, CPU/allocation or Windows latency claim is made.
 Default production composition is unchanged. The explicit atomic capability keeps
 `SpawnEvents` only for the retiring backend until whole-port P7; the native branch
 never invokes it, a separate Store commit or a second initial Send. Remaining work:
-assignment/group projections, ordinary Store/resource operations, metadata/header
+group operations, ordinary Store/resource operations, metadata/header
 costs and Windows/Office qualification remain open.
 [Evidence](audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
 
@@ -134,7 +164,7 @@ boundedness claim. Schema 18 and durable frame shapes are unchanged.
 The retiring event backend explicitly keeps SendEvents until whole-port P7; an
 atomic backend never falls back to Prepared/Submit/Accepted writes. No new store,
 adapter, imported history or dual-write. Spawn and pause/resume are connected above;
-assignment/group projections, remaining Store/resource owners and production
+group operations, remaining Store/resource owners and production
 composition remain open.
 Windows/Office qualification is separate. [Evidence](audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
 

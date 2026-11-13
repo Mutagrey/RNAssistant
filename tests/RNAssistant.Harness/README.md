@@ -149,6 +149,17 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal assignments:` checks native `agents.list` through real Office/Workspace
+model wire after Send and Resolve, plus cold 50+1 paging across 61 inputs, bounded
+summary/surrogate handling, local direction, stale/scope refusal, rebuild and clean
+Workspace restore. A cold 50-row page reads 103 canonical records and 50 request
+bodies; no full Inbox replay or report-body hydration. Native Send/spawn fixtures
+also verify canonical Open/ResolutionReceived without upgrading a source Unknown.
+Pair with `journal send:`, `journal peer:`, `journal spawn:`, `agent assignments:`
+and the feed page/rebuild check; reuse the build. No Windows/Office qualification.
+The legacy Workspace assignment-wire case had one persistence failure followed by
+a successful targeted trace rerun; [cause remains open](../../docs/stabilization/BACKLOG.md#intermittent-workspace-assignment-wire-failure--2026-11-13).
+
 `journal cancel:` reuses the shared real Office/Workspace control fixture in seven
 cases: live run with queued input; lost request acknowledgement; unavailable proof;
 cold wait/restart/rebuild/restore; lost target terminal acknowledgement; competing

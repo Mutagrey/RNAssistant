@@ -1,5 +1,17 @@
 # RNAssistant backlog
 
+## Intermittent Workspace assignment wire failure — 2026-11-13
+
+Owner: Workspace runtime / Harness (`AgentCorrelatedWorkspaceWire`). During the
+native assignment-page slice on `37170720`, the existing
+`agent assignments: Workspace spawn resolve wait wire` case once stopped with
+`Run evidence could not be appended. Execution stopped; replay is required.`
+A targeted rerun with `RNA_HARNESS_TRACE=1` passed, so the underlying append error
+and relation to this slice are not established. The fixture exercises spawn/
+resolve/wait, not assignment listing. No claim of a fix or stable qualification.
+Retain the next failing inner exception and identify the competing writer/guard
+before changing storage behavior; do not hide this by repeated full-suite runs.
+
 ## JS tools on WebView2 — 2026-11-13
 
 Согласованное направление, реализация не начата. Owner: Application execution /

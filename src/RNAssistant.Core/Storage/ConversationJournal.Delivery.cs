@@ -256,15 +256,20 @@ namespace RNAssistant.Core.Storage
             return record;
         }
 
-        private JournalRecord InputRecord(SqliteConnection db, string message)
+        private JournalRecord InputRecord(SqliteConnection db, string message, long? through = null)
         {
             using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM input_state WHERE stream=$stream AND message=$message"))
-            { command.Parameters.AddWithValue("$message", message); return LocatedRecord(command); }
+            {
+                command.Parameters.AddWithValue("$message", message);
+                JournalCursor position; var record = LocatedRecord(command, out position);
+                if (through.HasValue && position?.Sequence > through.Value) throw new InvalidDataException("Input is beyond the observed chat revision.");
+                return record;
+            }
         }
 
-        private ConversationInputState InputState(SqliteConnection db, string message)
+        private ConversationInputState InputState(SqliteConnection db, string message, long? through = null)
         {
-            var record = InputRecord(db, message);
+            var record = InputRecord(db, message, through);
             if (record == null) return null;
             ConversationInputState state;
             if (record.Kind == "agent.accepted" || record.Kind == "agent.spawned")
@@ -403,8 +408,9 @@ namespace RNAssistant.Core.Storage
 
         private void SaveDelivery(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position, AgentMessageAccepted fact)
         {
-                    using (var command = Command(db, "INSERT INTO agent_delivery VALUES($stream,$operation,$message,$sender,$recipient,$run,$call,$chain,$reply,$resolution,$created,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
+                    using (var command = Command(db, "INSERT INTO agent_delivery VALUES($stream,$operation,$message,$sender,$recipient,$run,$call,$chain,$reply,$resolution,$created,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,$assignment)", tx))
                     {
+                        command.Parameters.AddWithValue("$assignment", fact.Assignment ? 1 : 0);
                         command.Parameters.AddWithValue("$message", fact.MessageId); command.Parameters.AddWithValue("$sender", fact.Sender);
                         command.Parameters.AddWithValue("$recipient", fact.Recipient); command.Parameters.AddWithValue("$run", fact.RunId); command.Parameters.AddWithValue("$call", fact.CallId);
                         command.Parameters.AddWithValue("$chain", fact.ChainId); command.Parameters.AddWithValue("$reply", (object)fact.ReplyTo ?? DBNull.Value);

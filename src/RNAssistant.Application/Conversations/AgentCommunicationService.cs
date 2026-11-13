@@ -342,7 +342,7 @@ namespace RNAssistant.Application.Conversations
                     sourceInbox.AppendAgentEvent(source, new AgentCommunicationEvent { State = AgentDeliveryState.Prepared,
                         ChainId = chain.ChainId, OperationId = operationId, Fingerprint = fingerprint,
                         Target = target.Address, MessageId = messageId, ReplyTo = replyTo, ExpectReply = expectReply,
-                        Assignment = assignment, AssignmentSummary = assignment ? AssignmentExcerpt(text) : null, Resolution = resolution });
+                        Assignment = assignment, AssignmentSummary = assignment ? AgentAssignmentView.Excerpt(text) : null, Resolution = resolution });
                 }
                 target.Inbox.Submit(recipient, input);
                 if (target.Inbox.FindOperation(recipient, operationId, fingerprint)?.AgentCommunication?.MessageId != messageId)

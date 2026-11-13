@@ -1494,3 +1494,46 @@ after-state/CAS ownership.
    delivery paths and capability/adapters. This is intermediate integration without
    a default production behavior change, so no product bump. One scoped commit;
    no push/tag.
+
+## P5 — native assignment pages (2026-11-13)
+
+1. `agents.list(assignments=incoming|outgoing)` now reads native intake through the
+   existing event port and Application service/Inbox. The existing page/view/state
+   DTO and excerpt helper move to Core; no second assignment store or durable read
+   model. Group operations remain the next separate owner/dependency slice.
+2. Each page checks current chat scope/revision, canonical request/resolution and
+   this chat's own input state. It returns at most 50 rows with a request-ID cursor;
+   separate pages do not share a pinned snapshot. Cold listing skips Inbox replay
+   and catalog enumeration. Only page request bodies are read for the existing
+   bounded/surrogate-safe summary; report bodies remain behind FIFO/policy. Canonical
+   Open/ResolutionReceived never changes a source Unknown or proves external effects.
+3. Schema 21 adds an assignment flag and directional partial indices to existing
+   `agent_delivery`; rebuild derives them from accepted facts. Shared input lookup
+   accepts a revision fence. Explicit AssignmentsEvents remains only for the retiring
+   backend until whole-port P7. No import, dual-write, fallback or new store/registry.
+   Production C# +159/−45 lines; new Core model/partial files are included in the
+   old-style csproj.
+4. On `37170720` + this slice, macOS/net8/C#7.3: two new cases pass through actual
+   Office run-service and Workspace ports/model wire, plus 50+1 paging, local
+   direction, summary bounds, stale/scope refusal, rebuild and clean Workspace
+   restore. Sixteen focused regressions pass: Send/Resolve (3), native peer (3),
+   spawn (4), retiring assignments (5), feed page/rebuild (1). One further retiring
+   Workspace assignment-wire case failed once at run persistence and passed a
+   targeted trace rerun; its cause remains [open](../stabilization/BACKLOG.md#intermittent-workspace-assignment-wire-failure--2026-11-13).
+   This is not a clean 17-case pass or a claimed fix. The Unknown fixture
+   recreates its lost Inbox owner after recovery; stale live cursors still fail.
+   No full suite or Office/VSTO validation was run.
+5. Before: native assignment listing used unsupported legacy event projections.
+   After: a cold 50-row incoming page with 61 retained inputs reads 103 canonical
+   records and exactly 50 request bodies in both hosts; it enumerates no catalog
+   and hydrates no report/unrelated input bodies. This proves bounded page selection,
+   not a history cost curve, CPU/allocation reduction or Windows latency. Request
+   body size, full Inbox replay and metadata/header costs remain separate concerns.
+6. Next: groups through their existing resource owner, other Store/resource
+   operations and P3 metadata/header costs. P4 stays deferred. Default writers are
+   unchanged; verified history/CAS/keys/locator backup, stopped old writers, full
+   restore and Windows/Office screen-photo evidence still gate whole-port P7.
+7. Session events, conversation protocol, MIGRATION_MAP, PROGRESS and Harness guide
+   are updated. P7 removes AssignmentsEvents with the explicit capability/adapters.
+   This intermediate integration does not change default production behavior, so
+   no product bump. One scoped commit; no push/tag.

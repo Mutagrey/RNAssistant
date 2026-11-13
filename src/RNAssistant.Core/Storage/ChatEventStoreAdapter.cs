@@ -143,6 +143,9 @@ namespace RNAssistant.Core.Storage
             internal string RunId;
         }
 
+        public AgentAssignmentPage ReadAgentAssignments(ConversationMetadata session, bool incoming, string afterRequest)
+        { throw new NotSupportedException("The retiring backend uses its explicit assignment-event projection."); }
+
         public IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, IReadOnlyList<string> messageIds)
         {
             if (messageIds == null || messageIds.Count < 1 || messageIds.Count > 32 || messageIds.Any(string.IsNullOrWhiteSpace))

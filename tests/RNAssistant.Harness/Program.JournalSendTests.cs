@@ -23,7 +23,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void JournalSendParity(bool loseAcknowledgement, bool loseReadBack = false, bool spawn = false, bool idle = false)
+        private static void JournalSendParity(bool loseAcknowledgement, bool loseReadBack = false, bool spawn = false, bool idle = false, bool assignments = false)
         {
             foreach (var office in new[] { true, false }) WithJournalInput(office, (paths, journal, source, scopeKey) => {
                 IConversationStore store = journal;
@@ -91,14 +91,15 @@ namespace RNAssistant.Harness
                             {
                                 var request = await listener.GetContextAsync().ConfigureAwait(false);
                                 string wire; using (var reader = new StreamReader(request.Request.InputStream)) wire = await reader.ReadToEndAsync().ConfigureAwait(false);
-                                if (++round > 2)
+                                if (++round > (assignments ? 3 : 2))
                                     foreach (var message in JObject.Parse(wire)["messages"])
                                     {
                                         var content = (string)message["content"] ?? "";
                                         var feedback = content.IndexOf("completionFeedback:", StringComparison.Ordinal);
                                         if (feedback >= 0) Console.WriteLine(content.Substring(feedback, Math.Min(1400, content.Length - feedback)));
                                     }
-                                AssertTrue(round <= 2, "send or resolve is never retried by the model loop");
+                                AssertTrue(round <= (assignments ? 3 : 2), "send or resolve is never retried by the model loop");
+                                if (assignments && round == 3) AssertContains(wire, requestId == null ? "Open" : "ResolutionReceived", "native assignment page reaches the real model wire");
                                 if (requestId != null) AssertContains(wire, "Inspect this exact assignment", "recipient model receives peer provenance and original text");
                                 var response = round == 1 ? ModelProtocolWire.WriteAcceptedCall("Contact the exact peer.", null,
                                     new ConversationToolCall { Name = requestId == null ? (spawn ? AgentCommunicationToolCatalog.Spawn : AgentCommunicationToolCatalog.Send) : AgentCommunicationToolCatalog.Resolve,
@@ -107,6 +108,9 @@ namespace RNAssistant.Harness
                                                 ["assignment"] = true, ["expect_reply"] = true } : new JObject { ["agent_id"] = AgentChatAddress.IdFor(target.Id),
                                             ["text"] = "Inspect this exact assignment", ["assignment"] = true, ["expect_reply"] = true }
                                             : new JObject { ["request_id"] = requestId, ["outcome"] = "completed", ["text"] = "Exact native completion" } })
+                                    : assignments && round == 2 ? ModelProtocolWire.WriteAcceptedCall("Read this chat's assignments.", null,
+                                        new ConversationToolCall { Name = AgentCommunicationToolCatalog.List,
+                                            Arguments = new JObject { ["assignments"] = requestId == null ? "outgoing" : "incoming" } })
                                     : ModelProtocolWire.WriteAcceptedDecision("finish", "The message attempt ended.", "Delivery observed.",
                                         outcome: ConversationOutcome.Completed, results: new[] {
                                             new ConversationResultClaim("Peer intake only; no external completion is claimed.", new[] { "E1" },
@@ -154,6 +158,9 @@ namespace RNAssistant.Harness
                         {
                             RuntimeThrows<RunStoreException>(() => run(source, null)); journal.Fault = null;
                             source = RecoverJournalRun(store, store.Load(source.Id), office);
+                            // The interrupted fixture's bound owner is gone after
+                            // recovery; do not reuse its stale live Inbox projection.
+                            inbox = new ConversationInboxService(journal); executor.AgentInbox = inbox;
                         }
                         else run(source, null);
                         if (!spawn) AssertEqual(!loseReadBack, notification.IsCompleted, "only proven intake wakes the existing live Inbox signal");
@@ -161,7 +168,7 @@ namespace RNAssistant.Harness
                         if (!spawn && !loseAcknowledgement && !loseReadBack)
                             AssertTrue(targetBox.Paused && !inbox.TryStartWorker(targetBox.Session), "peer intake cannot release a user-stopped queue");
                         AssertEqual(0, catalogReads, "known-address delivery never enumerates the participant catalog");
-                        var send = journal.ReadWindow(source.Id, long.MaxValue, 8).Single();
+                        var send = journal.ReadWindow(source.Id, long.MaxValue, 8).Single(item => item.Fact.Result.ToolName != AgentCommunicationToolCatalog.List);
                         AssertEqual(loseReadBack ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok,
                             send.Fact.Result.ExecutionProgress.Outcome, "only exact canonical read-back proves intake");
                         if (spawn)
@@ -201,12 +208,15 @@ namespace RNAssistant.Harness
                         }
                         var accepted = new ConversationInboxService(journal).ReadUndelivered(store.Load(target.Id)).Single();
                         requestId = accepted.AgentCommunication.MessageId;
+                        var open = communication.Assignments(inbox, source, 2, "outgoing", null).Items.Single();
+                        AssertEqual(requestId, open.RequestId, "assignment projection reads the same atomic request");
+                        AssertEqual(AgentAssignmentState.Open, open.State, "canonical intake remains distinct from an unknown source terminal");
                         var delivery = journal.AgentMessage(requestId);
                         AssertEqual(send.Fact.Result.ToolCallId, delivery.Fact.CallId, "tool terminal refers to the exact native delivery call");
                         AssertEqual(source.LastRun.RunId, delivery.Fact.RunId, "acceptance belongs to the actual sender run");
                         journal.Rebuild();
                         source = store.Load(source.Id); target = store.Load(target.Id);
-                        AssertEqual(send.Position.Hash, journal.ReadWindow(source.Id, long.MaxValue, 8).Single().Position.Hash, "rebuild preserves even an unknown terminal");
+                        AssertEqual(send.Position.Hash, journal.ReadWindow(source.Id, long.MaxValue, 8).Single(item => item.Fact.Result.ToolName != AgentCommunicationToolCatalog.List).Position.Hash, "rebuild preserves even an unknown terminal");
                         // Restart does not schedule retained input; explicit resume uses
                         // the same Inbox and real Office/Workspace run consumers.
                         inbox = new ConversationInboxService(journal); executor.AgentInbox = inbox;
@@ -216,20 +226,24 @@ namespace RNAssistant.Harness
                         round = 0; run(target, incoming);
                         AssertEqual(loseReadBack ? 1 : 2, starts, "resolve schedules one new correlated input");
                         AssertEqual(0, catalogReads, "resolve also uses exact indexed addressing");
-                        var resolved = journal.ReadWindow(target.Id, long.MaxValue, 8).Single();
+                        var resolved = journal.ReadWindow(target.Id, long.MaxValue, 8).Single(item => item.Fact.Result.ToolName != AgentCommunicationToolCatalog.List);
                         AssertEqual(ToolExecutionOutcome.Ok, resolved.Fact.Result.ExecutionProgress.Outcome, "real resolve has its native receipt");
                         source = store.Load(source.Id);
                         var completion = inbox.ReadUndelivered(source).Single();
                         AssertEqual(requestId, completion.AgentCommunication.ReplyTo, "resolution retains request identity across restart");
                         AssertEqual(AgentAssignmentOutcome.Completed, completion.AgentCommunication.Resolution.Value, "completion remains the peer's report");
                         AssertEqual(ConversationInputStatus.Applied, journal.InputState(requestId).Status, "the original assignment is applied once");
+                        var page = communication.Assignments(inbox, source, 2, "outgoing", null).Items.Single();
+                        AssertTrue(page.State == AgentAssignmentState.ResolutionReceived && page.InputStatus == ConversationInputStatus.Pending &&
+                            page.ReportedOutcome == AgentAssignmentOutcome.Completed && page.Summary == "Inspect this exact assignment",
+                            "projection exposes report receipt without consuming or exposing its pending body");
                         AssertEqual(delivery.Position.Hash, journal.AgentMessage(requestId).Position.Hash, "reply never rewrites original acceptance");
                         if (!office)
                         {
                             var backup = Path.Combine(paths.Root, "send-backup"); JournalCasService(paths, StorageProtector.None).BackupJournals(backup);
                             var restored = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "send-restore"), _ => StorageProtector.None);
                             var copy = new ConversationJournal(restored, scopeKey);
-                            AssertEqual(send.Position.Hash, copy.ReadWindow(source.Id, long.MaxValue, 8).Single().Position.Hash, "restore preserves the original sender outcome without dispatch");
+                            AssertEqual(send.Position.Hash, copy.ReadWindow(source.Id, long.MaxValue, 8).Single(item => item.Fact.Result.ToolName != AgentCommunicationToolCatalog.List).Position.Hash, "restore preserves the original sender outcome without dispatch");
                             AssertEqual(AgentAssignmentOutcome.Completed, new ConversationInboxService(copy)
                                 .ReadUndelivered(((IConversationStore)copy).Load(source.Id)).Single().AgentCommunication.Resolution.Value,
                                 "restore retains native completion input");

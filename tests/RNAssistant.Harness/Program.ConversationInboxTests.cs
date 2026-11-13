@@ -378,6 +378,9 @@ namespace RNAssistant.Harness
             public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentControl(ChatSession source, ChatSession target,
                 AgentControlCommand command, Action dispatch) { return Inner.AcceptAgentControl(source, target, command, dispatch); }
 
+            public AgentAssignmentPage ReadAgentAssignments(ConversationMetadata session, bool incoming, string afterRequest)
+            { return Inner.ReadAgentAssignments(session, incoming, afterRequest); }
+
             public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
             { return Inner.ReadAgentRequests(session, ids); }
 
