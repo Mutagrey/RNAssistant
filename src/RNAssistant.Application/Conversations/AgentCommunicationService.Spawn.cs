@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Application.Conversations
 {
@@ -20,7 +22,51 @@ namespace RNAssistant.Application.Conversations
     internal sealed partial class AgentCommunicationService
     {
         internal AgentSpawnReceipt Spawn(ConversationInboxService inbox, ChatSession source, int limit,
-            string runId, string operationId, string title, string initialMessage, Action dispatch, bool expectReply = false, bool assignment = false)
+            string runId, string operationId, string title, string initialMessage, Action dispatch, bool expectReply = false, bool assignment = false,
+            ToolExecutionContext execution = null)
+        {
+            return inbox.AtomicAgentDelivery
+                ? SpawnAtomic(inbox, source, limit, operationId, title, initialMessage, dispatch, expectReply, assignment, execution)
+                : SpawnEvents(inbox, source, limit, runId, operationId, title, initialMessage, dispatch, expectReply, assignment);
+        }
+
+        private AgentSpawnReceipt SpawnAtomic(ConversationInboxService inbox, ChatSession source, int capturedLimit,
+            string operation, string title, string initialText, Action dispatch, bool expectReply, bool assignment, ToolExecutionContext execution)
+        {
+            RequireEnabled(capturedLimit);
+            if (execution == null) throw new AgentCommunicationException("agent_call_required", "Нет текущего вызова инструмента.");
+            AgentConversationScope scope;
+            lock (_sync) scope = Scope(source);
+            if (scope.Prepare == null || scope.Endpoint == null)
+                throw new AgentCommunicationException("agent_spawn_unavailable", "Создание участников в этой области недоступно.");
+            var chain = Context(source);
+            if (chain.Root == null)
+                throw new AgentCommunicationException("agent_spawn_chain_unavailable", "Для создания участников начните новую цепочку пользовательским сообщением.");
+            var runtimeKey = scope.Endpoint(Address(source)).Validate(source);
+            var child = scope.Prepare(source, title);
+            if (child == null || child.Id == source.Id || child.Revision != 0 || !scope.Contains(child))
+                throw new InvalidOperationException("Creation must prepare a fresh conversation in the exact source scope.");
+            var limit = Math.Min(capturedLimit, _currentLimit?.Invoke() ?? capturedLimit);
+            RequireEnabled(limit);
+            var initial = inbox.AcceptAgentSpawn(source, child, new AgentSpawnCommand { OperationId = operation,
+                Execution = execution, RootChatId = chain.Root.ChatId, ChainId = chain.ChainId, ParticipantLimit = limit,
+                Title = title, InitialText = initialText, RuntimeKey = runtimeKey, ExpectReply = expectReply, Assignment = assignment }, dispatch);
+            // The receipt proves creation/intake independently of UI or scheduler
+            // availability. Their failure cannot erase that proof or create again.
+            try
+            {
+                var target = scope.Endpoint(Address(child));
+                if (initial == null) target.Changed?.Invoke(child);
+                else if (target.Inbox.AdoptSpawn(inbox, child, initial)) target.Start?.Invoke(child);
+            }
+            catch (Exception error) { System.Diagnostics.Trace.TraceError("Agent spawn notification/scheduling: {0}", error.Message); }
+            return new AgentSpawnReceipt { AgentId = AgentChatAddress.IdFor(child.Id), Title = child.Title, Created = true,
+                InitialMessage = initial == null ? "not_requested" : "queued", MessageId = initial?.Change.Input.Id,
+                Assignment = initial?.Change.Input.AgentCommunication.Assignment == true };
+        }
+
+        private AgentSpawnReceipt SpawnEvents(ConversationInboxService inbox, ChatSession source, int limit,
+            string runId, string operationId, string title, string initialMessage, Action dispatch, bool expectReply, bool assignment)
         {
             ChatSession child;
             lock (_sync)

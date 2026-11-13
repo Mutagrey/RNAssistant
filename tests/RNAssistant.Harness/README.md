@@ -149,6 +149,17 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal spawn:` reuses the real Office/Workspace runtime fixture in four cases:
+normal creation and child Resolve; idle Plan/Deny/model inheritance and Store rename;
+lost acknowledgement; unavailable read-back/Unknown recovery. Checks include one
+shared frame, zero catalog reads, unchanged active chat, no copied history/child run,
+source/child feeds, fresh-vs-cold Inbox scheduling, detached-view notification,
+restart/rebuild and clean Workspace restore with child context/provenance.
+Targeted regressions: `journal send:`, `journal peer:`, `journal feed:`,
+`storage optimization: atomic spawn`, `agent communication: spawn durable identity`
+and `agent communication: spawn initial failure` (14 checks). Build once, then
+`--no-build`; no VSTO/Office build or production cutover qualification.
+
 `journal send:` covers native Application Send/Resolve through the actual Office run
 service and Workspace runtime ports: one intake receipt, exact terminal linkage,
 live Inbox notification, preserved user stop, lost acknowledgement with successful
@@ -166,7 +177,7 @@ exact body/provenance, cold pause, Applied without replay, rebuild and Workspace
 restore. Replies reach real Office run service and Workspace runtime ports/shared
 input channel. Publication is injected through native SendAgent after an atomic
 accepted-call checkpoint; application Send/Resolve/live notification are now covered
-above. Spawn and peer controls remain open. Pair with `journal input:`, `journal wait:`,
+above. Spawn is also connected above; peer controls remain open. Pair with `journal input:`, `journal wait:`,
 `journal feed:`, native atomic delivery, existing correlated reply and assignment
 recovery checks. No production switch or Windows qualification claim.
 

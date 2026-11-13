@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Native spawn — 2026-11-13
+
+Создание обычного чата, membership и начальный Inbox input подключены к одному
+`agent.spawned` через реальные Office/Workspace runtime consumers. Четыре новых
+и 14 регрессионных checks проходят; lost ack, Unknown без replay, restart/rebuild
+и чистый Workspace restore проверены. Default writers не переключены, Windows/Office
+evidence открыт. Далее peer controls/projections, остальные Store/resource операции
+и metadata/header. [Отчёт §12](../audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
+
 ## Native caption — исправление по повторному замечанию, 2026-11-13
 
 Системный заголовок исключён из CreateParams до создания HWND; conditional caption
@@ -260,8 +269,8 @@ Docs-only принятие политики оставило `16.1.0-alpha.1`; �
 `ConversationJournal`; дальнейшая оптимизация старого `ChatStore` не планируется.
 Приоритет уточнён пользователем 2026-11-13: завершать этапы по зависимостям с
 сохранением текущих возможностей; минимальный урезанный Windows-срез больше не цель.
-После native Send/Resolve — spawn, peer controls/projections и остальные Store/resource
-consumers, затем полное переключение. P4 остаётся отложенной по прежнему решению.
+После native Send/Resolve/spawn — peer controls/projections, остальные Store/resource
+consumers и metadata/header, затем полное переключение. P4 остаётся отложенной по прежнему решению.
 Первый Store-срез: текстовые create/append, preferences/selection, metadata/header,
 page и explicit load реализованы самим journal owner. `WorkspaceStore` больше не
 зависит от конкретного `ChatStore`. Семь адресных checks проходят, включая реальные
@@ -338,7 +347,14 @@ Schema 18 расширяет существующие индексы. 3 новы
 падает на чистом `a38e5aba` и вынесен в [backlog](BACKLOG.md#send-batch-parserfixture-mismatch--2026-11-13).
 Промежуточный срез без bump/default switch; schema 18 не меняется.
 [Отчёт §12](../audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
-Spawn, peer controls, assignment/group projections, остальные mutation/resource owners,
+Подключён application spawn (2026-11-13): обычный Store-чат, membership и initial input
+сохраняются одним frame. Child наследует effective model/policy без истории и approval;
+idle не меняет selection и не запускает Run. Source/child feeds не дублируют acceptance.
+Потеря ack разрешается по исходному receipt, недоступный read-back остаётся Unknown;
+холодная очередь сохраняет паузу. Schema 19, 4 новых + 14 regression checks проходят;
+промежуточный срез без bump/default switch.
+[Отчёт §12](../audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
+Peer controls, assignment/group projections, остальные mutation/resource owners,
 rewrite/move/delete, usage и
 production composition остаются открыты. Backup смешанного root закономерно
 запрещён до переноса resource journals; restore нового run проверен в чистом root.

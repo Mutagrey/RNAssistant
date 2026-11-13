@@ -108,7 +108,7 @@ namespace RNAssistant.Application.Conversations
                 {
                     var spawn = JObject.FromObject(context.Arguments).ToObject<SpawnRequest>();
                     var created = _service.Spawn(_inbox, _session, _limit, context.Execution.RunId,
-                        operationId, spawn.Title, spawn.InitialMessage, context.MarkDispatchPossible, spawn.ExpectReply, spawn.Assignment);
+                        operationId, spawn.Title, spawn.InitialMessage, context.MarkDispatchPossible, spawn.ExpectReply, spawn.Assignment, context.Execution);
                     var data = JsonConvert.SerializeObject(created);
                     var unknown = created.InitialMessage == "unknown";
                     var result = unknown ? (context.MayHaveDispatched

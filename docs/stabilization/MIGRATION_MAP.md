@@ -52,6 +52,18 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P5 application spawn (2026-11-13): existing `agent.spawned` now embeds the child's
+Store metadata/context and optional native input, advancing both heads atomically.
+Owner: Application AgentCommunicationService/Inbox and Core ConversationJournal.
+Schema 19 indexes spawn sender/sequence on the existing table; no second store or
+registry. Common metadata writing/runtime-entry checks are shared with chat/Send.
+`SpawnEvents` is explicitly retained only for the retiring backend; whole-port P7
+removes it and the capability branch with SendEvents/adapters. Native creation has
+no separate root reservation, Store commit, initial Send, import or fallback.
+Peer controls/projections, remaining Store/resource operations, metadata/header
+costs and default composition remain open.
+[Contract](../session-events.md#journal-application-spawn--2026-11-13).
+
 P5 outbound Send/Resolve (2026-11-13): existing event port exposes atomic delivery
 explicitly; native indexed alias lookup supplies the existing scope endpoint. Owner:
 Application AgentCommunicationService/Inbox and Core ConversationJournal. No catalog
@@ -59,8 +71,8 @@ scan/global service lock during native persistence, no new store/adapter/schema.
 Exact runtime entry, receipt-linked terminal, both live cursors and Inbox signal are
 connected. Whole-port P7 removes the temporary capability branch and SendEvents
 together with the old event adapters; atomic delivery has no fallback/dual-write.
-Spawn, peer controls, assignment/group projections, other Store/resource consumers
-and default composition remain open. [Contract](../session-events.md#journal-outbound-send-and-resolve--2026-11-13).
+Spawn is connected above; peer controls, assignment/group projections, other
+Store/resource consumers and default composition remain open. [Contract](../session-events.md#journal-outbound-send-and-resolve--2026-11-13).
 
 P5 peer Inbox/correlation (2026-11-13): native acceptance shares delivery, input,
 membership and both chat heads in one frame; existing Inbox consumes it. The event
@@ -69,7 +81,7 @@ Owner: Core journal / existing Inbox, AgentCommunicationService and runtime cons
 Schema 18 extends existing chat/delivery indices only. Legacy Prepared parsing moves
 to the existing ChatEventStoreAdapter, removed with whole-port P7; no new adapter,
 fallback or dual-write. Send/Resolve and live notification are connected above;
-spawn, controls and default composition remain unconnected. Input-history bounds,
+spawn is connected above; controls and default composition remain open. Input-history bounds,
 metadata/header and remaining Store/resource ports stay open.
 [Contract](../session-events.md#journal-peer-inbox-and-correlated-waits--2026-11-13).
 

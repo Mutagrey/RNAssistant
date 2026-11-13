@@ -192,10 +192,14 @@ namespace RNAssistant.Core.Storage
                     }
                     return operations.Select(operation => {
                         var write = FindChatWrite(db, operation);
-                        return Tuple.Create(write, write == null ? FindDelivery(db, "operation", operation) : null);
+                        if (write?.Fact.Card.ChatId != session.Id) write = null;
+                        var spawn = write == null ? FindSpawn(db, operation) : null;
+                        if (spawn != null && spawn.Fact.Sender != session.Id) throw new InvalidDataException("Foreign spawn event.");
+                        return Tuple.Create(write, write == null && spawn == null ? FindDelivery(db, "operation", operation) : null, spawn);
                     }).ToArray();
                 }, CancellationToken.None);
-                return receipts.Select(item => item.Item1 != null ? ProjectChatEvent(item.Item1) : ProjectPeerEvent(item.Item2, session.Id)).ToArray();
+                return receipts.Select(item => item.Item1 != null ? ProjectChatEvent(item.Item1) : item.Item3 != null
+                    ? ProjectSpawnEvent(item.Item3) : ProjectPeerEvent(item.Item2, session.Id)).ToArray();
             }
         }
 

@@ -373,6 +373,8 @@ namespace RNAssistant.Harness
             public AgentChatAddress FindAgent(ConversationMetadata source, string agentId) { return Inner.FindAgent(source, agentId); }
             public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
                 AgentDeliveryCommand command, Action dispatch) { return Inner.AcceptAgentDelivery(source, recipient, command, dispatch); }
+            public RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
+                AgentSpawnCommand command, Action dispatch) { return Inner.AcceptAgentSpawn(source, child, command, dispatch); }
 
             public System.Collections.Generic.IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session, System.Collections.Generic.IReadOnlyList<string> ids)
             { return Inner.ReadAgentRequests(session, ids); }

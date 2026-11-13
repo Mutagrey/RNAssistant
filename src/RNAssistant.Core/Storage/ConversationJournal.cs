@@ -350,7 +350,7 @@ namespace RNAssistant.Core.Storage
             if (record.Kind == "tool.accepted") return CallReferences(DecodeCall(record).Call);
             if (record.Kind == "run.checkpoint") { var fact = DecodeRun(record); return fact.References.Concat(new[] { fact.Body }); }
             if (record.Kind == "agent.accepted") return new[] { DecodeDelivery(record).Body };
-            if (record.Kind == "agent.spawned") { var fact = DecodeSpawn(record); return fact.Input == null ? new PayloadRef[0] : new[] { fact.Input.Body }; }
+            if (record.Kind == "agent.spawned") return SpawnReferences(DecodeSpawn(record));
             if (record.Kind == "chat.created") DecodeCard(record);
             else if (record.Kind == "input.changed") DecodeInput(record);
             else if (record.Kind == "queue.control") DecodeControl(record);

@@ -293,6 +293,10 @@ namespace RNAssistant.Core.Persistence
         AgentChatAddress FindAgent(ConversationMetadata source, string agentId);
         RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ChatSession recipient,
             AgentDeliveryCommand command, Action dispatch);
+        // Advances the prepared child and source after read-back; null means an
+        // accepted idle child without an initial input, never a backend fallback.
+        RNAssistant.Core.Services.ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child,
+            AgentSpawnCommand command, Action dispatch);
         SessionEvent Append(ChatSession session, SessionEventWrite write);
         IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs);
         IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode);

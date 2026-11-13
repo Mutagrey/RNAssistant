@@ -60,14 +60,14 @@ namespace RNAssistant.Core.Storage
                     command.CommandText = "PRAGMA foreign_keys=ON"; command.ExecuteNonQuery();
                     command.CommandText = "PRAGMA user_version";
                     var version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version != 0 && version != 18) throw new IndexVersionMismatch();
-                    if (version == 18) return db;
+                    if (version != 0 && version != 19) throw new IndexVersionMismatch();
+                    if (version == 19) return db;
                     using (var transaction = db.BeginTransaction())
                     {
                     command.Transaction = transaction;
                     command.CommandText = "PRAGMA user_version";
                     version = Convert.ToInt32(command.ExecuteScalar());
-                    if (version == 18) { transaction.Commit(); return db; }
+                    if (version == 19) { transaction.Commit(); return db; }
                     if (version != 0) throw new IndexVersionMismatch();
                     command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1";
                     if (command.ExecuteScalar() != null) throw new IndexVersionMismatch();
@@ -85,7 +85,7 @@ namespace RNAssistant.Core.Storage
                     command.CommandText += "; CREATE TABLE agent_chain(stream TEXT,chain TEXT,root TEXT,participants INTEGER,PRIMARY KEY(stream,chain)); CREATE TABLE agent_participant(stream TEXT,chain TEXT,chat TEXT,PRIMARY KEY(stream,chain,chat))";
                     command.CommandText += "; CREATE TABLE input_state(stream TEXT,message TEXT,recipient TEXT,status TEXT,revision INTEGER,run TEXT,accepted_sequence INTEGER,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,request_id TEXT,PRIMARY KEY(stream,message)); CREATE UNIQUE INDEX input_request ON input_state(stream,recipient,request_id) WHERE request_id IS NOT NULL; CREATE INDEX pending_input_page ON input_state(stream,recipient,status,accepted_sequence)";
                     command.CommandText += "; CREATE TABLE input_transition(stream TEXT,operation TEXT,message TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation))";
-                    command.CommandText += "; CREATE TABLE agent_spawn(stream TEXT,operation TEXT,sender TEXT,run TEXT,call TEXT,child TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation),UNIQUE(stream,sender,run,call))";
+                    command.CommandText += "; CREATE TABLE agent_spawn(stream TEXT,operation TEXT,sender TEXT,run TEXT,call TEXT,child TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation),UNIQUE(stream,sender,run,call)); CREATE INDEX agent_spawn_sender ON agent_spawn(stream,sender,sequence)";
                     command.CommandText += "; CREATE TABLE run_fact(stream TEXT,operation TEXT,chat TEXT,run TEXT,revision INTEGER,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation)); CREATE TABLE run_current(stream TEXT,chat TEXT,operation TEXT,PRIMARY KEY(stream,chat)); CREATE TABLE run_identity(stream TEXT,chat TEXT,run TEXT,PRIMARY KEY(stream,chat,run))";
                     command.CommandText += "; CREATE TABLE control_fact(stream TEXT,operation TEXT,chat TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation)); CREATE TABLE control_current(stream TEXT,chat TEXT,operation TEXT,PRIMARY KEY(stream,chat)); CREATE INDEX control_chat_page ON control_fact(stream,chat,sequence)";
                     command.CommandText += "; CREATE TABLE chat_write(stream TEXT,chat TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation))";
@@ -93,7 +93,7 @@ namespace RNAssistant.Core.Storage
                     command.CommandText += "; CREATE TABLE chat_selection(stream TEXT PRIMARY KEY,chat TEXT)";
                     command.CommandText += "; CREATE INDEX chat_write_history ON chat_write(stream,chat,sequence)";
                     command.ExecuteNonQuery();
-                    command.CommandText = "PRAGMA user_version=18"; command.ExecuteNonQuery();
+                    command.CommandText = "PRAGMA user_version=19"; command.ExecuteNonQuery();
                     transaction.Commit();
                     }
                 }

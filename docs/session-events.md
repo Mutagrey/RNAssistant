@@ -1,5 +1,40 @@
 # Session event stream
 
+## Journal application spawn — 2026-11-13
+
+The existing native `agent.spawned` frame now creates a normal Store chat: child
+metadata/context, immutable creation provenance, chain membership, optional initial
+Inbox input/control and both chat heads share one acceptance. The child inherits
+mode/mutation restrictions, effective model and reasoning preference; it receives
+no history, resource aliases, run or approval. Idle creation does not select a tab
+or start a run. The initial input uses the same native Inbox/Resolve path as Send.
+
+The existing Application service, Inbox and journal/event port own the flow. Dispatch
+requires the exact accepted call, runtime entry and source revision. Verified frame,
+intent and CAS read-back precede live cursors and fresh Inbox adoption. Only that
+fresh adoption permits scheduling; an already loaded or recovered queue keeps its
+pause/worker. Lost append acknowledgement resolves to the original child; unavailable
+read-back recovers Unknown without scheduling or another creation. Notification or
+scheduler failure after proof cannot erase creation/intake evidence.
+
+Schema 19 adds a sender/sequence index to `agent_spawn`. Its Store metadata is located
+through existing `chat_write`/`chat_state`; input/control/delivery retain their existing
+indices. Source and child feeds expose one notice each, without duplicate delivery
+rows or CAS hydration. Backup reachability includes the child's empty context body.
+
+Four new scenarios use real Office run service and Workspace runtime ports, covering
+idle creation, Plan/Deny inheritance, effective model, native child Resolve, Store
+rename, receipt loss, Unknown, restart/rebuild and clean Workspace restore. They
+record zero catalog reads and one shared acceptance frame. No spawn history cost
+curve, CPU/allocation or Windows latency claim is made.
+
+Default production composition is unchanged. The explicit atomic capability keeps
+`SpawnEvents` only for the retiring backend until whole-port P7; the native branch
+never invokes it, a separate Store commit or a second initial Send. Peer controls,
+assignment/group projections, ordinary Store/resource operations, metadata/header
+costs and Windows/Office qualification remain open.
+[Evidence](audits/storage-context-optimization.md#p5--application-spawn-on-the-journal-2026-11-13).
+
 ## Journal outbound Send and Resolve — 2026-11-13
 
 Application Send/Resolve now use the existing event port's explicit atomic-delivery
@@ -27,8 +62,9 @@ boundedness claim. Schema 18 and durable frame shapes are unchanged.
 
 The retiring event backend explicitly keeps SendEvents until whole-port P7; an
 atomic backend never falls back to Prepared/Submit/Accepted writes. No new store,
-adapter, imported history or dual-write. Spawn, peer controls, assignment/group
-projections, remaining Store/resource owners and production composition remain open.
+adapter, imported history or dual-write. Spawn is connected in the slice above; peer
+controls, assignment/group projections, remaining Store/resource owners and production
+composition remain open.
 Windows/Office qualification is separate. [Evidence](audits/storage-context-optimization.md#p5--application-sendresolve-on-the-journal-2026-11-13).
 
 ## Journal peer Inbox and correlated waits — 2026-11-13
@@ -56,7 +92,8 @@ an assignment outcome is the peer's assessment, not external effect evidence.
 
 Native publication is injected at the persistence boundary in these earlier checks;
 application Send/Resolve and live notification are covered by the slice above.
-Spawn and peer controls remain unconnected; default production writers are unchanged. Full input-history
+Application spawn is connected above; peer controls and default production writers
+remain unchanged. Full input-history
 boundedness, metadata/header costs, remaining Store/resource owners and Windows/Office
 qualification remain open. [Evidence](audits/storage-context-optimization.md#p5--journal-peer-inbox-and-correlated-waits-2026-11-13).
 

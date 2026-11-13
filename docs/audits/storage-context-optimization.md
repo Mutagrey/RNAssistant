@@ -1364,3 +1364,46 @@ after-state/CAS ownership.
    branch/SendEvents with the existing retiring adapters. This intermediate slice
    changes no default production behavior, so no product bump. Scoped staging
    preserves parallel window/UI changes. No push/tag.
+
+## P5 — application spawn on the journal (2026-11-13)
+
+1. Native spawn now reaches the same Store/Inbox/runtime consumers as Send/Resolve.
+   Owners remain Application AgentCommunicationService/Inbox and Core journal/event
+   port. This advances F19/P5; peer controls, assignment/group projections and
+   history-sized input/metadata/header work are not declared closed.
+2. One `agent.spawned` frame accepts child metadata/context/provenance, membership,
+   optional input/control and both heads. Runtime-entry/source-revision guards run
+   before dispatch. Frame/intent/CAS read-back precedes live projection and fresh
+   scheduling. Idle creation preserves selection and has no run/input; inheritance
+   preserves mode/mutation restrictions/effective model without history or approval.
+   Lost acknowledgement resolves to the same child; unavailable proof recovers
+   Unknown without replay. A detached view cannot erase proven creation.
+3. Native spawn omits root reservations, standalone Store commits and a separate
+   initial Send. Existing chat metadata writing and runtime-entry validation are
+   shared. Schema 19 adds sender/sequence lookup to existing `agent_spawn`; the
+   child's metadata uses existing chat indices. Feed union avoids duplicate spawn
+   deliveries; backup reachability includes child context. No new store, registry,
+   import, dual-write or fallback. Production C# +401/−75 lines plus one csproj entry.
+4. On `8e021769` + this slice, macOS/net8/C#7.3: four new cases pass through real
+   Office run service and Workspace runtime ports. They cover idle Plan/Deny/model
+   inheritance, catalog creator, ordinary Store rename, initial assignment/Resolve,
+   notification failure, native feeds, lost ack, Unknown, restart/rebuild and clean
+   Workspace restore. Fourteen targeted regressions pass: Send/Resolve (3), peer
+   Inbox/waits (3), feed (5), primitive atomic spawn (1), retiring spawn identity and
+   initial failure (2). No full suite or VSTO/Office validation was run.
+5. Before: application spawn could not create an integrated native Store chat.
+   After: zero catalog reads, one shared acceptance frame, and no additional creation
+   or automatic scheduling after restart/rebuild/restore in these fixtures. The
+   existing feed cost curve still reads 5/2/4 canonical records for page/idle/after
+   append at H=100/1000/10000, with zero CAS body hydration. These are logical I/O
+   and operation counts; spawn CPU/allocations/history curve and Windows latency
+   were not measured. Metadata/header and full Inbox replay costs remain open.
+6. Next: native peer controls and assignment/group projections, remaining ordinary
+   Store/resource operations and P3 metadata/header costs. P4 remains deferred.
+   Production writers are unchanged. Full P7 still needs verified history/CAS/keys/
+   locator backup, stopped old writers, full restore and Windows/Office screen-photo
+   evidence; host-neutral tests do not qualify controller/Office delivery.
+7. Canonical session events/protocol, MIGRATION_MAP, PROGRESS and Harness guide are
+   updated. Whole-port P7 removes `SpawnEvents` and the explicit capability branch
+   with SendEvents/retiring adapters. This intermediate integration changes no
+   default production behavior, so no product bump. One scoped commit; no push/tag.

@@ -89,6 +89,36 @@ namespace RNAssistant.Application.Conversations
         internal AgentChatAddress FindAgent(ChatSession source, string agentId)
         { return _events.FindAgent(ConversationMetadata.From(source), agentId); }
 
+        internal ConversationInputRecord AcceptAgentSpawn(ChatSession source, ChatSession child, AgentSpawnCommand command, Action dispatch)
+        {
+            var from = Get(source);
+            lock (from.Sync)
+            {
+                if (!ReferenceEquals(from.Session, source)) throw new InvalidOperationException("The sender no longer owns this live session.");
+                return _events.AcceptAgentSpawn(source, child, command, dispatch);
+            }
+        }
+
+        internal bool AdoptSpawn(ConversationInboxService sourceInbox, ChatSession child, ConversationInputRecord initial)
+        {
+            if (!ReferenceEquals(_events, sourceInbox._events)) throw new InvalidOperationException("Atomic spawn requires the same event owner.");
+            if (initial == null) return false;
+            if (child.Revision != initial.Event.Sequence || initial.Event.SessionId != child.Id)
+                throw new InvalidOperationException("Spawn intake requires its exact proven child head.");
+            lock (_sync)
+            {
+                var key = ScopeKey(child);
+                // Only this fresh, read-back-proven intake may start immediately.
+                // An already observed/recovered queue retains its own pause/worker.
+                if (_inboxes.ContainsKey(key)) return false;
+                var box = new Inbox { Session = child, Revision = initial.Event.Sequence, ViewRevision = 1 };
+                Apply(box, initial.Change, initial.Event);
+                _inboxes.Add(key, box);
+                SignalInputChanged(box);
+                return true;
+            }
+        }
+
         internal RNAssistant.Core.Services.ConversationInputRecord AcceptAgentDelivery(ChatSession source, ConversationInboxService recipientInbox,
             ChatSession recipient, AgentDeliveryCommand command, Action dispatch)
         {

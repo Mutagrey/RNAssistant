@@ -19,4 +19,17 @@ namespace RNAssistant.Core.Persistence
         public AgentAssignmentOutcome? Resolution { get; set; }
     }
 
+    public sealed class AgentSpawnCommand
+    {
+        public string OperationId { get; set; }
+        public ToolExecutionContext Execution { get; set; }
+        public string RootChatId { get; set; }
+        public string ChainId { get; set; }
+        public int ParticipantLimit { get; set; }
+        public string Title { get; set; }
+        public string InitialText { get; set; }
+        public string RuntimeKey { get; set; }
+        public bool ExpectReply { get; set; }
+        public bool Assignment { get; set; }
+    }
 }

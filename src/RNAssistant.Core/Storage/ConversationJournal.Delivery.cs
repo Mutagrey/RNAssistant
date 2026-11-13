@@ -467,7 +467,7 @@ namespace RNAssistant.Core.Storage
         private static ConversationInputState DecodeInput(JournalRecord record)
         {
             if (record.Kind == "chat.committed") return DecodeChatCommit(record).Input ?? throw new InvalidDataException("Missing input transition.");
-            if (record.Kind == "agent.accepted") return DecodeDelivery(record).Input ?? throw new InvalidDataException("Missing peer input.");
+            if (record.Kind == "agent.accepted" || record.Kind == "agent.spawned") return DecodeDelivery(record).Input ?? throw new InvalidDataException("Missing peer input.");
             var fact = DeliveryData<ConversationInputState>(record);
             if (record.Kind != "input.changed" || fact == null || record.Fingerprint != TextPatternEngine.Sha256(JsonConvert.SerializeObject(fact))) throw new InvalidDataException("Invalid input state.");
             return fact;
@@ -494,10 +494,13 @@ namespace RNAssistant.Core.Storage
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string DocumentPath { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string SelectedModel { get; private set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ReasoningEnabled { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool TitleAssignedByAgent { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public AgentThreadCreation AgentCreation { get; private set; }
         [JsonConstructor]
         internal ConversationCard(string chatId, string title, ConversationRunPolicy policy, DateTime createdUtc, ModelRunMetadata model = null,
             ConversationMetadata address = null, string documentTitle = null, string documentPath = null,
-            string selectedModel = null, bool reasoningEnabled = false)
+            string selectedModel = null, bool reasoningEnabled = false, bool titleAssignedByAgent = false,
+            AgentThreadCreation agentCreation = null)
         {
             if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(title) || title.Length > 512 || policy == null || createdUtc.Kind != DateTimeKind.Utc)
                 throw new ArgumentException("Invalid conversation metadata.");
@@ -505,6 +508,8 @@ namespace RNAssistant.Core.Storage
             Model = model == null ? null : JsonConvert.DeserializeObject<ModelRunMetadata>(JsonConvert.SerializeObject(model));
             Address = address; DocumentTitle = documentTitle; DocumentPath = documentPath;
             SelectedModel = selectedModel; ReasoningEnabled = reasoningEnabled;
+            TitleAssignedByAgent = titleAssignedByAgent;
+            AgentCreation = agentCreation == null ? null : JsonConvert.DeserializeObject<AgentThreadCreation>(JsonConvert.SerializeObject(agentCreation));
         }
     }
 

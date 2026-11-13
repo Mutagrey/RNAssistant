@@ -320,6 +320,15 @@ queued receipt содержит message_id для requests в agents.wait. Recei
 Корневой чат должен оставаться доступным для проверки состава. Повтор exact operation
 возвращает прежний подтверждённый receipt, несовпадение fingerprint отклоняется.
 
+Native journal composition (2026-11-13) подключает spawn через существующий event port:
+один `agent.spawned` содержит обычный Store-чат, membership и optional initial input,
+без отдельных `ParticipantReserved`/Store commit/Send. Начальный ввод использует общие
+Inbox/Resolve consumers; source и child cursor обновляются после точного read-back.
+Lost ack возвращает того же ребёнка, недоступный proof оставляет Unknown без replay.
+Idle не запускает Run; ошибка уведомления/планирования после proof не отменяет создание.
+Прежняя последовательность выше остаётся только в явном `SpawnEvents` до whole-port P7;
+default backend ещё не переключён. [Контракт](session-events.md#journal-application-spawn--2026-11-13).
+
 `AgentCommunicationContext` переносит runtime provenance, policy ceiling, root и chain identity из Inbox
 в durable user message. Модель видит пометку другого агента, короткий адрес и название;
 runtime chain/run IDs в текст не попадают. При compaction это источник интерпретации
