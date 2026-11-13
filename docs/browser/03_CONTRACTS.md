@@ -1,5 +1,23 @@
 # Universal Browser: предлагаемые контракты
 
+## Native input admission — F2c3, 2026-11-13
+
+Semantic element names remain the primary input contract. Optional point/toPoint are
+fallbacks for ambiguous elements, only for click/hover/drag/scroll. They require a
+media observation delivered in the accepted request of the same run. Existing immutable
+snapshot dependencies carry the native capture revision; no image ID becomes a model
+argument. Historical reads omit the live dependency. Native admission checks page,
+control, viewport, CSS size/DPR/zoom, geometry epoch, bounded layout and hit target.
+A coordinate mouse move is followed by another hit/layout check before pressing.
+
+ModelContextCompiler matches exact durable media provenance to images in the detached
+request before attaching evidence. Raw refs stay outside the model request. Workspace
+accepted responses now receive the same delivered evidence contract as Office. Media
+release removes this authority from later requests. Existing semantic input is retained;
+keyboard read-back checks actual focus/selection changes and viewport scroll is an
+explicit observed region. Native focus traversal cannot leave the page during agent
+control. Internal plugin member GETs accept query strings without granting other paths.
+
 ## Autonomous page export — F2c2, 2026-11-13
 
 `prepareBrowserHtmlExport` resolves the exact Browser target and opens metadata-only

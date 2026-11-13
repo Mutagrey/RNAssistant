@@ -129,6 +129,7 @@ namespace RNAssistant.Application.Contracts
     // these bytes/coordinates never come from page JS or model tool arguments.
     public sealed class BrowserMediaCapture
     {
+        public string CaptureRevision { get; set; }
         public BrowserPageHandle Page { get; set; }
         public byte[] Png { get; set; }
         public DateTime CapturedUtc { get; set; }
@@ -136,6 +137,8 @@ namespace RNAssistant.Application.Contracts
         public string SourceAddress { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
+        public int CssWidth { get; set; }
+        public int CssHeight { get; set; }
         public long ViewportRevision { get; set; }
         public long ControlRevision { get; set; }
         public double DeviceScale { get; set; }
@@ -152,6 +155,8 @@ namespace RNAssistant.Application.Contracts
     // Semantic actions use the native site policy and exact observations; no model JS/selectors.
     public sealed class BrowserActionRequest
     {
+        [JsonProperty("point")] public BrowserInputPoint Point { get; set; }
+        [JsonProperty("toPoint")] public BrowserInputPoint ToPoint { get; set; }
         [JsonProperty("action")] public string Action { get; set; }
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("value")] public string Value { get; set; }
@@ -166,6 +171,12 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("deltaY")] public int DeltaY { get; set; }
         [JsonProperty("key")] public string Key { get; set; }
         [JsonProperty("checked")] public bool? Checked { get; set; }
+    }
+
+    public sealed class BrowserInputPoint
+    {
+        [JsonProperty("x")] public double X { get; set; }
+        [JsonProperty("y")] public double Y { get; set; }
     }
 
     [JsonConverter(typeof(StringEnumConverter))]

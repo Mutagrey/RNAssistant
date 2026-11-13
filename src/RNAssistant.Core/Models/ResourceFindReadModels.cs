@@ -68,6 +68,7 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceReadProjection
     {
+        [JsonProperty("mediaDescription", NullValueHandling = NullValueHandling.Ignore)] public string MediaDescription { get; set; }
         internal ResourceReadProjection CopyText(string text)
         {
             if (Table != null || Tree != null) throw new System.InvalidOperationException("Only an explicit text view can retain a text body.");
@@ -118,7 +119,7 @@ namespace RNAssistant.Core.Models
         {
             if (result == null) throw new System.ArgumentNullException(nameof(result));
             return new ResourceReadProjection { Target = target, Type = type, Scope = scope,
-                Representation = result.Representation, Text = result.Text, Table = result.Table,
+                Representation = result.Representation, Text = result.Text, Table = result.Table, MediaDescription = result.MediaDescription,
                 Coverage = result.Coverage, Offset = result.Offset,
                 ReturnedCharacters = result.ReturnedCharacters, TotalCharacters = result.TotalCharacters,
                 Complete = result.Complete, SourceComplete = result.SourceComplete, Procedure = result.Procedure,

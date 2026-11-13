@@ -56,9 +56,9 @@ namespace RNAssistant.Office.Tools
                     properties["locator"] = new { type = "string", description = "Exact local locator from current Browser discovery. Network URLs are refused.", minLength = 1, maxLength = 2048 };
                     properties["linkName"] = new { type = "string", description = "Exact observed name of one visible HTML link. Follow its bound href in this tab. Provide either locator or linkName, never both.", minLength = 1, maxLength = 160 };
                 }
-                if (id == Click) AddPointerSchema(properties);
+                if (id == Click) { AddPointerSchema(properties); AddCoordinateSchema(properties); }
                 var schema = JsonConvert.SerializeObject(new { type = "object", properties,
-                    required = id == Navigate ? new[] { "target" } : new[] { "target", "name", value }, additionalProperties = false });
+                    required = id == Navigate ? new[] { "target" } : id == Click ? new[] { "target", value } : new[] { "target", "name", value }, additionalProperties = false });
                 if (id == Navigate) {
                     var shape = JObject.Parse(schema);
                     shape["anyOf"] = new JArray(new JObject { ["required"] = new JArray("locator") }, new JObject { ["required"] = new JArray("linkName") });
@@ -96,16 +96,20 @@ namespace RNAssistant.Office.Tools
                         message.ToolCallId == context.Execution.Call.Id && message.RunId == context.Execution.RunId &&
                         message.AcceptedCallOrigin?.StepId == context.Execution.StepId);
                     var uri = ResourceUri.Create("browser", target.ChatId, target.SessionId);
+                    var coordinate = context.Arguments.ContainsKey("point");
                     var observation = accepted?.ResourceEvidence?.Where(evidence => evidence.Immutable &&
                         evidence.ReadMetadata?.DescriptorAtRead?.Kind == ExternalBrowserResourceProvider.Kind &&
-                        evidence.Resource.IsExact && evidence.View == "text" && evidence.Payload != null &&
-                        evidence.Payload.Sha256 == evidence.ContentSha256 && evidence.Coverage?.Start == 0 &&
+                        evidence.Resource.IsExact && evidence.View == (coordinate ? "media" : "text") && evidence.Payload != null &&
+                        evidence.Payload.Sha256 == evidence.ContentSha256 && (coordinate || evidence.Coverage?.Start == 0) &&
+                        (!coordinate || _session.Messages.Any(message => message.Role != "assistant" && message.ToolName == "core.read" && message.RunId == context.Execution.RunId &&
+                            (message.ResourceEvidence ?? new List<ResourceEvidence>()).Any(item => item.EvidenceId == evidence.EvidenceId))) &&
                         evidence.ReadMetadata?.RepresentationComplete == true &&
                         evidence.ReadMetadata.RequestedCoverage?.Kind == ResourceCoverageKinds.Whole)
                         .SelectMany(evidence => evidence.Dependencies).LastOrDefault(dependency =>
-                            dependency.Kind == "immutable-snapshot" && dependency.View == "text" &&
+                            dependency.Kind == "immutable-snapshot" && dependency.View == (coordinate ? "media" : "text") &&
                             dependency.Resource.Uri == uri && dependency.Resource.IsExact)?.Resource;
-                    if (observation == null) throw Error("Read the current browser page in this conversation before acting; an omitted read does not authorize an action.", "browser_observation_required");
+                    if (observation == null) throw Error(coordinate ? "Read the current viewport as media in this run before coordinate input; retained or omitted pixels do not authorize it." :
+                        "Read the current browser page in this conversation before acting; an omitted read does not authorize an action.", "browser_observation_required");
                     using (DocumentAccessGate.BeginOperation()) using (_documentAccess?.Invoke(_session)) { }
                     var prepared = new ExternalBrowserPrepared { Target = target, Observation = observation,
                         PreparationId = Guid.NewGuid().ToString("N") };

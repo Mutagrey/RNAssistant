@@ -755,12 +755,25 @@ namespace RNAssistant.Core.Services
                 throw new PromptBudgetExceededException("Current evidence and causal frames use approximately " +
                     receipt.EstimatedTokens + " tokens at a message budget of " + budget +
                     " after correctness filtering. Compact context or select a narrower resource view.", true);
+            // A media read is authority only while its exact image is in this request.
+            // RequireWireImages rejects the request before model execution if hydration is omitted.
+            var mediaFrames = (facts ?? new ChatMessage[0]).Concat(required ?? new ChatMessage[0]).Where(media =>
+                media.ProtocolMessage && media.Role == "user" && (media.Content ?? "").StartsWith(ResourceMediaMessages.Prefix, StringComparison.Ordinal)).ToArray();
+            var mediaReads = (facts ?? new ChatMessage[0]).Concat(workingSet == null ? Enumerable.Empty<ChatMessage>() :
+                    workingSet.Operations.Concat(workingSet.Bodies).Select(item => item.Source))
+                .Where(source => source != null && source.Role != "assistant" && source.ToolName == "core.read")
+                .SelectMany(source => (source.ResourceEvidence ?? new List<ResourceEvidence>()).Where(evidence => evidence.View == "media" && evidence.Payload != null &&
+                    mediaFrames.Any(media => media.RunId == source.RunId &&
+                        media.ResourceRefs.Any(reference => reference.Uri == evidence.Resource.Uri && reference.Revision == evidence.Resource.Revision) &&
+                        messages.Any(projected => projected.Id == media.Id && projected.Attachments.Any(attachment =>
+                            attachment.Kind == "image" && attachment.ContentSha256 == evidence.Payload.Sha256)))))
+                .Where(evidence => _reducer.Reduce(evidence, authority.Resources).State == EvidenceState.Current);
             var delivered = atoms.SelectMany(atom => atom.PromptMessages.Where(message => message.SyntheticResourceObservation ||
                     message.ToolName == "core.read" && atom.ReadBody.IsSuccessfulResourceRead(message) &&
                         (atom.ReadBody.HasVisibleBody(message) || selectedSkillReads.Contains(message.Id))))
                 .SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
-                .Where(evidence => _reducer.Reduce(evidence, authority.Resources).State == EvidenceState.Current)
-                .GroupBy(evidence => evidence.EvidenceId, StringComparer.Ordinal).Select(group => group.First());
+                .Where(evidence => evidence.View != "media" && _reducer.Reduce(evidence, authority.Resources).State == EvidenceState.Current)
+                .Concat(mediaReads).GroupBy(evidence => evidence.EvidenceId, StringComparer.Ordinal).Select(group => group.First());
             return new ModelContextSnapshot(authority, messages, receipt, delivered);
         }
 

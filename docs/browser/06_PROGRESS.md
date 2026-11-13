@@ -1,5 +1,16 @@
 # Universal Browser: статус
 
+## F2c3 element input and viewport fallback — 2026-11-13
+
+`16.24.0-dev`: element names remain the primary action target. Added the optional
+fresh-image coordinate fallback required by 03, with same-run/request provenance,
+CSS geometry and native hit-test checks. Historical/omitted/foreign images cannot
+authorize it. Fixed Workspace accepted responses losing delivered read evidence;
+added keyboard focus/selection read-back and the observed viewport scroll region.
+Internal plugin package queries retain exact-member authority. Focused provider,
+model-wire, semantic-action and Chromium checks pass. Windows qualification and
+native selection/highlight remain open; then 07 and main integration. No push/release.
+
 ## F2c2 autonomous HTML export — 2026-11-13
 
 `16.23.1-dev`: common Browser and editor export the exact selected page with embedded

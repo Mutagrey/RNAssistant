@@ -157,6 +157,8 @@ namespace RNAssistant.Core.Models
 
     public sealed class ResourceReadResult
     {
+        [Newtonsoft.Json.JsonProperty("mediaDescription", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string MediaDescription { get; set; }
         // Exact bounded provider body for application/browser consumers, never model JSON.
         [Newtonsoft.Json.JsonIgnore]
         public byte[] Bytes { get; set; }

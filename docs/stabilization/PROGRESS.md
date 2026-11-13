@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Browser input admission completed — 2026-11-13
+
+`16.24.0-dev`: semantic elements remain primary; optional coordinates require the
+exact image delivered in this run and unchanged viewport. Workspace now retains
+accepted read evidence consistently with Office. Focused wire, semantic/native-script
+checks pass. Native selection/highlight, 07 and integration continue; Windows evidence
+remains open. [Details](../browser/06_PROGRESS.md#f2c3-element-input-and-viewport-fallback--2026-11-13).
+
 ## Autonomous HTML export connected — 2026-11-13
 
 `16.23.1-dev`: Browser/editor share exact bounded export; real file:// JavaScript

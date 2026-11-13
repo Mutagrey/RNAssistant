@@ -1951,8 +1951,11 @@ namespace RNAssistant.Runtime
                 if (expectedRevision != _cursor) throw new InvalidOperationException("Stale workspace run cursor.");
                 var firstMessage = _session.Messages.Count;
                 ConversationRunProjection.Apply(_session.LastRun, fact);
-                if (fact.Kind == AgentRunEventKind.ResponseAccepted)
-                    _session.Messages.AddRange(ConversationRunProjection.CreateAcceptedResponse(fact, _lastCompletion, _payloads));
+                if (fact.Kind == AgentRunEventKind.ResponseAccepted) {
+                    var accepted = ConversationRunProjection.CreateAcceptedResponse(fact, _lastCompletion, _payloads).ToArray();
+                    foreach (var message in accepted) message.ResourceEvidence = _delivered.Where(item => item.Key.StartsWith("request:", StringComparison.Ordinal)).Select(item => item.Value).ToList();
+                    _session.Messages.AddRange(accepted);
+                }
                 ChatMessage activity = null;
                 if (fact.Kind == AgentRunEventKind.ToolStarted || fact.Kind == AgentRunEventKind.ToolCompleted || fact.Kind == AgentRunEventKind.ToolWaiting)
                     activity = ProjectToolActivity(fact);

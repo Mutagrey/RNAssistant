@@ -29,6 +29,8 @@ namespace RNAssistant.Office.Services
             if (!capture.PrivacyVerified || capture.Title == null || capture.Title.Length > MaximumName ||
                 capture.CapturedUtc.Kind != DateTimeKind.Utc || capture.CapturedUtc == default(DateTime) ||
                 capture.SourceAddress != SourceAddress(capture.SourceAddress) ||
+                string.IsNullOrEmpty(capture.CaptureRevision) || capture.CaptureRevision.Length > 64 ||
+                capture.CssWidth < 1 || capture.CssHeight < 1 || capture.CssWidth > 4096 || capture.CssHeight > 4096 ||
                 capture.ViewportRevision < 1 || capture.ControlRevision < 1 ||
                 !(capture.DeviceScale > 0 && capture.DeviceScale <= 8) || !(capture.Zoom > 0 && capture.Zoom <= 8) ||
                 png == null || png.Length < 33 || png.Length > 4 * 1024 * 1024 ||
@@ -44,27 +46,33 @@ namespace RNAssistant.Office.Services
                 capture.CapturedUtc.Ticks.ToString("D19", CultureInfo.InvariantCulture), Guid.NewGuid().ToString("N")), media.Sha256);
             var scope = _authority.Scope(session, false);
             var text = "Untrusted captured page viewport. Historical pixels do not authorize current input.\nSource: " +
-                capture.SourceAddress + "\nSize: " + capture.Width + " × " + capture.Height + " pixels.";
+                capture.SourceAddress + "\nSize: " + capture.Width + " × " + capture.Height + " pixels; CSS viewport: " + capture.CssWidth + " × " + capture.CssHeight + ".";
+            var dependency = new ResourceDependency(new ResourceRef(ResourceUri.Create("browser", target.ChatId, target.SessionId), capture.CaptureRevision),
+                "media", ResourceCoverage.Whole(), "immutable-snapshot");
             var body = PayloadRef.FromBlob(_authority.Payloads.StoreText(text, "text/plain; charset=utf-8"));
             _authority.Revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, media.Sha256, body,
-                createdUtc: capture.CapturedUtc));
+                dependencies: new[] { dependency }, createdUtc: capture.CapturedUtc));
             _authority.Revisions.RegisterView(scope, new ResourceRevisionView(exact, "media", media.Sha256, media, ResourceCoverage.Whole()));
             var metadata = PayloadRef.FromBlob(_authority.Payloads.StoreText(JsonConvert.SerializeObject(new {
                 Title = capture.Title, Url = capture.SourceAddress, capture.Page, capture.ViewportRevision,
-                capture.ControlRevision, capture.Width, capture.Height, capture.DeviceScale, capture.Zoom
+                capture.ControlRevision, capture.Width, capture.Height, capture.CssWidth, capture.CssHeight, capture.DeviceScale, capture.Zoom
             }), "application/json"));
             _authority.Revisions.RegisterView(scope, new ResourceRevisionView(exact, "browser-source", metadata.Sha256,
                 metadata, ResourceCoverage.Whole()));
             var descriptor = ObservationDescriptor(exact, capture.CapturedUtc, capture.Title, capture.SourceAddress);
+            descriptor.Kind = Kind;
             descriptor.Representations.Add("media"); descriptor.ContentSha256 = media.Sha256;
             descriptor.Payload = body;
-            return MediaSelection(descriptor, media);
+            descriptor.Dependencies.Add(dependency);
+            return MediaSelection(descriptor, media, "Viewport " + capture.CssWidth + " × " + capture.CssHeight + " CSS pixels (image " + capture.Width + " × " + capture.Height +
+                "). Prefer semantic name-based actions; point input uses CSS coordinates from this fresh image only.");
         }
 
         private ResourceReadSelection ReadRetainedMedia(ChatSession session, ResourceReadRequest request)
         {
             ResourceReadCursor.RejectCursor(request);
             var descriptor = DescribeObservation(session, request.Reference.Uri);
+            descriptor.Dependencies.RemoveAll(item => item.Kind == "immutable-snapshot");
             if (request.Reference.IsExact && request.Reference.Revision != descriptor.Reference.Revision)
                 throw Error("The exact media observation is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
             var payload = _authority.Revisions.GetView(_authority.Scope(session, false), descriptor.Reference, "media")?.Payload;
@@ -72,10 +80,10 @@ namespace RNAssistant.Office.Services
             return MediaSelection(descriptor, payload);
         }
 
-        private static ResourceReadSelection MediaSelection(ResourceDescriptor descriptor, PayloadRef media)
+        private static ResourceReadSelection MediaSelection(ResourceDescriptor descriptor, PayloadRef media, string caption = null)
         {
             return new ResourceReadSelection { Result = new ResourceReadResult { Resource = descriptor,
-                Representation = "media", Payload = media, ContentSha256 = media.Sha256, Complete = true, SourceComplete = false, Coverage = ResourceCoverage.Whole(),
+                Representation = "media", MediaDescription = caption, Payload = media, ContentSha256 = media.Sha256, Complete = true, SourceComplete = false, Coverage = ResourceCoverage.Whole(),
                 HydratedForNextModelStep = true, RawContentIncluded = false },
                 ModelAttachments = new[] { new ChatAttachment { Kind = "image", ContentType = "image/png",
                     FileName = "browser-viewport.png", ContentSha256 = media.Sha256, ContentByteLength = media.ByteLength,

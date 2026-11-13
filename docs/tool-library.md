@@ -1,5 +1,13 @@
 # Tool Library and capability truth
 
+## Local Browser input — 2026-11-13
+
+Use semantic element names for browser input. Optional CSS point input is a fallback
+for click/hover/drag/scroll after a fresh explicit media read in the same run; layout,
+zoom, scroll or physical takeover invalidates it. Model arguments contain no native
+IDs, selectors, JS, image handles or authority tokens. Existing core.find/read/search
+remain the only reading tools.
+
 ## Chat naming — 2026-11-03
 
 `chat.rename` is a direct tool in the initial Office/Workspace/plugin profile.

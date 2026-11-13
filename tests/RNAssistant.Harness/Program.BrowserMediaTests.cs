@@ -26,18 +26,24 @@ namespace RNAssistant.Harness
     {
         // Fixture pixels test the real CAS/provider/Workspace/wire path, not native
         // WebView2 capture or privacy qualification (which remains unavailable).
-        private sealed class HarnessBrowserMediaSource : HarnessBrowserReadSource, IBrowserMediaSource
+        private sealed class HarnessBrowserMediaSource : HarnessBrowserReadSource, IBrowserMediaSource, IBrowserActionSource
         {
             internal static readonly byte[] Pixels = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6XkAAAAASUVORK5CYII=");
             internal bool Current = true, Privacy = true;
             public Task<BrowserMediaCapture> ReadMediaAsync(BrowserPageHandle target, CancellationToken token)
             {
                 token.ThrowIfCancellationRequested();
-                return Task.FromResult(new BrowserMediaCapture { Page = target, Png = Pixels, CapturedUtc = DateTime.UtcNow,
+                return Task.FromResult(new BrowserMediaCapture { CaptureRevision = "fixture-capture", Page = target, Png = Pixels, CapturedUtc = DateTime.UtcNow,
                     Title = "Viewport fixture", SourceAddress = "/", Width = 1, Height = 1, ViewportRevision = 1,
-                    ControlRevision = 1, DeviceScale = 1, Zoom = 1, PrivacyVerified = Privacy });
+                    ControlRevision = 1, CssWidth = 1, CssHeight = 1, DeviceScale = 1, Zoom = 1, PrivacyVerified = Privacy });
             }
             public bool IsCaptureCurrent(BrowserMediaCapture capture) { return Current && capture.Page.Matches(Target); }
+            public Task PrepareAsync(BrowserPageHandle target, string revision, string id, BrowserActionRequest request, CancellationToken token)
+            { AssertEqual("fixture-capture", revision, "native coordinates pin the delivered viewport revision"); return Task.CompletedTask; }
+            public Task<BrowserActionResult> ActAsync(BrowserPageHandle target, string id, Action dispatch, CancellationToken token, bool navigation = false)
+            { throw new NotSupportedException(); }
+            public void PresentResult(BrowserPageHandle target, string id, BrowserActionEffect effect) { }
+            public void BlockActions(BrowserPageHandle target) { }
         }
 
         private static void BrowserWorkspaceMediaWire()
@@ -96,13 +102,17 @@ namespace RNAssistant.Harness
                         var second = requests[1].ToString();
                         AssertEqual(vision, second.Contains("data:image/png;base64," + Convert.ToBase64String(HarnessBrowserMediaSource.Pixels)),
                             "actual next model wire receives exact CAS pixels only for a vision model");
-                        if (vision) AssertTrue(second.Contains("Browser observation: "), "wire exposes the semantic retained observation target");
+                        if (vision) AssertTrue(second.Contains("Browser observation: ") && second.Contains("CSS pixels"), "wire exposes the semantic retained observation target and CSS coordinate space");
                         AssertTrue(!requests[0].ToString().Contains("data:image/") && !requests[2].ToString().Contains("data:image/"),
                             "pixels are absent before explicit read and after restart");
                         if (!vision) AssertTrue(requests[1]["messages"].Any(item => item["content"]?.Type == JTokenType.String &&
                             ((string)item["content"]).Contains("\"loaded\":false")) && second.Contains("resource_media_unavailable") && !second.Contains("data:image/"),
                             "non-vision media returns explicit unavailable instead of loaded success");
                         var saved = new ChatStore(paths).Load(chatId);
+                        AssertEqual(vision, saved.Messages.Where(message => message.Role == "assistant").Any(message =>
+                            message.ResourceEvidence.Any(evidence => evidence.View == "media")), "only the response to delivered image pixels receives media evidence");
+                        AssertTrue(!saved.Messages.Last(message => message.Role == "assistant").ResourceEvidence.Any(evidence => evidence.View == "media"),
+                            "released images do not grant evidence in the next run");
                         AssertTrue(saved.Messages.Where(message => (message.Content ?? "").StartsWith(ResourceMediaMessages.Prefix))
                             .All(message => message.ExcludeFromModelContext && message.Attachments.Count == 0),
                             "one-shot hydration is released durably without deleting CAS observations");
@@ -135,7 +145,23 @@ namespace RNAssistant.Harness
                 source.Current = true;
                 var captured = read(source.Target.Target);
                 AssertEqual(ToolResultStatus.Ok, captured.Result.Status, "qualified fixture capture retained");
+                var action = new ExternalBrowserToolHandler(session, () => source, null);
+                Func<string, IReadOnlyList<ResourceEvidence>, ToolPreparationResult> prepare = (run, evidence) => {
+                    var call = new ToolCall(Guid.NewGuid().ToString("N"), "browser.click", "{}");
+                    session.Messages.Add(new ChatMessage { Role = "assistant", RunId = run, ToolCallId = call.Id,
+                        AcceptedCallOrigin = new AcceptedToolCallOrigin("point", "attempt", 0), ResourceEvidence = evidence.ToList() });
+                    var execution = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "test", ResourceReadToolHandler.Policy), run, "turn", "point", DateTime.UtcNow, false, 1);
+                    return action.PrepareAsync(new ToolHandlerContext(execution, new Dictionary<string, object> { ["target"] = source.Target.Target,
+                        ["point"] = new { x = 0, y = 0 }, ["expectedText"] = "Changed" }), CancellationToken.None).GetAwaiter().GetResult();
+                };
+                session.Messages.Add(new ChatMessage { Role = "tool", ToolName = "core.read", RunId = "run", ResourceEvidence = captured.ResourceEvidence.ToList() });
+                var pointPreparation = prepare("run", captured.ResourceEvidence);
+                AssertEqual(ToolResultStatus.Ok, pointPreparation.Result.Status, "delivered media from this run admits coordinate preparation: " + pointPreparation.Result.Message);
+                AssertTrue(prepare("foreign-run", captured.ResourceEvidence).Result.Status != ToolResultStatus.Ok, "foreign run pixels never admit coordinates");
+                AssertTrue(prepare("run", new ResourceEvidence[0]).Result.Status != ToolResultStatus.Ok, "omitted pixels never admit coordinates");
                 var savedTarget = (string)JObject.Parse(captured.Result.DataJson)["snapshotTarget"];
+                AssertTrue(!read(savedTarget).ResourceEvidence.SelectMany(item => item.Dependencies).Any(item => item.Kind == "immutable-snapshot"),
+                    "retained media reads never reissue a live coordinate grant");
                 source.Target = null; attachments = null;
                 AssertEqual(ToolResultStatus.Ok, read(savedTarget).Result.Status, "historical pixels remain readable after native close and provider recreation");
                 AssertTrue(new AttachmentStore(paths).ReadBytes(attachments.Single()).SequenceEqual(HarnessBrowserMediaSource.Pixels),

@@ -242,7 +242,7 @@ namespace RNAssistant.Core.Services
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "pageIndex", "startPage", "requestedPages", "nextPageIndex", "pageCount", "kind", "target", "type", "scope",
                     "representation", "text", "table", "tree", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
-                    "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
+                    "returnedCharacters", "totalCharacters", "complete", "sourceComplete", "mediaDescription",
                     "rawContentIncluded", "bodyIncluded", "omittedReason", "observation", "snapshotTarget", "loaded",
                     "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
             if (name == "core.read")

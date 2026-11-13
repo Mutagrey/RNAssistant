@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Tools;
 
@@ -18,6 +17,13 @@ namespace RNAssistant.Office.Tools
             properties["modifiers"] = new { type = "array", description = "Bounded native pointer modifiers; no held state survives this call.", maxItems = 3,
                 items = new { type = "string", @enum = new[] { "Alt", "Control", "Shift" } } };
         }
+        private static void AddCoordinateSchema(Dictionary<string, object> properties, bool drag = false)
+        {
+            var point = new { type = "object", description = "Fallback when a semantic element cannot be identified unambiguously. Prefer name. CSS-pixel point in the fresh viewport image delivered in this run. Supply point OR name. Resize, scroll, zoom or layout changes require a new core.read with representation=media.",
+                properties = new { x = new { type = "number", minimum = 0, maximum = 4095 }, y = new { type = "number", minimum = 0, maximum = 4095 } },
+                required = new[] { "x", "y" }, additionalProperties = false };
+            properties["point"] = point; if (drag) properties["toPoint"] = point;
+        }
         private static IEnumerable<ToolCatalogEntry> InputCatalog()
         {
             foreach (var id in new[] { Drag, Hover, Scroll, PressKey, Select, Check })
@@ -26,8 +32,9 @@ namespace RNAssistant.Office.Tools
                     ["target"] = new { type = "string", description = "Exact live Browser page from core.find/read in this conversation.", minLength = 1, maxLength = 240 },
                     ["name"] = new { type = "string", description = "Exact observed element or scroll region name; viewport only if delivered by the page observation.", minLength = 1, maxLength = 160 }
                 };
-                var required = new List<string> { "target", "name" };
-                if (id == Drag) { AddPointerSchema(properties); properties["toName"] = new { type = "string", description = "Exact observed destination element.", minLength = 1, maxLength = 160 }; required.Add("toName"); }
+                var required = new List<string> { "target" };
+                if (id == Drag || id == Hover || id == Scroll) AddCoordinateSchema(properties, id == Drag); else required.Add("name");
+                if (id == Drag) { AddPointerSchema(properties); properties["toName"] = new { type = "string", description = "Exact observed destination element; use toPoint for a coordinate drag.", minLength = 1, maxLength = 160 }; }
                 if (id == Hover) properties["durationMs"] = new { type = "integer", description = "Maximum hover duration in this call.", minimum = 0, maximum = 1500 };
                 if (id == Scroll) {
                     properties["deltaX"] = new { type = "integer", description = "Horizontal CSS-pixel wheel delta.", minimum = -2000, maximum = 2000 };
@@ -49,14 +56,16 @@ namespace RNAssistant.Office.Tools
         }
         private static BrowserActionRequest InputRequest(ToolHandlerContext context, string name, string locator)
         {
-            var json = JObject.FromObject(context.Arguments);
-            var modifiers = json["modifiers"]?.ToObject<string[]>() ?? new string[0];
-            if (modifiers.Distinct(StringComparer.Ordinal).Count() != modifiers.Length) throw Error("Duplicate native modifiers are not allowed.", "browser_action_invalid");
-            return new BrowserActionRequest { Action = context.Execution.Call.Name.Substring("browser.".Length), Name = name,
-                Locator = locator, Value = (string)json["value"], ExpectedText = (string)json["expectedText"], ToName = (string)json["toName"],
-                Button = (string)json["button"] ?? "left", Count = (int?)json["count"] ?? 1, DurationMs = (int?)json["durationMs"] ?? 0,
-                Modifiers = modifiers, DeltaX = (int?)json["deltaX"] ?? 0,
-                DeltaY = (int?)json["deltaY"] ?? 0, Key = (string)json["key"], Checked = (bool?)json["checked"] };
+            var request = JsonConvert.DeserializeObject<BrowserActionRequest>(JsonConvert.SerializeObject(context.Arguments));
+            request.Action = context.Execution.Call.Name.Substring("browser.".Length); request.Name = name; request.Locator = locator;
+            if (request.Modifiers == null || request.Modifiers.Distinct(StringComparer.Ordinal).Count() != request.Modifiers.Length)
+                throw Error("Duplicate native modifiers are not allowed.", "browser_action_invalid");
+            if (request.Action == "scroll" && request.DeltaX == 0 && request.DeltaY == 0) throw Error("Scroll requires a nonzero delta.", "browser_action_invalid");
+            if (request.Action != "navigate" && (string.IsNullOrEmpty(name) == (request.Point == null)) ||
+                request.Point != null && request.Action != "click" && request.Action != "drag" && request.Action != "hover" && request.Action != "scroll" ||
+                request.Action == "drag" && (request.Point == null ? string.IsNullOrEmpty(request.ToName) || request.ToPoint != null : request.ToPoint == null || request.ToName != null))
+                throw Error("Supply one semantic name or one viewport point, with a destination of the same kind for drag.", "browser_action_invalid");
+            return request;
         }
     }
 }

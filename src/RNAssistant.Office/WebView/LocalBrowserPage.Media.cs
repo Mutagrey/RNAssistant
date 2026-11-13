@@ -56,9 +56,14 @@ namespace RNAssistant.Office.WebView
             if (width < 1 || height < 1 || width > 4096 || height > 4096 || (long)width * height > 4 * 1024 * 1024 ||
                 Math.Abs(width - privacy.width * privacy.scale) > 2 || Math.Abs(height - privacy.height * privacy.scale) > 2)
                 throw new InvalidOperationException("Browser pixels do not match the observed viewport.");
-            return new BrowserMediaCapture { Page = handle, Png = png, CapturedUtc = DateTime.UtcNow, Title = State.Title,
+            var revision = Guid.NewGuid().ToString("N");
+            if (!await Evaluate<bool>("__rnaLocalBrowser.captureMedia(" + Newtonsoft.Json.JsonConvert.SerializeObject(revision) + "," + after.epoch + ")"))
+                throw new InvalidOperationException("The viewport changed before media admission.");
+            _mediaCapture = new BrowserMediaCapture { CaptureRevision = revision, Page = handle, Png = png, CapturedUtc = DateTime.UtcNow, Title = State.Title,
                 SourceAddress = ExternalBrowserResourceProvider.SourceAddress(State.Url), Width = width, Height = height,
+                CssWidth = (int)privacy.width, CssHeight = (int)privacy.height,
                 ViewportRevision = viewport, ControlRevision = control, DeviceScale = privacy.scale, Zoom = zoom, PrivacyVerified = true };
+            return _mediaCapture;
         }
     }
 }

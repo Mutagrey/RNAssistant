@@ -164,7 +164,7 @@ namespace RNAssistant.Office.WebView
                     if(instance==null || instance.Token.IsCancellationRequested || uri.GetLeftPart(UriPartial.Authority)!=instance.Origin)
                         throw new PluginException("plugin_origin_denied","Unbound plugin origin.");
                     var path=Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/'); byte[] bytes; string mime;
-                    var query=Query(uri.Query);
+                    var query=path.StartsWith(".data/",StringComparison.Ordinal) || path.StartsWith(".result/",StringComparison.Ordinal) ? Query(uri.Query) : null;
                     if(path.StartsWith(".result/download/",StringComparison.Ordinal) && e.Request.Method=="GET" && uri.Query.Length==0)
                     {
                         var download=await Task.Run(()=>_service.DownloadResult(instance,path.Substring(17)));
@@ -188,7 +188,7 @@ namespace RNAssistant.Office.WebView
                     }
                     else
                     {
-                        if(e.Request.Method!="GET" || uri.Query.Length!=0)throw new PluginException("plugin_request_denied","Only exact package GETs are allowed.");
+                        if(e.Request.Method!="GET")throw new PluginException("plugin_request_denied","Only exact package GETs are allowed.");
                         if(path.StartsWith(".host/",StringComparison.Ordinal))
                         {
                             var name=path.Substring(6);

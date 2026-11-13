@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.24.0-dev
+
+- Browser keeps element-based input and adds an optional fresh-viewport coordinate
+  fallback. Workspace actions retain delivered read evidence like Office; keyboard
+  focus/selection and viewport scrolling have explicit read-back.
+
 ### 16.23.1-dev
 
 - Browser and HTML editor share autonomous HTML export with embedded binding data.

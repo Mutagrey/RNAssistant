@@ -55,7 +55,7 @@ namespace RNAssistant.Office.WebView
                     try {
                         var call = JsonConvert.DeserializeObject<BindingCall>(args.ParameterObjectAsJson);
                         if (call?.name != "__rnaViewportChanged" || call.executionContextId != _world) return;
-                        State.ViewportRevision++; _observationId = _observationRevision = null; Publish();
+                        State.ViewportRevision++; _observationId = _observationRevision = null; _mediaCapture = null; Publish();
                     } catch { }
                 };
                 await Core.CallDevToolsProtocolMethodAsync("Runtime.addBinding", "{\"name\":\"__rnaViewportChanged\",\"executionContextName\":\"RNAssistantLocal\"}");
@@ -65,8 +65,9 @@ namespace RNAssistant.Office.WebView
             await Evaluate<bool>(visual + "\n;globalThis.__rnaActionView=RNAssistantBrowserActionView.create(" + JsonConvert.SerializeObject(styles) + ",{nativeOwned:true});true");
             await Evaluate<bool>(AutomationScript);
         }
+        private BrowserMediaCapture _mediaCapture;
         private void InvalidateAutomation()
-        { _observationRevision = _observationId = _preparationId = null; _input?.Cancel(); }
+        { _observationRevision = _observationId = _preparationId = null; _mediaCapture = null; _input?.Cancel(); }
         internal void BlockActions() { _actionsBlocked = true; InvalidateAutomation(); }
         internal void ResumeAgent(long? revision)
         {
@@ -93,9 +94,12 @@ namespace RNAssistant.Office.WebView
         internal async Task PrepareAsync(string revision, string id, BrowserActionRequest request, CancellationToken token)
         {
             RequireAction(); token.ThrowIfCancellationRequested();
-            if (revision != _observationRevision || string.IsNullOrEmpty(_observationId)) throw new InvalidOperationException("Read the current page before native input.");
+            var coordinate = request.Point != null;
+            if (coordinate ? _mediaCapture == null || revision != _mediaCapture.CaptureRevision || !_mediaCapture.Page.Matches(Handle) ||
+                _mediaCapture.ViewportRevision != State.ViewportRevision || _mediaCapture.ControlRevision != State.ControlRevision || _mediaCapture.Zoom != Controller.ZoomFactor :
+                revision != _observationRevision || string.IsNullOrEmpty(_observationId)) throw new InvalidOperationException("Read the current page or viewport before native input.");
             if (request.Locator != null) throw new InvalidOperationException("Local navigation must be dispatched by the Browser session owner.");
-            var point = await Evaluate<NativePoint>("__rnaLocalBrowser.prepare(" + JsonConvert.SerializeObject(_observationId) + "," + JsonConvert.SerializeObject(id) + "," + JsonConvert.SerializeObject(request) + ")");
+            var point = await Evaluate<NativePoint>("__rnaLocalBrowser." + (coordinate ? "prepareMedia" : "prepare") + "(" + JsonConvert.SerializeObject(coordinate ? revision : _observationId) + "," + JsonConvert.SerializeObject(id) + "," + JsonConvert.SerializeObject(request) + ")");
             token.ThrowIfCancellationRequested(); RequireAction();
             _point = point; _request = request; _preparationId = id; _preparedAt = DateTime.UtcNow;
             _preparedViewport = State.ViewportRevision; _preparedControl = State.ControlRevision;
@@ -157,6 +161,7 @@ namespace RNAssistant.Office.WebView
                     await Mouse("mouseMoved", point.x, point.y, modifiers: modifiers);
                     var click = request.Action == "click" || request.Action == "fill" || request.Action == "select" || request.Action == "check" || request.Action == "press_key" || request.Action == "navigate" || request.Action == "drag";
                     if (click) {
+                        if (request.Point != null) await Evaluate<bool>("__rnaLocalBrowser.admit(" + JsonConvert.SerializeObject(id) + ")");
                         var button = request.Button ?? "left"; var mask = button == "right" ? 2 : button == "middle" ? 4 : 1;
                         for (var repeat = 0; repeat < (request.Action == "click" ? request.Count : 1); repeat++) {
                             input.ThrowIfCancellationRequested(); down = true; await Mouse("mousePressed", point.x, point.y, button, mask, repeat + 1, modifiers);
@@ -172,6 +177,7 @@ namespace RNAssistant.Office.WebView
                         if (request.Value.Length == 0) { heldKeys.Add("Backspace"); await Key("keyDown", "Backspace"); await Key("keyUp", "Backspace"); heldKeys.Remove("Backspace"); }
                         else await Core.CallDevToolsProtocolMethodAsync("Input.insertText", JsonConvert.SerializeObject(new { text = request.Value }));
                     } else if (request.Action == "press_key") {
+                        await Evaluate<bool>("__rnaLocalBrowser.beforeKey(" + JsonConvert.SerializeObject(id) + ")");
                         var chord = request.Key.Split('+'); var key = chord[chord.Length - 1];
                         for (var i = 0; i < chord.Length - 1; i++) { modifiers |= chord[i] == "Control" ? 2 : 8; heldKeys.Add(chord[i]); await Key("keyDown", chord[i], modifiers); }
                         for (var i = 0; i < request.Count; i++) { input.ThrowIfCancellationRequested(); heldKeys.Add(key); await Key("keyDown", key, modifiers); await Key("keyUp", key, modifiers); heldKeys.Remove(key); }

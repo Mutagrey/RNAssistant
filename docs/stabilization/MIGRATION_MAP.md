@@ -1,5 +1,12 @@
 # Current-to-target migration map
 
+## Browser input evidence — F2c3, 2026-11-13
+
+The existing accepted-response evidence and media provenance owners admit optional
+viewport input; there is no coordinate registry/store or model-visible capture ID.
+Workspace copies request evidence at ResponseAccepted, matching Office. Native
+preparations remain one-shot and Unknown remains blocked until manual reopen.
+
 ## HTML export cutover — F2c2, 2026-11-13
 
 Owner: Browser/resource export. Browser and editor now share exact target capture

@@ -1,5 +1,15 @@
 # Universal Browser: матрица проверок
 
+## F2c3 input admission evidence — 2026-11-13
+
+Passed: exact media/retained provenance and foreign-run/omitted-image refusal; real
+standalone plugin-source Workspace model wire (vision/nonvision, one-shot media,
+CSS viewport description, accepted evidence and no later-run grant); delivered-read
+semantic action runtime; existing Office artifact media hydration. Real Chromium
+runs named field/button/key input, CSS-point click and layout-stale refusal using the
+shipped isolated script, plus bindings and actual file:// export. Native OS input,
+WebView2 focus traversal, DPI and physical interruption still require Windows evidence.
+
 ## F2c2 autonomous export evidence — 2026-11-13
 
 Passed: real-controller Mock `--browser-html-export-test` (exact source/data,

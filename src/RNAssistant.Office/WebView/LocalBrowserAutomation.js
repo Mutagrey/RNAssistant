@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   if (globalThis.__rnaLocalBrowser) return true;
-  var observation, preparation, epoch = 0, geometryEpoch = 0;
+  var observation, mediaObservation, preparation, epoch = 0, geometryEpoch = 0;
   function capture() {
   // Never deliver input values, link destinations, HTML or page script state.
   var nodes = [], elements = [], destinations = [], visited = 0, characters = 0, truncated = false, deadline = performance.now() + 100;
@@ -53,7 +53,7 @@
   }
   function role(element) {
     var explicit = element.getAttribute("role");
-    if (/^(button|link|heading|textbox|checkbox|radio|combobox)$/.test(explicit)) return explicit;
+    if (/^(button|link|heading|textbox|checkbox|radio|combobox|region)$/.test(explicit)) return explicit;
     var tag = element.tagName;
     if (tag === "BUTTON" || tag === "INPUT" && /^(button|submit|reset)$/.test(element.type)) return "button";
     if (tag === "A" && element.hasAttribute("href")) return "link";
@@ -66,6 +66,7 @@
   try {
     var root = document.body;
     if (!root || hidden(root)) return { nodes: nodes, elements: elements, destinations: destinations, visited: visited, truncated: false };
+    add('region', 'Viewport', document.scrollingElement);
     var represented = new WeakSet(), walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
         budget();
@@ -79,7 +80,7 @@
       if (node.nodeType === 3) add("text", node.nodeValue, null);
       else {
         var kind = role(node);
-        if (kind) { add(kind, name(node, kind), node); represented.add(node); }
+        if (kind) { add(kind, name(node, kind), node); if (kind !== 'region') represented.add(node); }
       }
     }
   } catch (error) { if (error !== stop) throw error; }
@@ -102,8 +103,30 @@
     if (matches.length !== 1) fail('browser_target_ambiguous');
     return matches[0].element;
   }
+  function layout() {
+    var nodes = document.querySelectorAll('*'); if (nodes.length > 3000) fail('browser_layout_bounds');
+    return Array.from(nodes).filter(authored).map(function (node) {
+      var box = node.getBoundingClientRect(); return [box.x, box.y, box.width, box.height, node.scrollLeft, node.scrollTop].join(',');
+    }).join(';') + ':' + innerWidth + ':' + innerHeight + ':' + devicePixelRatio;
+  }
+  function hit(position) {
+    if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y) || position.x < 0 || position.y < 0 || position.x >= innerWidth || position.y >= innerHeight) fail('browser_target_outside_viewport');
+    var element = document.elementFromPoint(position.x, position.y);
+    if (!element || !authored(element) || element.closest('[data-private],[data-sensitive],iframe,object,embed,canvas,svg,input,textarea,select,[contenteditable]:not([contenteditable="false"]),[inert],[aria-disabled="true"]') || element.matches(':disabled')) fail('browser_private_or_stale');
+    return element;
+  }
   var api = {
-    invalidate: function () { epoch++; observation = preparation = null; },
+    invalidate: function () { epoch++; observation = mediaObservation = preparation = null; },
+    captureMedia: function (id, geometry) {
+      if (geometry !== geometryEpoch || !api.privacy().safe) return false;
+      var view = capture(); mediaObservation = { id: id, geometry: geometry, layout: layout(), fingerprint: fingerprint(view), epoch: epoch }; return true;
+    },
+    prepareMedia: function (mediaId, id, request) {
+      var media = mediaObservation;
+      if (!media || media.id !== mediaId || media.geometry !== geometryEpoch || media.layout !== layout() || !api.privacy().safe) fail('browser_viewport_stale');
+      if (!request.point || ['click', 'hover', 'drag', 'scroll'].indexOf(request.action) < 0) fail('browser_coordinate_action_invalid');
+      observation = media; var result = api.prepare(mediaId, id, request); preparation.media = media; return result;
+    },
     read: function (id) {
       var view = capture(); observation = { id: id, fingerprint: fingerprint(view), epoch: epoch }; preparation = null;
       return { observationId: id, title: document.title.slice(0, 160), nodes: view.nodes, visited: view.visited, truncated: view.truncated };
@@ -112,7 +135,9 @@
       if (!observation || observation.id !== observationId || observation.epoch !== epoch) fail('browser_observation_stale');
       var view = capture(); if (view.truncated || fingerprint(view) !== observation.fingerprint) fail('browser_document_changed');
       var roles = request.action === 'fill' ? ['textbox'] : request.action === 'select' ? ['combobox'] : request.action === 'check' ? ['checkbox', 'radio'] : request.action === 'navigate' ? ['link'] : null;
-      var element = find(view, request.name, roles), position = point(element), destination = request.toName ? point(find(view, request.toName)) : null;
+      var viewport = request.action === 'scroll' && request.name === 'Viewport';
+      var element = request.point ? hit(request.point) : find(view, request.name, roles), position = request.point || (viewport ? { x: innerWidth / 2, y: innerHeight / 2 } : point(element)),
+        destination = request.toPoint ? (hit(request.toPoint), request.toPoint) : request.toName ? point(find(view, request.toName)) : null;
       if (request.action === 'fill' && element.readOnly) fail('browser_read_only');
       if (request.expectedText && view.nodes.some(function (node) { return node.name === request.expectedText; })) fail('browser_expected_text_present');
       var option = -1;
@@ -121,23 +146,29 @@
         var choices = Array.from(element.options).map(function (value, index) { return { value: value, index: index }; }).filter(function (value) { return value.value.text.trim() === request.value && !value.value.disabled; });
         if (choices.length !== 1 || choices[0].index > 100) fail('browser_option_ambiguous'); option = choices[0].index;
       }
-      preparation = { id: id, request: request, element: element, position: position, destination: destination, epoch: epoch,
+      preparation = { id: id, request: request, element: element, position: position, destination: destination, viewport: viewport, epoch: epoch,
         fingerprint: observation.fingerprint, beforeValue: element.value, checked: element.checked, scrollX: scrollX, scrollY: scrollY,
         elementScrollX: element.scrollLeft, elementScrollY: element.scrollTop, option: option };
       if (globalThis.__rnaActionView) __rnaActionView.show(id, element, request.action, true);
       return { x: position.x, y: position.y, toX: destination && destination.x, toY: destination && destination.y,
         option: option, href: request.action === 'navigate' ? element.href : null,
-        satisfied: request.action === 'check' && element.checked === request.checked };
+        satisfied: request.action === 'check' && element.checked === request.checked || request.action === 'hover' && element.matches(':hover') };
     },
     admit: function (id) {
       var value = preparation; if (!value || value.id !== id || value.epoch !== epoch) fail('browser_preparation_stale');
-      var position = point(value.element);
+      if (value.media && (value.media.geometry !== geometryEpoch || value.media.layout !== layout() || hit(value.position) !== value.element)) fail('browser_viewport_stale');
+      var position = value.media || value.viewport ? value.position : point(value.element);
       if (Math.abs(position.x - value.position.x) > 1 || Math.abs(position.y - value.position.y) > 1 || fingerprint(capture()) !== value.fingerprint) fail('browser_layout_changed');
-      if (value.destination) { var next = point(find(capture(), value.request.toName)); if (Math.abs(next.x - value.destination.x) > 1 || Math.abs(next.y - value.destination.y) > 1) fail('browser_layout_changed'); }
-      observation = null; return true;
+      if (value.destination) { var next = value.request.toPoint ? (hit(value.request.toPoint), value.request.toPoint) : point(find(capture(), value.request.toName)); if (Math.abs(next.x - value.destination.x) > 1 || Math.abs(next.y - value.destination.y) > 1) fail('browser_layout_changed'); }
+      observation = mediaObservation = null; return true;
     },
     dispatch: function (id) {
       api.admit(id); if (globalThis.__rnaActionView) __rnaActionView.dispatch(id, preparation.element, preparation.request.action); return true;
+    },
+    beforeKey: function (id) {
+      var value = preparation; if (!value || value.id !== id || value.epoch !== epoch) fail('browser_preparation_stale');
+      value.keyFocus = document.activeElement; value.beforeValue = value.element.value;
+      value.selectionStart = value.element.selectionStart; value.selectionEnd = value.element.selectionEnd; return true;
     },
     verify: function (id, finalRead) {
       var value = preparation;
@@ -150,6 +181,8 @@
       else if (request.expectedText) verified = !view.truncated && view.nodes.some(function (node) { return node.name === request.expectedText; });
       else if (request.action === 'hover') verified = element.matches(':hover');
       else if (request.action === 'scroll') verified = scrollX !== value.scrollX || scrollY !== value.scrollY || element.scrollLeft !== value.elementScrollX || element.scrollTop !== value.elementScrollY;
+      else if (request.action === 'press_key') verified = document.activeElement !== value.keyFocus || element.value !== value.beforeValue ||
+        element.selectionStart !== value.selectionStart || element.selectionEnd !== value.selectionEnd || !view.truncated && fingerprint(view) !== value.fingerprint;
       else verified = !view.truncated && fingerprint(view) !== value.fingerprint || element.value !== value.beforeValue || element.checked !== value.checked;
       if (verified || finalRead !== false) preparation = null;
       return { effect: verified ? 'VerifiedChange' : 'Unknown', code: verified ? 'browser_verified' : 'browser_effect_unknown' };

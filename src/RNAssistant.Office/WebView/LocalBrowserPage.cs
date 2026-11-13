@@ -64,6 +64,7 @@ namespace RNAssistant.Office.WebView
                 var controller = await environment.CreateCoreWebView2ControllerAsync(Control.Handle, options);
                 if (_closed || linked.IsCancellationRequested) { controller.Close(); linked.Token.ThrowIfCancellationRequested(); }
                 Controller = controller;
+                Controller.MoveFocusRequested += (sender, args) => { if (AgentOwnsInput) args.Handled = true; };
                 Controller.IsVisible = true;
                 Controller.GotFocus += (sender, args) => NativeFocused = true; Controller.LostFocus += (sender, args) => NativeFocused = false;
                 Core.Settings.AreHostObjectsAllowed = false; Core.Settings.AreDevToolsEnabled = false;
