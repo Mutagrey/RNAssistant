@@ -1582,3 +1582,41 @@ after-state/CAS ownership.
    ChatStore.Groups with its old backend. This intermediate port integration does
    not change default production behavior, so no product bump. One scoped commit;
    no push/tag.
+
+## P1/P2 — native single-chat deletion (2026-11-13)
+
+1. The existing ConversationJournal directly implements single-chat Store deletion
+   with `chat.deleted`. Office ChatSessionService and WorkspaceStore consume it;
+   no new facade/store/registry or alternate production writer is introduced.
+2. The fact pins address/revision/hash. Append admission checks exact scope and
+   terminal-run state under the same resource scope lease as group membership.
+   The existing card locator becomes the canonical tombstone receipt; alias,
+   live metadata and selection disappear atomically. Store/primitive/spawn creation
+   cannot reuse the ID. Other chats and resource-owned groups survive unchanged.
+3. Canonical history, CAS and resource evidence remain retained. This is logical
+   deletion, not storage reclamation. Lost flush acknowledgement/index update uses
+   exact read-back without redispatch; unavailable proof throws instead of claiming
+   success. Restart/rebuild/restore do not resurrect the chat or upgrade a retained
+   source Unknown. No new table/schema, old-history import or fallback. Production
+   C# +124/−11; the partial is included in the old-style Core csproj.
+4. On `35a1defe` + this slice, macOS/net8/C#7.3: four new cases cover Office/Workspace
+   deletion/selection/catalog/alias, foreign scope, rejected resurrection, group
+   persistence, active-run refusal and post-recovery deletion, the membership lease
+   race, before-append/after-flush/index/read-back faults, rebuild and clean Workspace
+   restore. A real model Unknown and its cross-journal resource proof survive source
+   deletion and restore. Twelve regressions pass: native groups (3), spawn (4),
+   Send/Resolve (3), text Store consumers/recovery (2). Version format/diff checks
+   pass. No full suite or Office/VSTO validation was run.
+5. Before: the native Store rejected Delete. After: one bounded fact removes the
+   live chat without loading historical bodies or rewriting memberships/other chats;
+   the fault fixture observes zero ChatBodyReads. Deleted cards are excluded from
+   catalog enumeration. This does not establish a Windows latency/allocation curve
+   or close broader metadata/header costs; retained history still occupies storage.
+6. Next: DeleteDocument, Move/MoveDocument, history rewrites/usage, remaining resource
+   consumers and P3 metadata/header/authority snapshot. P4 stays deferred. Verified
+   history/CAS/keys/locator backup, stopped old writers, full restore and Windows/
+   Office screen-photo evidence still gate whole-port P7.
+7. Session events, conversation protocol, migration map, progress and Harness guide
+   are updated. Default writers remain unchanged, so this intermediate integration
+   has no product version bump. The existing ChatStore/Store adapter is removed
+   with whole-port P7. One scoped commit; no push/tag.

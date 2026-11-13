@@ -111,6 +111,19 @@ focused Harness cases and two Browser fixtures pass; Windows/B02 and UI acceptan
 remain open. Document HTML and raw import continue from this state.
 [Details](../browser/06_PROGRESS.md#f3c-workspace-checkpoints--2026-11-13).
 
+## Native single-chat deletion — 2026-11-13
+
+Удаление одного чата подключено к `chat.deleted` через Office ChatSessionService
+и WorkspaceStore. Tombstone атомарно убирает live metadata/alias/selection; история,
+evidence, группы и остальные чаты сохраняются. Новых таблиц/schema/stores нет.
+Четыре checks проходят: consumers, lost ack/index/read-back, active run, гонка membership,
+Unknown/resource proof после удаления, rebuild и clean Workspace restore. Ещё 12
+регрессионных checks проходят. Delete не загружает тела истории. Это логическое
+удаление, без освобождения CAS. Default writers прежние; Windows/Office evidence открыт.
+Далее DeleteDocument, Move/MoveDocument и usage, остальные resource consumers и
+metadata/header/authority snapshot. P4 остаётся отложенной.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-single-chat-deletion-2026-11-13).
+
 ## Native chat groups — 2026-11-13
 
 Группы подключены через существующий ConversationGroupService к ResourceJournal/CAS.

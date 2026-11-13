@@ -142,6 +142,18 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 native single-chat deletion (2026-11-13): ConversationJournal directly owns
+`IConversationStore.Delete` / `chat.deleted`; the existing card locator becomes the
+verified tombstone receipt, with no new table/schema/store. Live alias, metadata
+and selection are removed atomically; retained identity prevents resurrection.
+Scope lease is shared with groups, and active runs reject deletion. Office
+ChatSessionService / WorkspaceStore, fault recovery, group races, rebuild and clean
+Workspace restore are checked host-neutral. History/evidence/CAS are retained;
+this does not reclaim storage. Default writers and the existing adapter remain
+until whole-port P7. DeleteDocument, Move/MoveDocument and storage usage are still
+separate Store work, followed by other resource consumers and metadata/header.
+[Contract](../session-events.md#journal-single-chat-deletion--2026-11-13).
+
 P5 native chat groups (2026-11-13): existing ConversationGroupService owns scoped
 metadata, ResourceJournal/CAS publication and typed UI changes. AgentCommunication
 uses the existing Inbox alias lookup; exact accepted calls bind resource preparation
@@ -150,8 +162,8 @@ reads page only group heads, but hydrate all group bodies; authority Publish sna
 and metadata/header costs remain open. Owner: Application ConversationGroupService /
 existing conversation and resource ports. Whole-port P7 removes ChatStore.Groups,
 the explicit ChatStore constructor and retiring catalog branch; no data import.
-Before native chat Delete/Move is admitted, share the resource scope lease and check
-the add/delete-chat race. Default writers unchanged; Windows evidence open.
+Native single-chat Delete now shares this lease and its add/delete race is checked
+host-neutral. Move/document deletion remain open. Default writers unchanged; Windows evidence open.
 [Contract](../session-events.md#journal-chat-groups--2026-11-13).
 
 P5 native assignment pages (2026-11-13): the existing event port projects canonical

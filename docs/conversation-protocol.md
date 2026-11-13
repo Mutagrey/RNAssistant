@@ -16,9 +16,11 @@ Model membership разрешается через Inbox alias index, без п�
 Typed UI сохраняет exact revision guard. Группы читаются по resource prefix страницами
 по 100 heads; тела всех групп этой области пока нужны для проверки уникальности имён.
 Retiring composition явно использует ChatStore.Groups/ResourceAuthorityStore до P7.
-Native mutation держит существующий resource scope lease; native Delete/Move чатов
-ещё не подключены. При переносе удаления тот же lease обязан охватывать проверку
-membership и удаление. Прежний backend использует общий document lock. Конфликт/unknown не
+Native mutation и удаление одного чата держат общий resource scope lease; гонка
+add/delete проверена host-neutral. `chat.deleted` скрывает чат и его memberships,
+сохраняя группу, другие чаты и canonical evidence. Удаление требует terminal run.
+Move и удаление документа ещё не подключены и должны сохранить эту сериализацию.
+Прежний backend использует общий document lock. Конфликт/unknown не
 повторяется автоматически. Группы не запускают/продолжают/останавливают Run, не
 снимают ограничения и не меняют participant roster цепочки. Дочерний чат добавляется
 явно. CreatorChatId — provenance из AgentCreation, не ParentSessionId fork истории.

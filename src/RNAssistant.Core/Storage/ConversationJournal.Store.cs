@@ -178,10 +178,10 @@ namespace RNAssistant.Core.Storage
             RequireTextRoot();
             return Access((db, cursor) => {
                 var ids = new List<string>();
-                using (var command = Command(db, "SELECT chat FROM chat_card WHERE stream=$stream ORDER BY chat"))
+                using (var command = Command(db, "SELECT chat FROM chat_card WHERE stream=$stream AND alias IS NOT NULL ORDER BY chat"))
                 using (var reader = command.ExecuteReader()) while (reader.Read()) ids.Add(reader.GetString(0));
                 return (IReadOnlyList<ChatSessionHeader>)ids.Select(id => TextChat(db, id))
-                    .Where(receipt => host == null || MatchesAddress(receipt, host, key)).Select(receipt => {
+                    .Where(receipt => receipt != null && (host == null || MatchesAddress(receipt, host, key))).Select(receipt => {
                         var card = receipt.Fact.Card; var address = card.Address;
                         return new ChatSessionHeader { Id = card.ChatId, Revision = receipt.Position.Sequence,
                             Host = address.Host, DocumentKey = address.DocumentKey, WorkspaceId = address.WorkspaceId,
@@ -235,7 +235,7 @@ namespace RNAssistant.Core.Storage
 
         ChatSession IConversationStore.Move(ChatSession session, string host, string key, string title) { throw TextStoreScope(); }
         void IConversationStore.MoveDocument(string oldHost, string oldKey, string host, string key, string title, string path) { throw TextStoreScope(); }
-        bool IConversationStore.Delete(string host, string key, string id) { throw TextStoreScope(); }
+        bool IConversationStore.Delete(string host, string key, string id) { return DeleteChat(host, key, id); }
         bool IConversationStore.DeleteDocument(string host, string key) { throw TextStoreScope(); }
         bool IConversationStore.PrepareInterruptedRunRecovery(ChatSession session, string runId)
         {

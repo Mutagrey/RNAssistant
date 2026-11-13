@@ -159,14 +159,24 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal delete:` covers Office ChatSessionService and WorkspaceStore, scoped logical
+deletion, catalog/alias/selection, rejected resurrection, retained groups/other chats,
+active-run refusal and post-recovery deletion. Faults cover before append, lost flush
+acknowledgement, failed index update and unavailable read-back; rebuild and clean
+Workspace restore preserve accepted tombstones. The group add/delete race uses the
+real resource lease. A fourth case retains source Unknown and cross-journal resource
+proof after deletion, rebuild and restore. Delete reads zero history bodies. Regressions: `journal groups:`,
+`journal spawn:`, `journal send:`, and text Store consumers/recovery. Reuse the build;
+document deletion/moves, storage reclamation and Windows qualification are not covered.
+
 `journal groups:` covers the existing typed UI owner and real Office/Workspace
 consumers: create/add/rename/remove/delete, no-op/list, exact revision/scope, name
 conflicts, tombstones, lease refusal and unchanged participant history. Lost authority
 acknowledgement preserves source Unknown through rebuild and clean Workspace restore.
 Model membership uses the native alias index (catalog access throws in the fixture).
 Targeted regressions: `agent groups:`, `journal resources:` and `journal mutation:`;
-reuse the build. Native chat Delete/Move and the add/delete-chat race remain open,
-as do default-writer cutover and Windows/Office qualification.
+reuse the build. The native single-chat add/delete race is covered by `journal delete:`;
+Move/document deletion, default-writer cutover and Windows/Office qualification remain open.
 
 `journal assignments:` checks native `agents.list` through real Office/Workspace
 model wire after Send and Resolve, plus cold 50+1 paging across 61 inputs, bounded

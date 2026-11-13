@@ -102,7 +102,7 @@ namespace RNAssistant.Core.Storage
         {
             var fact = DecodeSpawn(record);
             var sender = Card(db, fact.Sender)?.Item1;
-            if (sender == null || Card(db, fact.Root) == null || Card(db, fact.Child.ChatId) != null)
+            if (sender == null || Card(db, fact.Root) == null || CardRecord(db, fact.Child.ChatId) != null)
                 throw new InvalidOperationException("Spawn source/root/child identity conflicts.");
             if (sender.Address == null)
             {
