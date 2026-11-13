@@ -9,7 +9,7 @@ namespace RNAssistant.Application
 {
     // Existing resource/HTML owners supply verified metadata. This projection grants no access
     // and stores no session, revision or selected target; every operation keeps its owner guard.
-    public static class BrowserTargetResolver
+    public static partial class BrowserTargetResolver
     {
         public static bool IsHtmlResource(ChatArtifact artifact)
         {
@@ -38,6 +38,9 @@ namespace RNAssistant.Application
                 Kind = project ? BrowserTargetKind.HtmlArtifact : BrowserTargetKind.HtmlResource,
                 State = BrowserTargetState.Ready, ChatId = source.Id, DocumentId = source.DocumentAuthorityId ?? "",
                 ResourceUri = exactUri, ArtifactId = artifact.Id, Revision = artifact.Revision,
+                OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Document, ScopeId = source.DocumentAuthorityId ?? source.Id, ChatId = source.Id },
+                ContentRevision = artifact.Id + ":" + artifact.Revision, Immutable = true, Title = artifact.Title,
+                DisplayLocator = BrowserLocalLocator.ForResource(artifact.Id + "~" + artifact.Revision),
                 Capabilities = new BrowserTargetCapabilities { Source = true, Preview = project,
                     Versions = project && !string.IsNullOrEmpty(source.DocumentAuthorityId), ExportProject = project,
                     CreateProject = project && !string.IsNullOrEmpty(source.DocumentAuthorityId) }
@@ -63,6 +66,8 @@ namespace RNAssistant.Application
                 throw new InvalidOperationException("Выбранный источник не является HTML workspace.");
             result = Saved(source, artifact, ChatResourceUri.CreateArtifactRevisionUri(source, artifact));
             result.Kind = BrowserTargetKind.HtmlWorkspace;
+            result.Immutable = false;
+            result.DisplayLocator = BrowserLocalLocator.ForResource("working-" + source.Id);
             var files = source.HtmlWorkspace?.Files;
             result.Capabilities = new BrowserTargetCapabilities {
                 Source = files != null && files.Count != 0, Preview = files != null && files.Any(file => file.Kind == "html"),

@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -58,7 +59,7 @@ namespace RNAssistant.Office.Services
             ResourceAuthorityService authority = null, CatalogPublicationService catalogs = null,
             Func<ChatAttachment, byte[]> readAttachmentBytes = null,
             Func<bool> agentJavaScriptEnabled = null,
-            Func<RNAssistant.Office.Contracts.IExternalBrowserReadSource> externalBrowser = null)
+            Func<RNAssistant.Application.Contracts.IBrowserReadSource> externalBrowser = null)
         {
             var providers = new List<IResourceProvider>
             {

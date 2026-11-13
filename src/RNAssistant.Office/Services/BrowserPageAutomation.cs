@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.IO;
 using System.Linq;
@@ -15,7 +16,7 @@ namespace RNAssistant.Office.Services
         private readonly Action<Action> _post;
         private readonly Func<bool> _onUi;
         internal SemaphoreSlim Gate { get; } = new SemaphoreSlim(1, 1);
-        private readonly Func<ExternalBrowserReadTarget> _target;
+        private readonly Func<BrowserPageHandle> _target;
         private readonly Func<string> _sourceUrl;
         private readonly Func<bool> _visible;
         private readonly Func<string, string, Task<string>> _protocol;
@@ -26,7 +27,7 @@ namespace RNAssistant.Office.Services
         internal bool ManualControl => _manualControl;
         internal long ControlRevision => _controlRevision;
         internal string Message => _message;
-        private ExternalBrowserReadTarget ReadTarget => _disposed ? null : _target();
+        private BrowserPageHandle ReadTarget => _disposed ? null : _target();
         private readonly Func<string, string, Task<Action>> _pauseRun;
         private Task<Action> _pauseTask;
         private bool _manualControl, _pauseFailed;
@@ -44,12 +45,12 @@ namespace RNAssistant.Office.Services
         private string _preparedNavigationUrl;
         private bool _preparedLink;
         private ExternalBrowserNavigation _navigation;
-        private ExternalBrowserReadTarget _observationTarget;
+        private BrowserPageHandle _observationTarget;
         private bool _actionUnknown;
         private int _abandonedAction;
         internal void BlockActions() { Interlocked.Exchange(ref _abandonedAction, 1); }
 
-        internal BrowserPageAutomation(string chatId, Func<ExternalBrowserReadTarget> target, Func<string> sourceUrl, Func<bool> visible,
+        internal BrowserPageAutomation(string chatId, Func<BrowserPageHandle> target, Func<string> sourceUrl, Func<bool> visible,
             Func<string, string, Task<string>> protocol, Action<string> requireAccess,
             Func<string, string, Task<Action>> pauseRun, Action changed, Action<Action> post, Func<bool> onUi)
         { _chatId = chatId; _target = target; _sourceUrl = sourceUrl; _visible = visible; _protocol = protocol;
@@ -60,9 +61,9 @@ namespace RNAssistant.Office.Services
         internal void NavigationUnknown(string code) { _navigation?.Unknown(code); }
         private void Publish() { if (!_disposed) _changed(); }
         public void Dispose() { if (_disposed) return; HideAction(); AbandonNavigation("browser_effect_unknown"); _disposed = true; BlockActions(); }
-        internal async Task<T> InvokeAsync<T>(ExternalBrowserReadTarget target,
+        internal async Task<T> InvokeAsync<T>(BrowserPageHandle target,
             Func<BrowserPageAutomation, Action, Task<T>> operation, CancellationToken token, Action beforeDispatch = null,
-            int timeoutMs = 3000, Func<T, ExternalBrowserReadTarget> resultTarget = null)
+            int timeoutMs = 3000, Func<T, BrowserPageHandle> resultTarget = null)
         {
             token.ThrowIfCancellationRequested();
             if (_onUi()) throw ExternalBrowserResourceProvider.Error("Browser operations require a background caller.", "browser_dispatch_invalid");
@@ -166,13 +167,13 @@ namespace RNAssistant.Office.Services
             if (wire == null || wire.Length > 262144) throw ExternalBrowserResourceProvider.Error("Browser capture exceeded its transport bound.", "browser_capture_invalid");
             return JsonConvert.DeserializeObject<T>(wire);
         }
-        public async Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target)
+        public async Task<BrowserObservation> ReadAsync(BrowserPageHandle target)
         {
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("Browser document changed before capture.", "browser_document_stale");
             RequireAgentAccess();
             var sourceUrl = _sourceUrl();
             if (_manualControl) { EnsureUserPause(); await Evaluate<bool>("globalThis.__rnaBrowserControl.hold()"); }
-            var content = await Evaluate<ExternalBrowserSemanticContent>(SemanticScript);
+            var content = await Evaluate<BrowserObservation>(SemanticScript);
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("Browser document changed during capture.", "browser_document_stale");
             RequireAgentAccess(); // A revoked permission cannot deliver an in-flight observation.
             if (sourceUrl != _sourceUrl())
@@ -284,7 +285,7 @@ namespace RNAssistant.Office.Services
             Publish();
         }
 
-        private void CheckAction(ExternalBrowserReadTarget target)
+        private void CheckAction(BrowserPageHandle target)
         {
             RequireAgentAccess();
             if (_manualControl) { EnsureUserPause(); throw ExternalBrowserResourceProvider.Error("The user is controlling this page. Wait for explicit Resume agent; do not retry browser actions.", "browser_user_control"); }
@@ -293,8 +294,8 @@ namespace RNAssistant.Office.Services
             if (_actionUnknown || Volatile.Read(ref _abandonedAction) != 0) throw ExternalBrowserResourceProvider.Error("A previous effect is unknown. Inspect the page; mutations require closing and reopening it manually.", "browser_effect_unknown");
         }
 
-        public async Task<bool> PrepareAsync(ExternalBrowserReadTarget target, string observationRevision,
-            string preparationId, ExternalBrowserActionRequest request)
+        public async Task<bool> PrepareAsync(BrowserPageHandle target, string observationRevision,
+            string preparationId, BrowserActionRequest request)
         {
             var navigation = request.Action == "navigate";
             if (navigation && !target.CanNavigate) throw ExternalBrowserResourceProvider.Error("This preview has no external navigation capability.", "browser_navigation_unavailable");
@@ -309,7 +310,7 @@ namespace RNAssistant.Office.Services
                 string url;
                 if (request.Name != null)
                 {
-                    var link = await Evaluate<ExternalBrowserLinkPreparation>("globalThis.__rnaBrowser.prepareLink(" +
+                    var link = await Evaluate<BrowserLinkPreparation>("globalThis.__rnaBrowser.prepareLink(" +
                         JsonConvert.SerializeObject(_observationId) + "," + JsonConvert.SerializeObject(preparationId) + "," + JsonConvert.SerializeObject(request.Name) + ")");
                     if (link?.Prepared != true) throw ExternalBrowserResourceProvider.Error("The observed link changed or is not actionable.", ExternalBrowserPolicy.SafeActionCode(link?.Code));
                     url = link.Url; _preparedLink = true;
@@ -322,16 +323,16 @@ namespace RNAssistant.Office.Services
                 _preparedNavigationUrl = url; _preparationId = preparationId;
                 return true;
             }
-            var result = await Evaluate<ExternalBrowserActionResult>("globalThis.__rnaBrowser.prepare(" +
+            var result = await Evaluate<BrowserActionResult>("globalThis.__rnaBrowser.prepare(" +
                 JsonConvert.SerializeObject(_observationId) + "," + JsonConvert.SerializeObject(preparationId) + "," + JsonConvert.SerializeObject(request) + ")");
             CheckAction(target);
-            if (result?.Effect != ExternalBrowserEffect.VerifiedNoChange || result.Code != "browser_prepared")
+            if (result?.Effect != BrowserActionEffect.VerifiedNoChange || result.Code != "browser_prepared")
                 throw ExternalBrowserResourceProvider.Error("The exact page element could not be prepared. Read the page again.", ExternalBrowserPolicy.SafeActionCode(result?.Code));
             _preparationId = preparationId;
             return true;
         }
 
-        public async Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId, Action beforeDispatch)
+        public async Task<BrowserActionResult> ActAsync(BrowserPageHandle target, string preparationId, Action beforeDispatch)
         {
             CheckAction(target);
             if (preparationId != _preparationId || preparationId == null)
@@ -350,19 +351,19 @@ namespace RNAssistant.Office.Services
             beforeDispatch();
 
             _actionUnknown = true; _preparationId = null;
-            var result = await Evaluate<ExternalBrowserActionResult>("globalThis.__rnaBrowser.act(" + JsonConvert.SerializeObject(preparationId) + ")", true);
+            var result = await Evaluate<BrowserActionResult>("globalThis.__rnaBrowser.act(" + JsonConvert.SerializeObject(preparationId) + ")", true);
             if (!target.Matches(ReadTarget)) throw ExternalBrowserResourceProvider.Error("The page changed after dispatch; its effect is unknown.", "browser_effect_unknown");
             RequireAgentAccess();
-            if (result == null || !Enum.IsDefined(typeof(ExternalBrowserEffect), result.Effect))
+            if (result == null || !Enum.IsDefined(typeof(BrowserActionEffect), result.Effect))
                 throw ExternalBrowserResourceProvider.Error("The renderer returned no valid effect evidence.", "browser_effect_unknown");
-            _actionUnknown = result.Effect == ExternalBrowserEffect.Unknown;
+            _actionUnknown = result.Effect == BrowserActionEffect.Unknown;
             return result;
         }
 
         internal void AbandonNavigation(string code)
         { var pending = _navigation; _navigation = null; pending?.Unknown(code); }
 
-        private async Task<ExternalBrowserActionResult> NavigateAgentAsync(ExternalBrowserReadTarget target, string preparationId, Action beforeDispatch)
+        private async Task<BrowserActionResult> NavigateAgentAsync(BrowserPageHandle target, string preparationId, Action beforeDispatch)
         {
             var url = _preparedNavigationUrl;
             var pending = new ExternalBrowserNavigation(target, url,
@@ -372,26 +373,26 @@ namespace RNAssistant.Office.Services
             try
             {
                 // The fixed isolated script checks trusted input and starts navigation atomically.
-                var dispatched = await Evaluate<ExternalBrowserNavigationDispatch>("globalThis.__rnaBrowser." + (follow ? "follow(" : "navigate(") +
+                var dispatched = await Evaluate<BrowserNavigationDispatch>("globalThis.__rnaBrowser." + (follow ? "follow(" : "navigate(") +
                     JsonConvert.SerializeObject(follow ? preparationId : _observationId) + "," + JsonConvert.SerializeObject(url) + ")");
                 if (dispatched == null) throw ExternalBrowserResourceProvider.Error("Navigation dispatch is unknown.", "browser_effect_unknown");
                 if (!dispatched.Started)
                 {
                     _actionUnknown = false;
-                    return new ExternalBrowserActionResult { Effect = dispatched.Unchanged ? ExternalBrowserEffect.VerifiedNoChange : ExternalBrowserEffect.Rejected,
+                    return new BrowserActionResult { Effect = dispatched.Unchanged ? BrowserActionEffect.VerifiedNoChange : BrowserActionEffect.Rejected,
                         Code = ExternalBrowserPolicy.SafeActionCode(dispatched.Code) };
                 }
                 if (await Task.WhenAny(pending.Completion, Task.Delay(12000)) != pending.Completion)
                     pending.Unknown("browser_effect_unknown");
                 var result = await pending.Completion;
-                if (result.Effect == ExternalBrowserEffect.VerifiedChange)
+                if (result.Effect == BrowserActionEffect.VerifiedChange)
                 {
                     await Evaluate<bool>("globalThis.__rnaBrowser ? globalThis.__rnaBrowser.completeNavigation() : true");
                     RequireAgentAccess();
                     if (_manualControl || !result.NavigationTarget.Matches(ReadTarget) || Volatile.Read(ref _abandonedAction) != 0)
                         throw ExternalBrowserResourceProvider.Error("The browser changed before navigation delivery.", "browser_effect_unknown");
                 }
-                _actionUnknown = result.Effect == ExternalBrowserEffect.Unknown;
+                _actionUnknown = result.Effect == BrowserActionEffect.Unknown;
                 return result;
             }
             finally
@@ -406,7 +407,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal async void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect)
+        internal async void PresentResult(BrowserPageHandle target, string preparationId, BrowserActionEffect effect)
         {
             if (_disposed || !target.Matches(ReadTarget) || _visualContext != _semanticContext) return;
             try { await Evaluate<bool>("globalThis.__rnaBrowser.completeAction(" + JsonConvert.SerializeObject(preparationId) + "," +

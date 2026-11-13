@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,7 +23,7 @@ namespace RNAssistant.Office.Tools
 {
     public sealed class OfficeToolExecutor
     {
-        public IExternalBrowserReadSource ExternalBrowserReadSource { get; set; }
+        public IBrowserReadSource ExternalBrowserReadSource { get; set; }
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly IReadOnlyList<ToolCatalogEntry> _adapterTools;
         private readonly VbaToolExecutor _vbaExecutor;
@@ -206,7 +207,7 @@ namespace RNAssistant.Office.Tools
             {
                 if (!enabled && string.Equals(tool.Id, JsToolHandler.RunId, StringComparison.Ordinal)) continue;
                 if (!agentCommunicationEnabled && AgentCommunicationToolCatalog.Owns(tool.Id)) continue;
-                if (ExternalBrowserToolHandler.Owns(tool.Id) && !(ExternalBrowserReadSource is IExternalBrowserActionSource)) continue;
+                if (ExternalBrowserToolHandler.Owns(tool.Id) && !(ExternalBrowserReadSource is IBrowserActionSource)) continue;
                 yield return ConfigureControllerTool(tool, enabled);
             }
         }

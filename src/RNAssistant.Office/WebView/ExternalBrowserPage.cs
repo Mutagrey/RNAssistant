@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.IO;
 using System.Threading;
@@ -31,7 +32,7 @@ namespace RNAssistant.Office.WebView
         internal void BlockActions() { _automation.BlockActions(); }
         private string _runtime = "—";
         private string _url = ExternalBrowserPolicy.ProbeUrl, _title = "Внешняя страница", _message = "Запуск WebView2…";
-        private ExternalBrowserStatus _status = ExternalBrowserStatus.Starting;
+        private BrowserPageStatus _status = BrowserPageStatus.Starting;
         public string SessionId { get; } = Guid.NewGuid().ToString("N");
         public WebView2 Control { get; }
         internal BrowserPageAutomation Automation => _automation;
@@ -51,17 +52,17 @@ namespace RNAssistant.Office.WebView
                 }, pauseRun, Publish, action => Control.BeginInvoke(action), () => !Control.InvokeRequired);
         }
 
-        public ExternalBrowserReadTarget ReadTarget
-        { get { return !_disposed && _documentReady && _status == ExternalBrowserStatus.Ready && !string.IsNullOrEmpty(_chatId)
-            ? new ExternalBrowserReadTarget(_chatId, SessionId, _documentGeneration) : null; } }
+        public BrowserPageHandle ReadTarget
+        { get { return !_disposed && _documentReady && _status == BrowserPageStatus.Ready && !string.IsNullOrEmpty(_chatId)
+            ? new BrowserPageHandle(_chatId, SessionId, _documentGeneration) : null; } }
 
-        public Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target) => _automation.ReadAsync(target);
-        public Task<bool> PrepareAsync(ExternalBrowserReadTarget target, string revision, string preparation, ExternalBrowserActionRequest request)
+        public Task<BrowserObservation> ReadAsync(BrowserPageHandle target) => _automation.ReadAsync(target);
+        public Task<bool> PrepareAsync(BrowserPageHandle target, string revision, string preparation, BrowserActionRequest request)
             => _automation.PrepareAsync(target, revision, preparation, request);
-        public Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparation, Action beforeDispatch)
+        public Task<BrowserActionResult> ActAsync(BrowserPageHandle target, string preparation, Action beforeDispatch)
             => _automation.ActAsync(target, preparation, beforeDispatch);
         public Task ResumeAgentAsync(long? revision) => _automation.ResumeAgentAsync(revision);
-        internal void PresentResult(ExternalBrowserReadTarget target, string preparation, ExternalBrowserEffect effect)
+        internal void PresentResult(BrowserPageHandle target, string preparation, BrowserActionEffect effect)
             => _automation.PresentResult(target, preparation, effect);
         private void ControlEvent(object sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e) => _automation.ControlEvent(e.ParameterObjectAsJson);
         private void VisibilityChanged(object sender, EventArgs e) { if (!Control.Visible) _automation.HideAction(); }
@@ -111,9 +112,9 @@ namespace RNAssistant.Office.WebView
             core.Navigate(_url);
         }
 
-        public ExternalBrowserStateDto Snapshot(string placement)
+        public BrowserPageStateDto Snapshot(string placement)
         {
-            return new ExternalBrowserStateDto
+            return new BrowserPageStateDto
             {
                 SessionId = SessionId, Revision = _revision, Status = _status, Url = _url, Title = _title,
                 ManualControl = _automation.ManualControl, ControlRevision = _automation.ControlRevision,
@@ -124,23 +125,23 @@ namespace RNAssistant.Office.WebView
             };
         }
 
-        public void Execute(ExternalBrowserCommandPayload request)
+        public void Execute(BrowserCommandPayload request)
         {
-            if (_disposed || _status == ExternalBrowserStatus.Failed || Control.CoreWebView2 == null)
+            if (_disposed || _status == BrowserPageStatus.Failed || Control.CoreWebView2 == null)
                 throw new InvalidOperationException("Страница недоступна. Закройте вкладку и откройте её снова.");
             var core = Control.CoreWebView2;
-            if (request.Action == ExternalBrowserAction.Navigate || request.Action == ExternalBrowserAction.Back ||
-                request.Action == ExternalBrowserAction.Forward || request.Action == ExternalBrowserAction.Reload)
+            if (request.Action == BrowserCommandKind.Navigate || request.Action == BrowserCommandKind.Back ||
+                request.Action == BrowserCommandKind.Forward || request.Action == BrowserCommandKind.Reload)
             { _automation.AbandonNavigation("browser_user_control"); _automation.TakeControl(); }
             switch (request.Action)
             {
-                case ExternalBrowserAction.Navigate:
+                case BrowserCommandKind.Navigate:
                     _requireAccess(request.Url);
                     core.Navigate(ExternalBrowserPolicy.NavigationUrl(request.Url)); break;
-                case ExternalBrowserAction.Back: if (core.CanGoBack) core.GoBack(); break;
-                case ExternalBrowserAction.Forward: if (core.CanGoForward) core.GoForward(); break;
-                case ExternalBrowserAction.Reload: core.Reload(); break;
-                case ExternalBrowserAction.Focus: if (Control.Visible) Control.Focus(); break;
+                case BrowserCommandKind.Back: if (core.CanGoBack) core.GoBack(); break;
+                case BrowserCommandKind.Forward: if (core.CanGoForward) core.GoForward(); break;
+                case BrowserCommandKind.Reload: core.Reload(); break;
+                case BrowserCommandKind.Focus: if (Control.Visible) Control.Focus(); break;
                 default: throw new InvalidOperationException("Недопустимая команда страницы.");
             }
         }
@@ -152,7 +153,7 @@ namespace RNAssistant.Office.WebView
             if (_disposed) return;
             _automation.AbandonNavigation("browser_effect_unknown");
             _documentReady = false; _documentGeneration++;
-            _status = ExternalBrowserStatus.Failed; Control.Visible = false;
+            _status = BrowserPageStatus.Failed; Control.Visible = false;
             var message = error.GetBaseException().Message;
             _message = "WebView2: " + message.Substring(0, Math.Min(message.Length, 400)) + ". Закройте вкладку и откройте снова.";
             Publish();
@@ -160,7 +161,7 @@ namespace RNAssistant.Office.WebView
         private void NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
             _automation.HideAction();
-            if (_disposed || _status == ExternalBrowserStatus.Failed) { e.Cancel = true; return; }
+            if (_disposed || _status == BrowserPageStatus.Failed) { e.Cancel = true; return; }
             if (e.IsUserInitiated) { _automation.AbandonNavigation("browser_user_control"); _automation.TakeControl(); }
             _navigationId = e.NavigationId; _navigationRefused = false;
             try
@@ -196,17 +197,17 @@ namespace RNAssistant.Office.WebView
         }
         private async void NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            if (_disposed || _status == ExternalBrowserStatus.Failed) return;
+            if (_disposed || _status == BrowserPageStatus.Failed) return;
             if (e.NavigationId != _navigationId || _navigationRefused) return;
             var generation = _documentGeneration;
             if (e.IsSuccess)
             {
-                try { var ready = _documentReady; _documentReady = true; _status = ExternalBrowserStatus.Ready;
+                try { var ready = _documentReady; _documentReady = true; _status = BrowserPageStatus.Ready;
                     try { await _automation.InitializeAsync(); } finally { _documentReady = ready; } }
                 catch (Exception error) { if (!_disposed && generation == _documentGeneration) Fail(error); return; }
             }
             if (_disposed || generation != _documentGeneration) return;
-            _status = ExternalBrowserStatus.Ready;
+            _status = BrowserPageStatus.Ready;
             _documentReady = e.IsSuccess;
             _message = e.IsSuccess ? "Экспериментальный браузер · Windows-проверка открыта" : "Ошибка загрузки: " + e.WebErrorStatus;
             Publish();
@@ -233,7 +234,7 @@ namespace RNAssistant.Office.WebView
         private void ProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs e)
         {
             _documentReady = false; _documentGeneration++;
-            _status = ExternalBrowserStatus.Failed; Control.Visible = false;
+            _status = BrowserPageStatus.Failed; Control.Visible = false;
             _message = "WebView2: " + e.ProcessFailedKind + ". Закройте вкладку и откройте снова; страница автоматически не повторяется.";
             Publish();
         }
@@ -252,7 +253,7 @@ namespace RNAssistant.Office.WebView
         {
             if (_disposed) return;
             _automation.AbandonNavigation("browser_effect_unknown");
-            _disposed = true; _documentReady = false; _documentGeneration++; _status = ExternalBrowserStatus.Closed; _revision++;
+            _disposed = true; _documentReady = false; _documentGeneration++; _status = BrowserPageStatus.Closed; _revision++;
             _automation.Dispose(); Changed = null;
             Control.Enter -= FocusChanged; Control.Leave -= FocusChanged;
             Control.VisibleChanged -= VisibilityChanged;

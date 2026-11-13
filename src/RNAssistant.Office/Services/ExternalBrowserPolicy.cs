@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using RNAssistant.Office.Contracts;
 
@@ -38,7 +39,7 @@ namespace RNAssistant.Office.Services
             return uri.AbsoluteUri;
         }
 
-        public static bool ValidBounds(ExternalBrowserBoundsDto bounds)
+        public static bool ValidBounds(BrowserBoundsDto bounds)
         {
             if (bounds == null) return false;
             if (!bounds.Visible) return true;

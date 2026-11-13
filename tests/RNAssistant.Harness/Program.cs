@@ -1346,6 +1346,7 @@ namespace RNAssistant.Harness
                 Test("external browser: navigation and bounds admission", ExternalBrowserAdmission),
                 Test("external browser: navigation redirects and terminal evidence", ExternalBrowserNavigationEvidence),
                 Test("local browser: network access is denied", ExternalBrowserSiteAccess),
+                Test("local browser: addresses and exact scope", BrowserLocalAddressesAndScope),
                 Test("external browser: typed bridge trust", ExternalBrowserBridgeTrust),
                 Test("external browser: semantic Gateway delivery", ExternalBrowserSemanticGateway),
                 Test("external browser: retained research sources and model context", ExternalBrowserResearchObservations),

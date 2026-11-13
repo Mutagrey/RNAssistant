@@ -1,5 +1,15 @@
 # Universal Browser: матрица проверок
 
+## F0 contracts / resolver — 2026-11-13
+
+`local browser: addresses and exact scope`: traversal/encoding/network rejection,
+formatter round-trip, exact Removed vs same-bytes entry, foreign/ambiguous owner,
+bounded generation-aware suggestions, metadata query без нового candidate.
+Девять `external browser:` regression cases проходят после переноса DTO в Application.
+`browser-saved-views.test.js` проходит: retained input, exact reads, late rejection,
+wide/420 px/125%, 30 px address/mode height. Native WinForms не собирался;
+version bump не нужен промежуточному F0, пользовательский local delivery ещё в F1.
+
 ## Local Browser: ранний deny/proxy removal — 2026-11-13
 
 - Harness `local browser: network access is denied`: external/loopback/private

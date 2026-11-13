@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
@@ -13,8 +14,8 @@ namespace RNAssistant.Office
 {
     public sealed class AssistantController
     {
-        internal IExternalBrowserReadSource BrowserReadSource { get; private set; }
-        internal void SetExternalBrowserReadSource(IExternalBrowserReadSource source) { BrowserReadSource = source; }
+        internal IBrowserReadSource BrowserReadSource { get; private set; }
+        internal void SetExternalBrowserReadSource(IBrowserReadSource source) { BrowserReadSource = source; }
         internal RNAssistant.Core.Storage.AppDataPaths StoragePaths { get; }
         internal IReadOnlyList<RNAssistant.Application.Conversations.ConversationActiveSnapshot> ActiveChatRuns()
         { return new RNAssistant.Application.Conversations.ConversationActiveSnapshot[0]; }
@@ -662,6 +663,8 @@ namespace RNAssistant.Office
         }
         public ResourceDataOpenResponse OpenResourceData(ResourceDataOpenRequest request, CancellationToken cancellationToken = default(CancellationToken)) { return new ResourceDataOpenResponse(); }
         public ResourceDataCloseResponse CloseResourceData(ResourceDataCloseRequest request) { return new ResourceDataCloseResponse { Closed = true }; }
+        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner)
+        { return new BrowserTargetDescriptor[0]; }
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public Task<HtmlWorkspaceSourceResponse> ReadHtmlWorkspaceSourceAsync(HtmlWorkspaceSourceRequest request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return Task.FromResult(new HtmlWorkspaceSourceResponse { ChatId = request.ChatId, Resource = request.Resource }); }
         public ResourceUploadOpenResponse BeginHtmlWorkspaceMutationUpload(HtmlWorkspaceMutationUploadRequest request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new ResourceUploadOpenResponse(); }

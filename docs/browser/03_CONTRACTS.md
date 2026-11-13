@@ -1,5 +1,26 @@
 # Universal Browser: предлагаемые контракты
 
+## F0 host-neutral contracts — 2026-11-13
+
+`Application/Contracts/BrowserPageContracts` владеет `IBrowserPageRuntime`,
+`BrowserPageHandle`, typed commands/state/read/action DTO. Native implementation
+остаётся Office/WebView. Exact handle сравнивает tab/session/owner/content/saved-entry
+и navigation generation. `BrowserTargetDescriptor` различает Home, document HTML,
+raw HTML, plugin source/release и Workspace project; Removed не подменяется latest.
+Capabilities/отказы типизированы. Version state/entry/command DTO фиксируют отдельные
+catalog entry, package identity, expected content/definition/catalog/active и operation.
+Их durable owners подключаются в F3; пустых successful handlers нет.
+
+`ResolveLocalLocator` / `QueryNavigationSuggestions` — typed bridge methods.
+`BrowserLocalLocator` — единственный parser/formatter `/projects`, `/plugins`,
+`/resources`, `/`. Traversal, network schemes, double encoding и foreign scope
+отклоняются. Query сохраняется для live navigation, удаляется из recent locator.
+Suggestions metadata-only, default 12/max 20 и echoed generation. Catalogs поставляют
+существующие document/plugin/workspace owners; query не Check и не запускает renderer.
+`IBrowserCapabilityContribution` отдельно от Office binding; F2 подключает Workspace
+tools/read/media, поэтому наличие interface ещё не означает их доступность.
+Старые ExternalBrowser native/bridge route names временно до F1; второго runtime нет.
+
 ## Действующее ограничение сети — 2026-11-13
 
 `htmlFetch`, `allowHtmlNetworkOrigin` и developer/deployment bridge operations

@@ -82,6 +82,7 @@ namespace RNAssistant.Office.Contracts
         [BridgeOperationPolicy(true, 300)] EditMessage,
         UpdateMessageActivityData,
         GetSettings,
+        ResolveLocalLocator, QueryNavigationSuggestions,
         GetCasHealth,
         CollectCasGarbage,
         [BridgeOperationPolicy(true, 300)] GetModelCatalog,

@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Services;
 using System;
 using System.Collections.Generic;
@@ -77,7 +78,7 @@ namespace RNAssistant.Office.Runtime
             AuthoredFileService authoredFiles = null, SkillSelectionAdmission skillAdmission = null,
             RNAssistant.Application.Conversations.AgentCommunicationService agentCommunication = null,
             RNAssistant.Application.Conversations.ConversationInboxService agentInbox = null,
-            Func<IExternalBrowserReadSource> externalBrowser = null, Func<ChatSession, IDisposable> browserDocumentAccess = null)
+            Func<IBrowserReadSource> externalBrowser = null, Func<ChatSession, IDisposable> browserDocumentAccess = null)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();

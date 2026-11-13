@@ -2,6 +2,11 @@
 
 ## Local Browser / Settings — In Review, 2026-11-13
 
+F0: app-browser-target проверяет kind-specific identity/capabilities, включая Home,
+Workspace/plugin и Removed. Native-independent contracts принадлежат Application;
+resolve/completion возвращают metadata от существующих owners. Dock identity ещё
+переключается в F1/F4; shared saved-view fixture сохраняет bounds и late-response guards.
+
 Scope local-only принят пакетом пользователя. HTML page→parent→bridge→host HTTP
 path и deployment editor удалены; Settings сохраняет пустой Developer disclosure.
 Общие Settings lifecycle/tokens и LLM controls сохранены. Старый signed config

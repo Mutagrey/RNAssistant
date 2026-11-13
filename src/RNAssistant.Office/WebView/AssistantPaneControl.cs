@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -230,7 +231,7 @@ namespace RNAssistant.Office.WebView
             if (string.Equals(Environment.GetEnvironmentVariable("RNA_BROWSER_PILOT"), "1", StringComparison.Ordinal))
             {
                 _externalBrowser = new ExternalBrowserDockHost(this, _webView, Path.Combine(_webRoot, "browser-probe"),
-                    value => PostBridgeMessage(JsonConvert.SerializeObject(new ExternalBrowserStateMessage { Payload = value })),
+                    value => PostBridgeMessage(JsonConvert.SerializeObject(new BrowserPageStateMessage { Payload = value })),
                     url => _bridge.RequireBrowserAccess(url), (chat, pause) => _bridge.PauseBrowserRunAsync(chat, pause));
                 _bridge.ExternalBrowser = _externalBrowser;
             }

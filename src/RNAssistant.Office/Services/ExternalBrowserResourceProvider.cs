@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -14,13 +15,13 @@ namespace RNAssistant.Office.Services
     // Owned live pages plus immutable observations in the existing scoped CAS/authority.
     internal sealed class ExternalBrowserResourceProvider : IResourceProvider
     {
-        internal const string TargetPrefix = "Browser page: ", Target = TargetPrefix + "external";
+        internal const string TargetPrefix = "Browser page: ", Target = TargetPrefix + "local";
         internal const string Kind = "browser-page";
         internal const string ObservationKind = "browser-observation", ObservationPrefix = "Browser observation: ";
         internal const int MaximumNodes = 160, MaximumName = 160, MaximumCharacters = 16000, MaximumVisited = 3000;
         internal const int MaximumText = 2000;
         private const string TimestampFormat = "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'";
-        private readonly Func<IExternalBrowserReadSource> _source;
+        private readonly Func<IBrowserReadSource> _source;
         private readonly Func<ChatSession, IDisposable> _beginDocumentRead;
         private readonly ResourceAuthorityService _authority;
         private sealed class ObservationSource
@@ -29,16 +30,16 @@ namespace RNAssistant.Office.Services
             public string Url { get; set; }
         }
         public string Id { get { return "browser"; } }
-        internal ExternalBrowserResourceProvider(Func<IExternalBrowserReadSource> source, Func<ChatSession, IDisposable> beginDocumentRead = null,
+        internal ExternalBrowserResourceProvider(Func<IBrowserReadSource> source, Func<ChatSession, IDisposable> beginDocumentRead = null,
             ResourceAuthorityService authority = null)
         { _source = source; _beginDocumentRead = beginDocumentRead; _authority = authority; }
         private void CheckDocument(ChatSession session)
         { using (_beginDocumentRead?.Invoke(session)) { } }
 
-        private static string UriFor(ExternalBrowserReadTarget target)
+        private static string UriFor(BrowserPageHandle target)
         { return ResourceUri.Create("browser", target.ChatId, target.SessionId); }
 
-        private static ResourceDescriptor Describe(ExternalBrowserReadTarget target, string revision = null)
+        private static ResourceDescriptor Describe(BrowserPageHandle target, string revision = null)
         {
             var value = new ResourceDescriptor { Provider = "browser", Kind = Kind, Title = target.Name, SnapshotTarget = target.Target,
                 Reference = new ResourceRef(UriFor(target), revision ?? "document-" + target.DocumentGeneration),
@@ -59,9 +60,9 @@ namespace RNAssistant.Office.Services
             result.Total = targets.Length; result.Truncated = result.Items.Count < result.Total; return result;
         }
 
-        private ExternalBrowserReadTarget[] Targets(ChatSession session)
-        { return string.IsNullOrEmpty(session?.Id) ? new ExternalBrowserReadTarget[0] :
-            _source()?.TargetsFor(session.Id).ToArray() ?? new ExternalBrowserReadTarget[0]; }
+        private BrowserPageHandle[] Targets(ChatSession session)
+        { return string.IsNullOrEmpty(session?.Id) ? new BrowserPageHandle[0] :
+            _source()?.TargetsFor(session.Id).ToArray() ?? new BrowserPageHandle[0]; }
 
         public ResourceDescriptor Resolve(ChatSession session, string resourceUri)
         {
@@ -233,20 +234,20 @@ namespace RNAssistant.Office.Services
             return new UriBuilder(uri) { UserName = "", Password = "", Query = "", Fragment = "" }.Uri.AbsoluteUri;
         }
 
-        internal static string Revision(ExternalBrowserReadTarget target, string observationId, string hash)
+        internal static string Revision(BrowserPageHandle target, string observationId, string hash)
         {
             Guid id;
             if (!Guid.TryParseExact(observationId, "N", out id)) throw Error("The browser observation has no exact binding.", "browser_capture_invalid");
             return target.DocumentGeneration + "-" + observationId + "-" + hash;
         }
 
-        internal static string Revision(ExternalBrowserReadTarget target, ExternalBrowserSemanticContent content)
+        internal static string Revision(BrowserPageHandle target, BrowserObservation content)
         {
             using (var sha = SHA256.Create()) return Revision(target, content.ObservationId,
                 BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(Format(content)))).Replace("-", "").ToLowerInvariant());
         }
 
-        private static string Format(ExternalBrowserSemanticContent content)
+        private static string Format(BrowserObservation content)
         {
             if (content?.Nodes == null || content.Nodes.Length > MaximumNodes || content.Visited < 0 || content.Visited > MaximumVisited ||
                 content.Title == null || content.Title.Length > MaximumName || content.CapturedUtc.Kind != DateTimeKind.Utc ||

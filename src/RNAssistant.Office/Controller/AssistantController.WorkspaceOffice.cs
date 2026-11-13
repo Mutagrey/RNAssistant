@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using RNAssistant.Core.Models;
 using RNAssistant.Runtime.Contracts;
@@ -21,7 +22,7 @@ namespace RNAssistant.Office
 
     public sealed partial class AssistantController
     {
-        internal void SetExternalBrowserReadSource(Contracts.IExternalBrowserReadSource source)
+        internal void SetExternalBrowserReadSource(RNAssistant.Application.Contracts.IBrowserReadSource source)
         { if (_toolExecutor != null) _toolExecutor.ExternalBrowserReadSource = source; }
 
         internal WorkspaceOfficeRunTarget CaptureWorkspaceOfficeTarget()

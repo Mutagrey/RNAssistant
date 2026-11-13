@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,19 +36,19 @@ namespace RNAssistant.Harness
                 try { ExternalBrowserPolicy.NavigationUrl(url); } catch (InvalidOperationException) { refused = true; }
                 AssertTrue(refused, "external navigation rejects unsupported scheme/credentials: " + url.Split(':')[0]);
             }
-            var bounds = new ExternalBrowserBoundsDto { Visible = true, X = 20, Y = 80, Width = 300, Height = 400, ViewportWidth = 420, ViewportHeight = 800 };
+            var bounds = new BrowserBoundsDto { Visible = true, X = 20, Y = 80, Width = 300, Height = 400, ViewportWidth = 420, ViewportHeight = 800 };
             AssertTrue(ExternalBrowserPolicy.ValidBounds(bounds), "bounded visible viewport");
             bounds.X = double.NaN; AssertTrue(!ExternalBrowserPolicy.ValidBounds(bounds), "NaN cannot reach native coordinates");
             bounds.X = 200; AssertTrue(!ExternalBrowserPolicy.ValidBounds(bounds), "out-of-viewport native surface refused");
             bounds.X = -1; AssertTrue(!ExternalBrowserPolicy.ValidBounds(bounds), "negative native coordinates refused");
-            AssertTrue(ExternalBrowserPolicy.ValidBounds(new ExternalBrowserBoundsDto()), "hidden does not require stale geometry");
+            AssertTrue(ExternalBrowserPolicy.ValidBounds(new BrowserBoundsDto()), "hidden does not require stale geometry");
         }
 
-        private sealed class HarnessExternalBrowserHost : IExternalBrowserHost
+        private sealed class HarnessExternalBrowserHost : IBrowserPageHost
         {
             internal int Calls;
-            public Task<ExternalBrowserStateDto> ExecuteAsync(ExternalBrowserCommandPayload request, CancellationToken cancellationToken)
-            { Calls++; return Task.FromResult(new ExternalBrowserStateDto { SessionId = "runtime-browser", Status = ExternalBrowserStatus.Starting }); }
+            public Task<BrowserPageStateDto> ExecuteAsync(BrowserCommandPayload request, CancellationToken cancellationToken)
+            { Calls++; return Task.FromResult(new BrowserPageStateDto { SessionId = "runtime-browser", Status = BrowserPageStatus.Starting }); }
         }
         private static async Task ExternalBrowserBridgeTrust()
         {
@@ -56,7 +57,7 @@ namespace RNAssistant.Harness
                 var token = BridgeToken(bridge); var host = new HarnessExternalBrowserHost();
                 Func<object, string, Task<string>> send = (body, auth) => bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
                     contractVersion = BridgeOperationCatalog.Version, id = Guid.NewGuid().ToString("N"), type = "externalBrowserCommand", bridgeToken = auth, payload = body }));
-                var request = new ExternalBrowserCommandPayload { Action = ExternalBrowserAction.Open };
+                var request = new BrowserCommandPayload { Action = BrowserCommandKind.Open };
                 AssertTrue(!(bool)JObject.Parse(await send(request, token))["ok"], "disabled pilot refuses open");
                 bridge.ExternalBrowser = host;
                 AssertTrue(!(bool)JObject.Parse(await send(request, "foreign"))["ok"], "root token required");

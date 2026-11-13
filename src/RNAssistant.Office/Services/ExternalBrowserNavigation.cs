@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Threading.Tasks;
 using RNAssistant.Office.Contracts;
@@ -7,17 +8,17 @@ namespace RNAssistant.Office.Services
     // One dispatched navigation, correlated through redirects and terminal read-back.
     internal sealed class ExternalBrowserNavigation
     {
-        private readonly ExternalBrowserReadTarget _before;
+        private readonly BrowserPageHandle _before;
         private readonly Action<string> _access;
-        private readonly TaskCompletionSource<ExternalBrowserActionResult> _completion =
-            new TaskCompletionSource<ExternalBrowserActionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<BrowserActionResult> _completion =
+            new TaskCompletionSource<BrowserActionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         private ulong? _navigationId;
         private string _expectedUrl;
-        internal ExternalBrowserNavigation(ExternalBrowserReadTarget before, string url, Action<string> access)
+        internal ExternalBrowserNavigation(BrowserPageHandle before, string url, Action<string> access)
         { _before = before; _expectedUrl = CanonicalUrl(url); _access = access; _access(_expectedUrl); }
         private static string CanonicalUrl(string value)
         { var uri = new Uri(ExternalBrowserPolicy.NavigationUrl(value)); return new UriBuilder(uri) { Host = uri.IdnHost }.Uri.AbsoluteUri; }
-        internal Task<ExternalBrowserActionResult> Completion { get { return _completion.Task; } }
+        internal Task<BrowserActionResult> Completion { get { return _completion.Task; } }
         internal void Starting(ulong id, string url, bool redirect)
         {
             if (Completion.IsCompleted) throw ExternalBrowserResourceProvider.Error("Navigation is no longer active.", "browser_navigation_changed");
@@ -26,7 +27,7 @@ namespace RNAssistant.Office.Services
                 throw ExternalBrowserResourceProvider.Error("Another navigation replaced the requested transition.", "browser_navigation_changed");
             _access(actual); _navigationId = id; _expectedUrl = actual;
         }
-        internal void Completed(ulong? id, bool success, ExternalBrowserReadTarget after, string actualUrl)
+        internal void Completed(ulong? id, bool success, BrowserPageHandle after, string actualUrl)
         {
             if (Completion.IsCompleted || id != _navigationId) return; // Late completion of a different document.
             try
@@ -35,12 +36,12 @@ namespace RNAssistant.Office.Services
                     after.DocumentGeneration <= _before.DocumentGeneration || CanonicalUrl(actualUrl) != _expectedUrl)
                 { Unknown("browser_navigation_changed"); return; }
                 _access(actualUrl); // Revocation during loading cannot produce success.
-                _completion.TrySetResult(new ExternalBrowserActionResult { Effect = ExternalBrowserEffect.VerifiedChange,
+                _completion.TrySetResult(new BrowserActionResult { Effect = BrowserActionEffect.VerifiedChange,
                     Code = "browser_verified", NavigationTarget = after });
             }
             catch (Exception) { Unknown("browser_site_denied"); }
         }
         internal void Unknown(string code)
-        { _completion.TrySetResult(new ExternalBrowserActionResult { Effect = ExternalBrowserEffect.Unknown, Code = code }); }
+        { _completion.TrySetResult(new BrowserActionResult { Effect = BrowserActionEffect.Unknown, Code = code }); }
     }
 }

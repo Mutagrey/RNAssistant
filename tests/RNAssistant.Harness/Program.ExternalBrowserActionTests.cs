@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,19 +17,19 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private sealed class HarnessBrowserActionSource : HarnessBrowserReadSource, IExternalBrowserActionSource
+        private sealed class HarnessBrowserActionSource : HarnessBrowserReadSource, IBrowserActionSource
         {
             internal int Dispatches, Preparations;
             internal Action BeforeDispatch, AfterDispatch;
-            internal Action<ExternalBrowserEffect> OnPresent;
-            internal ExternalBrowserEffect Effect = ExternalBrowserEffect.VerifiedChange;
+            internal Action<BrowserActionEffect> OnPresent;
+            internal BrowserActionEffect Effect = BrowserActionEffect.VerifiedChange;
             internal bool Blocked;
-            public void BlockActions(ExternalBrowserReadTarget target) { Blocked = true; }
-            public void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect) { OnPresent?.Invoke(effect); }
+            public void BlockActions(BrowserPageHandle target) { Blocked = true; }
+            public void PresentResult(BrowserPageHandle target, string preparationId, BrowserActionEffect effect) { OnPresent?.Invoke(effect); }
             private string _prepared;
-            internal ExternalBrowserActionRequest LastRequest;
-            public Task PrepareAsync(ExternalBrowserReadTarget target, string revision, string preparationId,
-                ExternalBrowserActionRequest request, CancellationToken token)
+            internal BrowserActionRequest LastRequest;
+            public Task PrepareAsync(BrowserPageHandle target, string revision, string preparationId,
+                BrowserActionRequest request, CancellationToken token)
             {
                 token.ThrowIfCancellationRequested(); Preparations++;
                 LastRequest = request;
@@ -37,15 +38,15 @@ namespace RNAssistant.Harness
                 _prepared = preparationId;
                 return Task.CompletedTask;
             }
-            public Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
+            public Task<BrowserActionResult> ActAsync(BrowserPageHandle target, string preparationId,
                 Action beforeDispatch, CancellationToken token, bool navigation = false)
             {
                 token.ThrowIfCancellationRequested();
                 AssertTrue(target.Matches(Target) && preparationId == _prepared, "exact native preparation reaches dispatch");
                 BeforeDispatch?.Invoke(); beforeDispatch(); Dispatches++; AfterDispatch?.Invoke();
-                if (navigation && Effect == ExternalBrowserEffect.VerifiedChange)
-                    Target = new ExternalBrowserReadTarget(target.ChatId, target.SessionId, target.DocumentGeneration + 1);
-                return Task.FromResult(new ExternalBrowserActionResult { Effect = Effect, Code = "browser_verified", NavigationTarget = navigation ? Target : null });
+                if (navigation && Effect == BrowserActionEffect.VerifiedChange)
+                    Target = new BrowserPageHandle(target.ChatId, target.SessionId, target.DocumentGeneration + 1);
+                return Task.FromResult(new BrowserActionResult { Effect = Effect, Code = "browser_verified", NavigationTarget = navigation ? Target : null });
             }
         }
 
@@ -55,14 +56,14 @@ namespace RNAssistant.Harness
             {
                 AssertTrue(!executor.GetControllerTools().Any(tool => ExternalBrowserToolHandler.Owns(tool.Id)), "actions stay hidden without the native pilot");
                 var session = NewSession(adapter);
-                var source = new HarnessBrowserActionSource { Target = new ExternalBrowserReadTarget(session.Id, "page", 1) };
+                var source = new HarnessBrowserActionSource { Target = new BrowserPageHandle(session.Id, "page", 1) };
                 executor.ExternalBrowserReadSource = source;
                 ToolPreparationResult pendingPreparation = null;
                 var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToArray(),
                     new AppSettings(), ChatModes.Agent, false,
                     (context, prepared) => { pendingPreparation = prepared; return "pending"; });
                 var journal = new ResourceMutationJournal(FixturePaths.Value);
-                ExternalBrowserEffect? presented = null;
+                BrowserActionEffect? presented = null;
                 source.OnPresent = effect => {
                     AssertEqual(0, journal.Unresolved().Count, "presentation follows the published terminal");
                     presented = effect;
@@ -101,7 +102,7 @@ namespace RNAssistant.Harness
                 var filled = execute(ExternalBrowserToolHandler.Fill, args, read.ResourceEvidence);
                 AssertEqual(ToolExecutionOutcome.Ok, filled.Outcome, filled.Message);
                 AssertEqual(ToolEffectEvidence.VerifiedChange, filled.Evidence.Effect, "verified native effect reaches runtime");
-                AssertEqual(ExternalBrowserEffect.VerifiedChange, presented.Value, "only published success reaches presentation");
+                AssertEqual(BrowserActionEffect.VerifiedChange, presented.Value, "only published success reaches presentation");
                 AssertTrue(filled.AuthorityCommitId != null, "existing authority publishes the terminal");
                 AssertEqual(0, journal.Unresolved().Count, "terminal closes the attempt");
                 source.BeforeDispatch = null; source.AfterDispatch = null;
@@ -126,7 +127,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Unknown, unknown.Outcome, "transport loss after dispatch is never no-effect or success");
                 AssertEqual(ToolEffectEvidence.Unknown, unknown.Evidence.Effect, "unknown effect is retained");
                 AssertTrue(source.Blocked, "lost terminal evidence blocks further native mutations");
-                AssertEqual(ExternalBrowserEffect.Unknown, presented.Value, "channel loss never paints success");
+                AssertEqual(BrowserActionEffect.Unknown, presented.Value, "channel loss never paints success");
                 AssertEqual(0, journal.Unresolved().Count, "unknown is a terminal fact, not a replay request");
                 var attempts = source.Dispatches;
                 read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
@@ -142,7 +143,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = new ChatSession { Id = "workspace-browser", WorkspaceId = "workspace" };
-                var source = new HarnessBrowserActionSource { Target = new ExternalBrowserReadTarget(session.Id, "page", 1) };
+                var source = new HarnessBrowserActionSource { Target = new BrowserPageHandle(session.Id, "page", 1) };
                 executor.ExternalBrowserReadSource = source;
                 var office = new WorkspaceOfficeCapabilityService(adapter, executor, FixturePaths.Value);
                 var bound = office.ForTarget(office.CaptureCurrentTarget(), session, new AppSettings(), "run");
@@ -168,7 +169,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                var source = new HarnessBrowserActionSource { Target = new ExternalBrowserReadTarget(session.Id, "page", 1) };
+                var source = new HarnessBrowserActionSource { Target = new BrowserPageHandle(session.Id, "page", 1) };
                 executor.ExternalBrowserReadSource = source;
                 ToolPreparationResult prepared = null;
                 var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToArray(), new AppSettings(), ChatModes.Agent,
@@ -184,7 +185,7 @@ namespace RNAssistant.Harness
                     DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Outcome, "existing policy confirmation is retained");
                 AssertEqual(0, source.Dispatches, "confirmation waiting has no effect or held native operation");
-                source.Target = new ExternalBrowserReadTarget(session.Id, "new-page", 1);
+                source.Target = new BrowserPageHandle(session.Id, "new-page", 1);
                 var changed = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "action-step",
                     DateTime.UtcNow, true, 1, prepared.PreparedStateJson), CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Error, changed.Outcome, "confirmation cannot retarget a reopened page");

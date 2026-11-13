@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Linq;
 using System.Threading;
@@ -18,18 +19,18 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private class HarnessBrowserReadSource : IExternalBrowserReadSource
+        private class HarnessBrowserReadSource : IBrowserReadSource
         {
-            internal ExternalBrowserReadTarget Target;
+            internal BrowserPageHandle Target;
             internal int Captures, ReadThread;
             internal Action DuringRead;
-            internal ExternalBrowserSemanticContent Content = new ExternalBrowserSemanticContent {
+            internal BrowserObservation Content = new BrowserObservation {
                 ObservationId = Guid.NewGuid().ToString("N"),
                 SourceUrl = "https://example.test/form", Title = "Contact form", CapturedUtc = DateTime.UtcNow,
-                Nodes = new[] { new ExternalBrowserSemanticNode { Role = "heading", Name = "Local form" },
-                    new ExternalBrowserSemanticNode { Role = "button", Name = "Save", Disabled = true } }, Visited = 4 };
-            public System.Collections.Generic.IReadOnlyList<ExternalBrowserReadTarget> TargetsFor(string chatId) { return Target?.ChatId == chatId ? new[] { Target } : new ExternalBrowserReadTarget[0]; }
-            public Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken cancellationToken)
+                Nodes = new[] { new BrowserSemanticNode { Role = "heading", Name = "Local form" },
+                    new BrowserSemanticNode { Role = "button", Name = "Save", Disabled = true } }, Visited = 4 };
+            public System.Collections.Generic.IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId) { return Target?.ChatId == chatId ? new[] { Target } : new BrowserPageHandle[0]; }
+            public Task<BrowserObservation> ReadAsync(BrowserPageHandle target, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested(); Captures++; ReadThread = Thread.CurrentThread.ManagedThreadId;
                 AssertTrue(target.Matches(Target), "capture uses the exact runtime binding");
@@ -43,7 +44,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                var source = new HarnessBrowserReadSource { Target = new ExternalBrowserReadTarget(session.Id, "browser-runtime-1", 1) };
+                var source = new HarnessBrowserReadSource { Target = new BrowserPageHandle(session.Id, "browser-runtime-1", 1) };
                 executor.ExternalBrowserReadSource = source;
                 var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToArray(), new AppSettings(), ChatModes.Agent, false);
                 Func<string, object, JObject> execute = (id, arguments) => {
@@ -82,18 +83,18 @@ namespace RNAssistant.Harness
         private static void ExternalBrowserReadGuards()
         {
             var session = new ChatSession { Id = "owner" };
-            var source = new HarnessBrowserReadSource { Target = new ExternalBrowserReadTarget(session.Id, "page-1", 2) };
+            var source = new HarnessBrowserReadSource { Target = new BrowserPageHandle(session.Id, "page-1", 2) };
             var provider = new ExternalBrowserResourceProvider(() => source);
             Func<ResourceReadRequest> request = () => new ResourceReadRequest { Reference = new ResourceRef(ResourceUri.Create("browser", session.Id, "page-1")), Representation = "text" };
-            source.DuringRead = () => source.Target = new ExternalBrowserReadTarget(session.Id, "page-1", 3);
+            source.DuringRead = () => source.Target = new BrowserPageHandle(session.Id, "page-1", 3);
             AssertEqual("browser_document_stale", RuntimeThrows<ResourceRequestException>(() => provider.Read(session, request())).ErrorCode, "navigation during capture discards its body");
             source.DuringRead = () => source.Target = null;
             AssertEqual("browser_document_stale", RuntimeThrows<ResourceRequestException>(() => provider.Read(session, request())).ErrorCode, "close during capture discards its body");
-            source.DuringRead = null; source.Target = new ExternalBrowserReadTarget("other", "page-1", 4);
+            source.DuringRead = null; source.Target = new BrowserPageHandle("other", "page-1", 4);
             AssertEqual("browser_page_unavailable", RuntimeThrows<ResourceRequestException>(() => provider.Read(session, request())).ErrorCode, "foreign chat cannot capture");
-            source.Target = new ExternalBrowserReadTarget(session.Id, "page-2", 1);
+            source.Target = new BrowserPageHandle(session.Id, "page-2", 1);
             AssertEqual("browser_page_unavailable", RuntimeThrows<ResourceRequestException>(() => provider.Read(session, request())).ErrorCode, "reopened page cannot satisfy an old binding");
-            source.Target = new ExternalBrowserReadTarget(session.Id, "page-1", 5);
+            source.Target = new BrowserPageHandle(session.Id, "page-1", 5);
             source.Content.Nodes[0].Name = new string('x', ExternalBrowserResourceProvider.MaximumName + 1);
             AssertEqual("browser_capture_invalid", RuntimeThrows<ResourceRequestException>(() => provider.Read(session, request())).ErrorCode, "oversized renderer output is not accepted");
             using (var cancel = new CancellationTokenSource())
@@ -109,7 +110,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                var source = new HarnessBrowserReadSource { Target = new ExternalBrowserReadTarget(session.Id, "research", 1) };
+                var source = new HarnessBrowserReadSource { Target = new BrowserPageHandle(session.Id, "research", 1) };
                 executor.ExternalBrowserReadSource = source;
                 var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToArray(), new AppSettings(), ChatModes.Agent, false);
                 Func<string, ToolExecutionRecord> read = target => {
@@ -131,7 +132,7 @@ namespace RNAssistant.Harness
                 var evidence = first.ResourceEvidence.Single();
                 var scope = executor.ResourceAuthority.Scope(session, false);
                 executor.ResourceAuthority.ReportExternalDrift(scope, evidence.Dependencies.Single().Resource.Identity);
-                source.Target = new ExternalBrowserReadTarget(session.Id, "research", 2);
+                source.Target = new BrowserPageHandle(session.Id, "research", 2);
                 source.Content.SourceUrl = "https://example.test/article-b";
                 source.Content.Title = "Research B"; source.Content.Nodes[0].Name = "Fact from page B";
                 var second = read(ExternalBrowserResourceProvider.Target);

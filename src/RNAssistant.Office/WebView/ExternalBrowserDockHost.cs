@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
 using System;
 using System.Drawing;
@@ -12,12 +13,12 @@ using RNAssistant.Office.Services;
 namespace RNAssistant.Office.WebView
 {
     // The replaceable placement owner. No browser policy, navigation history or durable store.
-    internal sealed class ExternalBrowserDockHost : IExternalBrowserHost, IExternalBrowserActionSource, IDisposable
+    internal sealed class ExternalBrowserDockHost : IBrowserPageRuntime, IDisposable
     {
         private readonly Control _parent;
         private readonly WebView2 _shell;
         private readonly string _assets;
-        private readonly Action<ExternalBrowserStateDto> _publish;
+        private readonly Action<BrowserPageStateDto> _publish;
         private readonly Action<string> _requireAccess;
         private readonly Func<string, string, Task<Action>> _pauseRun;
         private ExternalBrowserPage _page;
@@ -25,43 +26,43 @@ namespace RNAssistant.Office.WebView
         private bool _disposed;
         private string _placement = "hidden";
         private long _layoutRevision;
-        private volatile ExternalBrowserReadTarget _readTarget;
+        private volatile BrowserPageHandle _readTarget;
 
-        public IReadOnlyList<ExternalBrowserReadTarget> TargetsFor(string chatId)
-        { var target = _readTarget; return target != null && target.ChatId == chatId ? new[] { target } : new ExternalBrowserReadTarget[0]; }
+        public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId)
+        { var target = _readTarget; return target != null && target.ChatId == chatId ? new[] { target } : new BrowserPageHandle[0]; }
 
         // One short native operation at a time. No gate is held across model/confirmation waits.
-        public Task<ExternalBrowserSemanticContent> ReadAsync(ExternalBrowserReadTarget target, CancellationToken token)
+        public Task<BrowserObservation> ReadAsync(BrowserPageHandle target, CancellationToken token)
         { return InvokeSemanticAsync(target, (page, dispatch) => page.ReadAsync(target), token); }
 
-        public async Task PrepareAsync(ExternalBrowserReadTarget target, string revision, string preparationId,
-            ExternalBrowserActionRequest request, CancellationToken token)
+        public async Task PrepareAsync(BrowserPageHandle target, string revision, string preparationId,
+            BrowserActionRequest request, CancellationToken token)
         { await InvokeSemanticAsync(target, (page, dispatch) => page.PrepareAsync(target, revision, preparationId, request), token).ConfigureAwait(false); }
 
-        public Task<ExternalBrowserActionResult> ActAsync(ExternalBrowserReadTarget target, string preparationId,
+        public Task<BrowserActionResult> ActAsync(BrowserPageHandle target, string preparationId,
             Action beforeDispatch, CancellationToken token, bool navigation = false)
         { return InvokeSemanticAsync(target, (page, dispatch) => page.ActAsync(target, preparationId, dispatch), token, beforeDispatch,
-            navigation ? 15000 : 3000, navigation ? new Func<ExternalBrowserActionResult, ExternalBrowserReadTarget>(result => result.NavigationTarget) : null); }
+            navigation ? 15000 : 3000, navigation ? new Func<BrowserActionResult, BrowserPageHandle>(result => result.NavigationTarget) : null); }
 
-        public void BlockActions(ExternalBrowserReadTarget target)
+        public void BlockActions(BrowserPageHandle target)
         { var page = _page; if (page?.SessionId == target?.SessionId) page?.BlockActions(); }
 
-        public void PresentResult(ExternalBrowserReadTarget target, string preparationId, ExternalBrowserEffect effect)
+        public void PresentResult(BrowserPageHandle target, string preparationId, BrowserActionEffect effect)
         {
             if (_disposed || _parent.IsDisposed || target == null) return;
             try { _parent.BeginInvoke(new Action(() => _page?.PresentResult(target, preparationId, effect))); }
             catch (Exception error) { Diagnostics.RuntimeLog.Error("Browser presentation was unavailable after the terminal.", error); }
         }
 
-        private Task<T> InvokeSemanticAsync<T>(ExternalBrowserReadTarget target, Func<BrowserPageAutomation, Action, Task<T>> operation,
-            CancellationToken token, Action beforeDispatch = null, int timeoutMs = 3000, Func<T, ExternalBrowserReadTarget> resultTarget = null)
+        private Task<T> InvokeSemanticAsync<T>(BrowserPageHandle target, Func<BrowserPageAutomation, Action, Task<T>> operation,
+            CancellationToken token, Action beforeDispatch = null, int timeoutMs = 3000, Func<T, BrowserPageHandle> resultTarget = null)
         {
             var page = _page;
             if (page == null || page.SessionId != target?.SessionId) throw ExternalBrowserResourceProvider.Error("Browser page closed.", "browser_page_unavailable");
             return page.Automation.InvokeAsync(target, operation, token, beforeDispatch, timeoutMs, resultTarget);
         }
 
-        public ExternalBrowserDockHost(Control parent, WebView2 shell, string assets, Action<ExternalBrowserStateDto> publish,
+        public ExternalBrowserDockHost(Control parent, WebView2 shell, string assets, Action<BrowserPageStateDto> publish,
             Action<string> requireAccess, Func<string, string, Task<Action>> pauseRun)
         {
             _parent = parent; _shell = shell; _assets = assets; _publish = publish; _requireAccess = requireAccess; _pauseRun = pauseRun;
@@ -71,11 +72,11 @@ namespace RNAssistant.Office.WebView
             _shell.VisibleChanged += InvalidatePlacement;
         }
 
-        public Task<ExternalBrowserStateDto> ExecuteAsync(ExternalBrowserCommandPayload request, CancellationToken cancellationToken)
+        public Task<BrowserPageStateDto> ExecuteAsync(BrowserCommandPayload request, CancellationToken cancellationToken)
         {
             if (_disposed || _parent.IsDisposed) throw new ObjectDisposedException(nameof(ExternalBrowserDockHost));
             if (!_parent.InvokeRequired) return ExecuteOnUiAsync(request, cancellationToken);
-            var result = new TaskCompletionSource<ExternalBrowserStateDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var result = new TaskCompletionSource<BrowserPageStateDto>(TaskCreationOptions.RunContinuationsAsynchronously);
             _parent.BeginInvoke(new Action(async () =>
             {
                 try { result.TrySetResult(await ExecuteOnUiAsync(request, cancellationToken)); }
@@ -84,12 +85,12 @@ namespace RNAssistant.Office.WebView
             return result.Task;
         }
 
-        private Task<ExternalBrowserStateDto> ExecuteOnUiAsync(ExternalBrowserCommandPayload request, CancellationToken cancellationToken)
+        private Task<BrowserPageStateDto> ExecuteOnUiAsync(BrowserCommandPayload request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_disposed) throw new ObjectDisposedException(nameof(ExternalBrowserDockHost));
-            if (request == null || !Enum.IsDefined(typeof(ExternalBrowserAction), request.Action)) throw new InvalidOperationException("Недопустимая команда браузера.");
-            if (request.Action == ExternalBrowserAction.Open)
+            if (request == null || !Enum.IsDefined(typeof(BrowserCommandKind), request.Action)) throw new InvalidOperationException("Недопустимая команда браузера.");
+            if (request.Action == BrowserCommandKind.Open)
             {
                 if (_page != null) throw new InvalidOperationException("Пилот поддерживает одну Browser-вкладку.");
                 if (!_initializing.IsCompleted) throw new InvalidOperationException("Предыдущий WebView2 ещё завершает запуск. Повторите открытие через несколько секунд.");
@@ -103,18 +104,18 @@ namespace RNAssistant.Office.WebView
                 return Task.FromResult(Snapshot());
             }
             if (_page == null || request.SessionId != _page.SessionId) throw new InvalidOperationException("Browser session закрыта или устарела.");
-            if (request.Action == ExternalBrowserAction.Close)
+            if (request.Action == BrowserCommandKind.Close)
             {
                 var sessionId = _page.SessionId; Reset();
-                return Task.FromResult(new ExternalBrowserStateDto { SessionId = sessionId, Status = ExternalBrowserStatus.Closed });
+                return Task.FromResult(new BrowserPageStateDto { SessionId = sessionId, Status = BrowserPageStatus.Closed });
             }
-            if (request.Action == ExternalBrowserAction.Layout) Place(request.Bounds);
-            else if (request.Action == ExternalBrowserAction.ResumeAgent) return ResumeAgentAsync(request, _page, cancellationToken);
+            if (request.Action == BrowserCommandKind.Layout) Place(request.Bounds);
+            else if (request.Action == BrowserCommandKind.ResumeAgent) return ResumeAgentAsync(request, _page, cancellationToken);
             else _page.Execute(request);
             return Task.FromResult(Snapshot());
         }
 
-        private async Task<ExternalBrowserStateDto> ResumeAgentAsync(ExternalBrowserCommandPayload request, ExternalBrowserPage page, CancellationToken token)
+        private async Task<BrowserPageStateDto> ResumeAgentAsync(BrowserCommandPayload request, ExternalBrowserPage page, CancellationToken token)
         {
             var gate = page.Automation.Gate;
             if (!await gate.WaitAsync(3000, token)) throw new InvalidOperationException("Операция браузера ещё выполняется. Повторите продолжение после её завершения.");
@@ -134,11 +135,11 @@ namespace RNAssistant.Office.WebView
             catch (Exception error) { if (!_disposed && _page == page) page.Fail(error); }
         }
 
-        private void Place(ExternalBrowserBoundsDto bounds)
+        private void Place(BrowserBoundsDto bounds)
         {
             _placement = "hidden";
             if (!ExternalBrowserPolicy.ValidBounds(bounds)) { _page.Control.Visible = false; throw new InvalidOperationException("Некорректная геометрия Browser."); }
-            if (!bounds.Visible || !_parent.Visible || !_shell.Visible || _page.Snapshot("").Status == ExternalBrowserStatus.Failed) { _page.Control.Visible = false; return; }
+            if (!bounds.Visible || !_parent.Visible || !_shell.Visible || _page.Snapshot("").Status == BrowserPageStatus.Failed) { _page.Control.Visible = false; return; }
             var scale = _shell.ClientSize.Width / bounds.ViewportWidth;
             var vertical = _shell.ClientSize.Height / bounds.ViewportHeight;
             if (scale <= 0 || Math.Abs(scale - vertical) > 0.05)
@@ -155,7 +156,7 @@ namespace RNAssistant.Office.WebView
         }
         private void InvalidatePlacement(object sender, EventArgs e)
         { if (_page != null) { _page.Control.Visible = false; _placement = "hidden: layout pending"; _layoutRevision++; Publish(); } }
-        private ExternalBrowserStateDto Snapshot()
+        private BrowserPageStateDto Snapshot()
         {
             var value = _page.Snapshot(_placement + " · DPI " + _parent.DeviceDpi + " · controls 1 · focus " + _page.Control.ContainsFocus);
             value.LayoutRevision = _layoutRevision; return value;

@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -87,7 +88,7 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolResultStatus.Ok, live.Result.Status,
                         "workspace can read the pinned Office document");
 
-                    var browserSource = new HarnessBrowserReadSource { Target = new RNAssistant.Office.Contracts.ExternalBrowserReadTarget(session.Id, "workspace-page", 1) };
+                    var browserSource = new HarnessBrowserReadSource { Target = new RNAssistant.Application.Contracts.BrowserPageHandle(session.Id, "workspace-page", 1) };
                     executor.ExternalBrowserReadSource = browserSource;
                     var browserCall = new ToolCall("workspace-browser-read", "core.read", "{}");
                     var browserExecution = new ToolExecutionContext(browserCall,

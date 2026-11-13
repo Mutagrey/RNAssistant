@@ -125,6 +125,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.AgentCommunication.cs" Link="Office\WebView\AssistantWebBridge.AgentCommunication.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Plugins.cs" Link="Office\WebView\AssistantWebBridge.Plugins.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Browser.cs" Link="Office\WebView\AssistantWebBridge.Browser.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Window.cs" Link="Office\WebView\AssistantWebBridge.Window.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\tests\RNAssistant.Harness\ProtectedSecretStoreHarnessStub.cs" Link="Testing\ProtectedSecretStoreHarnessStub.cs" />

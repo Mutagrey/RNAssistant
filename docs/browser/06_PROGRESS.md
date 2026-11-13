@@ -12,7 +12,7 @@ preview/automation patch включён в scope по подтверждению
 |---|---|
 | 08 / `702f3d28` | `16.14.4-dev`: LLM без User-Agent; 12 loopback requests, Harness 1/1 |
 | 04 V1 | Actor/run-scoped candidates, package reuse, source guard до dispatch; три focused Harness cases (authority, preview/grants, published history) |
-| F0 | Общий automation owner извлечён из native Page; multi-page discovery/semantic ambiguity guards. 11 existing Harness cases проходят. Далее host-neutral targets/runtime, typed bridge и local resolver; singleton delivery ещё не переключён |
+| F0 | `4a63288a` extraction + host-neutral page/owner/target/version/capability contracts, typed local resolve/suggestions и kind-specific UI validation. Address/scope fixture + 9 gateway/action regressions + saved-views Chrome проходят; native singleton/renderer ещё переключается в F1 |
 | Ранний 02 | `16.14.6-dev`: HTML proxy/bridge/origins и deployment controls/issuer path удалены; external launch/URL denied. 9 regression + 2 denial Harness, Settings Chrome wide/narrow/125% и HTML assembly 7/7 проходят. F0/F1 local delivery и B02 остаются открыты |
 | F1–F4 | Local delivery + adapters, tools/media, Save/Activate/Delete, navigation/Dock; каждый срез продолжает текущий HEAD |
 | F5 / 07 | Cleanup/canonical docs, затем отдельное сокращение экранов/Inspector |

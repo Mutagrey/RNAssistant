@@ -2,6 +2,12 @@
 
 ## Local Browser — промежуточный F0, 2026-11-13
 
+Contracts переведены в Application/Contracts; старый Office Contracts file удалён,
+consumers переключены. `ResolveLocalLocator`/`QueryNavigationSuggestions` имеют
+настоящие catalog consumers. Version DTO и independent capability seam ожидают
+F3/F2, не выдают доступность до functional wiring. В F1 удаляются старые native
+singleton/probe и provider iframe consumers; owner прежний Browser package.
+
 Owner: Browser package 01/02/03 в текущем последовательном чате. Существующий
 незавершённый extraction доведён до общего `BrowserPageAutomation`: native Page
 передаёт exact target/protocol, прежние gateway/tool consumers перечисляют owned

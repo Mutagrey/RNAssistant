@@ -1,5 +1,12 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserPageContracts.cs" Link="Application\Contracts\BrowserPageContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserNavigationContracts.cs" Link="Application\Contracts\BrowserNavigationContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserVersionContracts.cs" Link="Application\Contracts\BrowserVersionContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserCapabilityContracts.cs" Link="Application\Contracts\BrowserCapabilityContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PluginApplicationService.Browser.cs" Link="Application\PluginApplicationService.Browser.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BrowserLocalLocator.cs" Link="Application\BrowserLocalLocator.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BrowserTargetResolver.Navigation.cs" Link="Application\BrowserTargetResolver.Navigation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\SourceComparisonContracts.cs" Link="Application\Contracts\SourceComparisonContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SourceComparisonService.cs" Link="Application\SourceComparisonService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserTargetResolver.cs" Link="Application\BrowserTargetResolver.cs" />

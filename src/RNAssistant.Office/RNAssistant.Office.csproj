@@ -386,11 +386,12 @@
     <Compile Include="Tools\VbaToolHandler.cs" />
     <Compile Include="Tools\OfficeResourceMutationHandler.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
-    <Compile Include="Contracts\ExternalBrowserContracts.cs" />
     <Compile Include="Services\ExternalBrowserPolicy.cs" />
     <Compile Include="Services\ExternalBrowserNavigation.cs" />
     <Compile Include="Services\ExternalBrowserResourceProvider.cs" />
     <Compile Include="Services\BrowserPageAutomation.cs" />
+    <Compile Include="Controller\AssistantController.Browser.cs" />
+    <Compile Include="WebView\AssistantWebBridge.Browser.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.cs" />
     <Compile Include="WebView\ExternalBrowserPage.cs" />
     <Compile Include="WebView\ExternalBrowserDockHost.cs" />

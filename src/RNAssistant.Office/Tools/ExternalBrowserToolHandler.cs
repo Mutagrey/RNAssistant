@@ -1,3 +1,4 @@
+using RNAssistant.Application.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,7 +18,7 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class ExternalBrowserPrepared
     {
-        public ExternalBrowserReadTarget Target { get; set; }
+        public BrowserPageHandle Target { get; set; }
         public ResourceRef Observation { get; set; }
         public string PreparationId { get; set; }
     }
@@ -29,10 +30,10 @@ namespace RNAssistant.Office.Tools
         internal static bool Owns(string id) { return id == Fill || id == Click || id == Navigate; }
         internal static ToolBinding BindingFor(string id) { return new ToolBinding(id + ".v4"); }
         private readonly ChatSession _session;
-        private readonly Func<IExternalBrowserReadSource> _source;
+        private readonly Func<IBrowserReadSource> _source;
         private readonly Func<ChatSession, IDisposable> _documentAccess;
 
-        internal ExternalBrowserToolHandler(ChatSession session, Func<IExternalBrowserReadSource> source,
+        internal ExternalBrowserToolHandler(ChatSession session, Func<IBrowserReadSource> source,
             Func<ChatSession, IDisposable> documentAccess)
         { _session = session; _source = source; _documentAccess = documentAccess; }
 
@@ -79,9 +80,9 @@ namespace RNAssistant.Office.Tools
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    var source = _source?.Invoke() as IExternalBrowserActionSource;
+                    var source = _source?.Invoke() as IBrowserActionSource;
                     var name = ToolArgumentReader.String(context.Arguments, "target", "");
-                    var matches = source?.TargetsFor(_session?.Id).Where(item => item.Target == name).ToArray() ?? new ExternalBrowserReadTarget[0];
+                    var matches = source?.TargetsFor(_session?.Id).Where(item => item.Target == name).ToArray() ?? new BrowserPageHandle[0];
                     if (matches.Length > 1) throw Error("The browser page is ambiguous. Select an exact page from discovery.", "resource_target_ambiguous");
                     var target = matches.SingleOrDefault();
                     if (target == null) throw Error("Open the Browser page from this chat first.", "browser_page_unavailable");
@@ -108,7 +109,7 @@ namespace RNAssistant.Office.Tools
                     if (navigate && ((url == null) == (link == null)))
                         throw Error("Provide exactly one of url or linkName.", "browser_action_invalid");
                     source.PrepareAsync(target, observation.Revision, prepared.PreparationId,
-                        new ExternalBrowserActionRequest { Action = context.Execution.Call.Name == Navigate ? "navigate" : context.Execution.Call.Name == Fill ? "fill" : "click",
+                        new BrowserActionRequest { Action = context.Execution.Call.Name == Navigate ? "navigate" : context.Execution.Call.Name == Fill ? "fill" : "click",
                             Name = navigate ? link : ToolArgumentReader.String(context.Arguments, "name", ""),
                             Value = ToolArgumentReader.String(context.Arguments, "value", null),
                             ExpectedText = ToolArgumentReader.String(context.Arguments, "expectedText", null),
@@ -138,8 +139,8 @@ namespace RNAssistant.Office.Tools
             {
                 ToolHandlerResult completed;
                 ExternalBrowserPrepared prepared = null;
-                var visualEffect = ExternalBrowserEffect.Rejected;
-                var source = _source?.Invoke() as IExternalBrowserActionSource;
+                var visualEffect = BrowserActionEffect.Rejected;
+                var source = _source?.Invoke() as IBrowserActionSource;
                 try
                 {
                     prepared = JsonConvert.DeserializeObject<ExternalBrowserPrepared>(context.PreparedStateJson);
@@ -148,22 +149,22 @@ namespace RNAssistant.Office.Tools
                     var navigation = context.Execution.Call.Name == Navigate;
                     var native = source.ActAsync(prepared.Target, prepared.PreparationId, context.MarkDispatchPossible, token, navigation).GetAwaiter().GetResult();
                     visualEffect = native.Effect;
-                    if (navigation && native.Effect == ExternalBrowserEffect.VerifiedChange &&
+                    if (navigation && native.Effect == BrowserActionEffect.VerifiedChange &&
                         (native.NavigationTarget == null || native.NavigationTarget.DocumentGeneration <= prepared.Target.DocumentGeneration))
                         throw Error("Navigation has no fresh document evidence.", "browser_effect_unknown");
                     var after = navigation && native.NavigationTarget != null ? native.NavigationTarget : prepared.Target;
                     if (source != _source() || after.ChatId != prepared.Target.ChatId || after.SessionId != prepared.Target.SessionId ||
                         !source.TargetsFor(_session.Id).Any(after.Matches)) throw Error("The browser owner changed after dispatch.", "browser_effect_unknown");
                     using (_documentAccess?.Invoke(_session)) { } // User/host changes outside our gate must also fail closed.
-                    var verified = native.Effect == ExternalBrowserEffect.VerifiedChange || native.Effect == ExternalBrowserEffect.VerifiedNoChange;
+                    var verified = native.Effect == BrowserActionEffect.VerifiedChange || native.Effect == BrowserActionEffect.VerifiedNoChange;
                     var data = Code(ExternalBrowserPolicy.SafeActionCode(native.Code));
                     var result = verified ? RuntimeResult.Ok("The browser action passed its read-back check. Read the page again before another action.", data)
-                        : native.Effect == ExternalBrowserEffect.Rejected ? RuntimeResult.Error(native.Code == "browser_user_control"
+                        : native.Effect == BrowserActionEffect.Rejected ? RuntimeResult.Error(native.Code == "browser_user_control"
                             ? "The user controls this page. Wait for explicit Resume agent; do not retry browser actions."
                             : "The element changed or is not actionable. Read the page again; no effect occurred.", data)
                         : RuntimeResult.Unknown("The browser effect is unknown. Inspect the page; do not repeat the action. Further mutations require manually closing and reopening the page.", data);
-                    var effect = native.Effect == ExternalBrowserEffect.VerifiedChange ? ToolEffectEvidence.VerifiedChange
-                        : native.Effect == ExternalBrowserEffect.Unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.VerifiedNoChange;
+                    var effect = native.Effect == BrowserActionEffect.VerifiedChange ? ToolEffectEvidence.VerifiedChange
+                        : native.Effect == BrowserActionEffect.Unknown ? ToolEffectEvidence.Unknown : ToolEffectEvidence.VerifiedNoChange;
                     completed = new ToolHandlerResult(result, effect);
                 }
                 catch (Exception error)
@@ -171,7 +172,7 @@ namespace RNAssistant.Office.Tools
                     if (context.MayHaveDispatched) source?.BlockActions(prepared?.Target);
                     try { context.CompleteFailure(error); }
                     finally { source?.PresentResult(prepared?.Target, prepared?.PreparationId,
-                        context.MayHaveDispatched ? ExternalBrowserEffect.Unknown : ExternalBrowserEffect.Rejected); }
+                        context.MayHaveDispatched ? BrowserActionEffect.Unknown : BrowserActionEffect.Rejected); }
                     throw;
                 }
                 // A renderer read-back alone must not paint success before runtime accepts its terminal.
@@ -184,7 +185,7 @@ namespace RNAssistant.Office.Tools
                 catch
                 {
                     source.BlockActions(prepared.Target);
-                    source.PresentResult(prepared.Target, prepared.PreparationId, ExternalBrowserEffect.Unknown);
+                    source.PresentResult(prepared.Target, prepared.PreparationId, BrowserActionEffect.Unknown);
                     throw;
                 }
             }

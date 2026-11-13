@@ -41,14 +41,14 @@ namespace RNAssistant.Office.WebView
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
-        private IExternalBrowserHost _externalBrowser;
+        private IBrowserPageHost _externalBrowser;
         internal void RequireBrowserAccess(string url) { _controller.RequireBrowserAccess(url); }
         internal Task<Action> PauseBrowserRunAsync(string chatId, string pauseId)
         { return Task.Run(() => _agentCommunication.PauseForUser(chatId, pauseId)); }
-        public IExternalBrowserHost ExternalBrowser
+        public IBrowserPageHost ExternalBrowser
         {
             get { return _externalBrowser; }
-            set { _externalBrowser = value; _controller.SetExternalBrowserReadSource(value as IExternalBrowserReadSource); }
+            set { _externalBrowser = value; _controller.SetExternalBrowserReadSource(value as IBrowserReadSource); }
         }
 
         public bool HostSwitchPending
@@ -240,7 +240,7 @@ namespace RNAssistant.Office.WebView
                 {
                     case BridgeOperationId.ExternalBrowserCommand:
                         if (ExternalBrowser == null) throw new InvalidOperationException("External Browser pilot is disabled on this host.");
-                        responsePayload = await ExternalBrowser.ExecuteAsync(Payload<ExternalBrowserCommandPayload>(payload), cancellationToken).ConfigureAwait(false);
+                        responsePayload = await ExternalBrowser.ExecuteAsync(Payload<BrowserCommandPayload>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetHostWindowState:
                         if (WindowHost == null) throw new InvalidOperationException("This host does not support window commands.");
@@ -643,6 +643,12 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.GetSettings:
                         responsePayload = _controller.GetSettings();
+                        break;
+                    case BridgeOperationId.ResolveLocalLocator:
+                        responsePayload = ResolveBrowserLocator(Payload<BrowserResolveRequest>(payload));
+                        break;
+                    case BridgeOperationId.QueryNavigationSuggestions:
+                        responsePayload = BrowserSuggestions(Payload<BrowserSuggestionRequest>(payload));
                         break;
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = _controller.GetCasHealth();
