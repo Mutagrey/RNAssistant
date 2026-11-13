@@ -1620,3 +1620,23 @@ after-state/CAS ownership.
    are updated. Default writers remain unchanged, so this intermediate integration
    has no product version bump. The existing ChatStore/Store adapter is removed
    with whole-port P7. One scoped commit; no push/tag.
+
+## P5 — native group catalog scope fix (2026-11-13)
+
+1. Catalog capture constructed a temporary ChatSession with its default random ID.
+   The native scope guard correctly rejected that nonexistent chat, so catalog
+   consumers received an error instead of the group's metadata.
+2. Existing ConversationGroupService now explicitly uses `Id=null` for scope-only
+   catalog capture. The bound document/workspace guard and addressed-chat checks
+   remain in the same owner; no additional store, DTO or fallback is introduced.
+3. One production line changes. The discovered adjacent defect is fixed in its own
+   commit, separately from native chat deletion.
+4. On `3c038d8d` + this fix, the existing scoped UI-contract case checks a real native
+   catalog for both Office and Workspace headers, plus its existing revision/scope
+   guards. It passes; diff/version-format checks pass. No broad rerun or Office build.
+5. Before: valid native catalog scopes had a fabricated chat identity and failed.
+   After: the catalog returns its existing group. No performance claim is made.
+6. Remaining Store/resource integration, metadata/header costs, P7 and Windows
+   qualification remain open; P4 remains deferred.
+7. Session events, progress and Harness guide are updated. Default production
+   composition is unchanged, so no product bump; no push/tag.

@@ -12,7 +12,8 @@ Review: open two Office chats → inspect A → pin an old A run → select B/Br
 open the captured A step → close A → return to following selection. Repeat Workspace
 and plugin. Targeted UI/request/layout checks pass; old fixtures were updated from
 retired singleton composer/iframe/direct toolbar selectors. UI acceptance and Windows
-qualification remain open. Next is integration with current main, not a new UI phase.
+qualification remain open. Integrated with main through `e1f6b2f9`; no later UI phase
+starts implicitly.
 
 ## F2c5 find — In Review, 2026-11-13
 

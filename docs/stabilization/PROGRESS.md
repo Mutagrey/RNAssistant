@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Local Browser package integrated — 2026-11-13
+
+`16.25.1-dev`: 00–08 local implementation, including interactive native delivery,
+bindings, semantic input, export, annotations/find and scoped Inspector, is integrated
+with main through `e1f6b2f9`. Combined local Browser Harness passes 9/9; targeted
+Chromium/request/export checks and Mock compile pass. Windows native compilation /
+Office-WebView2 qualification and UI acceptance remain open; no push/release.
+[Final status and limitations](../browser/06_PROGRESS.md#final-local-integration--2026-11-13).
+
 ## Selected Inspector corrected — 2026-11-13
 
 `16.25.1-dev`: 07 now uses exact Office/Workspace/plugin scope for context, capabilities,
@@ -110,6 +119,12 @@ Common Browser Save/list/delete and project definition recovery are wired. Three
 focused Harness cases and two Browser fixtures pass; Windows/B02 and UI acceptance
 remain open. Document HTML and raw import continue from this state.
 [Details](../browser/06_PROGRESS.md#f3c-workspace-checkpoints--2026-11-13).
+
+## Native group catalog scope — 2026-11-13
+
+Исправлен scope каталога групп: временный carrier больше не получает случайный ID
+несуществующего чата. Native catalog возвращает группы без ложного scope error;
+проверено в существующем Office/Workspace UI-contract case. Очередь ниже не меняется.
 
 ## Native single-chat deletion — 2026-11-13
 

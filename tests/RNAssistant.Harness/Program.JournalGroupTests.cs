@@ -42,6 +42,9 @@ namespace RNAssistant.Harness
                 var sourceHead = source.StorageHeadHash; var memberHead = member.StorageHeadHash;
                 var create = new ChatGroupChange { Action = ChatGroupAction.Create, Name = "Team" };
                 var group = groups.Change(source, create, "create-team").Group;
+                var catalog = groups.Catalog(store.ListHeaders(false)).Single();
+                AssertTrue(catalog.Error == null && catalog.Groups.Single().Id == group.Id,
+                    "native catalog uses a scope address, not a generated nonexistent chat ID");
                 var written = resources.Journal.WrittenBytes;
                 AssertTrue(!groups.Change(source, create, "create-team").Changed, "duplicate creation is read-only");
                 AssertEqual(written, resources.Journal.WrittenBytes, "duplicate has no resource append");

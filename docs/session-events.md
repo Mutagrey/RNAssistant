@@ -34,6 +34,8 @@ ports bound to one document/workspace. Group heads and immutable CAS bodies rema
 in ResourceJournal; no group stream, table, schema change or second store. Reads
 select the group prefix in 100-head pages, validate generation and verify payloads.
 Membership uses scoped metadata; model aliases use the existing Inbox/event index.
+Catalog capture uses an explicit scope-only address (`Id=null`), so its temporary
+carrier never impersonates a new, unpersisted chat at the native scope guard.
 It never loads member histories or changes their runs, queues or participant roster.
 
 Create/rename/add/remove/delete keep exact revision, unique name, deduplication and

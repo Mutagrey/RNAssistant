@@ -1,13 +1,24 @@
 # Universal Browser: статус
 
-## Current-main integration checks — 2026-11-13
+## Final local integration — 2026-11-13
 
-Browser branch incorporates main `35a1defe` (native spawn/control/assignment/group
-Journal consumers). Documentation conflicts preserve both work streams; code merges
-without manual conflict resolution. Combined local Browser Harness: 9/9; actual
-controller Mock compile: zero errors. Native Office/WebView2 is not built on macOS.
-Main working changes belong to the separate Journal task and remain uncommitted.
-Advance main only with those changes preserved; no push/release.
+Package 00–08 implementation is integrated with main through `e1f6b2f9`, including
+native Journal spawn/control/assignment/group/deletion updates. Product version:
+`16.25.1-dev`. Documentation conflicts preserve both work streams; code merged
+without manual conflict resolution. Local Browser Harness on the combined latest
+code: 9/9; actual-controller Mock compilation passed after the initial main merge.
+UI/request/native-script, bindings and actual file:// evidence are listed below.
+
+Semantic element input is primary; fresh-image coordinates are optional. Internal
+member/resource/SDK transport remains supported. Single-page autonomous HTML embeds
+binding snapshots; live Office/plugin SDK needs the app. Raw/generic Workspace HTML
+has no existing annotation owner, explicitly reflected by capability.
+
+Open: Windows x64/Office x64/VS 2022 native compilation and WebView2 qualification
+(network/worker isolation, trusted input/IME/DPI, manual takeover, media privacy,
+overlays, profile/process cleanup), plus user UI acceptance. Source-only is a runtime
+unavailability state, not the completed product behavior. No Windows/VSTO build,
+push, tag or release was performed. No unrelated uncommitted changes were included.
 
 ## 07 scoped Inspector and route reduction — 2026-11-13
 
