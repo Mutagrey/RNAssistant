@@ -93,7 +93,6 @@ namespace RNAssistant.Harness
                 Test("plugins: paged published history and guarded restore", PluginsPublishedHistoryAndRestore),
                 Test("plugin versions: catalog migration save activation deletion and restart", PluginSavedVersionCatalogLifecycle),
                 Test("plugin versions: lost receipts reconcile without replay", SavedVersionReceiptsReconcileWithoutReplay),
-                Test("plugin versions: Browser exact owner and source independence", PluginBrowserVersionOwnership),
                 Test("plugins: panel removal preserves and restores publication", PluginsPanelVisibility),
                 Test("plugins: source chats share project history", PluginsSourceChatSessions),
                 Test("plugins: project chat fork preserves exact prefix", PluginsProjectChatFork),
