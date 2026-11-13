@@ -19,7 +19,9 @@ Retiring composition явно использует ChatStore.Groups/ResourceAuth
 Native mutation и удаление одного чата держат общий resource scope lease; гонка
 add/delete проверена host-neutral. `chat.deleted` скрывает чат и его memberships,
 сохраняя группу, другие чаты и canonical evidence. Удаление требует terminal run.
-Move и удаление документа ещё не подключены и должны сохранить эту сериализацию.
+Удаление всех чатов документа использует тот же lease и один `document.deleted` с
+границей по journal cursor; новые чаты после этой границы сохраняются. Move/MoveDocument
+ещё не подключены и должны сохранить эту сериализацию.
 Прежний backend использует общий document lock. Конфликт/unknown не
 повторяется автоматически. Группы не запускают/продолжают/останавливают Run, не
 снимают ограничения и не меняют participant roster цепочки. Дочерний чат добавляется

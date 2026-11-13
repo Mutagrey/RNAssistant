@@ -15,11 +15,9 @@ namespace RNAssistant.Core.Storage
         {
             if (string.IsNullOrWhiteSpace(id)) return false;
             RequireTextRoot();
-            var separator = _scope.IndexOf(':');
-            var scope = new ResourceAuthorityScopeId(_scope.Substring(0, separator), _scope.Substring(separator + 1));
             using (RuntimeStorageActivity.Acquire(_paths))
             // Same lease as group membership. Do not delete the shared journal or CAS.
-            using (new ResourceJournal(_paths, _protector).AcquireScope(scope))
+            using (AcquireDeletionScope())
             {
                 JournalRecord deletion = null; Exception failure = null;
                 try
@@ -40,14 +38,27 @@ namespace RNAssistant.Core.Storage
                 }
                 catch (Exception error) when (deletion != null && (error is IOException || error is SqliteException))
                 { failure = error; }
-                // Lost acknowledgement is resolved by the exact canonical tombstone,
-                // never by a missing projection or by appending the command again.
-                Fault?.Invoke("before_delete_readback");
-                var actual = Access((db, cursor) => CardRecord(db, id), CancellationToken.None);
-                if (actual?.Kind != "chat.deleted" || actual.Operation != deletion.Operation || actual.Fingerprint != deletion.Fingerprint)
-                    throw new IOException("Удаление чата не подтверждено. Обновите список перед повтором команды.", failure);
+                RequireDeletionReceipt(deletion, id, failure);
                 return true;
             }
+        }
+
+        private IDisposable AcquireDeletionScope()
+        {
+            var separator = _scope.IndexOf(':');
+            return new ResourceJournal(_paths, _protector).AcquireScope(
+                new ResourceAuthorityScopeId(_scope.Substring(0, separator), _scope.Substring(separator + 1)));
+        }
+
+        private static bool IsChatDeletion(string kind) { return kind == "chat.deleted" || kind == "document.deleted"; }
+
+        private void RequireDeletionReceipt(JournalRecord deletion, string witness, Exception failure)
+        {
+            // Absence in a projection cannot prove acceptance. Never redispatch.
+            Fault?.Invoke("before_delete_readback");
+            var actual = Access((db, cursor) => CardRecord(db, witness), CancellationToken.None);
+            if (actual?.Kind != deletion.Kind || actual.Operation != deletion.Operation || actual.Fingerprint != deletion.Fingerprint)
+                throw new IOException("Удаление не подтверждено. Обновите список перед повтором команды.", failure);
         }
 
         private static ConversationChatDeletion DecodeChatDeletion(JournalRecord record)
@@ -68,14 +79,23 @@ namespace RNAssistant.Core.Storage
             RequireChatRevision(fact.Address, current);
             if (current.Position.Hash != fact.PreviousHash)
                 throw new ChatConcurrencyException("Chat changed before deletion.");
-            var run = CurrentRun(db, fact.Address.Id);
+            RequireIdleForDeletion(db, current);
+        }
+
+        private void RequireIdleForDeletion(SqliteConnection db, ConversationChatReceipt current)
+        {
+            var run = CurrentRun(db, current.Fact.Card.ChatId);
             if (current.Fact.Run != null && (run == null || run.Fact.RunId != current.Fact.Run.RunId || !TerminalRun(run.Fact.Lifecycle)))
                 throw new InvalidOperationException("Stop or resolve the active run before deleting this chat.");
         }
 
         private void ApplyChatDeletion(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position)
         {
-            var id = DecodeChatDeletion(record).Address.Id;
+            RemoveLiveChat(db, tx, record, position, DecodeChatDeletion(record).Address.Id);
+        }
+
+        private void RemoveLiveChat(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position, string id)
+        {
             // Reuse the card locator as a durable deletion receipt. The retained
             // identity prevents every creation path from resurrecting this ID.
             using (var command = Command(db, "UPDATE chat_card SET alias=NULL,operation=$operation,fingerprint=$fingerprint,segment=$segment,start_offset=$start,end_offset=$end,sequence=$sequence,hash=$hash,first_sequence=$first WHERE stream=$stream AND chat=$chat", tx))

@@ -236,7 +236,7 @@ namespace RNAssistant.Core.Storage
         ChatSession IConversationStore.Move(ChatSession session, string host, string key, string title) { throw TextStoreScope(); }
         void IConversationStore.MoveDocument(string oldHost, string oldKey, string host, string key, string title, string path) { throw TextStoreScope(); }
         bool IConversationStore.Delete(string host, string key, string id) { return DeleteChat(host, key, id); }
-        bool IConversationStore.DeleteDocument(string host, string key) { throw TextStoreScope(); }
+        bool IConversationStore.DeleteDocument(string host, string key) { return DeleteDocument(host, key); }
         bool IConversationStore.PrepareInterruptedRunRecovery(ChatSession session, string runId)
         {
             RequireTextRoot();

@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Native document chat deletion — 2026-11-13
+
+DeleteDocument подключён к одному `document.deleted`: все подходящие чаты проверяются
+до записи и скрываются атомарно. Чаты и selection после границы cursor сохраняются;
+группы, история, CAS и Unknown/resource proof переживают rebuild/restore. Новых
+tables/schema/stores нет. Четыре новых и восемь регрессионных checks проходят на
+изолированном `7fae9c36` с нашим storage patch; общая рабочая копия на момент сборки
+имела незавершённый Browser API.
+Default writers прежние, Windows/Office evidence открыт. Далее Move/MoveDocument,
+history rewrite/usage, остальные resource consumers и metadata/header; P4 отложена.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-document-chat-deletion-2026-11-13).
+
 ## Local Browser package integrated — 2026-11-13
 
 `16.25.1-dev`: 00–08 local implementation, including interactive native delivery,

@@ -18,7 +18,7 @@ namespace RNAssistant.Core.Storage
     internal sealed partial class ConversationJournal
     {
         internal long ChatBodyReads;
-        private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.selected" || kind == "chat.deleted"; }
+        private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.selected" || IsChatDeletion(kind); }
 
         private static string ChatFingerprint(ConversationChatCommit fact)
         {
@@ -38,6 +38,7 @@ namespace RNAssistant.Core.Storage
         private static IEnumerable<PayloadRef> ChatReferences(JournalRecord record)
         {
             if (record.Kind == "chat.deleted") { DecodeChatDeletion(record); return new PayloadRef[0]; }
+            if (record.Kind == "document.deleted") { DecodeDocumentDeletion(record); return new PayloadRef[0]; }
             if (record.Kind == "chat.selected") { DecodeChatSelection(record); return new PayloadRef[0]; }
             var fact = DecodeChatCommit(record);
             return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning }.Concat(MessageReferences(item.Header))))
@@ -104,6 +105,7 @@ namespace RNAssistant.Core.Storage
         {
             if (OperationExists(db, record.Operation)) throw new InvalidDataException("Duplicate chat operation.");
             if (record.Kind == "chat.deleted") { ValidateChatDeletion(db, record); return new PayloadRef[0]; }
+            if (record.Kind == "document.deleted") { ValidateDocumentDeletion(db, record); return new PayloadRef[0]; }
             if (record.Kind == "chat.selected")
             {
                 var selected = DecodeChatSelection(record);
@@ -158,6 +160,7 @@ namespace RNAssistant.Core.Storage
 
         private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
         {
+            if (record.Kind == "document.deleted") { ApplyDocumentDeletion(db, record, position); return; }
             ValidateChatFact(db, record, keys, outcome);
             var committed = record.Kind == "chat.committed" ? DecodeChatCommit(record) : null;
             long lastActivity = 0;

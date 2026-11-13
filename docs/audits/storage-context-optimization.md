@@ -1640,3 +1640,42 @@ after-state/CAS ownership.
    qualification remain open; P4 remains deferred.
 7. Session events, progress and Harness guide are updated. Default production
    composition is unchanged, so no product bump; no push/tag.
+
+## P1/P2 — native document chat deletion (2026-11-13)
+
+1. Existing ConversationJournal now implements DeleteDocument with one
+   `document.deleted` fact. Its exact address, prior cursor/hash, target count and
+   witness identify the deletion boundary without a growing target array.
+2. The existing resource scope lease covers metadata/run guards and publication.
+   All matching chats must be idle before append; one active run rejects the whole
+   set. One index transaction removes live cards/aliases/selection. Later creation
+   and selection, other addresses, groups, CAS and canonical history survive.
+3. Single/batch deletion share scope, idle guard, row update and exact read-back
+   helpers. Existing card/chat-write locators prove the tombstone and its inclusion
+   boundary. Lost flush/index acknowledgement is resolved without another append;
+   partial index application rolls back and rebuilds atomically. Unavailable proof
+   throws instead of claiming success. No new store/table/schema, import or fallback.
+   Production C# +177/−14; the new Core partial is included in the old-style csproj.
+4. Four new cases pass on an isolated source archive of `7fae9c36` plus the owned
+   storage changes: Office/Workspace readers after bulk deletion, scope/cutoff,
+   group retention, before-append/after-flush/index/partial-index/read-back faults,
+   late active-run veto, scope lease refusal, independent later writer, rebuild and
+   clean Workspace restore. Actual model Unknown and cross-journal resource proof
+   survive document chat deletion and restore. Eight regressions pass: single-chat
+   deletion (4), native groups (3), text Store consumers (1). Owned source files
+   match the validated archive. Version-format/diff checks pass. Shared-worktree
+   compilation hit an unfinished parallel Browser `StageBrowserVisualSelection`
+   API; this evidence does not qualify that integration. No VSTO/Office/full-suite run.
+5. Before: native DeleteDocument was unsupported. After: healthy-index deletion
+   hydrates zero history bodies; the two-chat fixture writes a compact frame below
+   4 KiB. Metadata validation remains O(live chats in the scope), and retained
+   history still occupies storage. No constant-time, allocation or Windows latency
+   claim is made. Groups are filtered on read rather than rewritten for each chat.
+6. Next: Move/MoveDocument, remaining rewrites/usage and resource consumers, then
+   P3 metadata/header/authority-snapshot work. P4 stays deferred. Verified backup,
+   stopped old writers, complete restore and Windows/Office screen-photo evidence
+   remain whole-port P7 gates. Default writers are unchanged.
+7. Session events, conversation protocol, migration map, progress and Harness guide
+   are updated. ChatStore and its existing adapter remain only until whole-port P7;
+   this intermediate native integration has no product bump. One scoped commit;
+   no push/tag. Parallel Browser edits are outside this storage change.

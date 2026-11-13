@@ -1,5 +1,35 @@
 # Session event stream
 
+## Journal document chat deletion — 2026-11-13
+
+`IConversationStore.DeleteDocument` now appends one `document.deleted` fact for the
+exact host/document key in its bound journal. The fact retains the preceding journal
+sequence/hash, target count and one witness chat, not an array of targets. Before
+append, live metadata is enumerated and every matching run must be terminal (or
+absent). One active run rejects the entire operation without deleting idle chats.
+The existing resource scope lease serializes it with group membership; append
+admission serializes the boundary with chat creation and run commits.
+
+One index transaction replaces the selected card locators with the tombstone and
+removes their live metadata, aliases and selection. Chats created after the pinned
+boundary and other document keys survive, including a newer active selection.
+The existing `chat_write_history` index supplies an exact last metadata write when
+checking that a card belongs to the deletion predicate and boundary. Retained IDs
+cannot be recreated. No new table, schema, registry or store is introduced.
+
+The witness supplies exact canonical acknowledgement even if flush/index confirmation
+was lost or another writer has since created a chat. Failed partial index application
+rolls back and replays atomically; unavailable read-back throws instead of reporting
+success or redispatching. History, CAS, groups and Unknown/resource proof remain
+retained through rebuild/restore. This is logical chat deletion, not reclamation.
+Metadata work is proportional to live chats in the scope; healthy-index deletion
+does not hydrate historical bodies. The frame stays bounded independently of count.
+
+Four host-neutral cases cover Office/Workspace consumers, fault boundaries, active
+run/scope lease guards, concurrent later creation and retained Unknown/resource proof.
+Default writers and controller composition remain unchanged. Move/MoveDocument,
+other Store/resource ports, P7 and Windows/Office qualification remain open.
+
 ## Journal single-chat deletion — 2026-11-13
 
 `IConversationStore.Delete` now uses one `chat.deleted` fact in the existing
@@ -24,7 +54,7 @@ success; restart/rebuild retains the accepted deletion. An already absent chat r
 false and does not dispatch. Office ChatSessionService selects a surviving chat;
 WorkspaceStore retains its existing selection behavior. Four checks cover these
 consumers, guards, faults, retained Unknown/resource proof after deletion, rebuild
-and clean Workspace restore. Document deletion,
+and clean Workspace restore. Whole-document chat deletion is covered above;
 Move/MoveDocument, production cutover and Windows/Office qualification remain open.
 
 ## Journal chat groups — 2026-11-13
@@ -47,8 +77,8 @@ even when the group is durable; restart, rebuild and restore do not retry or upg
 that terminal. Runtime authority commits are excluded from model/UI JSON.
 
 Native single-chat Delete now shares this lease; its add/delete race has host-neutral
-coverage above. Move and document deletion remain unsupported and must preserve
-the same serialization. Default writers still use the explicit retiring
+coverage above. Document chat deletion shares that lease too; Move remains
+unsupported and must preserve the same serialization. Default writers still use the explicit retiring
 composition below. Whole-port P7 removes ChatStore.Groups and the legacy constructor/
 catalog branch, with no import, dual-write or fallback. Group reads still hydrate
 all group bodies in the scope; Publish's existing authority snapshot and broader
@@ -490,7 +520,7 @@ introduced; this slice does not alter `ChatStore` itself.
 
 No-tool runtime/protocol messages and `CommitRun` are now connected as described
 above. Single-chat deletion is connected by `chat.deleted`. Other resource/attachment
-owners, history rewrites, move/document deletion and storage usage remain open. Reading an unconnected tool/
+owners, history rewrites, moves and storage usage remain open. Reading an unconnected tool/
 agent chat must not return an apparently complete text history. Remaining operations must move to
 the same owner before P7 removes the old backend; verified backup, stopped legacy
 writers and Windows/Office photo evidence still gate that switch. Existing journal

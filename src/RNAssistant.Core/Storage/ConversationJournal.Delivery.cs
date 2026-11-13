@@ -202,7 +202,7 @@ namespace RNAssistant.Core.Storage
         private Tuple<ConversationCard, string> Card(SqliteConnection db, string chat)
         {
             var record = CardRecord(db, chat);
-            if (record == null || record.Kind == "chat.deleted") return null;
+            if (record == null || IsChatDeletion(record.Kind)) return null;
             var fact = DecodeCard(record);
             if (fact.ChatId != chat) throw new InvalidDataException("Foreign conversation card.");
             return Tuple.Create(fact, record.Operation);
@@ -217,6 +217,7 @@ namespace RNAssistant.Core.Storage
                 if (record == null) return null;
                 if (record.Kind == "chat.deleted" && DecodeChatDeletion(record).Address.Id != chat)
                     throw new InvalidDataException("Foreign chat deletion.");
+                if (record.Kind == "document.deleted") ValidateDeletedDocumentCard(db, chat, record);
                 return record;
             }
         }

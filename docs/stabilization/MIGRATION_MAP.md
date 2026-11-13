@@ -142,6 +142,19 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 native document chat deletion (2026-11-13): existing ConversationJournal
+implements DeleteDocument with one bounded `document.deleted` predicate/cursor fact.
+All matching run guards precede append; one index transaction hides the selected
+live cards/aliases/selection. Newer chats/selections and other keys survive. Shared
+single/batch deletion helpers retain the same resource scope lease and exact receipt
+owner. Existing card and chat-write locators prove deletion; no schema/store change.
+Groups, CAS, history and Unknown/resource proof remain retained. Owner: Core journal /
+existing Store port; retiring ChatStore/adapter removal remains whole-port P7.
+Four checks and focused regressions use an isolated `7fae9c36` + owned storage patch
+because concurrent Browser edits temporarily broke shared Harness compilation.
+Default composition, Windows qualification and remaining moves/Store/resource/P3
+integration remain open. [Contract](../session-events.md#journal-document-chat-deletion--2026-11-13).
+
 P1/P2 native single-chat deletion (2026-11-13): ConversationJournal directly owns
 `IConversationStore.Delete` / `chat.deleted`; the existing card locator becomes the
 verified tombstone receipt, with no new table/schema/store. Live alias, metadata
@@ -150,7 +163,7 @@ Scope lease is shared with groups, and active runs reject deletion. Office
 ChatSessionService / WorkspaceStore, fault recovery, group races, rebuild and clean
 Workspace restore are checked host-neutral. History/evidence/CAS are retained;
 this does not reclaim storage. Default writers and the existing adapter remain
-until whole-port P7. DeleteDocument, Move/MoveDocument and storage usage are still
+until whole-port P7. Move/MoveDocument and storage usage are still
 separate Store work, followed by other resource consumers and metadata/header.
 [Contract](../session-events.md#journal-single-chat-deletion--2026-11-13).
 
@@ -163,7 +176,7 @@ and metadata/header costs remain open. Owner: Application ConversationGroupServi
 existing conversation and resource ports. Whole-port P7 removes ChatStore.Groups,
 the explicit ChatStore constructor and retiring catalog branch; no data import.
 Native single-chat Delete now shares this lease and its add/delete race is checked
-host-neutral. Move/document deletion remain open. Default writers unchanged; Windows evidence open.
+host-neutral. Document deletion shares the lease; moves remain open. Default writers unchanged; Windows evidence open.
 [Contract](../session-events.md#journal-chat-groups--2026-11-13).
 
 P5 native assignment pages (2026-11-13): the existing event port projects canonical
