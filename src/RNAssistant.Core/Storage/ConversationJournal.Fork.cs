@@ -14,11 +14,12 @@ namespace RNAssistant.Core.Storage
     {
         private static void RequireForkScope(ChatSession session)
         {
-            // Resource graph publication has its own commit barrier. Do not accept
-            // a partially copied graph through the history-only fork boundary.
-            if (session.Artifacts.Count != 0 || session.ArtifactLinks.Count != 0 || session.ResourceCopies.Count != 0 ||
-                session.ContextCheckpoints.Count != 0 || session.ActiveHtmlArtifactId != null ||
-                session.ActiveTaskListArtifactId != null || session.ActivePlanDocumentArtifactId != null || session.ActiveContextCheckpointId != null ||
+            // Shared resources retain their published owner. Conversation-local
+            // graphs still require their separate copy/publication boundary.
+            var metadata = ConversationMetadata.From(session);
+            if (session.Artifacts.Any(item => !IsPublishedSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item))) ||
+                session.ResourceCopies.Count != 0 || session.ContextCheckpoints.Count != 0 ||
+                session.ActiveTaskListArtifactId != null || session.ActiveContextCheckpointId != null ||
                 session.Context?.Notes.Any(note => note.Role == ContextNoteRole.SuppliedData) == true)
                 throw TextStoreScope();
         }
@@ -71,19 +72,21 @@ namespace RNAssistant.Core.Storage
                 if (write == null || !InheritedFact(db, fork, write.Fact.Card.ChatId, write.Position.Sequence))
                     throw new InvalidDataException("Foreign fork history locator.");
                 var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
-                RequireForkMessage(original);
+                RequireForkMessage(ConversationMetadata.From(session), original);
                 if (!SameInheritedText(original, messages[index])) throw new InvalidOperationException("Fork cannot rewrite source evidence.");
             }
             messages = new ConversationTextEntry[0];
             return fork;
         }
 
-        private static void RequireForkMessage(ConversationTextEntry entry)
+        private static void RequireForkMessage(ConversationMetadata owner, ConversationTextEntry entry)
         {
-            if (entry.Header.Attachments.Count != 0 || entry.Header.HtmlWorkspaceCheckpoint != null ||
+            if (entry.Header.Attachments.Count != 0 && owner.DocumentAuthorityId == null ||
+                entry.Header.HtmlWorkspaceCheckpoint != null && !IsHtmlSnapshot(owner, entry.Header.HtmlWorkspaceCheckpoint) ||
                 entry.Header.ResourceRefs.Any(reference => {
-                    string owner, id; int revision;
-                    return ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision);
+                    string scope, id; int revision;
+                    return ChatResourceUri.TryParseArtifactRevision(reference, out scope, out id, out revision) &&
+                        !IsPublishedSnapshot(owner, ChatResourceUri.ArtifactSnapshot(reference));
                 })) throw TextStoreScope();
         }
 
@@ -114,17 +117,27 @@ namespace RNAssistant.Core.Storage
                 fork.Parent.WorkspaceId != fact.Card.Address.WorkspaceId || fork.Parent.DocumentAuthorityId != fact.Card.Address.DocumentAuthorityId ||
                 fact.ExpectedRevision != 0 || fact.History == null || fact.Messages.Count != 0 || fact.Run != null ||
                 fact.Checkpoint != null || fact.Tools != null || fact.Input != null || fact.Control != null || fact.ModelEvent != null ||
-                fact.ContextReceipt != null || fact.Card.AgentCreation != null || fact.Resources != null || (fact.Snapshots?.Count ?? 0) != 0 ||
+                fact.ContextReceipt != null || fact.Card.AgentCreation != null || (fact.Snapshots?.Count ?? 0) != 0 ||
                 fork.NextCall != Convert.ToInt64(Scalar(db, "SELECT next_t FROM chat_sequence WHERE stream=$stream AND chat=$chat", fork.Parent.Id) ?? 1L) ||
                 fork.NextEvidence != Convert.ToInt64(Scalar(db, "SELECT next_e FROM chat_sequence WHERE stream=$stream AND chat=$chat", fork.Parent.Id) ?? 1L))
                 throw new InvalidDataException("Invalid atomic fork provenance.");
+            var resources = ReadResourceSet(fact.Resources, fact.Card.Address);
+            var retained = ReadResourceSet(source.Fact.Resources, fork.Parent);
+            var membership = new HashSet<string>(resources.References.Select(item => item.Uri), StringComparer.Ordinal);
+            if (resources.References.Any(item => !IsPublishedSnapshot(fact.Card.Address, item)) ||
+                resources.ActiveTask != null || resources.ActiveContext != null ||
+                !SameRunValue(resources.ActiveHtml, retained.ActiveHtml) || !SameRunValue(resources.ActivePlan, retained.ActivePlan) ||
+                !SameRunValue(resources.Links, retained.Links) ||
+                retained.References.Where(item => IsPublishedSnapshot(fork.Parent, item))
+                    .Any(item => !membership.Contains(item.Uri)))
+                throw new InvalidDataException("Fork must preserve shared membership and selection without copying local graphs.");
             var history = ReadHistory(fact.History); var expected = ForkPrefix(db, fork);
             if (history.Removed.Count != 0 || fact.MessageCount != expected.Count || !SameRunValue(history.Entries, expected))
                 throw new InvalidDataException("Fork membership disagrees with its frozen prefix.");
             foreach (var group in expected.GroupBy(item => item.Operation))
             {
                 var write = FindChatWrite(db, group.Key); RequireHistoryOwner(db, fork.Parent.Id, write);
-                foreach (var entry in group) RequireForkMessage(write.Fact.Messages.Single(item => item.Header.Id == entry.Id));
+                foreach (var entry in group) RequireForkMessage(fact.Card.Address, write.Fact.Messages.Single(item => item.Header.Id == entry.Id));
             }
             return history;
         }

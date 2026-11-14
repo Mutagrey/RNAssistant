@@ -334,6 +334,7 @@ namespace RNAssistant.Harness
                     AssertEqual("Published through native journal.", artifact.InlineText, "real kernel publishes exact Plan bytes");
                     AssertEqual(1, restored.Artifacts.Count, "journal retains one exact Plan selection");
                     AssertTrue(restored.Artifacts.Single().InlineText == null, "journal does not hydrate Plan bodies");
+                    VerifyJournalSharedForkRuntime(paths, journal, resources, restored, restored.ActivePlanDocumentArtifactId);
                     if (!office) AssertEqual(artifact.InlineText,
                         new WorkspacePlanService(paths, store, payloads, workspace, restored,
                             new DocumentArtifactStore(resources, resources, payloads), resources, resources)

@@ -247,6 +247,7 @@ namespace RNAssistant.Office.Services
             if (selectedDocumentPlan != null && !PlanDocumentService.IsRemoved(fork, selectedDocumentPlan) &&
                 !ArtifactWorkingSet.IsDetached(fork, selectedDocumentPlan))
                 fork.ActivePlanDocumentArtifactId = selectedDocumentPlan.Id;
+            ArtifactWorkingSet.CopySharedForFork(source, fork);
             return plan;
         }
 
@@ -452,27 +453,8 @@ namespace RNAssistant.Office.Services
 
         internal static ChatArtifact CloneArtifact(ChatArtifact artifact)
         {
-            return new ChatArtifact
-            {
-                Id = artifact.Id,
-                Kind = artifact.Kind,
-                Title = artifact.Title,
-                MimeType = artifact.MimeType,
-                SourceMessageId = artifact.SourceMessageId,
-                DocumentAuthorityId = artifact.DocumentAuthorityId,
-                OriginalAttachment = CloneAttachment(artifact.OriginalAttachment),
-                AvailabilityIssue = artifact.AvailabilityIssue,
-                RunId = artifact.RunId,
-                Revision = artifact.Revision,
-                ParentArtifactId = artifact.ParentArtifactId,
-                RelativePath = artifact.RelativePath,
-                InlineText = artifact.InlineText,
-                ContentSha256 = artifact.ContentSha256,
-                ContentByteLength = artifact.ContentByteLength,
-                MetadataJson = artifact.MetadataJson,
-                RelatedArtifactIds = artifact.RelatedArtifactIds == null ? new List<string>() : new List<string>(artifact.RelatedArtifactIds),
-                CreatedUtc = artifact.CreatedUtc
-            };
+            var copy = artifact.CopyMetadata(); copy.InlineText = artifact.InlineText;
+            return copy;
         }
 
         private static ChatAttachment CloneAttachment(ChatAttachment attachment)

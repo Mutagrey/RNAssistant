@@ -1,5 +1,30 @@
 # Session event stream
 
+## Journal shared resource fork — 2026-11-14
+
+Atomic native forks also accept published document/workspace resources through the
+same Office publication observer and Workspace fork owner: shared Plans, document
+HTML and document-owned originals. Historical member refs, attachment analysis and
+HTML checkpoints retain their exact source occurrence; they create no child tool
+execution or shared resource publication. Existing schema 27 and CAS roots suffice.
+
+ArtifactWorkingSet copies shared metadata, links and exact selection independently
+of the dialogue prefix, including detached resources and off-prefix tombstones.
+ChatArtifact.CopyMetadata preserves origin/availability/removal fields without
+serializing bodies. It replaces incomplete manual/JSON clones in both fork consumers;
+the default Workspace path also benefits from this correction. Selected HTML still
+hydrates through its existing preparation/read owner. Later shared publication
+cannot retarget the fork's retained revision, and stale writes remain rejected.
+
+Canonical validation retains the parent's shared membership, links and selection;
+existing publication validation checks exact ownership. Lost acknowledgement retry,
+source deletion, rebuild and Workspace journal/CAS restore preserve references and
+bytes. Local Task Lists, compaction checkpoints, Workspace originals and supplied-data
+definition-copy graphs remain explicitly unsupported at native fork acceptance.
+Their existing preparation owners must join the atomic boundary before P7. Shared
+metadata/full-load costs remain P3; default production storage and Windows gates are
+unchanged. Full application-owner backup remains open.
+
 ## Journal atomic text fork — 2026-11-14
 
 Native ConversationJournal now accepts text-history forks through the existing
@@ -25,10 +50,9 @@ Incomplete inherited tool exchanges are excluded in the disposable model view;
 later history edits keep their canonical locators. Independent reads and new runs
 remain available; possible unverified effects are not replayed.
 
-Scope is text and retained runtime presentation. Forks carrying artifacts, message
-attachments, checkpoints, supplied-data notes or resource-copy plans remain explicitly
-unsupported until their publication/ownership boundary is connected. Their source
-preparation below remains available. Full-load/cloning costs, ancestry/header work
+This initial slice covers text and retained runtime presentation; shared resources
+are connected above. Conversation-local graphs still require their copy/publication
+boundary. Their source preparation below remains available. Full-load/cloning costs, ancestry/header work
 and inherited usage attribution remain P3. Production storage stays ChatStore until
 whole-port P7; Windows/Office qualification and complete application backup are open.
 
@@ -50,8 +74,8 @@ shared-publication provenance and failure state instead of dropping those fields
 Office uses the conversation port for preparation; Workspace uses it for transient
 creation and commit. The existing adapter delegates only to the current default.
 
-Text acceptance and inherited execution obligations are connected above. Forks with
-resource graphs remain explicitly unsupported; copied evidence cannot become a new
+Text/shared acceptance and inherited execution obligations are connected above.
+Conversation-local graphs remain unsupported; copied evidence cannot become a new
 execution or permission to retry. Default storage remains ChatStore until whole-port
 P7; no fallback, import or dual-write is added by preparation or text acceptance.
 

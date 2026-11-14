@@ -254,8 +254,9 @@ namespace RNAssistant.Runtime
             }
             fork.Artifacts = (source.Artifacts ?? new List<ChatArtifact>())
                 .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id))
-                .Select(artifact => JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(artifact)))
+                .Select(artifact => { var copy = artifact.CopyMetadata(); copy.InlineText = artifact.InlineText; return copy; })
                 .ToList();
+            ArtifactWorkingSet.CopySharedForFork(source, fork);
             var retainedReferences = new HashSet<string>(fork.Messages
                 .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
                 .Select(reference => reference.ExactKey), StringComparer.Ordinal);

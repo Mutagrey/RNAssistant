@@ -128,6 +128,16 @@ namespace RNAssistant.Core.Models
         public List<string> RelatedArtifactIds { get; set; }
         public DateTime CreatedUtc { get; set; }
 
+        public ChatArtifact CopyMetadata()
+        {
+            var copy = (ChatArtifact)MemberwiseClone();
+            copy.InlineText = null;
+            copy.StorageInlineTextTrusted = false; copy.StorageContentSha256 = null; copy.StorageContentByteLength = null;
+            copy.RelatedArtifactIds = new List<string>(RelatedArtifactIds ?? new List<string>());
+            copy.OriginalAttachment = OriginalAttachment?.CopyForContext();
+            return copy;
+        }
+
         public ChatArtifact()
         {
             Id = Guid.NewGuid().ToString("N");

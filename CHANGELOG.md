@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.5-dev
+
+- Fork сохраняет общий working set и выбранный Plan независимо от границы истории,
+  включая detach, tombstone и происхождение ресурсов. Workspace больше не теряет
+  эти сведения при создании ветки. Native journal принимает общие Plan/document HTML
+  и Office-вложения без копирования тел или изменения shared heads; локальные
+  графы ещё требуют подключения. Production storage прежний, Windows evidence открыт.
+
 ### 16.27.4-dev
 
 - Fork загружает только выбранные Task/document HTML snapshots; недоступное старое

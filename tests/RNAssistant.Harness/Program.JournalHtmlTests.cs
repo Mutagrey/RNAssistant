@@ -95,6 +95,7 @@ namespace RNAssistant.Harness
             journal.Rebuild(); chat = store.Load(chat.Id);
             AssertEqual(exact.Uri, chat.Messages.Single(item => item.Id == note.Id).HtmlWorkspaceCheckpoint.Uri, "rebuild preserves exact message checkpoint");
             AssertEqual("<main>Native HTML</main>", chat.HtmlWorkspace.Files.Single().Content, "restart reconstructs selected HTML");
+            VerifyJournalSharedForkRuntime(paths, journal, resources, chat, latest.Id);
 
             var authority = new ResourceAuthorityService(resources, resources, resources, blobs);
             var observer = new ResourceMutationAuthorityObserver(authority, resources, chat, blobs, current => store.Commit(current, new ConversationCommit()));

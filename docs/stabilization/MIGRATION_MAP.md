@@ -142,13 +142,23 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 shared resource fork (2026-11-14): existing Office/Workspace fork consumers
+retain shared Plans, document HTML and document originals through ConversationJournal.
+ArtifactWorkingSet owns metadata/link/selection copying independently of the prefix;
+ChatArtifact.CopyMetadata replaces incomplete manual/JSON clones. Immutable bytes,
+resource heads and tool evidence retain their original owners. No new store, schema
+or adapter. Local Tasks/checkpoints, Workspace originals and supplied-data graph
+copies still need atomic publication; default adapters retire at P7. P3 and complete
+owner backup remain open.
+[Contract](../session-events.md#journal-shared-resource-fork--2026-11-14).
+
 P1/P2 atomic text fork (2026-11-14): ConversationJournal accepts the frozen prefix
 through its existing commit/history owner. Original messages and execution facts
 keep their provenance; index schema 27 adds chat to existing obligation keys for
 inherited guards. No child executions or second store are created. Workspace's
 existing fork preparation is callable with the conversation port, without a new
 facade; Office keeps its publication observer. Default adapters still retire at
-P7. Resource-bearing forks, P3 and complete owner backup remain open.
+P7. Local resource forks, P3 and complete owner backup remain open.
 [Contract](../session-events.md#journal-atomic-text-fork--2026-11-14).
 
 P1/P2 fork preparation (2026-11-14): IConversationStore now owns explicit exact-body
@@ -158,8 +168,8 @@ snapshot and document owners; ChatCloneService loads only selected Task/document
 HTML and retains checkpoint publication provenance. No new adapter/store added.
 ChatConversationStoreAdapter delegates the default path until whole-port P7 removes
 it and the remaining chat-owned HTML dependency-copy path; owner: current
-conversation/resource services. Resource-bearing fork acceptance still rejects
-before write; atomic text membership and inherited Unknown are connected above.
+conversation/resource services. Local resource fork acceptance still rejects before
+write; atomic text/shared membership and inherited Unknown are connected above.
 [Contract](../session-events.md#journal-fork-preparation--2026-11-14).
 
 P1/P2 context-state (2026-11-14): existing ConversationJournal/CAS retains typed notes,

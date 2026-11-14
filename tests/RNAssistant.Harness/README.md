@@ -159,20 +159,26 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
-`journal fork:` runs three checks: actual Office publication and Workspace fork
+`journal fork:` runs four checks: actual Office publication and Workspace fork
 owners, a 140-message prefix with cold page reads, atomic faults/lost ack/retry,
 source fencing/forgery rejection, multiple generations and ancestor deletion,
 child history edits and unmatched exchanges. Actual Workspace kernel proves that
 inherited Unknown outside the prefix blocks its repeat while independent reading
 continues, also after rebuild and journal/CAS restore. Copied results never become
-child executions. Relevant regressions: `journal history:`, `journal context:`,
+child executions. The shared-resource case covers prefix-independent working sets,
+Plan selection, off-prefix tombstones, original attachment/analysis/provenance,
+detach, cold bodies, stale write rejection, lost ack, source deletion and Workspace
+journal/CAS restore. `journal Plan: Office` and `journal HTML: Office` also fork real
+kernel call/result history and check that shared heads are not republished.
+Relevant regressions: `journal history:`, `journal context:`,
 `journal task list: revisions`, `journal HTML: Office`, `journal move: Office` and
 `plugins: project chat fork`. Reuse one build; Office qualification stays separate.
 
 Fork preparation extends `journal HTML: Office` and `journal task list: revisions`:
 only the selected body is read, unavailable ancestors stay cold, stale revisions
 and missing selected bytes fail explicitly, and preparation publishes nothing.
-Resource-bearing native fork commit remains unsupported without partial writes. Related checks:
+Native local Task/checkpoint/Workspace-original/definition-copy forks remain
+unsupported without partial writes; shared resources are accepted above. Related checks:
 `shared HTML: publication selection`, `resource cutover: fork preparation fails`,
 `resource cutover: schema mapping derived publication`, `plugins: project chat fork`
 and `context: fork checkpoint preserves publication`. The older broad

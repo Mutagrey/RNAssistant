@@ -2087,3 +2087,39 @@ after-state/CAS ownership.
    the default consumer: no product bump, version remains 16.27.4-dev. Scoped diff,
    changed documentation links and ValidateVersionFormat checked before commit.
    No tag, push or release.
+
+## P1/P2 — native shared resource fork (2026-11-14)
+
+1. Advances F04 through existing ConversationJournal, ArtifactWorkingSet and actual
+   Office/Workspace fork consumers. Scope: published shared Plans, document HTML and
+   document-owned originals; conversation-local graphs remain a separate boundary.
+2. A fork retains shared metadata, links and exact selection independently of the
+   dialogue prefix. Detach, off-prefix tombstones, original attachments/analysis and
+   publisher provenance survive. Shared heads never rewind or republish; historical
+   refs retain their original revision. Later publication leaves those bytes intact,
+   and a stale write fails. Real kernel call/results do not become child executions.
+3. Replaced incomplete manual/JSON artifact clones with existing-model CopyMetadata;
+   existing working-set owner supplies common fork behavior. Native canonical
+   validation now admits shared references while retaining source membership and
+   selection. No body copies, new store/registry, schema change, fallback or dual-write.
+4. Ten selected checks pass on macOS/net8/C#7.3: one new shared Office/Workspace case,
+   two extended actual-kernel Plan/HTML cases, three text-fork regressions and four
+   existing graph/HTML/Workspace/Task regressions. Coverage includes stale writes,
+   lost acknowledgement retry after source deletion, rebuild and Workspace journal/
+   CAS restore. One build reused; no full suite or Office/VSTO validation.
+5. Before: native forks rejected shared resources; Workspace prefix filtering and
+   JSON cloning lost working-set state/provenance. After: shared metadata stays
+   cold and no payload is copied. A one-message page reads two chat bodies in the
+   Workspace fixture, three with Office attachment analysis, no Plan/original bytes.
+   All-shared metadata scans and initial history cloning remain P3. No CPU/allocation
+   or Windows latency claim; selected HTML keeps its existing hydration owner.
+6. Next: local Task/checkpoint snapshots, Workspace chat originals and supplied-data
+   definition-copy publication. P3 metadata/header/context/summary usage, complete
+   owner backup/quiescence and P7 removal of ChatStore/adapters remain open. Default
+   writer is still ChatStore; Office identity/Workspace connections and Windows
+   evidence are not qualified by journal/CAS restore. P4 stays deferred; Unknown
+   retry-policy refinement remains its separately recorded task.
+7. Updated session/artifact/CAS contracts, migration map, progress and Harness guide.
+   Version 16.27.5-dev records the shared production Workspace correction in
+   CHANGELOG; native composition remains isolated until P7. Scoped diff/links and
+   mandatory ValidateVersionFormat checked before commit. No tag, push or release.

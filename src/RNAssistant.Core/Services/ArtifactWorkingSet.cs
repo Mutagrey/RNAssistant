@@ -12,6 +12,28 @@ namespace RNAssistant.Core.Services
     // Chat-local membership is independent of immutable source-message references.
     public static class ArtifactWorkingSet
     {
+        public static void CopySharedForFork(ChatSession source, ChatSession target)
+        {
+            if (source == null || target == null || source.Id == target.Id || target.ParentSessionId != source.Id ||
+                source.DocumentAuthorityId != target.DocumentAuthorityId || source.WorkspaceId != target.WorkspaceId)
+                throw new InvalidOperationException("A fork must retain the same document/workspace authority.");
+            Validate(source);
+            var shared = source.Artifacts.Where(item => DocumentArtifactStore.Owns(source,
+                ChatResourceUri.CreateArtifactRevision(source, item))).ToArray();
+            // Shared membership is independent of the selected dialogue prefix.
+            // Metadata keeps removals/provenance; immutable bodies stay with their owner.
+            target.Artifacts.RemoveAll(item => DocumentArtifactStore.Owns(target, ChatResourceUri.CreateArtifactRevision(target, item)));
+            target.Artifacts.AddRange(shared.Select(item => item.CopyMetadata()));
+            target.ArtifactLinks = source.ArtifactLinks.Select(link => new ChatArtifactLink {
+                Identity = link.Identity, Reference = link.Reference.Copy(), Detached = link.Detached }).ToList();
+            if (shared.Any(item => item.Kind == ChatArtifactKinds.PlanDocument))
+                target.ActivePlanDocumentArtifactId = shared.Any(item => item.Id == source.ActivePlanDocumentArtifactId &&
+                    !IsDetached(source, item)) ? source.ActivePlanDocumentArtifactId : null;
+            if (shared.Any(item => item.Kind == ChatArtifactKinds.HtmlWorkspace))
+                target.ActiveHtmlArtifactId = shared.Any(item => item.Id == source.ActiveHtmlArtifactId &&
+                    !IsDetached(source, item)) ? source.ActiveHtmlArtifactId : null;
+        }
+
         public static void Validate(ChatSession session)
         {
             Validate(ConversationMetadata.From(session), session.ArtifactLinks);

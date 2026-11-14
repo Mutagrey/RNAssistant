@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Native shared resource fork — 2026-11-14
+
+Fork с общими Plan/document HTML и Office-originals подключён через существующие
+Office/Workspace consumers. Working set, точный выбор, detach/tombstone и provenance
+сохраняются независимо от prefix; shared heads и тела не копируются. `16.27.5-dev`
+также исправляет потерю этих сведений в production Workspace fork. Десять целевых
+проверок проходят host-neutral, включая реальную kernel history, lost ack, удаление
+источника, rebuild и Workspace journal/CAS restore.
+Следующий шаг — локальные Tasks/checkpoints, Workspace originals и supplied-data
+definition copies. Затем P3 metadata/header/context/summary usage, backup всех owners,
+остановка старых writers и P7 с удалением ChatStore/adapters. Default writer прежний;
+P4 отложена, Windows/Office evidence и полный application backup открыты.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-shared-resource-fork-2026-11-14).
+
 ## Native atomic text fork — 2026-11-14
 
 Текстовые ветки подключены через Office publication observer и существующий
