@@ -135,6 +135,11 @@ Native frame/DPI/focus/capture and Windows compilation remain separate evidence.
 
 ## Run a focused slice
 
+Unified chat W2: filters `storage: CAS create-only`, `storage: CAS supplied`,
+`storage: CAS defaults` cover bytes/file races, hash/format/key mismatch, unchanged
+corrupt objects and missing root protection. Pair with `storage: encrypted history`
+and `universal mutations: streamed file`. No Office/VSTO validation on macOS.
+
 The trailing argument is a case-insensitive substring matched against category or test name:
 
 ```bash

@@ -120,10 +120,10 @@ namespace RNAssistant.Core.Storage
             public string ExpectedSha256 { get; set; }
         }
 
-        public WorkspaceFileService(AppDataPaths paths)
+        public WorkspaceFileService(AppDataPaths paths, Func<StorageProtector> protectionProvider = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
-            _blobs = new ChatBlobStore(paths);
+            _blobs = new ChatBlobStore(paths, protectionProvider);
             _authority = new ResourceAuthorityStore(paths);
             _revisions = (IResourceRevisionStore)_authority;
             _journal = new ResourceMutationJournal(paths);

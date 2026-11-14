@@ -66,7 +66,7 @@ namespace RNAssistant.Harness
 
                 // A different canonical stream has no index cursor after crash.
                 var unindexed = new ConversationJournal(paths, "document:unindexed", protector);
-                unindexed.Fault = point => { throw new IOException("derived index failed"); };
+                unindexed.Fault = point => { if (point == "before_index") throw new IOException("derived index failed"); };
                 unindexed.CreateChat("unindexed-card", "other", "Other", policy);
                 var unindexedRun = unindexed.CommitRun("unindexed-run", "other", null, "other-invocation",
                     CheckpointState("other-run", RunLifecycle.Running, 0, 0), policy);

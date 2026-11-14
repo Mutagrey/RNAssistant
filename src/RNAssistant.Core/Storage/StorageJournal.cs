@@ -166,7 +166,8 @@ namespace RNAssistant.Core.Storage
             foreach (var path in Directory.EnumerateFileSystemEntries(_directory))
             {
                 if (StorageFileSystem.IsReparsePoint(path) || Directory.Exists(path)) throw new InvalidDataException("Unexpected journal entry or link.");
-                if (Path.GetFileName(path) == "append.lck") continue;
+                var name = Path.GetFileName(path);
+                if ((name == "append.lck" || name == ".publish.lock") && !StorageFileSystem.IsReparsePoint(path)) continue;
                 if (UnpublishedHeader(path)) continue;
                 int number;
                 if (!int.TryParse(Path.GetFileNameWithoutExtension(path), out number) || number < 1 ||

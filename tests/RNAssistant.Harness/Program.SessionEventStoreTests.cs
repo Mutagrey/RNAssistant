@@ -3474,7 +3474,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SuppliedArtifactTextRepairsRetainedCorruption()
+        private static void SuppliedArtifactTextPreservesRetainedCorruption()
         {
             foreach (var encrypted in new[] { false, true })
             foreach (var compressed in new[] { false, true })
@@ -3502,12 +3502,100 @@ namespace RNAssistant.Harness
                 var damaged = reopened.Artifacts.Single();
                 AssertTrue(damaged.InlineText == null, "corrupt bytes are not hydrated");
                 damaged.InlineText = body;
-                reopenedStore.Save(reopened);
-                AssertEqual(hash, damaged.ContentSha256, "repair retains exact CAS identity");
-                AssertEqual(body, new ChatStore(paths, protection).Load(session.Id).Artifacts.Single().InlineText,
-                    "supplied text repairs retained CAS: encrypted=" + encrypted + ", compressed=" + compressed);
+                var rejected = false;
+                try { reopenedStore.Save(reopened); }
+                catch (IOException) { rejected = true; }
+                AssertTrue(rejected, "corrupt immutable CAS must reject publication");
+                AssertTrue(stored.SequenceEqual(File.ReadAllBytes(blobPath)), "supplied text cannot overwrite retained corruption");
+                AssertTrue(new ChatStore(paths, protection).Load(session.Id).Artifacts.Single().InlineText == null,
+                    "failed publication never reports a repaired body");
                 AssertEqual(1, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length,
-                    "repair creates no parallel body or format");
+                    "rejection creates no parallel body or format");
+            });
+        }
+
+        private static void CasPublicationIsCreateOnly()
+        {
+            var salt = Enumerable.Range(1, 32).Select(value => (byte)value).ToArray();
+            var protectedA = new StorageProtector(HistoryIntegrityModes.Sha256,
+                HistoryEncryptionModes.Aes256CbcHmacSha256, "cas-a", salt);
+            var protectedB = new StorageProtector(HistoryIntegrityModes.Sha256,
+                HistoryEncryptionModes.Aes256CbcHmacSha256, "cas-b", salt);
+            var bytes = Encoding.UTF8.GetBytes(new string('ж', 8192));
+            foreach (var file in new[] { false, true })
+            foreach (var mismatch in new[] { "hash", "format", "key", "plaintext", "encrypted" })
+            WithTempPaths(paths =>
+            {
+                var originalProtection = mismatch == "encrypted" ? StorageProtector.None : protectedA;
+                var first = new ChatBlobStore(paths, () => originalProtection);
+                var reference = first.StoreBytes(bytes, "text/plain");
+                var blob = Path.Combine(paths.ChatBlobDirectory, reference.Sha256.Substring(0, 2), reference.Sha256 + ".blob");
+                var original = File.ReadAllBytes(blob);
+                if (mismatch == "hash") original[original.Length - 1] ^= 1;
+                if (mismatch == "format") original = Encoding.UTF8.GetBytes("RNA-CAS-unknown-format");
+                File.WriteAllBytes(blob, original);
+                var writer = new ChatBlobStore(paths, () => mismatch == "key" ? protectedB :
+                    mismatch == "plaintext" ? StorageProtector.None : protectedA);
+                var source = Path.Combine(paths.Root, "source.txt"); File.WriteAllBytes(source, bytes);
+                var rejected = false;
+                try { if (file) writer.StoreFile(source, "text/plain"); else writer.StoreBytes(bytes, "text/plain"); }
+                catch (IOException) { rejected = true; }
+                AssertTrue(rejected, "mismatch rejected: file=" + file + ", " + mismatch);
+                AssertTrue(original.SequenceEqual(File.ReadAllBytes(blob)), "existing bytes preserved: " + mismatch);
+                AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.tmp", SearchOption.AllDirectories).Length,
+                    "temporary publication files cleaned");
+            });
+
+            foreach (var file in new[] { false, true })
+            foreach (var sameProtection in new[] { false, true })
+            for (var repetition = 0; repetition < 8; repetition++)
+            WithTempPaths(paths =>
+            {
+                var source = Path.Combine(paths.Root, "source.txt"); File.WriteAllBytes(source, bytes);
+                var writers = new[] { new ChatBlobStore(paths, () => protectedA),
+                    new ChatBlobStore(paths, () => sameProtection ? protectedA : protectedB) };
+                var published = new byte[2][];
+                using (var barrier = new Barrier(2))
+                {
+                    var tasks = writers.Select((writer, index) => Task.Run(() =>
+                    {
+                        barrier.SignalAndWait();
+                        try
+                        {
+                            var reference = file ? writer.StoreFile(source, "text/plain") : writer.StoreBytes(bytes, "text/plain");
+                            var blob = Path.Combine(paths.ChatBlobDirectory, reference.Sha256.Substring(0, 2), reference.Sha256 + ".blob");
+                            published[index] = File.ReadAllBytes(blob);
+                            var reopened = writer.ReadBytes(reference);
+                            AssertTrue(reopened != null && bytes.SequenceEqual(reopened), "race winner verifies exact body");
+                            return reference;
+                        }
+                        catch (IOException) { return null; }
+                    })).ToArray();
+                    Task.WaitAll(tasks);
+                    AssertEqual(sameProtection ? 2 : 1, tasks.Count(task => task.Result != null), "compatible reuse or one incompatible winner");
+                    var retained = File.ReadAllBytes(Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Single());
+                    foreach (var winner in published.Where(value => value != null))
+                        AssertTrue(winner.SequenceEqual(retained), "race loser cannot replace the published bytes");
+                }
+            });
+        }
+
+        private static void CasDefaultsRequireRootProtection()
+        {
+            WithTempPaths(paths =>
+            {
+                // Reopening a configured root after loss of its protected key.
+                new JsonFileStore().Save(paths.SettingsFile, new AppSettings { HistoryEncryptionMode = HistoryEncryptionModes.Aes256CbcHmacSha256 });
+                foreach (var publish in new Action[] {
+                    () => new ChatBlobStore(paths).StoreText("must not become plaintext", "text/plain"),
+                    () => new ChatStore(paths).Create("Word", "protected-root", "Protected.docx", "Protected") })
+                {
+                    var rejected = false;
+                    try { publish(); } catch (InvalidOperationException) { rejected = true; }
+                    AssertTrue(rejected, "default owner cannot silently bypass configured protection without its key");
+                }
+                AssertEqual(0, Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Length,
+                    "missing key creates no plaintext CAS");
             });
         }
 

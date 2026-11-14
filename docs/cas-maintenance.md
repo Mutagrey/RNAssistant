@@ -1,5 +1,9 @@
 # CAS health and garbage collection
 
+Publication serializes the final existence check and move with the existing
+directory write lock; encoding stays outside that lock. This also closes the
+[Unix File.Move check/rename race](https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/IO/FileSystem.Unix.cs).
+
 `chat-blobs` is one immutable SHA-256 CAS shared by chat model payloads, artifact bodies, committed attachments, extracted attachment text, file snapshots, web manifests/verification records and VBA before/intended/backup source. Durable roots include chat `*.events.jsonl`, VBA journals, resource authority revisions/views and resource mutation journals. CAS files are not a second index.
 
 ## New-generation journal closure and backup — 2026-11-10
@@ -7,7 +11,7 @@
 The collector independently inventories `conversation-streams/<scope-hash>` and
 `resource-stream`, including streams absent from SQLite. Segment gaps, unknown
 files, links, unknown fact kinds, incomplete tails and mismatched reducer cursors
-block collection. Only the known append lock and unpublished create-only header
+block collection. Only the known append/publication locks and unpublished create-only header
 staging names are noncanonical. Maintenance does not truncate/adopt tails.
 
 The same domain reducers rebuild a private temporary SQLite projection; cursor
@@ -105,9 +109,17 @@ The report distinguishes missing referenced blobs, corrupt/unreadable referenced
 ## Publication and reuse
 
 `ChatBlobStore.StoreText` uses the same verified write path as `StoreBytes`.
-Supplying exact source bytes can repair a damaged blob at its existing content
-address; an earlier reference, matching file size or valid envelope cannot bypass
-verification. No CAS format or identity changes are involved.
+Both byte and streamed-file publication are create-only. An existing object or
+concurrent winner must verify against the expected hash, length, format and
+protector; otherwise publication fails and preserves its bytes. Supplying the
+original plaintext does not authorize repair/overwrite. The existing
+`StorageFileSystem.PublishNewFile` owns atomic publication; no replacement path
+or new CAS format is introduced. Maintenance/recovery remains explicit.
+
+Default ChatStore/ChatBlobStore owners use the root's SettingsService protection
+provider, matching Office composition. Workspace explicitly shares that provider
+with its chat/payload/file/web-snapshot owners. Missing keys or unavailable providers
+fail closed, with no plaintext fallback, migration or re-encryption.
 
 Chat trace publication holds the persistence maintenance boundary from CAS storage
 through the flushed JSONL reference. A reachability snapshot cannot run between

@@ -1,5 +1,15 @@
 # Current-to-target migration map
 
+## Immutable CAS publication — W2, 2026-11-14
+
+Owner: ChatBlobStore / existing StorageFileSystem.PublishNewFile. Removed mutable
+WriteAtomic publication from StoreBytes and StoreHashedFile/StoreFile, along with
+the supplied-plaintext corruption-repair behavior. Existing mismatch and race loser
+preserve winner bytes; default root protection no longer silently selects None.
+Workspace explicitly shares SettingsService protection among its CAS owners.
+No migration, replacement backend, data cleanup or production Journal cutover.
+
+
 ## Inspector selected-context cutover — 07, 2026-11-13
 
 Owner: Diagnostics navigation/query + ConversationPanel snapshots/drafts. Removed

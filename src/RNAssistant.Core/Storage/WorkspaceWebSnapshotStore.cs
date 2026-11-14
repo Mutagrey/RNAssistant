@@ -35,10 +35,10 @@ namespace RNAssistant.Core.Storage
             [JsonProperty(Required = Required.Always)] public IReadOnlyList<WebSnapshotFile> Files { get; set; }
         }
 
-        public WorkspaceWebSnapshotStore(AppDataPaths paths, WorkspaceFileService files)
+        public WorkspaceWebSnapshotStore(AppDataPaths paths, WorkspaceFileService files, Func<StorageProtector> protectionProvider = null)
         {
             _authority = new ResourceAuthorityStore(paths);
-            _payloads = new ChatBlobStore(paths);
+            _payloads = new ChatBlobStore(paths, protectionProvider);
             _files = files ?? throw new ArgumentNullException(nameof(files));
         }
 

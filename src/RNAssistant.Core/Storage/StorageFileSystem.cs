@@ -78,16 +78,33 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        // Publish immutable names (journal headers). A racing creator owns the name;
+        // Publish immutable names (journal headers and CAS). A racing creator owns the name;
         // the caller must validate its bytes, never replace them.
         internal static bool PublishNewFile(string path, byte[] bytes)
         {
+            return PublishNewFile(path, temporary => WriteBytesDurable(temporary, bytes));
+        }
+
+        internal static bool PublishNewFile(string path, Action<string> writeTemporary)
+        {
+            if (writeTemporary == null) throw new ArgumentNullException(nameof(writeTemporary));
             var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                WriteBytesDurable(temporary, bytes);
-                try { File.Move(temporary, path); return true; }
-                catch (IOException) { if (!File.Exists(path) || IsReparsePoint(path)) throw; return false; }
+                writeTemporary(temporary);
+                // Unix File.Move may use a check followed by a replacing rename.
+                // Serialize only publication, after the complete temporary is durable.
+                // One lock per directory bounds lock files for CAS hash prefixes.
+                using (AcquireWriteLock(Path.Combine(Path.GetDirectoryName(path), ".publish.lock")))
+                {
+                    if (File.Exists(path))
+                    {
+                        if (IsReparsePoint(path)) throw new IOException("Immutable storage file cannot be a reparse point.");
+                        return false;
+                    }
+                    try { File.Move(temporary, path); return true; }
+                    catch (IOException) { if (!File.Exists(path) || IsReparsePoint(path)) throw; return false; }
+                }
             }
             finally { TryDeleteFile(temporary); }
         }

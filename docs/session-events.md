@@ -1828,6 +1828,11 @@ The default SHA-256 hash-chain detects accidental edits, truncation in the middl
 
 Large immutable content is stored once by SHA-256 in `chat-blobs`; the event stream keeps hash, byte length, and content type.
 
+Byte and file writers publish create-only and verify an existing/concurrent winner.
+Hash/format/protection mismatch fails without changing its bytes, including when
+the caller supplies the original plaintext. Default owners resolve root protection
+through SettingsService; a missing key cannot select plaintext implicitly.
+
 Externalized accepted calls retain exact `AcceptedCallNarration` in their existing
 message header alongside origin and payload references. The body remains the
 canonical accepted wire; hydration verifies that its message equals the header.

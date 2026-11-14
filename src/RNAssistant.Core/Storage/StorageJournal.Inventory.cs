@@ -47,7 +47,8 @@ namespace RNAssistant.Core.Storage
             {
                 if (StorageFileSystem.IsReparsePoint(entry) || Directory.Exists(entry))
                     throw new InvalidDataException("Journal inventory contains a link or nested directory.");
-                if (Path.GetFileName(entry) == "append.lck") continue;
+                var name = Path.GetFileName(entry);
+                if (name == "append.lck" || name == ".publish.lock") continue;
                 if (UnpublishedHeader(entry)) continue;
                 int number;
                 if (!int.TryParse(Path.GetFileNameWithoutExtension(entry), out number) || number < 1 ||

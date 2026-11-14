@@ -106,6 +106,7 @@ namespace RNAssistant.Runtime
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _executionAdmission = ConversationExecutionScheduler.ForStorage(paths);
             var communicationSettings = new SettingsService(paths);
+            Func<StorageProtector> protection = communicationSettings.LoadStorageProtector;
             AgentCommunication = new AgentCommunicationService(() => communicationSettings.Load().MaxCollaborationAgents);
             _conversationLeases = ConversationLeaseService.ForWorkspace(paths);
             _activeRuns = new ConversationRunOwner(_conversationLeases);
@@ -114,15 +115,15 @@ namespace RNAssistant.Runtime
             _isPluginSourceWorkspace = isPluginSourceWorkspace;
             _toolProfile = toolProfile ?? CallableToolProfile.Core();
             _runtimeUseLease = runtimeUseLease;
-            _chats = new ChatStore(paths);
+            _chats = new ChatStore(paths, protection);
             _conversationStore = new ChatConversationStoreAdapter(_chats);
             _eventStore = new ChatEventStoreAdapter(_chats);
             _conversationInbox = new ConversationInboxService(new ChatEventStoreAdapter(_chats));
             _conversationApplication = new ConversationApplicationService(_conversationInbox, _activeRuns);
             _workspaces = new WorkspaceStore(paths);
-            _files = new WorkspaceFileService(paths);
-            _payloads = new ChatBlobStore(paths);
-            _webSnapshots = new WorkspaceWebSnapshotStore(paths, _files);
+            _files = new WorkspaceFileService(paths, protection);
+            _payloads = new ChatBlobStore(paths, protection);
+            _webSnapshots = new WorkspaceWebSnapshotStore(paths, _files, protection);
         }
 
         public void Dispose()

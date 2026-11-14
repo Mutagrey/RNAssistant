@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Unified chat CAS safety — 2026-11-14
+
+F07 / W2: `StoreBytes` и `StoreFile/StoreHashedFile` публикуют create-only;
+hash/format/protector mismatch и concurrent creation не заменяют существующие байты.
+Workspace использует settings-backed provider, как Office; missing key блокирует
+запись без plaintext fallback. Матрица byte/file/mismatch/races, сохранность corrupt
+artifact, missing-key defaults, encrypted history и streamed-file mutation проходят
+host-neutral. `16.27.13-dev`; DPAPI/Windows filesystem qualification отдельно.
+Storage cutover/P7 и полное восстановление owners остаются открытыми.
+
+
 ## Native Workspace original fork — 2026-11-14
 
 Workspace originals подключены к native fork через существующие consumers и индекс

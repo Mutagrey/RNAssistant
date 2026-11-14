@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Storage
         {
             if (paths == null) throw new ArgumentNullException("paths");
             _rootDirectory = paths.ChatBlobDirectory;
-            _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
+            _protectionProvider = protectionProvider ?? new Func<StorageProtector>(new SettingsService(paths).LoadStorageProtector);
         }
 
         public ChatBlobReference StoreText(string value, string contentType)
@@ -63,21 +63,16 @@ namespace RNAssistant.Core.Storage
             var path = PathFor(hash);
             if (!Matches(path, hash, byteLength, protector, token, progress))
             {
+                if (File.Exists(path)) throw ExistingBlobMismatch();
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
-                try
+                StorageFileSystem.PublishNewFile(path, tempPath =>
                 {
-                    StorageFileSystem.WriteAtomic(path, tempPath =>
-                    {
-                        CasBlobCodec.EncodeStream(source, byteLength, contentType, protector,
-                            BlobPurpose(hash, byteLength), tempPath, token, progress);
-                        if (!Matches(tempPath, hash, byteLength, protector, token, progress))
-                            throw new IOException("Streamed CAS payload does not match its source hash.");
-                    });
-                }
-                catch (IOException)
-                {
-                    if (!Matches(path, hash, byteLength, protector, token, progress)) throw;
-                }
+                    CasBlobCodec.EncodeStream(source, byteLength, contentType, protector,
+                        BlobPurpose(hash, byteLength), tempPath, token, progress);
+                    if (!Matches(tempPath, hash, byteLength, protector, token, progress))
+                        throw new IOException("Streamed CAS payload does not match its source hash.");
+                });
+                if (!Matches(path, hash, byteLength, protector, token, progress)) throw ExistingBlobMismatch();
             }
             token.ThrowIfCancellationRequested();
             if (source.Length != byteLength)
@@ -190,28 +185,26 @@ namespace RNAssistant.Core.Storage
             var verified = Matches(path, hash, bytes.LongLength, protector);
             if (!verified)
             {
+                if (File.Exists(path)) throw ExistingBlobMismatch();
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 var stored = CasBlobCodec.Encode(
                     bytes,
                     contentType,
                     protector,
                     BlobPurpose(hash, bytes.LongLength));
-                try
-                {
-                    StorageFileSystem.WriteAtomic(path, tempPath => StorageFileSystem.WriteBytesDurable(tempPath, stored));
-                    verified = Matches(path, hash, bytes.LongLength, protector);
-                }
-                catch (IOException)
-                {
-                    verified = Matches(path, hash, bytes.LongLength, protector);
-                    if (!verified) throw;
-                }
+                StorageFileSystem.PublishNewFile(path, stored);
+                verified = Matches(path, hash, bytes.LongLength, protector);
             }
             if (!verified)
             {
-                throw new IOException("Content-addressed blob could not be verified after writing.");
+                throw ExistingBlobMismatch();
             }
             return CreateReference(hash, bytes.LongLength, contentType, protector);
+        }
+
+        private static IOException ExistingBlobMismatch()
+        {
+            return new IOException("Existing CAS object does not match its hash, format or protection. Its bytes were preserved.");
         }
 
         public string ReadText(ChatBlobReference reference)
@@ -487,7 +480,7 @@ namespace RNAssistant.Core.Storage
 
         private StorageProtector Protection()
         {
-            return _protectionProvider() ?? StorageProtector.None;
+            return _protectionProvider() ?? throw new InvalidOperationException("CAS protection is unavailable.");
         }
 
         private static string BlobPurpose(string hash, long length)

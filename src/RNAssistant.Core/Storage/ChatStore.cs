@@ -215,7 +215,7 @@ namespace RNAssistant.Core.Storage
         public ChatStore(AppDataPaths paths, Func<StorageProtector> protectionProvider)
         {
             _paths = paths ?? throw new ArgumentNullException("paths");
-            _protectionProvider = protectionProvider ?? (() => StorageProtector.None);
+            _protectionProvider = protectionProvider ?? new Func<StorageProtector>(new SettingsService(paths).LoadStorageProtector);
             _blobs = new ChatBlobStore(paths, _protectionProvider);
             var authority = new ResourceAuthorityStore(paths);
             _groupAuthority = authority;
