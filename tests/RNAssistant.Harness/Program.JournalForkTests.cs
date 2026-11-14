@@ -113,7 +113,13 @@ namespace RNAssistant.Harness
         {
             IConversationStore store = journal;
             var original = journal.ReadWindow(source.Id, long.MaxValue, 8).Single();
+            AppendJournalContextHistory(store, source); var beforeCompaction = source.Messages.Count;
+            CompactJournalContext(paths, resources, source, settings, "Summary does not resolve Unknown");
+            store.Commit(source, new ConversationCommit(source.Messages.Skip(beforeCompaction))); source = store.Load(source.Id);
             var all = WorkspaceConversationService.ForkHistorySession(store, workspace, source, source.Messages.Last().Id, new AttachmentStore(paths));
+            AssertEqual(source.ActiveContextCheckpointId, store.Load(all.Id).ActiveContextCheckpointId, "fork inherits the selected local summary");
+            AssertTrue(journal.RestoreContext(all.Id, "new-run", 0, 8192).WorkingSet.Requirements.UnknownEffects,
+                "an inherited checkpoint cannot discharge an uncertain source effect");
             AssertEqual(source.Messages.Count, store.Load(all.Id).Messages.Count, "accepted calls and results remain visible with original provenance");
             AssertEqual(0, journal.ReadWindow(all.Id, long.MaxValue, 8).Count, "inherited results are not child executions");
             AssertEqual(source.ToolCallReferenceSequence, store.Load(all.Id).ToolCallReferenceSequence, "future tool aliases cannot collide with inherited ones");

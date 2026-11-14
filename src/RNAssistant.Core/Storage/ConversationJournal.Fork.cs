@@ -14,12 +14,12 @@ namespace RNAssistant.Core.Storage
     {
         private static void RequireForkScope(ChatSession session)
         {
-            // Shared resources retain their published owner. Conversation-local
-            // graphs still require their separate copy/publication boundary.
+            // Shared resources retain their published owner; checkpoints inherit
+            // original locators. Other local graphs still need their publication boundary.
             var metadata = ConversationMetadata.From(session);
-            if (session.Artifacts.Any(item => !IsPublishedSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item))) ||
-                session.ResourceCopies.Count != 0 || session.ContextCheckpoints.Count != 0 ||
-                session.ActiveTaskListArtifactId != null || session.ActiveContextCheckpointId != null ||
+            if (session.Artifacts.Any(item => !IsPublishedSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)) &&
+                    (item.Kind != ChatArtifactKinds.Compaction || !IsCompactionSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)))) ||
+                session.ResourceCopies.Count != 0 || session.ActiveTaskListArtifactId != null ||
                 session.Context?.Notes.Any(note => note.Role == ContextNoteRole.SuppliedData) == true)
                 throw TextStoreScope();
         }
@@ -72,8 +72,9 @@ namespace RNAssistant.Core.Storage
                 if (write == null || !InheritedFact(db, fork, write.Fact.Card.ChatId, write.Position.Sequence))
                     throw new InvalidDataException("Foreign fork history locator.");
                 var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
-                RequireForkMessage(ConversationMetadata.From(session), original);
-                if (!SameInheritedText(original, messages[index])) throw new InvalidOperationException("Fork cannot rewrite source evidence.");
+                RequireForkMessage(write.Fact.Card.Address, original);
+                if (!SameInheritedText(ProjectInheritedText(original, write.Fact.Card.Address, session.Id), messages[index]))
+                    throw new InvalidOperationException("Fork cannot rewrite source evidence.");
             }
             messages = new ConversationTextEntry[0];
             return fork;
@@ -86,8 +87,19 @@ namespace RNAssistant.Core.Storage
                 entry.Header.ResourceRefs.Any(reference => {
                     string scope, id; int revision;
                     return ChatResourceUri.TryParseArtifactRevision(reference, out scope, out id, out revision) &&
-                        !IsPublishedSnapshot(owner, ChatResourceUri.ArtifactSnapshot(reference));
+                        !IsPublishedSnapshot(owner, ChatResourceUri.ArtifactSnapshot(reference)) && !IsCompactionSnapshot(owner, reference);
                 })) throw TextStoreScope();
+        }
+
+        private static ConversationTextEntry ProjectInheritedText(ConversationTextEntry original, ConversationMetadata owner, string chat)
+        {
+            if (owner.Id == chat || !original.Header.ResourceRefs.Any(item => IsCompactionSnapshot(owner, item))) return original;
+            var header = original.Header.CopyForContext();
+            // Only presentation links follow the child. Claims, payloads and tool
+            // evidence keep their canonical source ownership and original locators.
+            header.ResourceRefs = header.ResourceRefs.Select(item => IsCompactionSnapshot(owner, item)
+                ? ChatResourceUri.RebaseArtifactRevision(item, chat) : item).ToList();
+            return new ConversationTextEntry(header, original.Body, original.Reasoning, original.Analysis);
         }
 
         private static bool SameInheritedText(ConversationTextEntry original, ConversationTextEntry proposed)
@@ -124,21 +136,36 @@ namespace RNAssistant.Core.Storage
             var resources = ReadResourceSet(fact.Resources, fact.Card.Address);
             var retained = ReadResourceSet(source.Fact.Resources, fork.Parent);
             var membership = new HashSet<string>(resources.References.Select(item => item.Uri), StringComparer.Ordinal);
-            if (resources.References.Any(item => !IsPublishedSnapshot(fact.Card.Address, item)) ||
-                resources.ActiveTask != null || resources.ActiveContext != null ||
+            var parentMembership = new HashSet<string>(retained.References.Select(item => item.Uri), StringComparer.Ordinal);
+            if (resources.References.Any(item => !IsPublishedSnapshot(fact.Card.Address, item) &&
+                    (!IsCompactionSnapshot(fact.Card.Address, item) || !parentMembership.Contains(ChatResourceUri.RebaseArtifactRevision(item, fork.Parent.Id).Uri))) ||
+                resources.ActiveTask != null ||
                 !SameRunValue(resources.ActiveHtml, retained.ActiveHtml) || !SameRunValue(resources.ActivePlan, retained.ActivePlan) ||
                 !SameRunValue(resources.Links, retained.Links) ||
                 retained.References.Where(item => IsPublishedSnapshot(fork.Parent, item))
                     .Any(item => !membership.Contains(item.Uri)))
-                throw new InvalidDataException("Fork must preserve shared membership and selection without copying local graphs.");
+                throw new InvalidDataException("Fork must preserve shared membership and inherit only retained local snapshots.");
             var history = ReadHistory(fact.History); var expected = ForkPrefix(db, fork);
             if (history.Removed.Count != 0 || fact.MessageCount != expected.Count || !SameRunValue(history.Entries, expected))
                 throw new InvalidDataException("Fork membership disagrees with its frozen prefix.");
             foreach (var group in expected.GroupBy(item => item.Operation))
             {
                 var write = FindChatWrite(db, group.Key); RequireHistoryOwner(db, fork.Parent.Id, write);
-                foreach (var entry in group) RequireForkMessage(fact.Card.Address, write.Fact.Messages.Single(item => item.Header.Id == entry.Id));
+                foreach (var entry in group)
+                {
+                    var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
+                    RequireForkMessage(write.Fact.Card.Address, original);
+                    if (ProjectInheritedText(original, write.Fact.Card.Address, fact.Card.ChatId).Header.ResourceRefs
+                        .Any(item => IsCompactionSnapshot(fact.Card.Address, item) && !membership.Contains(item.Uri)))
+                        throw new InvalidDataException("Fork omitted an inherited checkpoint reference.");
+                }
             }
+            var ids = new HashSet<string>(expected.Select(item => item.Id), StringComparer.Ordinal);
+            var active = retained.ActiveContext == null ? null : LocalSnapshot(db, fork.Parent.Id, ResourceUri.Parse(retained.ActiveContext.Uri).Segments[2]);
+            var selected = active != null && ids.Contains(active.SourceMessageId) && ids.Contains(CheckpointMetadata(active).ThroughMessageId)
+                ? ChatResourceUri.RebaseArtifactRevision(retained.ActiveContext, fact.Card.ChatId) : null;
+            if (!SameRunValue(selected, resources.ActiveContext))
+                throw new InvalidDataException("Fork must preserve only the source's applicable selected checkpoint.");
             return history;
         }
 

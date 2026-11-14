@@ -55,7 +55,7 @@ namespace RNAssistant.Core.Storage
                 {
                     var entry = saved.Entries[i]; var write = writes[entry.Operation];
                     RequireHistoryOwner(db, session.Id, write);
-                    var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
+                    var original = ProjectInheritedText(write.Fact.Messages.Single(item => item.Header.Id == entry.Id), write.Fact.Card.Address, session.Id);
                     if (!(write.Fact.Card.ChatId == session.Id ? SameRunValue(messages[i], original) : SameInheritedText(original, messages[i])))
                         throw new InvalidOperationException("History operation was reused with different text.");
                 }
@@ -84,7 +84,7 @@ namespace RNAssistant.Core.Storage
                     if (!writesByOperation.TryGetValue(prior.Operation, out write))
                         writesByOperation.Add(prior.Operation, write = FindChatWrite(db, prior.Operation));
                     RequireHistoryOwner(db, session.Id, write);
-                    var original = write.Fact.Messages.Single(item => item.Header.Id == prior.Id);
+                    var original = ProjectInheritedText(write.Fact.Messages.Single(item => item.Header.Id == prior.Id), write.Fact.Card.Address, session.Id);
                     if (write.Fact.Card.ChatId == session.Id ? SameRunValue(message, original) : SameInheritedText(original, message))
                     { entries.Add(prior); continue; }
                 }

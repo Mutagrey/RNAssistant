@@ -319,6 +319,46 @@ namespace RNAssistant.Core.Services
                 string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase));
         }
 
+        public static void PrepareFork(ChatSession source, ChatSession target, Func<ChatSession, string, bool> loadArtifactBody)
+        {
+            if (source == null || target == null || source.Id == target.Id || target.ParentSessionId != source.Id)
+                throw new InvalidOperationException("An explicit source and child chat are required.");
+            var messages = new HashSet<string>(target.Messages.Select(item => item.Id), StringComparer.Ordinal);
+            var snapshots = source.Artifacts.Where(item => item.Kind == ChatArtifactKinds.Compaction)
+                .ToDictionary(item => item.Id, StringComparer.Ordinal);
+            var retained = new HashSet<string>(snapshots.Values.Where(item => messages.Contains(item.SourceMessageId))
+                .Select(item => item.Id), StringComparer.Ordinal);
+            var pending = new Queue<string>(retained);
+            while (pending.Count != 0)
+            {
+                var parent = snapshots[pending.Dequeue()].ParentArtifactId;
+                if (parent == null || !retained.Add(parent)) continue;
+                if (!snapshots.ContainsKey(parent)) throw new InvalidOperationException("The checkpoint's exact parent is unavailable.");
+                pending.Enqueue(parent);
+            }
+            target.Artifacts.RemoveAll(item => item.Kind == ChatArtifactKinds.Compaction);
+            target.Artifacts.AddRange(source.Artifacts.Where(item => retained.Contains(item.Id)).Select(item => item.CopyMetadata()));
+            target.ContextCheckpoints.Clear(); target.ActiveContextCheckpointId = null;
+            // A history edit invalidates selection. Retained older metadata must not
+            // silently resurrect a summary; only the source's exact selection may follow.
+            if (source.ActiveContextCheckpointId == null || !retained.Contains(source.ActiveContextCheckpointId)) return;
+            var selected = snapshots[source.ActiveContextCheckpointId];
+            var metadata = JsonConvert.DeserializeObject<ContextCheckpointMetadata>(selected.MetadataJson);
+            if (metadata == null) throw new InvalidOperationException("The selected checkpoint boundary is unavailable.");
+            if (!messages.Contains(metadata.ThroughMessageId) || !messages.Contains(selected.SourceMessageId)) return;
+            var previousBody = selected.InlineText;
+            try
+            {
+                if (loadArtifactBody == null || !loadArtifactBody(source, selected.Id))
+                    throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: the selected checkpoint is unavailable.");
+                var checkpoint = JsonConvert.DeserializeObject<ContextCheckpoint>(selected.InlineText);
+                if (checkpoint?.Id != selected.Id || checkpoint.ThroughMessageId != metadata.ThroughMessageId)
+                    throw new InvalidOperationException("The selected checkpoint differs from its exact source.");
+                target.ContextCheckpoints.Add(checkpoint); target.ActiveContextCheckpointId = selected.Id;
+            }
+            finally { selected.InlineText = previousBody; }
+        }
+
         public static bool IsReplayMessage(ChatMessage message)
         {
             if (message == null || message.ExcludeFromModelContext || message.Activity != null)

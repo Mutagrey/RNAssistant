@@ -88,17 +88,19 @@ namespace RNAssistant.Core.Storage
             if (operation == null) return null;
             var receipt = FindChatWrite(db, operation);
             var artifact = receipt?.Fact.Snapshots?.SingleOrDefault(item => item.Id == id);
-            if (receipt?.Fact.Card.ChatId != chat || artifact == null)
+            if (artifact == null || !InheritedFact(db, chat, receipt.Fact.Card.ChatId, receipt.Position.Sequence))
                 throw new InvalidDataException("Snapshot locator disagrees with its canonical snapshot.");
             return artifact;
         }
 
-        private IReadOnlyList<ChatArtifact> PrepareSnapshotDelta(SqliteConnection db, string chat, ChatArtifact[] candidates, ConversationChatReceipt prior)
+        private IReadOnlyList<ChatArtifact> PrepareSnapshotDelta(SqliteConnection db, string chat, ChatArtifact[] candidates, ConversationChatReceipt prior,
+            ConversationFork fork = null)
         {
             var added = new List<ChatArtifact>();
             foreach (var artifact in candidates)
             {
-                var retained = LocalSnapshot(db, chat, artifact.Id);
+                var retained = LocalSnapshot(db, chat, artifact.Id) ?? (fork == null ? null : LocalSnapshot(db, fork.Parent.Id, artifact.Id));
+                if (fork != null && retained == null) throw new InvalidOperationException("A fork cannot invent a local snapshot.");
                 if (retained != null && !SameRunValue(artifact, retained))
                     throw new InvalidOperationException("A local snapshot cannot be rebound to different evidence.");
                 if (retained == null && artifact.Kind == ChatArtifactKinds.TaskList)
@@ -119,7 +121,10 @@ namespace RNAssistant.Core.Storage
             var added = fact.Snapshots ?? new ChatArtifact[0];
             if (added.Count > 128 || added.Select(item => item?.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != added.Count)
                 throw new InvalidDataException("Snapshot delta is ambiguous or unbounded.");
-            Func<string, ChatArtifact> resolve = id => added.SingleOrDefault(item => item?.Id == id) ?? LocalSnapshot(db, fact.Card.ChatId, id);
+            var fork = fact.ExpectedRevision == 0 ? fact.Fork : null;
+            var membership = fork == null ? null : new HashSet<string>(state.References.Select(item => item.Uri), StringComparer.Ordinal);
+            Func<string, ChatArtifact> resolve = id => added.SingleOrDefault(item => item?.Id == id) ?? LocalSnapshot(db, fact.Card.ChatId, id) ??
+                (fork == null ? null : LocalSnapshot(db, fork.Parent.Id, id));
             foreach (var artifact in added)
             {
                 RequireSnapshotHeader(fact.Card.Address, artifact);
@@ -137,6 +142,12 @@ namespace RNAssistant.Core.Storage
                 var artifact = resolve(ResourceUri.Parse(reference.Uri).Segments[2]);
                 if (artifact == null || !SameRunValue(reference, ChatResourceUri.CreateArtifactRevision(fact.Card.ChatId, artifact)))
                     throw new InvalidDataException("Local snapshot membership lacks its exact snapshot.");
+                if (fork != null && artifact.ParentArtifactId != null)
+                {
+                    var parent = resolve(artifact.ParentArtifactId);
+                    if (parent == null || !membership.Contains(ChatResourceUri.CreateArtifactRevision(fact.Card.ChatId, parent).Uri))
+                        throw new InvalidDataException("Fork omitted an inherited snapshot parent.");
+                }
                 if (SameRunValue(reference, state.ActiveTask) && TaskMetadata(artifact).Status != "active" && TaskMetadata(artifact).Status != "blocked")
                     throw new InvalidDataException("A closed task list cannot be selected as active.");
             }
@@ -145,6 +156,14 @@ namespace RNAssistant.Core.Storage
 
         private void ApplySnapshotRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record, ConversationChatCommit fact)
         {
+            if (fact.ExpectedRevision == 0 && fact.Fork != null)
+                foreach (var reference in ReadResourceSet(fact.Resources, fact.Card.Address).References.Where(item => IsCompactionSnapshot(fact.Card.Address, item)))
+                    using (var command = Command(db, "INSERT INTO chat_snapshot SELECT stream,$chat,id,operation FROM chat_snapshot WHERE stream=$stream AND chat=$parent AND id=$id", tx))
+                    {
+                        command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$parent", fact.Fork.Parent.Id);
+                        command.Parameters.AddWithValue("$id", ResourceUri.Parse(reference.Uri).Segments[2]);
+                        if (command.ExecuteNonQuery() != 1) throw new InvalidDataException("Inherited snapshot locator is unavailable.");
+                    }
             foreach (var artifact in fact.Snapshots ?? new ChatArtifact[0])
             using (var command = Command(db, "INSERT INTO chat_snapshot VALUES($stream,$chat,$id,$operation)", tx))
             {

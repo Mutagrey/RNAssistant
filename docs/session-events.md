@@ -1,5 +1,29 @@
 # Session event stream
 
+## Journal checkpoint fork — 2026-11-14
+
+Native forks accept local compaction checkpoints through the existing Office and
+Workspace consumers. ContextCompactionRuntime owns their common preparation: retain
+prefix metadata and its parent lineage, hydrate only the exact selected checkpoint.
+Selection follows only when both its boundary and source activity remain in the
+prefix. A shorter prefix or invalidated source selection never chooses an older
+summary. Missing selected bytes fail before acceptance. This also fixes the default
+Workspace consumer, which previously dropped checkpoint selection.
+
+The same chat commit inherits chat_snapshot locators in the index transaction;
+canonical metadata and CAS bodies stay in their original frames. Snapshot lookup
+validates immutable fork ancestry. Message presentation links rebase to the child,
+while claims, shared-publication provenance, tool evidence and payloads retain their
+original identities. No new store, schema, copied snapshot delta or child execution.
+
+Child compaction may append a revision to the inherited lineage. Lost acknowledgement
+retry, two ancestor deletions, rebuild and Workspace journal/CAS restore preserve the
+selected summary. Cold message pages read no checkpoint bodies. An inherited summary
+does not discharge Unknown or prevent independent reads; history edits still clear
+selection. Task Lists, Workspace originals and supplied-data/definition graphs remain
+outside native fork acceptance. P3 costs, complete owner backup, P7 and Windows/Office
+qualification remain open; default storage is still ChatStore.
+
 ## Journal shared resource fork — 2026-11-14
 
 Atomic native forks also accept published document/workspace resources through the
@@ -19,8 +43,8 @@ cannot retarget the fork's retained revision, and stale writes remain rejected.
 Canonical validation retains the parent's shared membership, links and selection;
 existing publication validation checks exact ownership. Lost acknowledgement retry,
 source deletion, rebuild and Workspace journal/CAS restore preserve references and
-bytes. Local Task Lists, compaction checkpoints, Workspace originals and supplied-data
-definition-copy graphs remain explicitly unsupported at native fork acceptance.
+bytes. Local checkpoints are connected above. Task Lists, Workspace originals and
+supplied-data definition-copy graphs remain unsupported at native fork acceptance.
 Their existing preparation owners must join the atomic boundary before P7. Shared
 metadata/full-load costs remain P3; default production storage and Windows gates are
 unchanged. Full application-owner backup remains open.
@@ -51,7 +75,7 @@ later history edits keep their canonical locators. Independent reads and new run
 remain available; possible unverified effects are not replayed.
 
 This initial slice covers text and retained runtime presentation; shared resources
-are connected above. Conversation-local graphs still require their copy/publication
+and checkpoints are connected above. Other local graphs still require their copy/publication
 boundary. Their source preparation below remains available. Full-load/cloning costs, ancestry/header work
 and inherited usage attribution remain P3. Production storage stays ChatStore until
 whole-port P7; Windows/Office qualification and complete application backup are open.
@@ -75,7 +99,7 @@ Office uses the conversation port for preparation; Workspace uses it for transie
 creation and commit. The existing adapter delegates only to the current default.
 
 Text/shared acceptance and inherited execution obligations are connected above.
-Conversation-local graphs remain unsupported; copied evidence cannot become a new
+Tasks/originals/definition graphs remain unsupported; copied evidence cannot become a new
 execution or permission to retry. Default storage remains ChatStore until whole-port
 P7; no fallback, import or dual-write is added by preparation or text acceptance.
 
@@ -111,7 +135,7 @@ usage counters do not yet attribute those nested bodies; that remains P3.
 Checked through actual Office/Workspace kernel requests: two compactions, exact
 notes, selected restoration, index/ack loss and idempotent retry, metadata pages,
 history invalidation, Unknown, rebuild and Workspace journal/CAS restore. Full
-application backup (Office identity and Workspace connections), fork, P3 and P7
+application backup (Office identity and Workspace connections), remaining fork scopes, P3 and P7
 cutover remain open. Default writer stays ChatStore; Windows/Office evidence is open.
 
 ## Journal HTML consumers — 2026-11-14

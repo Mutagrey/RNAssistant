@@ -31,8 +31,11 @@ Shared resource forks retain exact refs and existing resource-owner roots withou
 copying payloads or publishing heads. Existing replay rebuilds inherited guards.
 Multi-generation deletion, rebuild and Workspace journal/CAS restore are checked,
 including a selected shared Plan after later publication and source deletion.
+Local checkpoint forks inherit original snapshot locators as well; canonical frames
+retain their nested CAS roots. Two deleted ancestors, continued child compaction and
+Workspace journal/CAS restore are checked without a copied metadata/body stream.
 Inherited per-chat usage attribution remains P3. This does not close complete
-application-owner backup or native acceptance of conversation-local resource forks.
+application-owner backup or native acceptance of Task/original/definition forks.
 
 `ForScope` run leases join the existing `locks/run_*.lck`/`run-registry.lck` namespace.
 `RuntimeStorageActivity` remains held from CAS publication to acceptance or confirmed

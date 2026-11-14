@@ -142,12 +142,21 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 checkpoint fork (2026-11-14): ContextCompactionRuntime replaces Office's
+selection from cloned in-memory summaries and Workspace's omitted selection with
+one exact prefix preparation. ConversationJournal inherits existing snapshot
+locators in the same index transaction and projects child presentation links without
+rewriting source evidence. No schema/store/adapter added. Tasks still require
+Workspace selection and child authority publication through its existing owners;
+originals/definition copies remain open. Default adapters retire at P7.
+[Contract](../session-events.md#journal-checkpoint-fork--2026-11-14).
+
 P1/P2 shared resource fork (2026-11-14): existing Office/Workspace fork consumers
 retain shared Plans, document HTML and document originals through ConversationJournal.
 ArtifactWorkingSet owns metadata/link/selection copying independently of the prefix;
 ChatArtifact.CopyMetadata replaces incomplete manual/JSON clones. Immutable bytes,
 resource heads and tool evidence retain their original owners. No new store, schema
-or adapter. Local Tasks/checkpoints, Workspace originals and supplied-data graph
+or adapter. Local Tasks, Workspace originals and supplied-data graph
 copies still need atomic publication; default adapters retire at P7. P3 and complete
 owner backup remain open.
 [Contract](../session-events.md#journal-shared-resource-fork--2026-11-14).

@@ -832,8 +832,11 @@ does not prevent preparation. Native source reads and
 are connected for shared Plans, document HTML and document-owned originals.
 ArtifactWorkingSet retains all shared metadata, exact selection and links even
 outside the selected message prefix; detached resources, tombstones and origin
-remain intact. No shared head or payload is copied. Conversation-local Tasks,
-checkpoints, Workspace originals and supplied-data definition copies still require
+remain intact. No shared head or payload is copied. Local
+[checkpoint forks](session-events.md#journal-checkpoint-fork--2026-11-14) inherit
+immutable metadata/body locators; only an applicable source selection follows the
+prefix, without reactivating older summaries after an edit. Conversation-local Tasks,
+Workspace originals and supplied-data definition copies still require
 their separate publication boundary and fail explicitly before native acceptance.
 Sharing across *different* Office documents is outside this cutover: an explicit
 copy/import with dependencies is required, without granting access to another live

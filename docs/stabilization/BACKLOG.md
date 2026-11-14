@@ -1,5 +1,15 @@
 # RNAssistant backlog
 
+## Workspace Task fork authority — 2026-11-14
+
+Owner: WorkspaceConversationService / WorkspaceTaskListObserver / TaskListPublication.
+Code inspection: Workspace fork retains referenced Task artifacts but does not select
+the prefix's Task state or publish its child conversation head. Merely enabling
+native snapshot copying would leave Task edits unavailable (RequireCurrent rejects
+unpublished state). Next fork slice must connect selection, durable read-back and
+publication through these owners; test child edits without changing source authority,
+lost acknowledgement and Unknown. Native Task forks remain explicitly unsupported.
+
 ## Clone fixture protocol drift — 2026-11-14
 
 Owner: Harness context/clone coverage. Existing `context: clone preserves values`

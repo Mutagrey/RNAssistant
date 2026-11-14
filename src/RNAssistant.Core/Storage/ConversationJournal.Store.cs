@@ -138,7 +138,7 @@ namespace RNAssistant.Core.Storage
                     var entries = ids.Select(item => {
                         var write = commits[item.Item2];
                         RequireHistoryOwner(db, id, write);
-                        return write.Fact.Messages.Single(message => message.Header.Id == item.Item1);
+                        return ProjectInheritedText(write.Fact.Messages.Single(message => message.Header.Id == item.Item1), write.Fact.Card.Address, id);
                     }).ToArray();
                     return Tuple.Create(current, entries);
                 }, CancellationToken.None);

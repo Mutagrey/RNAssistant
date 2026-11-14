@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.6-dev
+
+- Fork в Office/Workspace сохраняет выбранный compaction checkpoint, если его
+  граница и исходное событие входят в ветку. Workspace больше не теряет выбранную
+  сводку; после её сброса редактированием истории старые summaries не активируются.
+  Native journal наследует исходные snapshot/CAS-ссылки без копирования тел; Unknown
+  сохраняется. Production storage пока прежний, Windows/Office evidence открыт.
+
 ### 16.27.5-dev
 
 - Fork сохраняет общий working set и выбранный Plan независимо от границы истории,

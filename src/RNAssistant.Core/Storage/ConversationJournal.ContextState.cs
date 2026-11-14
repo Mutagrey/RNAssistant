@@ -83,10 +83,18 @@ namespace RNAssistant.Core.Storage
                     throw new InvalidDataException("Compaction must be committed with its exact source message.");
             }
             if (state.ActiveContext == null) return;
-            if (fact.History != null) throw new InvalidDataException("A history rewrite must invalidate its context checkpoint.");
+            var fork = fact.ExpectedRevision == 0 && fact.Fork != null;
+            if (fact.History != null && !fork) throw new InvalidDataException("A history rewrite must invalidate its context checkpoint.");
             var selected = resolve(ResourceUri.Parse(state.ActiveContext.Uri).Segments[2]);
             if (selected?.Kind != ChatArtifactKinds.Compaction) throw new InvalidDataException("Selected checkpoint is unavailable.");
             var boundary = CheckpointMetadata(selected).ThroughMessageId;
+            if (fork)
+            {
+                var ids = new HashSet<string>(ReadHistory(fact.History).Entries.Select(item => item.Id), StringComparer.Ordinal);
+                if (!ids.Contains(boundary) || !ids.Contains(selected.SourceMessageId))
+                    throw new InvalidDataException("Inherited checkpoint boundary must remain in the fork prefix.");
+                return;
+            }
             if (!fact.Messages.Any(item => item.Header.Id == boundary))
                 using (var command = Command(db, "SELECT 1 FROM chat_message WHERE stream=$stream AND chat=$chat AND id=$id AND ordinal>=0"))
                 {

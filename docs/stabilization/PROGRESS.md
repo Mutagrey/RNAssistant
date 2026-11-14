@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Native checkpoint fork — 2026-11-14
+
+Локальные compaction checkpoints подключены через реальные Office/Workspace fork
+consumers. Ветка наследует исходные snapshot/CAS-ссылки и применимый точный выбор;
+старые summaries после редактирования истории не активируются. Новый checkpoint
+может продолжить унаследованную цепочку. Unknown сохраняется независимо от сводки.
+Восемь целевых проверок проходят host-neutral: prefix/cold reads, corrupt selected,
+lost ack, удаление двух предков, rebuild/restore и реальный kernel Unknown.
+`16.27.6-dev` также исправляет потерю выбранной сводки в production Workspace fork.
+Далее — [Tasks: выбор и публикация authority ветки](BACKLOG.md#workspace-task-fork-authority--2026-11-14),
+Workspace originals и supplied-data/definition copies; затем P3, backup всех owners,
+остановка старых writers и P7. Default writer — ChatStore; P4 отложена,
+Windows/Office evidence и полный application backup открыты.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-checkpoint-fork-2026-11-14).
+
 ## Native shared resource fork — 2026-11-14
 
 Fork с общими Plan/document HTML и Office-originals подключён через существующие

@@ -299,7 +299,8 @@ namespace RNAssistant.Core.Storage
                         PrepareChatControl(db, session, queueControl, priorControl);
                     var input = queueControl?.Input == null ? null : PrepareChatInput(db, session, queueControl.Input, inputBody);
                     var fact = new ConversationChatCommit(card, commit.JournalRevision, commit.JournalMessageCount, messages, context, DateTime.UtcNow,
-                        run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control, input: input, history: history, resources: resources, snapshots: PrepareSnapshotDelta(db, session.Id, tasks, prior), fork: fork);
+                        run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control, input: input, history: history, resources: resources,
+                        snapshots: PrepareSnapshotDelta(db, session.Id, tasks, prior, creatingFork ? fork : null), fork: fork);
                     AssignChatReferences(db, fact, prior?.Fact);
                     var fingerprint = ChatFingerprint(fact);
                     if (prior != null)

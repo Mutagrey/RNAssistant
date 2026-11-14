@@ -228,8 +228,7 @@ namespace RNAssistant.Office.Services
                     fork.Artifacts.Single(item => item.Id == artifact.Id).InlineText = artifact.InlineText;
                 }
             var plan = definitions.Prepare(source, fork, string.IsNullOrWhiteSpace(checkpoint) ? source.HtmlWorkspace : null);
-            fork.ContextCheckpoints = CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
-            fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(item => item.CreatedUtc).Select(item => item.Id).FirstOrDefault();
+            ContextCompactionRuntime.PrepareFork(source, fork, loadArtifactBody);
             if (!string.IsNullOrWhiteSpace(checkpoint))
             {
                 if (!HtmlWorkspaceArtifactService.Restore(fork, checkpoint))

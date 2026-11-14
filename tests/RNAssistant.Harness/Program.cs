@@ -742,6 +742,7 @@ namespace RNAssistant.Harness
                 Test("journal fork: atomic receipts and source fencing", JournalForkReceipts),
                 Test("journal fork: inherited Unknown without replay", JournalForkUnknown),
                 Test("journal fork: shared resources and publication ownership", JournalSharedForkConsumers),
+                Test("journal fork: local checkpoints and source ownership", JournalCheckpointForkConsumers),
                 Test("journal send: lost acknowledgement restart and restore", () => JournalSendParity(true)),
                 Test("journal send: unavailable read-back recovers Unknown without replay", () => JournalSendParity(false, true)),
                 Test("journal peer: atomic Inbox heads and recovery", JournalPeerAtomicInbox),

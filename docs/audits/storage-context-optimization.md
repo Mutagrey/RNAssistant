@@ -2123,3 +2123,40 @@ after-state/CAS ownership.
    Version 16.27.5-dev records the shared production Workspace correction in
    CHANGELOG; native composition remains isolated until P7. Scoped diff/links and
    mandatory ValidateVersionFormat checked before commit. No tag, push or release.
+
+## P1/P2 — native checkpoint fork (2026-11-14)
+
+1. Advances F04 through ContextCompactionRuntime, ConversationJournal and existing
+   Office/Workspace fork consumers. Scope is local compaction snapshots and their
+   retained lineage; Task authority and definition copies remain separate.
+2. Fork preparation retains exact selected claims only if the source activity and
+   boundary remain in the prefix. Missing selected bytes fail; shorter prefixes or
+   history-invalidated selection never activate an older summary. Workspace now
+   preserves selection. Child compaction can append to the inherited lineage.
+3. Replaced Office's selection from in-memory clones and Workspace's omitted
+   selection with the existing compaction owner. Native snapshot index rows point
+   to original frames, guarded by fork ancestry; only presentation links rebase.
+   No copied snapshot delta, new store/schema/adapter, fallback, dual-write or
+   invented child tool execution. Claims and Unknown retain original provenance.
+4. Eight selected checks pass on macOS/net8/C#7.3: new Office/Workspace checkpoint
+   fork, extended actual-kernel Unknown, shared fork, atomic fork faults, two context
+   cases, Task snapshots and default Workspace fork. The new case covers parent
+   membership, selected/cold corrupt bytes, continuation, lost ack after source
+   deletion, two ancestors, edits, rebuild and Workspace journal/CAS restore. Only
+   the changed checkpoint case was rebuilt/rechecked after the final local lookup
+   correction; no full suite or Office/VSTO validation.
+5. Before: native forks rejected local checkpoints and Workspace dropped selection.
+   After: one canonical fork frame adds no copied snapshot metadata; existing CAS
+   is reused. A one-message page reads two chat bodies (text and membership), zero
+   checkpoint bodies; selected preparation leaves an unavailable older body cold.
+   Parent-membership checks use a set rather than nested scans. Initial history/
+   metadata scans and inherited usage remain P3; no CPU/allocation/timing claim.
+6. Next: Task fork selection and child authority publication (recorded in backlog),
+   Workspace originals and supplied-data/definition copies. P3 metadata/header/
+   context/summary usage, complete owner backup/quiescence and P7 remain open.
+   Default writer is ChatStore; P4 deferred. Windows evidence and full Office
+   identity/Workspace connection backup are not closed by journal/CAS checks.
+7. Updated session/artifact/CAS contracts, migration map, progress, backlog and
+   Harness guide. Version 16.27.6-dev records the shared production consumer fix
+   in CHANGELOG. Default adapters retire at P7. Scoped diff/links and mandatory
+   ValidateVersionFormat checked before commit; no tag, push or release.

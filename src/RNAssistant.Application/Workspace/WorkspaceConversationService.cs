@@ -257,6 +257,7 @@ namespace RNAssistant.Runtime
                 .Select(artifact => { var copy = artifact.CopyMetadata(); copy.InlineText = artifact.InlineText; return copy; })
                 .ToList();
             ArtifactWorkingSet.CopySharedForFork(source, fork);
+            ContextCompactionRuntime.PrepareFork(source, fork, store.LoadArtifactBody);
             var retainedReferences = new HashSet<string>(fork.Messages
                 .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
                 .Select(reference => reference.ExactKey), StringComparer.Ordinal);
