@@ -63,8 +63,8 @@ const root = path.resolve(__dirname, '../..');
       await page.locator('#messages .agent-stream-step').waitFor({state:'detached'});
     }
     await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
-    await page.locator('#workspaceChatApprove').waitFor({state:'visible'});
-    await page.locator('#workspaceChatApprove').click();
+    await page.locator('.conversation-panel:visible [data-chat-node="agentApprovalDock"] button.primary').waitFor({state:'visible'});
+    await page.locator('.conversation-panel:visible [data-chat-node="agentApprovalDock"] button.primary').click();
     await page.waitForFunction(() => chatViewTest.calls.length === 1);
     assert.deepEqual(await page.evaluate(() => chatViewTest.calls[0].payload),
       {workspaceId:'preview-data-workspace', sessionId:'preview-project-review',
@@ -74,8 +74,8 @@ const root = path.resolve(__dirname, '../..');
       chatViewTest.questionWorkspace = 'preview-data-workspace';
       return RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review');
     });
-    await page.locator('#workspaceChatQuestions').waitFor({state:'visible'});
-    await page.locator('#workspaceChatQuestions input[value="yes"]').click();
+    await page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"]').waitFor({state:'visible'});
+    await page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"] input[value="yes"]').click();
     await page.waitForFunction(() => chatViewTest.calls.length === 2);
     assert.deepEqual(await page.evaluate(() => chatViewTest.calls[1].payload.input.answers),
       {runId:'preview-run', questionSetId:'preview-questions',
@@ -129,8 +129,8 @@ const root = path.resolve(__dirname, '../..');
       chatViewTest.pendingWorkspace = 'preview-plugin-workspace';
       return RNAssistantPlugins.select('data-templates');
     });
-    await page.locator('#workspaceChatReject').waitFor({state:'visible'});
-    await page.locator('#workspaceChatReject').click();
+    await page.locator('.conversation-panel:visible [data-chat-node="agentApprovalDock"] button.secondary').waitFor({state:'visible'});
+    await page.locator('.conversation-panel:visible [data-chat-node="agentApprovalDock"] button.secondary').click();
     await page.waitForFunction(() => chatViewTest.calls.length === 4);
     assert.deepEqual(await page.evaluate(() => {
       const call = chatViewTest.calls[3];

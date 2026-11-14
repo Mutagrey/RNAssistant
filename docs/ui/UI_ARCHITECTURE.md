@@ -1,5 +1,29 @@
 # Архитектура UI RNAssistant
 
+
+## Адресные чтения чата — In Review, 2026-11-14
+
+Все Panel consumers используют `renderConversationTranscript` и `paintConversationStream`
+в app-messages.js. Office/Workspace adapters нормализуют данные; отдельные Workspace
+renderMessages/paintProgress и live leaf удалены. Activity callbacks получают один
+presentation scope. Resource cards/charts/run changes выбираются capabilities;
+Office resources читаются из snapshot исходной панели и открываются с её target.
+
+Pending UI/header принадлежат тому же Panel: adapters возвращают run, questions
+и metadata цели, общий AgentApproval/Questions строит DOM. Office извлекает адрес
+сохранённого core.ask из bounded snapshot и читает typed presentation; Workspace
+передаёт уже полученный questionSet. Commands проверяют captured pending/run IDs.
+Отдельный Workspace approval renderer и глобальный экземпляр AgentApproval удалены.
+Контекст по решению пользователя остаётся у composer. Общий header использует
+ActionMenu и Inspector; его
+elapsed timer работает только у видимого running view и снимается при hide/dispose.
+
+ConversationPanel владеет initial/refresh loading и retry всех sources. Ошибка
+refresh сохраняет принятый snapshot и DOM. Preview/questions получают target/scope
+исходного ConversationView; его observer отменяет чтение при hide/dispose и делает
+catch-up после возврата. Фокус соседней панели не влияет на чтение. Details и usage
+тоже адресные; выбранный Inspector больше не служит адресом result preview.
+
 ## Browser screenshot — In Review, 2026-11-14
 
 Screenshot consumer использует общий Browser Actions → typed native capture →

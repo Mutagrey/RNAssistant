@@ -1,11 +1,3 @@
-var agentApproval = window.RNAssistantAgentApproval.create({
-  state: state,
-  currentActiveSend: function () { return typeof currentActiveSend === "function" ? currentActiveSend() : null; },
-  primaryText: function (pending) { return pending.toolName || "Действие"; },
-  cancel: function (pendingId) { return cancelAgentTool(pendingId); },
-  confirm: function (pendingId) { return confirmAgentTool(pendingId); }
-});
-
 function appendAgentRunProcess(parent, timeline, stats) {
   if (!timeline.length) {
     var empty = document.createElement("div");
@@ -24,7 +16,7 @@ function appendAgentRunProcess(parent, timeline, stats) {
     var isCurrent = stats.current && activityContains(item.activity, stats.current);
     entry.agentReconcileKey = activityTimelineKey(item.activity) + ":" + (messageId(item.message) || item.index);
     entry.agentReconcileSignature = JSON.stringify([item.activity, item.reasoningMessage || item.message,
-      !!isCurrent, !!stats.liveFeed, !!stats.terminal, !!stats.workspace]);
+      !!isCurrent, !!stats.liveFeed, !!stats.terminal]);
     var activityContext = {
       messageId: messageId(item.message),
       index: item.index,
@@ -33,7 +25,7 @@ function appendAgentRunProcess(parent, timeline, stats) {
       renderInlineArtifacts: false,
       liveFeed: !!stats.liveFeed,
       terminal: !!stats.terminal,
-      workspace: !!stats.workspace
+      presentation: stats.presentation
     };
     entry.appendChild(renderActivityNode(item.activity, false, isCurrent, activityContext));
     process.appendChild(entry);
@@ -110,11 +102,8 @@ function activityContains(activity, target) {
 }
 
 function pendingAgentApprovalActivity() {
-  return agentApproval.pendingActivity();
-}
-
-function renderAgentApprovalDock() {
-  agentApproval.renderDock();
+  var panel = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
+  return panel && panel.approval ? panel.approval.pendingActivity() : null;
 }
 function appendAgentFinalAnswer(parent, finalMessage) {
   if (!finalMessage || !messageContent(finalMessage.message).trim()) {
@@ -368,7 +357,7 @@ function appendAgentActionStage(parent, actions, stats) {
   parent.appendChild(details);
 }
 
-function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts, terminal, workspace, suppressReasoning) {
+function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts, terminal, suppressReasoning, messagePresentation) {
   var actions = [];
   function append(item, activity, nested) {
     if (activityKind(activity) !== "step" && activityKind(activity) !== "group") {
@@ -382,7 +371,7 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
     return activityKind(item.activity) !== "notice";
   }), !isLast, null);
   stats.terminal = !!terminal;
-  stats.workspace = !!workspace;
+  stats.presentation = messagePresentation;
   var active = !terminal && isLast && stats.current && isActiveTimelineStatus(activityStatus(stats.current))
     ? stats.current : null;
   stats.current = active;
@@ -405,7 +394,7 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
     }
     var artifacts = document.createElement("div");
     if (!suppressArtifacts) appendActivityArtifacts(artifacts, item.activity, {
-      message: item.message, messageId: messageId(item.message), index: item.index, workspace: !!workspace });
+      message: item.message, messageId: messageId(item.message), index: item.index, presentation: messagePresentation });
     if (artifacts.childNodes.length) {
       flush();
       artifacts.className = "agent-run-artifacts";
@@ -491,7 +480,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       if (!historyItems.length) return;
       var section = document.createElement("section");
       section.className = "agent-model-step agent-model-step-history";
-      appendLiveAgentStep(section, { items: historyItems }, false, true, true, true, stats.workspace);
+      appendLiveAgentStep(section, { items: historyItems }, false, true, true, true, false, stats.presentation);
       content.appendChild(section);
     });
     if (!content.childNodes.length) {
@@ -552,7 +541,7 @@ function renderAgentRunArticle(run, presentation) {
   if (finalMessage) timingItems.push(finalMessage);
   var runViewState = agentRunViewState(items, finalMessage);
   var stats = agentRunStats(timingItems, !!finalMessage && !run.live, runViewState);
-  stats.workspace = !!run.workspace;
+  stats.presentation = presentation;
   var steps = groupAgentRunSteps(timeline);
   var node = document.createElement("article");
   node.setAttribute("aria-label", "Ответ агента");
@@ -571,7 +560,7 @@ function renderAgentRunArticle(run, presentation) {
     section.className = "agent-model-step";
     section.agentReconcileKey = step.id;
     section.agentReconcileSignature = JSON.stringify([step.message, step.reason, step.items, step.ambient, step.marker,
-      stepIndex === updates.length - 1, !!run.hasLiveDraft, !!run.live, !!run.workspace,
+      stepIndex === updates.length - 1, !!run.hasLiveDraft, !!run.live,
       runViewState && runViewState.lifecycle]);
     var reasoningMessage = step.marker && (step.marker.reasoningMessage || step.marker.message);
     var hasStepReasoning = typeof messageHasReasoning === "function" && messageHasReasoning(reasoningMessage);
@@ -579,19 +568,13 @@ function renderAgentRunArticle(run, presentation) {
     appendAgentStepMessage(section, step.message, step.marker);
     appendAgentStepReason(section, step);
     if (expanded) appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
-      !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, run.workspace, hasStepReasoning);
+      !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, hasStepReasoning, presentation);
     if (section.childNodes.length) process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);
   if (run.live && run.executionQueued) process.appendChild(renderActivityRow({ Kind: "notice",
     Title: "Ожидаю свободный слот выполнения…", Status: "running", RunId: run.runId || agentRunId(items, finalMessage) }, true, false));
   if (process.childNodes.length || run.live) body.appendChild(process);
-  if (run.live && run.workspaceProgress) {
-    var stream = document.createElement("section");
-    stream.className = "agent-model-step agent-stream-step";
-    paintLiveModelOutput(stream, run.workspaceProgress);
-    process.appendChild(stream);
-  }
   // A terminal interruption stays visible even when the action trace is collapsed.
   if (!run.live) appendAgentRunViewState(body, runViewState);
   if (finalMessage) {
@@ -610,11 +593,11 @@ function renderAgentRunArticle(run, presentation) {
       appendAcceptedResponseDetails(finalSection, finalMessage.message, runViewState);
     body.appendChild(finalSection);
   }
-  if (!expanded) appendAgentRunArtifacts(body, timeline, !!run.workspace);
-  if (!run.live && !run.workspace && typeof appendAgentRunResourceCards === "function") {
-    appendAgentRunResourceCards(body, items, finalMessage);
+  if (!expanded) appendAgentRunArtifacts(body, timeline, presentation);
+  if (!run.live && presentation && presentation.capabilities.artifactCards && typeof appendAgentRunResourceCards === "function") {
+    appendAgentRunResourceCards(body, items, finalMessage, presentation);
   }
-  if (!run.live && !run.workspace && !run.continued && presentation && typeof appendRunChanges === "function") {
+  if (!run.live && !run.continued && presentation && presentation.capabilities.runChanges && typeof appendRunChanges === "function") {
     appendRunChanges(body, presentation.target.sessionId, agentRunId(items, finalMessage));
   }
   node.appendChild(body);
@@ -622,7 +605,7 @@ function renderAgentRunArticle(run, presentation) {
   if (!run.live) {
     if (!items.length && finalMessage && typeof appendMessageFooter === "function") {
       appendMessageFooter(node, finalMessage.message, finalMessage.index, null,
-        { workspace: !!run.workspace, usage: run.usage, presentation: presentation });
+        { usage: run.usage, presentation: presentation });
     } else {
       appendAgentRunFooter(node, items, finalMessage, presentation, run.usage);
     }

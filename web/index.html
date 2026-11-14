@@ -115,11 +115,20 @@
             <strong id="activeChatTitle">Новый чат</strong>
             <span id="activeChatSubtitle"></span>
           </div>
-          <div class="chatbar-actions"></div>
+          <div class="chatbar-actions" id="chatbarActions">
+            <span class="chat-run-status" id="chatRunStatus"></span>
+            <button type="button" class="icon-btn chat-header-wide" id="chatActivityButton" title="Ход работы" aria-label="Ход работы">
+              <svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg>
+            </button>
+          </div>
         </div>
         <div class="document-notice hidden" id="documentNotice">
           <span>Документ закрыт или не подключён: чат, HTML и локальные инструменты доступны. Для работы с Office откройте документ и выберите чат повторно.</span>
           <button type="button" class="link-button" id="openDocumentButton">Открыть файл</button>
+        </div>
+        <div class="document-notice hidden" id="chatLoadStatus" role="status">
+          <span id="chatLoadStatusText"></span>
+          <button type="button" class="link-button" id="chatLoadRetry">Повторить загрузку</button>
         </div>
         <div class="chat-scroll-region" id="officeChatTranscriptMount">
           <div class="messages" id="messages" role="region" aria-label="Сообщения чата" tabindex="0">
@@ -137,8 +146,7 @@
         </div>
         <div class="chat-run-notice" id="chatRunNotice" role="status" hidden></div>
         <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
-        <div class="workspace-chat-control" id="workspaceChatControl" hidden><div class="workspace-chat-pending" id="workspaceChatPending"></div><button type="button" id="workspaceChatApprove">Разрешить</button><button type="button" id="workspaceChatReject">Отклонить</button></div>
-        <div class="workspace-chat-questions" id="workspaceChatQuestions" hidden></div>
+        <div class="chat-questions" id="chatQuestions" hidden></div>
         <form class="composer" id="chatForm" data-owner="office">
           <div class="composer-reply-prompt" id="composerReplyPrompt" hidden>
             <div class="composer-reply-copy" role="status" aria-live="polite">

@@ -1,5 +1,21 @@
 # Дизайн-система и компоненты RNAssistant
 
+
+## Состояние чтения чата — In Review, 2026-11-14
+
+Одна лента и live leaf сохраняют существующую геометрию сообщений. В Chrome проверены
+равные computed metrics Office/Workspace, reading anchor при новом сообщении/потоке,
+jump-to-latest и 420 px/125%. Отдельных resource layout по source нет.
+
+Pending UI повторно использует AgentApproval/Questions и их tokens, без Workspace
+геометрии/controls. Неизменные формы и approval nodes сохраняются при вводе.
+Header остаётся прежней полосой 33 px в Dockview; icon-btn и ActionMenu общие.
+Context meter по уточнению пользователя остаётся внизу у поля ввода. Source не выбирает layout. Узкий container query скрывает широкие действия.
+
+Общий ConversationPanel использует существующий notice и link-button для ошибки
+чтения/retry над лентой. Accepted content сохраняется, новый empty state при ошибке
+не рисуется. Office/Workspace используют один markup; проверены 420 px и 125%.
+
 ## Browser screenshot — In Review, 2026-11-14
 
 Использованы общие action-menu item, image icon и status без новых размеров/overrides.

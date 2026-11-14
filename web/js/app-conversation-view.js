@@ -214,6 +214,11 @@
           scope: function () { return view.scope(); }
         }));
         subscriptions.push(observer);
+        var disposeObserver = observer.dispose;
+        observer.dispose = function () {
+          subscriptions = subscriptions.filter(function (entry) { return entry !== observer; });
+          disposeObserver();
+        };
         if (!visible) observer.suspend();
         return observer;
       },
@@ -223,6 +228,7 @@
       },
       matches: function (target) { return !disposed && key === JSON.stringify(target); },
       isDisposed: function () { return disposed; },
+      contains: function (node) { return (options.root || box).contains(node); },
       canRender: function () { if (disposed) return false; if (!visible) dirty = true; return visible; },
       setVisible: setVisible, bind: bind, capture: capture, restore: restore, shouldFollow: shouldFollow,
       updateButton: updateButton, bottom: bottom, sync: sync,

@@ -140,6 +140,22 @@ Unified chat W2: filters `storage: CAS create-only`, `storage: CAS supplied`,
 corrupt objects and missing root protection. Pair with `storage: encrypted history`
 and `universal mutations: streamed file`. No Office/VSTO validation on macOS.
 
+Unified chat W1: `tool-result-presentation.test.js` covers exact A/B preview/question
+targets, revision races, hide/catch-up and disposal through the real view observer.
+`chat-refresh-failure.test.js` covers initial/refresh failures for both sources,
+retry, unchanged snapshot/draft/history nodes, scroll/disclosures and 420 px/125%.
+Optional `RNA_CHAT_REVIEW=/tmp/chat-refresh` writes review PNGs. Existing
+`independent-chat-views.test.js` and `chat-inspector.test.js` cover delivery/placement.
+W7/W8: `questions-interaction.test.js` uses scoped Panel nodes for retry/lost ACK,
+wrong-source delivery, Workspace/plugin/Office and form drafts. `chat-header-interactions`
+checks common approval, stale pending IDs, exact usage/activity, one full retained error,
+20 edits without approval replacement and 420 px/125% without focusable duplicates.
+Shared rendering: `workspace-chat-progress/run-notice/v8`, `conversation-shared-layout`, `live-run-projection`,
+`stream-render-cost`, `chat-image-display`; no production Workspace renderer wrapper.
+The test-only workspace-transcript-fixture supplies normalized data to the common owner.
+Legacy `completion-guard.test.js` expects the removed expanded evidence card and also
+fails on the starting HEAD; current folded facts are checked by workspace-chat-run-notice.
+
 The trailing argument is a case-insensitive substring matched against category or test name:
 
 ```bash

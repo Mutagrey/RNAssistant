@@ -23,6 +23,7 @@ const root = path.resolve(__dirname, '../..');
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(address + 'preview/web/?scenario=ready');
+      await page.addScriptTag({path:path.join(__dirname,'workspace-transcript-fixture.js')});
       await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
       await page.evaluate(() => {
         const original = send;
@@ -84,40 +85,41 @@ const root = path.resolve(__dirname, '../..');
       });
       if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
       else {
-        await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-        await page.locator('#pluginSourceChat').click();
+        await page.evaluate(async () => {
+          const chat = await send('getPluginChat', {pluginId:'data-templates'});
+          RNAssistantConversationPanel.open({source:'workspace',workspaceId:chat.project.workspaceId,sessionId:chat.sessionId});
+        });
       }
-      const notice = page.locator('#workspaceChatNotice');
-      await page.waitForFunction(() => document.querySelector('#workspaceChatNotice').textContent ===
-        'Работа остановлена. Не удалось получить ответ от сервиса модели.');
-      assert.equal(await notice.getAttribute('data-error'), 'true', owner + ': terminal failure is an alert');
-      assert.equal(await page.locator('#stopButton').isVisible(), false,
+      const notice = page.locator('.conversation-panel:not([inert]) [data-chat-node="chatRunNotice"]');
+      await page.locator('.conversation-panel:not([inert]) .agent-run-notice').filter({hasText:'Не удалось получить ответ от сервиса модели.'}).waitFor();
+      assert.equal(await notice.isVisible(), false, owner + ': saved failure has no duplicate composer alert');
+      assert.equal(await page.locator('.conversation-panel:not([inert]) [data-chat-node="stopButton"]').isVisible(), false,
         owner + ': terminal kernel state hides Stop despite stale shell status');
-      await page.locator('#chatInput').fill('Новый запрос');
-      assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="chatInput"]').fill('Новый запрос');
+      assert.equal(await page.locator('.conversation-panel:not([inert]) [data-chat-node="sendButton"]').isEnabled(), true,
         owner + ': terminal kernel state unlocks a new request');
-      assert.equal((await page.locator('#messages').textContent()).includes('Unaccepted draft after failure.'), false,
+      assert.equal((await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"]').textContent()).includes('Unaccepted draft after failure.'), false,
         owner + ': terminal kernel state suppresses stale model preview');
-      await page.locator('#messages .agent-reflection-step').getByText('Inspect the exact source first.').waitFor();
-      await page.locator('#messages .agent-model-results > summary').click();
-      await page.locator('#messages .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
-      assert.equal(await page.locator('#messages').getByText('core.read').count() > 0, true,
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-reflection-step').getByText('Inspect the exact source first.').waitFor();
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-model-results > summary').click();
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
+      assert.equal(await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"]').getByText('core.read').count() > 0, true,
         owner + ': saved tool activity uses the common message renderer');
-      await page.locator('#messages .agent-run-notice').getByText('Не удалось получить ответ от сервиса модели.', { exact: false }).waitFor();
-      assert.equal((await page.locator('#messages').textContent()).includes('private v8 JSON'), false,
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-run-notice').getByText('Не удалось получить ответ от сервиса модели.', { exact: false }).waitFor();
+      assert.equal((await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"]').textContent()).includes('private v8 JSON'), false,
         owner + ': protocol body stays hidden');
-      await page.locator('#messages .chat-history-more').click();
-      await page.locator('#messages').getByText('Earlier answer.').waitFor();
-      const historical = page.locator('#messages article.message').filter({ hasText: 'Earlier answer.' });
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] .chat-history-more').click();
+      await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"]').getByText('Earlier answer.').waitFor();
+      const historical = page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] article.message').filter({ hasText: 'Earlier answer.' });
       assert.equal(await historical.locator('.agent-run-notice').count(), 0,
         owner + ': unknown effects add no warning card');
       assert.equal(await historical.locator('.agent-model-results').evaluate(node => node.open), false,
         owner + ': runtime facts start collapsed');
       await historical.locator('.agent-model-results > summary').click();
       await historical.locator('.agent-run-effect-facts').getByText('с неизвестным эффектом: 1', { exact: false }).waitFor();
-      assert.equal(await page.locator('#messages .agent-details-link').count(), 0,
+      assert.equal(await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-details-link').count(), 0,
         owner + ': historical workspace outcome cannot open an Office-only journal');
-      assert.equal(await page.locator('#messages .chat-history-more').count(), 0,
+      assert.equal(await page.locator('.conversation-panel:not([inert]) [data-chat-node="messages"] .chat-history-more').count(), 0,
         owner + ': oldest page removes the history control');
       const grouped = await page.evaluate(() => {
         const list = document.createElement('section'); document.body.appendChild(list);
@@ -125,7 +127,7 @@ const root = path.resolve(__dirname, '../..');
         const activity = (id, stepId) => ({ Id: id, Role: 'assistant', RunId: runId, Content: '',
           Activity: { RunId: runId, StepId: stepId, Kind: 'tool', Title: 'Чтение',
             ToolId: 'core.read', ToolCallId: id, Status: 'completed', ResultMessage: id } });
-        RNAssistantWorkspaceChat.renderMessages(list, { sessionId: 'grouped-session',
+        renderWorkspaceFixture(list, { sessionId: 'grouped-session',
           project: { workspaceId: 'grouped-workspace' }, messages: [activity('first', 'step-1'),
             { Id: 'result-1', Role: 'user', RunId: runId, ProtocolMessage: true },
             activity('second', 'step-2'),

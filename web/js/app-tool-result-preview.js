@@ -4,10 +4,10 @@
   var watching = new Map();
   new MutationObserver(function () {
     watching.forEach(function (entry, slot) {
-      if (!slot.isConnected || !entry.active()) entry.cancel();
+      if (!entry.current()) entry.dispose();
     });
   }).observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener("pagehide", function () { watching.forEach(function (entry) { entry.cancel(); }); });
+  window.addEventListener("pagehide", function () { watching.forEach(function (entry) { entry.dispose(); }); });
   function node(tag, cls, text) {
     var result = document.createElement(tag); result.className = cls || "";
     if (text != null) result.textContent = text;
@@ -106,60 +106,56 @@
   window.RNAssistantToolResultPresentation = { renderCompact: renderCompact, sourceLabel: sourceLabel };
   window.appendToolResultPreview = function (parent, activity, context, disclosure, renderResponse) {
     if (typeof renderResponse !== "function") throw new Error("A tool result renderer is required.");
-    var workspace = !!(context && context.workspace);
-    var owner = workspace && window.RNAssistantChatInspector ? window.RNAssistantChatInspector.target() : null;
-    var scopeOwner = owner && owner.owner;
-    var chatId = workspace ? owner && owner.sessionId : state.activeChatId;
-    var workspaceId = workspace ? owner && owner.workspaceId : null;
+    var presentation = context && context.presentation;
+    if (!presentation || !presentation.isCurrent()) return false;
+    var target = presentation.target, view = presentation.view;
+    var workspace = target.source === "workspace", chatId = target.sessionId, workspaceId = target.workspaceId;
     var runId = activityValue(activity, "RunId", "runId", "") || (context && context.message ? messageRunId(context.message) : "");
     var toolCallId = activityToolCallId(activity);
     if (!chatId || workspace && !workspaceId || !runId || !toolCallId) return false;
     var slot = node("div", "tool-result-slot"); parent.appendChild(slot);
-    var generation = 0, requestId = null, revision = null;
-    function currentRevision() { return workspace ? 0 : (state.chatProjectionRevisions || {})[chatId] || 0; }
+    var requestId = null, revision = null;
+    function currentRevision() {
+      var owner = view.projection(), snapshot = owner && owner.snapshot();
+      return snapshot && (workspace ? snapshot.state && snapshot.state.revision : snapshot.sessionRevision) || 0;
+    }
     function cancel() {
-      generation++;
-      watching.delete(slot);
       if (requestId && typeof cancelBridgeRequest === "function") cancelBridgeRequest(requestId).catch(function () {});
       requestId = null;
     }
-    function active() {
-      if (!slot.isConnected || disclosure && !disclosure.open) return false;
-      if (!workspace) return state.activeChatId === chatId;
-      var current = window.RNAssistantChatInspector && window.RNAssistantChatInspector.target();
-      return !!current && current.owner === scopeOwner && current.workspaceId === workspaceId && current.sessionId === chatId;
+    function current() { return presentation.isCurrent() && view.contains(slot); }
+    function failed() {
+      requestId = null; slot.textContent = "";
+      var retry = node("button", "agent-action-button secondary", "Не удалось загрузить представление · Повторить");
+      retry.type = "button"; retry.addEventListener("click", load); slot.appendChild(retry);
     }
-    function load() {
-      if (!active()) return;
-      cancel(); var ticket = generation; revision = currentRevision();
-      watching.set(slot, { active: active, cancel: cancel });
-      slot.textContent = "Загрузка представления…";
-      var request = workspace
-        ? send("getProjectToolResultPresentation", { workspaceId: workspaceId, sessionId: chatId,
-          runId: runId, toolCallId: toolCallId })
-        : send("getToolResultPresentation", { chatId: chatId, runId: runId, toolCallId: toolCallId });
-      requestId = request.requestId;
-      request.then(function (response) {
-        if (ticket !== generation || !active()) return;
+    var observer = view.observe({
+      current: function () { return current() && (!disclosure || disclosure.open) ? target : null; },
+      read: function () {
+        revision = currentRevision(); slot.textContent = "Загрузка представления…";
+        var request = workspace
+          ? send("getProjectToolResultPresentation", { workspaceId: workspaceId, sessionId: chatId,
+            runId: runId, toolCallId: toolCallId })
+          : send("getToolResultPresentation", { chatId: chatId, runId: runId, toolCallId: toolCallId });
+        requestId = request.requestId;
+        return request;
+      }, changed: function (response) {
         requestId = null;
         if (revision !== currentRevision()) { load(); return; }
         if (!response || response.chatId !== chatId || response.runId !== runId || response.toolCallId !== toolCallId ||
             workspace && response.workspaceId !== workspaceId)
           throw new Error("Mismatched presentation source.");
         renderResponse(slot, response);
-      }).catch(function () {
-        if (ticket !== generation || !active()) return;
-        requestId = null; slot.textContent = "";
-        var retry = node("button", "agent-action-button secondary", "Не удалось загрузить представление · Повторить");
-        retry.type = "button"; retry.addEventListener("click", load); slot.appendChild(retry);
-      });
-    }
+      }, failed: failed, cancel: cancel
+    });
+    function load() { return observer.refresh(); }
+    watching.set(slot, { current: current, dispose: function () { observer.dispose(); watching.delete(slot); } });
     if (disclosure) disclosure.addEventListener("toggle", function () {
-      if (disclosure.open) load(); else { cancel(); slot.textContent = ""; }
+      if (disclosure.open) load(); else { observer.stop(); slot.textContent = ""; }
     });
     // Interactions load on attachment; ordinary closed details remain lazy.
     setTimeout(function () {
-      if (!slot.isConnected) return;
+      if (!current()) return;
       if ((!disclosure || disclosure.open) && revision === null) load();
     }, 0);
     return true;

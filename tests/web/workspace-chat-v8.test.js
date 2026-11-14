@@ -16,6 +16,7 @@ class Element {
     this.scrollTop = 0;
     this.clientHeight = 0;
   }
+  get children() { return this.childNodes; }
   get firstChild() { return this.childNodes[0] || null; }
   get nextSibling() { return this.parentNode?.childNodes[this.parentNode.childNodes.indexOf(this) + 1] || null; }
   appendChild(child) { if (child.parentNode) child.parentNode.removeChild(child); this.childNodes.push(child); child.parentNode = this; return child; }
@@ -36,9 +37,11 @@ class Element {
   }
 }
 
-const context = vm.createContext({ document: { createElement: tag => new Element(tag), activeElement: null } });
+const context = vm.createContext({ document: { createElement: tag => new Element(tag), getElementById: () => null, activeElement: null } });
 context.window = context;
-for (const script of ["app-utils.js", "app-agent-model.js"]) {
+context.$ = () => null;
+context.setTimeout = () => 1; context.clearTimeout = () => {};
+for (const script of ["app-utils.js", "app-agent-model.js", "app-conversation-view.js", "app-conversation-state.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/" + script), "utf8"), context,
     { filename: script });
 }
@@ -59,6 +62,7 @@ const source = fs.readFileSync(path.join(__dirname, "../../web/js/app-workspace-
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-run-view-state.js"), "utf8"), context,
   { filename: "app-run-view-state.js" });
 vm.runInContext(source, context, { filename: "app-workspace-chat.js" });
+vm.runInContext(fs.readFileSync(path.join(__dirname, "workspace-transcript-fixture.js"), "utf8"), context);
 
 const failedRun = { RunId: "run-1", TurnId: "turn-1", Lifecycle: "failed", ExecutionHealth: "clean",
   SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0,
@@ -68,13 +72,14 @@ assert.equal(context.RNAssistantWorkspaceChat.runNotice({ state: { runViewState:
   "project and plugin state reuse the Office run notice");
 
 const list = new Element("section");
-context.RNAssistantWorkspaceChat.renderMessages(list, { sessionId: "chat-1", messages: [
+const messages = [
   { Id: "reflection", Role: "assistant", Content: "", ReflectionDecision: "Inspect the exact file first." },
   { Id: "finish", Role: "assistant", Content: "Chart remains unfinished.", Results: [
     { Summary: "Chart absent", Assessment: "partially_satisfied", Evidence: ["E1"] }
   ] },
   { Id: "hidden", Role: "assistant", ProtocolMessage: true, Content: "private v8 JSON" }
-] });
+];
+context.renderWorkspaceFixture(list, { sessionId: "chat-1", messages });
 
 assert.equal(rendered.length, 2, "one shared renderer receives both visible v8 projections");
 assert.equal(list.childNodes.length, 2);
@@ -83,9 +88,9 @@ assert.equal(rendered[1].Results[0].Assessment, "partially_satisfied");
 assert.equal(rendered[1].Results[0].Evidence[0], "E1");
 assert.ok(!rendered.some(message => message.Id === "hidden"), "raw protocol bodies stay out of transcript");
 const firstNode = list.childNodes[0], answerNode = list.childNodes[1];
-const sameMessages = JSON.parse(list._chatSignature)[0];
+const sameMessages = messages.slice();
 sameMessages.push({ Id: "new", Role: "assistant", Content: "New step" });
-context.RNAssistantWorkspaceChat.renderMessages(list, { sessionId: "chat-1", messages: sameMessages });
+context.renderWorkspaceFixture(list, { sessionId: "chat-1", messages: sameMessages });
 assert.equal(list.childNodes[0], firstNode, "accepted reflection stays attached when new messages arrive");
 assert.equal(list.childNodes[1], answerNode, "unchanged answer preserves focus and disclosure nodes");
 assert.equal(context.RNAssistantWorkspaceChat.readOnly({ state: { readOnly: true } }), true);

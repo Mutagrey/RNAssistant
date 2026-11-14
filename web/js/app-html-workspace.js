@@ -154,10 +154,11 @@
     openCurrent: function () { return openBrowser(state.activeChatId); },
     openArtifact: function (artifact, options) {
       if (!artifact) return false;
-      var kind = artifactKind(artifact);
-      if (kind === "html_workspace" && artifactId(artifact) !== state.activeHtmlArtifactId) return false;
-      if (kind === "html_workspace" && (!options || options.purpose !== "edit")) return openBrowser(state.activeChatId);
-      return open(state.activeChatId, { mode: options && options.purpose === "edit" ? "edit" : "preview",
+      var kind = artifactKind(artifact), chatId = options && options.chatId || state.activeChatId;
+      var activeHtmlId = options && options.chatId ? options.activeHtmlArtifactId : state.activeHtmlArtifactId;
+      if (kind === "html_workspace" && artifactId(artifact) !== activeHtmlId) return false;
+      if (kind === "html_workspace" && (!options || options.purpose !== "edit")) return openBrowser(chatId);
+      return open(chatId, { mode: options && options.purpose === "edit" ? "edit" : "preview",
         selection: kind === "html_workspace" ? null : { type: kind === "plan" ? "plan" : "artifact", id: artifactId(artifact) } });
     },
     isDirty: function (chatId) { var editor = view(chatId); return !!editor && editor.dirty(); },

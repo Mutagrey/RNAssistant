@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Unified chat presentation — 2026-11-14
+
+F04/F08/F09: адресные preview/questions/details/usage/resources, общий Panel для
+initial/refresh errors, approvals/questions/header. Refresh сохраняет snapshot/draft,
+DOM/scroll; context остаётся у composer. Все источники переключены на app-messages
+transcript/live renderer; Workspace renderMessages/paintProgress и live leaf удалены.
+`16.27.14-dev`, In Review. Browser fixtures проходят A/B, split/hide/late replies,
+retry/lost ACK, resources, Workspace/plugin, scroll, narrow 420 px/125%; visual QA локально.
+Измерения: refresh заменяет 0 history nodes, 20 edits заменяют 0 approval nodes,
+30 progress updates вызывают 0 full transcript/tree renders, 1000 history nodes сохранены.
+Native lifecycle/live delivery, draft flush и storage consumers остаются открытыми.
+Windows/Office/WebView2 evidence и пользовательское визуальное принятие отдельно.
+`completion-guard.test.js` падает также на исходном HEAD: старое ожидание полной
+expanded evidence card. Текущее folded outcome проверено workspace-chat-run-notice.
+
+
 ## Unified chat CAS safety — 2026-11-14
 
 F07 / W2: `StoreBytes` и `StoreFile/StoreHashedFile` публикуют create-only;

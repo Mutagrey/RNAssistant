@@ -32,13 +32,13 @@ function renderActivityNode(activity, nested, current, context) {
   if (!context || context.renderInlineArtifacts !== false) {
     appendActivityArtifacts(node, activity, context);
   }
-  if (!context || !context.terminal && !context.workspace) appendQuestionCards(node, activity, context);
   return node;
 }
 
 function appendQuestionCards(node, activity, context) {
   if (String(activityToolId(activity) || "") !== "core.ask" || activityStatus(activity) !== "waiting") return;
-  if (context && Number.isInteger(context.index) && (state.messages || []).slice(context.index + 1).some(function (message) {
+  var presentation = context && context.presentation;
+  if (context && Number.isInteger(context.index) && presentation && (presentation.data.messages || []).slice(context.index - (presentation.data.start || presentation.data.messageStartIndex || 0) + 1).some(function (message) {
     return !messageProtocolMessage(message) && String(messageRole(message) || "").toLowerCase() === "user";
   })) return;
   var slot = document.createElement("div");
@@ -66,15 +66,17 @@ function appendQuestionCards(node, activity, context) {
       target.appendChild(retry);
       return;
     }
-    renderQuestionCards(target, response.questions, response);
+    renderQuestionCards(target, response.questions, response, presentation);
   });
   if (!loading) slot.textContent = "Не удалось определить источник вопросов. Обновите чат.";
 }
 
-function renderQuestionCards(node, data, source) {
+function renderQuestionCards(node, data, source, presentation) {
   window.RNAssistantQuestions.render(node, data, {
-    scope: "office:" + source.chatId, runId: source.runId,
-    submit: function (answers) { return submitInboxMessage(null, [], source.chatId, "Steer", answers); }
+    scope: JSON.stringify(presentation.target), runId: source.runId,
+    submit: function (answers, requestId) {
+      return presentation.isCurrent() ? presentation.invoke("answerQuestions", { answers: answers, requestId: requestId }) : false;
+    }
   });
 }
 
@@ -518,7 +520,7 @@ function activityTimeText(context) {
 }
 
 function activityHasDetails(activity, context) {
-  return !!((!(context && context.liveFeed) && activityChildren(activity).length) ||
+  return activityKind(activity) === "model_attempt" || !!((!(context && context.liveFeed) && activityChildren(activity).length) ||
     activityCommentText(activity) ||
     activityArgumentsJson(activity) ||
     activityDataJson(activity) ||
@@ -542,7 +544,7 @@ function appendActivityErrorActions(node, activity, context) {
   }
 
   var toolId = activityToolId(activity);
-  var sourceChatId = state.activeChatId;
+  var presentation = context && context.presentation;
   var actions = document.createElement("div");
   actions.className = "agent-inline-actions";
   actions.appendChild(createAgentCopyButton("Копировать диагностику", [
@@ -551,11 +553,13 @@ function appendActivityErrorActions(node, activity, context) {
     "Status: " + activityStatus(activity),
     "Reason: " + activityDetailTexts(activity, context).join("\n\n")
   ].join("\n")));
-  if (!(context && context.workspace)) actions.appendChild(createAgentTextButton("Причина и детали", "secondary", function () {
-    if (state.activeChatId !== sourceChatId || typeof window.openRunJournal !== "function") return;
+  if (presentation) actions.appendChild(createAgentTextButton("Причина и детали", "secondary", function () {
+    if (!presentation.isCurrent() || typeof window.openRunJournal !== "function") return;
     var message = context && context.message ? context.message : null;
     window.openRunJournal({
-      chatId: sourceChatId,
+      owner: presentation.workspace ? "project" : "office",
+      workspaceId: presentation.target.workspaceId,
+      chatId: presentation.target.sessionId,
       runId: activityValue(activity, "RunId", "runId", "") || (message ? messageRunId(message) : ""),
       stepId: activityStepId(activity),
       toolCallId: activityToolCallId(activity),
@@ -802,6 +806,25 @@ function appendActivityDetailsContent(node, activity, context) {
 
   var body = document.createElement("div");
   body.className = "agent-activity-detail-body";
+  var retained = context && activityValue(context.message, "RetainedAttempt", "retainedAttempt", null);
+  if (retained) {
+    var attemptBody = activityValue(retained, "Body", "body", {});
+    var explanation = activityValue(retained, "Explanation", "explanation", "");
+    if (explanation) {
+      var notice = document.createElement("p"); notice.className = "agent-activity-detail-summary";
+      notice.textContent = explanation; body.appendChild(notice);
+    }
+    [["Message", "message", "Ответ"], ["Reason", "reason", "Причина"], ["Decision", "decision", "Решение"],
+      ["Reasoning", "reasoning", "Рассуждение"], ["Refusal", "refusal", "Отказ провайдера"]].forEach(function (field) {
+      var text = activityValue(attemptBody, field[0], field[1], "");
+      if (!text) return;
+      var label = document.createElement("strong"); label.textContent = field[2]; body.appendChild(label);
+      var paragraph = document.createElement("p"); paragraph.className = "agent-activity-detail-summary agent-attempt-text"; paragraph.textContent = text;
+      if (activityValue(attemptBody, field[0] + "Truncated", field[1] + "Truncated", false)) paragraph.textContent += "\n[Сохранённый текст усечён]";
+      body.appendChild(paragraph);
+    });
+    node.appendChild(body); return;
+  }
   var reason = activityStepReason(activity);
   if (reason) {
     var reasonLine = document.createElement("div"); reasonLine.className = "agent-step-reason";
@@ -848,7 +871,9 @@ function appendActivityDetailsContent(node, activity, context) {
 }
 
 function appendActivityArtifacts(node, activity, context) {
-  if (context && context.workspace) return false;
+  var presentation = context && context.presentation;
+  if (presentation && !presentation.capabilities.inlineCharts) return false;
+  if (presentation) context = Object.assign({}, context, { chatId: presentation.target.sessionId, isCurrent: presentation.isCurrent });
   var appended = false;
   if (typeof tryRenderChartArtifact === "function") {
     var chart = tryRenderChartArtifact(activity, context || {});
@@ -876,7 +901,7 @@ function agentStatusLabel(status) {
   return labels[status] || status || "Статус";
 }
 
-function appendAgentRunArtifacts(parent, timeline, workspace) {
+function appendAgentRunArtifacts(parent, timeline, presentation) {
   var artifacts = document.createElement("div");
   artifacts.className = "agent-run-artifacts";
   (timeline || []).forEach(function (item) {
@@ -884,7 +909,7 @@ function appendAgentRunArtifacts(parent, timeline, workspace) {
       messageId: messageId(item.message),
       index: item.index,
       message: item.message,
-      workspace: !!workspace
+      presentation: presentation
     });
   });
   if (artifacts.childNodes.length) {

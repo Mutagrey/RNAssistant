@@ -20,6 +20,7 @@
       if (window.RNAssistantHtmlWorkspaceSurface) RNAssistantHtmlWorkspaceSurface.onSnapshot(snapshot());
       snapshot().liveRun = state.chatRuns[id] || null;
       component.loading = !!response.detailDeferred; component.loadError = "";
+      if (!response.detailDeferred) component.hasSnapshot = true;
       if (response.inbox) applyChatInbox(response.inbox, true);
       reconcileChatInputEchoes(id, snapshot().messages);
       applyChatCatalogState(response);
@@ -28,7 +29,7 @@
     }
     var history = component.view.observe({ current: function () { return id ? target : null; },
       read: function () { return loadChatState(id); }, changed: function (response) { accept(response); },
-      failed: function (error) { component.loading = false; component.loadError = error.detail || error.message; component.render(); }
+      failed: component.loadFailed
     });
     var inbox = component.view.observe({ current: function () { return id ? target : null; },
       shouldPoll: function () { return !state.bridgeUnavailable && (!state.chatInboxes[id] || running() || chatInputEchoes(id).length || (chatInbox(id).items || []).length); },
@@ -42,12 +43,12 @@
     });
     function refresh(options) {
       if (!id || !component.isCurrent()) return Promise.resolve();
-      if (!snapshot().sessionRevision) component.loading = true;
+      component.loading = !component.hasSnapshot; component.loadError = ""; component.render();
       if (options && options.latestMessages) {
         var generation = ++historyGeneration;
         return loadChatState(id).then(function (response) {
           if (component.isCurrent() && generation === historyGeneration) accept(response, options);
-        }).catch(function (error) { if (generation === historyGeneration) component.notice(error); });
+        }).catch(function (error) { if (generation === historyGeneration) component.loadFailed(error); });
       }
       return history.refresh();
     }
@@ -92,16 +93,13 @@
       } catch (error) { component.notice(error); await refresh(); }
       finally { delete state.activeSends[id]; endChatRunTracking(id); component.render(); }
     }
-    var approval = RNAssistantAgentApproval.create({ state: Object.defineProperty({}, "activeRunViewState", { get: function () { return snapshot().activeRunViewState; } }),
-      node: node, currentActiveSend: running, primaryText: function (value) { return value.toolName || "Действие"; },
-      confirm: function (pendingId) { tracked("confirmAgentTool", { pendingId: pendingId }); },
-      cancel: function (pendingId) { action("cancelAgentTool", { pendingId: pendingId }); }
-    });
+    function pendingApproval() { var run = snapshot().activeRunViewState; return run && run.pendingConfirmation; }
     var commands = {
+      capabilities: function () { return { artifactCards: true, inlineCharts: true, runChanges: true }; },
       snapshot: snapshot,
       preferences: function () { var data = snapshot(); return { selected: data.activeChatModel, mode: data.activeChatMode,
         reasoning: data.activeChatReasoning, disabled: !id || running() || !!edit() || pending() || component.loading || !!component.loadError ||
-          data.chatReadOnly || state.bridgeUnavailable || !!approval.pendingActivity() }; },
+          data.chatReadOnly || state.bridgeUnavailable || !!pendingApproval() }; },
       preferenceService: function () { return officePreferenceService(component); },
       submit: async function () {
         if (pending() || !id || component.loading || component.loadError || snapshot().chatReadOnly || draft() && draft().pendingVisualAnnotation) return;
@@ -118,12 +116,20 @@
         if (!text && !attachments.length) return;
         var run = snapshot().activeRunViewState, live = state.chatRuns[id];
         var runId = run && (run.lifecycle === "running" || run.lifecycle === "awaiting_confirmation") ? run.runId : live && live.runId;
-        var delivery = (running() || approval.pendingActivity()) && runId ? runningMessageDelivery() : "Queue";
+        var delivery = (running() || pendingApproval()) && runId ? runningMessageDelivery() : "Queue";
         await submitInboxMessage(text, attachments, id, delivery, null, delivery === "Steer" ? runId : null,
           delivery === "Steer" && run && run.pendingConfirmation ? run.pendingConfirmation.pendingId : null, component);
       },
-      confirm: function (pendingId) { if (pendingId) return tracked("confirmAgentTool", { pendingId: pendingId }); },
-      reject: function (pendingId) { if (pendingId) return action("cancelAgentTool", { pendingId: pendingId }); },
+      resolve: function (value) {
+        var run = snapshot().activeRunViewState, pending = pendingApproval();
+        if (!value || !run || run.runId !== value.runId || !pending || pending.pendingId !== value.pendingId || running() || component.loading || component.loadError) return false;
+        return value.approve ? tracked("confirmAgentTool", { pendingId: value.pendingId }) : action("cancelAgentTool", { pendingId: value.pendingId });
+      },
+      answerQuestions: function (value) {
+        var run = snapshot().activeRunViewState;
+        if (!value || !run || run.runId !== value.answers.runId || run.lifecycle !== "awaiting_user") return false;
+        return submitInboxMessage(null, [], id, "Steer", value.answers, null, null, component);
+      },
       stop: async function () {
         if (!running()) return;
         var active = state.activeSends[id], live = state.chatRuns[id];
@@ -136,7 +142,7 @@
         component.controls();
       },
       canMessageAction: function (value) { return !!value.message && !component.loading && !snapshot().chatReadOnly && !running() && !pending() &&
-        !edit() && !deleting && !approval.pendingActivity() && (value.name !== "edit" || messageRole(value.message) === "user" && !RNAssistantAgentCommunication.sender(value.message)); },
+        !edit() && !deleting && !pendingApproval() && (value.name !== "edit" || messageRole(value.message) === "user" && !RNAssistantAgentCommunication.sender(value.message)); },
       messageAction: async function (value) {
         if (!commands.canMessageAction(value)) return;
         if (value.name === "edit") {
@@ -169,7 +175,7 @@
       finally { uploading = false; component.controls(); }
     }
     function renderUtilities() {
-      renderOfficeChatHeader(component); approval.renderDock();
+      renderOfficeChatHeader(component);
       renderChatRunNotice(component); renderAgentPlanDock(component); renderContextMeter(component);
       if (node("contextStrip").context !== snapshot().context) {
         node("contextStrip").context = snapshot().context; renderContext(component);
@@ -183,15 +189,35 @@
           if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); component.controls();
         } catch (error) { component.notice(error); }
       }, controller);
-      node("workspaceChatControl").hidden = true; node("workspaceChatQuestions").hidden = true;
     }
     return { commands: commands, projection: function () { return owner; }, snapshot: snapshot, accept: accept, refresh: refresh,
       draft: draft, writeDraft: writeDraft, captureDraft: captureDraft, running: running, pending: pending, attachFiles: attachFiles,
       hasAttachments: function () { var saved = draft(); return !!(saved && saved.attachments.length); },
+      transcript: function () { return officeTranscriptData(snapshot()); },
       pendingUnits: function () { return buildPendingInputUnits(component); }, renderUtilities: renderUtilities,
+      runView: function () { return snapshot().activeRunViewState; },
+      header: function () {
+        var chat = (window.state.chats || []).find(function (value) { return chatId(value) === id; });
+        return { title: chat ? chatTitle(chat) : "Новый чат", label: chat ? chatDocumentTitle(chat) : "Документ",
+          detail: chat && chatDocumentPath(chat), unavailable: !!chat && !chatIsCurrentDocument(chat) };
+      },
+      questions: function () {
+        var run = snapshot().activeRunViewState;
+        if (!run || run.lifecycle !== "awaiting_user") return null;
+        var result = null;
+        function find(activity, message, index) {
+          if (!activity || result) return;
+          if (activityToolId(activity) === "core.ask" && activityStatus(activity) === "waiting" &&
+              (activityValue(activity, "RunId", "runId", "") || messageRunId(message)) === run.runId)
+            result = { runId: run.runId, activity: activity, message: message, index: index };
+          activityChildren(activity).forEach(function (child) { find(child, message, index); });
+        }
+        (snapshot().messages || []).forEach(function (message, index) { find(messageActivity(message), message, index); });
+        return result;
+      },
       presentation: function () { var view = snapshot().activeRunViewState; return { running: running(), readOnly: snapshot().chatReadOnly,
         canceling: !!(chatInbox(id).canceling || state.chatRuns[id] && state.chatRuns[id].cancelRequested),
-        awaitingReply: view && view.lifecycle === "awaiting_user", awaitingApproval: !!approval.pendingActivity(), queue: runningMessageDelivery() === "Queue" }; },
+        awaitingReply: view && view.lifecycle === "awaiting_user", awaitingApproval: !!pendingApproval(), queue: runningMessageDelivery() === "Queue" }; },
       focus: function () {
         if (!id) return;
         prepareOfficeChatSelection(id, false);

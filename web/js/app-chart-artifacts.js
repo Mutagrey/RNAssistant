@@ -238,7 +238,8 @@
     }
     context = {
       chatId: context && context.chatId ? context.chatId : state.activeChatId,
-      messageId: context && context.messageId ? context.messageId : ""
+      messageId: context && context.messageId ? context.messageId : "",
+      isCurrent: context && context.isCurrent
     };
 
     var config = artifactConfig(artifact);
@@ -486,6 +487,7 @@
   }
 
   function saveArtifact(context, artifact) {
+    if (context && context.isCurrent && !context.isCurrent()) return;
     if (!context || !context.chatId || !context.messageId) {
       return;
     }
@@ -523,6 +525,7 @@
   }
 
   async function refreshArtifactFromExcel(artifact, context, button) {
+    if (context && context.isCurrent && !context.isCurrent()) return;
     var chatId = context.chatId;
     var targetMessageId = context.messageId;
     var source = artifactValue(artifact, "Source", "source", {}) || {};

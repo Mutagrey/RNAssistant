@@ -20,10 +20,21 @@ const { chromium } = require("playwright");
       };
       window.cancelBridgeRequest = id => { cancelled.push(id); return Promise.resolve(); };
     });
-    await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../../web/js/app-tool-result-preview.js"), "utf8") });
+    for (const file of ["app-conversation-observer", "app-conversation-view", "app-tool-result-preview"])
+      await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../../web/js/" + file + ".js"), "utf8") });
     await page.evaluate(() => {
+      window.presentationFor = (root, target) => {
+        const children = Array.from(root.childNodes), view = RNAssistantConversationView.get(root);
+        view.begin(target); root.replaceChildren(...children);
+        view.projection = () => ({ snapshot: () => ({ sessionRevision: state.chatProjectionRevisions[target.sessionId] || 0 }) });
+        const scope = view.scope();
+        return { view, target, isCurrent: scope.isCurrent, data: { messages: state.messages || [] },
+          invoke: (name, value) => name === 'answerQuestions' && window.submitInboxMessage(null, [], target.sessionId, 'Steer', value.answers) };
+      };
+      window.presentation = presentationFor(document.body, { source: "office", sessionId: "chat" });
       window.renderPreview = (target, response) => RNAssistantToolResultPresentation.renderCompact(target, response.blocks);
-      appendToolResultPreview(document.getElementById("preview"), { ToolCallId: "call", RunId: "run" }, null, document.getElementById("step"), renderPreview);
+      appendToolResultPreview(document.getElementById("preview"), { ToolCallId: "call", RunId: "run" }, { presentation }, document.getElementById("step"), renderPreview);
+      state.activeChatId = "neighbor";
     });
     assert.equal(await page.evaluate(() => requests.length), 0, "collapsed card performs no fetch");
     await page.locator("#step > summary").click();
@@ -108,7 +119,8 @@ const { chromium } = require("playwright");
       window.inboxOperationId = () => "answer-operation";
       appendQuestionCards(document.getElementById("questions"), {
         ToolId: "core.ask", ToolCallId: "ask", RunId: "run", Status: "waiting", DataJson: null
-      }, { index: 0 });
+      }, { index: 0, presentation: presentationFor(document.body, { source: "office", sessionId: "chat" }) });
+      state.activeChatId = "neighbor"; state.messages = [{}, { Role: "user" }];
     });
     await page.waitForFunction(() => requests.length === 6);
     assert.deepEqual(await page.evaluate(() => requests[5].payload), { chatId: "chat", runId: "run", toolCallId: "ask" });
@@ -146,8 +158,10 @@ const { chromium } = require("playwright");
       const details = document.createElement("details"); details.id = "workspace-result";
       details.innerHTML = '<summary>Шаг workspace</summary><div id="workspace-preview"></div>';
       document.body.appendChild(details);
+      window.workspacePresentation = presentationFor(details, { source: "workspace", workspaceId: "workspace", sessionId: "session" });
       appendToolResultPreview(document.getElementById("workspace-preview"),
-        { ToolCallId: "workspace-call", RunId: "workspace-run" }, { workspace: true }, details, renderPreview);
+        { ToolCallId: "workspace-call", RunId: "workspace-run" }, { workspace: true, presentation: workspacePresentation }, details, renderPreview);
+      window.workspaceTarget = { workspaceId: "neighbor", sessionId: "neighbor" };
     });
     await page.locator("#workspace-result > summary").click();
     await page.waitForFunction(() => requests.length === 8);
@@ -170,8 +184,22 @@ const { chromium } = require("playwright");
       requests[9].resolve({ workspaceId: "workspace", chatId: "session", runId: "workspace-run", toolCallId: "workspace-call",
         blocks: [{ kind: "text", title: "Late", text: "stale workspace result", complete: true }] });
     });
-    assert.equal(await page.locator("#workspace-preview .tool-result-preview").count(), 0,
-      "a late response cannot cross workspace/plugin ownership even for the same canonical IDs");
+    await page.locator("#workspace-preview").getByText("stale workspace result").waitFor();
+    assert.equal(await page.locator("#workspace-preview .tool-result-preview").count(), 1,
+      "global Inspector selection does not own the originating panel");
+    await page.locator("#workspace-result > summary").click();
+    await page.locator("#workspace-result > summary").click();
+    await page.waitForFunction(() => requests.length === 11);
+    await page.evaluate(() => workspacePresentation.view.setVisible(false, () => {}));
+    await page.waitForFunction(() => cancelled.includes("10"));
+    await page.evaluate(() => {
+      requests[10].resolve({ workspaceId: "workspace", chatId: "session", runId: "workspace-run", toolCallId: "workspace-call", blocks: [] });
+      workspacePresentation.view.setVisible(true, () => {});
+    });
+    await page.waitForFunction(() => requests.length === 12);
+    await page.evaluate(() => requests[11].resolve({ workspaceId: "workspace", chatId: "session", runId: "workspace-run", toolCallId: "workspace-call",
+      blocks: [{ kind: "text", text: "Resumed preview", complete: true }] }));
+    await page.getByText("Resumed preview").waitFor();
     console.log("PASS tool presentation: Office/workspace scope, lazy reads, cancellation, retry, revision race, inert blocks and retained questions");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

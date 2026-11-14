@@ -19,7 +19,7 @@
     var address = Object.freeze(target.source === "workspace"
       ? { source: "workspace", workspaceId: target.workspaceId, sessionId: target.sessionId }
       : { source: "office", sessionId: target.sessionId });
-    var disposed = false, adapter, communication, listeners = new AbortController(), fullPending = false;
+    var disposed = false, adapter, communication, listeners = new AbortController(), fullPending = false, questionsSignature = null, headerTimer = null;
     [root].concat(Array.from(root.querySelectorAll("[id]"))).forEach(function (node) {
       var id = node.id; nodes[id] = node; node.dataset.chatNode = id; node.id = prefix + id;
     });
@@ -34,6 +34,7 @@
     root.dataset.conversation = JSON.stringify(address);
     node("chatForm").dataset.owner = address.source === "office" ? "office" : "project";
     var view = RNAssistantConversationView.get(node("messages"), {
+      root: root,
       button: node("chatScrollBottomButton"), clear: function () {
         releaseMessageMediaThumbnails(node("messages")); clearMarkdownEnhancements(node("messages"));
       }
@@ -41,12 +42,18 @@
     view.begin(address); view.bind();
     var composer = RNAssistantChatComposer.create({ form: node("chatForm"), input: node("chatInput"),
       send: node("sendButton"), stop: node("stopButton"), clear: node("clearInputButton"), cancelEdit: node("cancelMessageEditButton"),
-      approve: node("workspaceChatApprove"), reject: node("workspaceChatReject") });
+      });
     view.composer = composer;
     var component = { target: address, route: route(address), element: root, view: view, composer: composer, node: node,
       inboxState: { inboxEditing: null, inboxEditDraft: null },
-      loading: false, loadError: "", error: "", isCurrent: function () { return !disposed; },
+      loading: !!address.sessionId, loadError: "", hasSnapshot: false, error: "", isCurrent: function () { return !disposed; },
+      loadFailed: function (error) {
+        if (disposed) return;
+        component.loading = false; component.loadError = error.detail || error.message || String(error);
+        render();
+      },
       snapshot: function () { return adapter.snapshot(); },
+      transcript: function () { return adapter.transcript(); },
       draft: function () { return adapter.draft(); },
       refresh: function (options) { return Promise.resolve(adapter.refresh(options)); },
       accept: function (snapshot, options) { return adapter.accept(snapshot, options); },
@@ -62,8 +69,7 @@
         fullPending = fullPending || full;
         view.schedule("stream", function () {
           if (fullPending) { fullPending = false; render(); }
-          else if (address.source === "office") renderStreamingMessages(true, component);
-          else if (!RNAssistantWorkspaceChat.paintProgress(node("messages"), adapter.snapshot())) render();
+          else if (!renderStreamingMessages(true, component)) render();
         });
       },
       focus: function () {
@@ -76,12 +82,13 @@
         if (window.RNAssistantChatInspector) { RNAssistantChatInspector.mount(address.source === "office" ? "office" : "project"); RNAssistantChatInspector.render(); }
       },
       activate: function () { view.setVisible(true, render); render(); if (adapter.activate) adapter.activate(); },
-      deactivate: function () { view.setVisible(false, render); },
+      deactivate: function () { view.setVisible(false, render); stopHeaderTimer(); RNAssistantActionMenu.closeWithin(root); },
       layout: function () { if (!disposed) resizeComposerInput(node("chatInput")); },
       dispose: function (options) {
         if (disposed) return;
         if (!options || options.captureDraft !== false) adapter.captureDraft(false);
         disposed = true;
+        stopHeaderTimer(); RNAssistantActionMenu.closeWithin(root);
         if (communication) communication.dispose();
         if (selected === component) selected = null;
         if (window.RNAssistantChatInspector) RNAssistantChatInspector.render();
@@ -106,6 +113,13 @@
     };
     adapter = address.source === "office" ? RNAssistantOfficeChatView.create(component) : RNAssistantWorkspaceChat.createPanelAdapter(component);
     composer.register(address.source, Object.assign(common, adapter.commands)); composer.activate(address.source); composer.bind();
+    component.approval = RNAssistantAgentApproval.create({
+      state: Object.defineProperty({}, "activeRunViewState", { get: adapter.runView }), node: node,
+      currentActiveSend: function () { return adapter.running() || adapter.pending(); },
+      primaryText: function (pending) { return pending.toolName || "Действие"; },
+      confirm: function (pendingId, runId) { return composer.dispatch("resolve", { pendingId: pendingId, runId: runId, approve: true }); },
+      cancel: function (pendingId, runId) { return composer.dispatch("resolve", { pendingId: pendingId, runId: runId, approve: false }); }
+    });
     composer.restoreDraft(address, adapter.draft());
     on(root, "pointerdown", component.focus); on(root, "focusin", component.focus);
     on(node("focusReplyButton"), "click", function () { node("chatInput").focus(); });
@@ -147,11 +161,29 @@
     });
     on(node("composerAddMenu"), "click", function (event) { if (event.target.closest("button")) node("composerAddPicker").open = false; });
     bindComposerTooltip(node("contextMeterWrap"), node("contextMeter"), node("contextMeterTooltip"), function () { return true; }, listeners.signal);
-    on(node("contextMeter"), "click", function () { component.focus(); RNAssistantChatInspector.openUsage(); });
+    on(node("contextMeter"), "click", function () { RNAssistantChatInspector.openUsage(address, view.scope(), node("contextMeter")); });
+    function activityTarget() {
+      var run = adapter.runView();
+      return run && run.runId ? { owner: address.source === "office" ? "office" : "project",
+        workspaceId: address.workspaceId, chatId: address.sessionId, runId: run.runId } : null;
+    }
+    function openActivity(target, scope, trigger) {
+      if (scope.isCurrent() && target) RNAssistantChatInspector.openActivity(target, trigger);
+    }
+    on(node("chatActivityButton"), "click", function () { openActivity(activityTarget(), view.scope(), node("chatActivityButton")); });
+    var chatMenu = RNAssistantActionMenu.createTrigger("Действия чата"); node("chatbarActions").appendChild(chatMenu);
+    on(chatMenu, "click", function () {
+      var scope = view.scope(), target = activityTarget(), items = [];
+      if (!node("chatActivityButton").getClientRects().length) items.push({ label: "Ход работы", icon: "clock", disabled: !target,
+        onSelect: function () { openActivity(target, scope, chatMenu); } });
+      items.push({ label: "Обновить историю", icon: "refresh", onSelect: function () { if (scope.isCurrent()) component.refresh(); } });
+      RNAssistantActionMenu.open(chatMenu, items);
+    });
     on(node("openContextTabButton"), "click", function () { setContextManagerOpen(node("contextManager").classList.contains("hidden"), component); });
     on(node("closeContextManagerButton"), "click", function () { setContextManagerOpen(false, component); });
     on(node("contextJsonDetails"), "toggle", function () { if (this.open) mountContextJsonViewer(component); else clearContextJsonViewer(component); });
     on(node("clearContextButton"), "click", function () { composer.dispatch("clearContext"); });
+    on(node("chatLoadRetry"), "click", function () { component.refresh(); });
     on(window, "resize", component.layout);
     function renderControls() {
       if (disposed) return;
@@ -174,11 +206,47 @@
         effectiveModelSupportsReasoning(preferences.selected || settingsModel()));
       node("inboxStatus").textContent = component.error;
       if (adapter.renderUtilities) adapter.renderUtilities();
+      component.approval.renderDock();
+      renderQuestions();
+      renderHeader();
+    }
+    function stopHeaderTimer() { if (headerTimer !== null) clearTimeout(headerTimer); headerTimer = null; }
+    function renderHeader() {
+      stopHeaderTimer();
+      if (disposed || !view.canRender()) return;
+      var header = adapter.header(), run = adapter.runView(), running = adapter.running();
+      function text(id, value) { if (node(id).textContent !== value) node(id).textContent = value; }
+      text("activeChatTitle", header.title);
+      text("activeChatSubtitle", header.label + (header.unavailable ? " · недоступно" : ""));
+      node("activeChatSubtitle").title = [header.label, header.detail].filter(Boolean).join("\n");
+      var labels = { running: "Выполняю", awaiting_confirmation: "Нужно разрешение", awaiting_user: "Нужен ответ",
+        completed: "Завершено", failed: "Ошибка", cancelled: "Остановлено" };
+      var status = component.loading ? "Загрузка…" : run ? labels[run.lifecycle] || "" : running ? "Выполняю" : "";
+      var started = run && Date.parse(run.startedUtc);
+      if (running && Number.isFinite(started)) status += " · " + formatElapsedTime(Math.max(0, Date.now() - started));
+      text("chatRunStatus", status); node("chatRunStatus").title = run && run.currentAction || status;
+      node("chatActivityButton").disabled = !activityTarget();
+      if (running) headerTimer = setTimeout(renderHeader, 1000);
+    }
+    function renderQuestions() {
+      var pending = adapter.questions(), host = node("chatQuestions");
+      var signature = JSON.stringify(pending && [pending.runId, pending.data, pending.activity, pending.message && messageId(pending.message)]);
+      if (signature === questionsSignature) return;
+      questionsSignature = signature; host.replaceChildren(); host.hidden = !pending;
+      if (!pending) return;
+      var presentation = createMessagePresentation(view, adapter.snapshot(), composer.capture());
+      if (pending.data) renderQuestionCards(host, pending.data, { runId: pending.runId }, presentation);
+      else appendQuestionCards(host, pending.activity, { presentation: presentation, message: pending.message });
     }
     function render(options) {
       if (disposed || !view.canRender()) return;
-      if (address.source === "office") renderMessages(options, component);
-      else RNAssistantWorkspaceChat.renderMessages(node("messages"), adapter.snapshot(), null, options, composer.capture());
+      var status = component.loading ? "Загрузка чата…" : component.loadError;
+      node("chatLoadStatus").classList.toggle("hidden", !status);
+      node("chatLoadStatusText").textContent = status;
+      node("chatLoadRetry").hidden = !component.loadError || component.loading;
+      if (!component.hasSnapshot && address.sessionId) {
+        if (node("messages").childNodes.length) view.reset();
+      } else renderMessages(options, component);
       renderControls();
     }
     communication = RNAssistantAgentCommunication.mount(component);

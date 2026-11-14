@@ -171,8 +171,6 @@
       listen(nodes.stop, "click", function () { dispatch("stop"); });
       listen(nodes.clear, "click", function () { dispatch("clear"); });
       listen(nodes.cancelEdit, "click", function () { dispatch("cancelEdit"); });
-      listen(nodes.approve, "click", function () { dispatch("resolve", true); });
-      listen(nodes.reject, "click", function () { dispatch("resolve", false); });
     }
     return { register: function (name, adapter) { sources[name] = adapter; },
       activate: function (name) { owner = name; context(); }, owner: function () { return owner; },
@@ -252,7 +250,12 @@ function renderChatRunNotice(component) {
   var workspace = component && component.target.source === "workspace";
   var run = workspace ? RNAssistantRunViewState.normalize(state.state && (state.state.runViewState || state.state.RunViewState)) : state.activeRunViewState;
   var runNotice = workspace ? RNAssistantWorkspaceChat.runNotice(state) : RNAssistantRunViewState.runNotice(run);
-  var sendError = state.failedSend && state.failedSend.error;
+  var retainedFailure = run && run.lifecycle === "failed" && (state.messages || []).some(function (message) {
+    var saved = message.RunViewState;
+    return saved && saved.RunId === run.runId && saved.Lifecycle === "failed";
+  });
+  if (retainedFailure) runNotice = null;
+  var sendError = !retainedFailure && state.failedSend && state.failedSend.error;
   var title = runNotice ? runNotice.title : "Не удалось выполнить действие";
   var text = runNotice ? runNotice.text : String(sendError || "");
   var signature = JSON.stringify([state.activeChatId, run && run.runId, runNotice, text]);

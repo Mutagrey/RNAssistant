@@ -83,8 +83,15 @@
 .chatbar-actions {
   display: flex;
   flex: 0 0 auto;
-  gap: 7px;
+  gap: var(--space-1);
   align-items: center;
+}
+
+.conversation-panel { container: chat-panel / inline-size; }
+.chat-run-status { color: var(--ink-muted); font-size: var(--text-sm); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container chat-panel (max-width: 520px) {
+  .chatbar .chat-header-wide { display: none !important; }
+  .chat-run-status { max-width: 100px; }
 }
 
 .chat-scroll-region {
@@ -607,3 +614,5 @@
 .message-action.message-inspect-action.icon-btn > svg { flex-basis: 13px; width: 13px; height: 13px; stroke-width: 1.75; }
 
 .chat-inspector-estimate-preview { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--text-xs) var(--mono); }
+
+.agent-attempt-text { white-space: pre-wrap; }

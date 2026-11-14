@@ -7,11 +7,7 @@
 .shell .workspace-chat-notice { min-height: 0; padding: 0 20px; color: var(--ink-muted); font-size: 12px; }
 .shell .workspace-chat-notice:not(:empty) { padding-top: 12px; }
 .shell .workspace-chat-notice[data-error="true"] { color: var(--danger); }
-.shell .workspace-chat-control { width: calc(100% - 36px); margin: 0 auto 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-subtle); }
-.shell .workspace-chat-questions { width: calc(100% - 36px); margin: 0 auto 12px; padding: 0 4px; }
-.shell .workspace-chat-pending { overflow-wrap: anywhere; white-space: pre-wrap; }
-.shell .workspace-chat-pending .inline-change { white-space: normal; margin: 8px 0; }
-.shell .workspace-chat-control button { margin-right: 8px; }
+.shell .chat-questions { width: calc(100% - 36px); margin: 0 auto 12px; padding: 0 4px; }
 .shell .chat-inspector { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface-subtle); }
 .shell .chat-inspector-head { position: relative; z-index: 1; display: flex; align-items: center; gap: 5px; flex: 0 0 52px; min-height: var(--page-header-height); padding: 5px var(--panel-toggle-inset); border-bottom: 1px solid var(--line); }
 .shell .chat-inspector-switcher { margin: 0; }

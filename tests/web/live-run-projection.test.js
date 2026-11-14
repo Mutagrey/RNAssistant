@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 class Element {
-  constructor(tag) { this.tagName = tag; this.childNodes = []; this.className = ""; this.attributes = {}; this._text = ""; this.innerHTML = ""; this.open = false; }
+  constructor(tag) { this.tagName = tag; this.childNodes = []; this.className = ""; this.attributes = {}; this.dataset = {}; this._text = ""; this.innerHTML = ""; this.open = false; }
   get children() { return this.childNodes; }
   get firstChild() { return this.childNodes[0] || null; }
   get nextSibling() { const peers = this.parentNode.childNodes; return peers[peers.indexOf(this) + 1] || null; }
@@ -98,7 +98,7 @@ console.log("PASS live projection: real rendering merges persisted CAS/inline re
 // Return to an active chat with an already loaded persisted snapshot.
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-run.js"), "utf8"), ctx);
 ctx.state.activeSends = { chat: {} };
-ctx.renderAgentPlanDock = () => {}; ctx.renderAgentApprovalDock = () => {}; ctx.renderSendControls = () => {};
+ctx.renderAgentPlanDock = () => {}; ctx.renderSendControls = () => {};
 ctx.publishOfficeChatRun("chat", null);
 ctx.resetRenderedMessageUnits(box);
 ctx.restoreActiveChatRun(); assertFeed(2, 3);
@@ -225,6 +225,7 @@ console.log("PASS live projection: terminal no-tool run and consecutive inbox ru
 
 // A same-chat background snapshot must not erase the in-flight output for one paint.
 ctx.applyLibraryCatalogState = () => false;
+ctx.RNAssistantChatGroups = { accept: () => {} };
 ctx.renderChatSessions = () => {}; ctx.renderContext = () => {}; ctx.renderContextMeter = () => {}; ctx.renderModelControls = () => {};
 ctx.state.chatProjectionRevisions = {};
 ctx.state.chatRuns.chat = { runId: "r", activities: [marker("fresh")], stream: "Still streaming", reasoning: "Still reasoning" };

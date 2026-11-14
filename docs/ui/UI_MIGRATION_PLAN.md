@@ -1,5 +1,29 @@
 # План модернизации production UI
 
+
+## Unified chat W1 — In Review, 2026-11-14
+
+W7/W8, `16.27.14-dev`: pending interactions/header переключены на общий Panel.
+Удалены Workspace approval/questions markup/CSS/listeners и глобальный approval
+instance; сохранён один AgentApproval/Questions. Header actions адресные; контекст
+по уточнению пользователя остаётся у composer. Full run error не дублируется над вводом. Проверки:
+`questions-interaction`, `chat-header-interactions`, `independent-chat-views`;
+20 edits → 0 замен неизменного approval node, exact A/B/stale pending/retry/lost ACK,
+420 px/125% проходят. Ревью: открыть A/B → вызвать usage A при фокусе B → ответить
+на вопрос → сузить панель и открыть меню. Workspace transcript/live renderer удалён; Panel использует общий app-messages path.
+Native lifecycle/delivery и storage consumers остаются открытыми; визуальное принятие отдельно.
+
+Сверка с e9bb52c1: Inspector уже исправлен в 93d99a85; оставшиеся F04 callbacks
+preview/questions/details/usage переключены на исходный target/scope. F08 loading
+и retry принадлежат Panel; refresh не сбрасывает принятую историю/draft/scroll.
+Удалены глобальный адрес preview и Office-only очистка ленты при read error.
+Адресные browser fixtures проходят, refresh заменяет 0 узлов истории. Ревью:
+split A/B → раскрыть результат A при фокусе B → hide/return → retry ошибки чтения.
+Общий renderer проверен fixtures workspace-chat-progress/run-notice/v8,
+conversation-shared-layout, live-run-projection, stream-render-cost и chat-image-display. 30 progress updates →
+0 full transcript/tree renders; 1000 history nodes сохраняются. Native lifecycle открыт.
+Windows/Office/WebView2 qualification отдельно.
+
 ## Browser screenshot — In Review, 2026-11-14
 
 A7 завершён локально: общий screenshot action, exact native session, PNG data-plane,
@@ -1392,7 +1416,7 @@ adapters сохраняют transport/receipts и правила доступн�
 истории также проверяет binding до начала чтения.
 
 Проверки: `conversation-view`, `message-actions` (два borrowed snapshots,
-async delete/navigation, deferred history), `live-run-projection`,
+async delete/navigation, deferred history), `conversation-shared-layout`, `live-run-projection`,
 `stream-render-cost`; Chromium `workspace-chat-layout`, `workspace-chat-progress`,
 `chat-inspector`, `run-changes-layout`. Сохранены 1000 attached history nodes в
 изолированном render-cost fixture и один кадр на burst из 100 событий; это проверка

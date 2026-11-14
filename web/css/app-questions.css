@@ -32,6 +32,6 @@
 .plan-question-cards .question-actions .button { min-height: 30px; padding-inline: var(--space-3); }
 .plan-question-cards .question-status { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
 .plan-question-cards .question-status.is-error, .plan-question-cards fieldset[aria-invalid="true"] .question-prompt { color: var(--danger); }
-.workspace-chat-questions { flex: 0 1 auto; min-height: 0; max-height: 55vh; overflow: auto; scrollbar-gutter: stable; }
+.chat-questions { flex: 0 1 auto; min-height: 0; max-height: 55vh; overflow: auto; scrollbar-gutter: stable; }
 @media (pointer: coarse) { .plan-question-cards .question-option, .plan-question-cards .question-actions .button { min-height: 40px; } }
 @media (forced-colors: active) { .plan-question-cards .question-option input:checked { background: Highlight; border-color: Highlight; forced-color-adjust: none; } .plan-question-cards .question-option input:checked::after { border-color: HighlightText; } }

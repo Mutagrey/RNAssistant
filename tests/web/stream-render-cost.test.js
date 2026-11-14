@@ -170,9 +170,9 @@ console.log("PASS reflection: accepted reasoning handoff survives next attempt r
 
 progress({ contentDelta: "Unaccepted draft" });
 bridge.setChatRunCancelling("foreground", true);
-assert.equal(bridge.state.liveStreamContent, null);
+assert.equal(bridge.state.liveStreamContent, "Unaccepted draft", "stop freezes the received text pending retention");
 progress({ contentDelta: "late chunk", reasoningDelta: "late reasoning" });
-assert.equal(bridge.state.liveStreamContent, null, "late model data cannot revive a cancelled draft");
+assert.equal(bridge.state.liveStreamContent, "Unaccepted draft", "late model data cannot change the frozen partial");
 assert.equal(bridge.chatModelStageText(bridge.state.chatRuns.foreground), "Останавливаю…");
 bridge.state.chats = [];
 bridge.state.activeRunViewState = { runId: "run", lifecycle: "cancelled" };

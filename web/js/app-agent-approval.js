@@ -5,6 +5,7 @@
     options = options || {};
     var state = options.state;
     var $ = options.node || window.$;
+    var signature = null;
 
     function pendingState() {
       if (options.currentActiveSend()) return null;
@@ -18,6 +19,9 @@
       var dock = $("agentApprovalDock");
       if (!dock) return;
       var pendingStateValue = pendingState();
+      var next = JSON.stringify(pendingStateValue);
+      if (next === signature) return;
+      signature = next;
       if (!pendingStateValue) {
         dock.replaceChildren();
         dock.classList.add("hidden");
@@ -60,8 +64,9 @@
 
       var actions = document.createElement("div");
       actions.className = "agent-approval-actions";
-      actions.appendChild(createAgentTextButton("Отменить", "secondary", function () { options.cancel(pendingId); }));
-      actions.appendChild(createAgentTextButton("Подтвердить", "primary", function () { options.confirm(pendingId); }));
+      var runId = pendingStateValue.viewState.runId;
+      actions.appendChild(createAgentTextButton("Отменить", "secondary", function () { options.cancel(pendingId, runId); }));
+      actions.appendChild(createAgentTextButton("Подтвердить", "primary", function () { options.confirm(pendingId, runId); }));
       panel.appendChild(actions);
 
       dock.replaceChildren(panel);

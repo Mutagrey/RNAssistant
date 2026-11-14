@@ -15,20 +15,21 @@ const { chromium } = require('playwright');
     const page = await browser.newPage(); const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(address + 'preview/web/?scenario=ready');
+    await page.addScriptTag({path:path.join(__dirname,'workspace-transcript-fixture.js')});
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     const checks = await page.evaluate(() => {
       const list = document.createElement('section'); document.body.appendChild(list);
       const first = { Id: 'reflection', RunId: 'run', Role: 'assistant', Content: '', ReflectionDecision: 'Read the procedure.', ReasoningContent: 'Accepted reasoning.' };
       const chat = { sessionId: 'progress-test', project: { workspaceId: 'workspace' }, messages: [first], state: { status: 'running', runId: 'run' } };
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       const saved = list.querySelector('.reasoning-block'), step = list.querySelector('.agent-reflection-step');
       const summary = saved.querySelector('summary'); saved.open = true; summary.focus();
       chat.state.modelProgress = { RunId: 'run', StepId: 'step-2', AttemptId: 'a', Message: 'Preview text.', Reasoning: 'New reasoning.' };
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       const live = list.querySelector('.agent-stream-step');
       const retained = saved === list.querySelector('.reasoning-block') && step === list.querySelector('.agent-reflection-step') && document.activeElement === summary && saved.open;
       first.ReasoningContent = 'Revised accepted reasoning.';
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       const revised = list.querySelector('.reasoning-block');
       const replaced = revised !== saved && revised.open &&
         document.activeElement === revised.querySelector('summary') && revised.textContent.includes('Revised accepted reasoning.');
@@ -36,19 +37,19 @@ const { chromium } = require('playwright');
       liveReasoning.open = true; liveReasoning.querySelector('summary').focus();
       chat.state.modelProgress.Message = 'Longer preview.';
       chat.state.modelProgress.Reasoning = 'Longer reasoning.';
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       const updated = live === list.querySelector('.agent-stream-step') && live.textContent.includes('Longer preview.') &&
         liveReasoning === live.querySelector('.reasoning-block') && liveReasoning.open &&
         document.activeElement === liveReasoning.querySelector('summary') && live.textContent.includes('Longer reasoning.');
       chat.state.modelProgress = { RunId: 'run', StepId: 'step-2', AttemptId: 'b', Message: '', Reasoning: '', Retrying: true };
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       const reset = !live.textContent.includes('Longer reasoning.') && !live.textContent.includes('Longer preview.') && live.textContent.includes('Повторная попытка');
       chat.messages.push({ Id: 'finish', RunId: 'run', Role: 'assistant', Content: 'Final answer.', ReasoningContent: 'Accepted final reasoning.' });
       chat.state = { runId: 'run', status: 'completed' };
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       const finished = !list.querySelector('.agent-stream-step') && list.textContent.includes('Accepted final reasoning.') && revised.isConnected;
       chat.state = { runId: 'new-run', status: 'running', modelProgress: { RunId: 'run', Message: 'Stale preview.' } };
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       const scoped = !list.textContent.includes('Stale preview.');
       const activeList = document.createElement('section');
       const activeChat = { project: { workspaceId: 'workspace' }, sessionId: 'active-run',
@@ -56,27 +57,27 @@ const { chromium } = require('playwright');
           RunId: 'active', Kind: 'tool', ToolId: 'core.read', ToolCallId: 'call',
           Title: 'Чтение', Status: 'completed', ResultMessage: 'Источник прочитан.' } }],
         state: { status: 'running', runId: 'active', modelProgress: { RunId: 'active', Message: 'Формирую ответ.' } } };
-      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      renderWorkspaceFixture(activeList, activeChat);
       const attachedLive = activeList.querySelectorAll('article.agent-run').length === 1 &&
         !!activeList.querySelector('article.agent-run.live .agent-stream-step') &&
         activeList.textContent.includes('Формирую ответ.');
       activeChat.state.executionQueued = true;
-      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      renderWorkspaceFixture(activeList, activeChat);
       const queued = activeList.querySelectorAll('article.agent-run').length === 1 &&
         activeList.textContent.includes('Ожидаю свободный слот выполнения…') &&
         !activeList.querySelector('.agent-stream-step');
       activeChat.state.executionQueued = false;
-      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      renderWorkspaceFixture(activeList, activeChat);
       const admitted = !activeList.textContent.includes('Ожидаю свободный слот выполнения…') &&
         !!activeList.querySelector('.agent-stream-step');
       const queuedList = document.createElement('section');
       const queuedChat = { project: { workspaceId: 'workspace' }, sessionId: 'queued-empty', messages: [],
         state: { status: 'running', runId: 'new-queued', executionQueued: true } };
-      RNAssistantWorkspaceChat.renderMessages(queuedList, queuedChat);
+      renderWorkspaceFixture(queuedList, queuedChat);
       const queuedBeforeModel = queuedList.querySelectorAll('article.agent-run').length === 1 &&
         queuedList.textContent.includes('Ожидаю свободный слот выполнения…');
       queuedChat.state.status = 'cancelled';
-      RNAssistantWorkspaceChat.renderMessages(queuedList, queuedChat);
+      renderWorkspaceFixture(queuedList, queuedChat);
       const cancelledQueue = !queuedList.textContent.includes('Ожидаю свободный слот выполнения…');
       const stableList = document.createElement('section'); document.body.appendChild(stableList);
       const activity = (id, step) => ({ RunId: 'stable', Kind: 'tool', ToolId: 'core.read',
@@ -88,7 +89,7 @@ const { chromium } = require('playwright');
           { Id: 'read-2', RunId: 'stable', Role: 'assistant', Activity: activity('read-2', 'step-1') },
           { Id: 'read-3', RunId: 'stable', Role: 'assistant', Activity: activity('read-3', 'step-2') }
         ], state: { status: 'running', runId: 'stable' } };
-      RNAssistantWorkspaceChat.renderMessages(stableList, stableChat);
+      renderWorkspaceFixture(stableList, stableChat);
       const stableArticle = stableList.querySelector('article.agent-run');
       const stableStep = stableArticle.querySelector('.agent-model-step');
       const stableGroup = stableStep.querySelector('.agent-action-stage');
@@ -96,7 +97,7 @@ const { chromium } = require('playwright');
       const stableEntry = stableStep.querySelector('.agent-transcript-entry');
       stableChat.messages.push({ Id: 'read-4', RunId: 'stable', Role: 'assistant',
         Activity: activity('read-4', 'step-3') });
-      RNAssistantWorkspaceChat.renderMessages(stableList, stableChat);
+      renderWorkspaceFixture(stableList, stableChat);
       const stableParts = [stableArticle === stableList.querySelector('article.agent-run'),
         stableStep === stableArticle.querySelector('.agent-model-step'),
         stableGroup === stableArticle.querySelector('.agent-action-stage'), stableGroup.open,
@@ -106,13 +107,13 @@ const { chromium } = require('playwright');
       const growingList = document.createElement('section'); document.body.appendChild(growingList);
       const growingChat = { project: { workspaceId: 'workspace' }, sessionId: 'growing-step',
         messages: stableChat.messages.slice(0, 2), state: { status: 'running', runId: 'stable' } };
-      RNAssistantWorkspaceChat.renderMessages(growingList, growingChat);
+      renderWorkspaceFixture(growingList, growingChat);
       const growingGroup = growingList.querySelector('.agent-action-stage');
       const growingEntry = growingGroup.querySelector('.agent-transcript-entry');
       growingGroup.open = true;
       growingChat.messages.push({ Id: 'read-extra', RunId: 'stable', Role: 'assistant',
         Activity: activity('read-extra', 'step-1') });
-      RNAssistantWorkspaceChat.renderMessages(growingList, growingChat);
+      renderWorkspaceFixture(growingList, growingChat);
       const stableGrowingGroup = growingGroup === growingList.querySelector('.agent-action-stage') &&
         growingGroup.open && growingEntry === growingGroup.querySelector('.agent-transcript-entry') &&
         growingGroup.querySelectorAll('.agent-transcript-entry').length === 3;
@@ -121,11 +122,11 @@ const { chromium } = require('playwright');
         RunViewState: { RunId: 'active', TurnId: 'turn', Lifecycle: 'completed', ExecutionHealth: 'clean',
           ModelResults: [], FailedCalls: 0, UnknownEffects: 0 } });
       activeChat.state = { status: 'completed', runId: 'active' };
-      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      renderWorkspaceFixture(activeList, activeChat);
       const attachedFinal = activeList.querySelectorAll('article.agent-run').length === 1 &&
         !activeList.querySelector('.agent-stream-step') && activeList.textContent.includes('Ответ готов.');
       const reflectionList = document.createElement('section');
-      RNAssistantWorkspaceChat.renderMessages(reflectionList, {
+      renderWorkspaceFixture(reflectionList, {
         project: { workspaceId: 'workspace' }, sessionId: 'reflection-message',
         messages: [{ Id: 'reflection-with-message', Role: 'assistant', Content: 'Проверю источник.',
           ReflectionDecision: 'Проверю источник.' },
@@ -160,7 +161,7 @@ const { chromium } = require('playwright');
           StepMessage: 'Проверю **источник**.', Title: 'Промежуточное решение', Status: 'completed' } };
       const runReflection = { project: { workspaceId: 'workspace' }, sessionId: 'run-reflection',
         messages: [acceptedReflection], state: { status: 'running', runId: 'reflection-run' } };
-      RNAssistantWorkspaceChat.renderMessages(runReflectionList, runReflection);
+      renderWorkspaceFixture(runReflectionList, runReflection);
       const activeReflection = runReflectionList.querySelector('.agent-reflection-step');
       const reflectionMarkdown = !!activeReflection &&
         !!activeReflection.querySelector('.agent-reflection-body strong') &&
@@ -171,7 +172,7 @@ const { chromium } = require('playwright');
         Content: 'Готово.', RunViewState: { RunId: 'reflection-run', TurnId: 'turn',
           Lifecycle: 'completed', ExecutionHealth: 'clean' } });
       runReflection.state = { status: 'completed', runId: 'reflection-run' };
-      RNAssistantWorkspaceChat.renderMessages(runReflectionList, runReflection);
+      renderWorkspaceFixture(runReflectionList, runReflection);
       const retainedReflection = !!runReflectionList.querySelector('.agent-reflection-step') &&
         runReflectionList.textContent.includes('Нужно точное чтение.');
       runReflectionList.remove();
@@ -269,14 +270,14 @@ const { chromium } = require('playwright');
       await page.locator('.conversation-panel:not([inert]) [data-chat-node="chatInput"]').press('Enter');
       await page.waitForFunction(() => document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step')?.textContent.includes('Готовлю ответ проекта'));
       const repaint = await page.evaluate(async () => {
-        const tree = RNAssistantNavigationTree.render, transcript = RNAssistantWorkspaceChat.renderMessages;
+        const tree = RNAssistantNavigationTree.render, transcript = window.renderMessages;
         const leaf = document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step');
         const snapshot = RNAssistantProjectChats.snapshot();
         const current = snapshot.state.modelProgress;
         const sequence = current.Sequence || current.sequence || 0;
         let treeCalls = 0, transcriptCalls = 0;
         RNAssistantNavigationTree.render = function (...args) { treeCalls++; return tree.apply(this, args); };
-        RNAssistantWorkspaceChat.renderMessages = function (...args) { transcriptCalls++; return transcript.apply(this, args); };
+        window.renderMessages = function (...args) { transcriptCalls++; return transcript.apply(this, args); };
         try {
           for (let index = 1; index <= 30; index++)
             RNAssistantWorkspaceChat.acceptProgress({ workspaceId: snapshot.project.workspaceId,
@@ -287,7 +288,7 @@ const { chromium } = require('playwright');
             textUpdated: leaf.textContent.includes('Живое обновление без перестройки ленты.') };
         } finally {
           RNAssistantNavigationTree.render = tree;
-          RNAssistantWorkspaceChat.renderMessages = transcript;
+          window.renderMessages = transcript;
         }
       });
       assert.deepEqual(repaint, { treeCalls: 0, transcriptCalls: 0, leafRetained: true, textUpdated: true },

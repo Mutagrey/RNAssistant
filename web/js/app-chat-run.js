@@ -17,6 +17,16 @@ function applyOfficeChatProgress(progress, progressPending, requestId) {
   var progressChatId = progress.chatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
   var progressRunId = progress.runId || "";
   if (isChatProgress && !progressChatId) return;
+  if (isChatProgress && progress.phase === "attempt_unsaved" && progress.activity) {
+    var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(progressChatId);
+    var owner = component && component.view.projection();
+    if (owner) {
+      RNAssistantConversationState.retainUnsavedAttempt(owner.snapshot(), progressRunId,
+        progress.activity.unsavedAttempt || progress.activity.UnsavedAttempt);
+      component.render();
+    }
+    return;
+  }
   // Saved kernel state wins over a delayed progress frame for the same run.
   if (isChatProgress && progressRunId && typeof chatRunTerminalView === "function" &&
       chatRunTerminalView(progressChatId, progressRunId)) return;
@@ -183,9 +193,9 @@ function setChatRunCancelling(chatId, cancelling) {
   var run = state.chatRuns && state.chatRuns[chatId];
   if (!run) return;
   run.cancelRequested = cancelling;
-  if (cancelling) {
-    run.stream = ""; run.reasoning = ""; run.reasoningComplete = false; run.streamRetrying = false;
-  }
+  // Freeze the received preview until the mandatory retained/terminal snapshot arrives.
+  // The progress reducer already ignores late deltas while cancellation is pending.
+  if (cancelling) run.streamRetrying = false;
   updateChatModelStage(chatId);
 }
 
@@ -269,6 +279,3 @@ function restoreActiveChatRun(render) {
     renderSendControls();
   }
 }
-
-function confirmAgentTool(pendingId) { return chatComposer().dispatch("confirm", pendingId); }
-function cancelAgentTool(pendingId) { return chatComposer().dispatch("reject", pendingId); }

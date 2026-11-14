@@ -62,7 +62,7 @@ function mergeOfficeChatSnapshot(current, response, options) {
     next.activeTaskListArtifactId = response.activeTaskListArtifactId || response.ActiveTaskListArtifactId || "";
   if (response.activePlanDocumentArtifactId !== undefined || response.ActivePlanDocumentArtifactId !== undefined)
     next.activePlanDocumentArtifactId = response.activePlanDocumentArtifactId || response.ActivePlanDocumentArtifactId || "";
-  return next;
+  return RNAssistantConversationState.preserveUnsavedAttempts(current, next);
 }
 function createOfficeChatProjection(chatId) {
   var owner = window.RNAssistantConversationState.createSnapshotOwner(officeChatSource(chatId), mergeOfficeChatSnapshot);
@@ -136,12 +136,6 @@ function renderOfficeChatHeader(component) {
   var node = component.node, snapshot = component.snapshot(), id = component.target.sessionId;
   var chat = (state.chats || []).find(function (value) { return chatId(value) === id; });
   var current = !chat || chatIsCurrentDocument(chat);
-  node("activeChatTitle").textContent = chat ? chatTitle(chat) : "Новый чат";
-  var count = (snapshot.messages || []).filter(function (message) { return !messageProtocolMessage(message); }).length;
-  var subtitle = id ? [component.loading ? "Загрузка чата…" : component.loadError ? "Ошибка загрузки чата" : snapshot.messageStartIndex > 0
-    ? "Показано " + count + " · история доступна выше" : formatChatMessageCount(count)] : [];
-  if (chat) subtitle = subtitle.concat([chatDocumentTitle(chat), chatHost(chat)].filter(Boolean));
-  node("activeChatSubtitle").textContent = subtitle.join(" · ");
   node("documentNotice").classList.toggle("hidden", current);
   node("openDocumentButton").hidden = current || !chatDocumentPath(chat);
   var compactable = (snapshot.messages || []).filter(function (message) { return !messageActivity(message); }).length;
@@ -668,7 +662,10 @@ function applyChatState(response, skipDraftCapture, options) {
   if (projection) projection.accept(hasResponseChatId ? response :
     Object.assign({ activeChatId: nextChatId }, response), Object.assign({}, options, { knownRevision: previousRevision }));
   var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(nextChatId);
-  if (component) { component.loading = detailDeferred; component.loadError = ""; }
+  if (component) {
+    component.loading = detailDeferred; component.loadError = "";
+    if (!detailDeferred) component.hasSnapshot = true;
+  }
   state.activeChatId = nextChatId;
   state.chatDetailPending = detailDeferred;
   state.chatDetailError = "";

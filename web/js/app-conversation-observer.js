@@ -52,7 +52,10 @@
       return existing;
     }
     function clearTimer() { if (timer !== null) window.clearInterval(timer); timer = null; }
-    function invalidate() { ++epoch; inFlight.clear(); refreshAfter.clear(); }
+    function invalidate() {
+      ++epoch; inFlight.clear(); refreshAfter.clear();
+      if (options.cancel) options.cancel();
+    }
     function startTimer() {
       if (timer !== null || !polling || suspended || disposed) return;
       timer = window.setInterval(function () {

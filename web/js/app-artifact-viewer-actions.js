@@ -342,7 +342,7 @@
       var entry = {
         status: "queued",
         resourceUri: uri,
-        chatId: state.activeChatId,
+        chatId: request.chatId || state.activeChatId,
         promise: promise,
         resolve: resolveRequest
       };

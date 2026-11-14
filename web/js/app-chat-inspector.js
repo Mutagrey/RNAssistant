@@ -101,7 +101,7 @@
   function source() {
     var current = RNAssistantDiagnostics.context(pinned);
     owner = current.owner;
-    return Object.assign({}, current, { key: RNAssistantDiagnostics.key(current) + (pinned ? ':' + pinned.runId + ':' + (pinned.stepId || '') : ':live') + (current.available ? '' : ':unavailable') });
+    return Object.assign({}, current, { key: RNAssistantDiagnostics.key(current) + (pinned && pinned.runId ? ':' + pinned.runId + ':' + (pinned.stepId || '') : ':live') + (current.available ? '' : ':unavailable') });
   }
   function target() {
     var current = source();
@@ -601,5 +601,12 @@
     mount: mount, target: target, isOpen: function () { return visible; }, onDockState: onDockState, panelControls: panelControls, panelOpen: panelOpen, togglePanel: togglePanel,
     syncToggle: function () { if (panelToggle) panelToggle.sync(); },
     syncSwitcher: syncSwitcher,
-    openUsage: function () { pinned = null; returnFocus = document.activeElement; returnFocusKey = source().key; view = "usage"; if (visible) sync(); else setOpen(true); document.querySelector("#chatInspectorSwitcher summary").focus(); } };
+    openUsage: function (target, scope, trigger) {
+      if (scope && !scope.isCurrent()) return false;
+      pinned = target ? Object.freeze({ owner: target.source === "office" ? "office" : "project",
+        workspaceId: target.workspaceId, chatId: target.sessionId, sessionId: target.sessionId }) : null;
+      returnFocus = trigger || document.activeElement; returnFocusKey = source().key;
+      view = "usage"; if (visible) sync(); else setOpen(true);
+      document.querySelector("#chatInspectorSwitcher summary").focus(); return true;
+    } };
 }());

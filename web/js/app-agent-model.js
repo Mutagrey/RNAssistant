@@ -130,6 +130,8 @@ function activityText(activity) {
 }
 
 function activityTimelineKey(activity) {
+  var attempt = activityValue(activity, "ModelAttemptId", "modelAttemptId", "");
+  if (attempt) return "attempt:" + attempt;
   var stepId = activityStepId(activity);
   if (stepId && activityKind(activity) === "step") {
     return "step:" + activityValue(activity, "RunId", "runId", "") + ":" + stepId;
@@ -317,7 +319,7 @@ function agentRunStats(items, finished, runViewState) {
 function isAgentRunContinuation(message) {
   var kind = activityKind(messageActivity(message));
   return messageRole(message) === "assistant" &&
-    (kind === "step" || kind === "tool" || kind === "control" || kind === "diagnostic" || kind === "reasoning");
+    (kind === "step" || kind === "tool" || kind === "control" || kind === "diagnostic" || kind === "reasoning" || kind === "model_attempt");
 }
 
 function canCollectAgentRunAt(index, messages) {

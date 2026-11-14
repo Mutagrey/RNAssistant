@@ -1,5 +1,22 @@
 # Current-to-target migration map
 
+## Unified chat addressed reads — W1, 2026-11-14
+
+W7/W8: common Panel now owns pending interactions and header. Removed Workspace
+approval/questions markup, layout overrides and listeners, global AgentApproval
+instance and selected-chat confirm/reject wrappers. Existing Question/Approval
+components remain; adapters supply data and exact commands. No temporary UI path.
+
+Owner: ConversationPanel/View and existing snapshot adapters. Removed global
+selected-chat/Inspector preview addressing and Office-only loading/error transcript
+reset. Preview reads use the existing view observer (hide/catch-up/dispose), details
+and usage carry exact targets. No temporary adapter or new observation protocol.
+All Panel sources now use app-messages renderConversationTranscript/paintConversationStream.
+Removed Workspace renderMessages/paintProgress and workspaceProgress live-leaf path.
+Resource capabilities and captured snapshot/target replace source switches. Native
+lifecycle/live delivery remains open; no alternate transcript renderer is retained.
+
+
 ## Immutable CAS publication — W2, 2026-11-14
 
 Owner: ChatBlobStore / existing StorageFileSystem.PublishNewFile. Removed mutable

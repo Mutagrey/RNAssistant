@@ -21,6 +21,28 @@
       read: async function (load) { return accept(await load(address)); } };
   }
 
+  // Uncommitted presentation stays in the existing bounded view projection.
+  // It is not a durable history store and is lost when this view/process closes.
+  function retainUnsavedAttempt(snapshot, runId, attempt, stepId) {
+    if (!snapshot || !attempt) return;
+    var body = attempt.body || attempt.Body, id = body && (body.attemptId || body.AttemptId);
+    if (!id || !runId) return;
+    var key = "attempt_" + id, messages = snapshot.messages || (snapshot.messages = []);
+    if (messages.some(function (message) { return (message.id || message.Id) === key; })) return;
+    messages.push({ id: key, role: "assistant", runId: runId, excludeFromModelContext: true,
+      retainedAttempt: attempt, activity: { kind: "model_attempt", runId: runId, stepId: stepId || id,
+        modelAttemptId: id, title: "Не сохранено", status: "unsaved" } });
+  }
+  function preserveUnsavedAttempts(previous, next) {
+    if (!next) return next;
+    (previous && previous.messages || []).forEach(function (message) {
+      var activity = message.activity || message.Activity;
+      if (activity && (activity.status || activity.Status) === "unsaved")
+        retainUnsavedAttempt(next, message.runId || message.RunId, message.retainedAttempt || message.RetainedAttempt, activity.stepId || activity.StepId);
+    });
+    return next;
+  }
+
   // One bounded projection per owner; the runtime/store still owns durable data.
   function createSnapshotOwner(source, merge) {
     var snapshot = null, disposed = false;
@@ -115,5 +137,6 @@
 
   window.RNAssistantConversationState = { status: status, lifecycle: lifecycle,
     messageWindow: messageWindow, prependMessageWindow: prependMessageWindow,
+    retainUnsavedAttempt: retainUnsavedAttempt, preserveUnsavedAttempts: preserveUnsavedAttempts,
     createSnapshotSource: createSnapshotSource, createSnapshotOwner: createSnapshotOwner };
 })();

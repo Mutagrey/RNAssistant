@@ -19,6 +19,7 @@ fs.mkdirSync(captures, {recursive:true});
     const page = await browser.newPage({viewport:{width:1360,height:900}}), errors=[];
     page.on('pageerror', error => errors.push(error.stack || error.message));
     await page.goto(address+'preview/web/?scenario=ready');
+    await page.addScriptTag({path:path.join(__dirname,'workspace-transcript-fixture.js')});
     await page.waitForFunction(() => state.activeChatId==='preview-chat' && !state.initializePromise);
     await page.evaluate(() => RNAssistantChatInspector.setOpen(false));
     const checkToggleFocus = async selector => {
@@ -115,7 +116,7 @@ fs.mkdirSync(captures, {recursive:true});
         messages: Array.from({ length: 40 }, (_, index) => ({ Id: 'scroll-' + index,
           Role: 'user', Content: 'Сообщение ' + index + ' — ' + 'Текст для проверки прокрутки. '.repeat(8) })),
         state: { status: 'running', runId: 'scroll-run', modelProgress: { RunId: 'scroll-run', Message: 'Начало ответа.' } } };
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       list.scrollTop = Math.floor((list.scrollHeight - list.clientHeight) / 3);
       list.dispatchEvent(new Event('scroll'));
       const top = list.scrollTop;
@@ -123,15 +124,15 @@ fs.mkdirSync(captures, {recursive:true});
       const offset = firstVisible.getBoundingClientRect().top - list.getBoundingClientRect().top;
       const visible = button.classList.contains('is-visible');
       chat.messages.push({ Id: 'scroll-later', Role: 'user', Content: 'Новое сообщение во время чтения истории.' });
-      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      renderWorkspaceFixture(list, chat);
       chat.state.modelProgress = { RunId: 'scroll-run', Message: 'Продолжение ответа, которое увеличивает высоту текущего блока. '.repeat(12) };
-      RNAssistantWorkspaceChat.paintProgress(list, chat);
+      paintWorkspaceFixture(list, chat);
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const anchored = Math.abs(list.scrollTop - top) < 3 &&
         Math.abs(firstVisible.getBoundingClientRect().top - list.getBoundingClientRect().top - offset) < 3;
       button.click();
       chat.state.modelProgress.Message += ' Ещё текст после перехода вниз.'.repeat(8);
-      RNAssistantWorkspaceChat.paintProgress(list, chat);
+      paintWorkspaceFixture(list, chat);
       await new Promise(resolve => requestAnimationFrame(resolve));
       const jumped = Math.max(0, list.scrollHeight-list.scrollTop-list.clientHeight) <= 2 && !button.classList.contains('is-visible');
       RNAssistantProjectChats.render();

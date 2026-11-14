@@ -30,13 +30,13 @@ withPreviewPage(async ({page, errors, chatNode}) => {
       };
     }, fixture);
     await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
-    await chatNode('workspaceChatApprove').waitFor({state:'visible'});
+    await chatNode('agentApprovalDock').getByRole('button', {name:'Подтвердить', exact:true}).waitFor({state:'visible'});
     await chatNode('chatInput').fill('Следующая задача');
-    await chatNode('workspaceChatApprove').click();
+    await chatNode('agentApprovalDock').getByRole('button', {name:'Подтвердить', exact:true}).click();
     await page.waitForFunction(() => approvalRequest && !state.pending[approvalRequest.id] && !RNAssistantProjectChats.isBusy());
     assert.equal(await page.evaluate(() => approvalRequest.payload.pendingId), fixture.waiting.pendingId);
     assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot().state.Status), 'running');
-    assert.equal(await chatNode('workspaceChatControl').isVisible(), false, 'consumed approval is removed');
+    assert.equal(await chatNode('agentApprovalDock').isVisible(), false, 'consumed approval is removed');
     assert.equal(await chatNode('chatInput').inputValue(), 'Следующая задача', 'approval never clears the draft');
     assert.equal(await chatNode('sendButton').isEnabled(), true,
       'the admitted continuation still accepts an exact-run clarification');

@@ -17,6 +17,7 @@
   function artifactRevision(artifact) { return Number(value(artifact, "Revision", "revision", 1) || 1); }
 
   function artifactRemoved(artifact) {
+    if (artifact && artifact.chatProjection) return !!artifact.removedFromChat;
     var uri = String(value(artifact, "ResourceUri", "resourceUri", "") || "").toLowerCase();
     if (!uri) return false;
     return !!artifactProjection().removedResourceUris[uri];
@@ -84,7 +85,7 @@
 
   function libraryHeadForArtifact(artifact) {
     var embedded = value(artifact, "LibraryHead", "libraryHead", null);
-    if (embedded) return embedded;
+    if (embedded || artifact && artifact.chatProjection) return embedded;
     var id = String(artifactId(artifact) || "").toLowerCase();
     if (!id) return null;
     var index = artifactProjection();
@@ -125,8 +126,20 @@
     return result;
   }
 
-  function artifactById(id) {
+  function artifactById(id, presentation) {
     var normalized = String(id || "").toLowerCase();
+    if (presentation) {
+      if (!presentation.capabilities.artifactCards) return null;
+      var snapshot = presentation.data.resourceSnapshot || {}, library = snapshot.artifactLibrary || {};
+      var artifact = (snapshot.artifacts || []).find(function (entry) { return String(artifactId(entry)).toLowerCase() === normalized; });
+      if (!artifact) return null;
+      var head = (value(library, "Heads", "heads", []) || []).find(function (entry) {
+        return String(value(entry, "ArtifactId", "artifactId", "")).toLowerCase() === normalized;
+      });
+      var removed = value(library, "RemovedResourceUris", "removedResourceUris", []) || [];
+      return Object.assign({}, artifact, { chatProjection: true, libraryHead: head || null,
+        removedFromChat: removed.some(function (uri) { return String(uri).toLowerCase() === artifactResourceUri(artifact).toLowerCase(); }) });
+    }
     return normalized ? artifactProjection().artifactById[normalized] || null : null;
   }
 
@@ -273,10 +286,10 @@
     return runtime && typeof runtime.state === "function" ? runtime.state(resourceUri) : null;
   }
 
-  function loadArtifactThumbnail(resourceUri) {
+  function loadArtifactThumbnail(resourceUri, chatId) {
     var runtime = thumbnailRuntime();
     return runtime && typeof runtime.load === "function"
-      ? runtime.load({ resourceUri: resourceUri })
+      ? runtime.load({ resourceUri: resourceUri, chatId: chatId })
       : Promise.resolve(false);
   }
 
@@ -417,11 +430,17 @@
     if (!artifact || value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable") return false;
     if ((!options || options.purpose !== "edit") && window.RNAssistantMaterialView &&
         value(artifact, "ResourceUri", "resourceUri", ""))
-      return window.RNAssistantMaterialView.openArtifact(artifact);
+      return window.RNAssistantMaterialView.openArtifact(artifact, options);
     return RNAssistantHtmlWorkspaceSurface.openArtifact(artifact, options);
   }
 
-  function artifactCard(artifact) {
+  function artifactContext(presentation) {
+    var snapshot = presentation && presentation.data.resourceSnapshot;
+    return presentation ? { chatId: presentation.target.sessionId, sessionRevision: snapshot && snapshot.sessionRevision,
+      activeHtmlArtifactId: snapshot && snapshot.activeHtmlArtifactId } : null;
+  }
+
+  function artifactCard(artifact, presentation) {
     var kind = artifactKind(artifact);
     var removed = artifactRemoved(artifact);
     var unavailable = value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable";
@@ -466,22 +485,23 @@
       card.setAttribute("aria-label", card.title);
     }
     if (!removed && !unavailable) card.addEventListener("click", function () {
-      if (kind === "html_workspace" && window.RNAssistantHtmlWorkspaceSurface &&
-          window.RNAssistantHtmlWorkspaceSurface.openArtifact(artifact)) return;
-      openArtifactResource(artifact);
+      if (presentation && !presentation.isCurrent()) return;
+      var context = artifactContext(presentation);
+      if (context) context.head = libraryHeadForArtifact(artifact);
+      openArtifactResource(artifact, null, null, context);
     });
     return card;
   }
 
-  function messageArtifacts(message) {
-    return (message.ArtifactIds || []).map(artifactById).filter(Boolean).filter(function (artifact) {
+  function messageArtifacts(message, presentation) {
+    return (message.ArtifactIds || []).map(function (id) { return artifactById(id, presentation); }).filter(Boolean).filter(function (artifact) {
       var kind = artifactKind(artifact);
       return kind !== "attachment" && kind !== "image" && kind !== "audio";
     });
   }
 
-  function messageImageArtifacts(message) {
-    return (message.ArtifactIds || []).map(artifactById).filter(Boolean).filter(isImageArtifact);
+  function messageImageArtifacts(message, presentation) {
+    return (message.ArtifactIds || []).map(function (id) { return artifactById(id, presentation); }).filter(Boolean).filter(isImageArtifact);
   }
 
   function imageAttachmentId(artifact) {
@@ -493,9 +513,9 @@
     }
   }
 
-  function messageImageAttachmentIds(message) {
+  function messageImageAttachmentIds(message, presentation) {
     var result = {};
-    messageImageArtifacts(message).forEach(function (artifact) {
+    messageImageArtifacts(message, presentation).forEach(function (artifact) {
       var id = imageAttachmentId(artifact);
       if (id) result[id] = true;
     });
@@ -511,9 +531,9 @@
     });
   }
 
-  function observeChatThumbnail(node, resourceUri) {
+  function observeChatThumbnail(node, resourceUri, presentation) {
     if (typeof window.IntersectionObserver !== "function") {
-      loadArtifactThumbnail(resourceUri);
+      loadArtifactThumbnail(resourceUri, presentation && presentation.target.sessionId);
       return;
     }
     if (!chatThumbnailObserver) {
@@ -522,14 +542,15 @@
           if (!entry.isIntersecting || !entry.target.isConnected) return;
           // Keep observing: an exact thumbnail may expire or leave the bounded
           // cache while this message stays mounted outside the viewport.
-          loadArtifactThumbnail(entry.target.dataset.resourceUri);
+          loadArtifactThumbnail(entry.target.dataset.resourceUri, entry.target.dataset.chatId);
         });
       }, { rootMargin: "160px" });
     }
+    if (presentation) node.dataset.chatId = presentation.target.sessionId;
     chatThumbnailObserver.observe(node);
   }
 
-  function appendArtifactMediaGallery(parent, artifacts, className) {
+  function appendArtifactMediaGallery(parent, artifacts, className, presentation) {
     artifacts = (artifacts || []).filter(isImageArtifact);
     if (!parent || !artifacts.length) return;
     var wrap = document.createElement("div");
@@ -552,20 +573,25 @@
         more.textContent = "+" + (artifacts.length - 4);
         button.appendChild(more);
       }
-      button.addEventListener("click", function () { openArtifactResource(artifact, artifacts, "chat"); });
+      button.addEventListener("click", function () {
+        if (presentation && !presentation.isCurrent()) return;
+        var context = artifactContext(presentation);
+        if (context) context.head = libraryHeadForArtifact(artifact);
+        openArtifactResource(artifact, artifacts, "chat", context);
+      });
       wrap.appendChild(button);
-      observeChatThumbnail(thumbnail, uri);
+      observeChatThumbnail(thumbnail, uri, presentation);
     });
     parent.appendChild(wrap);
   }
 
-  function appendMessageMediaGallery(parent, message) {
-    appendArtifactMediaGallery(parent, messageImageArtifacts(message), "message-media-gallery");
+  function appendMessageMediaGallery(parent, message, presentation) {
+    appendArtifactMediaGallery(parent, messageImageArtifacts(message, presentation), "message-media-gallery", presentation);
   }
 
-  function appendMessageArtifactCards(parent, message, seenArtifactIds) {
+  function appendMessageArtifactCards(parent, message, seenArtifactIds, presentation) {
     if (!parent || !message) return;
-    var artifacts = messageArtifacts(message).filter(function (artifact) {
+    var artifacts = messageArtifacts(message, presentation).filter(function (artifact) {
       var key = "$" + String(artifactId(artifact) || "").toLowerCase();
       return !seenArtifactIds || !seenArtifactIds[key];
     });
@@ -574,18 +600,18 @@
     wrap.className = "chat-artifact-list";
     artifacts.forEach(function (artifact) {
       if (seenArtifactIds) seenArtifactIds["$" + String(artifactId(artifact) || "").toLowerCase()] = true;
-      wrap.appendChild(artifactCard(artifact));
+      wrap.appendChild(artifactCard(artifact, presentation));
     });
     parent.appendChild(wrap);
   }
 
-  function collectRunArtifacts(items, finalMessage) {
+  function collectRunArtifacts(items, finalMessage, presentation) {
     var positions = Object.create(null);
     var artifacts = [];
     var messages = (items || []).map(function (item) { return item && item.message; });
     if (finalMessage && finalMessage.message) messages.push(finalMessage.message);
     messages.filter(Boolean).forEach(function (message) {
-      messageArtifacts(message).forEach(function (artifact) {
+      messageArtifacts(message, presentation).forEach(function (artifact) {
         var key = artifactLogicalKey(artifact);
         if (!key) return;
         if (positions[key] === undefined) {
@@ -610,13 +636,13 @@
     });
   }
 
-  function collectRunImageArtifacts(items, finalMessage) {
+  function collectRunImageArtifacts(items, finalMessage, presentation) {
     var messages = (items || []).map(function (item) { return item && item.message; });
     if (finalMessage && finalMessage.message) messages.push(finalMessage.message);
     var seen = {};
     var artifacts = [];
     messages.filter(Boolean).forEach(function (message) {
-      messageImageArtifacts(message).forEach(function (artifact) {
+      messageImageArtifacts(message, presentation).forEach(function (artifact) {
         var uri = artifactResourceUri(artifact);
         if (!uri || seen[uri]) return;
         seen[uri] = true;
@@ -639,16 +665,16 @@
     return labels.slice(0, 3).join(" · ") + (labels.length > 3 ? " · …" : "");
   }
 
-  function appendAgentRunResourceCards(parent, items, finalMessage) {
+  function appendAgentRunResourceCards(parent, items, finalMessage, presentation) {
     if (!parent) return;
-    appendArtifactMediaGallery(parent, collectRunImageArtifacts(items, finalMessage), "agent-run-media-gallery");
-    var artifacts = visibleRunArtifacts(collectRunArtifacts(items, finalMessage));
+    appendArtifactMediaGallery(parent, collectRunImageArtifacts(items, finalMessage, presentation), "agent-run-media-gallery", presentation);
+    var artifacts = visibleRunArtifacts(collectRunArtifacts(items, finalMessage, presentation));
     if (!artifacts.length) return;
 
     if (artifacts.length === 1) {
       var single = document.createElement("div");
       single.className = "chat-artifact-list agent-run-resource-list";
-      single.appendChild(artifactCard(artifacts[0]));
+      single.appendChild(artifactCard(artifacts[0], presentation));
       parent.appendChild(single);
       return;
     }
@@ -682,7 +708,7 @@
 
     var list = document.createElement("div");
     list.className = "chat-artifact-list chat-resource-bundle-list";
-    artifacts.forEach(function (artifact) { list.appendChild(artifactCard(artifact)); });
+    artifacts.forEach(function (artifact) { list.appendChild(artifactCard(artifact, presentation)); });
     details.appendChild(list);
     parent.appendChild(details);
   }

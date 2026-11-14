@@ -55,7 +55,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
         }
       };
       window.messageProtocolMessage = () => false;
-      window.renderChatResourceNavigation = window.renderAgentPlanDock = window.renderAgentApprovalDock = () => {};
+      window.renderChatResourceNavigation = window.renderAgentPlanDock = () => {};
       window.syncChatScroll = () => {};
       window.buildMessageUnits = () => [
         { key: "spacer", signature: "spacer", render: () => {
@@ -66,9 +66,11 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
           appendMessageMediaGallery(node, state.messages[0]); return node;
         } }
       ];
-      renderMessages();
+      window.renderImages = () => renderConversationTranscript($("messages"),
+        { source: "office", sessionId: state.activeChatId }, officeTranscriptData(state), null);
+      renderImages();
       window.originalCell = document.querySelector(".chat-media-item");
-      renderMessages(); // Retains the message node while the image is offscreen.
+      renderImages(); // Retains the message node while the image is offscreen.
     });
     assert.equal(await page.evaluate(() => originalCell === document.querySelector(".chat-media-item")), true);
     assert.equal(await page.evaluate(() => reads), 0, "offscreen images stay lazy");

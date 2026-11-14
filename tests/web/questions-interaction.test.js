@@ -31,6 +31,10 @@ const root = path.resolve(__dirname, "../..");
           { id: "sections", header: "Разделы", prompt: "Что включить в отчёт?", selection: "multiple", allowFreeText: true,
             options: [{ id: "steps", label: "Шаги", description: "План действий" }, { id: "risks", label: "Риски", description: "Что требует внимания" }] }
         ] } };
+      questionTest.open = async () => {
+        await RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review");
+        await RNAssistantConversationPanel.find({source:"workspace", workspaceId:"preview-data-workspace",sessionId:"preview-project-review"}).refresh();
+      };
       window.send = async function (type, payload) {
         let answerInput = null, omitReceipt = false, wrongChat = false;
         if (type === "submitProjectChat" && payload.input.answers) {
@@ -55,9 +59,9 @@ const root = path.resolve(__dirname, "../..");
           result.state.userInput = { runId: "run-" + questionTest.generation, questionSet: questionTest.set };
         return result;
       };
-      return RNAssistantProjectChats.setScope("projects");
+      return questionTest.open();
     });
-    const form = page.locator("#workspaceChatQuestions .plan-question-cards");
+    const form = page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"] .plan-question-cards');
     await form.waitFor();
     assert.equal(await form.locator(".question-card:visible").count(), 1, "only one question is shown");
     assert.equal(await form.locator(".question-counter").textContent(), "1 / 2");
@@ -80,7 +84,7 @@ const root = path.resolve(__dirname, "../..");
     await form.locator('input[value="risks"]').check();
     assert.equal(await page.evaluate(() => questionTest.calls.length), 0, "multiple choice waits for Done");
     await form.locator("textarea").fill("С примерами");
-    await page.evaluate(() => RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review"));
+    await page.evaluate(() => questionTest.open());
     assert.equal(await form.locator('input[value="md"]').isChecked(), true);
     assert.equal(await form.locator("textarea").inputValue(), "С примерами", "poll/reopen keeps the form draft");
     assert.equal(await form.locator(".question-counter").textContent(), "2 / 2", "redraw keeps the active page");
@@ -96,10 +100,10 @@ const root = path.resolve(__dirname, "../..");
       { questionId: "format", optionIds: ["md"], freeText: "" },
       { questionId: "sections", optionIds: ["steps", "risks"], freeText: "С примерами" }
     ] });
-    await page.locator("#workspaceChatQuestions").waitFor({ state: "hidden" });
+    await page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"]').waitFor({ state: "hidden" });
 
     await page.evaluate(() => { questionTest.pending = true; questionTest.generation++;
-      return RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review"); });
+      return questionTest.open(); });
     await form.waitFor();
     await form.locator(".question-skip").first().click();
     await form.locator("textarea").fill("Только выводы");
@@ -109,14 +113,14 @@ const root = path.resolve(__dirname, "../..");
       { questionId: "format", optionIds: [], freeText: "", skipped: true },
       { questionId: "sections", optionIds: [], freeText: "Только выводы" }
     ]);
-    await page.locator("#workspaceChatQuestions").waitFor({ state: "hidden" });
+    await page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"]').waitFor({ state: "hidden" });
 
     // Final single choice submits automatically, but the card closes only on acknowledgement.
     await page.evaluate(() => {
       questionTest.pending = true; questionTest.generation++;
       questionTest.set.questions[1].selection = "single";
       questionTest.holdSubmit = true; questionTest.keepPending = true;
-      return RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review");
+      return questionTest.open();
     });
     await form.locator(".question-next").click();
     await form.locator('input[value="steps"]').click();
@@ -129,14 +133,17 @@ const root = path.resolve(__dirname, "../..");
     assert.equal(await form.isVisible(), true, "unacknowledged submission keeps the card visible");
     assert.equal(await form.locator('button[type="submit"]').isDisabled(), true);
     await page.evaluate(() => questionTest.releaseSubmit());
-    await page.locator("#workspaceChatQuestions").waitFor({ state: "hidden" });
-    await page.evaluate(() => RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review"));
+    await page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"]').waitFor({ state: "hidden" });
+    await page.evaluate(() => questionTest.open());
     assert.equal(await form.isVisible(), false, "stale pending snapshots cannot reopen an accepted card");
 
     await page.evaluate(() => { questionTest.pending = true; questionTest.generation++;
       questionTest.holdSubmit = false; questionTest.keepPending = false;
       questionTest.set.questions[1].selection = "multiple";
-      return RNAssistantPlugins.select("data-templates"); });
+      return send("getPluginChat", { pluginId: "data-templates" }).then(snapshot => {
+        const target = {source:"workspace", workspaceId:snapshot.project.workspaceId, sessionId:snapshot.sessionId};
+        RNAssistantConversationPanel.open(target); RNAssistantConversationPanel.find(target).accept(snapshot);
+      }); });
     await form.waitFor();
     assert.equal(await form.locator("input:checked").count(), 0, "another owner never adopts the project answer");
     assert.equal(await form.locator("textarea").inputValue(), "");
@@ -148,7 +155,7 @@ const root = path.resolve(__dirname, "../..");
     await page.evaluate(async () => {
       RNAssistantProjectChats.setScope("projects");
       questionTest.pending = true; questionTest.generation++; questionTest.omitReceiptOnce = true;
-      await RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review");
+      await questionTest.open();
     });
     await form.waitFor();
     await form.getByRole("button", { name: "Пропустить всё", exact: true }).click();
@@ -159,15 +166,15 @@ const root = path.resolve(__dirname, "../..");
     const answerRetry = await page.evaluate(() => questionTest.calls.slice(-2));
     assert.equal(answerRetry[0].input.requestId, answerRetry[1].input.requestId,
       "missing answer receipt retries with the same operation ID");
-    await page.locator("#workspaceChatQuestions").waitFor({ state: "hidden" });
+    await page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"]').waitFor({ state: "hidden" });
 
     await page.evaluate(async () => {
       questionTest.pending = true; questionTest.generation++; questionTest.wrongChatOnce = true;
-      await RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review");
+      await questionTest.open();
     });
     await form.waitFor();
     await form.getByRole("button", { name: "Пропустить всё", exact: true }).click();
-    await form.getByText("Ответ получен для другого чата. Обновите беседу перед повтором.", { exact: true }).waitFor();
+    await form.getByText("Состояние получено для другого чата. Повторите загрузку.", { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot().sessionId), "preview-project-review",
       "wrong-chat response cannot replace the selected conversation");
     await form.getByRole("button", { name: "Пропустить всё", exact: true }).click();
@@ -175,17 +182,16 @@ const root = path.resolve(__dirname, "../..");
     const addressedRetry = await page.evaluate(() => questionTest.calls.slice(-2));
     assert.equal(addressedRetry[0].input.requestId, addressedRetry[1].input.requestId,
       "wrong-chat response preserves the answer operation ID");
-    await page.locator("#workspaceChatQuestions").waitFor({ state: "hidden" });
+    await page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"]').waitFor({ state: "hidden" });
 
     // Use the actual Office transcript and inbox, including the render during intake.
-    await page.evaluate(() => RNAssistantProjectChats.setScope("office"));
-    await page.locator('.rail-button[data-tab="chat"]').click();
+    await page.evaluate(() => RNAssistantConversationPanel.open({source:"office",sessionId:"preview-chat"}));
     await page.evaluate(() => {
       window.questionTest.officeCalls = [];
       questionTest.set.questions[0].allowFreeText = true;
       const original = send;
       window.send = async function (type, payload) {
-        if (type === "getToolResultPresentation") return { chatId: state.activeChatId, runId: "office-run", toolCallId: "ask", blocks: [], questions: questionTest.set };
+        if (type === "getToolResultPresentation") return { chatId: payload.chatId, runId: "office-run", toolCallId: "ask", blocks: [], questions: questionTest.set };
         if (type === "getRunChanges") return { chatId: payload.chatId, runId: payload.runId, complete: true, items: [] };
         if (type === "submitChatInput" && payload.answers) {
           questionTest.officeCalls.push(payload);
@@ -195,22 +201,24 @@ const root = path.resolve(__dirname, "../..");
         }
         return original(type, payload);
       };
-      state.messages = [
+      const messages = [
         { Id: "request", Role: "user", Content: "Подготовь отчёт по продажам за сентябрь." },
         { Id: "intro", Role: "assistant", RunId: "office-run", Content: "Уточню формат и содержание отчёта." },
         { Id: "question", Role: "assistant", RunId: "office-run", Content: "",
         RunViewState: { RunId: "office-run", TurnId: "turn", Lifecycle: "awaiting_user", ExecutionHealth: "clean", GoalVerification: "not_assessed",
           SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0, FailedCalls: 0, UnknownEffects: 0, Reason: "awaiting_user" },
         Activity: { RunId: "office-run", ToolId: "core.ask", ToolCallId: "ask", Kind: "tool", Status: "waiting", Title: "Уточнение задачи" } }];
-      state.messages[1].RunViewState = state.messages[2].RunViewState;
-      renderMessages();
+      messages[1].RunViewState = messages[2].RunViewState;
+      const panel = RNAssistantConversationPanel.office("preview-chat");
+      panel.accept({ activeChatId:"preview-chat", sessionRevision:panel.snapshot().sessionRevision + 1,
+        messages, runViewState:messages[2].RunViewState });
     });
-    const office = page.locator("#messages .plan-question-cards");
+    const office = page.locator('.conversation-panel:visible [data-chat-node="chatQuestions"] .plan-question-cards');
     await office.waitFor();
-    await page.locator("#chatInput").fill("Черновик следующего сообщения");
+    await page.locator('.conversation-panel:visible [data-chat-node="chatInput"]').fill("Черновик следующего сообщения");
     await office.locator('input[value="html"]').check();
     await office.locator("textarea:visible").fill("С примерами и краткими выводами");
-    await page.evaluate(() => { state.messages.find(item => item.Id === "question").Activity.Subtitle = "Обновлено"; renderMessages(); });
+    await page.evaluate(() => { const panel = RNAssistantConversationPanel.office("preview-chat"); panel.snapshot().messages.find(item => item.Id === "question").Activity.Subtitle = "Обновлено"; panel.render(); });
     await office.waitFor();
     assert.equal(await office.locator('input[value="html"]').isChecked(), true, "Office redraw retains the selected answer");
     assert.equal(await office.locator("textarea:visible").inputValue(), "С примерами и краткими выводами");
@@ -230,7 +238,7 @@ const root = path.resolve(__dirname, "../..");
       assert.equal(metrics.radius, metrics.expectedRadius, "outer rounding uses the demo token");
       assert.ok(metrics.rowHeight <= 56 && metrics.panelHeight <= 360, "one compact rounded card");
       colors.push(metrics.background);
-      if (process.env.QUESTION_SCREENSHOTS) await page.locator("#chatDropZone").screenshot({ animations: "disabled", path: path.join(process.env.QUESTION_SCREENSHOTS, "questions-" + theme + ".png") });
+      if (process.env.QUESTION_SCREENSHOTS) await page.locator(".conversation-panel:visible").screenshot({ animations: "disabled", path: path.join(process.env.QUESTION_SCREENSHOTS, "questions-" + theme + ".png") });
     }
     assert.notEqual(colors[0], colors[1], "cards use the active theme");
     await page.setViewportSize({ width: 390, height: 844 });
@@ -242,7 +250,7 @@ const root = path.resolve(__dirname, "../..");
     await page.waitForFunction(() => questionTest.officeCalls.length === 1);
     await page.waitForFunction(() => !RNAssistantConversationInput.isPending("office", { chatId: "preview-chat" }) &&
       chatInputEchoes("preview-chat").some(item => item.Id === "answer" && item.Status === "Applied"));
-    assert.equal(await page.locator("#chatInput").inputValue(), "Черновик следующего сообщения");
+    assert.equal(await page.locator('.conversation-panel:visible [data-chat-node="chatInput"]').inputValue(), "Черновик следующего сообщения");
     assert.deepEqual(await page.evaluate(() => questionTest.officeCalls[0].answers.answers), [
       { questionId: "format", optionIds: ["html"], freeText: "" },
       { questionId: "sections", optionIds: [], freeText: "<img src=x onerror=alert(1)> Свой ответ" }
