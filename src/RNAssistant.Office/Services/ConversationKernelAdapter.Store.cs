@@ -50,6 +50,9 @@ namespace RNAssistant.Office.Services
             ChatMessage activity = null;
             switch (fact.Kind)
             {
+                case AgentRunEventKind.ModelAttemptRetained:
+                    _session.Messages.Add(ConversationRunProjection.CreateRetainedAttempt(fact));
+                    break;
                 case AgentRunEventKind.ResponseAccepted:
                     _stepMessage = fact.Response.Message;
                     var acceptedMessages = ConversationRunProjection.CreateAcceptedResponse(fact,
@@ -126,7 +129,16 @@ namespace RNAssistant.Office.Services
             }
             var appended = _session.Messages.GetRange(firstMessage, _session.Messages.Count - firstMessage);
             StampMessages(appended);
-            Save(fact, appended, fact.Kind == AgentRunEventKind.ResponseAccepted ? null : activity);
+            try { Save(fact, appended, fact.Kind == AgentRunEventKind.ResponseAccepted ? null : activity); }
+            catch when (fact.Kind == AgentRunEventKind.ModelAttemptRetained)
+            {
+                _session.Messages.RemoveRange(firstMessage, _session.Messages.Count - firstMessage);
+                foreach (var message in appended) _pendingMessageUpdates.Remove(message);
+                _progress?.Invoke("attempt_unsaved", "Не сохранено", new ChatActivity {
+                    Kind = "model_attempt", Title = "Не сохранено", Status = "unsaved", StepId = fact.StepId,
+                    RunId = fact.Summary.RunId, ModelAttemptId = fact.SourceModelAttemptId, UnsavedAttempt = fact.RetainedAttempt });
+                throw;
+            }
             if (fact.Kind == AgentRunEventKind.ToolCompleted)
             {
                 // Counts and the completed activity are already durable. Context/media

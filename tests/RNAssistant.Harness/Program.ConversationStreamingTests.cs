@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -33,20 +34,58 @@ namespace RNAssistant.Harness
             AssertEqual(string.Empty, extractor.Add("  \r\n"), "trailing whitespace produces no delta");
         }
 
+        private static void ConversationStreamTerminalAndTimer()
+        {
+            var values = new List<ConversationAttemptSnapshot>();
+            using (var flushed = new ManualResetEventSlim())
+            using (var stream = new ConversationStreamProgressProjector("attempt-a", false, snapshot => {
+                lock (values) values.Add(snapshot);
+                if (snapshot.Message == "first tail" && !snapshot.TransportEnded) flushed.Set();
+            }))
+            {
+                stream.OnUpdate(new LlmStreamUpdate { ContentDelta = "{\"message\":\"first" });
+                AssertEqual("first", values.Last().Message, "first visible fragment is synchronous");
+                stream.OnUpdate(new LlmStreamUpdate { ContentDelta = " tail" });
+                AssertTrue(flushed.Wait(3000), "small trailing fragment is painted without another chunk");
+                stream.OnUpdate(new LlmStreamUpdate { ReasoningDelta = "reasoning" });
+                stream.OnUpdate(new LlmStreamUpdate { ReasoningDelta = " tail" });
+                var ended = stream.End(ModelTransportOutcome.Cancelled);
+                AssertEqual("reasoning tail", ended.Reasoning, "cancel flushes pending reasoning");
+                var revision = ended.Revision;
+                stream.OnUpdate(new LlmStreamUpdate { ContentDelta = " late", ReasoningDelta = " late", Completed = true });
+                stream.End(ModelTransportOutcome.Completed);
+                AssertEqual(revision, stream.Snapshot.Revision, "terminal is emitted once and freezes late deltas");
+                AssertEqual(1, values.Count(value => value.TransportEnded), "one transport-ended per request");
+                AssertEqual(ModelTransportOutcome.Cancelled, stream.Snapshot.TransportOutcome, "cancel is not completion");
+            }
+            using (var stream = new ConversationStreamProgressProjector("attempt-b", true, null))
+            {
+                var value = stream.End(ModelTransportOutcome.Completed, new LlmCompletionResult {
+                    Content = "{\"response\":{\"message\":\"json fallback\"}}", ReasoningContent = new string('r', 25000) });
+                AssertEqual("json fallback", value.Message, "JSON fallback uses the same snapshot projection");
+                AssertEqual(false, value.IsEventStream, "requested SSE is not observed SSE");
+                AssertEqual(24000, value.Reasoning.Length, "reasoning is bounded");
+                AssertTrue(value.ReasoningTruncated, "truncation is explicit");
+            }
+            Action<LlmStreamUpdate> late = null;
+            var endedAttempts = new List<ConversationAttemptSnapshot>();
+            var client = new ModelProtocolClient((settings, messages, options, progress, token) => {
+                late = progress;
+                progress(new LlmStreamUpdate { ContentDelta = "{\"message\":\"partial" });
+                throw new OperationCanceledException();
+            });
+            var request = NewProtocolRequest();
+            client.GetResponseAsync(request, new ModelProtocolProgress { AttemptProgress = snapshot => endedAttempts.Add(snapshot) },
+                CancellationToken.None).GetAwaiter().GetResult();
+            AssertEqual(ModelTransportOutcome.Cancelled, endedAttempts.Last().TransportOutcome, "request owner ends cancellation");
+            var count = endedAttempts.Count;
+            late(new LlmStreamUpdate { ContentDelta = " late" });
+            AssertEqual(count, endedAttempts.Count, "request callback cannot mutate another attempt");
+            AssertEqual("partial", endedAttempts.Last().Message, "partial remains available after cancellation");
+        }
+
         private static void ConversationStreamsMessageAndThinking()
         {
-            var delayed = new List<Tuple<string, string, ChatActivity>>();
-            var projector = new ConversationStreamProgressProjector(
-                (phase, message, activity) => delayed.Add(Tuple.Create(phase, message, activity)));
-            projector.Start(true);
-            projector.OnUpdate(new LlmStreamUpdate
-                { ContentDelta = "{\"action\":\"finish\",\"reason\":\"Answer.\",\"outcome\":\"completed\",\"results\":[],\"message\":\" " });
-            AssertEqual(1, delayed.Count, "a new attempt clears the prior draft before any visible output arrives");
-            projector.OnUpdate(new LlmStreamUpdate { ContentDelta = "Visible\"}" });
-            projector.Complete();
-            AssertEqual(string.Empty, delayed[0].Item2, "attempt start emits exactly one immediate reset");
-            AssertEqual(" Visible", delayed[1].Item2, "replacement text follows that reset");
-
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var thinking = new string('р', 300);
@@ -212,7 +251,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Жил-был потоковый черновик.", streamEvents[1], "first attempt message");
                 AssertEqual(string.Empty, streamEvents[2], "repair attempt reset");
                 AssertEqual("Исправлено.", streamEvents[3], "repaired attempt message");
-                AssertTrue(reasoning.SequenceEqual(new[] { "Первая мысль.", "Исправленная мысль." }),
+                AssertTrue(reasoning.Where(value => !string.IsNullOrEmpty(value)).SequenceEqual(new[] { "Первая мысль.", "Исправленная мысль." }),
                     "thinking is isolated per model attempt");
                 AssertTrue(!progressEvents.Any(item =>
                     (item.Item2 ?? string.Empty).IndexOf("исправляет структуру", StringComparison.OrdinalIgnoreCase) >= 0),

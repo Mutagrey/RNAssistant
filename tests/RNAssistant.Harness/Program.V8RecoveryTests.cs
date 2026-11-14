@@ -360,7 +360,7 @@ namespace RNAssistant.Harness
                         var session = service.CreateSession(workspace, "Stream"); var previewSeen = false;
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "fixture",
                             StreamResponses = true, SmartChatTitles = false, AutoCompressContext = false,
-                            ContextWindowOverrideTokens = strict ? 24000 : 131072, MaxConsecutiveReflections = 1,
+                            ContextWindowOverrideTokens = strict ? 30000 : 131072, MaxConsecutiveReflections = 1,
                             AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject };
                         var result = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                             SessionId = session.Id, Message = "Answer directly.", ReasoningEnabled = true }, settings, () => "fixture-key",

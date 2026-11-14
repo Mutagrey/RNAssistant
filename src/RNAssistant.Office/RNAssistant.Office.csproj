@@ -297,7 +297,7 @@
     <Compile Include="Services\ConversationModelSession.cs" />
     <Compile Include="Services\AgentArsenalProjection.cs" />
     <Compile Include="Services\ConversationProtocolContext.cs" />
-    <Compile Include="Services\ConversationStreamProgressProjector.cs" />
+    <Compile Include="Services\ConversationStreamProgressDelivery.cs" />
     <Compile Include="Services\AgentJsonProtocol.cs" />
     <Compile Include="Services\ConversationPromptComposer.cs" />
     <Compile Include="Services\CallableToolPack.cs" />

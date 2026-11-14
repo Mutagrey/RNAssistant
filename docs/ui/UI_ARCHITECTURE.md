@@ -1,5 +1,11 @@
 # Архитектура UI RNAssistant
 
+W3 retained attempts (In Review, 2026-11-14): `ChatMessageViewDto.RetainedAttempt`
+поступает из обязательного kernel commit; общий `renderActivityNode` показывает
+его внутри run. Принятый snapshot не становится владельцем незаписанной истории:
+unsaved body остаётся только в существующей ограниченной live/view projection.
+Execution orchestration и Office live delivery ещё требуют объединения.
+
 
 ## Адресные чтения чата — In Review, 2026-11-14
 

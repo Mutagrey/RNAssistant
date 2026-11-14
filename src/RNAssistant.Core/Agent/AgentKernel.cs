@@ -281,7 +281,9 @@ namespace RNAssistant.Core.Agent
                             state.Messages, completionFeedback ?? state.FinishCorrection?.Message ?? (state.Progress.InspectionRequired
                                 ? ModelProtocolWire.UnknownEffectGuidance : null), state.Limits.MaxConsecutiveReflections,
                             state.ConsecutiveReflections, requestCause ?? state.FinishCorrection?.RequestCause(),
-                            state.FinishCorrection), requestCancellation.Token).ConfigureAwait(false);
+                            state.FinishCorrection, retained => AppendAsync(state,
+                                new AgentRunEvent(AgentRunEventKind.ModelAttemptRetained, state.Summary(), stepId,
+                                    sourceModelAttemptId: retained.Body.AttemptId, retainedAttempt: retained))), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -293,28 +295,43 @@ namespace RNAssistant.Core.Agent
                 {
                     return await FinishAsync(state, RunLifecycle.Failed, "model_infrastructure", ex.Message).ConfigureAwait(false);
                 }
+                async Task<AgentRunResult> RejectAndFinishAsync(RunLifecycle lifecycle, string reason, string message)
+                {
+                    await RetainModelAsync(state, stepId, model,
+                        lifecycle == RunLifecycle.Cancelled ? ModelRuntimeDisposition.Cancelled : ModelRuntimeDisposition.Rejected,
+                        reason + ": " + message).ConfigureAwait(false);
+                    return await FinishAsync(state, lifecycle, reason, message).ConfigureAwait(false);
+                }
+                if (model?.FailureKind == ModelProtocolFailureKind.Persistence)
+                    return await RejectAndFinishAsync(RunLifecycle.Failed, "attempt_not_saved", model.Message).ConfigureAwait(false);
                 if (cancellationToken.IsCancellationRequested)
-                    return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
+                    return await RejectAndFinishAsync(RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
                 pauseId = (_input as IRunPauseChannel)?.PauseId;
-                if (pauseId != null) return await PauseAsync(state, pauseId).ConfigureAwait(false);
+                if (pauseId != null)
+                {
+                    await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Superseded, "Run paused before admission.").ConfigureAwait(false);
+                    return await PauseAsync(state, pauseId).ConfigureAwait(false);
+                }
                 if (_input != null && _input.HasPendingInput)
                 {
+                    await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Superseded, "New input arrived before admission.").ConfigureAwait(false);
                     requestCause = new ModelRequestCause(ModelRequestCauseKind.InputReceived,
                         model?.SourceModelAttemptId, "New input arrived before this response was accepted; no tools from this response were dispatched.");
                     continue;
                 }
                 if (model == null)
-                    return await FinishAsync(state, RunLifecycle.Failed, "missing_model_result", "Model returned no result.").ConfigureAwait(false);
+                    return await RejectAndFinishAsync(RunLifecycle.Failed, "missing_model_result", "Model returned no result.").ConfigureAwait(false);
                 if (model.FailureKind.HasValue)
                     return await FinishAsync(state,
                         model.FailureKind == ModelProtocolFailureKind.Cancelled ? RunLifecycle.Cancelled : RunLifecycle.Failed,
                         model.FailureKind.Value.ToString(), model.Message).ConfigureAwait(false);
                 if (model.ProviderRefusal)
-                    return await FinishAsync(state, RunLifecycle.Failed, "provider_refused", model.Message).ConfigureAwait(false);
+                    return await RejectAndFinishAsync(RunLifecycle.Failed, "provider_refused", model.Message).ConfigureAwait(false);
 
                 if (model.CompletionRejected)
                 {
                     completionFeedback = null; requestCause = null;
+                    await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Rejected, model.CompletionRejection.Message).ConfigureAwait(false);
                     var stopped = await RejectFinishAsync(state, model.Response, model.CompletionRejection,
                         model.SourceModelAttemptId, stepId).ConfigureAwait(false);
                     if (stopped != null) return stopped;
@@ -323,7 +340,7 @@ namespace RNAssistant.Core.Agent
                 completionFeedback = null;
                 requestCause = null;
                 if (model.Response == null)
-                    return await FinishAsync(state, RunLifecycle.Failed, "invalid_accepted_response", "Accepted response is missing.").ConfigureAwait(false);
+                    return await RejectAndFinishAsync(RunLifecycle.Failed, "invalid_accepted_response", "Accepted response is missing.").ConfigureAwait(false);
                 AgentResponse response;
                 try
                 {
@@ -333,7 +350,7 @@ namespace RNAssistant.Core.Agent
                 {
                     // Allocation is local infrastructure, never a reason to ask
                     // the model to regenerate its useful payload.
-                    return await FinishAsync(state, RunLifecycle.Failed, "call_id_allocation_failed", ex.Message).ConfigureAwait(false);
+                    return await RejectAndFinishAsync(RunLifecycle.Failed, "call_id_allocation_failed", ex.Message).ConfigureAwait(false);
                 }
                 ToolPolicySnapshot[] policies;
                 try
@@ -342,20 +359,21 @@ namespace RNAssistant.Core.Agent
                 }
                 catch (Exception ex)
                 {
-                    return await FinishAsync(state, RunLifecycle.Failed, "invalid_accepted_response", ex.Message).ConfigureAwait(false);
+                    return await RejectAndFinishAsync(RunLifecycle.Failed, "invalid_accepted_response", ex.Message).ConfigureAwait(false);
                 }
                 if (response.Action == ConversationResponse.ReflectionAction)
                 {
                     if (state.Limits.MaxConsecutiveReflections == 0)
-                        return await FinishAsync(state, RunLifecycle.Failed, "ReflectionDisabled",
+                        return await RejectAndFinishAsync(RunLifecycle.Failed, "ReflectionDisabled",
                             "Рефлексия отключена для этого запуска, но модель вернула reflection. Ответ отклонён без запроса на корректировку.").ConfigureAwait(false);
                     if (state.ReflectionFeedbackIssued)
-                        return await FinishAsync(state, RunLifecycle.Failed, "reflection_limit",
+                        return await RejectAndFinishAsync(RunLifecycle.Failed, "reflection_limit",
                             "Reflection limit reached without a new tool result or user input.").ConfigureAwait(false);
                     if (state.ConsecutiveReflections >= state.Limits.MaxConsecutiveReflections)
                     {
                         state.ReflectionFeedbackIssued = true;
                         completionFeedback = ReflectionLimitFeedback(state);
+                        await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Rejected, completionFeedback).ConfigureAwait(false);
                         requestCause = new ModelRequestCause(ModelRequestCauseKind.ReflectionLimit,
                             model.SourceModelAttemptId, completionFeedback);
                         await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
@@ -365,6 +383,7 @@ namespace RNAssistant.Core.Agent
                 }
                 if (response.Final && state.Progress.InspectionRequired)
                 {
+                    await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Rejected, ModelProtocolWire.UnknownEffectGuidance).ConfigureAwait(false);
                     var stopped = await RejectFinishAsync(state, model.Response,
                         FinishAdmission.Reject("inspection_required", ModelProtocolWire.UnknownEffectGuidance),
                         model.SourceModelAttemptId, stepId).ConfigureAwait(false);
@@ -381,13 +400,14 @@ namespace RNAssistant.Core.Agent
                     }
                     catch (Exception ex)
                     {
-                        return await FinishAsync(state, RunLifecycle.Failed, "finish_evidence_unavailable", ex.Message).ConfigureAwait(false);
+                        return await RejectAndFinishAsync(RunLifecycle.Failed, "finish_evidence_unavailable", ex.Message).ConfigureAwait(false);
                     }
                     if (admission == null)
-                        return await FinishAsync(state, RunLifecycle.Failed, "finish_evidence_unavailable",
+                        return await RejectAndFinishAsync(RunLifecycle.Failed, "finish_evidence_unavailable",
                             "Finish evidence resolver returned no decision.").ConfigureAwait(false);
                     if (!admission.Accepted)
                     {
+                        await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Rejected, admission.Message).ConfigureAwait(false);
                         var stopped = await RejectFinishAsync(state, model.Response, admission,
                             model.SourceModelAttemptId, stepId).ConfigureAwait(false);
                         if (stopped != null) return stopped;
@@ -399,6 +419,7 @@ namespace RNAssistant.Core.Agent
                         !partialFinishRechecked && state.Iterations < state.Limits.MaxIterations &&
                         state.ToolSteps < state.Limits.MaxToolSteps)
                     {
+                        await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Rejected, ModelProtocolWire.PartialFinishRecheckGuidance).ConfigureAwait(false);
                         partialFinishRechecked = true;
                         state.FinishCorrection = FinishCorrection.Create(model.Response, "partial_finish_recheck",
                             ModelProtocolWire.PartialFinishRecheckGuidance, null, model.SourceModelAttemptId,
@@ -409,6 +430,7 @@ namespace RNAssistant.Core.Agent
                     }
                     if (_input != null && !_input.TryCloseInput())
                     {
+                        await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Superseded, "New input arrived before finish admission.").ConfigureAwait(false);
                         requestCause = new ModelRequestCause(ModelRequestCauseKind.InputReceived,
                             model.SourceModelAttemptId, "New input arrived before finish was accepted.");
                         continue;
@@ -437,6 +459,15 @@ namespace RNAssistant.Core.Agent
                         "Three consecutive model responses repeated only rejected calls. No repeated operation was dispatched; change the approach or reconcile the earlier result.").ConfigureAwait(false);
             }
             return await FinishAsync(state, RunLifecycle.Failed, "iteration_limit", "Model iteration limit reached.").ConfigureAwait(false);
+        }
+
+        private Task RetainModelAsync(State state, string stepId, AgentModelResult model,
+            ModelRuntimeDisposition disposition, string explanation)
+        {
+            if (model?.Attempt == null) return Task.CompletedTask;
+            var retained = new RetainedModelAttempt(model.Attempt, ModelProtocolDisposition.Accepted, disposition, explanation);
+            return AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ModelAttemptRetained, state.Summary(), stepId,
+                sourceModelAttemptId: retained.Body.AttemptId, retainedAttempt: retained));
         }
 
         private static string ReflectionLimitFeedback(State state)

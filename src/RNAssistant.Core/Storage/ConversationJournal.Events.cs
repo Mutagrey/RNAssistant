@@ -236,7 +236,7 @@ namespace RNAssistant.Core.Storage
         [JsonConstructor] internal ConversationModelEvent(SessionEventKind kind, string runId, string turnId, string stepId, PayloadRef body)
         {
             if (kind != SessionEventKind.ModelRequestPrepared && kind != SessionEventKind.ModelResponseReceived &&
-                kind != SessionEventKind.ModelResponseAccepted && kind != SessionEventKind.ModelAttemptRejected && kind != SessionEventKind.ModelFailure &&
+                kind != SessionEventKind.ModelResponseAccepted && kind != SessionEventKind.ModelAttemptRejected && kind != SessionEventKind.ModelAttemptRetained && kind != SessionEventKind.ModelFailure &&
                 kind != SessionEventKind.ToolPackExtensionAccepted && kind != SessionEventKind.ToolPackExtensionRejected ||
                 string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || body == null)
                 throw new ArgumentException("An exact model manifest/diagnostic event is required.");

@@ -25,6 +25,8 @@ namespace RNAssistant.Core.Llm
         public LlmCompletionTermination Termination { get; set; }
         public string Content { get; set; }
         public string RefusalContent { get; set; }
+        public bool RefusalTruncated { get; set; }
+        [JsonIgnore] public RNAssistant.Core.ModelProtocol.ConversationAttemptSnapshot AttemptSnapshot { get; internal set; }
         public string ReasoningContent { get; set; }
         public int? ReasoningTokens { get; set; }
         public bool ReasoningTruncated { get; set; }
@@ -41,6 +43,7 @@ namespace RNAssistant.Core.Llm
     {
         public string ContentDelta { get; set; }
         public string ReasoningDelta { get; set; }
+        public string RefusalDelta { get; set; }
         public bool Completed { get; set; }
     }
 }

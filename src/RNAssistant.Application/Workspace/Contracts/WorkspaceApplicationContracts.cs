@@ -143,6 +143,7 @@ namespace RNAssistant.Runtime.Contracts
         public string Reasoning { get; set; }
         public bool ReasoningTruncated { get; set; }
         public bool Retrying { get; set; }
+        public RNAssistant.Core.ModelProtocol.RetainedModelAttempt UnsavedAttempt { get; set; }
     }
 
     public sealed class WorkspaceOfficeContext

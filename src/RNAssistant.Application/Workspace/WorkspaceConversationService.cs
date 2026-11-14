@@ -74,14 +74,19 @@ namespace RNAssistant.Runtime
                 value.Sequence = Interlocked.Increment(ref _modelProgressSequence);
                 _liveModels[sessionId] = value;
             }
-            else { WorkspaceModelProgress removed; _liveModels.TryRemove(sessionId, out removed); }
+            else {
+                WorkspaceModelProgress existing;
+                if (_liveModels.TryGetValue(sessionId, out existing) && existing.UnsavedAttempt != null) return;
+                WorkspaceModelProgress removed; _liveModels.TryRemove(sessionId, out removed);
+            }
         }
 
         private WorkspaceModelProgress LocalModelProgress(ChatSession session)
         {
             WorkspaceModelProgress value;
-            return session.LastRun?.Status == "running" && _liveModels.TryGetValue(session.Id, out value) &&
-                value.RunId == session.LastRun.RunId ? value : null;
+            return _liveModels.TryGetValue(session.Id, out value) &&
+                (session.LastRun?.Status == "running" || value.UnsavedAttempt != null) &&
+                value.RunId == session.LastRun?.RunId ? value : null;
         }
 
         private WorkspaceRunPreviewRead ModelProgress(ChatSession session)
@@ -1668,7 +1673,6 @@ namespace RNAssistant.Runtime
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
                 options.TraceRequestCause = request.RequestCause;
-                options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                 var messages = snapshot.Messages;
                 _lastRequest = request;
                 _lastAuthority = snapshot.Authority;
@@ -1691,9 +1695,9 @@ namespace RNAssistant.Runtime
                 ModelProtocolResult result;
                 try
                 {
-                    result = await _protocol.GetResponseAsync(preparation.CreateRequest(snapshot, _catalog,
-                        notice => _compiler.CompileRepair(snapshot, notice)),
-                        ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
+                    var prepared = preparation.CreateRequest(snapshot, _catalog, notice => _compiler.CompileRepair(snapshot, notice));
+                    prepared.RetainAttemptAsync = request.RetainAttemptAsync;
+                    result = await _protocol.GetResponseAsync(prepared, ModelProgress(request), cancellationToken).ConfigureAwait(false);
                 }
                 finally { _mediaUpdates.AddRange(ResourceMediaMessages.Release(_session.Messages)); }
                 _lastCompletion = result.Completion;
@@ -1713,7 +1717,7 @@ namespace RNAssistant.Runtime
                     PluginSourceHasUncheckedChanges(_session, request.RunId))
                     return AgentModelResult.RejectCompletion(proposal, FinishAdmission.Reject("plugin_check_required",
                         "Plugin source changed, but no successful plugins.check followed the last file change. " +
-                        "Run plugins.check on the current source; repair its reported error before claiming completion."), result.SourceModelAttemptId);
+                        "Run plugins.check on the current source; repair its reported error before claiming completion."), result.SourceModelAttemptId, result.Completion?.AttemptSnapshot);
                 if (result.Response.Action == ConversationResponse.FinishAction && _acceptance?.Requested == true)
                 {
                     // Refresh after the model wait, including externally changed dependencies.
@@ -1724,9 +1728,9 @@ namespace RNAssistant.Runtime
                     // satisfy the acceptance contract or turn CLI exit into 0.
                     var admitsIncomplete = result.Response.Outcome != ConversationOutcome.Completed;
                     if (unmet != null && !admitsIncomplete)
-                        return AgentModelResult.RejectCompletion(proposal, FinishAdmission.Reject("workspace_acceptance_unmet", unmet), result.SourceModelAttemptId);
+                        return AgentModelResult.RejectCompletion(proposal, FinishAdmission.Reject("workspace_acceptance_unmet", unmet), result.SourceModelAttemptId, result.Completion?.AttemptSnapshot);
                 }
-                return AgentModelResult.Accepted(proposal, result.SourceModelAttemptId);
+                return AgentModelResult.Accepted(proposal, result.SourceModelAttemptId, result.Completion?.AttemptSnapshot);
             }
 
             private CallableToolSet NewCallableSet(IReadOnlyList<ToolPackExtensionEventData> restored)
@@ -1925,46 +1929,25 @@ namespace RNAssistant.Runtime
                     "Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
             }
 
-            private ModelProtocolProgress ModelProgress(AgentModelRequest request, LlmRequestOptions options)
+            private ModelProtocolProgress ModelProgress(AgentModelRequest request)
             {
-                var text = new StringBuilder(); var reasoning = new StringBuilder();
-                ConversationMessageStreamExtractor extractor = null;
-                var attempt = 0; var lastPaint = DateTime.MinValue; var pending = 0; var truncated = false;
-                var pendingReplacement = false;
-                Action<bool> publish = force => {
-                    if (!force && pending < 256 && DateTime.UtcNow - lastPaint < TimeSpan.FromMilliseconds(100)) return;
+                string previousAttempt = null;
+                var attemptCount = 0;
+                return new ModelProtocolProgress { AttemptProgress = snapshot => {
+                    if (previousAttempt != snapshot.AttemptId) { previousAttempt = snapshot.AttemptId; attemptCount++; }
                     var value = new WorkspaceModelProgress { RunId = request.RunId, StepId = request.StepId,
-                        AttemptId = options.TraceModelAttemptId, Message = text.ToString(), Reasoning = reasoning.ToString(),
-                        ReasoningTruncated = truncated, Retrying = attempt > 1 };
+                        AttemptId = snapshot.AttemptId, Message = snapshot.Message, Reasoning = snapshot.Reasoning,
+                        ReasoningTruncated = snapshot.ReasoningTruncated, Retrying = attemptCount > 1 };
                     _modelProgress?.Invoke(value);
                     _progress?.Invoke(new WorkspaceRunEvent("ModelProgress", _session.LastRun.KernelState.Summary,
                         null, modelProgress: value));
-                    pending = 0; lastPaint = DateTime.UtcNow;
-                };
-                return new ModelProtocolProgress {
-                    AttemptStarted = (streaming, strict) => {
-                        attempt++; text.Clear(); reasoning.Clear(); truncated = false;
-                        extractor = new ConversationMessageStreamExtractor(strict);
-                        pendingReplacement = attempt > 1;
-                        if (!pendingReplacement) publish(true);
-                    },
-                    StreamUpdate = update => {
-                        if (update == null) return;
-                        var content = extractor.Add(update.ContentDelta);
-                        var thoughts = update.ReasoningDelta ?? string.Empty;
-                        var firstMessage = text.Length == 0 && content.Length > 0;
-                        var firstReasoning = reasoning.Length == 0 && thoughts.Length > 0;
-                        text.Append(content, 0, Math.Min(content.Length, Math.Max(0, 24000 - text.Length)));
-                        var take = Math.Min(thoughts.Length, Math.Max(0, 24000 - reasoning.Length));
-                        reasoning.Append(thoughts, 0, take); truncated |= take < thoughts.Length;
-                        pending += content.Length + thoughts.Length;
-                        if (pendingReplacement && string.IsNullOrWhiteSpace(text.ToString()) &&
-                            string.IsNullOrWhiteSpace(reasoning.ToString())) return;
-                        pendingReplacement = false;
-                        publish(update.Completed || firstMessage || firstReasoning);
-                    },
-                    AttemptCompleted = () => { if (!pendingReplacement) publish(true); }
-                };
+                }, RetentionFailed = retained => {
+                    var value = new WorkspaceModelProgress { RunId = request.RunId, StepId = request.StepId,
+                        AttemptId = retained.Body.AttemptId, UnsavedAttempt = retained };
+                    _modelProgress?.Invoke(value);
+                    _progress?.Invoke(new WorkspaceRunEvent("ModelProgress", _session.LastRun.KernelState.Summary,
+                        null, modelProgress: value));
+                } };
             }
 
             private void CaptureMedia(string callId, IReadOnlyList<ChatAttachment> attachments)
@@ -1978,6 +1961,8 @@ namespace RNAssistant.Runtime
                 if (expectedRevision != _cursor) throw new InvalidOperationException("Stale workspace run cursor.");
                 var firstMessage = _session.Messages.Count;
                 ConversationRunProjection.Apply(_session.LastRun, fact);
+                if (fact.Kind == AgentRunEventKind.ModelAttemptRetained)
+                    _session.Messages.Add(ConversationRunProjection.CreateRetainedAttempt(fact));
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted) {
                     var accepted = ConversationRunProjection.CreateAcceptedResponse(fact, _lastCompletion, _payloads).ToArray();
                     foreach (var message in accepted) message.ResourceEvidence = _delivered.Where(item => item.Key.StartsWith("request:", StringComparison.Ordinal)).Select(item => item.Value).ToList();
@@ -2036,9 +2021,21 @@ namespace RNAssistant.Runtime
                 var appended = _session.Messages.GetRange(firstMessage, _session.Messages.Count - firstMessage);
                 // Serialize native checkpoint construction/cursor publication with
                 // the existing live Inbox controls; model/UI waits stay outside.
-                lock (_events.AtomicAgentDelivery && _agentInbox != null ? _agentInbox.Get(_session).Sync : _session)
-                    new ConversationRunCommit(_session, fact, appended,
-                        activity, updated: _mediaUpdates.Concat(projected == null ? new ChatMessage[0] : new[] { projected })).Persist(_conversations.CommitRun, _session);
+                try
+                {
+                    lock (_events.AtomicAgentDelivery && _agentInbox != null ? _agentInbox.Get(_session).Sync : _session)
+                        new ConversationRunCommit(_session, fact, appended,
+                            activity, updated: _mediaUpdates.Concat(projected == null ? new ChatMessage[0] : new[] { projected })).Persist(_conversations.CommitRun, _session);
+                }
+                catch when (fact.Kind == AgentRunEventKind.ModelAttemptRetained)
+                {
+                    _session.Messages.RemoveRange(firstMessage, _session.Messages.Count - firstMessage);
+                    var preview = new WorkspaceModelProgress { RunId = fact.Summary.RunId, StepId = fact.StepId,
+                        AttemptId = fact.SourceModelAttemptId, UnsavedAttempt = fact.RetainedAttempt };
+                    _modelProgress?.Invoke(preview);
+                    _progress?.Invoke(new WorkspaceRunEvent("ModelProgress", fact.Summary, null, modelProgress: preview));
+                    throw;
+                }
                 _mediaUpdates.Clear();
                 if (fact.Kind == AgentRunEventKind.ToolCompleted &&
                     fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation && _callable != null)

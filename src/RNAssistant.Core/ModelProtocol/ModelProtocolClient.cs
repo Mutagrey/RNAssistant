@@ -34,6 +34,12 @@ namespace RNAssistant.Core.ModelProtocol
             var accepted = (request.AcceptedMessages ?? new ChatMessage[0]).ToArray();
             var options = request.Options ?? new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject };
             object contextUsage = null;
+            ConversationAttemptSnapshot unadmitted = null;
+            async Task RetainCurrent(ModelProtocolDisposition protocol, ModelRuntimeDisposition runtime, string reason)
+            {
+                var body = unadmitted; unadmitted = null;
+                if (body != null) await RetainAsync(request, progress, body, protocol, runtime, reason).ConfigureAwait(false);
+            }
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -86,7 +92,8 @@ namespace RNAssistant.Core.ModelProtocol
                             return BudgetFailure(budgetError, contextUsage);
                         try
                         {
-                            completion = await CompleteAsync(settings, wireMessages, options, progress, cancellationToken).ConfigureAwait(false);
+                            completion = await CompleteAsync(request, settings, wireMessages, options, progress, cancellationToken).ConfigureAwait(false);
+                            unadmitted = completion.AttemptSnapshot;
                             break;
                         }
                         catch (LlmRequestException ex)
@@ -105,6 +112,8 @@ namespace RNAssistant.Core.ModelProtocol
                         options, completion.CompletionTokens, completion.TotalTokens);
                     if (!string.IsNullOrWhiteSpace(completion.RefusalContent))
                     {
+                        await RetainCurrent(ModelProtocolDisposition.Rejected,
+                            ModelRuntimeDisposition.Rejected, "Provider refusal.").ConfigureAwait(false);
                         TraceAccepted(options, true, progress);
                         return ModelProtocolResult.Refused(completion, contextUsage);
                     }
@@ -124,6 +133,8 @@ namespace RNAssistant.Core.ModelProtocol
                             "Return a shorter complete response: keep reasoning and message concise, choose one next action, " +
                             "and split large changes into smaller tool calls. Do not omit required fields. " +
                             "Nothing from the truncated response was accepted or executed.";
+                        await RetainCurrent(ModelProtocolDisposition.Rejected,
+                            ModelRuntimeDisposition.Rejected, lastError).ConfigureAwait(false);
                         TraceRejected(options, completion, lastError, attempt - 1, progress);
                         // One bounded correction within the protocol budget. Repeating
                         // the same token-limited generation ten times cannot make progress.
@@ -134,15 +145,21 @@ namespace RNAssistant.Core.ModelProtocol
                         continue;
                     }
                     if (completion.Termination == LlmCompletionTermination.Filtered)
+                    {
+                        await RetainCurrent(ModelProtocolDisposition.Rejected,
+                            ModelRuntimeDisposition.Rejected, "Provider content filter.").ConfigureAwait(false);
                         return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.Provider,
                             "Провайдер остановил ответ фильтром содержимого."), contextUsage);
+                    }
                     var parsed = ModelProtocolWire.Parse(completion.Content, request.CallableTools, request.RunnableCatalog, request.CallContext,
                         string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal));
                     if (parsed.Success)
                     {
                         TraceAccepted(options, false, progress);
-                        return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage, sourceModelAttemptId,
+                        var result = ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage, sourceModelAttemptId,
                             request.ProjectReferences == null ? new string[0] : ModelReferenceProjection.Delivered(wireMessages));
+                        unadmitted = null;
+                        return result;
                     }
                     lastError = parsed.Error;
                     var identicalRejection = hasPreviousRejectedContent && lastErrorKind == parsed.ErrorKind && previousRejectedContent == completion.Content;
@@ -153,6 +170,7 @@ namespace RNAssistant.Core.ModelProtocol
                         lastError += " Provider-native tool_calls were observed separately; return them as name/arguments entries inside the decision JSON, without provider IDs or function wrappers.";
                     // Preserve the existing zero-based diagnostic index; the limit and
                     // repair instruction count total protocol responses, starting at one.
+                    await RetainCurrent(ModelProtocolDisposition.Rejected, ModelRuntimeDisposition.Rejected, parsed.ErrorCode + ": " + lastError).ConfigureAwait(false);
                     TraceRejected(options, completion, parsed.ErrorCode + ": " + lastError, attempt - 1, progress);
                     cancellationToken.ThrowIfCancellationRequested();
                     if (identicalRejection)
@@ -171,6 +189,10 @@ namespace RNAssistant.Core.ModelProtocol
                 return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
                     "Ответ модели не выполнен после " + budget.ProtocolAttemptLimit + " попыток получить корректный ответ: " + lastError), contextUsage);
             }
+            catch (ModelAttemptPersistenceException ex)
+            {
+                return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.Persistence, ex.Message, ex), contextUsage);
+            }
             catch (OperationCanceledException ex)
             {
                 return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.Cancelled, ex.Message, ex), contextUsage);
@@ -186,6 +208,9 @@ namespace RNAssistant.Core.ModelProtocol
             }
             finally
             {
+                await RetainCurrent(ModelProtocolDisposition.Unvalidated,
+                    cancellationToken.IsCancellationRequested ? ModelRuntimeDisposition.Cancelled : ModelRuntimeDisposition.Rejected,
+                    "Response did not reach protocol admission.").ConfigureAwait(false);
                 options.TraceMessageContentChanged = null;
                 options.TraceRequestCause = null;
             }
@@ -209,20 +234,54 @@ namespace RNAssistant.Core.ModelProtocol
         private static bool VisibleMessage(ChatMessage message)
         { return message != null && !message.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(message.Role); }
 
-        private async Task<LlmCompletionResult> CompleteAsync(AppSettings settings, IReadOnlyList<ChatMessage> messages,
+        private async Task<LlmCompletionResult> CompleteAsync(ModelProtocolRequest request, AppSettings settings, IReadOnlyList<ChatMessage> messages,
             LlmRequestOptions options, ModelProtocolProgress progress, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             options.TraceModelAttemptId = Guid.NewGuid().ToString("N");
             options.TraceRequestId = null;
-            if (progress != null && progress.AttemptStarted != null) progress.AttemptStarted(settings.StreamResponses,
-                string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal));
-            var completion = await _completeAsync(settings, messages, options,
-                progress == null ? null : progress.StreamUpdate, cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (progress != null && progress.AttemptCompleted != null) progress.AttemptCompleted();
-            if (completion == null) throw new InvalidOperationException("Model returned no completion.");
-            return completion;
+            using (var stream = new ConversationStreamProgressProjector(options.TraceModelAttemptId,
+                string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal),
+                progress == null ? null : progress.AttemptProgress))
+            {
+                try
+                {
+                    var completion = await _completeAsync(settings, messages, options,
+                        stream.OnUpdate, cancellationToken).ConfigureAwait(false);
+                    if (completion == null) throw new InvalidOperationException("Model returned no completion.");
+                    completion.AttemptSnapshot = stream.End(ModelTransportOutcome.Completed, completion);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return completion;
+                }
+                catch (ModelAttemptPersistenceException) { throw; }
+                catch (OperationCanceledException error)
+                {
+                    await RetainAsync(request, progress, stream.End(ModelTransportOutcome.Cancelled),
+                        ModelProtocolDisposition.Unvalidated, ModelRuntimeDisposition.Cancelled, error.Message).ConfigureAwait(false);
+                    throw;
+                }
+                catch (Exception error)
+                {
+                    await RetainAsync(request, progress, stream.End(ModelTransportOutcome.Failed),
+                        ModelProtocolDisposition.Unvalidated, ModelRuntimeDisposition.Rejected, error.Message).ConfigureAwait(false);
+                    throw;
+                }
+            }
+        }
+
+        private static async Task RetainAsync(ModelProtocolRequest request, ModelProtocolProgress progress,
+            ConversationAttemptSnapshot body, ModelProtocolDisposition protocol, ModelRuntimeDisposition runtime, string reason)
+        {
+            // Non-conversation diagnostic probes have no history owner. Every
+            // production kernel adapter supplies the kernel's mandatory commit port.
+            if (request.RetainAttemptAsync == null) return;
+            var retained = new RetainedModelAttempt(body, protocol, runtime, reason);
+            try { await request.RetainAttemptAsync(retained).ConfigureAwait(false); }
+            catch (Exception error)
+            {
+                try { progress?.RetentionFailed?.Invoke(retained); } catch { }
+                throw new ModelAttemptPersistenceException(error);
+            }
         }
 
         private static ModelProtocolResult BudgetFailure(string message, object contextUsage)

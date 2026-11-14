@@ -52,6 +52,7 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ModelProtocolRequest
     {
         public AppSettings Settings { get; set; }
+        public Func<RetainedModelAttempt, Task> RetainAttemptAsync { get; set; }
         public IReadOnlyList<ChatMessage> AcceptedMessages { get; set; }
         public ModelContextSnapshot ContextSnapshot { get; set; }
         public Func<ChatMessage, IReadOnlyList<ChatMessage>> CompileRepair { get; set; }
@@ -66,13 +67,11 @@ namespace RNAssistant.Core.ModelProtocol
         public Func<IReadOnlyList<ChatMessage>, IReadOnlyList<ChatMessage>> ProjectReferences { get; set; }
     }
 
-    // Presentation controls carry no repair instruction or attempt count. StreamUpdate
-    // preserves the existing provisional preview; it is never accepted history.
+    // Provisional snapshots are observations, never accepted history.
     public sealed class ModelProtocolProgress
     {
-        public Action<bool, bool> AttemptStarted { get; set; }
-        public Action<LlmStreamUpdate> StreamUpdate { get; set; }
-        public Action AttemptCompleted { get; set; }
+        public Action<ConversationAttemptSnapshot> AttemptProgress { get; set; }
+        public Action<RetainedModelAttempt> RetentionFailed { get; set; }
         public Action OptionalTraceFailed { get; set; }
     }
 
@@ -84,7 +83,8 @@ namespace RNAssistant.Core.ModelProtocol
         Provider,
         Cancelled,
         Infrastructure,
-        ReflectionDisabled
+        ReflectionDisabled,
+        Persistence
     }
 
     public sealed class ModelProtocolFailure

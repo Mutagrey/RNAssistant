@@ -299,6 +299,15 @@ Here `call_index:0` identifies the call within its batch, `E3` the eligible resu
 delivered excerpt. The label itself includes neither the range nor the text.
 
 ## Admission, persistence and presentation
+HTTP completion, protocol validation and runtime acceptance are distinct. Each
+request carries its immutable AttemptId through the stream and the final accepted
+or retained projection. Rejected/interrupted visible fields and provider reasoning
+are mandatory `ModelAttemptRetained` facts; retry waits for that commit. These bodies
+are presentation-only, excluded from model context, and never execute partial JSON.
+The existing run activity shows a compact disclosure; no extra attempt screen.
+See [Session events](../session-events.md#retained-model-attempts--2026-11-14).
+
+
 
 Kernel accepts `execute` calls before dispatch and pins their runtime ID,
 step and model-attempt origin. Reflection is persisted as a no-call accepted

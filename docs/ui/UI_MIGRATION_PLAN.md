@@ -1,5 +1,12 @@
 # План модернизации production UI
 
+W3 retained attempts — In Review, 2026-11-14. Общий блок внутри run подключён
+для Office/Workspace/plugin. `retained-attempts.test.js` проверяет оба источника,
+поля/усечение и сохранность unsaved body при refresh; `stream-render-cost` — freeze
+при Stop и поздние deltas. Host-neutral persistence проверена отдельно. Следующие
+срезы: общая native live delivery, удаление второго lifecycle,
+draft barriers. Storage P7 и Windows qualification этим срезом не закрыты.
+
 
 ## Unified chat W1 — In Review, 2026-11-14
 

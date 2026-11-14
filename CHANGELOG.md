@@ -11,6 +11,18 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.15-dev
+
+- Отклонённые и прерванные ответы сохраняются обязательным событием внутри run:
+  полученные message/reason/decision, provider reasoning и refusal с признаками
+  усечения. Они доступны после reopen/rebuild и не становятся model context.
+  Retry ждёт commit; потерянный ACK разрешается по receipt. При ошибке записи
+  открытая панель сохраняет доступный текст с отметкой «Не сохранено».
+- Office, Workspace и plugin используют один ограниченный накопитель потока:
+  первый видимый фрагмент сразу, trailing flush по таймеру и terminal flush при
+  завершении/отмене/ошибке. Поздние deltas не меняют завершённую попытку.
+  HTTP completion остаётся отдельным фактом от принятия ответа и результата задачи.
+
 ### 16.27.14-dev
 
 - Результаты, вопросы, детали и расход контекста адресуются исходному Chat View,
@@ -24,7 +36,6 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 - Все три чата используют один transcript/live renderer. Старые Workspace paths
   удалены; ресурсы выбираются по capabilities и открываются для исходной панели.
   Поток сохраняет узлы истории и позицию чтения.
-
 
 
 ### 16.27.13-dev

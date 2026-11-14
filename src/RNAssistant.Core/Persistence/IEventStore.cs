@@ -55,7 +55,8 @@ namespace RNAssistant.Core.Persistence
         StepStarted = 22,
         StepEnded = 23,
         ConversationInputChanged = 24,
-        AgentCommunicationChanged = 25
+        AgentCommunicationChanged = 25,
+        ModelAttemptRetained = 26
     }
 
     public sealed class SessionEventDescriptor
@@ -93,6 +94,7 @@ namespace RNAssistant.Core.Persistence
                     SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
                 Agent(SessionEventKind.AgentCommunicationChanged, SessionEventTypes.AgentCommunicationChanged,
                     SessionEventAuthority.Authority, SessionEventDurability.Mandatory),
+                Storage(SessionEventKind.ModelAttemptRetained, SessionEventTypes.ModelAttemptRetained),
                 Storage(SessionEventKind.SessionCreated, SessionEventTypes.SessionCreated),
                 Storage(SessionEventKind.SessionForked, SessionEventTypes.SessionForked),
                 Storage(SessionEventKind.SessionCommit, SessionEventTypes.SessionCommit),

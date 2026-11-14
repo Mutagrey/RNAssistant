@@ -3635,3 +3635,19 @@ or immutable evidence without allowing unknown replay. Saved request composition
 opens exact bytes through a new store/Inspector. Actual HTTP/CAS byte equality and
 frozen repair are covered by `tests/cli/tool_result_projection_smoke.py`.
 Commands/results and scope: [V8 evidence](../../docs/audits/evidence/v8-architecture-2026-10-26/README.md).
+
+Unified chat stream: `conversation: stream timer and terminal`,
+`conversation: streams message and thinking`, `conversation: streams provider reasoning`,
+`conversation: resets stream and thinking between repairs`,
+`model protocol: provider budget spans the whole step`,
+`v8 recovery: workspace live and accepted reasoning`.
+These are host-neutral evidence; no Office/WebView2 qualification is implied.
+
+Retained attempts: `conversation: retained attempt protocol barriers`,
+`conversation: retained attempt runtime history`,
+`conversation: retained attempt lost acknowledgement`; browser
+`tests/web/retained-attempts.test.js` and `tests/web/stream-render-cost.test.js`.
+The runtime fixture covers both backends, cancel after received partial, context
+exclusion and reopen; the native receipt fixture also reads the semantic event and
+rebuilds. `workspace: failed read activity` is an unresolved scripted HTTP fixture,
+not passed evidence for these changes.

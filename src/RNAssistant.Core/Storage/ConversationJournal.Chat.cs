@@ -264,6 +264,14 @@ namespace RNAssistant.Core.Storage
                 var creatingFork = commit.JournalRevision == 0 && session.ParentSessionId != null;
                 if (creatingFork) RequireForkScope(session);
                 var messages = (creatingFork ? session.Messages : commit.Messages.Select(write => write.Message)).Select(PublishText).ToArray();
+                if ((commit as ConversationRunCommit)?.FactKind == AgentRunEventKind.ModelAttemptRetained)
+                {
+                    if (modelEvent != null) throw new InvalidOperationException("Attempt retention cannot replace another semantic event.");
+                    var identity = commit.Messages.Single(write => write.Operation == SessionOperationTypes.ModelAttemptRetained).Message.Id;
+                    var attempt = messages.Single(item => item.Header.Id == identity);
+                    modelEvent = new ConversationModelEvent(SessionEventKind.ModelAttemptRetained, session.LastRun.RunId,
+                        session.LastRun.TurnId, attempt.Header.Activity.StepId, attempt.Body);
+                }
                 var resources = PrepareResourceSet(session);
                 var tasks = PrepareSnapshotCandidates(session);
                 ValidatePublishedArtifacts(session, messages);
@@ -321,6 +329,7 @@ namespace RNAssistant.Core.Storage
         private ConversationTextEntry PublishText(ChatMessage message)
         {
             ConversationTextEntry.RequireText(message);
+            if (message.Activity?.Kind == "model_attempt") RNAssistant.Core.Services.ConversationRunProjection.ReadRetainedAttempt(message);
             if (message.AcceptedCallOrigin != null)
             {
                 message = message.CopyForContext();

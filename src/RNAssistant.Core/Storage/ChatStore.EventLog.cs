@@ -292,7 +292,7 @@ namespace RNAssistant.Core.Storage
 
         private StorageProtector Protection()
         {
-            return _protectionProvider() ?? StorageProtector.None;
+            return _protectionProvider() ?? throw new InvalidOperationException("History protection is unavailable.");
         }
 
         private IDisposable AcquirePathLock(string targetPath, TimeSpan? waitTimeout, string operation)

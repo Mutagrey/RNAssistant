@@ -1,4 +1,31 @@
 # Session event stream
+## Retained model attempts — 2026-11-14
+
+Each HTTP request has one immutable AttemptId. The shared accumulator freezes one
+transport-ended snapshot; protocol admission and runtime acceptance remain separate.
+Protocol/provider rejection, cancellation, superseded input and runtime rejection
+publish mandatory `ModelAttemptRetained` through AgentKernel/ConversationRunCommit
+before another model request. The body contains only actually received visible
+message/reason/decision, provider reasoning and refusal, with bounded fields and
+explicit truncation/transport outcome. Partial JSON is never executed.
+
+ConversationJournal stores the semantic ModelEvent, the run checkpoint and its
+visible message in one existing chat.commit frame. ModelEvent and message share the
+same CAS body and exact run/step; rebuild validates that closure. Existing bounded
+history pages expose the activity. The legacy adapter uses `model.attempt.retained`;
+this is no storage cutover or dual write. RuntimeProjection/ExcludeFromModelContext
+keep retained attempts out of accepted assistant history. Optional raw trace is not
+part of this guarantee.
+
+Mandatory append does not use the cancelled model-request token. A recovered exact
+receipt resolves a lost ACK without re-appending or requesting the model again.
+Failed retention stops automatic retry, removes its uncommitted row from the accepted
+native projection, and exposes an explicitly unsaved body in the existing live/view
+projection. Only a successful commit promises reopen/restart persistence. Hard I/O
+bounds of the current synchronous commit port and full native observation convergence
+remain separate lifecycle work; unsaved Office view text is not process-crash storage.
+
+
 
 ## Journal definition-copy fork — 2026-11-14
 
@@ -1981,6 +2008,16 @@ Current history encryption does not cover transient attachment staging, settings
 
 ## Transient stream rendering
 
+`ModelProtocolClient` creates one `ConversationStreamProgressProjector` per stable
+HTTP AttemptId. It publishes a first visible fragment synchronously, coalesces a
+single bounded snapshot and flushes pending changes after 100 ms even without a new
+chunk. Both hosts consume these snapshots through their existing observers/revisions.
+The request owner flushes exactly one terminal on completion, cancellation or error;
+late callbacks cannot change the frozen body. `IsEventStream` records observed
+transport, not the requested setting. This boundary does not accept a protocol
+response or complete a task. Durable retention is a separate commit responsibility.
+
+
 Chat-tree siblings are ordered by `LastActivityUtc` descending, then chat id for
 equal timestamps. This disposable header/summary value is the latest retained
 message timestamp or run start, bounded below by chat creation. Navigation, title
@@ -2010,10 +2047,10 @@ preserving selection and embedded viewer lifecycle as well as disclosures/focus.
 Streamed text and reasoning belong to the active run article. The text uses normal
 contrast and a quiet “Черновик ответа · …” request-stage status, replacing the ambient thinking label
 while a draft is visible. Only an accepted final answer receives the divider after
-actions. An attempt reset immediately removes its unaccepted text/reasoning in both
-foreground and background chats, before waiting for the first replacement token.
-Stop immediately clears unaccepted drafts and ignores late deltas while cancellation
-is pending; the runtime still owns terminal lifecycle and effect evidence.
+actions. An attempt reset replaces only the live slot after the preceding rejected body has
+passed its mandatory retention barrier. Retained history remains in the same run.
+Stop freezes the received preview and ignores late deltas while cancellation is
+pending; the runtime still owns terminal lifecycle and effect evidence.
 An active-chat terminal snapshot retires the live run even without a chat catalog.
 A repeated attempt before step acceptance shows
 “Повторная попытка…” even before replacement output arrives; ordinary next steps

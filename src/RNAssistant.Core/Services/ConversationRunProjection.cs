@@ -17,6 +17,7 @@ namespace RNAssistant.Core.Services
         // and actual request-delivery evidence stay with their existing owners.
         public static void Apply(ChatRunRecord run, AgentRunEvent fact)
         {
+            if (fact.Kind == AgentRunEventKind.ModelAttemptRetained) return;
             run.KernelState = AgentRunState.Apply(run.KernelState, fact);
             Apply(run);
             switch (fact.Kind)
@@ -67,6 +68,30 @@ namespace RNAssistant.Core.Services
                 messages.Add(message);
             }
             return messages;
+        }
+
+        public static ChatMessage CreateRetainedAttempt(AgentRunEvent fact)
+        {
+            if (fact?.Kind != AgentRunEventKind.ModelAttemptRetained || fact.RetainedAttempt == null || string.IsNullOrWhiteSpace(fact.StepId))
+                throw new ArgumentException("A retained attempt requires its exact run and step.");
+            return new ChatMessage { Id = "attempt_" + fact.RetainedAttempt.Body.AttemptId,
+                Role = "assistant", RuntimeProjection = true, ExcludeFromModelContext = true,
+                RunId = fact.Summary.RunId, ResponseModelAttemptId = fact.RetainedAttempt.Body.AttemptId,
+                Content = JsonConvert.SerializeObject(fact.RetainedAttempt),
+                Activity = new ChatActivity { Kind = "model_attempt", StepId = fact.StepId, RunId = fact.Summary.RunId,
+                    ModelAttemptId = fact.RetainedAttempt.Body.AttemptId,
+                    Title = "Ответ не принят", Status = "retained" } };
+        }
+
+        public static RetainedModelAttempt ReadRetainedAttempt(ChatMessage message)
+        {
+            var retained = JsonConvert.DeserializeObject<RetainedModelAttempt>(message.Content);
+            if (retained == null || message.Activity?.Kind != "model_attempt" ||
+                retained.Body.AttemptId != message.ResponseModelAttemptId || retained.Body.AttemptId != message.Activity.ModelAttemptId ||
+                message.ProtocolMessage || !message.RuntimeProjection || !message.ExcludeFromModelContext ||
+                string.IsNullOrWhiteSpace(message.RunId) || message.RunId != message.Activity.RunId || string.IsNullOrWhiteSpace(message.Activity.StepId))
+                throw new InvalidOperationException("Retained attempt differs from its runtime identity.");
+            return retained;
         }
 
         public static void ApplyCompletion(ChatMessage message, LlmCompletionResult completion)

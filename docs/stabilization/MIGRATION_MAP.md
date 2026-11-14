@@ -1,5 +1,22 @@
 # Current-to-target migration map
 
+## Unified chat attempts and stream — W3/W4, 2026-11-14
+
+Owner: ModelProtocolClient creates one Core ConversationStreamProgressProjector per
+HTTP AttemptId; AgentKernel owns accepted/retained decisions, ConversationRunCommit
+owns publication. Removed Office accumulator and Workspace inline StringBuilders/
+elapsed throttling. Office ConversationStreamProgressDelivery only translates the
+shared snapshots into its existing channel; removal condition is common typed live
+presentation delivery. No additional gap/replay/watermark protocol.
+
+Mandatory ModelAttemptRetained uses the chosen Journal's existing ModelEvent/index,
+the exact message CAS body and checkpoint in one frame. Legacy adapter supports the
+same semantic operation until the established P7 cutover. Optional rejection traces
+no longer provide retention. Common activity renderer shows retained fields inside
+the run; no new screen/store. Stop freezes received text pending the terminal fact.
+Native lifecycle and Office live delivery still need convergence; no completion claim.
+
+
 ## Unified chat addressed reads — W1, 2026-11-14
 
 W7/W8: common Panel now owns pending interactions and header. Removed Workspace

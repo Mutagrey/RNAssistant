@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Models
     {
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public AgentChatAddress AgentSender { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.ModelProtocol.RetainedModelAttempt RetainedAttempt { get; set; }
         public string Id { get; set; }
         public string Role { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string Content { get; set; }
@@ -52,7 +53,9 @@ namespace RNAssistant.Core.Models
             view.CompletionTokens = message.CompletionTokens;
             view.TotalTokens = message.TotalTokens;
             if (message.ProtocolMessage) return view;
-            view.Content = message.Content;
+            if (message.Activity?.Kind == "model_attempt")
+                view.RetainedAttempt = RNAssistant.Core.Services.ConversationRunProjection.ReadRetainedAttempt(message);
+            else view.Content = message.Content;
             view.ExcludeFromModelContext = message.ExcludeFromModelContext;
             view.RunViewState = message.RunViewState;
             view.Attachments = message.Attachments == null || message.Attachments.Count == 0
@@ -78,6 +81,7 @@ namespace RNAssistant.Core.Models
                 RunId = activity.RunId,
                 Sequence = activity.Sequence,
                 StepId = activity.StepId,
+                ModelAttemptId = activity.ModelAttemptId,
                 StepMessage = activity.StepMessage,
                 StepReason = activity.StepReason,
                 Kind = activity.Kind,

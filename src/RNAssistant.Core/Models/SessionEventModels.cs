@@ -20,6 +20,7 @@ namespace RNAssistant.Core.Models
         public const string LlmRequest = "llm.request";
         public const string LlmResponse = "llm.response";
         public const string LlmFailure = "llm.failure";
+        public const string ModelAttemptRetained = "model.attempt.retained";
         public const string AgentResponseRejected = "agent.response.rejected";
         public const string ModelResponseAccepted = "model.response.accepted";
         public const string ToolPackExtensionAccepted = "tool_pack.extension.accepted";
@@ -43,6 +44,7 @@ namespace RNAssistant.Core.Models
         public const string RunEnded = "run.ended";
         public const string MessageUpdated = "message.updated";
         public const string UserMessageAppended = "user.message.appended";
+        public const string ModelAttemptRetained = "model.attempt.retained";
         public const string AssistantMessageAppended = "assistant.message.appended";
         public const string ToolCallRecorded = "tool.call.recorded";
         public const string ToolResultRecorded = "tool.result.recorded";

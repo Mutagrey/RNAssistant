@@ -325,7 +325,7 @@ namespace RNAssistant.Harness
                 });
                 var result = await protocol.GetResponseAsync(request, new ModelProtocolProgress
                 {
-                    AttemptStarted = (streaming, strict) => progressCalls++, AttemptCompleted = () => progressCalls++
+                    AttemptProgress = snapshot => progressCalls++
                 }, CancellationToken.None);
                 AssertTrue(result.Failure != null, "incomplete context is a boundary failure, not accepted completion");
                 AssertEqual(ModelProtocolFailureKind.Infrastructure, result.Failure.Kind, "runtime context is not model format exhaustion");
@@ -849,7 +849,7 @@ namespace RNAssistant.Harness
             });
             var result = await protocol.GetResponseAsync(request, new ModelProtocolProgress
             {
-                AttemptStarted = (streaming, strict) => started++, AttemptCompleted = () => completed++
+                AttemptProgress = snapshot => { if (snapshot.TransportEnded) completed++; else if (snapshot.Revision == 1) started++; }
             }, CancellationToken.None);
             AssertTrue(result.Failure == null, result.Failure == null ? "accepted typed result" : result.Failure.Message);
             AssertEqual("  Accepted.  ", result.Response.Message, "v8 preserves the exact message string");

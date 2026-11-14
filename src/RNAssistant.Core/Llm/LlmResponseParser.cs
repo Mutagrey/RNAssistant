@@ -275,6 +275,7 @@ namespace RNAssistant.Core.Llm
             private readonly StringBuilder _reasoning = new StringBuilder();
             private readonly StringBuilder _embeddedReasoning = new StringBuilder();
             private readonly StringBuilder _refusal = new StringBuilder();
+            private bool _refusalTruncated;
             private readonly Action<LlmStreamUpdate> _progress;
             private readonly ThinkStreamSplitter _thinkSplitter;
             private JObject _usage;
@@ -393,6 +394,7 @@ namespace RNAssistant.Core.Llm
                 if (_nativeCalls.Count > 0) message["tool_calls"] = new JArray(_nativeCalls.Values);
                 var result = BuildCompletionResult(message, _usage, _finishReason, _inspectNativeToolCalls);
                 result.NativeToolCallsObserved |= _nativeCallsObserved;
+                result.RefusalTruncated |= _refusalTruncated;
                 result.IsEventStream = true;
                 result.ReasoningTruncated = _reasoning.Length > 0
                     ? _reasoningTruncated
@@ -453,6 +455,8 @@ namespace RNAssistant.Core.Llm
                     return;
                 }
                 var remaining = MaxStoredRefusalChars - _refusal.Length;
+                _refusalTruncated |= value.Length > remaining;
+                _progress?.Invoke(new LlmStreamUpdate { RefusalDelta = value });
                 if (remaining <= 0)
                 {
                     return;
@@ -685,6 +689,7 @@ namespace RNAssistant.Core.Llm
                     finishReason == "content_filter" ? LlmCompletionTermination.Filtered : LlmCompletionTermination.Other,
                 Content = content,
                 RefusalContent = ReadRefusalContent(message),
+                RefusalTruncated = ReadStringToken(message["refusal"], "choices[0].message.refusal").Length > MaxStoredRefusalChars,
                 ReasoningContent = providerReasoning.Length > 0 ? providerReasoning : embeddedReasoning,
                 ReasoningTokens = ReadReasoningTokens(usage),
                 ReasoningTruncated = providerReasoning.Length > 0

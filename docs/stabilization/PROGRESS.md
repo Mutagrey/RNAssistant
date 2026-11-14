@@ -1,5 +1,33 @@
 # Stabilization progress
 
+## Unified chat retained attempts — 2026-11-14
+
+W3 / F01 minimal retained projection: stable AttemptId, separate transport/protocol/
+runtime outcomes, mandatory kernel → ConversationRunCommit fact, existing Journal
+ModelEvent + CAS body in the same atomic frame. Legacy adapter recognizes the exact
+semantic operation; no dual write/cutover. Rejection/cancel/reflection-limit retain
+received visible fields/reasoning; retry waits for commit and lost ACK uses receipt.
+Both backends pass reopen, cancellation and context-exclusion checks; Journal also
+passes semantic event read/rebuild/lost ACK. Shared collapsed run activity passes
+Office/Workspace web fixture, explicit truncation and unsaved refresh preservation.
+`16.27.15-dev`, In Review. Uncommitted Office text remains view-local; a durable
+commit is required for restart. Native observation/lifecycle convergence and hard
+I/O cleanup bounds of the synchronous commit port remain open; Windows evidence
+is separate. Optional `workspace: failed read activity` fixture did not finish its
+scripted exchange within the diagnostic timeout; it is not counted as passed.
+
+## Unified chat stream accumulator — 2026-11-14
+
+F02 / W4 accumulation: `ModelProtocolClient` владеет одним Core projector на HTTP
+AttemptId. Office delivery переводит snapshots в прежний observer channel;
+Workspace/plugin получают тот же snapshot. Два старых accumulators удалены.
+Память ограничена 24 000 символами на поле, очередь coalesced до одного snapshot;
+первый фрагмент синхронный, timer 100 ms, один frozen terminal при success/cancel/error.
+Core timer/late-delta, Office message/reasoning/retry и Workspace live/reopen checks
+проходят host-neutral. `16.27.15-dev`; durable retained projection описана выше.
+Native lifecycle/live delivery и Windows evidence остаются открытыми.
+
+
 ## Unified chat presentation — 2026-11-14
 
 F04/F08/F09: адресные preview/questions/details/usage/resources, общий Panel для

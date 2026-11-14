@@ -64,10 +64,11 @@ namespace RNAssistant.Office.Services
                 if (contextTimer.ElapsedMilliseconds >= 500)
                     RuntimeLog.Info("Model context timing: authority=" + authorityMs +
                         "ms, session=" + sessionMs + "ms, request=" + requestMs + "ms.");
+                preparedRequest.RetainAttemptAsync = request.RetainAttemptAsync;
                 _lastModel = await _protocol.GetResponseAsync(
                     preparedRequest,
-                    ConversationStreamProgressProjector.ForProtocol((phase, message, activity) =>
-                    { if (!cancellationToken.IsCancellationRequested && _progress != null) _progress(phase, message, activity); }), cancellationToken).ConfigureAwait(false);
+                    ConversationStreamProgressDelivery.ForProtocol((phase, message, activity) =>
+                    { if (_progress != null) _progress(phase, message, activity); }), cancellationToken).ConfigureAwait(false);
             }
             catch (PromptBudgetExceededException ex)
             {
@@ -99,7 +100,7 @@ namespace RNAssistant.Office.Services
                 response.Action == ConversationResponse.ExecuteAction
                     ? response.ToolCalls.Select(call => new ToolCallDraft(call.Name, call.Arguments.ToString(Formatting.None)))
                     : null, response.Decision, response.Results, response.Outcome),
-                _lastModel.SourceModelAttemptId);
+                _lastModel.SourceModelAttemptId, _lastModel.Completion?.AttemptSnapshot);
         }
 
         private async Task EnsureModelSessionAsync(CancellationToken cancellationToken)

@@ -76,7 +76,7 @@ namespace RNAssistant.Core.Agent
         }
     }
 
-    public enum AgentRunEventKind { Started, ModelStepStarted, ResponseAccepted, ToolStarted, ToolCompleted, SummaryChanged, ToolWaiting, ExecutionQueued, ExecutionAdmitted }
+    public enum AgentRunEventKind { Started, ModelStepStarted, ResponseAccepted, ToolStarted, ToolCompleted, SummaryChanged, ToolWaiting, ExecutionQueued, ExecutionAdmitted, ModelAttemptRetained }
 
     public sealed class AgentRunEvent
     {
@@ -87,6 +87,7 @@ namespace RNAssistant.Core.Agent
         public string StepId { get; private set; }
         public AgentMessage UserMessage { get; private set; }
         public AgentResponse Response { get; private set; }
+        public RetainedModelAttempt RetainedAttempt { get; private set; }
         public string SourceModelAttemptId { get; private set; }
         public ToolExecutionContext ToolContext { get; private set; }
         public ToolExecutionRecord Execution { get; private set; }
@@ -97,8 +98,9 @@ namespace RNAssistant.Core.Agent
         internal AgentRunEvent(AgentRunEventKind kind, RunSummary summary, string stepId = null,
             AgentRunLimits limits = null, AgentMessage userMessage = null, AgentResponse response = null,
             ToolExecutionContext toolContext = null, ToolExecutionRecord execution = null,
-            string sourceModelAttemptId = null, bool claimsContinuation = false)
+            string sourceModelAttemptId = null, bool claimsContinuation = false, RetainedModelAttempt retainedAttempt = null)
         {
+            RetainedAttempt = retainedAttempt;
             ClaimsContinuation = claimsContinuation;
             Kind = kind;
             Summary = summary;

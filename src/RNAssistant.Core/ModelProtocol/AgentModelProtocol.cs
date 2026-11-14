@@ -20,6 +20,7 @@ namespace RNAssistant.Core.ModelProtocol
         public string RunId { get; private set; }
         public string TurnId { get; private set; }
         public string StepId { get; private set; }
+        public Func<RetainedModelAttempt, Task> RetainAttemptAsync { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
         public string CompletionFeedback { get; private set; }
         public ModelRequestCause RequestCause { get; private set; }
@@ -30,8 +31,9 @@ namespace RNAssistant.Core.ModelProtocol
         internal AgentModelRequest(string runId, string turnId, string stepId,
             IEnumerable<AgentMessage> messages, string completionFeedback = null,
             int? reflectionLimit = null, int reflectionsUsed = 0, ModelRequestCause requestCause = null,
-            FinishCorrection finishCorrection = null)
+            FinishCorrection finishCorrection = null, Func<RetainedModelAttempt, Task> retainAttemptAsync = null)
         {
+            RetainAttemptAsync = retainAttemptAsync;
             RunId = runId;
             TurnId = turnId;
             StepId = stepId;
@@ -53,24 +55,25 @@ namespace RNAssistant.Core.ModelProtocol
         public bool CompletionRejected { get; private set; }
         public FinishAdmission CompletionRejection { get; private set; }
         public string SourceModelAttemptId { get; private set; }
+        public ConversationAttemptSnapshot Attempt { get; private set; }
 
         private AgentModelResult() { }
 
-        public static AgentModelResult Accepted(AgentResponseDraft response, string sourceModelAttemptId = null)
+        public static AgentModelResult Accepted(AgentResponseDraft response, string sourceModelAttemptId = null, ConversationAttemptSnapshot attempt = null)
         {
             return new AgentModelResult { Response = response ?? throw new ArgumentNullException(nameof(response)),
-                SourceModelAttemptId = sourceModelAttemptId };
+                SourceModelAttemptId = sourceModelAttemptId, Attempt = attempt };
         }
 
         // A valid finish failed explicit application-owned postconditions. This is
         // a fresh kernel step, never a format repair or accepted assistant answer.
         public static AgentModelResult RejectCompletion(AgentResponseDraft proposal, FinishAdmission rejection,
-            string sourceModelAttemptId = null)
+            string sourceModelAttemptId = null, ConversationAttemptSnapshot attempt = null)
         {
             if (proposal == null || proposal.Action != ConversationResponse.FinishAction || rejection == null || rejection.Accepted)
                 throw new ArgumentException("A validated finish and its explicit rejection are required.");
             return new AgentModelResult { CompletionRejected = true, Response = proposal, CompletionRejection = rejection, Message = rejection.Message,
-                SourceModelAttemptId = sourceModelAttemptId };
+                SourceModelAttemptId = sourceModelAttemptId, Attempt = attempt };
         }
 
         public static AgentModelResult Failed(ModelProtocolFailureKind kind, string message)

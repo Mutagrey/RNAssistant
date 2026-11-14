@@ -33,12 +33,20 @@ namespace RNAssistant.Core.Tools
         }
 
         private readonly bool _schemaTransport;
+        private readonly string _visibleProperty;
+        private readonly int _maximumCharacters;
+        private int _emittedCharacters;
         private bool _insideResponse;
         private bool _responseSeen;
 
-        public ConversationMessageStreamExtractor(bool schemaTransport = false)
+        public ConversationMessageStreamExtractor(bool schemaTransport = false, string visibleProperty = "message", int maximumCharacters = int.MaxValue)
         {
             _schemaTransport = schemaTransport;
+            if (visibleProperty != "message" && visibleProperty != "reason" && visibleProperty != "decision")
+                throw new ArgumentException("Only visible conversation fields can be extracted.", nameof(visibleProperty));
+            _visibleProperty = visibleProperty;
+            if (maximumCharacters < 1) throw new ArgumentOutOfRangeException(nameof(maximumCharacters));
+            _maximumCharacters = maximumCharacters;
         }
 
         private readonly StringBuilder _property = new StringBuilder();
@@ -56,6 +64,7 @@ namespace RNAssistant.Core.Tools
         private bool _compositeEscape;
 
         public bool MessageCompleted { get; private set; }
+        public bool Truncated { get; private set; }
 
         public string Add(string value)
         {
@@ -131,7 +140,7 @@ namespace RNAssistant.Core.Tools
                             _state = ParseState.RootPropertyOrEnd;
                             return;
                         }
-                        if (!_messageSeen && string.Equals(_currentProperty, "message", StringComparison.Ordinal))
+                        if (!_messageSeen && string.Equals(_currentProperty, _visibleProperty, StringComparison.Ordinal))
                         {
                             if (value != '"')
                             {
@@ -247,6 +256,7 @@ namespace RNAssistant.Core.Tools
             }
             if (value == '{' || value == '[')
             {
+                if (_compositeClosers.Count >= 64) { Invalidate(); return; }
                 _compositeClosers.Push(value == '{' ? '}' : ']');
                 return;
             }
@@ -332,7 +342,8 @@ namespace RNAssistant.Core.Tools
         {
             if (_stringTarget == StringTarget.Property)
             {
-                _property.Append(value);
+                // Only short known root names matter; never retain arbitrary keys.
+                if (_property.Length < 32) _property.Append(value);
                 return;
             }
             if (_stringTarget != StringTarget.Message) return;
@@ -341,10 +352,10 @@ namespace RNAssistant.Core.Tools
             {
                 var high = _pendingMessageHighSurrogate.Value;
                 _pendingMessageHighSurrogate = null;
-                _output.Append(high);
+                AppendOutput(high);
                 if (char.IsLowSurrogate(value))
                 {
-                    _output.Append(value);
+                    AppendOutput(value);
                     return;
                 }
             }
@@ -353,7 +364,13 @@ namespace RNAssistant.Core.Tools
                 _pendingMessageHighSurrogate = value;
                 return;
             }
-            _output.Append(value);
+            AppendOutput(value);
+        }
+
+        private void AppendOutput(char value)
+        {
+            if (_emittedCharacters >= _maximumCharacters) { Truncated = true; return; }
+            _output.Append(value); _emittedCharacters++;
         }
 
         private void EndString()
@@ -369,7 +386,7 @@ namespace RNAssistant.Core.Tools
                 {
                     if (_pendingMessageHighSurrogate.HasValue)
                     {
-                        _output.Append(_pendingMessageHighSurrogate.Value);
+                        AppendOutput(_pendingMessageHighSurrogate.Value);
                     }
                     _messageSeen = true;
                     MessageCompleted = true;

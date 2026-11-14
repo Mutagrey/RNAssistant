@@ -222,6 +222,8 @@
     <Compile Include="ModelProtocol\ModelProtocolCallContext.cs" />
     <Compile Include="ModelProtocol\ToolResultWire.cs" />
     <Compile Include="ModelProtocol\ModelProtocolClient.cs" />
+    <Compile Include="ModelProtocol\ConversationStreamProgressProjector.cs" />
+    <Compile Include="ModelProtocol\RetainedModelAttempt.cs" />
     <Compile Include="ModelProtocol\ModelReferenceProjection.cs" />
     <Compile Include="ModelProtocol\ModelHistoryBatchProjection.cs" />
     <Compile Include="ModelProtocol\ModelReference.cs" />

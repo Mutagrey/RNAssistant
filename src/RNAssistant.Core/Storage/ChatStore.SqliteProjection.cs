@@ -533,6 +533,7 @@ namespace RNAssistant.Core.Storage
                         break;
                     case SessionOperationTypes.MessageUpdated:
                     case SessionOperationTypes.UserMessageAppended:
+                    case SessionOperationTypes.ModelAttemptRetained:
                     case SessionOperationTypes.AssistantMessageAppended:
                     case SessionOperationTypes.ToolResultRecorded:
                     case SessionOperationTypes.ToolExecutionStarted:

@@ -120,6 +120,16 @@ namespace RNAssistant.Core.Storage
             if (fact.ModelEvent != null && (fact.Run == null || fact.ModelEvent.RunId != fact.Run.RunId ||
                 fact.ModelEvent.TurnId != fact.Run.TurnId || fact.RunState == null))
                 throw new InvalidOperationException("Model manifest requires its accepted exact run.");
+            if (fact.ModelEvent?.Kind == SessionEventKind.ModelAttemptRetained)
+            {
+                var attempts = fact.Messages.Where(item => item.Header.Activity?.Kind == "model_attempt" &&
+                    SameRunValue(item.Body, fact.ModelEvent.Body)).ToArray();
+                if (attempts.Length != 1 || attempts[0].Header.Activity.StepId != fact.ModelEvent.StepId ||
+                    attempts[0].Header.RunId != fact.ModelEvent.RunId)
+                    throw new InvalidDataException("Retained attempt must share its atomic message body and exact run/step.");
+                var message = attempts[0].Header.CopyForContext(); message.Content = ReadChatBody(attempts[0].Body);
+                ConversationRunProjection.ReadRetainedAttempt(message);
+            }
         }
 
         void IConversationStore.CommitRun(ConversationRunCommit commit)

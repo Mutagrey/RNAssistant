@@ -139,6 +139,9 @@ namespace RNAssistant.Core.Persistence
                 string operation;
                 switch (fact.Kind)
                 {
+                    case AgentRunEventKind.ModelAttemptRetained:
+                        operation = SessionOperationTypes.ModelAttemptRetained;
+                        break;
                     case AgentRunEventKind.ResponseAccepted:
                         operation = fact.Response.ToolCalls.Count == 0
                             ? SessionOperationTypes.AssistantMessageAppended : SessionOperationTypes.ToolCallRecorded;
@@ -187,6 +190,14 @@ namespace RNAssistant.Core.Persistence
             {
                 write(this);
                 if (Position == null) throw new InvalidOperationException("Runtime storage did not confirm the commit.");
+            }
+            catch (System.IO.IOException)
+            {
+                // Inspect after the adapter finally publishes the recovered receipt;
+                // an exception filter would run before that finally.
+                if (FactKind != AgentRunEventKind.ModelAttemptRetained || Position == null) throw;
+                // Both adapters recovered this exact operation's canonical receipt.
+                // No second append or model request is needed after a lost ACK.
             }
             finally
             {
