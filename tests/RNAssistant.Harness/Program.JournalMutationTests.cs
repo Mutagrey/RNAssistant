@@ -32,6 +32,9 @@ namespace RNAssistant.Harness
         private static void JournalMutationTerminalReceipt()
         { JournalMutationTurn(false, "terminal-ack"); }
 
+        private static void JournalTaskRuntime()
+        { JournalMutationTurn(true, "task"); JournalMutationTurn(false, "task"); }
+
         private static void JournalPlanRuntime()
         { JournalMutationTurn(true, "plan"); JournalMutationTurn(false, "plan"); }
 
@@ -94,13 +97,15 @@ namespace RNAssistant.Harness
                     RequestTimeoutSeconds = 5, MaxAgentFormatRetries = 0 };
                 var executor = office ? new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths),
                     new ToolStore(paths), () => settings, paths: paths, resourceAuthorityStore: resources,
-                    resourceMutationJournal: resources, resourceOrigin: (session, context) => journal.MutationOrigin(session, context)) : null;
+                    resourceMutationJournal: resources, resourceOrigin: (session, context) => journal.MutationOrigin(session, context),
+                    persistResourceFacts: store.Commit) : null;
                 var chat = office ? new ChatSessionService(adapter, store).CreatePersistentChat("Journal mutation") :
                     new WorkspaceStore(paths).CreateSession(store, workspace, "Journal mutation");
                 var target = office ? "VBA module: JournalModule" : "created.txt";
                 var content = office ? "Sub Main()\nDebug.Print 17\nEnd Sub" : "Written exactly once.";
                 var uncertain = fault == "unknown" || fault == "resource-ack";
                 var plan = fault == "plan";
+                var tasks = fault == "task";
                 var recover = fault?.StartsWith("recovery-", StringComparison.Ordinal) == true;
                 if (plan)
                 {
@@ -142,8 +147,8 @@ namespace RNAssistant.Harness
                                 var request = await listener.GetContextAsync().ConfigureAwait(false);
                                 using (var reader = new StreamReader(request.Request.InputStream)) await reader.ReadToEndAsync().ConfigureAwait(false);
                                 var number = ++calls;
-                                AssertTrue(number <= (uncertain ? 4 : 2), "finish correction remains bounded without repeating the mutation");
-                                var response = number == 1
+                                AssertTrue(number <= (tasks ? 6 : uncertain ? 4 : 2), "finish correction remains bounded without repeating the mutation");
+                                var response = tasks ? JournalTaskResponse(number, store.Load(chat.Id)) : number == 1
                                     ? ModelProtocolWire.WriteAcceptedCall("Create the requested source.", null,
                                         new ConversationToolCall { Name = "core.write", Arguments = new JObject { ["target"] = target, ["content"] = content } })
                                     : uncertain
@@ -182,7 +187,7 @@ namespace RNAssistant.Harness
                                 var user = new ChatMessage { Role = "user", Content = "Create the source.", RunId = id };
                                 chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
                                 var ports = workspacePorts(chat);
-                                ConversationRunCoordinator.RunAsync(new AgentRunRequest(id, id, user.Content, new AgentRunLimits(5, 5)),
+                                ConversationRunCoordinator.RunAsync(new AgentRunRequest(id, id, user.Content, new AgentRunLimits(tasks ? 6 : 5, tasks ? 6 : 5)),
                                     ports, ports.Tools, ports, CancellationToken.None).GetAwaiter().GetResult();
                             }
                         };
@@ -250,6 +255,7 @@ namespace RNAssistant.Harness
                     return;
                 }
                 var restored = store.Load(chat.Id);
+                if (tasks) { VerifyJournalTaskRuntime(paths, journal, resources, restored, scope, calls, office); return; }
                 if (recover)
                 {
                     AssertTrue(restored.LastRun.KernelState.InFlightTool != null, "lost terminal retains entered call");

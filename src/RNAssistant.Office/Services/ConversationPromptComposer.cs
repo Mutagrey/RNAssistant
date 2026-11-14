@@ -26,12 +26,14 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatAttachment> attachments,
             bool replayCurrentUserInHistory = false,
             int historyBudgetTokens = 0,
-            JObject capabilityCatalog = null, JObject completionFeedback = null, SkillRequestSurface skillSurface = null)
+            JObject capabilityCatalog = null, JObject completionFeedback = null, SkillRequestSurface skillSurface = null,
+            TaskListStateProjection taskList = null)
         {
             settings = settings ?? new AppSettings();
             mode = ConversationRunPolicy.For(mode).Mode;
             var instruction = BuildInstruction(mode, settings);
             var runtime = BuildRuntimeContextData(mode, adapter, tools, skills, context, session, settings, capabilityCatalog);
+            if (taskList != null) runtime["active_task_list"] = JObject.FromObject(taskList);
             if (completionFeedback != null) runtime["completionFeedback"] = completionFeedback.DeepClone();
             if (skillSurface != null) runtime["loaded_skills"] = new JArray(skillSurface.Instructions.Select(skill => skill.Id));
             var runtimeContext = RuntimeContextPrompt.Render(runtime, ConversationInputMessage.HasAgentMessages(session));

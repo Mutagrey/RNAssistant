@@ -158,9 +158,12 @@ namespace RNAssistant.Harness
                 var removedRead = executor.ExecuteManual(Command("common.plan_read"), tools, new AppSettings(), false, false, session);
                 AssertEqual("unknown_tool", removedRead.ErrorCode, "legacy plan id stays unknown");
 
-                session.Messages.Remove(updateMessage);
-                ChatResourceReferenceService.RestoreActiveTaskListFromMessages(session);
-                ChatResourceReferenceService.PruneUnreachable(session);
+                executor.MutateChatResources(session, new ChatResourceMutationIntent(ChatResourceMutationKind.DeleteMessage, updateMessage.Id), () => {
+                    session.Messages.Remove(updateMessage);
+                    ChatResourceReferenceService.RestoreActiveTaskListFromMessages(session);
+                    ChatResourceReferenceService.PruneUnreachable(session);
+                    return true;
+                });
                 AssertEqual(firstArtifactId, session.ActiveTaskListArtifactId, "history rewind restores prior task-list revision");
                 AssertTrue(session.Artifacts.All(item => item.Id != secondArtifactId), "future plan revision pruned");
 

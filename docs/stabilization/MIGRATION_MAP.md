@@ -142,6 +142,16 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 Task List (2026-11-14): native ConversationJournal/CAS retains immutable
+snapshot deltas and reference-only membership/selection. Existing JournalIndex
+schema 25 adds only a rebuildable task snapshot locator. WorkspaceTaskListObserver
+uses supplied authority/revision/mutation ports and exact origin; Office uses the
+same publisher, admission and current-state projection. No new store or adapter.
+Default resource constructors and ChatStore composition remain until whole-port P7
+removes them; owner: current ConversationJournal and existing resource publication
+owners. HTML/context-state, fork, P3 and full owner backup remain open.
+[Contract](../session-events.md#journal-task-list-snapshots--2026-11-14).
+
 P1/P2 Plan (2026-11-14): native resource membership/selection extends the existing
 attachment manifest; no new store, index schema or adapter. Original metadata/body
 ownership is unchanged. WorkspacePlanService now accepts existing authority,

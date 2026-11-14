@@ -262,7 +262,7 @@ namespace RNAssistant.Office.Tools
                     ? null
                     : new ResourceMutationAuthorityObserver(
                         _resourceAuthority, _resourceMutationJournal, session, Payloads,
-                        saved => _persistResourceFacts?.Invoke(saved, new ConversationCommit()),
+                        _persistResourceFacts == null ? (Action<ChatSession>)null : saved => _persistResourceFacts(saved, new ConversationCommit()),
                         _catalogPublication.CaptureReadBack, _resourceOrigin == null ? (Func<ToolExecutionContext, ResourceMutationOrigin>)null :
                             context => _resourceOrigin(session, context)), _markdownDocuments, runPolicy, dispatchGuard, _authoredFiles, skillAdmission, AgentCommunication, AgentInbox,
                         () => ExternalBrowserReadSource, BeginLiveOfficeRead);

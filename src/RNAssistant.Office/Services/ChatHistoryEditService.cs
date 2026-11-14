@@ -79,10 +79,8 @@ namespace RNAssistant.Office.Services
             session.LastRun = null;
             session.LastContextReceipt = null;
             InvalidateContextCheckpoints(session);
-            if (_loadArtifactBody != null)
-                foreach (var artifact in ChatResourceReferenceService.ReachableForMessages(session.Artifacts, messages)
-                    .Where(item => item.Kind == ChatArtifactKinds.TaskList)) _loadArtifactBody(session, artifact.Id);
             ChatResourceReferenceService.RestoreActiveTaskListFromMessages(session);
+            if (session.ActiveTaskListArtifactId != null) _loadArtifactBody?.Invoke(session, session.ActiveTaskListArtifactId);
             ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(session);
             ChatResourceReferenceService.PruneUnreachable(session);
 

@@ -29,7 +29,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private static bool IsStoredSnapshot(ConversationMetadata metadata, ResourceRef reference)
-        { return IsOriginal(metadata, reference) || IsPlanSnapshot(metadata, reference); }
+        { return IsOriginal(metadata, reference) || IsPlanSnapshot(metadata, reference) || IsTaskSnapshot(metadata, reference); }
 
         private static ResourceIdentity WorkingSetIdentity(ConversationMetadata metadata, ResourceRef reference)
         {
@@ -44,7 +44,9 @@ namespace RNAssistant.Core.Storage
             if (state?.References == null || state.Links == null || state.References.Any(item => !IsStoredSnapshot(metadata, item)) ||
                 state.References.Select(item => item.Uri).Distinct(StringComparer.Ordinal).Count() != state.References.Count ||
                 state.Links.Any(item => item == null || !IsStoredSnapshot(metadata, item.Reference) ||
-                    !WorkingSetIdentity(metadata, item.Reference).Equals(item.Identity)) ||
+                    !WorkingSetIdentity(metadata, item.Reference).Equals(item.Identity) || IsTaskSnapshot(metadata, item.Reference)) ||
+                state.ActiveTask != null && (!IsTaskSnapshot(metadata, state.ActiveTask) ||
+                    !state.References.Any(item => SameRunValue(item, state.ActiveTask))) ||
                 state.ActivePlan != null && (!IsPlanSnapshot(metadata, state.ActivePlan) ||
                     !state.References.Any(item => SameRunValue(item, state.ActivePlan)) ||
                     state.Links.Any(item => item.Detached && item.Identity.Equals(WorkingSetIdentity(metadata, state.ActivePlan)))))
@@ -57,16 +59,19 @@ namespace RNAssistant.Core.Storage
         {
             if (session.Artifacts.Any(item => item == null || item.AvailabilityIssue == null &&
                 item.Kind != ChatArtifactKinds.Attachment && item.Kind != ChatArtifactKinds.Image &&
-                item.Kind != ChatArtifactKinds.PlanDocument)) throw TextStoreScope();
+                item.Kind != ChatArtifactKinds.PlanDocument && item.Kind != ChatArtifactKinds.TaskList)) throw TextStoreScope();
             var metadata = ConversationMetadata.From(session);
             var references = session.Artifacts.Select(item => ChatResourceUri.CreateArtifactRevision(session, item)).ToArray();
-            if (references.Any(item => !IsStoredSnapshot(metadata, item)) || session.ArtifactLinks.Any(item => !IsStoredSnapshot(metadata, item?.Reference)))
+            if (references.Any(item => !IsStoredSnapshot(metadata, item)) || session.ArtifactLinks.Any(item => !IsStoredSnapshot(metadata, item?.Reference) || IsTaskSnapshot(metadata, item.Reference)))
                 throw TextStoreScope();
             ArtifactWorkingSet.Validate(session);
             var active = session.ActivePlanDocumentArtifactId == null ? null :
                 DocumentArtifactStore.PlanSelectionReference(session, session.ActivePlanDocumentArtifactId);
-            if (references.Length == 0 && session.ArtifactLinks.Count == 0 && active == null) return null;
-            return StoreChatJson(new ConversationResourceSet(references, session.ArtifactLinks, active));
+            var task = session.ActiveTaskListArtifactId == null ? null : references.SingleOrDefault(item =>
+                IsTaskSnapshot(metadata, item) && ResourceUri.Parse(item.Uri).Segments[2] == session.ActiveTaskListArtifactId);
+            if (session.ActiveTaskListArtifactId != null && task == null) throw new InvalidDataException("Active task-list membership is missing.");
+            if (references.Length == 0 && session.ArtifactLinks.Count == 0 && active == null && task == null) return null;
+            return StoreChatJson(new ConversationResourceSet(references, session.ArtifactLinks, active, task));
         }
 
         // Called outside the conversation transaction: document authority uses its
@@ -128,7 +133,8 @@ namespace RNAssistant.Core.Storage
             var local = selected.Where(item => !result.ContainsKey(item.Uri)).ToArray();
             if (local.Length != 0) Access((db, cursor) => {
                     RequireChatRevision(metadata, TextChat(db, metadata.Id));
-                    foreach (var item in local) result.Add(item.Uri, ReadLocalOriginal(db, metadata, item));
+                    foreach (var item in local) result.Add(item.Uri, IsTaskSnapshot(metadata, item)
+                        ? ReadTaskSnapshot(db, metadata, item) : ReadLocalOriginal(db, metadata, item));
                     return true;
                 }, CancellationToken.None);
             return selected.Select(item => result[item.Uri]).ToArray();
@@ -151,15 +157,16 @@ namespace RNAssistant.Core.Storage
         }
     }
 
-    // Only membership/selection is chat-owned; published metadata and bodies retain
-    // their resource owner. The existing manifest also covers local attachments.
+    // The manifest contains only membership/selection. Snapshot metadata and bodies
+    // retain their owner; local Task snapshots are canonical conversation facts.
     internal sealed class ConversationResourceSet
     {
         public IReadOnlyList<ResourceRef> References { get; private set; }
         public IReadOnlyList<ChatArtifactLink> Links { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceRef ActivePlan { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceRef ActiveTask { get; private set; }
         [JsonConstructor] internal ConversationResourceSet(IReadOnlyList<ResourceRef> references, IReadOnlyList<ChatArtifactLink> links,
-            ResourceRef activePlan = null)
-        { References = references; Links = links; ActivePlan = activePlan; }
+            ResourceRef activePlan = null, ResourceRef activeTask = null)
+        { References = references; Links = links; ActivePlan = activePlan; ActiveTask = activeTask; }
     }
 }

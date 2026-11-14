@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.2-dev
+
+- Task List: Office и Workspace одинаково проверяют опубликованное состояние перед
+  изменением; неопределённый результат не выдаётся модели как доступный текущий список.
+  Откат истории выбирает ревизию по metadata и загружает только её тело, включая
+  состояние blocked. Native journal сохраняет ревизии и CAS через существующих
+  consumers; production storage пока не переключён. Windows/Office evidence открыт.
+
 ### 16.27.1-dev
 
 - Browser: «Обсудить» открывает связанный чат или создаёт новый для источника страницы

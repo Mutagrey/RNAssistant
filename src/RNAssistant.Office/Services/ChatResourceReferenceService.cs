@@ -198,11 +198,12 @@ namespace RNAssistant.Office.Services
                 for (var idIndex = (ids ?? new List<string>()).Count - 1; idIndex >= 0; idIndex--)
                 {
                     if (!artifacts.ContainsKey(ids[idIndex])) continue;
-                    ChatTaskList taskList;
-                    try { taskList = JsonConvert.DeserializeObject<ChatTaskList>(artifacts[ids[idIndex]].InlineText); }
+                    TaskListRevisionMetadata taskList;
+                    try { taskList = JsonConvert.DeserializeObject<TaskListRevisionMetadata>(artifacts[ids[idIndex]].MetadataJson); }
                     catch (JsonException) { continue; }
                     if (taskList == null) continue;
-                    if (!string.Equals(taskList.Status, "active", StringComparison.OrdinalIgnoreCase)) return;
+                    if (!string.Equals(taskList.Status, "active", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(taskList.Status, "blocked", StringComparison.OrdinalIgnoreCase)) return;
                     session.ActiveTaskListArtifactId = ids[idIndex];
                     return;
                 }

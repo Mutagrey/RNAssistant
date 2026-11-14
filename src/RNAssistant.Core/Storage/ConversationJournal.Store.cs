@@ -93,6 +93,8 @@ namespace RNAssistant.Core.Storage
             session.Revision = receipt.Position.Sequence; session.UpdatedUtc = receipt.UpdatedUtc;
             session.StorageHeadHash = receipt.Position.Hash; session.StorageByteLength = receipt.Position.End;
             session.StorageTailByteOffset = receipt.Position.Start;
+            foreach (var artifact in session.Artifacts.Where(item => item.Kind == ChatArtifactKinds.TaskList && item.Id != session.ActiveTaskListArtifactId))
+                artifact.InlineText = null;
         }
 
         ConversationMetadata IConversationStore.ReadMetadata(string id)
@@ -143,6 +145,7 @@ namespace RNAssistant.Core.Storage
                     DetachedArtifactIds = new HashSet<string>(artifacts.Where(item => ArtifactWorkingSet.IsDetached(metadata, state?.Links, item)).Select(item => item.Id)),
                     ApplicableTombstoneIds = new HashSet<string>(artifacts.Where(item => PlanDocumentService.IsApplicableTombstone(metadata,
                         sourceIds, item)).Select(item => item.Id)),
+                    ActiveTaskListArtifactId = state.ActiveTask == null ? null : ResourceUri.Parse(state.ActiveTask.Uri).Segments[2],
                     ActivePlanDocumentArtifactId = state.ActivePlan == null ? null : ResourceUri.Parse(state.ActivePlan.Uri).Segments[2],
                     StartIndex = Math.Max(0, beforeIndex - pageSize), TotalCount = selected.Item1.Fact.MessageCount };
             }
@@ -182,6 +185,8 @@ namespace RNAssistant.Core.Storage
                 session.Artifacts = ReadArtifacts(ChatMetadata(receipt), resourceSet.References).ToList();
                 session.ArtifactLinks = resourceSet.Links.ToList();
                 session.ActivePlanDocumentArtifactId = resourceSet.ActivePlan == null ? null : ResourceUri.Parse(resourceSet.ActivePlan.Uri).Segments[2];
+                session.ActiveTaskListArtifactId = resourceSet.ActiveTask == null ? null : ResourceUri.Parse(resourceSet.ActiveTask.Uri).Segments[2];
+                TaskListPublication.HydrateActive(session, _bodies);
                 LoadChatReferences(session); return session;
             }
         }

@@ -159,6 +159,14 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal task list:` covers actual Office/Workspace kernel save/update/blocked/close
+with schema admission and exact resource outcome links; bounded metadata pages,
+active-body hydration, cold history rewind, immutable revisions, index/ack failure,
+restart/rebuild, Unknown guards, independent input and Workspace backup/restore.
+Pair with `task lists:`, `journal history: Office edit clear`, `journal Plan: Office`
+and `journal attachments:` when changing their shared owners. Reuse one build;
+no full suite or Office validation is implied. Default cutover is still open.
+
 `journal Plan:` covers actual Office/Workspace kernel publication plus shared
 Plan lifecycle, exact selection, metadata-only pages, off-page tombstones,
 publication/chat receipt loss, index failure, rebuild, Workspace restore and

@@ -478,7 +478,8 @@ namespace RNAssistant.Office.Services
             if (retainAuthority) _currentAuthority = frozen;
             var required = new ConversationPromptComposer().BuildRequiredMessages(_mode, _userText, null,
                 tools, skillDefinitions, null, _settings, _session, null, true, 0,
-                _toolPack.CapabilityContext(skillDefinitions, tools), _completionFeedback, surface);
+                _toolPack.CapabilityContext(skillDefinitions, tools), _completionFeedback, surface,
+                _authority == null ? null : TaskListPublication.Project(_session, resources.Get(TaskListPublication.Scope(_session)), _authority.Revisions, _payloads));
             if (packState != null) required.Add(packState);
             var budget = PrepareRequest(tools).MessageBudget(required);
             var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);

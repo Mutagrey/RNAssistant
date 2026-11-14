@@ -1873,3 +1873,49 @@ after-state/CAS ownership.
    Harness guide updated. Owned sources match the validation archive; scoped
    diff/links and mandatory version-format check run before commit. Intermediate
    native integration: no product bump, tag or push.
+
+
+## P1/P2 — native Task List consumers (2026-11-14)
+
+1. Task List is the next P1/P2 consumer after Plan. Real Office/Workspace kernel
+   save/update/blocked/close now use native conversation snapshots and exact
+   resource-outcome proof through the existing TaskListPublication owner.
+2. ConversationJournal appends bounded new snapshot-header deltas; bodies live in
+   CAS and unchanged revisions are not republished. The existing reference manifest
+   gains exact ActiveTask selection. JournalIndex schema 25 adds a rebuildable
+   chat_task_list locator in the same index/cursor transaction. CAS closure/usage
+   retains historical bodies after clear. No store, registry, adapter, import,
+   dual-write or fallback is introduced. Snapshot body/metadata/parent rebinding
+   and a selected closed list are rejected before acceptance.
+3. WorkspaceTaskListObserver consumes supplied authority/revision/mutation ports
+   and accepted-call origin; Office retains its bound observer and persists before
+   capture/publication. Both use the same frozen-authority projection and mutation
+   precondition. Unknown makes current-list state unavailable and denies another
+   save, while exact historical reads and independent input remain usable. A saved
+   body alone does not turn interrupted execution into a verified outcome.
+4. Three new checks pass on macOS/net8/C#7.3: real kernel parity with schema admission
+   and exact proof; snapshot/index/ack/retry/restart/rebuild, cold history rewind and
+   Workspace restore; interrupted Task dispatch with both observers' rejection,
+   independent input and restored Unknown. Ten selected regressions pass: existing
+   Task Lists (5), native Office history edit/clear and Workspace deletion (1),
+   native Plan kernel parity (1), attachments (3). The old Task rewind fixture now
+   uses the actual history mutation owner instead of bypassing authority. No full
+   suite, VSTO/Office validation or Windows evidence is claimed.
+5. Before: native Store rejected Task state; Workspace used separate default
+   resource constructors; history editing hydrated every reachable Task body.
+   After: Load and accepted-session state keep only the active body hot (128 KiB
+   bound), message pages read referenced metadata, and history selects by metadata
+   and loads one body. The tested one-message page reads text plus one manifest,
+   zero Task bodies. Metadata/header/working-set scans and Workspace full read-back
+   remain P3 costs; no unmeasured CPU/allocation or Windows latency claim is made.
+6. Remaining: HTML/context-state consumers, fork and remaining resource-bearing
+   history; P3 metadata/header/context/summary usage; complete owner backup, writer
+   shutdown and default cutover with ChatStore/adapters removed. Office identity
+   backup and Windows qualification stay open. P4 remains deferred. The native
+   composition is still isolated and production storage remains ChatStore.
+7. Canonical session/resource/artifact docs, migration map, progress and harness
+   guide updated. Product version is 16.27.2-dev: shared Office admission/projection
+   now matches Workspace, and history preserves blocked selection while avoiding
+   all-history body hydration. This shared behavior change warrants a patch even
+   though native storage integration remains intermediate. Scoped diff and mandatory
+   ValidateVersionFormat pass before commit; no tag, push or release.

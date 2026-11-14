@@ -7,10 +7,34 @@ using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Services
 {
-    // Task lists remain conversation-owned artifacts in ChatStore/CAS. This owns
+    // Task lists remain conversation-owned immutable snapshots and CAS bodies. This owns
     // their logical authority publication, shared by Office and workspace hosts.
     public static class TaskListPublication
     {
+        public const int MaxBodyBytes = 128 * 1024;
+
+        public static string ReadBody(ChatArtifact artifact, ChatBlobStore payloads)
+        {
+            if (artifact?.Kind != ChatArtifactKinds.TaskList) throw new InvalidDataException("Task-list snapshot is unavailable.");
+            var body = artifact.InlineText;
+            if (body == null && artifact.ContentByteLength.HasValue && artifact.ContentByteLength <= MaxBodyBytes)
+                body = payloads.ReadText(new ChatBlobReference { Sha256 = artifact.ContentSha256,
+                    ByteLength = artifact.ContentByteLength.Value, ContentType = artifact.MimeType });
+            if (body == null || System.Text.Encoding.UTF8.GetByteCount(body) > MaxBodyBytes ||
+                artifact.ContentSha256 != null && (TextPatternEngine.Sha256(body) != artifact.ContentSha256 ||
+                    System.Text.Encoding.UTF8.GetByteCount(body) != artifact.ContentByteLength))
+                throw new InvalidDataException("Task-list body is unavailable or differs from its snapshot.");
+            return body;
+        }
+
+        public static void HydrateActive(ChatSession session, ChatBlobStore payloads)
+        {
+            if (string.IsNullOrEmpty(session.ActiveTaskListArtifactId)) return;
+            var artifact = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveTaskListArtifactId);
+            var body = ReadBody(artifact, payloads);
+            artifact.InlineText = body;
+        }
+
         public static ResourceAuthorityScopeId Scope(ChatSession session)
         {
             if (string.IsNullOrWhiteSpace(session?.Id)) throw new InvalidOperationException("A persisted chat is required.");
@@ -28,14 +52,20 @@ namespace RNAssistant.Core.Services
             var artifact = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveTaskListArtifactId);
             if (artifact?.Kind != ChatArtifactKinds.TaskList)
                 throw new InvalidDataException("The active task-list snapshot is unavailable.");
+            HydrateActive(session, payloads);
             var body = artifact.InlineText;
-            if (body == null && artifact.ContentByteLength.HasValue && artifact.ContentByteLength <= 128 * 1024)
-                body = payloads.ReadText(new ChatBlobReference { Sha256 = artifact.ContentSha256,
-                    ByteLength = artifact.ContentByteLength.Value, ContentType = artifact.MimeType });
-            if (body == null) throw new InvalidDataException("The active task-list body is unavailable.");
             var payload = PayloadRef.FromBlob(payloads.StoreText(body, artifact.MimeType ?? "application/json"));
             return new ResourceMutationReadBack(identity, true, "text", payload.Sha256, payload,
                 dependencies: new[] { new ResourceDependency(ChatResourceUri.CreateArtifactRevision(session, artifact), kind: "immutable-snapshot") });
+        }
+
+        public static TaskListStateProjection Project(ChatSession session, ResourceAuthoritySnapshot snapshot,
+            IResourceRevisionStore revisions, ChatBlobStore payloads)
+        {
+            try { RequireCurrent(session, snapshot, revisions, payloads); }
+            catch (Exception error) when (error is InvalidOperationException || error is IOException)
+            { return new TaskListStateProjection { Available = false }; }
+            return TaskListService.ProjectCurrent(session);
         }
 
         public static void RequireCurrent(ChatSession session, ResourceAuthoritySnapshot snapshot,

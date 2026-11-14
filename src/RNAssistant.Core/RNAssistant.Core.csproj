@@ -407,6 +407,7 @@
     <Compile Include="Storage\ConversationJournal.History.cs" />
     <Compile Include="Storage\ConversationJournal.Attachments.cs" />
     <Compile Include="Storage\ConversationJournal.Resources.cs" />
+    <Compile Include="Storage\ConversationJournal.TaskLists.cs" />
     <Compile Include="Storage\ConversationJournal.RuntimeStore.cs" />
     <Compile Include="Storage\ConversationJournal.ToolStore.cs" />
     <Compile Include="Storage\ConversationJournal.Mutations.cs" />

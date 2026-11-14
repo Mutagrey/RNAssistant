@@ -356,16 +356,18 @@ write authority nor file-read acceptance. Skill reads use this run's model input
 budget; CLI skill-reference continuation is open scope. See
 [skills](skills.md#independent-workspace-runtime) for selection and publication.
 
-Task Lists use the shared Core `TaskListPublication` owner for
-`state/conversation/<chat>/task-list`. Their immutable bodies and revisions remain
-in the existing ChatStore/CAS. The CLI pins this conversation scope alongside file
-and skill scopes; its required current-list projection is admitted only when its
-selected artifact matches the frozen published head. Unknown authority yields an
-unavailable projection and cannot authorize another save. Workspace mutation
-composition persists and reads back the appended revision before publication;
-interrupted possible effects are not replayed. Office retains its bound gate and
-uses the same logical publisher. This does not introduce a filesystem reader or
-an artifact store, and does not implement workspace-owned Markdown Plans.
+Task Lists use shared Core `TaskListPublication` for
+`state/conversation/<chat>/task-list`. Office and Workspace pin the same conversation
+scope, check selected snapshots against frozen authority, and expose Unknown as an
+unavailable current-list projection. Unknown cannot authorize another save;
+independent work and exact snapshot reads remain available. WorkspaceTaskListObserver
+accepts the same resource ports/origin as its surrounding composition; Office keeps
+its bound gate. Both persist before publication. In the native composition,
+ConversationJournal/CAS owns immutable Task snapshots and selection; the resource
+journal owns logical head/effect proof. Load hydrates only the active bounded body,
+metadata pages stay cold, and history rewind loads just its selected body.
+Default ChatStore composition is temporary until whole-port P7; no adapter/store
+is added. [Native Task contract](session-events.md#journal-task-list-snapshots--2026-11-14).
 
 The file owner publishes mutation effects. Guarded `resources.delete` moves an accepted
 UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an

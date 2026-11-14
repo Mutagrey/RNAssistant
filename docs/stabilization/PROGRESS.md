@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Native Task List consumers — 2026-11-14
+
+Task List подключён к native journal через реальные Office/Workspace consumers:
+immutable snapshots/CAS, exact selection и outcome proof, restart/Unknown, lost ack,
+rebuild и Workspace restore. В обоих hosts общий guard и current-state projection;
+Unknown блокирует изменение списка, оставляя независимую работу доступной. Страницы
+читают metadata; Load и откат истории — только выбранное тело. `16.27.2-dev` включает
+исправление общего Office guard/projection и выбор blocked-ревизии при откате.
+Остались HTML/context-state consumers и fork, P3 (metadata/header, working-set scans,
+context/summary usage и full read-back), backup всех owners, остановка старых writers,
+переключение и удаление ChatStore/adapters. Default writer прежний; P4 отложена;
+Office backup и Windows evidence открыты.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-task-list-consumers-2026-11-14).
+
 ## Native Plan consumers — 2026-11-14
 
 Plan подключён к native journal: общий reference-only manifest хранит рабочий набор

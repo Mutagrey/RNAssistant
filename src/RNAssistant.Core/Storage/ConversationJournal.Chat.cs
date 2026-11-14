@@ -45,7 +45,7 @@ namespace RNAssistant.Core.Storage
             return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body, fact.History, fact.Resources }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning, item.Analysis }.Concat(MessageReferences(item.Header))))
                 .Concat(fact.Tools?.Terminal == null ? new PayloadRef[0] : MessageReferences(fact.Tools.Terminal.Result))
                 .Where(item => item != null).Concat(fact.Checkpoint?.References ?? new PayloadRef[0]).Concat(fact.Input?.Body == null ? new PayloadRef[0] : new[] { fact.Input.Body })
-                .Concat(AttachmentReferences(fact.Input?.Header?.Attachments));
+                .Concat(AttachmentReferences(fact.Input?.Header?.Attachments)).Concat((fact.TaskLists ?? new ChatArtifact[0]).Select(TaskBody));
         }
 
         private ConversationChatReceipt FindChatWrite(SqliteConnection db, string operation, string chat = null)
@@ -130,7 +130,7 @@ namespace RNAssistant.Core.Storage
                 current.Fact.Card.CreatedUtc != fact.Card.CreatedUtc))
                 throw new InvalidOperationException("A metadata update cannot move chat ownership or replace creation identity.");
             if (fact.History != null) ValidateHistory(db, record, fact, current);
-            ReadResourceSet(fact.Resources, fact.Card.Address);
+            ValidateTaskSnapshots(db, fact, ReadResourceSet(fact.Resources, fact.Card.Address));
             ValidateMessageAttachments(db, fact);
             var added = 0;
             foreach (var message in fact.Messages)
@@ -217,6 +217,7 @@ namespace RNAssistant.Core.Storage
                         }
                 }
                 if (committed != null) ApplyAttachmentRows(db, tx, record, committed);
+                if (committed != null) ApplyTaskRows(db, tx, record, committed);
                 if (committed != null) ApplyChatToolRows(db, tx, record, position, committed, keys, existing, nextEvidence);
                 if (committed?.Checkpoint != null) ApplyRunRows(db, tx, record, position, committed.Checkpoint);
                 if (committed?.Control != null) ApplyControlRows(db, tx, record, position, committed.Control);
@@ -255,6 +256,7 @@ namespace RNAssistant.Core.Storage
                 ValidateChatAddress(card);
                 var messages = commit.Messages.Select(write => PublishText(write.Message)).ToArray();
                 var resources = PrepareResourceSet(session);
+                var tasks = PrepareTaskCandidates(session);
                 ValidatePublishedArtifacts(session, messages);
                 if (queueControl?.Input != null)
                     queueControl.Input.Attachments = AttachmentHeaders(queueControl.Input.Attachments);
@@ -286,7 +288,7 @@ namespace RNAssistant.Core.Storage
                         PrepareChatControl(db, session, queueControl, priorControl);
                     var input = queueControl?.Input == null ? null : PrepareChatInput(db, session, queueControl.Input, inputBody);
                     var fact = new ConversationChatCommit(card, commit.JournalRevision, commit.JournalMessageCount, messages, context, DateTime.UtcNow,
-                        run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control, input: input, history: history, resources: resources);
+                        run, runBody, checkpoint, receiptBody, modelEvent, tools, control: control, input: input, history: history, resources: resources, taskLists: PrepareTaskDelta(db, session.Id, tasks, prior));
                     AssignChatReferences(db, fact, prior?.Fact);
                     var fingerprint = ChatFingerprint(fact);
                     if (prior != null)
@@ -350,7 +352,6 @@ namespace RNAssistant.Core.Storage
             if (commit.RemovedMessageIds.Count != 0 && !commit.RewritesHistory ||
                 session.ParentSessionId != null || session.ParentSessionRevision != null || session.ForkedThroughMessageId != null ||
                 session.ActiveContextCheckpointId != null || session.ActiveHtmlArtifactId != null ||
-                session.ActiveTaskListArtifactId != null ||
                 session.ContextCheckpoints.Count != 0 ||
                 session.ResourceCopies.Count != 0 || session.Context.Notes.Count != 0 ||
                 session.HtmlWorkspace.Files.Count != 0 || session.HtmlWorkspace.DataSources.Count != 0 ||
@@ -418,13 +419,14 @@ namespace RNAssistant.Core.Storage
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationRuntimeTools Tools { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PayloadRef History { get; private set; }
         [JsonProperty("Attachments", NullValueHandling = NullValueHandling.Ignore)] public PayloadRef Resources { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ChatArtifact> TaskLists { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationQueueControl Control { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationInputState Input { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ModelResourceReference> References { get; internal set; }
         [JsonConstructor] internal ConversationChatCommit(ConversationCard card, long expectedRevision, int messageCount,
             IReadOnlyList<ConversationTextEntry> messages, PayloadRef context, DateTime createdUtc,
             ChatRunRecord run = null, PayloadRef runState = null, ConversationRunCheckpoint checkpoint = null,
-            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null, ConversationRuntimeTools tools = null, IReadOnlyList<ModelResourceReference> references = null, ConversationQueueControl control = null, ConversationInputState input = null, PayloadRef history = null, [JsonProperty("Attachments")] PayloadRef resources = null)
+            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null, ConversationRuntimeTools tools = null, IReadOnlyList<ModelResourceReference> references = null, ConversationQueueControl control = null, ConversationInputState input = null, PayloadRef history = null, [JsonProperty("Attachments")] PayloadRef resources = null, IReadOnlyList<ChatArtifact> taskLists = null)
         {
             if (card == null || expectedRevision < 0 || messageCount < 0 || messages == null || messages.Count > 128 || context == null ||
                 messages.Any(item => item == null) || messages.Select(item => item.Header.Id).Distinct(StringComparer.Ordinal).Count() != messages.Count ||
@@ -434,7 +436,7 @@ namespace RNAssistant.Core.Storage
             if (run?.KernelState != null || runState != null && run == null || checkpoint != null &&
                 (checkpoint.ChatId != card.ChatId || checkpoint.RunId != run?.RunId || checkpoint.Body.Sha256 != runState?.Sha256))
                 throw new ArgumentException("Runtime metadata and checkpoint identity disagree.");
-            Tools = tools; References = references; Control = control; Input = input; History = history; Resources = resources;
+            Tools = tools; References = references; Control = control; Input = input; History = history; Resources = resources; TaskLists = taskLists;
             Run = run; RunState = runState; Checkpoint = checkpoint; ContextReceipt = contextReceipt; ModelEvent = modelEvent;
         }
     }

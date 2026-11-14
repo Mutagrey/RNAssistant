@@ -1,5 +1,36 @@
 # Session event stream
 
+## Journal Task List snapshots — 2026-11-14
+
+Task Lists remain conversation-owned. ConversationJournal appends only new immutable
+snapshot headers with CAS body addresses; the existing resource manifest retains
+membership and optional exact ActiveTask selection. JournalIndex schema 25 adds
+chat_task_list as a disposable canonical-frame locator, applied with the chat cursor
+and usage counters. It is rebuilt from facts, never another authoritative store.
+Existing revisions cannot change body, metadata or parent. Historical facts keep
+CAS roots after visible history is cleared; no import, dual-write or fallback exists.
+
+Office and Workspace kernel consumers use TaskListPublication and the supplied
+resource authority/revision/mutation ports. Publication follows durable snapshot
+acceptance and read-back, with accepted-call origin linking the exact outcome.
+Both hosts validate the selected snapshot against frozen authority: Unknown is an
+unavailable current-list projection and cannot authorize another task save.
+Independent input and exact historical reads remain available. Restart never
+replays an interrupted mutation or promotes a saved body to verified effect proof.
+
+Load hydrates only the active bounded Task body (128 KiB); accepted commits release
+inactive bodies from the session. Message pages address referenced metadata without
+Task-body hydration and expose exact active selection. History editing selects by
+metadata (including blocked) and requests just the selected body. Immutable source
+metadata is not rewritten when message presentation links change.
+
+Checked host-neutral: actual Office/Workspace kernel save, update, blocked and close;
+index failure, lost acknowledgement, retry, restart/rebuild, cold history rewind,
+Unknown guards and Workspace backup/restore, including CAS retained after clear.
+Working-set/header scans and Workspace observer full read-back remain P3 costs.
+HTML/context-state consumers and fork remain open. Default storage is still ChatStore;
+complete owner backup, whole-port cutover/removal and Windows qualification are open.
+
 ## Journal Plan resources — 2026-11-14
 
 ConversationJournal now retains Plan membership and exact active selection through

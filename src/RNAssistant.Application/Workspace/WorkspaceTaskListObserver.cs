@@ -17,16 +17,23 @@ namespace RNAssistant.Runtime
         private readonly ChatSession _session;
         private readonly IConversationStore _chats;
         private readonly ChatBlobStore _payloads;
-        private readonly ResourceAuthorityStore _authority;
-        private readonly ResourceMutationJournal _journal;
+        private readonly IResourceAuthorityStore _authority;
+        private readonly IResourceRevisionStore _revisions;
+        private readonly IResourceMutationJournal _journal;
+        private readonly Func<ToolExecutionContext, ResourceMutationOrigin> _origin;
         private MutationAttempt _attempt;
         private IDisposable _lease;
         private HashSet<string> _previousArtifacts;
 
-        internal WorkspaceTaskListObserver(AppDataPaths paths, IConversationStore chats, ChatBlobStore payloads, ChatSession session)
+        internal WorkspaceTaskListObserver(AppDataPaths paths, IConversationStore chats, ChatBlobStore payloads, ChatSession session,
+            IResourceAuthorityStore authority = null, IResourceMutationJournal journal = null,
+            Func<ToolExecutionContext, ResourceMutationOrigin> origin = null)
         {
             _session = session; _chats = chats; _payloads = payloads;
-            _authority = new ResourceAuthorityStore(paths); _journal = new ResourceMutationJournal(paths);
+            if ((authority == null) != (journal == null)) throw new ArgumentException("Resource authority and mutation journal must be supplied together.");
+            _authority = authority ?? new ResourceAuthorityStore(paths); _journal = journal ?? new ResourceMutationJournal(paths);
+            _revisions = _authority as IResourceRevisionStore ?? throw new ArgumentException("Task-list authority must retain its revisions.");
+            _origin = origin;
         }
 
         internal void ReconcileInterrupted()
@@ -41,17 +48,13 @@ namespace RNAssistant.Runtime
                 item.ScopeId.Equals(TaskListPublication.Scope(_session)) && item.Operation == TaskListToolCatalog.SetToolId))
             {
                 if (pending.State == MutationAttemptState.Prepared) _journal.AbandonBeforeDispatch(pending.AttemptId);
-                else TaskListPublication.Publish(_authority, _authority, _journal, pending, null, null);
+                else TaskListPublication.Publish(_authority, _revisions, _journal, pending, null, null);
             }
         }
 
         internal TaskListStateProjection Project(ResourceAuthoritySnapshotSet frozen)
         {
-            var snapshot = frozen.Get(TaskListPublication.Scope(_session));
-            try { TaskListPublication.RequireCurrent(_session, snapshot, _authority, _payloads); }
-            catch (Exception ex) when (ex is InvalidOperationException || ex is IOException)
-            { return new TaskListStateProjection { Available = false }; }
-            return TaskListService.ProjectCurrent(_session);
+            return TaskListPublication.Project(_session, frozen.Get(TaskListPublication.Scope(_session)), _revisions, _payloads);
         }
 
         internal TaskListStateProjection Inspect()
@@ -73,13 +76,13 @@ namespace RNAssistant.Runtime
                 ReconcileUnderLease();
                 var scope = TaskListPublication.Scope(_session);
                 var snapshot = _authority.Capture(scope);
-                TaskListPublication.RequireCurrent(_session, snapshot, _authority, _payloads);
+                TaskListPublication.RequireCurrent(_session, snapshot, _revisions, _payloads);
                 var identity = TaskListPublication.Identity(_session);
                 _previousArtifacts = new HashSet<string>(_session.Artifacts.Select(item => item.Id), StringComparer.Ordinal);
                 _attempt = _journal.Prepare(scope, context.Call.Name, identity,
                     snapshot.GetHead(identity)?.Revision?.Revision,
                     PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json")),
-                    intendedImpacts: new[] { new ResourceImpact(identity, ResourceImpactRelation.ContainerMembership) });
+                    intendedImpacts: new[] { new ResourceImpact(identity, ResourceImpactRelation.ContainerMembership) }, origin: _origin?.Invoke(context));
                 return _attempt.AttemptId;
             }
             catch { Release(); throw; }
@@ -106,12 +109,12 @@ namespace RNAssistant.Runtime
                     var retained = saved?.Artifacts.SingleOrDefault(item => item.Id == added[0].Id);
                     if (saved == null || retained == null || saved.WorkspaceId != _session.WorkspaceId ||
                         saved.ActiveTaskListArtifactId != _session.ActiveTaskListArtifactId ||
-                        retained?.ContentSha256 != added[0].ContentSha256 || retained.InlineText != added[0].InlineText ||
+                        retained?.ContentSha256 != added[0].ContentSha256 || TaskListPublication.ReadBody(retained, _payloads) != TaskListPublication.ReadBody(added[0], _payloads) ||
                         retained.Revision != added[0].Revision || retained.ParentArtifactId != added[0].ParentArtifactId)
                         throw new InvalidDataException("Task-list revision failed durable read-back.");
                     captured = TaskListPublication.Capture(saved, _payloads);
                 }
-                return TaskListPublication.Publish(_authority, _authority, _journal, _attempt, record, captured);
+                return TaskListPublication.Publish(_authority, _revisions, _journal, _attempt, record, captured);
             }
             finally { Release(); }
         }

@@ -1214,11 +1214,11 @@ namespace RNAssistant.Runtime
                     ScopeId = workspace.WorkspaceId, ChatId = session.Id }, session, _settings, browserRunId ?? session.LastRun?.RunId, CaptureMedia);
                 var projection = office?.ModelProjection ?? browserSet?.ModelProjection;
                 _compiler = new ModelContextCompiler(payloads, projection);
-                _taskLists = new WorkspaceTaskListObserver(paths, conversations, payloads, session);
                 if ((resourceAuthority == null) != (resourceMutations == null))
                     throw new ArgumentException("Resource authority and mutation journal must be supplied together.");
                 var authorityStore = resourceAuthority ?? new ResourceAuthorityStore(paths);
                 var mutations = resourceMutations ?? new ResourceMutationJournal(paths);
+                _taskLists = new WorkspaceTaskListObserver(paths, conversations, payloads, session, authorityStore, mutations, mutationOrigin);
                 _plans = new WorkspacePlanService(paths, conversations, payloads, workspace, session, artifacts, authorityStore, mutations, mutationOrigin);
                 _modelTrace = new ModelTracePersistenceService(events);
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
