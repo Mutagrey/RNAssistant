@@ -43,8 +43,14 @@ Workspace original forks inherit accepted attachment-message locators and reuse 
 same original/extraction/analysis CAS closure. Two ancestor deletions, index rebuild
 and Workspace journal/CAS restore retain both visible attachments and metadata whose
 source occurrence is hidden. No copied body stream or extra root owner is introduced.
-Inherited per-chat usage attribution remains P3. This does not close complete
-application-owner backup or native acceptance of definition-copy forks.
+Native definition forks root their immutable copy-link CAS body through the existing
+conversation reference enumerator. Resource journals retain copied revision payloads
+and dependencies; supplied-note payloads remain in the typed context closure.
+Nested copies survive deleted ancestors and index rebuild. Isolated journal/CAS
+restore preserves copy provenance without manufacturing authority publication;
+missing copy CAS blocks load/rebuild. Full Office backup still refuses its unhandled
+identity registry. Inherited per-chat usage attribution and complete owner backup
+remain open; this is not Office/application restore qualification.
 
 `ForScope` run leases join the existing `locks/run_*.lck`/`run-registry.lck` namespace.
 `RuntimeStorageActivity` remains held from CAS publication to acceptance or confirmed

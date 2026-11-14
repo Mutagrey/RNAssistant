@@ -11,6 +11,22 @@ host-neutral. `16.27.13-dev`; DPAPI/Windows filesystem qualification отдел�
 Storage cutover/P7 и полное восстановление owners остаются открытыми.
 
 
+## Native definition-copy fork — 2026-11-14
+
+Office schema/mapping/derived и supplied-data copies подключены к native fork через
+существующие ResourceForkService/observer. Provenance хранится один раз в CAS;
+подготовка/сохранение без authority publication не дают права чтения. Вложенные
+ветки сохраняют две mapping-ревизии и переживают удаление предков. Workspace authoring
+таких definitions/notes не добавляется. Default writer остаётся ChatStore;
+это промежуточное подключение без повышения версии.
+Остаток: прямые catalog/plugin/browser consumers и единая Office/Workspace
+composition; P3 metadata/header/context/summary/inherited usage; backup Office
+identity registry, Workspace connections и ключей, остановка старых writers;
+P7 с удалением ChatStore/adapters и ключевыми проверками. P4 отложена.
+Office backup по-прежнему явно отказывает при documents.json: этот gate не закрыт
+изолированным journal/CAS restore. Windows/Office evidence остаётся отдельным.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-definition-copy-fork-2026-11-14).
+
 ## Native Workspace original fork — 2026-11-14
 
 Workspace originals подключены к native fork через существующие consumers и индекс

@@ -1829,6 +1829,12 @@ publication order, not an independently rebuilt publication history.
 Only deliberately copied artifacts and references are rebound. Materialized data
 reuses its CAS body; typed definitions get new bodies when their internal refs change.
 Cycles, missing/unpublished dependencies and size/depth bounds fail before publication.
+Native ConversationJournal persists the same bounded copy links in an immutable
+fork CAS body. Subsequent metadata/history writes cannot replace this provenance;
+reopen restores it only for the existing publication proof above. Headers/pages
+never hydrate the copy graph. Supplied-data and definition copies through the Office
+owner survive nested forks and ancestor deletion; their persistence alone grants no
+resource access. See [journal contract](session-events.md#journal-definition-copy-fork--2026-11-14).
 
 `ConversationRunService` → `AgentKernel` remains the only lifecycle/outcome loop.
 `ConversationKernelAdapter` captures published catalogs at request boundaries.

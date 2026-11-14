@@ -178,6 +178,7 @@ namespace RNAssistant.Core.Storage
                     TitleAssignedByAgent = card.TitleAssignedByAgent, AgentCreation = card.AgentCreation,
                     ParentSessionId = receipt.Fact.Fork?.Parent.Id, ParentSessionRevision = receipt.Fact.Fork?.Parent.Revision,
                     ForkedThroughMessageId = receipt.Fact.Fork?.ThroughMessageId,
+                    ResourceCopies = ReadForkCopies(receipt.Fact.Fork, id),
                     PreviousDocumentKeys = (card.PreviousDocumentKeys ?? new string[0]).ToList(),
                     Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
                     Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)),

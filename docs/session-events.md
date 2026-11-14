@@ -1,5 +1,28 @@
 # Session event stream
 
+## Journal definition-copy fork — 2026-11-14
+
+Native fork facts now retain the existing ResourceForkService copy provenance in
+one immutable CAS body (at most 256 source links / 128 copied revisions). The fork
+frame contains its reference; later commits must preserve the exact hash. Full
+load restores the typed links, while headers and message pages keep them cold.
+CAS maintenance follows the reference; missing provenance fails load/rebuild.
+
+The existing Office preparation and mutation observer remain the owners: preparing
+or persisting copies alone does not publish heads. Only the verified authority
+commit enables reads, including retained copies that were not selected as heads.
+Schema/mapping/virtual definitions rebind through the existing graph copier;
+materialized data and supplied-note bodies keep their original CAS references.
+Historical messages and source evidence are not rewritten.
+
+Actual Office tools/fork/gateway cover two mapping revisions, nested copies, deleted
+ancestors and bounded reads. Receipt tests cover append/index faults, lost ACK and
+isolated journal/CAS restore without inventing publication. Full Office backup still
+refuses its unhandled documents.json identity registry. Workspace has no production
+supplied-note/definition producer today; its fork feature is not expanded here.
+Default composition remains ChatStore. Remaining consumers/composition, P3 costs,
+complete owner backup/quiescence and P7 are open; Windows evidence is separate.
+
 ## Journal Workspace original fork — 2026-11-14
 
 Workspace forks now inherit original-attachment locators through the existing
@@ -18,8 +41,8 @@ Actual Workspace fork/read consumers, mixed shared Plans/originals, cold pages,
 failed append, index failure, lost acknowledgement, two deleted ancestors and
 journal/CAS restore are covered. The older Workspace path already preserves these
 attachments; this is native cutover integration, not a default-writer switch.
-Supplied-data/definition copies, remaining composition consumers, P3, complete owner
-backup/quiescence and P7 remain open; Windows evidence is separate.
+Office supplied-data/definition copies are connected above. Remaining composition
+consumers, P3, complete owner backup/quiescence and P7 are open; Windows evidence is separate.
 
 ## Workspace history Task authority — 2026-11-14
 
@@ -63,8 +86,8 @@ replaying a Task operation or creating the child. Child edits, source deletion,
 rebuild and Workspace journal/CAS restore retain independent authority.
 
 The default Workspace consumer also gains correct Task selection/publication.
-Default storage is still ChatStore. Workspace originals are connected above; supplied-data/definition
-copies and remaining composition consumers precede P7; P3 metadata/header/context/
+Default storage is still ChatStore. Workspace originals and Office definition copies
+are connected above. Remaining composition consumers precede P7; P3 metadata/header/context/
 summary usage, complete owner backup/quiescence and Windows evidence remain open.
 Workspace history edit/delete authority is connected above.
 
@@ -88,8 +111,8 @@ Child compaction may append a revision to the inherited lineage. Lost acknowledg
 retry, two ancestor deletions, rebuild and Workspace journal/CAS restore preserve the
 selected summary. Cold message pages read no checkpoint bodies. An inherited summary
 does not discharge Unknown or prevent independent reads; history edits still clear
-selection. Tasks/Workspace originals are connected above; supplied-data/definition graphs remain
-outside native fork acceptance. P3 costs, complete owner backup, P7 and Windows/Office
+selection. Tasks/Workspace originals and Office supplied-data/definition copies are
+connected above. P3 costs, complete owner backup, P7 and Windows/Office
 qualification remain open; default storage is still ChatStore.
 
 ## Journal shared resource fork — 2026-11-14
@@ -112,9 +135,8 @@ Canonical validation retains the parent's shared membership, links and selection
 existing publication validation checks exact ownership. Lost acknowledgement retry,
 source deletion, rebuild and Workspace journal/CAS restore preserve references and
 bytes. Local Tasks/checkpoints/Workspace originals are connected above.
-Supplied-data definition-copy graphs remain unsupported at native fork acceptance.
-Their existing preparation owners must join the atomic boundary before P7. Shared
-metadata/full-load costs remain P3; default production storage and Windows gates are
+Office supplied-data/definition graphs now use their existing preparation/publication
+owners at the native boundary, as described above. Shared metadata/full-load costs remain P3; default production storage and Windows gates are
 unchanged. Full application-owner backup remains open.
 
 ## Journal atomic text fork — 2026-11-14
@@ -167,8 +189,8 @@ Office uses the conversation port for preparation; Workspace uses it for transie
 creation and commit. The existing adapter delegates only to the current default.
 
 Text/shared acceptance and inherited execution obligations are connected above.
-Tasks/originals/definition graphs remain unsupported; copied evidence cannot become a new
-execution or permission to retry. Default storage remains ChatStore until whole-port
+Tasks/originals and Office definition copies are connected above. Copied evidence
+cannot become a new execution or permission to retry. Default storage remains ChatStore until whole-port
 P7; no fallback, import or dual-write is added by preparation or text acceptance.
 
 ## Journal context state — 2026-11-14

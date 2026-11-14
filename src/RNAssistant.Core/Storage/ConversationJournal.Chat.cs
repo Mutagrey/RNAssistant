@@ -42,7 +42,7 @@ namespace RNAssistant.Core.Storage
             if (record.Kind == "document.deleted") { DecodeDocumentDeletion(record); return new PayloadRef[0]; }
             if (record.Kind == "chat.selected") { DecodeChatSelection(record); return new PayloadRef[0]; }
             var fact = DecodeChatCommit(record);
-            return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body, fact.History, fact.Resources }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning, item.Analysis }.Concat(MessageReferences(item.Header))))
+            return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body, fact.History, fact.Resources, fact.Fork?.Copies }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning, item.Analysis }.Concat(MessageReferences(item.Header))))
                 .Concat(fact.Tools?.Terminal == null ? new PayloadRef[0] : MessageReferences(fact.Tools.Terminal.Result))
                 .Where(item => item != null).Concat(fact.Checkpoint?.References ?? new PayloadRef[0]).Concat(fact.Input?.Body == null ? new PayloadRef[0] : new[] { fact.Input.Body })
                 .Concat(AttachmentReferences(fact.Input?.Header?.Attachments)).Concat((fact.Snapshots ?? new ChatArtifact[0]).Select(SnapshotBody));
@@ -363,7 +363,7 @@ namespace RNAssistant.Core.Storage
             if (session == null || commit == null || !session.UsesCurrentProtocol) throw new ArgumentException("A current chat and exact commit are required.");
             if (commit.RemovedMessageIds.Count != 0 && !commit.RewritesHistory ||
                 session.ParentSessionId == null && (session.ParentSessionRevision != null || session.ForkedThroughMessageId != null) ||
-                session.ResourceCopies.Count != 0 ||
+                session.ParentSessionId == null && session.ResourceCopies.Count != 0 ||
                 session.ActiveHtmlArtifactId == null && (session.HtmlWorkspace.Files.Count != 0 || session.HtmlWorkspace.DataSources.Count != 0 ||
                 !string.IsNullOrWhiteSpace(session.HtmlWorkspace.ActiveFileId) || session.HtmlWorkspace.History.Count != 0 || session.HtmlWorkspace.RedoBranches.Count != 0))
                 throw TextStoreScope();

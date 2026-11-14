@@ -15,14 +15,39 @@ namespace RNAssistant.Core.Storage
         private static void RequireForkScope(ChatSession session)
         {
             // Shared resources retain their published owner; local snapshots inherit
-            // original locators. Other local graphs still need their publication boundary.
+            // original locators. Definition copies have separate immutable provenance.
             var metadata = ConversationMetadata.From(session);
             if (session.Artifacts.Any(item => !IsPublishedSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)) &&
                     !IsWorkspaceOriginal(metadata, ChatResourceUri.CreateArtifactRevision(session, item)) &&
-                    (item.Kind != ChatArtifactKinds.Compaction && item.Kind != ChatArtifactKinds.TaskList || !IsLocalSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)))) ||
-                session.ResourceCopies.Count != 0 ||
-                session.Context?.Notes.Any(note => note.Role == ContextNoteRole.SuppliedData) == true)
+                    (item.Kind != ChatArtifactKinds.Compaction && item.Kind != ChatArtifactKinds.TaskList || !IsLocalSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)))))
                 throw TextStoreScope();
+        }
+
+        private static ResourceCopyLink[] ForkCopies(string chat, IEnumerable<ResourceCopyLink> links)
+        {
+            var copies = (links ?? new ResourceCopyLink[0]).ToArray();
+            if (copies.Length > 256 || copies.Any(item => item == null) ||
+                copies.Select(item => item.Source.Uri + "\n" + item.Source.Revision).Distinct(StringComparer.Ordinal).Count() != copies.Length ||
+                copies.Select(item => item.Copy.Uri + "\n" + item.Copy.Revision).Distinct(StringComparer.Ordinal).Count() > 128)
+                throw new InvalidDataException("Invalid bounded fork copy provenance.");
+            foreach (var link in copies)
+            {
+                var source = ResourceUri.Parse(link.Source.Uri); var copy = ResourceUri.Parse(link.Copy.Uri);
+                if ((copy.Provider != "state" && copy.Provider != "context") || source.Provider != copy.Provider ||
+                    source.Segments.Count != 3 || copy.Segments.Count != 3 || source.Segments[0] != "conversation" ||
+                    copy.Segments[0] != "conversation" || source.Segments[1] == chat || copy.Segments[1] != chat ||
+                    source.Segments[2] != copy.Segments[2])
+                    throw new InvalidDataException("Fork copy must retain an exact conversation definition and its new owner.");
+            }
+            return copies.OrderBy(item => item.Source.Uri, StringComparer.Ordinal)
+                .ThenBy(item => item.Source.Revision, StringComparer.Ordinal).ToArray();
+        }
+
+        private List<ResourceCopyLink> ReadForkCopies(ConversationFork fork, string chat)
+        {
+            return fork?.Copies == null ? new List<ResourceCopyLink>() : ForkCopies(chat,
+                JsonConvert.DeserializeObject<ResourceCopyLink[]>(ReadChatBody(fork.Copies)) ??
+                    throw new InvalidDataException("Fork copy provenance is unavailable.")).ToList();
         }
 
         private ConversationFork PrepareFork(SqliteConnection db, ChatSession session, ConversationCommit commit,
@@ -30,6 +55,10 @@ namespace RNAssistant.Core.Storage
         {
             history = null;
             var current = retry ?? TextChat(db, session.Id);
+            var copies = ForkCopies(session.Id, session.ResourceCopies);
+            var copiesHash = copies.Length == 0 ? null : RNAssistant.Core.Tools.TextPatternEngine.Sha256(JsonConvert.SerializeObject(copies));
+            if (current != null && current.Fact.Fork?.Copies?.Sha256 != copiesHash)
+                throw new InvalidOperationException("A commit cannot replace fork copy provenance.");
             if (commit.JournalRevision != 0 || session.ParentSessionId == null)
             {
                 var retained = current?.Fact.Fork;
@@ -59,7 +88,8 @@ namespace RNAssistant.Core.Storage
                 RequireIdleChat(db, source);
                 fork = new ConversationFork(ChatMetadata(source), source.Operation, source.Position.Hash,
                     session.ForkedThroughMessageId, Convert.ToInt64(Scalar(db, "SELECT next_t FROM chat_sequence WHERE stream=$stream AND chat=$chat", source.Fact.Card.ChatId) ?? 1L),
-                    Convert.ToInt64(Scalar(db, "SELECT next_e FROM chat_sequence WHERE stream=$stream AND chat=$chat", source.Fact.Card.ChatId) ?? 1L));
+                    Convert.ToInt64(Scalar(db, "SELECT next_e FROM chat_sequence WHERE stream=$stream AND chat=$chat", source.Fact.Card.ChatId) ?? 1L),
+                    copies.Length == 0 ? null : StoreChatJson(copies));
                 history = StoreChatJson(new ConversationHistoryRewrite(ForkPrefix(db, fork), new string[0]));
             }
             var membership = ReadHistory(history);
@@ -128,6 +158,7 @@ namespace RNAssistant.Core.Storage
         {
             var fork = fact.Fork; var source = TextChat(db, fork.Parent.Id);
             RequireChatRevision(fork.Parent, source); RequireIdleChat(db, source);
+            ReadForkCopies(fork, fact.Card.ChatId);
             if (fork.Parent.Id == fact.Card.ChatId || source.Operation != fork.ParentOperation || source.Position.Hash != fork.ParentHash ||
                 fork.Parent.Host != fact.Card.Address.Host || fork.Parent.DocumentKey != fact.Card.Address.DocumentKey ||
                 fork.Parent.WorkspaceId != fact.Card.Address.WorkspaceId || fork.Parent.DocumentAuthorityId != fact.Card.Address.DocumentAuthorityId ||
@@ -242,14 +273,15 @@ namespace RNAssistant.Core.Storage
         public string ThroughMessageId { get; private set; }
         public long NextCall { get; private set; }
         public long NextEvidence { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PayloadRef Copies { get; private set; }
         [JsonConstructor] internal ConversationFork(ConversationMetadata parent, string parentOperation, string parentHash,
-            string throughMessageId, long nextCall, long nextEvidence)
+            string throughMessageId, long nextCall, long nextEvidence, PayloadRef copies = null)
         {
             if (parent == null || parent.Revision < 1 || string.IsNullOrWhiteSpace(parentOperation) ||
                 string.IsNullOrWhiteSpace(parentHash) || nextCall < 1 || nextEvidence < 1)
                 throw new ArgumentException("Fork requires a frozen source and reserved reference sequences.");
             Parent = parent; ParentOperation = parentOperation; ParentHash = parentHash;
-            ThroughMessageId = throughMessageId; NextCall = nextCall; NextEvidence = nextEvidence;
+            ThroughMessageId = throughMessageId; NextCall = nextCall; NextEvidence = nextEvidence; Copies = copies;
         }
     }
 }

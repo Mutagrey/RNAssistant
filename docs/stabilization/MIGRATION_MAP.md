@@ -152,6 +152,16 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 definition-copy fork (2026-11-14): native conversation facts replace blanket
+copy/supplied-data rejection with immutable bounded CAS provenance. Existing Office
+ResourceForkService and resource publication observer remain the only copy/commit
+owners; no copied message stream, new store/schema/adapter or read fallback.
+Load restores links, subsequent writes cannot alter them, headers/pages stay cold.
+Production Workspace has no supplied-note/definition producer; no new feature added.
+Default composition, catalog/plugin/browser consumers, P3 and full owner backup /
+quiescence remain before P7 removal of ChatStore/adapters.
+[Contract](../session-events.md#journal-definition-copy-fork--2026-11-14).
+
 P1/P2 Workspace original fork (2026-11-14): existing Workspace fork/read consumers
 now use inherited chat_attachment locators. ConversationJournal replaces its
 same-chat locator restriction with frozen ancestry validation and removes the

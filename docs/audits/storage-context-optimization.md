@@ -2256,3 +2256,39 @@ after-state/CAS ownership.
    This intermediate native integration does not change default production behavior,
    so it has no product bump/CHANGELOG entry. Default adapters retire at P7. Scoped
    diff/links and mandatory version validation precede commit; no push or release.
+
+## P1/P2 — native definition-copy fork (2026-11-14)
+
+1. Advances F04 through ConversationJournal fork provenance and the existing Office
+   ResourceForkService / mutation observer. Scope: supplied data, schema/mapping,
+   virtual/materialized definitions; no new Workspace authoring feature.
+2. A fork retains at most 256 source links / 128 copied revisions in one CAS body.
+   Subsequent commits cannot alter its hash; full load restores the typed links.
+   Existing preparation selects exact dependencies and publication order; saving
+   provenance alone does not authorize copied-resource reads.
+3. Removed blanket native copy/supplied-data rejection. No new store, schema,
+   registry, adapter or copied message stream. Historical payloads stay untouched;
+   the existing graph copier reuses materialized/supplied CAS bodies and rewrites
+   only definitions whose internal refs change.
+4. Six selected macOS/net8/C#7.3 checks pass: two definition-copy cases, frozen-prefix
+   Office/Workspace fork, inherited Unknown, Office/Workspace context and preparation
+   failures. Actual Office tools/fork/gateway cover two mapping revisions, nested
+   copies, deleted ancestors, bounded reads and changed/missing provenance. Receipt
+   faults cover before-append, after-flush, after-index and isolated journal/CAS restore.
+   Full Office backup still explicitly refuses documents.json; that existing gate
+   is preserved, not bypassed. No full suite or Office/VSTO validation.
+5. Before: native fork rejected all prepared definition copies. After: a mixed graph
+   with 70,000 supplied characters writes a fork frame below 16 KiB. Header plus
+   one selected message page reads two bodies (text/manifest), not copy/note bodies.
+   Gateway returns its existing 32,000-character bound while CAS retains all 70,000.
+   Preparation/full-load/P3 costs are not claimed solved; no CPU/timing claim.
+6. Before default cutover: direct catalog/plugin/browser consumers and unified
+   Office/Workspace Store/events/resource composition; P3 metadata/header/context/
+   summary/inherited usage; full backup of Office identity, Workspace connections
+   and keys, writer quiescence; P7 removal of ChatStore/adapters and key scenarios.
+   Windows/Office evidence remains open. P4 is deferred. Workspace currently has
+   no production definition/note producer; its fork behavior was not expanded.
+7. Updated resource/session/CAS contracts, migration map, progress and Harness guide.
+   Intermediate native integration leaves default production composition unchanged,
+   so no product bump/CHANGELOG entry. Scoped diff/links and mandatory version check
+   precede commit; no push or release.
