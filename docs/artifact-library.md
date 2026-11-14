@@ -824,6 +824,12 @@ A chat keeps its selected working-set links, not copies or private resource head
 identity. `Create independent copy` explicitly creates a new logical identity and
 source relation. Forking/editing dialogue must neither clone the shared workspace
 nor rewind its head. A message always retains the exact revision it referenced.
+Fork preparation hydrates only selected document HTML and chat Task state; retained
+historical metadata stays cold. Shared HTML dependencies keep their document owner.
+An unavailable selected body fails explicitly, while an unrelated historical body
+does not prevent preparation. Native source reads are connected; native atomic fork
+acceptance and inherited execution evidence remain
+[a separate boundary](session-events.md#journal-fork-preparation--2026-11-14).
 Sharing across *different* Office documents is outside this cutover: an explicit
 copy/import with dependencies is required, without granting access to another live
 Office target. Existing document identity rules own Save/Save As/reopen semantics.

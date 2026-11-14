@@ -66,7 +66,8 @@ namespace RNAssistant.Office.Services
             {
                 // Retained workspace bodies stay immutable. Copy links also support a
                 // later explicit undo/restore of any workspace retained by this fork.
-                foreach (var artifact in _target.Artifacts.Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace))
+                foreach (var artifact in _target.Artifacts.Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace &&
+                    string.IsNullOrWhiteSpace(item.DocumentAuthorityId)))
                 {
                     if (string.IsNullOrWhiteSpace(artifact.InlineText)) throw Error("An exact workspace snapshot is unavailable.");
                     var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);

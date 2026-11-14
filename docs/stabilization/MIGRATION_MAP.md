@@ -142,6 +142,17 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 fork preparation (2026-11-14): IConversationStore now owns explicit exact-body
+reads on a revision-fenced source. Office preparation and Workspace fork creation/
+commit no longer call ChatStore directly. ConversationJournal reuses existing
+snapshot and document owners; ChatCloneService loads only selected Task/document
+HTML and retains checkpoint publication provenance. No new adapter/store added.
+ChatConversationStoreAdapter delegates the default path until whole-port P7 removes
+it and the remaining chat-owned HTML dependency-copy path; owner: current
+conversation/resource services. Native fork acceptance still rejects before write
+pending atomic history membership and inherited execution/Unknown evidence.
+[Contract](../session-events.md#journal-fork-preparation--2026-11-14).
+
 P1/P2 context-state (2026-11-14): existing ConversationJournal/CAS retains typed notes,
 local checkpoints and exact selection; DocumentArtifactStore owns shared publication.
 The Task snapshot reducer is generalized in ConversationJournal.Snapshots; schema 26

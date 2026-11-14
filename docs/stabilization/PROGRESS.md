@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Native fork preparation — 2026-11-14
+
+Подготовка fork читает точные snapshots через существующий Store-порт; Office и
+Workspace убрали прямые обращения к ChatStore в затронутых fork-операциях.
+Загружаются только выбранные Task/document HTML; старые тела остаются холодными.
+Checkpoint сохраняет сведения об общей публикации и её ошибке. Семь выбранных
+checks проходят; устаревший общий clone fixture записан в backlog.
+`16.27.4-dev`. Native создание ветки ещё явно закрыто: следующим шагом нужны
+атомарный prefix и наследование execution evidence/Unknown без повторного эффекта.
+Далее остаются неподключённые consumers, P3 metadata/header/context/summary usage,
+backup всех owners и P7 с удалением ChatStore/adapters. Default writer прежний;
+P4 отложена, Windows/Office evidence открыт.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-fork-preparation-2026-11-14).
+
 ## Native context-state consumers — 2026-11-14
 
 Typed context notes, локальные compaction checkpoints и shared publication подключены

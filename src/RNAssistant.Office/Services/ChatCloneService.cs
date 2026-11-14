@@ -156,20 +156,8 @@ namespace RNAssistant.Office.Services
             var messageIds = new HashSet<string>((messages ?? new ChatMessage[0]).Where(message => message != null).Select(message => message.Id), System.StringComparer.OrdinalIgnoreCase);
             return (checkpoints ?? new ContextCheckpoint[0])
                 .Where(checkpoint => checkpoint != null && messageIds.Contains(checkpoint.ThroughMessageId))
-                .Select(checkpoint => new ContextCheckpoint
-                {
-                    Id = checkpoint.Id,
-                    ThroughMessageId = checkpoint.ThroughMessageId,
-                    SummaryJson = checkpoint.SummaryJson,
-                    SummaryMarkdown = checkpoint.SummaryMarkdown,
-                    Claims = JsonConvert.DeserializeObject<List<StructuredContextClaim>>(JsonConvert.SerializeObject(checkpoint.Claims)) ?? new List<StructuredContextClaim>(),
-                    Model = checkpoint.Model,
-                    PromptVersion = checkpoint.PromptVersion,
-                    SourceMessageCount = checkpoint.SourceMessageCount,
-                    SourceTokens = checkpoint.SourceTokens,
-                    SummaryTokens = checkpoint.SummaryTokens,
-                    CreatedUtc = checkpoint.CreatedUtc
-                }).ToList();
+                .Select(checkpoint => JsonConvert.DeserializeObject<ContextCheckpoint>(JsonConvert.SerializeObject(checkpoint)))
+                .ToList();
         }
 
         public static List<ChatArtifact> CloneArtifactsForMessages(IEnumerable<ChatArtifact> artifacts, IEnumerable<ChatMessage> messages,
@@ -229,10 +217,16 @@ namespace RNAssistant.Office.Services
                 }
             }
             var reachable = ChatResourceReferenceService.ReachableForMessages(source.Artifacts, fork.Messages, additional);
-            if (loadArtifactBody != null)
-                foreach (var artifact in reachable.Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.TaskList))
-                    loadArtifactBody(source, artifact.Id);
             fork.Artifacts = CloneArtifactsForMessages(source.Artifacts, fork.Messages, additional);
+            ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
+            if (loadArtifactBody != null)
+                foreach (var artifact in reachable.Where(item => item.Kind == ChatArtifactKinds.TaskList ? item.Id == fork.ActiveTaskListArtifactId :
+                    item.Kind == ChatArtifactKinds.HtmlWorkspace && (string.IsNullOrWhiteSpace(item.DocumentAuthorityId) || item.Id == checkpoint)))
+                {
+                    if (!loadArtifactBody(source, artifact.Id))
+                        throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: the exact fork resource is unavailable.");
+                    fork.Artifacts.Single(item => item.Id == artifact.Id).InlineText = artifact.InlineText;
+                }
             var plan = definitions.Prepare(source, fork, string.IsNullOrWhiteSpace(checkpoint) ? source.HtmlWorkspace : null);
             fork.ContextCheckpoints = CloneContextCheckpoints(source.ContextCheckpoints, fork.Messages);
             fork.ActiveContextCheckpointId = fork.ContextCheckpoints.OrderByDescending(item => item.CreatedUtc).Select(item => item.Id).FirstOrDefault();

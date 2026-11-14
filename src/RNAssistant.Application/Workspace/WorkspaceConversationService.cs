@@ -212,7 +212,7 @@ namespace RNAssistant.Runtime
 
                 var title = (source.Title ?? "Новый чат").Trim();
                 title = title.Length > 192 ? title.Substring(0, 192).TrimEnd() : title;
-                var fork = _chats.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title + " (ветка)");
+                var fork = _conversationStore.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title + " (ветка)");
                 fork.WorkspaceId = workspace.WorkspaceId;
                 fork.ParentSessionId = source.Id;
                 fork.ParentSessionRevision = source.Revision;
@@ -257,7 +257,7 @@ namespace RNAssistant.Runtime
                 fork.ToolCallReferenceSequence = source.ToolCallReferenceSequence;
                 fork.EvidenceReferenceSequence = source.EvidenceReferenceSequence;
                 fork.ReferenceContractVersion = source.ReferenceContractVersion;
-                _chats.Commit(fork, new ConversationCommit());
+                _conversationStore.Commit(fork, new ConversationCommit());
                 return fork;
             }
         }

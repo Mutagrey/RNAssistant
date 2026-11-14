@@ -18,6 +18,33 @@ namespace RNAssistant.Core.Storage
             return new DocumentArtifactStore(resources, resources, _bodies);
         }
 
+        bool IConversationStore.LoadArtifactBody(ChatSession session, string artifactId)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(artifactId)) return false;
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                var metadata = ConversationMetadata.From(session);
+                RequireChatRevision(metadata, ReadChat(session.Id));
+                var matches = session.Artifacts.Where(item => item?.Id == artifactId).Take(2).ToArray();
+                if (matches.Length != 1 || matches[0].OriginalAttachment != null || matches[0].AvailabilityIssue != null) return false;
+                var artifact = matches[0];
+                var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+                if (!IsStoredSnapshot(metadata, reference)) return false;
+                try
+                {
+                    var retained = ReadArtifacts(metadata, new[] { reference }).Single();
+                    RequireArtifactProjection(artifact, retained);
+                    var body = IsPublishedSnapshot(metadata, reference) ? ResourceStore().Read(metadata, reference).InlineText :
+                        ReadChatBody(SnapshotBody(retained));
+                    if (body == null) return false;
+                    artifact.InlineText = body;
+                    return true;
+                }
+                catch (Exception error) when (error is IOException || error is InvalidDataException || error is JsonException || error is UnauthorizedAccessException)
+                { return false; }
+            }
+        }
+
         private void RestoreHtmlProjection(ChatSession session)
         {
             var metadata = ConversationMetadata.From(session);

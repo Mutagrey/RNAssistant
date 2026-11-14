@@ -2009,3 +2009,39 @@ after-state/CAS ownership.
    retire at P7. Version 16.27.3-dev includes the shared Workspace notes correction;
    CHANGELOG records it. Scoped diff/links and ValidateVersionFormat checked before
    commit; no tag, push or release.
+
+## P1/P2 — native fork preparation (2026-11-14)
+
+1. Advances F04/resource-consumer migration through existing IConversationStore,
+   ConversationJournal, ChatCloneService and ResourceForkService. The scoped result
+   is exact native source preparation; atomic native fork acceptance remains open.
+2. Office uses the conversation port for artifact bodies; Workspace uses it for
+   transient creation and commit. Native reads fence the loaded source revision and
+   immutable metadata, retaining document/local snapshot ownership. Preparation
+   reads selected Task/document HTML only; missing selected bytes fail explicitly.
+   Checkpoint clones now preserve shared-publication provenance and failure state.
+3. Removed the affected concrete ChatStore calls and all-reachable Task/document
+   HTML hydration. Shared HTML no longer enters conversation-definition copying.
+   Existing chat-owned HTML dependencies remain only in the old composition until
+   P7 removal. No new store, adapter, schema, import, dual-write or hidden fallback.
+4. Seven selected checks pass on macOS/net8/C#7.3: native Office HTML, Office/Workspace
+   Task snapshots, shared HTML selection, failed fork preparation, definition graph
+   copying, real Workspace fork and checkpoint publication cloning. They include
+   corrupt older/selected bodies, exact selection, source concurrency, no publication
+   during preparation and explicit native commit rejection without partial writes.
+   The old broad clone fixture has invalid batch/version expectations; recorded in
+   backlog, unchanged. No full suite or Office/VSTO validation.
+5. Before: preparation requested every reachable HTML/Task body. After: one selected
+   body per kind; fixture counters show one local Task CAS read, zero chat-body reads
+   for document HTML (its selected body uses the resource owner), unchanged journal
+   write counters and cold historical metadata. Source history is not reloaded.
+   No CPU/allocation or Windows latency measurement is claimed.
+6. Next: atomic native prefix membership and inherited call/result/Unknown evidence,
+   preserved independently of source rewrites/deletion and visible prefix. A copied
+   result must not count as child execution or authorize repetition. Remaining
+   consumers, P3 metadata/header/context/summary usage, complete owner backup and
+   whole-port cutover remain open. Default writer is ChatStore; P4 is deferred.
+7. Updated canonical session/artifact contracts, migration map, progress, backlog
+   and Harness guide. Version 16.27.4-dev records the shared fork improvement in
+   CHANGELOG; default adapter retires at P7. Scoped diff/links and mandatory version
+   validation checked before commit. Windows evidence remains open; no tag, push or release.

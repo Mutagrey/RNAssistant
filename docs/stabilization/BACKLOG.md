@@ -1,5 +1,16 @@
 # RNAssistant backlog
 
+## Clone fixture protocol drift — 2026-11-14
+
+Owner: Harness context/clone coverage. Existing `context: clone preserves values`
+fails before clone assertions: FixtureCallOrigin uses index 2 with default count 1.
+Both call and helper are unchanged from 7847eb29. Temporarily supplying count 3
+exposed a second stale expectation: Tool Result version 1 versus current version 2.
+Keep this fixture repair separate from native fork preparation; restore valid
+accepted-batch inputs and assert the current protocol contract. The separate
+`context: fork checkpoint preserves publication` check covers the checkpoint fix.
+No production regression or complete baseline run is claimed by this diagnosis.
+
 ## Политика повторов: recovery, чтения и макросы — 2026-11-14
 
 Статус: открыто, зафиксировано по запросу пользователя для следующего планирования

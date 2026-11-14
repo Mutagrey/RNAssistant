@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.4-dev
+
+- Fork загружает только выбранные Task/document HTML snapshots; недоступное старое
+  тело не мешает подготовке ветки. Checkpoint сохраняет сведения о shared publication
+  и её ошибке. Подготовка использует общий Store-порт; полное native создание ветки
+  и переключение production storage ещё открыты. Windows/Office evidence открыт.
+
 ### 16.27.3-dev
 
 - Workspace учитывает сохранённые context notes при подготовке запроса: полные

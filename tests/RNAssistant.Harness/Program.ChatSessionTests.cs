@@ -2000,6 +2000,7 @@ namespace RNAssistant.Harness
             public ChatSession Load(string id) { RequireFullLoad(); return _inner.Load(id); }
             public ConversationMetadata ReadMetadata(string id) { return _inner.ReadMetadata(id); }
             public ChatSessionHeader ReadHeader(string id) { RequireHeaders(); return _inner.ReadHeader(id); }
+            public bool LoadArtifactBody(ChatSession session, string id) { return _inner.LoadArtifactBody(session, id); }
             public ChatSession CreateTransient(string host, string key, string title, string name)
             { return _inner.CreateTransient(host, key, title, name); }
             public void Commit(ChatSession session, ConversationCommit commit) { _inner.Commit(session, commit); }

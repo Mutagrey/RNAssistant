@@ -159,6 +159,15 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+Fork preparation extends `journal HTML: Office` and `journal task list: revisions`:
+only the selected body is read, unavailable ancestors stay cold, stale revisions
+and missing selected bytes fail explicitly, and preparation publishes nothing.
+Native fork commit remains unsupported without partial writes. Related checks:
+`shared HTML: publication selection`, `resource cutover: fork preparation fails`,
+`resource cutover: schema mapping derived publication`, `plugins: project chat fork`
+and `context: fork checkpoint preserves publication`. The older broad
+`context: clone preserves values` fixture has protocol drift recorded in backlog.
+
 `journal context:` runs two checks through actual Office/Workspace consumers:
 selected checkpoints and typed notes in real kernel requests, two compactions,
 lost index/ack and same-command retry, cold pages/header, history invalidation and

@@ -96,6 +96,7 @@ namespace RNAssistant.Harness
                 journal.Rebuild(); chat = store.Load(chat.Id);
                 AssertEqual(1, chat.Artifacts.Count(item => item.InlineText != null), "only the active bounded body is hydrated");
                 AssertEqual("Retained note", TaskListService.Active(chat).Steps.Single().Note, "domain resumes exact task state");
+                VerifyJournalForkPreparation(paths, journal, new ResourceJournal(paths), chat, changed.Artifact.Id);
                 var reads = journal.ChatBodyReads;
                 var page = store.ReadMessageWindow(chat.Id, 1, 1);
                 AssertEqual(1, page.Artifacts.Count, "page addresses only referenced task metadata");

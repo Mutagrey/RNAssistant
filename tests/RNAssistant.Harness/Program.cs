@@ -1298,6 +1298,7 @@ namespace RNAssistant.Harness
                 Test("chat: tool deletion is exchange-scoped", ToolExchangeDeletionIsScoped),
 
                 Test("context: clone preserves values", ChatCloneServicePreservesValues),
+                Test("context: fork checkpoint preserves publication", ForkCheckpointPreservesPublication),
                 Test("context: core normalizer", ContextNormalizerUsesCoreModelsOnly),
                 Test("context: normalize and upsert", ContextServiceNormalizesAndUpserts),
                 Test("context: trim helper", ContextServiceTrimsText),

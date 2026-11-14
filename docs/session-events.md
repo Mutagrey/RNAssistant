@@ -1,5 +1,31 @@
 # Session event stream
 
+## Journal fork preparation — 2026-11-14
+
+Fork preparation now reads exact artifact bodies through IConversationStore, using
+the loaded source revision and immutable metadata. ConversationJournal checks that
+revision and delegates document bodies to DocumentArtifactStore; local Task bodies
+keep their existing snapshot/CAS owner. This read neither reloads history nor
+publishes a chat, resource head or execution outcome. Missing selected bytes fail
+explicitly; a stale source revision is a concurrency error.
+
+ChatCloneService hydrates only the selected Task and selected document HTML. Other
+retained document revisions stay cold, including an unavailable older body. Shared
+HTML keeps document identity/dependencies; it does not trigger conversation-owned
+definition copies. Existing chat-owned HTML still requires its retained dependency
+graph until the old composition is removed. Checkpoint cloning now retains exact
+shared-publication provenance and failure state instead of dropping those fields.
+Office uses the conversation port for preparation; Workspace uses it for transient
+creation and commit. The existing adapter delegates only to the current default.
+
+Native fork acceptance remains explicitly unsupported. Its next boundary must
+atomically retain the selected history prefix, inherited call/result provenance and
+Unknown replay obligations, including facts outside the visible prefix. Copied
+evidence cannot become a new execution or permission to retry. Source deletion or
+rewrites must not erase inherited obligations. Active runs/confirmations are not
+resumed in a fork. Default storage remains ChatStore until whole-port P7; no
+fallback, import or dual-write is added by this preparation change.
+
 ## Journal context state — 2026-11-14
 
 Native ConversationJournal accepts typed context notes and local compaction through

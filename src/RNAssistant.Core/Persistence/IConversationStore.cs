@@ -11,6 +11,9 @@ namespace RNAssistant.Core.Persistence
         ChatSession Load(string sessionId);
         ConversationMetadata ReadMetadata(string sessionId);
         ChatSessionHeader ReadHeader(string sessionId);
+        // Explicit artifact preparation on an already loaded, revision-fenced chat.
+        // Does not reload its transcript or substitute a newer resource revision.
+        bool LoadArtifactBody(ChatSession session, string artifactId);
         void Commit(ChatSession session, ConversationCommit commit);
         void CommitRun(ConversationRunCommit commit);
         void SetTitle(ChatSession session, string title);

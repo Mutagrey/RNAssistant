@@ -54,6 +54,7 @@ namespace RNAssistant.Harness
             AssertEqual("<main>Native HTML</main>", chat.HtmlWorkspace.Files.Single().Content, "shared projection reads only selected source");
             AssertEqual(1, chat.Artifacts.Count(item => item.InlineText != null), "older HTML bodies stay cold");
             AssertEqual(1, chat.HtmlWorkspace.History.Count, "navigation is rebuilt from source metadata");
+            VerifyJournalForkPreparation(paths, journal, resources, chat, latest.Id);
             var member = new ResourceRef(ResourceUri.Create("chat", chat.DocumentAuthorityId, "artifact", latest.Id, "revision", latest.Revision.ToString(),
                 "member", "file", chat.HtmlWorkspace.Files.Single().Id), latest.Revision.ToString());
             var note = new ChatMessage { Role = "user", Content = "Keep this exact source", HtmlWorkspaceCheckpoint = exact,
