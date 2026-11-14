@@ -129,7 +129,8 @@ namespace RNAssistant.Core.Tools
                     ErrorData("task_list_verification_failed", false)),
                     ToolEffectEvidence.Unknown);
             return new ToolHandlerResult(RuntimeResult.Ok(
-                mutation.Message, Payload(mutation).ToString(Formatting.None)),
+                mutation.Message, Payload(mutation).ToString(Formatting.None),
+                resources: new[] { ChatResourceUri.CreateArtifactRevision(_session, mutation.Artifact) }),
                 ToolEffectEvidence.VerifiedChange);
         }
 

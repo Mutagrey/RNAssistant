@@ -1054,6 +1054,16 @@ namespace RNAssistant.Harness
                         SessionId = source.SessionId }).Messages.Count, "deleting in a fork does not touch the source");
                     PluginFailure(() => service.ForkProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
                         SessionId = source.SessionId, MessageId = "missing" }), "project_chat_invalid");
+                    session = service.Conversations.GetSession(workspace, source.SessionId);
+                    var task = NewJournalTask(session).Artifact;
+                    session.Messages.Last().ResourceRefs.Add(ChatResourceUri.CreateArtifactRevision(session, task));
+                    store.Commit(session, new ConversationCommit(new[] { session.Messages.Last() }));
+                    var taskFork = service.ForkProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = source.SessionId, MessageId = session.Messages.Last().Id });
+                    var taskChild = service.Conversations.GetSession(workspace, taskFork.SessionId);
+                    AssertEqual(task.Id, taskChild.ActiveTaskListArtifactId, "production Workspace fork retains Task selection");
+                    AssertTrue(service.Conversations.GetTaskList(taskChild).Available,
+                        "production Workspace consumer publishes the child's task authority after durable read-back");
                 }
             });
         }

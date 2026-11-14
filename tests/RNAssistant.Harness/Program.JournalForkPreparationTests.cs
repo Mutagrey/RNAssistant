@@ -64,12 +64,6 @@ namespace RNAssistant.Harness
                 AssertEqual(before, journal.Journal.WrittenBytes, "resource preparation does not publish a chat");
                 AssertEqual(resourceBytes, resources.Journal.WrittenBytes, "shared document selection does not publish copied heads");
                 AssertEqual(0, child.ResourceCopies.Count, "shared artifacts and local Task metadata do not manufacture definition copies");
-                if (selected.Kind == ChatArtifactKinds.TaskList)
-                {
-                    // Conversation-local copies still require their publication boundary.
-                    RuntimeThrows<NotSupportedException>(() => store.Commit(child, new ConversationCommit(child.Messages)));
-                    AssertEqual(before, journal.Journal.WrittenBytes, "unsupported local fork leaves no partial chat");
-                }
 
                 selected.InlineText = null; File.WriteAllText(selectedPath, "corrupt selected body"); reads.Clear();
                 RuntimeThrows<InvalidOperationException>(() => prepare());

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using RNAssistant.Core.Models;
@@ -12,6 +13,43 @@ namespace RNAssistant.Core.Services
     public static class TaskListPublication
     {
         public const int MaxBodyBytes = 128 * 1024;
+        public const string ForkOperation = "common.chat_fork";
+
+        public static void PrepareFork(ChatSession source, ChatSession target, Func<ChatSession, string, bool> loadArtifactBody)
+        {
+            if (source == null || target == null || source.Id == target.Id || target.ParentSessionId != source.Id)
+                throw new InvalidOperationException("An explicit source and child chat are required.");
+            var tasks = source.Artifacts.Where(item => item.Kind == ChatArtifactKinds.TaskList)
+                .ToDictionary(item => item.Id, StringComparer.Ordinal);
+            var retained = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var reference in target.Messages.SelectMany(item => item.ResourceRefs ?? new List<ResourceRef>()))
+            {
+                string owner, id; int revision; ChatArtifact artifact;
+                if (ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) &&
+                    (owner == source.Id || owner == target.Id) && tasks.TryGetValue(id, out artifact) && artifact.Revision == revision)
+                    retained.Add(id);
+            }
+            var pending = new Queue<string>(retained);
+            while (pending.Count != 0)
+            {
+                var parent = tasks[pending.Dequeue()].ParentArtifactId;
+                if (parent == null || !retained.Add(parent)) continue;
+                if (!tasks.ContainsKey(parent)) throw new InvalidOperationException("The task-list parent is unavailable.");
+                pending.Enqueue(parent);
+            }
+            target.Artifacts.RemoveAll(item => item.Kind == ChatArtifactKinds.TaskList);
+            target.Artifacts.AddRange(source.Artifacts.Where(item => retained.Contains(item.Id)).Select(item => item.CopyMetadata()));
+            target.ActiveTaskListArtifactId = TaskListService.SelectForMessages(target.Messages, target.Artifacts);
+            if (target.ActiveTaskListArtifactId == null) return;
+            var selected = tasks[target.ActiveTaskListArtifactId]; var previousBody = selected.InlineText;
+            try
+            {
+                if (loadArtifactBody == null || !loadArtifactBody(source, selected.Id))
+                    throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: the selected task list is unavailable.");
+                target.Artifacts.Single(item => item.Id == selected.Id).InlineText = selected.InlineText;
+            }
+            finally { selected.InlineText = previousBody; }
+        }
 
         public static string ReadBody(ChatArtifact artifact, ChatBlobStore payloads)
         {
@@ -87,8 +125,17 @@ namespace RNAssistant.Core.Services
 
         public static ResourceAuthorityCommit Publish(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
             IResourceMutationJournal journal, MutationAttempt attempt, ToolExecutionRecord record, ResourceMutationReadBack captured)
+        { return PublishState(authority, revisions, journal, attempt, TaskListToolCatalog.SetToolId,
+            record?.Evidence?.Effect == ToolEffectEvidence.VerifiedChange, captured); }
+
+        public static ResourceAuthorityCommit PublishFork(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
+            IResourceMutationJournal journal, MutationAttempt attempt, ResourceMutationReadBack captured)
+        { return PublishState(authority, revisions, journal, attempt, ForkOperation, captured != null, captured); }
+
+        private static ResourceAuthorityCommit PublishState(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
+            IResourceMutationJournal journal, MutationAttempt attempt, string operation, bool changed, ResourceMutationReadBack captured)
         {
-            if (attempt.Operation != TaskListToolCatalog.SetToolId || attempt.ScopeId.Kind != "conversation" ||
+            if (attempt.Operation != operation || attempt.ScopeId.Kind != "conversation" ||
                 attempt.State != MutationAttemptState.DispatchMayHaveOccurred ||
                 attempt.IntendedImpacts.Count != 1 || attempt.Target.Uri != ResourceUri.Create("state", "conversation", attempt.ScopeId.Id, "task-list"))
                 throw new InvalidOperationException("An exact prepared task-list mutation is required.");
@@ -96,9 +143,8 @@ namespace RNAssistant.Core.Services
             var published = snapshot.FindMutationCommit(attempt.AttemptId);
             if (published != null) { journal.Resolve(attempt.AttemptId, published.CommitId); return published; }
             var before = snapshot.GetHead(attempt.Target);
-            if (before?.Revision?.Revision != attempt.ExpectedRevision)
+            if (before?.Revision?.Revision != attempt.ExpectedRevision || operation == ForkOperation && snapshot.Generation != 0)
                 throw new InvalidOperationException("Task-list authority changed before publication.");
-            var changed = record?.Evidence?.Effect == ToolEffectEvidence.VerifiedChange;
             if (changed && (captured == null || !captured.Identity.Equals(attempt.Target)))
                 throw new InvalidOperationException("Task-list publication requires matching source read-back.");
             ResourceHeadState after;

@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
@@ -107,7 +108,7 @@ namespace RNAssistant.Harness
                 ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
                 ResponseStatus = AgentResponseStatuses.Completed,
                 ToolCallId = "call-1",
-                AcceptedCallOrigin = FixtureCallOrigin("accepted-step", "accepted-attempt", 2),
+                AcceptedCallOrigin = FixtureCallOrigin("accepted-step", "accepted-attempt", 2, 3),
                 ToolName = "excel.read_range",
                 ToolResultRole = ToolResultRoles.Tool,
                 ToolCalls = new List<LlmToolCall>
@@ -196,11 +197,11 @@ namespace RNAssistant.Harness
             {
                 var sourceResult = sourceResults[index];
                 var clonedResult = clonedResults[index];
-                AssertEqual(1, clonedResult.ToolResultProtocolVersion, "Tool Result v1 marker survives cloning");
+                AssertEqual(ToolResultWire.CurrentVersion, clonedResult.ToolResultProtocolVersion, "current Tool Result marker survives cloning");
                 AssertEqual(sourceResult.Content, clonedResult.Content, "typed result envelope is preserved exactly");
                 AssertEqual(sourceResult.ToolCallId, clonedResult.ToolCallId, "result clone retains runtime correlation");
                 sourceResult.ToolResultProtocolVersion = 0;
-                AssertEqual(1, clonedResult.ToolResultProtocolVersion, "clone retains its own result version marker");
+                AssertEqual(ToolResultWire.CurrentVersion, clonedResult.ToolResultProtocolVersion, "clone retains its own result version marker");
             }
             clonedMessages.AddRange(clonedResults);
 
@@ -221,33 +222,22 @@ namespace RNAssistant.Harness
             ChatResourceReferenceService.LinkMessageResources(forkSession, 0);
             var forkPlanUri = ArtifactUri(forkSession, clonedArtifacts.Single(artifact => artifact.Id == "plan-1"));
             AssertEqual(forkPlanUri, clonedMessages[0].ResourceRefs[0].Uri, "fork rebases durable resource reference");
-            var forkArgumentsJson = sourceArgumentsJson.Replace(sourcePlanUri, forkPlanUri);
-            AssertEqual(forkArgumentsJson, clonedMessages[0].ToolCalls[0].ArgumentsJson,
-                "fork rebases native call URI without normalizing ISO argument strings");
-            AssertEqual(forkArgumentsJson, clonedMessages[0].Activity.ArgumentsJson,
-                "fork rebases activity URI without normalizing pending argument strings");
-            AssertEqual(forkArgumentsJson, clonedMessages[0].Activity.DataJson,
-                "fork rebases result URI without normalizing nested ISO strings");
-            foreach (var resultMessage in clonedResults)
+            AssertEqual(sourceArgumentsJson, clonedMessages[0].ToolCalls[0].ArgumentsJson,
+                "fork preserves original call evidence including URI and ISO strings");
+            AssertEqual(sourceArgumentsJson, clonedMessages[0].Activity.ArgumentsJson,
+                "fork preserves original activity arguments");
+            AssertEqual(sourceArgumentsJson, clonedMessages[0].Activity.DataJson,
+                "fork preserves original result data");
+            for (var resultIndex = 0; resultIndex < clonedResults.Count; resultIndex++)
             {
-                var json = resultMessage.Role == ToolResultRoles.Tool ? resultMessage.Content
-                    : resultMessage.Content.Substring("TOOL_RESULT:\n".Length);
-                var body = JsonConvert.DeserializeObject<JObject>(json,
-                    new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
+                var resultMessage = clonedResults[resultIndex];
                 var reference = resultMessage.ResourceRefs.Single();
                 AssertEqual(forkPlanUri, reference.Uri, resultMessage.Role + " result metadata uses the fork URI");
-                AssertEqual(reference.Uri, (string)body["resources"][0]["uri"],
-                    resultMessage.Role + " result resources agree with rebased metadata");
-                AssertEqual(reference.Uri, (string)body["data"]["uri"],
-                    resultMessage.Role + " result data agrees with rebased metadata");
+                AssertEqual(sourceResults[resultIndex].Content, resultMessage.Content,
+                    resultMessage.Role + " result keeps its exact original payload and source URIs");
                 AssertEqual("1", reference.Revision, "fork preserves the metadata revision");
-                AssertEqual(reference.Revision, (string)body["resources"][0]["revision"], "fork preserves the wire revision");
-                AssertEqual(forkArgumentsJson, body["data"].ToString(Formatting.None),
-                    resultMessage.Role + " result keeps literal ISO strings in object and array data");
-                AssertEqual(1, resultMessage.ToolResultProtocolVersion, "fork preserves the current result marker");
-                AssertEqual("ok", (string)body["status"], "fork preserves terminal status");
-                AssertEqual("result-" + resultMessage.Role, resultMessage.ToolCallId, "fork preserves runtime call identity");
-                AssertEqual(resultMessage.ToolCallId, (string)body["tool_call_id"], "fork preserves wire call correlation");
+                AssertEqual(ToolResultWire.CurrentVersion, resultMessage.ToolResultProtocolVersion, "fork preserves the current result marker");
+                AssertEqual(sourceResults[resultIndex].ToolCallId, resultMessage.ToolCallId, "fork preserves runtime call identity");
             }
             var sharedDto = ChatArtifactDto.From(new[] {
                 new ChatArtifact { Id = "shared", Kind = ChatArtifactKinds.File, DocumentAuthorityId = "document-one" },

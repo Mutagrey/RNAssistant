@@ -347,6 +347,11 @@ Task Lists stay chat-owned: journal facts retain immutable headers, CAS retains
 bodies, and resource authority retains logical current-state/effect proof. The
 existing library and message views consume metadata; only the selected Task body
 is hydrated for execution. Closed revisions survive clear/rebuild/restore as evidence.
+The [Task fork boundary](session-events.md#journal-task-fork--2026-11-14) retains the
+exact prefix selection and parent lineage through existing Office/Workspace owners.
+Only child presentation refs rebase; original payloads/evidence remain immutable.
+Workspace publishes its child's Task head after exact durable read-back, including
+on the default storage path; child edits cannot change the source authority.
 
 ### Native journal Plan integration — 2026-11-14
 
@@ -835,8 +840,10 @@ outside the selected message prefix; detached resources, tombstones and origin
 remain intact. No shared head or payload is copied. Local
 [checkpoint forks](session-events.md#journal-checkpoint-fork--2026-11-14) inherit
 immutable metadata/body locators; only an applicable source selection follows the
-prefix, without reactivating older summaries after an edit. Conversation-local Tasks,
-Workspace originals and supplied-data definition copies still require
+prefix, without reactivating older summaries after an edit. Local
+[Task forks](session-events.md#journal-task-fork--2026-11-14) retain prefix snapshots
+and publish independent child authority without copying bodies. Workspace originals
+and supplied-data definition copies still require
 their separate publication boundary and fail explicitly before native acceptance.
 Sharing across *different* Office documents is outside this cutover: an explicit
 copy/import with dependencies is required, without granting access to another live

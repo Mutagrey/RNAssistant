@@ -218,10 +218,10 @@ namespace RNAssistant.Office.Services
             }
             var reachable = ChatResourceReferenceService.ReachableForMessages(source.Artifacts, fork.Messages, additional);
             fork.Artifacts = CloneArtifactsForMessages(source.Artifacts, fork.Messages, additional);
-            ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
+            TaskListPublication.PrepareFork(source, fork, loadArtifactBody);
             if (loadArtifactBody != null)
-                foreach (var artifact in reachable.Where(item => item.Kind == ChatArtifactKinds.TaskList ? item.Id == fork.ActiveTaskListArtifactId :
-                    item.Kind == ChatArtifactKinds.HtmlWorkspace && (string.IsNullOrWhiteSpace(item.DocumentAuthorityId) || item.Id == checkpoint)))
+                foreach (var artifact in reachable.Where(item => item.Kind == ChatArtifactKinds.HtmlWorkspace &&
+                    (string.IsNullOrWhiteSpace(item.DocumentAuthorityId) || item.Id == checkpoint)))
                 {
                     if (!loadArtifactBody(source, artifact.Id))
                         throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: the exact fork resource is unavailable.");
@@ -241,7 +241,6 @@ namespace RNAssistant.Office.Services
                 HtmlWorkspaceArtifactService.CaptureCurrent(fork, "Forked HTML workspace");
             }
             ChatResourceReferenceService.LinkMessageResources(fork, 0);
-            ChatResourceReferenceService.RestoreActiveTaskListFromMessages(fork);
             ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(fork);
             if (selectedDocumentPlan != null && !PlanDocumentService.IsRemoved(fork, selectedDocumentPlan) &&
                 !ArtifactWorkingSet.IsDetached(fork, selectedDocumentPlan))

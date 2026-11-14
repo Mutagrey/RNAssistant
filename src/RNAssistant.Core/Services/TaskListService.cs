@@ -428,6 +428,23 @@ namespace RNAssistant.Core.Services
         { ChatTaskList task; return session == null || string.IsNullOrEmpty(session.ActiveTaskListArtifactId) ||
             FindRevision(session, null, out task) == null ? null : task; }
 
+        public static string SelectForMessages(IEnumerable<ChatMessage> messages, IEnumerable<ChatArtifact> artifacts)
+        {
+            var tasks = artifacts.Where(item => item?.Kind == ChatArtifactKinds.TaskList)
+                .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var message in messages.Reverse())
+            foreach (var reference in (message?.ResourceRefs ?? new List<ResourceRef>()).AsEnumerable().Reverse())
+            {
+                string owner, id; int revision; ChatArtifact artifact;
+                if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) ||
+                    !tasks.TryGetValue(id, out artifact) || artifact.Revision != revision) continue;
+                var metadata = JsonConvert.DeserializeObject<TaskListRevisionMetadata>(artifact.MetadataJson ?? "null");
+                if (metadata == null) throw new InvalidOperationException("The selected task-list metadata is unavailable.");
+                return metadata.Status == "active" || metadata.Status == "blocked" ? artifact.Id : null;
+            }
+            return null;
+        }
+
         public static TaskListStateProjection ProjectCurrent(ChatSession session)
         {
             if (string.IsNullOrEmpty(session?.ActiveTaskListArtifactId)) return null;

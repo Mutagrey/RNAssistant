@@ -50,8 +50,8 @@ namespace RNAssistant.Harness
                         fork.ForkedThroughMessageId, 139, source: source, fork: plan), () => fork);
                     AssertEqual(0, resources.Unresolved().Count, "Office fork completes its existing resource publication barrier");
                 }
-                else fork = WorkspaceConversationService.ForkHistorySession(store, workspace, source,
-                    source.Messages[139].Id, new AttachmentStore(paths));
+                else fork = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, source,
+                    source.Messages[139].Id, new AttachmentStore(paths), resources, resources);
                 AssertTrue(journal.Journal.WrittenBytes - before < 16384, "large prefix stays outside the bounded journal frame");
                 var reads = journal.ChatBodyReads;
                 AssertEqual("Question 139", store.ReadMessageWindow(fork.Id, 140, 1).PageMessages.Single().Content, "page follows the frozen source locator");
@@ -116,7 +116,7 @@ namespace RNAssistant.Harness
             AppendJournalContextHistory(store, source); var beforeCompaction = source.Messages.Count;
             CompactJournalContext(paths, resources, source, settings, "Summary does not resolve Unknown");
             store.Commit(source, new ConversationCommit(source.Messages.Skip(beforeCompaction))); source = store.Load(source.Id);
-            var all = WorkspaceConversationService.ForkHistorySession(store, workspace, source, source.Messages.Last().Id, new AttachmentStore(paths));
+            var all = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, source, source.Messages.Last().Id, new AttachmentStore(paths), resources, resources);
             AssertEqual(source.ActiveContextCheckpointId, store.Load(all.Id).ActiveContextCheckpointId, "fork inherits the selected local summary");
             AssertTrue(journal.RestoreContext(all.Id, "new-run", 0, 8192).WorkingSet.Requirements.UnknownEffects,
                 "an inherited checkpoint cannot discharge an uncertain source effect");
@@ -125,13 +125,13 @@ namespace RNAssistant.Harness
             AssertEqual(source.ToolCallReferenceSequence, store.Load(all.Id).ToolCallReferenceSequence, "future tool aliases cannot collide with inherited ones");
             var first = source.Messages.First(item => item.Role == "user");
             var accepted = source.Messages.Single(item => item.AcceptedCallOrigin != null);
-            var cut = WorkspaceConversationService.ForkHistorySession(store, workspace, source, accepted.Id, new AttachmentStore(paths));
+            var cut = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, source, accepted.Id, new AttachmentStore(paths), resources, resources);
             cut = store.Load(cut.Id);
             AssertTrue(cut.Messages.Last().ExcludeFromModelContext, "incomplete inherited exchange is excluded without rewriting source evidence");
             WorkspaceConversationService.DeleteHistoryMessage(store, cut, first.Id);
             AssertTrue(store.Load(cut.Id).Messages.Last().ExcludeFromModelContext, "child history rewrite preserves derived exclusion");
-            var prefix = WorkspaceConversationService.ForkHistorySession(store, workspace, source, first.Id, new AttachmentStore(paths));
-            var child = WorkspaceConversationService.ForkHistorySession(store, workspace, store.Load(prefix.Id), first.Id, new AttachmentStore(paths));
+            var prefix = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, source, first.Id, new AttachmentStore(paths), resources, resources);
+            var child = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, store.Load(prefix.Id), first.Id, new AttachmentStore(paths), resources, resources);
             store.Delete(source.Host, source.DocumentKey, source.Id); store.Delete(prefix.Host, prefix.DocumentKey, prefix.Id);
             journal.Rebuild(); child = store.Load(child.Id);
             AssertTrue(!child.Messages.Any(item => item.AcceptedCallOrigin != null), "Unknown lies outside the copied visible prefix");

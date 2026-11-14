@@ -3,23 +3,29 @@
 ## Workspace Task fork authority — 2026-11-14
 
 Owner: WorkspaceConversationService / WorkspaceTaskListObserver / TaskListPublication.
-Code inspection: Workspace fork retains referenced Task artifacts but does not select
-the prefix's Task state or publish its child conversation head. Merely enabling
-native snapshot copying would leave Task edits unavailable (RequireCurrent rejects
-unpublished state). Next fork slice must connect selection, durable read-back and
-publication through these owners; test child edits without changing source authority,
-lost acknowledgement and Unknown. Native Task forks remain explicitly unsupported.
+Closed host-neutral by the [Task fork slice](../session-events.md#journal-task-fork--2026-11-14):
+exact prefix selection, durable read-back and child authority publication share the
+existing owners. Native and default Workspace consumers are covered; child edits,
+lost acknowledgements, Unknown, source deletion and restore are checked. No Office
+qualification is claimed. Previously, copied snapshots had no usable selected head.
+
+## Workspace history Task authority — 2026-11-14
+
+Owner: WorkspaceConversationService / WorkspaceTaskListObserver / TaskListPublication.
+Code inspection: DeleteHistoryMessage and PrepareEditedHistory clear Task selection
+and prune artifacts, but their persistence paths do not republish the Task head.
+If an existing head is Known, RequireCurrent subsequently rejects the empty local
+selection. Connect these existing history owners to read-back/publication in a
+separate slice; cover edit/delete with selected Tasks and lost acknowledgement.
+The Task fork fix does not close this older lifecycle gap or authorize replay.
 
 ## Clone fixture protocol drift — 2026-11-14
 
-Owner: Harness context/clone coverage. Existing `context: clone preserves values`
-fails before clone assertions: FixtureCallOrigin uses index 2 with default count 1.
-Both call and helper are unchanged from 7847eb29. Temporarily supplying count 3
-exposed a second stale expectation: Tool Result version 1 versus current version 2.
-Keep this fixture repair separate from native fork preparation; restore valid
-accepted-batch inputs and assert the current protocol contract. The separate
-`context: fork checkpoint preserves publication` check covers the checkpoint fix.
-No production regression or complete baseline run is claimed by this diagnosis.
+Owner: Harness context/clone coverage. Closed while removing fork payload rewriting:
+`context: clone preserves values` now passes with valid accepted-batch count, current
+Tool Result version/role normalization and exact source payload assertions. The old
+fixture had call index 2 with default count 1 and expected the retired result wire.
+This is targeted coverage of the changed clone contract, not a complete baseline run.
 
 ## Политика повторов: recovery, чтения и макросы — 2026-11-14
 

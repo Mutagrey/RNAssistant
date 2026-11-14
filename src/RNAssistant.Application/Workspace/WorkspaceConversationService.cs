@@ -206,12 +206,13 @@ namespace RNAssistant.Runtime
                 if (!source.UsesCurrentProtocol)
                     throw new InvalidOperationException("Create a current-format chat before branching history.");
                 RequireIdleSession(workspace, sessionId);
-                return ForkHistorySession(_conversationStore, workspace, source, messageId, new AttachmentStore(_paths));
+                return ForkHistorySession(_paths, _conversationStore, workspace, source, messageId, new AttachmentStore(_paths));
             }
         }
 
-        internal static ChatSession ForkHistorySession(IConversationStore store, WorkspaceDescriptor workspace,
-            ChatSession source, string messageId, AttachmentStore attachments)
+        internal static ChatSession ForkHistorySession(AppDataPaths paths, IConversationStore store, WorkspaceDescriptor workspace,
+            ChatSession source, string messageId, AttachmentStore attachments,
+            IResourceAuthorityStore authority = null, IResourceMutationJournal mutations = null)
         {
             var index = source.Messages.FindIndex(message => message != null &&
                 string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
@@ -257,6 +258,7 @@ namespace RNAssistant.Runtime
                 .Select(artifact => { var copy = artifact.CopyMetadata(); copy.InlineText = artifact.InlineText; return copy; })
                 .ToList();
             ArtifactWorkingSet.CopySharedForFork(source, fork);
+            TaskListPublication.PrepareFork(source, fork, store.LoadArtifactBody);
             ContextCompactionRuntime.PrepareFork(source, fork, store.LoadArtifactBody);
             var retainedReferences = new HashSet<string>(fork.Messages
                 .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
@@ -266,7 +268,9 @@ namespace RNAssistant.Runtime
             fork.ToolCallReferenceSequence = source.ToolCallReferenceSequence;
             fork.EvidenceReferenceSequence = source.EvidenceReferenceSequence;
             fork.ReferenceContractVersion = source.ReferenceContractVersion;
-            store.Commit(fork, new ConversationCommit());
+            if (fork.Artifacts.Any(item => item.Kind == ChatArtifactKinds.TaskList))
+                new WorkspaceTaskListObserver(paths, store, new ChatBlobStore(paths), fork, authority, mutations).CommitFork();
+            else store.Commit(fork, new ConversationCommit());
             return fork;
         }
 

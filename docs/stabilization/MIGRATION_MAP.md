@@ -142,12 +142,21 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 Task fork (2026-11-14): TaskListPublication owns shared prefix preparation;
+ConversationJournal inherits existing local snapshot locators. Workspace's existing
+Task observer now publishes child authority after exact durable read-back and
+reconciles lost acknowledgements without replay. Office keeps its existing observer.
+Typed Task tool-result refs replace Office's activity-JSON link reconstruction;
+historical payload URI rewriting and duplicate Task selection are removed.
+No new store/schema/adapter. Workspace-original/definition copies, P3, complete
+owner backup and remaining composition consumers precede P7 adapter removal.
+[Contract](../session-events.md#journal-task-fork--2026-11-14).
+
 P1/P2 checkpoint fork (2026-11-14): ContextCompactionRuntime replaces Office's
 selection from cloned in-memory summaries and Workspace's omitted selection with
 one exact prefix preparation. ConversationJournal inherits existing snapshot
 locators in the same index transaction and projects child presentation links without
-rewriting source evidence. No schema/store/adapter added. Tasks still require
-Workspace selection and child authority publication through its existing owners;
+rewriting source evidence. No schema/store/adapter added. Tasks are connected above;
 originals/definition copies remain open. Default adapters retire at P7.
 [Contract](../session-events.md#journal-checkpoint-fork--2026-11-14).
 
@@ -156,7 +165,7 @@ retain shared Plans, document HTML and document originals through ConversationJo
 ArtifactWorkingSet owns metadata/link/selection copying independently of the prefix;
 ChatArtifact.CopyMetadata replaces incomplete manual/JSON clones. Immutable bytes,
 resource heads and tool evidence retain their original owners. No new store, schema
-or adapter. Local Tasks, Workspace originals and supplied-data graph
+or adapter. Workspace originals and supplied-data graph
 copies still need atomic publication; default adapters retire at P7. P3 and complete
 owner backup remain open.
 [Contract](../session-events.md#journal-shared-resource-fork--2026-11-14).

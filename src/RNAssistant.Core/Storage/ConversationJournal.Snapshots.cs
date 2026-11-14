@@ -157,7 +157,7 @@ namespace RNAssistant.Core.Storage
         private void ApplySnapshotRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record, ConversationChatCommit fact)
         {
             if (fact.ExpectedRevision == 0 && fact.Fork != null)
-                foreach (var reference in ReadResourceSet(fact.Resources, fact.Card.Address).References.Where(item => IsCompactionSnapshot(fact.Card.Address, item)))
+                foreach (var reference in ReadResourceSet(fact.Resources, fact.Card.Address).References.Where(item => IsLocalSnapshot(fact.Card.Address, item)))
                     using (var command = Command(db, "INSERT INTO chat_snapshot SELECT stream,$chat,id,operation FROM chat_snapshot WHERE stream=$stream AND chat=$parent AND id=$id", tx))
                     {
                         command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$parent", fact.Fork.Parent.Id);

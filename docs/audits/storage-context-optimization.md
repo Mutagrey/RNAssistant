@@ -2160,3 +2160,39 @@ after-state/CAS ownership.
    Harness guide. Version 16.27.6-dev records the shared production consumer fix
    in CHANGELOG. Default adapters retire at P7. Scoped diff/links and mandatory
    ValidateVersionFormat checked before commit; no tag, push or release.
+
+## P1/P2 — native Task fork (2026-11-14)
+
+1. Advances F04 through TaskListPublication/TaskListService, ConversationJournal
+   and existing Office/Workspace fork consumers. Scope: exact Task prefix selection,
+   inherited snapshot lineage and independent child authority.
+2. Active/blocked selection hydrates one exact body; closed prefixes retain cold
+   history without reactivating an older revision. Workspace prepares publication,
+   commits the child and compares durable parent/boundary/snapshot/hash before
+   publishing. Lost acknowledgement resolves exact saved state; absent/different
+   state remains Unknown without recreating the child or replaying a Task effect.
+3. Reuses the existing snapshot index and original canonical/CAS locators, with no
+   schema/store/adapter or copied snapshot delta. Typed Task result refs replace
+   activity-JSON reconstruction; shared selection replaces Office's duplicate scan.
+   Removed arbitrary URI rewriting inside historical call/result/activity payloads.
+   Only child presentation refs rebase; no invented child execution or source proof.
+4. Nine selected checks pass on macOS/net8/C#7.3: three Task cases, new fork recovery,
+   default Workspace fork, shared/checkpoint/Unknown forks and clone contract.
+   Real kernel history covers Office/Workspace child edits and unchanged source
+   heads; recovery covers both journal acknowledgements, source deletion, rebuild
+   and journal/CAS restore. The clone fixture was updated only for valid current
+   protocol inputs and the changed preservation contract. No full suite/Office build.
+5. Before: native Task forks were rejected; default Workspace lost selection/head.
+   After: four closed revisions remain cold; a blocked-prefix fork retains three
+   snapshots and hydrates one. A one-message page reads two chat bodies (text and
+   membership), zero Task bodies. No new snapshot metadata/body copies are appended.
+   These are logical I/O/structure checks, not measured CPU/allocation/time gains.
+6. Next: Workspace originals, supplied-data/definition copies and remaining
+   composition consumers. Recorded the older Workspace history edit/delete Task
+   authority gap separately. P3 metadata/header/context/summary usage, complete
+   owner backup/quiescence and P7 removal remain open. Default writer is ChatStore;
+   P4 deferred. Windows/Office and full application restore need separate evidence.
+7. Updated session/artifact/CAS contracts, migration map, progress, backlog and
+   Harness guide. Version 16.27.9-dev records production fork fixes in CHANGELOG;
+   pending UI slices remain separate. Default adapters retire at P7. Scoped
+   diff/links and mandatory ValidateVersionFormat precede commit; no tag/push/release.

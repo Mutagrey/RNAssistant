@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Native Task fork — 2026-11-14
+
+Tasks подключены через реальные Office/Workspace fork consumers: точный выбор по
+prefix, исходные snapshot/CAS locators, независимая authority ветки и её изменение.
+Workspace публикует head после durable read-back; потерянное подтверждение
+восстанавливается без replay, отсутствие/расхождение состояния остаётся Unknown.
+Typed result refs заменили восстановление Task-ссылок из activity JSON; Office
+больше не переписывает URI в исходных arguments/results при fork.
+Девять целевых checks проходят host-neutral, включая default Workspace consumer,
+rebuild/restore, удаление источника и сохранение inherited Unknown.
+`16.27.9-dev`. Далее Workspace originals, supplied-data/definition copies и оставшиеся
+composition consumers; отдельно открыт Task authority после Workspace history
+edit/delete. Затем P3 metadata/header/context/summary usage, backup всех owners,
+остановка старых writers и P7. Default writer — ChatStore; P4 отложена.
+Windows/Office evidence и полный application backup открыты.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-task-fork-2026-11-14).
+
 ## Native checkpoint fork — 2026-11-14
 
 Локальные compaction checkpoints подключены через реальные Office/Workspace fork

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -42,12 +43,69 @@ namespace RNAssistant.Runtime
             using (_journal.AcquireScope(TaskListPublication.Scope(_session))) ReconcileUnderLease();
         }
 
+        internal void CommitFork()
+        {
+            if (_attempt != null || _session.Revision != 0 || string.IsNullOrEmpty(_session.ParentSessionId) ||
+                !_session.ParentSessionRevision.HasValue || string.IsNullOrEmpty(_session.ForkedThroughMessageId))
+                throw new InvalidOperationException("Task fork publication requires an unpublished child.");
+            var scope = TaskListPublication.Scope(_session);
+            using (_journal.AcquireScope(scope))
+            {
+                if (_authority.Capture(scope).Generation != 0)
+                    throw new InvalidOperationException("Task fork authority already exists.");
+                var expected = TaskListPublication.Capture(_session, _payloads);
+                var state = new ForkState { ParentId = _session.ParentSessionId, ParentRevision = _session.ParentSessionRevision.Value,
+                    Boundary = _session.ForkedThroughMessageId, Snapshot = expected.Dependencies.SingleOrDefault()?.Resource,
+                    ContentSha256 = expected.ContentSha256 };
+                var attempt = _journal.Prepare(scope, TaskListPublication.ForkOperation, expected.Identity,
+                    payload: PayloadRef.FromBlob(_payloads.StoreText(JsonConvert.SerializeObject(state), "application/json")),
+                    intendedImpacts: new[] { new ResourceImpact(expected.Identity, ResourceImpactRelation.ContainerMembership) });
+                attempt = _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
+                _chats.Commit(_session, new ConversationCommit());
+                TaskListPublication.PublishFork(_authority, _revisions, _journal, attempt, ReadBackFork(attempt));
+            }
+        }
+
+        private ResourceMutationReadBack ReadBackFork(MutationAttempt attempt)
+        {
+            var state = attempt.Payload == null ? null : JsonConvert.DeserializeObject<ForkState>(_payloads.ReadText(attempt.Payload.ToBlobReference()));
+            var saved = _chats.Load(_session.Host, _session.DocumentKey, attempt.ScopeId.Id);
+            if (state == null || string.IsNullOrEmpty(state.ParentId) || state.ParentRevision < 1 || string.IsNullOrEmpty(state.Boundary) ||
+                saved == null || saved.Host != _session.Host || saved.WorkspaceId != _session.WorkspaceId ||
+                saved.ParentSessionId != state.ParentId || saved.ParentSessionRevision != state.ParentRevision || saved.ForkedThroughMessageId != state.Boundary)
+                throw new InvalidDataException("The saved task fork differs from its prepared source.");
+            var captured = TaskListPublication.Capture(saved, _payloads);
+            var reference = captured.Dependencies.SingleOrDefault()?.Resource;
+            if (reference?.Uri != state.Snapshot?.Uri || reference?.Revision != state.Snapshot?.Revision ||
+                captured.ContentSha256 != state.ContentSha256)
+                throw new InvalidDataException("The saved task fork differs from its prepared snapshot.");
+            return captured;
+        }
+
+        private sealed class ForkState
+        {
+            public string ParentId { get; set; }
+            public long ParentRevision { get; set; }
+            public string Boundary { get; set; }
+            public ResourceRef Snapshot { get; set; }
+            public string ContentSha256 { get; set; }
+        }
+
         private void ReconcileUnderLease()
         {
             foreach (var pending in _journal.Unresolved().Where(item =>
-                item.ScopeId.Equals(TaskListPublication.Scope(_session)) && item.Operation == TaskListToolCatalog.SetToolId))
+                item.ScopeId.Equals(TaskListPublication.Scope(_session)) &&
+                (item.Operation == TaskListToolCatalog.SetToolId || item.Operation == TaskListPublication.ForkOperation)))
             {
                 if (pending.State == MutationAttemptState.Prepared) _journal.AbandonBeforeDispatch(pending.AttemptId);
+                else if (pending.Operation == TaskListPublication.ForkOperation)
+                {
+                    ResourceMutationReadBack captured = null;
+                    try { captured = ReadBackFork(pending); }
+                    catch (Exception error) when (error is IOException || error is InvalidDataException || error is InvalidOperationException || error is JsonException || error is ArgumentException)
+                    { /* An unavailable exact read-back remains Unknown; never recreate or edit the fork. */ }
+                    TaskListPublication.PublishFork(_authority, _revisions, _journal, pending, captured);
+                }
                 else TaskListPublication.Publish(_authority, _revisions, _journal, pending, null, null);
             }
         }
@@ -61,7 +119,8 @@ namespace RNAssistant.Runtime
         {
             var scope = TaskListPublication.Scope(_session);
             if (_journal.Unresolved().Any(item => item.ScopeId.Equals(scope) &&
-                item.Operation == TaskListToolCatalog.SetToolId && item.State == MutationAttemptState.DispatchMayHaveOccurred))
+                (item.Operation == TaskListToolCatalog.SetToolId || item.Operation == TaskListPublication.ForkOperation) &&
+                item.State == MutationAttemptState.DispatchMayHaveOccurred))
                 return new TaskListStateProjection { Available = false };
             return Project(_authority.CaptureMany(new[] { scope }));
         }

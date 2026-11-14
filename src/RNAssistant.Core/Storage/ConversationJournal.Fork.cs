@@ -14,12 +14,12 @@ namespace RNAssistant.Core.Storage
     {
         private static void RequireForkScope(ChatSession session)
         {
-            // Shared resources retain their published owner; checkpoints inherit
+            // Shared resources retain their published owner; local snapshots inherit
             // original locators. Other local graphs still need their publication boundary.
             var metadata = ConversationMetadata.From(session);
             if (session.Artifacts.Any(item => !IsPublishedSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)) &&
-                    (item.Kind != ChatArtifactKinds.Compaction || !IsCompactionSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)))) ||
-                session.ResourceCopies.Count != 0 || session.ActiveTaskListArtifactId != null ||
+                    (item.Kind != ChatArtifactKinds.Compaction && item.Kind != ChatArtifactKinds.TaskList || !IsLocalSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)))) ||
+                session.ResourceCopies.Count != 0 ||
                 session.Context?.Notes.Any(note => note.Role == ContextNoteRole.SuppliedData) == true)
                 throw TextStoreScope();
         }
@@ -87,17 +87,17 @@ namespace RNAssistant.Core.Storage
                 entry.Header.ResourceRefs.Any(reference => {
                     string scope, id; int revision;
                     return ChatResourceUri.TryParseArtifactRevision(reference, out scope, out id, out revision) &&
-                        !IsPublishedSnapshot(owner, ChatResourceUri.ArtifactSnapshot(reference)) && !IsCompactionSnapshot(owner, reference);
+                        !IsPublishedSnapshot(owner, ChatResourceUri.ArtifactSnapshot(reference)) && !IsLocalSnapshot(owner, reference);
                 })) throw TextStoreScope();
         }
 
         private static ConversationTextEntry ProjectInheritedText(ConversationTextEntry original, ConversationMetadata owner, string chat)
         {
-            if (owner.Id == chat || !original.Header.ResourceRefs.Any(item => IsCompactionSnapshot(owner, item))) return original;
+            if (owner.Id == chat || !original.Header.ResourceRefs.Any(item => IsLocalSnapshot(owner, item))) return original;
             var header = original.Header.CopyForContext();
             // Only presentation links follow the child. Claims, payloads and tool
             // evidence keep their canonical source ownership and original locators.
-            header.ResourceRefs = header.ResourceRefs.Select(item => IsCompactionSnapshot(owner, item)
+            header.ResourceRefs = header.ResourceRefs.Select(item => IsLocalSnapshot(owner, item)
                 ? ChatResourceUri.RebaseArtifactRevision(item, chat) : item).ToList();
             return new ConversationTextEntry(header, original.Body, original.Reasoning, original.Analysis);
         }
@@ -138,8 +138,7 @@ namespace RNAssistant.Core.Storage
             var membership = new HashSet<string>(resources.References.Select(item => item.Uri), StringComparer.Ordinal);
             var parentMembership = new HashSet<string>(retained.References.Select(item => item.Uri), StringComparer.Ordinal);
             if (resources.References.Any(item => !IsPublishedSnapshot(fact.Card.Address, item) &&
-                    (!IsCompactionSnapshot(fact.Card.Address, item) || !parentMembership.Contains(ChatResourceUri.RebaseArtifactRevision(item, fork.Parent.Id).Uri))) ||
-                resources.ActiveTask != null ||
+                    (!IsLocalSnapshot(fact.Card.Address, item) || !parentMembership.Contains(ChatResourceUri.RebaseArtifactRevision(item, fork.Parent.Id).Uri))) ||
                 !SameRunValue(resources.ActiveHtml, retained.ActiveHtml) || !SameRunValue(resources.ActivePlan, retained.ActivePlan) ||
                 !SameRunValue(resources.Links, retained.Links) ||
                 retained.References.Where(item => IsPublishedSnapshot(fork.Parent, item))
@@ -148,6 +147,7 @@ namespace RNAssistant.Core.Storage
             var history = ReadHistory(fact.History); var expected = ForkPrefix(db, fork);
             if (history.Removed.Count != 0 || fact.MessageCount != expected.Count || !SameRunValue(history.Entries, expected))
                 throw new InvalidDataException("Fork membership disagrees with its frozen prefix.");
+            var inherited = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
             foreach (var group in expected.GroupBy(item => item.Operation))
             {
                 var write = FindChatWrite(db, group.Key); RequireHistoryOwner(db, fork.Parent.Id, write);
@@ -155,11 +155,19 @@ namespace RNAssistant.Core.Storage
                 {
                     var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
                     RequireForkMessage(write.Fact.Card.Address, original);
-                    if (ProjectInheritedText(original, write.Fact.Card.Address, fact.Card.ChatId).Header.ResourceRefs
-                        .Any(item => IsCompactionSnapshot(fact.Card.Address, item) && !membership.Contains(item.Uri)))
-                        throw new InvalidDataException("Fork omitted an inherited checkpoint reference.");
+                    var header = ProjectInheritedText(original, write.Fact.Card.Address, fact.Card.ChatId).Header;
+                    inherited.Add(entry.Id, header);
+                    if (header.ResourceRefs
+                        .Any(item => IsLocalSnapshot(fact.Card.Address, item) && !membership.Contains(item.Uri)))
+                        throw new InvalidDataException("Fork omitted an inherited local snapshot reference.");
                 }
             }
+            var tasks = resources.References.Where(item => IsTaskSnapshot(fact.Card.Address, item))
+                .Select(item => LocalSnapshot(db, fork.Parent.Id, ResourceUri.Parse(item.Uri).Segments[2])).ToArray();
+            var taskId = TaskListService.SelectForMessages(expected.Select(item => inherited[item.Id]), tasks);
+            var taskSelection = taskId == null ? null : ChatResourceUri.CreateArtifactRevision(fact.Card.ChatId, tasks.Single(item => item.Id == taskId));
+            if (!SameRunValue(taskSelection, resources.ActiveTask))
+                throw new InvalidDataException("Fork task selection disagrees with its exact prefix.");
             var ids = new HashSet<string>(expected.Select(item => item.Id), StringComparer.Ordinal);
             var active = retained.ActiveContext == null ? null : LocalSnapshot(db, fork.Parent.Id, ResourceUri.Parse(retained.ActiveContext.Uri).Segments[2]);
             var selected = active != null && ids.Contains(active.SourceMessageId) && ids.Contains(CheckpointMetadata(active).ThroughMessageId)

@@ -1,5 +1,31 @@
 # Session event stream
 
+## Journal Task fork — 2026-11-14
+
+Local Task snapshots now use the existing native fork/snapshot index boundary.
+TaskListPublication prepares the exact prefix selection and parent closure for both
+Office and Workspace; only the selected body hydrates. A closed prefix keeps its
+history without activating an older revision. Snapshot metadata and CAS bodies
+retain original locators; the child adds no copied snapshot delta or tool execution.
+
+TaskListToolHandler returns typed snapshot references through ToolResultPersistence.
+Office no longer reconstructs Task links from activity JSON, or rewrites historical
+call/result/activity payload URIs during fork. Only presentation links rebase.
+Source evidence and inherited Unknown guards keep their original identities.
+
+Office uses its existing publication observer. WorkspaceTaskListObserver prepares
+the child head, commits the fork, reads back the exact parent revision/boundary and
+selected snapshot/hash, then publishes authority. Lost acknowledgement reconciles
+only the exact saved state; missing or different state becomes Unknown without
+replaying a Task operation or creating the child. Child edits, source deletion,
+rebuild and Workspace journal/CAS restore retain independent authority.
+
+The default Workspace consumer also gains correct Task selection/publication.
+Default storage is still ChatStore. Workspace originals, supplied-data/definition
+copies and remaining composition consumers precede P7; P3 metadata/header/context/
+summary usage, complete owner backup/quiescence and Windows evidence remain open.
+Workspace history edit/delete authority is a separate recorded lifecycle gap.
+
 ## Journal checkpoint fork — 2026-11-14
 
 Native forks accept local compaction checkpoints through the existing Office and
@@ -20,7 +46,7 @@ Child compaction may append a revision to the inherited lineage. Lost acknowledg
 retry, two ancestor deletions, rebuild and Workspace journal/CAS restore preserve the
 selected summary. Cold message pages read no checkpoint bodies. An inherited summary
 does not discharge Unknown or prevent independent reads; history edits still clear
-selection. Task Lists, Workspace originals and supplied-data/definition graphs remain
+selection. Tasks are connected above; Workspace originals and supplied-data/definition graphs remain
 outside native fork acceptance. P3 costs, complete owner backup, P7 and Windows/Office
 qualification remain open; default storage is still ChatStore.
 
@@ -43,7 +69,7 @@ cannot retarget the fork's retained revision, and stale writes remain rejected.
 Canonical validation retains the parent's shared membership, links and selection;
 existing publication validation checks exact ownership. Lost acknowledgement retry,
 source deletion, rebuild and Workspace journal/CAS restore preserve references and
-bytes. Local checkpoints are connected above. Task Lists, Workspace originals and
+bytes. Local Tasks/checkpoints are connected above. Workspace originals and
 supplied-data definition-copy graphs remain unsupported at native fork acceptance.
 Their existing preparation owners must join the atomic boundary before P7. Shared
 metadata/full-load costs remain P3; default production storage and Windows gates are

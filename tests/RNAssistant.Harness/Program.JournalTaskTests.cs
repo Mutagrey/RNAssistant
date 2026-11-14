@@ -56,6 +56,7 @@ namespace RNAssistant.Harness
             AssertEqual(HeadKnowledge.Unavailable, resources.GetHead(taskScope, TaskListPublication.Identity(chat)).Knowledge, "close publishes removal of active state");
             journal.Rebuild();
             AssertEqual(4, ((IConversationStore)journal).Load(chat.Id).Artifacts.Count, "rebuild restores immutable snapshots");
+            VerifyJournalTaskForkRuntime(paths, journal, resources, chat, office);
             if (office) return;
             var backup = Path.Combine(paths.Root, "task-runtime-backup");
             JournalCasService(paths, StorageProtector.None).BackupJournals(backup);

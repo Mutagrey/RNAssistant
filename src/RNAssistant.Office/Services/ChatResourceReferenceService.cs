@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 
@@ -100,7 +98,6 @@ namespace RNAssistant.Office.Services
                 if (message.ProtocolMessage) continue;
                 ChatMessageAttachmentService.Link(session, message);
                 LinkHtmlWorkspace(session, message);
-                LinkTaskList(session, message);
                 LinkPlanDocument(session, message);
             }
         }
@@ -179,35 +176,8 @@ namespace RNAssistant.Office.Services
 
         public static void RestoreActiveTaskListFromMessages(ChatSession session)
         {
-            if (session == null)
-            {
-                return;
-            }
-            var artifacts = (session.Artifacts ?? new List<ChatArtifact>())
-                .Where(item => item != null && string.Equals(item.Kind, ChatArtifactKinds.TaskList, StringComparison.OrdinalIgnoreCase))
-                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
-                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-                .Where(group => group.Count() == 1)
-                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
-            session.ActiveTaskListArtifactId = null;
-            for (var messageIndex = (session.Messages ?? new List<ChatMessage>()).Count - 1; messageIndex >= 0; messageIndex--)
-            {
-                var ids = session.Messages[messageIndex] == null
-                    ? new List<string>()
-                    : ReferencedArtifactIds(session.Messages[messageIndex], artifacts.Values);
-                for (var idIndex = (ids ?? new List<string>()).Count - 1; idIndex >= 0; idIndex--)
-                {
-                    if (!artifacts.ContainsKey(ids[idIndex])) continue;
-                    TaskListRevisionMetadata taskList;
-                    try { taskList = JsonConvert.DeserializeObject<TaskListRevisionMetadata>(artifacts[ids[idIndex]].MetadataJson); }
-                    catch (JsonException) { continue; }
-                    if (taskList == null) continue;
-                    if (!string.Equals(taskList.Status, "active", StringComparison.OrdinalIgnoreCase) &&
-                        !string.Equals(taskList.Status, "blocked", StringComparison.OrdinalIgnoreCase)) return;
-                    session.ActiveTaskListArtifactId = ids[idIndex];
-                    return;
-                }
-            }
+            if (session != null) session.ActiveTaskListArtifactId = TaskListService.SelectForMessages(
+                session.Messages ?? new List<ChatMessage>(), session.Artifacts ?? new List<ChatArtifact>());
         }
 
         public static void RestoreActivePlanDocumentFromMessages(ChatSession session)
@@ -253,31 +223,6 @@ namespace RNAssistant.Office.Services
                 item.SourceMessageId == message.Id))
                 if (FindUniqueArtifact(session, artifact.Id, ChatArtifactKinds.HtmlWorkspace) == artifact)
                     AddReference(session, message, artifact);
-        }
-
-        private static void LinkTaskList(ChatSession session, ChatMessage message)
-        {
-            var activity = message.Activity;
-            if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
-                !activity.ToolId.StartsWith("task.list.", StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(activity.DataJson))
-            {
-                return;
-            }
-            try
-            {
-                var artifactId = (string)JObject.Parse(activity.DataJson)["artifactId"];
-                if (string.IsNullOrWhiteSpace(artifactId)) return;
-                var artifact = FindUniqueArtifact(session, artifactId, ChatArtifactKinds.TaskList);
-                if (artifact == null) return;
-                artifact.SourceMessageId = string.IsNullOrWhiteSpace(artifact.SourceMessageId) ? message.Id : artifact.SourceMessageId;
-                if (!string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase)) return;
-                artifact.RunId = string.IsNullOrWhiteSpace(artifact.RunId) ? message.RunId : artifact.RunId;
-                AddReference(session, message, artifact);
-            }
-            catch (JsonException)
-            {
-            }
         }
 
         private static void LinkPlanDocument(ChatSession session, ChatMessage message)
@@ -395,17 +340,8 @@ namespace RNAssistant.Office.Services
                     attachment.VisualSelectionSource = current;
             }
 
-            if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant")
-                message.Content = RebaseJsonText(session, message.Content, null);
-            foreach (var call in message.ToolCalls ?? new List<RNAssistant.Core.Llm.LlmToolCall>())
-            {
-                if (call != null) call.ArgumentsJson = RebaseJsonText(session, call.ArgumentsJson, null);
-            }
-            if (message.Activity != null)
-            {
-                message.Activity.ArgumentsJson = RebaseJsonText(session, message.Activity.ArgumentsJson, null);
-                message.Activity.DataJson = RebaseJsonText(session, message.Activity.DataJson, null);
-            }
+            // Forks rebind presentation links only. Historical calls, result bodies
+            // and activity payloads remain exact evidence of the original execution.
 
             if (message.HtmlWorkspaceCheckpoint != null &&
                 !RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, message.HtmlWorkspaceCheckpoint))
@@ -421,59 +357,6 @@ namespace RNAssistant.Office.Services
                     message.HtmlWorkspaceCheckpoint = checkpoint;
                 }
             }
-        }
-
-        private static string RebaseJsonText(ChatSession session, string value, string requiredPrefix)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return value;
-            var prefixLength = 0;
-            if (!string.IsNullOrWhiteSpace(requiredPrefix))
-            {
-                if (!value.StartsWith(requiredPrefix, StringComparison.Ordinal)) return value;
-                prefixLength = requiredPrefix.Length;
-            }
-            var json = value.Substring(prefixLength).TrimStart();
-            if (!(json.StartsWith("{", StringComparison.Ordinal) || json.StartsWith("[", StringComparison.Ordinal))) return value;
-            try
-            {
-                using (var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None })
-                {
-                    var token = JToken.Load(reader);
-                    while (reader.Read()) { }
-                    if (!RebaseJsonResourceUris(session, token)) return value;
-                    return (prefixLength == 0 ? string.Empty : requiredPrefix + "\n") + token.ToString(Formatting.None);
-                }
-            }
-            catch (JsonException)
-            {
-                return value;
-            }
-        }
-
-        private static bool RebaseJsonResourceUris(ChatSession session, JToken token)
-        {
-            if (token == null) return false;
-            var value = token as JValue;
-            if (value != null)
-            {
-                if (value.Type != JTokenType.String) return false;
-                if (RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, new ResourceRef((string)value))) return false;
-                var reference = ChatResourceUri.RebaseArtifactRevision(
-                    new ResourceRef((string)value), session == null ? null : session.Id);
-                string artifactId;
-                if (reference != null && ChatResourceUri.TryGetCurrentArtifactId(session, reference, out artifactId))
-                {
-                    if (!string.Equals((string)value, reference.Uri, StringComparison.Ordinal))
-                    {
-                        value.Value = reference.Uri;
-                        return true;
-                    }
-                }
-                return false;
-            }
-            var changed = false;
-            foreach (var child in token.Children().ToArray()) changed |= RebaseJsonResourceUris(session, child);
-            return changed;
         }
 
         private static void AddRequired(ISet<string> required, string id)

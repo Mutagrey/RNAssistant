@@ -20,8 +20,8 @@ namespace RNAssistant.Harness
         {
             IConversationStore store = journal;
             if (source.WorkspaceId != null)
-                return WorkspaceConversationService.ForkHistorySession(store, new WorkspaceStore(paths).OpenConnected(source.WorkspaceId),
-                    source, source.Messages[count - 1].Id, new AttachmentStore(paths));
+                return WorkspaceConversationService.ForkHistorySession(paths, store, new WorkspaceStore(paths).OpenConnected(source.WorkspaceId),
+                    source, source.Messages[count - 1].Id, new AttachmentStore(paths), resources, resources);
             var child = PrepareTextFork(store, source, count);
             var executor = new OfficeToolExecutor(FakeOfficeAdapter.ForHost(source.Host), new VbaJournalStore(paths),
                 new SkillStore(paths), new ToolStore(paths), () => new AppSettings(), paths: paths,

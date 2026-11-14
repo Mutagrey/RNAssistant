@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.9-dev
+
+- Fork в Office/Workspace сохраняет точную ревизию Tasks и позволяет независимо
+  изменять её в ветке. Workspace публикует authority после durable read-back;
+  потерянное подтверждение не повторяет операцию. Исторические arguments/results
+  сохраняют исходные URI. Native journal наследует snapshots без копирования тел;
+  default storage пока прежний. Windows/Office qualification остаётся открытой.
+
 ### 16.27.6-dev
 
 - Fork в Office/Workspace сохраняет выбранный compaction checkpoint, если его
