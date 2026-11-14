@@ -2225,3 +2225,34 @@ after-state/CAS ownership.
 7. Updated session/artifact contracts, migration map, progress, backlog, Harness
    guide and CHANGELOG (16.27.12-dev). Default adapters retain their P7 removal gate.
    Scoped diff/links and mandatory version validation precede commit; no push/release.
+
+## P1/P2 — native Workspace original fork (2026-11-14)
+
+1. Advances F04 through ConversationJournal's existing fork/attachment owners and
+   actual Workspace fork/read consumers. Scope: immutable conversation originals,
+   their extraction/analysis and original source-message locators.
+2. The fork transaction inherits chat_attachment rows referencing canonical ancestor
+   messages. Lookups validate frozen ancestry; later parent edits cannot retarget
+   the child. Local membership follows exact prefix references, including metadata
+   whose source occurrence is hidden. Off-prefix/header forgery is rejected.
+3. Removed explicit native rejection and the same-chat-only locator assumption.
+   No copied message/body stream, new store/schema/adapter or resource publication.
+   Only presentation refs rebase; payloads, evidence and source identities stay exact.
+4. Seven selected macOS/net8/C#7.3 checks pass: new Workspace-original fork, extended
+   shared-resource fork, three attachment cases, checkpoint fork and inherited
+   Unknown. Actual providers, mixed Plans/originals, append/index faults, lost ack,
+   two deleted ancestors, hidden-source metadata and journal/CAS restore are covered.
+   The shared-fork fault fixture now prepares local resources through its real owner.
+   No full suite or Office/VSTO validation.
+5. Before: native forks rejected Workspace originals. After: a fork with 70,000
+   analysis characters writes a journal frame below 16 KiB and retains existing CAS
+   refs. A later-reference page reads two chat bodies (text and manifest), no original
+   message/analysis/file body. Preparation/header costs remain P3; no CPU/timing claim.
+6. Remaining: supplied-data/definition copies and other composition consumers;
+   P3 metadata/header/context/summary usage, full owner backup, writer quiescence
+   and P7. Default writer remains ChatStore; P4 deferred. Journal/CAS restore does
+   not qualify Windows/Office or backup of all application owners.
+7. Updated session/artifact/CAS contracts, migration map, progress and Harness guide.
+   This intermediate native integration does not change default production behavior,
+   so it has no product bump/CHANGELOG entry. Default adapters retire at P7. Scoped
+   diff/links and mandatory version validation precede commit; no push or release.

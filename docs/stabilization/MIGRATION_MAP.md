@@ -142,6 +142,15 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 Workspace original fork (2026-11-14): existing Workspace fork/read consumers
+now use inherited chat_attachment locators. ConversationJournal replaces its
+same-chat locator restriction with frozen ancestry validation and removes the
+explicit Workspace-original fork rejection. Prefix membership and immutable header
+checks remain strict; source bodies/analysis/extraction stay in original CAS.
+No new store/schema/adapter; default composition unchanged. Definition copies,
+remaining consumers, P3 and full owner backup/quiescence precede P7.
+[Contract](../session-events.md#journal-workspace-original-fork--2026-11-14).
+
 P1/P2 Workspace history Tasks (2026-11-14): delete and edit replace direct history
 commits with the existing Task observer's prepared reset/read-back/publication.
 TaskListPublication owns the terminal head change; recovery checks exact removal/

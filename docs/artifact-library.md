@@ -845,8 +845,11 @@ remain intact. No shared head or payload is copied. Local
 immutable metadata/body locators; only an applicable source selection follows the
 prefix, without reactivating older summaries after an edit. Local
 [Task forks](session-events.md#journal-task-fork--2026-11-14) retain prefix snapshots
-and publish independent child authority without copying bodies. Workspace originals
-and supplied-data definition copies still require
+and publish independent child authority without copying bodies.
+[Workspace original forks](session-events.md#journal-workspace-original-fork--2026-11-14)
+inherit accepted source-message locators and existing original/extraction/analysis
+CAS refs for the exact prefix. Parent edits or deletion cannot retarget those bytes.
+Supplied-data definition copies still require
 their separate publication boundary and fail explicitly before native acceptance.
 Sharing across *different* Office documents is outside this cutover: an explicit
 copy/import with dependencies is required, without granting access to another live

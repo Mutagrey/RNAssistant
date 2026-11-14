@@ -18,6 +18,7 @@ namespace RNAssistant.Core.Storage
             // original locators. Other local graphs still need their publication boundary.
             var metadata = ConversationMetadata.From(session);
             if (session.Artifacts.Any(item => !IsPublishedSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)) &&
+                    !IsWorkspaceOriginal(metadata, ChatResourceUri.CreateArtifactRevision(session, item)) &&
                     (item.Kind != ChatArtifactKinds.Compaction && item.Kind != ChatArtifactKinds.TaskList || !IsLocalSnapshot(metadata, ChatResourceUri.CreateArtifactRevision(session, item)))) ||
                 session.ResourceCopies.Count != 0 ||
                 session.Context?.Notes.Any(note => note.Role == ContextNoteRole.SuppliedData) == true)
@@ -82,25 +83,28 @@ namespace RNAssistant.Core.Storage
 
         private static void RequireForkMessage(ConversationMetadata owner, ConversationTextEntry entry)
         {
-            if (entry.Header.Attachments.Count != 0 && owner.DocumentAuthorityId == null ||
+            if (entry.Header.Attachments.Count != 0 && owner.DocumentAuthorityId == null && owner.WorkspaceId == null ||
                 entry.Header.HtmlWorkspaceCheckpoint != null && !IsHtmlSnapshot(owner, entry.Header.HtmlWorkspaceCheckpoint) ||
                 entry.Header.ResourceRefs.Any(reference => {
                     string scope, id; int revision;
                     return ChatResourceUri.TryParseArtifactRevision(reference, out scope, out id, out revision) &&
-                        !IsPublishedSnapshot(owner, ChatResourceUri.ArtifactSnapshot(reference)) && !IsLocalSnapshot(owner, reference);
+                        !IsPublishedSnapshot(owner, ChatResourceUri.ArtifactSnapshot(reference)) && !IsForkLocalResource(owner, reference);
                 })) throw TextStoreScope();
         }
 
         private static ConversationTextEntry ProjectInheritedText(ConversationTextEntry original, ConversationMetadata owner, string chat)
         {
-            if (owner.Id == chat || !original.Header.ResourceRefs.Any(item => IsLocalSnapshot(owner, item))) return original;
+            if (owner.Id == chat || !original.Header.ResourceRefs.Any(item => IsForkLocalResource(owner, item))) return original;
             var header = original.Header.CopyForContext();
             // Only presentation links follow the child. Claims, payloads and tool
             // evidence keep their canonical source ownership and original locators.
-            header.ResourceRefs = header.ResourceRefs.Select(item => IsLocalSnapshot(owner, item)
+            header.ResourceRefs = header.ResourceRefs.Select(item => IsForkLocalResource(owner, item)
                 ? ChatResourceUri.RebaseArtifactRevision(item, chat) : item).ToList();
             return new ConversationTextEntry(header, original.Body, original.Reasoning, original.Analysis);
         }
+
+        private static bool IsForkLocalResource(ConversationMetadata metadata, ResourceRef reference)
+        { return IsLocalSnapshot(metadata, reference) || IsWorkspaceOriginal(metadata, reference); }
 
         private static bool SameInheritedText(ConversationTextEntry original, ConversationTextEntry proposed)
         {
@@ -138,16 +142,17 @@ namespace RNAssistant.Core.Storage
             var membership = new HashSet<string>(resources.References.Select(item => item.Uri), StringComparer.Ordinal);
             var parentMembership = new HashSet<string>(retained.References.Select(item => item.Uri), StringComparer.Ordinal);
             if (resources.References.Any(item => !IsPublishedSnapshot(fact.Card.Address, item) &&
-                    (!IsLocalSnapshot(fact.Card.Address, item) || !parentMembership.Contains(ChatResourceUri.RebaseArtifactRevision(item, fork.Parent.Id).Uri))) ||
+                    (!IsForkLocalResource(fact.Card.Address, item) || !parentMembership.Contains(ChatResourceUri.RebaseArtifactRevision(item, fork.Parent.Id).Uri))) ||
                 !SameRunValue(resources.ActiveHtml, retained.ActiveHtml) || !SameRunValue(resources.ActivePlan, retained.ActivePlan) ||
                 !SameRunValue(resources.Links, retained.Links) ||
                 retained.References.Where(item => IsPublishedSnapshot(fork.Parent, item))
                     .Any(item => !membership.Contains(item.Uri)))
-                throw new InvalidDataException("Fork must preserve shared membership and inherit only retained local snapshots.");
+                throw new InvalidDataException("Fork must preserve shared membership and inherit only retained local resources.");
             var history = ReadHistory(fact.History); var expected = ForkPrefix(db, fork);
             if (history.Removed.Count != 0 || fact.MessageCount != expected.Count || !SameRunValue(history.Entries, expected))
                 throw new InvalidDataException("Fork membership disagrees with its frozen prefix.");
             var inherited = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            var originals = new HashSet<string>(StringComparer.Ordinal);
             foreach (var group in expected.GroupBy(item => item.Operation))
             {
                 var write = FindChatWrite(db, group.Key); RequireHistoryOwner(db, fork.Parent.Id, write);
@@ -157,11 +162,17 @@ namespace RNAssistant.Core.Storage
                     RequireForkMessage(write.Fact.Card.Address, original);
                     var header = ProjectInheritedText(original, write.Fact.Card.Address, fact.Card.ChatId).Header;
                     inherited.Add(entry.Id, header);
+                    foreach (var reference in header.ResourceRefs.Where(item => IsWorkspaceOriginal(fact.Card.Address, item)))
+                        originals.Add(reference.Uri);
                     if (header.ResourceRefs
-                        .Any(item => IsLocalSnapshot(fact.Card.Address, item) && !membership.Contains(item.Uri)))
-                        throw new InvalidDataException("Fork omitted an inherited local snapshot reference.");
+                        .Any(item => IsForkLocalResource(fact.Card.Address, item) && !membership.Contains(item.Uri)))
+                        throw new InvalidDataException("Fork omitted an inherited local resource reference.");
                 }
             }
+            foreach (var reference in resources.References.Where(item => IsWorkspaceOriginal(fact.Card.Address, item)))
+                if (!originals.Contains(reference.Uri) || AttachmentEntry(db, fork.Parent.Id,
+                    ResourceUri.Parse(reference.Uri).Segments[2].Substring("attachment_".Length)) == null)
+                    throw new InvalidDataException("Fork original is outside its exact prefix or has no source locator.");
             var tasks = resources.References.Where(item => IsTaskSnapshot(fact.Card.Address, item))
                 .Select(item => LocalSnapshot(db, fork.Parent.Id, ResourceUri.Parse(item.Uri).Segments[2])).ToArray();
             var taskId = TaskListService.SelectForMessages(expected.Select(item => inherited[item.Id]), tasks);

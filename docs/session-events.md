@@ -1,5 +1,26 @@
 # Session event stream
 
+## Journal Workspace original fork — 2026-11-14
+
+Workspace forks now inherit original-attachment locators through the existing
+chat_attachment index in the same fork transaction. Headers remain in the accepted
+ancestor message; original, extracted text and analysis bytes keep their CAS refs.
+Lookup verifies the frozen ancestry even after parent edits or deletion. Presentation
+refs use the child chat; historical payloads/evidence and source-message IDs do not
+change. No snapshot/body copy, resource publication, new schema or store is added.
+
+Local original membership must be referenced by the exact prefix and retained by the
+parent. Injected off-prefix originals or changed attachment metadata are rejected.
+A later reference can retain metadata even when its source occurrence is hidden;
+this does not invent a visible attachment for Workspace semantic discovery.
+
+Actual Workspace fork/read consumers, mixed shared Plans/originals, cold pages,
+failed append, index failure, lost acknowledgement, two deleted ancestors and
+journal/CAS restore are covered. The older Workspace path already preserves these
+attachments; this is native cutover integration, not a default-writer switch.
+Supplied-data/definition copies, remaining composition consumers, P3, complete owner
+backup/quiescence and P7 remain open; Windows evidence is separate.
+
 ## Workspace history Task authority — 2026-11-14
 
 Workspace edit/delete already clear local Task selection. They now commit through
@@ -42,7 +63,7 @@ replaying a Task operation or creating the child. Child edits, source deletion,
 rebuild and Workspace journal/CAS restore retain independent authority.
 
 The default Workspace consumer also gains correct Task selection/publication.
-Default storage is still ChatStore. Workspace originals, supplied-data/definition
+Default storage is still ChatStore. Workspace originals are connected above; supplied-data/definition
 copies and remaining composition consumers precede P7; P3 metadata/header/context/
 summary usage, complete owner backup/quiescence and Windows evidence remain open.
 Workspace history edit/delete authority is connected above.
@@ -67,7 +88,7 @@ Child compaction may append a revision to the inherited lineage. Lost acknowledg
 retry, two ancestor deletions, rebuild and Workspace journal/CAS restore preserve the
 selected summary. Cold message pages read no checkpoint bodies. An inherited summary
 does not discharge Unknown or prevent independent reads; history edits still clear
-selection. Tasks are connected above; Workspace originals and supplied-data/definition graphs remain
+selection. Tasks/Workspace originals are connected above; supplied-data/definition graphs remain
 outside native fork acceptance. P3 costs, complete owner backup, P7 and Windows/Office
 qualification remain open; default storage is still ChatStore.
 
@@ -90,8 +111,8 @@ cannot retarget the fork's retained revision, and stale writes remain rejected.
 Canonical validation retains the parent's shared membership, links and selection;
 existing publication validation checks exact ownership. Lost acknowledgement retry,
 source deletion, rebuild and Workspace journal/CAS restore preserve references and
-bytes. Local Tasks/checkpoints are connected above. Workspace originals and
-supplied-data definition-copy graphs remain unsupported at native fork acceptance.
+bytes. Local Tasks/checkpoints/Workspace originals are connected above.
+Supplied-data definition-copy graphs remain unsupported at native fork acceptance.
 Their existing preparation owners must join the atomic boundary before P7. Shared
 metadata/full-load costs remain P3; default production storage and Windows gates are
 unchanged. Full application-owner backup remains open.
@@ -299,8 +320,8 @@ metadata size and repeated authority/working-set reads remain P3 costs.
 Existing Office ingestion and Workspace attachment providers consume this path.
 Retry, index failure, restart, rebuild, document relocation, attachment-bearing
 text edits/clear and Workspace backup/restore retain exact originals. Clearing
-chat history does not remove document publications. Plan/Task/HTML/context-state
-consumers and fork remain open. Default composition still uses ChatStore; complete
+chat history does not remove document publications. Plan/Task/HTML/context-state and
+Workspace original fork consumers are connected above. Default composition still uses ChatStore; complete
 Office backup and Windows qualification are separate gates.
 
 ## Journal visible history and retained replay guards — 2026-11-14

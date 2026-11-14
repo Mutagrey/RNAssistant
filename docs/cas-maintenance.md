@@ -35,8 +35,12 @@ Local Task/checkpoint forks inherit original snapshot locators as well; canonica
 retain their nested CAS roots. Task fork authority survives source deletion and
 Workspace journal/CAS restore. Two deleted ancestors, continued child compaction and
 Workspace journal/CAS restore are checked without a copied metadata/body stream.
+Workspace original forks inherit accepted attachment-message locators and reuse the
+same original/extraction/analysis CAS closure. Two ancestor deletions, index rebuild
+and Workspace journal/CAS restore retain both visible attachments and metadata whose
+source occurrence is hidden. No copied body stream or extra root owner is introduced.
 Inherited per-chat usage attribution remains P3. This does not close complete
-application-owner backup or native acceptance of Workspace-original/definition forks.
+application-owner backup or native acceptance of definition-copy forks.
 
 `ForScope` run leases join the existing `locks/run_*.lck`/`run-registry.lck` namespace.
 `RuntimeStorageActivity` remains held from CAS publication to acceptance or confirmed

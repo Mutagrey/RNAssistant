@@ -62,6 +62,9 @@ namespace RNAssistant.Core.Storage
                 id.StartsWith("attachment_", StringComparison.Ordinal) && ChatResourceUri.ArtifactSnapshot(reference).Uri == reference.Uri;
         }
 
+        private static bool IsWorkspaceOriginal(ConversationMetadata metadata, ResourceRef reference)
+        { return metadata.WorkspaceId != null && metadata.DocumentAuthorityId == null && IsOriginal(metadata, reference); }
+
         private ConversationTextEntry AttachmentEntry(SqliteConnection db, string chat, string id)
         {
             string message, operation;
@@ -73,7 +76,7 @@ namespace RNAssistant.Core.Storage
             }
             var receipt = FindChatWrite(db, operation);
             var entry = receipt?.Fact.Messages.SingleOrDefault(item => item.Header.Id == message);
-            if (receipt?.Fact.Card.ChatId != chat || entry == null ||
+            if (entry == null || !InheritedFact(db, chat, receipt.Fact.Card.ChatId, receipt.Position.Sequence) ||
                 entry.Header.Attachments.Count(item => item.Id == id) != 1)
                 throw new InvalidDataException("Attachment locator disagrees with its canonical message.");
             return entry;
@@ -104,6 +107,14 @@ namespace RNAssistant.Core.Storage
 
         private void ApplyAttachmentRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record, ConversationChatCommit fact)
         {
+            if (fact.ExpectedRevision == 0 && fact.Fork != null)
+                foreach (var reference in ReadResourceSet(fact.Resources, fact.Card.Address).References.Where(item => IsWorkspaceOriginal(fact.Card.Address, item)))
+                    using (var command = Command(db, "INSERT INTO chat_attachment SELECT stream,$chat,id,message,operation FROM chat_attachment WHERE stream=$stream AND chat=$parent AND id=$id", tx))
+                    {
+                        command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$parent", fact.Fork.Parent.Id);
+                        command.Parameters.AddWithValue("$id", ResourceUri.Parse(reference.Uri).Segments[2].Substring("attachment_".Length));
+                        if (command.ExecuteNonQuery() != 1) throw new InvalidDataException("Fork original locator is unavailable.");
+                    }
             foreach (var message in fact.Messages)
             foreach (var attachment in message.Header.Attachments ?? new List<ChatAttachment>())
             using (var command = Command(db, "INSERT OR REPLACE INTO chat_attachment VALUES($stream,$chat,$id,$message,$operation)", tx))
@@ -141,6 +152,10 @@ namespace RNAssistant.Core.Storage
                 var id = artifact.Id.Substring("attachment_".Length);
                 var source = messages.FirstOrDefault(item => item.Header.Id == artifact.SourceMessageId &&
                     item.Header.Attachments.Any(attachment => attachment.Id == id)) ?? AttachmentEntry(db, session.Id, id);
+                // Initial fork preparation may reference an original whose source
+                // occurrence is hidden. PrepareFork fences the parent in this transaction.
+                if (source == null && session.Revision == 0 && session.ParentSessionId != null)
+                    source = AttachmentEntry(db, session.ParentSessionId, id);
                 if (source == null) throw new InvalidDataException("Local original has no accepted source message.");
                 RequireArtifactProjection(artifact, LocalOriginal(source.Header, source.Header.Attachments.Single(item => item.Id == id)));
             }

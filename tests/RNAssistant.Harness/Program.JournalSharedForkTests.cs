@@ -45,14 +45,10 @@ namespace RNAssistant.Harness
                 var sourceRef = ChatResourceUri.CreateArtifactRevision(source, first);
                 var message = new ChatMessage { Role = "user", Content = "Exact shared source",
                     ResourceRefs = new List<ResourceRef> { sourceRef } };
-                if (office)
-                {
-                    message.Attachments.Add(JournalUpload(paths, source, "original.txt", "Immutable original"));
-                    message.AttachmentAnalysis = new AttachmentAnalysisContext { Content = "Retained analysis",
-                        AttachmentIds = new List<string> { message.Attachments[0].Id } };
-                    LinkJournalUpload(paths, source, message);
-                }
-                else source.Messages.Add(message);
+                message.Attachments.Add(JournalUpload(paths, source, "original.txt", "Immutable original"));
+                message.AttachmentAnalysis = new AttachmentAnalysisContext { Content = "Retained analysis",
+                    AttachmentIds = new List<string> { message.Attachments[0].Id } };
+                LinkJournalUpload(paths, source, message);
                 store.Commit(source, ConversationCommit.UserInput(message));
                 var selected = PublishJournalPlan(source, journal, resources, owner, PlanDocumentToolCatalog.SaveToolId,
                     JournalPlanCommand(source, owner, "# Selected"), JournalPlanContext());
@@ -66,14 +62,15 @@ namespace RNAssistant.Harness
                 var head = resources.GetHead(authority, identity).Revision;
                 var prefix = ForkSharedJournal(paths, journal, resources, source, 1);
                 AssertEqual(selected.Id, prefix.ActivePlanDocumentArtifactId, "shared selection is independent of the dialogue prefix");
-                AssertEqual(source.Artifacts.Count, prefix.Artifacts.Count, "fork retains the shared working set, including off-prefix originals");
+                AssertEqual(source.Artifacts.Count - (office ? 0 : 1), prefix.Artifacts.Count,
+                    "shared originals follow the working set; Workspace originals follow the prefix");
                 AssertTrue(prefix.Artifacts.All(item => item.InlineText == null), "fork copies shared metadata without body hydration");
                 AssertTrue(!object.ReferenceEquals(source.ArtifactLinks[0], prefix.ArtifactLinks[0]), "working-set decisions are detached projections");
                 var full = ForkSharedJournal(paths, journal, resources, source, source.Messages.Count);
                 AssertEqual(head.Uri, resources.GetHead(authority, identity).Revision.Uri, "fork never republishes or rewinds the shared Plan head");
                 journal.Rebuild(); full = store.Load(full.Id);
                 var reads = journal.ChatBodyReads; var page = store.ReadMessageWindow(full.Id, 2, 1);
-                AssertEqual(office ? 3L : 2L, journal.ChatBodyReads - reads, "page reads text/manifest and optional analysis, never Plan or original bodies");
+                AssertEqual(3L, journal.ChatBodyReads - reads, "page reads text/manifest/analysis, never Plan or original bodies");
                 AssertEqual(sourceRef.Uri, page.PageMessages.Single().ResourceRefs[0].Uri, "inherited message keeps the original exact revision");
                 AssertEqual(selected.Id, page.ActivePlanDocumentArtifactId, "page keeps current chat selection distinct from historical message refs");
                 if (office)
@@ -83,6 +80,13 @@ namespace RNAssistant.Harness
                     AssertEqual(message.Attachments[0].ContentSha256, full.Messages[1].Attachments[0].ContentSha256, "same original CAS bytes");
                     AssertEqual("Retained analysis", full.Messages[1].AttachmentAnalysis.Content, "analysis stays in original immutable occurrence");
                     AssertEqual(source.Id, full.Artifacts.Single(item => item.Id == original.Id).SourceChatId, "artifact provenance remains with its publisher");
+                }
+                else
+                {
+                    var provider = new WorkspaceChatAttachmentResourceProvider(paths, full);
+                    AssertTrue(provider.Read(provider.Find("original.txt").Items.Single().Target, 100) != null,
+                        "actual Workspace provider reads the inherited original through its child presentation reference");
+                    AssertEqual("Retained analysis", full.Messages[1].AttachmentAnalysis.Content, "Workspace analysis retains original bytes");
                 }
                 PublishJournalPlan(source, journal, resources, owner, PlanDocumentToolCatalog.SaveToolId,
                     JournalPlanCommand(source, owner, "# Later shared head"), JournalPlanContext());
@@ -95,8 +99,10 @@ namespace RNAssistant.Harness
                 AssertTrue(removed.ActivePlanDocumentArtifactId == null, "fork cannot resurrect a removed shared Plan");
                 AssertTrue(store.ReadMessageWindow(removed.Id, 2, 1).ApplicableTombstoneIds.Contains(tombstone.Id), "off-prefix tombstone follows the shared working set");
 
-                var pending = PrepareTextFork(store, store.Load(source.Id), 2);
-                ArtifactWorkingSet.CopySharedForFork(store.Load(source.Id), pending);
+                var durableSource = store.Load(source.Id);
+                var pending = PrepareTextFork(store, durableSource, 2);
+                ChatCloneService.PrepareForkResources(durableSource, pending, store.LoadArtifactBody,
+                    new ResourceForkService(new ResourceAuthorityService(resources, resources, resources, blobs), blobs));
                 var command = new ConversationCommit();
                 journal.Journal.Fault = point => { if (point == "after_flush") throw new IOException("fork acknowledgement lost"); };
                 RuntimeThrows<IOException>(() => store.Commit(pending, command)); journal.Journal.Fault = null;
@@ -113,6 +119,8 @@ namespace RNAssistant.Harness
                     var restoredResources = new ResourceJournal(restored);
                     AssertEqual("# Selected", new DocumentArtifactStore(restoredResources, restoredResources, new ChatBlobStore(restored))
                         .ReadPlanSelection(restoredStore.Load(full.Id), selected.Id).InlineText, "shared bytes and fork refs survive journal/CAS restore");
+                    AssertEqual("Immutable original", new AttachmentStore(restored).ReadExtractedText(
+                        restoredStore.Load(full.Id).Messages[1].Attachments.Single()), "Workspace fork restores the same original/extraction CAS closure");
                 }
             });
         }

@@ -159,7 +159,7 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
-`journal fork:` runs six checks: actual Office publication and Workspace fork
+`journal fork:` runs seven checks: actual Office publication and Workspace fork
 owners, a 140-message prefix with cold page reads, atomic faults/lost ack/retry,
 source fencing/forgery rejection, multiple generations and ancestor deletion,
 child history edits and unmatched exchanges. Actual Workspace kernel proves that
@@ -188,6 +188,11 @@ input before recovery, rebuild/restore and a new explicit Task after reset. Publ
 default consumers are also checked by `plugins: project chat edit` and the fork test's
 delete step. Existing history Unknown/context and Task-fork checks cover the shared
 recovery boundary; reuse one build instead of rerunning unrelated suites.
+The Workspace-original case covers frozen source locators, off-prefix/metadata
+forgery rejection, failed append/index recovery, parent edits, two ancestor deletions,
+hidden-source metadata and original/extraction/analysis restore. Its later-reference
+page reads only text/manifest. The shared-resource case now includes Workspace
+originals through actual fork/read consumers, including lost acknowledgement.
 Relevant regressions: `journal history:`, `journal context:`,
 `journal task list: revisions`, `journal HTML: Office`, `journal move: Office` and
 `plugins: project chat fork`. Reuse one build; Office qualification stays separate.
@@ -195,8 +200,8 @@ Relevant regressions: `journal history:`, `journal context:`,
 Fork preparation extends `journal HTML: Office` and `journal task list: revisions`:
 only the selected body is read, unavailable ancestors stay cold, stale revisions
 and missing selected bytes fail explicitly, and preparation publishes nothing.
-Native Workspace-original/definition-copy forks remain unsupported without
-partial writes; shared resources and local Tasks/checkpoints are accepted above. Related checks:
+Native definition-copy forks remain unsupported without partial writes; shared
+resources, Workspace originals and local Tasks/checkpoints are accepted above. Related checks:
 `shared HTML: publication selection`, `resource cutover: fork preparation fails`,
 `resource cutover: schema mapping derived publication`, `plugins: project chat fork`
 and `context: fork checkpoint preserves publication`. The older broad

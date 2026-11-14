@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Native Workspace original fork — 2026-11-14
+
+Workspace originals подключены к native fork через существующие consumers и индекс
+принятых сообщений. Файлы, extraction и analysis не копируются; ветка сохраняет
+исходный locator после редактирования/удаления предков. Off-prefix подмена и изменение
+метаданных отклоняются. Семь целевых checks проходят: реальные fork/read consumers,
+shared Plans, cold pages, append/index faults, lost ack, rebuild/restore и Unknown.
+Это промежуточное native подключение: default writer остаётся ChatStore, product
+version не повышается. Далее supplied-data/definition copies и оставшиеся composition
+consumers, P3 metadata/header/context/summary usage, полный backup owners,
+остановка старых writers и P7. P4 отложена; Windows/Office evidence открыт.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-workspace-original-fork-2026-11-14).
+
 ## Workspace history Task authority — 2026-11-14
 
 Edit/delete истории проходят через существующий Task observer: prepared до записи,
