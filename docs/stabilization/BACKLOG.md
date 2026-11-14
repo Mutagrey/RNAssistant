@@ -12,12 +12,12 @@ qualification is claimed. Previously, copied snapshots had no usable selected he
 ## Workspace history Task authority — 2026-11-14
 
 Owner: WorkspaceConversationService / WorkspaceTaskListObserver / TaskListPublication.
-Code inspection: DeleteHistoryMessage and PrepareEditedHistory clear Task selection
-and prune artifacts, but their persistence paths do not republish the Task head.
-If an existing head is Known, RequireCurrent subsequently rejects the empty local
-selection. Connect these existing history owners to read-back/publication in a
-separate slice; cover edit/delete with selected Tasks and lost acknowledgement.
-The Task fork fix does not close this older lifecycle gap or authorize replay.
+Closed host-neutral by the [history Task reset](../session-events.md#workspace-history-task-authority--2026-11-14).
+Previously DeleteHistoryMessage/PrepareWorkspaceMessageEdit cleared Task selection
+without updating a Known head, blocking later Task mutations. Both actual consumers
+now use the existing observer's prepared reset, durable read-back and publication.
+Lost acknowledgement, failed append, mismatch, independent input and restore are
+covered; old tool Unknown is not reclassified. Windows evidence remains separate.
 
 ## Clone fixture protocol drift — 2026-11-14
 

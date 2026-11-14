@@ -736,6 +736,7 @@ namespace RNAssistant.Harness
                 Test("journal usage: resource outcomes and Unknown rebuild restore", () => JournalGroupConsumers(true, checkUsage: true)),
                 Test("journal history: Office edit clear and Workspace deletion", JournalHistoryConsumers),
                 Test("journal history: acceptance index faults and retry", JournalHistoryReceipts),
+                Test("journal history: Workspace task reset and recovery", JournalTaskHistoryReset),
                 Test("journal history: retained Unknown blocks only its repeat", JournalHistoryUnknownConsumer),
                 Test("journal history: opaque repeats require fresh approval", JournalHistoryGuardPolicy),
                 Test("journal fork: Office and Workspace frozen prefix", JournalForkConsumers),

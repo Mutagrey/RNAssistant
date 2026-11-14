@@ -142,6 +142,14 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 Workspace history Tasks (2026-11-14): delete and edit replace direct history
+commits with the existing Task observer's prepared reset/read-back/publication.
+TaskListPublication owns the terminal head change; recovery checks exact removal/
+replacement IDs and cleared selection without replay. Native/default consumers use
+the same boundary. No new store/schema/adapter; existing default adapters retire at
+P7 after remaining consumers, P3 and complete owner backup/quiescence.
+[Contract](../session-events.md#workspace-history-task-authority--2026-11-14).
+
 P1/P2 Task fork (2026-11-14): TaskListPublication owns shared prefix preparation;
 ConversationJournal inherits existing local snapshot locators. Workspace's existing
 Task observer now publishes child authority after exact durable read-back and

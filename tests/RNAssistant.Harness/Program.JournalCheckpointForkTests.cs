@@ -102,7 +102,7 @@ namespace RNAssistant.Harness
                 store.Commit(pending, command); AssertEqual(accepted, pending.Revision, "same-command retry keeps inherited snapshots after source deletion");
                 journal.Rebuild(); descendant = store.Load(descendant.Id);
                 AssertEqual("Child summary", ContextCompactionRuntime.ActiveCheckpoint(descendant).SummaryMarkdown, "two deleted ancestors do not remove selected bytes");
-                WorkspaceConversationService.DeleteHistoryMessage(store, descendant, descendant.Messages[0].Id);
+                WorkspaceConversationService.DeleteHistoryMessage(paths, store, descendant, descendant.Messages[0].Id, resources, resources);
                 var edited = ForkSharedJournal(paths, journal, resources, store.Load(descendant.Id), descendant.Messages.Count);
                 AssertTrue(edited.ActiveContextCheckpointId == null, "fork cannot resurrect a summary invalidated by an earlier edit");
                 if (!office)

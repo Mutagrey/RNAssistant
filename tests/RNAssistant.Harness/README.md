@@ -182,6 +182,12 @@ closed/blocked selection, cold bodies, child edits and unchanged source authorit
 `plugins: project chat fork` also checks Task selection/publication on the default
 Workspace path. `context: clone preserves values` checks unchanged historical
 payloads while presentation refs follow the child.
+`journal history: Workspace task` covers both history consumers with selected Tasks:
+failed append, lost chat/resource acknowledgements, mismatched read-back, independent
+input before recovery, rebuild/restore and a new explicit Task after reset. Public
+default consumers are also checked by `plugins: project chat edit` and the fork test's
+delete step. Existing history Unknown/context and Task-fork checks cover the shared
+recovery boundary; reuse one build instead of rerunning unrelated suites.
 Relevant regressions: `journal history:`, `journal context:`,
 `journal task list: revisions`, `journal HTML: Office`, `journal move: Office` and
 `plugins: project chat fork`. Reuse one build; Office qualification stays separate.

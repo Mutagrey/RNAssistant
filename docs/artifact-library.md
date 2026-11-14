@@ -352,6 +352,9 @@ exact prefix selection and parent lineage through existing Office/Workspace owne
 Only child presentation refs rebase; original payloads/evidence remain immutable.
 Workspace publishes its child's Task head after exact durable read-back, including
 on the default storage path; child edits cannot change the source authority.
+Workspace [history edit/delete](session-events.md#workspace-history-task-authority--2026-11-14)
+also publish the cleared Task selection after read-back. This permits new explicit
+Task work without reclassifying previous tool outcomes or replaying the history change.
 
 ### Native journal Plan integration — 2026-11-14
 

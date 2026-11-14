@@ -1064,6 +1064,12 @@ namespace RNAssistant.Harness
                     AssertEqual(task.Id, taskChild.ActiveTaskListArtifactId, "production Workspace fork retains Task selection");
                     AssertTrue(service.Conversations.GetTaskList(taskChild).Available,
                         "production Workspace consumer publishes the child's task authority after durable read-back");
+                    taskChild = service.Conversations.DeleteMessage(workspace, taskChild.Id, taskChild.Messages.Last().Id);
+                    var authority = new ResourceAuthorityStore(paths);
+                    AssertEqual(HeadKnowledge.Unavailable, authority.GetHead(TaskListPublication.Scope(taskChild),
+                        TaskListPublication.Identity(taskChild)).Knowledge, "public delete resets Task authority with history");
+                    PublishWorkspaceTask(paths, new ChatConversationStoreAdapter(store), taskChild);
+                    AssertTrue(service.Conversations.GetTaskList(taskChild).Available, "Tasks remain editable after public deletion");
                 }
             });
         }
@@ -1107,6 +1113,7 @@ namespace RNAssistant.Harness
                             var store = new ChatStore(paths); store.Commit(session, ConversationCommit.UserInput(first));
                             var later = new ChatMessage { Role = "user", Content = "Будущий запрос" };
                             session.Messages.Add(later); store.Commit(session, ConversationCommit.UserInput(later));
+                            PublishWorkspaceTask(paths, new ChatConversationStoreAdapter(store), session);
                             var revision = session.Revision;
                             var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
                                 Model = "test-model", StreamResponses = false, SmartChatTitles = false,
@@ -1128,6 +1135,11 @@ namespace RNAssistant.Harness
                             AssertEqual(users[0].Id, after.Artifacts.Single(item => item.Id ==
                                 "attachment_" + users[0].Attachments[0].Id).SourceMessageId,
                                 "edited attachment remains bound to the new message");
+                            var authority = new ResourceAuthorityStore(paths);
+                            AssertEqual(HeadKnowledge.Unavailable, authority.GetHead(TaskListPublication.Scope(after),
+                                TaskListPublication.Identity(after)).Knowledge, "actual edit publishes cleared Task selection before the run");
+                            PublishWorkspaceTask(paths, new ChatConversationStoreAdapter(store), after);
+                            AssertTrue(service.Conversations.GetTaskList(after).Available, "Tasks remain editable after the edited run");
                         }
                         server.GetAwaiter().GetResult();
                     }

@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.12-dev
+
+- Редактирование и удаление истории Workspace согласованно очищают выбранные
+  Tasks и их authority: следующий список задач снова можно создать. Потерянное
+  подтверждение восстанавливается без повторного изменения истории; неподтверждённый
+  сброс остаётся Unknown. Прежние tool outcomes и независимый ввод сохраняются.
+  Исправление работает на текущем storage path; Windows/Office evidence открыт.
 ### 16.27.9-dev
 
 - Fork в Office/Workspace сохраняет точную ревизию Tasks и позволяет независимо

@@ -14,6 +14,11 @@ namespace RNAssistant.Core.Services
     {
         public const int MaxBodyBytes = 128 * 1024;
         public const string ForkOperation = "common.chat_fork";
+        public const string EditOperation = "common.chat_edit";
+        public const string DeleteMessageOperation = "common.chat_delete_message";
+
+        public static bool IsHistoryReset(string operation)
+        { return operation == EditOperation || operation == DeleteMessageOperation; }
 
         public static void PrepareFork(ChatSession source, ChatSession target, Func<ChatSession, string, bool> loadArtifactBody)
         {
@@ -131,6 +136,14 @@ namespace RNAssistant.Core.Services
         public static ResourceAuthorityCommit PublishFork(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
             IResourceMutationJournal journal, MutationAttempt attempt, ResourceMutationReadBack captured)
         { return PublishState(authority, revisions, journal, attempt, ForkOperation, captured != null, captured); }
+
+        public static ResourceAuthorityCommit PublishHistoryReset(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
+            IResourceMutationJournal journal, MutationAttempt attempt, ResourceMutationReadBack captured)
+        {
+            if (!IsHistoryReset(attempt.Operation) || captured?.Exists == true)
+                throw new InvalidOperationException("History reset may only remove the selected task state.");
+            return PublishState(authority, revisions, journal, attempt, attempt.Operation, captured != null, captured);
+        }
 
         private static ResourceAuthorityCommit PublishState(IResourceAuthorityStore authority, IResourceRevisionStore revisions,
             IResourceMutationJournal journal, MutationAttempt attempt, string operation, bool changed, ResourceMutationReadBack captured)

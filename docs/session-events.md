@@ -1,5 +1,26 @@
 # Session event stream
 
+## Workspace history Task authority — 2026-11-14
+
+Workspace edit/delete already clear local Task selection. They now commit through
+WorkspaceTaskListObserver, which prepares a Task-head reset before the history write
+and publishes Unavailable only after durable read-back. The bounded intent records
+the prior revision, removed message ID and, for edit, replacement user message ID.
+Read-back requires a later revision, the requested removal/replacement and no active
+Task selection. It proves this local reset, not the outcome of any previous tool.
+
+Recovery tolerates later independent input. Lost chat/resource acknowledgement is
+reconciled from saved state without replaying history; absent/mismatched proof
+publishes Unknown. Original tool outcomes/repeat guards and canonical snapshot/CAS
+roots remain intact. An already absent/unavailable Task head needs no extra resource
+publication. Both default public Workspace consumers and native journal consumers
+use the same owner; no new store, schema, adapter or hidden fallback.
+
+Targeted checks cover delete/edit, both journal acknowledgements, failed append,
+read-back mismatch, new explicit Task mutations, rebuild and journal/CAS restore.
+P3 history/metadata costs, remaining resource consumers, complete owner backup/P7
+and Windows qualification remain separate.
+
 ## Journal Task fork — 2026-11-14
 
 Local Task snapshots now use the existing native fork/snapshot index boundary.
@@ -24,7 +45,7 @@ The default Workspace consumer also gains correct Task selection/publication.
 Default storage is still ChatStore. Workspace originals, supplied-data/definition
 copies and remaining composition consumers precede P7; P3 metadata/header/context/
 summary usage, complete owner backup/quiescence and Windows evidence remain open.
-Workspace history edit/delete authority is a separate recorded lifecycle gap.
+Workspace history edit/delete authority is connected above.
 
 ## Journal checkpoint fork — 2026-11-14
 

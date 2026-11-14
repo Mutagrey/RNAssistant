@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Workspace history Task authority — 2026-11-14
+
+Edit/delete истории проходят через существующий Task observer: prepared до записи,
+read-back удаления/замены и сброса выбора, затем публикация authority. Потерянное
+подтверждение восстанавливается без replay; прежние Unknown и независимый ввод
+сохраняются. Семь целевых checks проходят, включая public Workspace consumers,
+native faults/rebuild/restore и создание нового списка после сброса.
+`16.27.12-dev` исправляет текущий production path; default writer остаётся ChatStore.
+Далее Workspace originals, supplied-data/definition copies и оставшиеся composition
+consumers, P3 metadata/header/context/summary usage, полный backup owners,
+остановка старых writers и P7. P4 отложена; Windows/Office evidence открыт.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--workspace-history-task-authority-2026-11-14).
+
 ## Native Task fork — 2026-11-14
 
 Tasks подключены через реальные Office/Workspace fork consumers: точный выбор по

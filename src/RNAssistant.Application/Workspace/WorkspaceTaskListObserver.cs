@@ -66,6 +66,56 @@ namespace RNAssistant.Runtime
             }
         }
 
+        internal void CommitHistoryReset(ConversationCommit commit, string removedMessageId, string replacementMessageId = null)
+        {
+            if (_attempt != null || _session.Revision < 1 || _session.ActiveTaskListArtifactId != null ||
+                commit?.RewritesHistory != true || !commit.RemovedMessageIds.Contains(removedMessageId, StringComparer.OrdinalIgnoreCase) ||
+                replacementMessageId != null && !commit.Messages.Any(item => item.Message.Id == replacementMessageId &&
+                    item.Message.Role == "user" && !item.Message.ProtocolMessage))
+                throw new InvalidOperationException("Task reset requires an exact history rewrite with no selected task.");
+            var scope = TaskListPublication.Scope(_session);
+            using (_journal.AcquireScope(scope))
+            {
+                ReconcileUnderLease();
+                var head = _authority.Capture(scope).GetHead(TaskListPublication.Identity(_session));
+                if (head == null || head.Knowledge == HeadKnowledge.Unavailable)
+                { _chats.Commit(_session, commit); return; }
+                var state = new HistoryResetState { BeforeRevision = _session.Revision,
+                    RemovedMessageId = removedMessageId, ReplacementMessageId = replacementMessageId };
+                var attempt = _journal.Prepare(scope, replacementMessageId == null
+                    ? TaskListPublication.DeleteMessageOperation : TaskListPublication.EditOperation,
+                    head.Identity, head.Revision?.Revision,
+                    PayloadRef.FromBlob(_payloads.StoreText(JsonConvert.SerializeObject(state), "application/json")),
+                    intendedImpacts: new[] { new ResourceImpact(head.Identity, ResourceImpactRelation.ContainerMembership) });
+                attempt = _journal.MarkDispatchMayHaveOccurred(attempt.AttemptId);
+                _chats.Commit(_session, commit);
+                TaskListPublication.PublishHistoryReset(_authority, _revisions, _journal, attempt, ReadBackHistoryReset(attempt));
+            }
+        }
+
+        private ResourceMutationReadBack ReadBackHistoryReset(MutationAttempt attempt)
+        {
+            var state = attempt.Payload == null ? null : JsonConvert.DeserializeObject<HistoryResetState>(_payloads.ReadText(attempt.Payload.ToBlobReference()));
+            var saved = _chats.Load(_session.Host, _session.DocumentKey, attempt.ScopeId.Id);
+            if (state == null || state.BeforeRevision < 1 || string.IsNullOrEmpty(state.RemovedMessageId) ||
+                (attempt.Operation == TaskListPublication.EditOperation) != (state.ReplacementMessageId != null) ||
+                saved == null || saved.WorkspaceId != _session.WorkspaceId || saved.Revision <= state.BeforeRevision ||
+                saved.ActiveTaskListArtifactId != null || saved.Messages.Any(item => string.Equals(item.Id, state.RemovedMessageId, StringComparison.OrdinalIgnoreCase)) ||
+                state.ReplacementMessageId != null && !saved.Messages.Any(item => string.Equals(item.Id, state.ReplacementMessageId, StringComparison.OrdinalIgnoreCase) &&
+                    item.Role == "user" && !item.ProtocolMessage))
+                throw new InvalidDataException("The saved history does not prove the prepared task reset.");
+            // Later independent input may exist. Prove only the requested reset;
+            // never reconstruct history or turn a former tool's Unknown into success.
+            return TaskListPublication.Capture(saved, _payloads);
+        }
+
+        private sealed class HistoryResetState
+        {
+            public long BeforeRevision { get; set; }
+            public string RemovedMessageId { get; set; }
+            public string ReplacementMessageId { get; set; }
+        }
+
         private ResourceMutationReadBack ReadBackFork(MutationAttempt attempt)
         {
             var state = attempt.Payload == null ? null : JsonConvert.DeserializeObject<ForkState>(_payloads.ReadText(attempt.Payload.ToBlobReference()));
@@ -95,20 +145,26 @@ namespace RNAssistant.Runtime
         {
             foreach (var pending in _journal.Unresolved().Where(item =>
                 item.ScopeId.Equals(TaskListPublication.Scope(_session)) &&
-                (item.Operation == TaskListToolCatalog.SetToolId || item.Operation == TaskListPublication.ForkOperation)))
+                OwnsPending(item)))
             {
                 if (pending.State == MutationAttemptState.Prepared) _journal.AbandonBeforeDispatch(pending.AttemptId);
-                else if (pending.Operation == TaskListPublication.ForkOperation)
+                else if (pending.Operation == TaskListPublication.ForkOperation || TaskListPublication.IsHistoryReset(pending.Operation))
                 {
                     ResourceMutationReadBack captured = null;
-                    try { captured = ReadBackFork(pending); }
+                    try { captured = pending.Operation == TaskListPublication.ForkOperation ? ReadBackFork(pending) : ReadBackHistoryReset(pending); }
                     catch (Exception error) when (error is IOException || error is InvalidDataException || error is InvalidOperationException || error is JsonException || error is ArgumentException)
-                    { /* An unavailable exact read-back remains Unknown; never recreate or edit the fork. */ }
-                    TaskListPublication.PublishFork(_authority, _revisions, _journal, pending, captured);
+                    { /* Missing proof remains Unknown; never recreate or rewrite history. */ }
+                    if (pending.Operation == TaskListPublication.ForkOperation)
+                        TaskListPublication.PublishFork(_authority, _revisions, _journal, pending, captured);
+                    else TaskListPublication.PublishHistoryReset(_authority, _revisions, _journal, pending, captured);
                 }
                 else TaskListPublication.Publish(_authority, _revisions, _journal, pending, null, null);
             }
         }
+
+        private static bool OwnsPending(MutationAttempt attempt)
+        { return attempt.Operation == TaskListToolCatalog.SetToolId || attempt.Operation == TaskListPublication.ForkOperation ||
+            TaskListPublication.IsHistoryReset(attempt.Operation); }
 
         internal TaskListStateProjection Project(ResourceAuthoritySnapshotSet frozen)
         {
@@ -119,7 +175,7 @@ namespace RNAssistant.Runtime
         {
             var scope = TaskListPublication.Scope(_session);
             if (_journal.Unresolved().Any(item => item.ScopeId.Equals(scope) &&
-                (item.Operation == TaskListToolCatalog.SetToolId || item.Operation == TaskListPublication.ForkOperation) &&
+                OwnsPending(item) &&
                 item.State == MutationAttemptState.DispatchMayHaveOccurred))
                 return new TaskListStateProjection { Available = false };
             return Project(_authority.CaptureMany(new[] { scope }));

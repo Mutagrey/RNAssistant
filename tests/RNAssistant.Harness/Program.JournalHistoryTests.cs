@@ -46,7 +46,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Edited", store.ReadMessageWindow(session.Id, 131, 1).PageMessages.Single().Content, "edited user occurrence");
                 AssertEqual(1L, journal.ChatBodyReads - reads, "a page does not hydrate the history manifest");
                 RuntimeThrows<ChatConcurrencyException>(() => store.Commit(old, ConversationCommit.RewriteHistory(old.Messages.Select(item => item.Id), old.Messages)));
-                WorkspaceConversationService.DeleteHistoryMessage(store, session, session.Messages[2].Id);
+                WorkspaceConversationService.DeleteHistoryMessage(paths, store, session, session.Messages[2].Id, resources, resources);
                 AssertEqual(130, store.Load(session.Id).Messages.Count, "Workspace deletion uses the same port and reindexes pages");
                 var resurrection = old.Messages.Last();
                 var beforeClear = ConversationEventFeed.Cursor(session);
@@ -130,8 +130,8 @@ namespace RNAssistant.Harness
             var source = chat.Messages.SingleOrDefault(item => item.AcceptedCallOrigin != null);
             var original = inherited ?? journal.ReadWindow(chat.Id, long.MaxValue, 8).Single();
             var terminalHash = original.Position.Hash;
-            if (source != null) WorkspaceConversationService.DeleteHistoryMessage(store, chat, source.Id);
-            else if (inherited != null) WorkspaceConversationService.DeleteHistoryMessage(store, chat, chat.Messages[0].Id);
+            if (source != null) WorkspaceConversationService.DeleteHistoryMessage(paths, store, chat, source.Id, resources, resources);
+            else if (inherited != null) WorkspaceConversationService.DeleteHistoryMessage(paths, store, chat, chat.Messages[0].Id, resources, resources);
             AssertTrue(!store.Load(chat.Id).Messages.Any(item => item.AcceptedCallOrigin != null), "visible call/result pair was deleted");
             journal.Rebuild(); chat = store.Load(chat.Id);
             var repeated = new ToolCall("new-call", "core.write", new JObject { ["content"] = content, ["target"] = target }.ToString());

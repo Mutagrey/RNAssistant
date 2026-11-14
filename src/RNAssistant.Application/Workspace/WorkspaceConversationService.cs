@@ -285,12 +285,13 @@ namespace RNAssistant.Runtime
                 if (!session.UsesCurrentProtocol)
                     throw new InvalidOperationException("Old-format history is read-only.");
                 RequireIdleSession(workspace, sessionId);
-                DeleteHistoryMessage(_conversationStore, session, messageId);
+                DeleteHistoryMessage(_paths, _conversationStore, session, messageId, payloads: _payloads);
                 return session;
             }
         }
 
-        internal static void DeleteHistoryMessage(IConversationStore store, ChatSession session, string messageId)
+        internal static void DeleteHistoryMessage(AppDataPaths paths, IConversationStore store, ChatSession session, string messageId,
+            IResourceAuthorityStore authority = null, IResourceMutationJournal mutations = null, ChatBlobStore payloads = null)
         {
             var index = session.Messages.FindIndex(message => message != null &&
                 string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
@@ -313,10 +314,11 @@ namespace RNAssistant.Runtime
                 .Select(reference => reference.ExactKey), StringComparer.Ordinal);
             session.ResourceReferenceIndex = (session.ResourceReferenceIndex ?? new List<ModelResourceReference>())
                 .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
-            store.Commit(session, ConversationCommit.RewriteHistory(previousIds, session.Messages));
+            new WorkspaceTaskListObserver(paths, store, payloads ?? new ChatBlobStore(paths), session, authority, mutations)
+                .CommitHistoryReset(ConversationCommit.RewriteHistory(previousIds, session.Messages), messageId);
         }
 
-        private static ChatMessage PrepareWorkspaceMessageEdit(ChatSession session,
+        internal static ChatMessage PrepareWorkspaceMessageEdit(ChatSession session,
             WorkspaceSubmitInputRequest request, out string[] previousIds)
         {
             if (session.Revision != request.ExpectedRevision.Value)
@@ -664,8 +666,9 @@ namespace RNAssistant.Runtime
                         }
                     LinkInputAttachments(session, userMessage);
                 }
-                _conversationStore.Commit(session, editedSource == null ? ConversationCommit.UserInput(userMessage) :
-                    ConversationCommit.RewriteHistory(editedPreviousIds, session.Messages));
+                if (editedSource == null) _conversationStore.Commit(session, ConversationCommit.UserInput(userMessage));
+                else new WorkspaceTaskListObserver(_paths, _conversationStore, _payloads, session).CommitHistoryReset(
+                    ConversationCommit.RewriteHistory(editedPreviousIds, session.Messages), editedSource.Id, userMessage.Id);
                 if (drafts.Count > 0 && queuedInput == null) attachmentStore.DeleteDrafts(userMessage);
                 input.Status = ConversationInputStatus.Applied; input.Revision++;
                 _conversationInbox.Applied(session, input.Id);

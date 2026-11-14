@@ -2196,3 +2196,32 @@ after-state/CAS ownership.
    Harness guide. Version 16.27.9-dev records production fork fixes in CHANGELOG;
    pending UI slices remain separate. Default adapters retire at P7. Scoped
    diff/links and mandatory ValidateVersionFormat precede commit; no tag/push/release.
+
+## P1/P2 — Workspace history Task authority (2026-11-14)
+
+1. Closes the recorded F04 lifecycle gap in WorkspaceConversationService,
+   WorkspaceTaskListObserver and TaskListPublication; no new owner or store.
+2. History delete/edit prepare a local Task reset, commit through the existing
+   conversation port, then verify removed/replacement IDs, advanced revision and
+   cleared selection before publishing Unavailable. New explicit Tasks work again.
+3. Removed direct commits that left a stale Known Task head. Existing mutation
+   recovery now handles these exact history operations: lost acknowledgement never
+   replays history; insufficient proof stays Unknown. Old tool outcomes/guards and
+   original snapshot/CAS roots remain canonical. No fallback/schema/adapter added.
+4. Seven selected macOS/net8/C#7.3 checks pass: new native Task history recovery
+   (delete/edit × five fault/state variants), public Workspace edit and deletion,
+   Office/Workspace history, retained Unknown, Task-fork recovery and context parity.
+   Read-back survives independent input, rebuild and journal/CAS restore; new Task
+   publication succeeds afterward. Only the new case was rerun for case-insensitive
+   message-ID matching. No full suite, Office/VSTO build or Windows qualification.
+5. Before: clearing selection left Known authority, so RequireCurrent blocked the
+   next Task. After: verified removal publishes Unavailable; recovery writes zero
+   conversation bytes and repeated recovery adds zero head generations. No Task
+   body is recreated. Explicit history/read-back loads remain P3; no timing/CPU claim.
+6. Remaining: Workspace originals, supplied-data/definition copies and composition
+   consumers; P3 metadata/header/context/summary usage, complete owner backup,
+   writer quiescence and P7. Default writer remains ChatStore; P4 deferred.
+   Windows/Office and complete application restore evidence remain open.
+7. Updated session/artifact contracts, migration map, progress, backlog, Harness
+   guide and CHANGELOG (16.27.12-dev). Default adapters retain their P7 removal gate.
+   Scoped diff/links and mandatory version validation precede commit; no push/release.

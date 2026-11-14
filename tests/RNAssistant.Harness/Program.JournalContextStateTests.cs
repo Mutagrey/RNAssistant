@@ -125,7 +125,8 @@ namespace RNAssistant.Harness
             AssertEqual(input.Id, store.Load(chat.Id).Messages.Last().Id, "unknown never disables independent chat input");
         }
 
-        private static void VerifyJournalContextHistory(ConversationJournal journal, ChatSession chat, bool office, OfficeToolExecutor executor)
+        private static void VerifyJournalContextHistory(AppDataPaths paths, ConversationJournal journal, ResourceJournal resources,
+            ChatSession chat, bool office, OfficeToolExecutor executor)
         {
             IConversationStore store = journal;
             var selected = chat.Artifacts.Single(item => item.Id == chat.ActiveContextCheckpointId);
@@ -136,7 +137,7 @@ namespace RNAssistant.Harness
                 executor.MutateChatResources(chat, new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, message.Id, 0, "Changed premise"),
                     () => editor.RewriteUserMessage(chat, chat.Id, message.Id, 0, "Changed premise"));
             }
-            else WorkspaceConversationService.DeleteHistoryMessage(store, chat, chat.Messages[0].Id);
+            else WorkspaceConversationService.DeleteHistoryMessage(paths, store, chat, chat.Messages[0].Id, resources, resources);
             journal.Rebuild(); chat = store.Load(chat.Id);
             AssertTrue(chat.ActiveContextCheckpointId == null && chat.ContextCheckpoints.Count == 0, "actual history consumers invalidate the summary");
             var retained = false;

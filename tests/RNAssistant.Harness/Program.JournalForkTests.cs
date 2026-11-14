@@ -61,7 +61,7 @@ namespace RNAssistant.Harness
                 AssertEqual(source.Revision, loaded.ParentSessionRevision, "source revision retained");
                 AssertTrue(loaded.LastRun == null, "fork has no active source run");
                 var grandchild = PrepareTextFork(store, loaded, 140); store.Commit(grandchild, new ConversationCommit());
-                WorkspaceConversationService.DeleteHistoryMessage(store, source, source.Messages[0].Id);
+                WorkspaceConversationService.DeleteHistoryMessage(paths, store, source, source.Messages[0].Id, resources, resources);
                 store.Delete(source.Host, source.DocumentKey, source.Id);
                 store.Delete(fork.Host, fork.DocumentKey, fork.Id);
                 journal.Rebuild(); loaded = store.Load(grandchild.Id);
@@ -128,7 +128,7 @@ namespace RNAssistant.Harness
             var cut = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, source, accepted.Id, new AttachmentStore(paths), resources, resources);
             cut = store.Load(cut.Id);
             AssertTrue(cut.Messages.Last().ExcludeFromModelContext, "incomplete inherited exchange is excluded without rewriting source evidence");
-            WorkspaceConversationService.DeleteHistoryMessage(store, cut, first.Id);
+            WorkspaceConversationService.DeleteHistoryMessage(paths, store, cut, first.Id, resources, resources);
             AssertTrue(store.Load(cut.Id).Messages.Last().ExcludeFromModelContext, "child history rewrite preserves derived exclusion");
             var prefix = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, source, first.Id, new AttachmentStore(paths), resources, resources);
             var child = WorkspaceConversationService.ForkHistorySession(paths, store, workspace, store.Load(prefix.Id), first.Id, new AttachmentStore(paths), resources, resources);

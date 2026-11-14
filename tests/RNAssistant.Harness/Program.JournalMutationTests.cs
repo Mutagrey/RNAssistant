@@ -399,7 +399,7 @@ namespace RNAssistant.Harness
                 AssertEqual(fault == "terminal-ack" ? 1 : uncertain ? 4 : 2, calls, "only bounded finish correction, never mutation replay");
                 if (checkHistory) JournalHistoryGuardAfterMutation(paths, journal, store.Load(chat.Id), resources, workspace, files, settings, target, content);
                 if (checkFork) VerifyJournalForkUnknown(paths, journal, store.Load(chat.Id), resources, workspace, files, settings, target, content);
-                if (checkContext && !uncertain) VerifyJournalContextHistory(journal, store.Load(chat.Id), office, executor);
+                if (checkContext && !uncertain) VerifyJournalContextHistory(paths, journal, resources, store.Load(chat.Id), office, executor);
             });
         }
     }
