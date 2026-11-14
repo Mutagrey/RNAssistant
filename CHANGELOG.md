@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.3-dev
+
+- Workspace учитывает сохранённые context notes при подготовке запроса: полные
+  инструкции читаются из CAS, данные и наблюдения проходят общий authority-aware
+  compiler. Native journal подключён к compaction/checkpoints и их восстановлению;
+  исходная история и Unknown сохраняются. Production storage пока не переключён,
+  Windows/Office evidence открыт.
+
 ### 16.27.2-dev
 
 - Task List: Office и Workspace одинаково проверяют опубликованное состояние перед

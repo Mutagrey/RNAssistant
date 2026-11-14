@@ -83,7 +83,7 @@ namespace RNAssistant.Harness
                 current => WorkspaceConversationService.InterruptAbandonedRun(current, store));
         }
 
-        private static void JournalMutationTurn(bool office, string fault, bool checkHistory = false)
+        private static void JournalMutationTurn(bool office, string fault, bool checkHistory = false, bool checkContext = false)
         {
             WithTempPaths(paths => {
                 var workspace = office ? null : new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
@@ -103,6 +103,7 @@ namespace RNAssistant.Harness
                     persistResourceFacts: store.Commit) : null;
                 var chat = office ? new ChatSessionService(adapter, store).CreatePersistentChat("Journal mutation") :
                     new WorkspaceStore(paths).CreateSession(store, workspace, "Journal mutation");
+                if (checkContext) chat = PrepareJournalContext(paths, journal, resources, chat, office, executor, settings);
                 var target = office ? "VBA module: JournalModule" : "created.txt";
                 var content = office ? "Sub Main()\nDebug.Print 17\nEnd Sub" : "Written exactly once.";
                 var uncertain = fault == "unknown" || fault == "resource-ack";
@@ -148,7 +149,14 @@ namespace RNAssistant.Harness
                             while (true)
                             {
                                 var request = await listener.GetContextAsync().ConfigureAwait(false);
-                                using (var reader = new StreamReader(request.Request.InputStream)) await reader.ReadToEndAsync().ConfigureAwait(false);
+                                string wire;
+                                using (var reader = new StreamReader(request.Request.InputStream)) wire = await reader.ReadToEndAsync().ConfigureAwait(false);
+                                if (checkContext)
+                                {
+                                    AssertTrue(wire.Contains("Native checkpoint 2"), "actual model request restores the selected checkpoint");
+                                    AssertTrue(wire.Contains("EXACT_NOTE_END"), "actual model request uses the full instruction payload");
+                                    AssertTrue(wire.Contains("Untrusted source data"), "actual model request receives typed supplied data");
+                                }
                                 var number = ++calls;
                                 AssertTrue(number <= (tasks ? 6 : html ? 4 : uncertain ? 4 : 2), "finish correction remains bounded without repeating the mutation");
                                 var response = html ? JournalHtmlResponse(number, store.Load(chat.Id), new DocumentArtifactStore(resources, resources, payloads)) :
@@ -338,6 +346,7 @@ namespace RNAssistant.Harness
                 {
                     AssertTrue(outcome == null && resources.Unresolved().Count == 1, "possible dispatch remains addressable without invented read-back");
                     AssertTrue(journal.RestoreContext(chat.Id, call.RunId, 0, 8192).WorkingSet.Requirements.UnknownEffects, "unknown write remains a required context obligation");
+                    if (checkContext) VerifyJournalContextUnknown(paths, journal, resources, restored, settings, call);
                 }
                 else
                 {
@@ -376,9 +385,19 @@ namespace RNAssistant.Harness
                     var recovered = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "restore"), _ => StorageProtector.None);
                     var recoveredResources = new ResourceJournal(recovered);
                     AssertEqual(outcome.Position.Hash, recoveredResources.CallOutcome(origin).Position.Hash, "restore preserves cross-journal proof without invocation");
+                    if (checkContext)
+                    {
+                        IConversationStore recoveredChats = new ConversationJournal(recovered, scope);
+                        var recoveredChat = recoveredChats.Load(chat.Id);
+                        AssertEqual("Native checkpoint 2", ContextCompactionRuntime.ActiveCheckpoint(recoveredChat).SummaryMarkdown,
+                            "canonical restore retains the selected context body");
+                        AssertContains(new ChatBlobStore(recovered).ReadText(recoveredChat.Context.Notes[0].InstructionPayload.ToBlobReference()),
+                            "EXACT_NOTE_END", "restore closes nested instruction payloads");
+                    }
                 }
                 AssertEqual(fault == "terminal-ack" ? 1 : uncertain ? 4 : 2, calls, "only bounded finish correction, never mutation replay");
                 if (checkHistory) JournalHistoryGuardAfterMutation(paths, journal, store.Load(chat.Id), resources, workspace, files, settings, target, content);
+                if (checkContext && !uncertain) VerifyJournalContextHistory(journal, store.Load(chat.Id), office, executor);
             });
         }
     }

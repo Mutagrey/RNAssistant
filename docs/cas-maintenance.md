@@ -18,6 +18,13 @@ metadata and explicit nested prepared-state closure. Missing/corrupt new-generat
 bodies block deletion. Recent new-generation orphans have a conservative one-hour
 grace; age never replaces the exclusive publication/run boundary.
 
+Native context-state (2026-11-14): the conversation owner follows typed
+DocumentContext and local compaction bodies during canonical maintenance, once per
+distinct CAS container. Instruction payloads and nested claim/note evidence remain
+roots even after selection or visible history changes. This closes their backup /
+restore and GC reachability without copying a closure into every chat header or
+parsing arbitrary model text. Catalog attribution of nested context bytes remains P3.
+
 `ForScope` run leases join the existing `locks/run_*.lck`/`run-registry.lck` namespace.
 `RuntimeStorageActivity` remains held from CAS publication to acceptance or confirmed
 abort. A second-process publication and a live scope run both block collection.

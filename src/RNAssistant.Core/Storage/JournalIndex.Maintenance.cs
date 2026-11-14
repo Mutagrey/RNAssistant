@@ -18,6 +18,7 @@ namespace RNAssistant.Core.Storage
             var streams = StorageJournal.Inventory(paths);
             if (streams.Count == 0) return streams;
             var scratch = Path.Combine(paths.Root, "index.audit." + Guid.NewGuid().ToString("N") + ".sqlite");
+            var contextBodies = new HashSet<string>(StringComparer.Ordinal);
             try
             {
                 using (var db = Open(paths, scratch)) { }
@@ -29,6 +30,7 @@ namespace RNAssistant.Core.Storage
                     var cursor = journal.Scan((record, position) => {
                         foreach (var reference in stream.Resources ? ResourceJournal.CanonicalReferences(record) : conversation.CanonicalReferences(record))
                             references.AddReference(reference.ToBlobReference(), "storage-journal", stream.Identity, record.Sequence.ToString());
+                        if (conversation != null) conversation.ScanChatContextReferences(record, references, contextBodies);
                         if (record.Kind == "run.checkpoint" || record.Kind == "chat.committed" && ConversationJournal.HasCheckpoint(record))
                         {
                             if (conversation == null) throw new InvalidDataException("Run checkpoint in resource stream.");

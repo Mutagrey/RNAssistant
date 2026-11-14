@@ -159,6 +159,15 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal context:` runs two checks through actual Office/Workspace consumers:
+selected checkpoints and typed notes in real kernel requests, two compactions,
+lost index/ack and same-command retry, cold pages/header, history invalidation and
+retained canonical roots, rebuild, nested-payload Workspace journal/CAS restore,
+and compaction after an unknown write without replay or loss of independent input.
+Relevant regressions: `journal task list:`, `journal HTML:`, `shared context:` and
+`storage: compaction projects`. Reuse one build; full application backup and
+Windows/Office qualification remain separate gates.
+
 `journal HTML:` uses real Office skill admission/kernel create/write and shared
 selection/navigation, exact outcome proof, metadata pages, checkpoint/index/ack
 recovery, corrupt selected source and Unknown with independent input. Workspace

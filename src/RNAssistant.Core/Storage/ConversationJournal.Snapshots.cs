@@ -50,12 +50,12 @@ namespace RNAssistant.Core.Storage
             TaskBody(artifact); TaskMetadata(artifact);
         }
 
-        private ChatArtifact[] PrepareTaskCandidates(ChatSession session)
+        private ChatArtifact[] PrepareSnapshotCandidates(ChatSession session)
         {
-            return session.Artifacts.Where(item => item.Kind == ChatArtifactKinds.TaskList).Select(artifact => {
+            return session.Artifacts.Where(item => item.Kind == ChatArtifactKinds.TaskList || item.Kind == ChatArtifactKinds.Compaction).Select(artifact => {
                 if (artifact.InlineText != null)
                 {
-                    if (Encoding.UTF8.GetByteCount(artifact.InlineText) > TaskListPublication.MaxBodyBytes)
+                    if (artifact.Kind == ChatArtifactKinds.TaskList && Encoding.UTF8.GetByteCount(artifact.InlineText) > TaskListPublication.MaxBodyBytes)
                         throw new InvalidDataException("Task-list body exceeds its bounded contract.");
                     var body = _bodies.StoreText(artifact.InlineText, artifact.MimeType);
                     if (artifact.ContentSha256 != null && (artifact.ContentSha256 != body.Sha256 || artifact.ContentByteLength != body.ByteLength))
@@ -64,90 +64,100 @@ namespace RNAssistant.Core.Storage
                 }
                 var header = JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(artifact));
                 // Message references own presentation links; immutable snapshots do not get rewritten.
-                header.InlineText = null; header.SourceMessageId = null; header.RunId = null;
-                RequireTaskHeader(ConversationMetadata.From(session), header);
+                header.InlineText = null;
+                if (header.Kind == ChatArtifactKinds.TaskList) { header.SourceMessageId = null; header.RunId = null; }
+                RequireSnapshotHeader(ConversationMetadata.From(session), header);
+                if (header.Kind == ChatArtifactKinds.Compaction && header.Id == session.ActiveContextCheckpointId)
+                {
+                    var selected = session.ContextCheckpoints.Where(item => item?.Id == header.Id).ToArray();
+                    if (selected.Length != 1 || Tools.TextPatternEngine.Sha256(JsonConvert.SerializeObject(selected[0])) != header.ContentSha256)
+                        throw new InvalidDataException("Active checkpoint projection differs from its immutable body.");
+                }
                 return header;
             }).ToArray();
         }
 
-        private ChatArtifact TaskSnapshot(SqliteConnection db, string chat, string id)
+        private ChatArtifact LocalSnapshot(SqliteConnection db, string chat, string id)
         {
             string operation;
-            using (var command = Command(db, "SELECT operation FROM chat_task_list WHERE stream=$stream AND chat=$chat AND id=$id"))
+            using (var command = Command(db, "SELECT operation FROM chat_snapshot WHERE stream=$stream AND chat=$chat AND id=$id"))
             {
                 command.Parameters.AddWithValue("$chat", chat); command.Parameters.AddWithValue("$id", id);
                 operation = command.ExecuteScalar() as string;
             }
             if (operation == null) return null;
             var receipt = FindChatWrite(db, operation);
-            var artifact = receipt?.Fact.TaskLists?.SingleOrDefault(item => item.Id == id);
+            var artifact = receipt?.Fact.Snapshots?.SingleOrDefault(item => item.Id == id);
             if (receipt?.Fact.Card.ChatId != chat || artifact == null)
-                throw new InvalidDataException("Task-list locator disagrees with its canonical snapshot.");
+                throw new InvalidDataException("Snapshot locator disagrees with its canonical snapshot.");
             return artifact;
         }
 
-        private IReadOnlyList<ChatArtifact> PrepareTaskDelta(SqliteConnection db, string chat, ChatArtifact[] candidates, ConversationChatReceipt prior)
+        private IReadOnlyList<ChatArtifact> PrepareSnapshotDelta(SqliteConnection db, string chat, ChatArtifact[] candidates, ConversationChatReceipt prior)
         {
             var added = new List<ChatArtifact>();
             foreach (var artifact in candidates)
             {
-                var retained = TaskSnapshot(db, chat, artifact.Id);
+                var retained = LocalSnapshot(db, chat, artifact.Id);
                 if (retained != null && !SameRunValue(artifact, retained))
-                    throw new InvalidOperationException("A task-list revision cannot be rebound to different evidence.");
-                if (retained == null)
+                    throw new InvalidOperationException("A local snapshot cannot be rebound to different evidence.");
+                if (retained == null && artifact.Kind == ChatArtifactKinds.TaskList)
                 {
                     var task = JsonConvert.DeserializeObject<ChatTaskList>(TaskListPublication.ReadBody(artifact, _bodies));
                     var metadata = TaskMetadata(artifact);
                     if (task == null || task.Id != metadata.TaskListId || task.Status != metadata.Status || task.Goal != artifact.Title)
                         throw new InvalidDataException("Task-list body disagrees with its metadata.");
                 }
-                if (retained == null || prior?.Fact.TaskLists?.Any(item => item.Id == artifact.Id) == true) added.Add(artifact);
+                if (retained == null && artifact.Kind == ChatArtifactKinds.Compaction) ReadCheckpoint(artifact);
+                if (retained == null || prior?.Fact.Snapshots?.Any(item => item.Id == artifact.Id) == true) added.Add(artifact);
             }
             return added.Count == 0 ? null : added;
         }
 
-        private void ValidateTaskSnapshots(SqliteConnection db, ConversationChatCommit fact, ConversationResourceSet state)
+        private void ValidateLocalSnapshots(SqliteConnection db, ConversationChatCommit fact, ConversationResourceSet state)
         {
-            var added = fact.TaskLists ?? new ChatArtifact[0];
+            var added = fact.Snapshots ?? new ChatArtifact[0];
             if (added.Count > 128 || added.Select(item => item?.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != added.Count)
-                throw new InvalidDataException("Task-list snapshot delta is ambiguous or unbounded.");
-            Func<string, ChatArtifact> resolve = id => added.SingleOrDefault(item => item?.Id == id) ?? TaskSnapshot(db, fact.Card.ChatId, id);
+                throw new InvalidDataException("Snapshot delta is ambiguous or unbounded.");
+            Func<string, ChatArtifact> resolve = id => added.SingleOrDefault(item => item?.Id == id) ?? LocalSnapshot(db, fact.Card.ChatId, id);
             foreach (var artifact in added)
             {
-                RequireTaskHeader(fact.Card.Address, artifact);
-                if (TaskSnapshot(db, fact.Card.ChatId, artifact.Id) != null || !state.References.Any(item =>
+                RequireSnapshotHeader(fact.Card.Address, artifact);
+                if (LocalSnapshot(db, fact.Card.ChatId, artifact.Id) != null || !state.References.Any(item =>
                     SameRunValue(item, ChatResourceUri.CreateArtifactRevision(fact.Card.ChatId, artifact))))
-                    throw new InvalidDataException("Task-list snapshot is repeated or absent from its working set.");
+                    throw new InvalidDataException("Local snapshot is repeated or absent from its working set.");
                 var parent = artifact.ParentArtifactId == null ? null : resolve(artifact.ParentArtifactId);
                 if (artifact.Revision == 1 ? artifact.ParentArtifactId != null : parent == null ||
-                    parent.Revision != artifact.Revision - 1 || TaskMetadata(parent).TaskListId != TaskMetadata(artifact).TaskListId)
-                    throw new InvalidDataException("Task-list revision lacks its exact parent.");
+                    parent.Kind != artifact.Kind || parent.Revision != artifact.Revision - 1 ||
+                    artifact.Kind == ChatArtifactKinds.TaskList && TaskMetadata(parent).TaskListId != TaskMetadata(artifact).TaskListId)
+                    throw new InvalidDataException("Local snapshot lacks its exact parent.");
             }
-            foreach (var reference in state.References.Where(item => IsTaskSnapshot(fact.Card.Address, item)))
+            foreach (var reference in state.References.Where(item => IsLocalSnapshot(fact.Card.Address, item)))
             {
                 var artifact = resolve(ResourceUri.Parse(reference.Uri).Segments[2]);
                 if (artifact == null || !SameRunValue(reference, ChatResourceUri.CreateArtifactRevision(fact.Card.ChatId, artifact)))
-                    throw new InvalidDataException("Task-list membership lacks its exact snapshot.");
+                    throw new InvalidDataException("Local snapshot membership lacks its exact snapshot.");
                 if (SameRunValue(reference, state.ActiveTask) && TaskMetadata(artifact).Status != "active" && TaskMetadata(artifact).Status != "blocked")
                     throw new InvalidDataException("A closed task list cannot be selected as active.");
             }
+            ValidateContextSelection(db, fact, state, resolve);
         }
 
-        private void ApplyTaskRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record, ConversationChatCommit fact)
+        private void ApplySnapshotRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record, ConversationChatCommit fact)
         {
-            foreach (var artifact in fact.TaskLists ?? new ChatArtifact[0])
-            using (var command = Command(db, "INSERT INTO chat_task_list VALUES($stream,$chat,$id,$operation)", tx))
+            foreach (var artifact in fact.Snapshots ?? new ChatArtifact[0])
+            using (var command = Command(db, "INSERT INTO chat_snapshot VALUES($stream,$chat,$id,$operation)", tx))
             {
                 command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$id", artifact.Id);
                 command.Parameters.AddWithValue("$operation", record.Operation); command.ExecuteNonQuery();
             }
         }
 
-        private ChatArtifact ReadTaskSnapshot(SqliteConnection db, ConversationMetadata metadata, ResourceRef reference)
+        private ChatArtifact ReadLocalSnapshot(SqliteConnection db, ConversationMetadata metadata, ResourceRef reference)
         {
-            var artifact = TaskSnapshot(db, metadata.Id, ResourceUri.Parse(reference.Uri).Segments[2]);
+            var artifact = LocalSnapshot(db, metadata.Id, ResourceUri.Parse(reference.Uri).Segments[2]);
             if (artifact == null || !SameRunValue(reference, ChatResourceUri.CreateArtifactRevision(metadata.Id, artifact)))
-                throw new InvalidDataException("Task-list snapshot is unavailable.");
+                throw new InvalidDataException("Local snapshot is unavailable.");
             return artifact;
         }
     }

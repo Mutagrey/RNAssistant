@@ -1971,3 +1971,41 @@ after-state/CAS ownership.
    guide updated. Scoped diff/links and ValidateVersionFormat checked before commit.
    This is intermediate native integration plus behavior-preserving owner extraction;
    no product bump (16.27.2-dev), tag, push or release.
+
+## P1/P2 — native context-state consumers (2026-11-14)
+
+1. Continued F04/F08/F10 integration through ConversationJournal and the existing
+   ContextCompactionRuntime, DocumentArtifactStore and Workspace compiler. This does
+   not close their remaining P3 scans/serialization. Typed notes, local checkpoint
+   selection and optional shared publication now survive native persistence.
+2. Local snapshots retain immutable CAS bodies and typed boundaries; selection
+   loads one checkpoint. Notes preserve exact instructions versus supplied data /
+   observations. Fixed the actual Workspace consumer omitting notes and their
+   authority scopes. History edits invalidate the summary without deleting canonical
+   roots; compaction cannot replace Unknown or its addressed replay guard.
+3. Reused the Task snapshot reducer as ConversationJournal.Snapshots and schema 26
+   chat_snapshot; removed the Task-only implementation/file. Existing source field
+   naming is unchanged. No new store, registry, adapter, import or dual-write.
+   CAS maintenance now follows typed context/checkpoint containers and their nested
+   payloads instead of omitting instruction bodies from native backup closure.
+4. macOS/net8/C#7.3: two new `journal context:` checks pass (T01/T06/T13): forced
+   compaction plus actual Office/Workspace kernel requests, two checkpoints, typed
+   notes, lost index/ack/retry, rebuild, history edit/delete, nested-payload restore
+   and Unknown with independent input. Eight regressions pass without rebuilding:
+   Task List (3), HTML (2), shared context (2), legacy compaction projection (1).
+   No full suite, VSTO/Office validation or new automatic-threshold qualification.
+5. Before: native Store rejected context-state. After: the same fixture retains two
+   checkpoint artifacts but loads one checkpoint body; a one-message page reads two
+   chat bodies (text and manifest), zero checkpoint bodies. Addressed header reads
+   zero chat bodies. CAS-maintenance visits each distinct context container once.
+   Full history/metadata work and nested context usage attribution remain P3; no
+   CPU/allocation or Windows latency claim is made.
+6. Remaining: fork/other unsupported resource consumers, P3 metadata/header/context/
+   summary usage, complete owner backup, old-writer shutdown and default cutover.
+   Office identity and Workspace connection backup, plus Windows evidence, remain
+   open. P4 is deferred; production storage still uses ChatStore.
+7. Updated Session events, Conversation protocol, Artifact Library, CAS maintenance,
+   migration map, progress and Harness guide. Existing default composition/adapters
+   retire at P7. Version 16.27.3-dev includes the shared Workspace notes correction;
+   CHANGELOG records it. Scoped diff/links and ValidateVersionFormat checked before
+   commit; no tag, push or release.

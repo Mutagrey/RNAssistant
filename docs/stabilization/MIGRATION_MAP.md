@@ -142,6 +142,17 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 context-state (2026-11-14): existing ConversationJournal/CAS retains typed notes,
+local checkpoints and exact selection; DocumentArtifactStore owns shared publication.
+The Task snapshot reducer is generalized in ConversationJournal.Snapshots; schema 26
+replaces its disposable task locator with chat_snapshot. No store/adapter added.
+Workspace forwards notes/scopes to its existing compiler. CAS maintenance traverses
+typed context/checkpoint containers, including nested payloads. Default ChatStore and
+its adapter remain explicit composition until whole-port P7, owned by current
+conversation/resource services. Fork, remaining resource consumers, P3 and complete
+owner backup/cutover remain open.
+[Contract](../session-events.md#journal-context-state--2026-11-14).
+
 P1/P2 HTML (2026-11-14): native conversation refs/selection/checkpoints consume
 DocumentArtifactStore / ResourceJournal; no new store, registry or index schema.
 HtmlWorkspaceNavigationService now owns reconstruction; the old ChatStore method

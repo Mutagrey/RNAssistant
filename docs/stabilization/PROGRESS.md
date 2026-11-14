@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Native context-state consumers — 2026-11-14
+
+Typed context notes, локальные compaction checkpoints и shared publication подключены
+к native journal через существующих owners. Полная загрузка восстанавливает только
+выбранный checkpoint; pages/header не читают его тело. Редактирование истории
+сбрасывает выбор, сохраняя canonical facts/CAS; Unknown переживает compaction и
+продолжает адресно защищать повтор операции, не блокируя независимый ввод.
+CAS-maintenance теперь учитывает вложенные note/checkpoint payloads при backup/restore.
+`16.27.3-dev` также исправляет реальный Workspace consumer: сохранённые notes и их
+authority scopes передаются общему compiler. Default writer остаётся ChatStore.
+Остались fork/прочие неподключённые resource consumers, P3 metadata/header/context/
+summary usage, полный backup owners и переключение с удалением ChatStore/adapters.
+P4 отложена; Office identity / Workspace connection backup и Windows evidence открыты.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-context-state-consumers-2026-11-14).
+
 ## Native HTML consumers — 2026-11-14
 
 HTML подключён к native journal через Office kernel и Workspace version services:

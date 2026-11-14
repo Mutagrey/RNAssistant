@@ -686,6 +686,8 @@ namespace RNAssistant.Harness
                 Test("journal mutation: terminal acknowledgement", JournalMutationTerminalReceipt),
                 Test("journal HTML: Office kernel and selected projection", JournalHtmlRuntime),
                 Test("journal HTML: Workspace saved versions and restore", JournalWorkspaceHtml),
+                Test("journal context: Office and Workspace consumers", JournalContextHostParity),
+                Test("journal context: compaction preserves unknown", JournalContextUnknown),
                 Test("journal task list: Office and Workspace runtime", JournalTaskRuntime),
                 Test("journal task list: revisions receipts and restore", JournalTaskSnapshots),
                 Test("journal task list: unknown recovery preserves independent input", JournalTaskUnknown),

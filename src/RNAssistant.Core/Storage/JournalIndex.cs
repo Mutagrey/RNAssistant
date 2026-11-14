@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Storage
     internal static partial class JournalIndex
     {
         internal static bool IsDamaged(SqliteException error) { return error.SqliteErrorCode == 11 || error.SqliteErrorCode == 26; }
-        private const int CurrentVersion = 25;
+        private const int CurrentVersion = 26;
         internal sealed class IndexVersionMismatch : InvalidOperationException { }
 
         internal static void Repair(AppDataPaths paths, StorageProtector protector, bool force, CancellationToken token)
@@ -91,7 +91,7 @@ namespace RNAssistant.Core.Storage
                     command.CommandText += "; CREATE TABLE control_fact(stream TEXT,operation TEXT,chat TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,sender TEXT,source_run TEXT,source_call TEXT,native INTEGER NOT NULL,PRIMARY KEY(stream,operation)); CREATE TABLE control_current(stream TEXT,chat TEXT,operation TEXT,PRIMARY KEY(stream,chat)); CREATE INDEX control_chat_page ON control_fact(stream,chat,sequence); CREATE INDEX control_sender_page ON control_fact(stream,sender,sequence); CREATE UNIQUE INDEX control_source_call ON control_fact(stream,sender,source_run,source_call) WHERE sender IS NOT NULL";
                     command.CommandText += "; CREATE TABLE chat_write(stream TEXT,chat TEXT,operation TEXT,fingerprint TEXT,segment INTEGER,start_offset INTEGER,end_offset INTEGER,sequence INTEGER,hash TEXT,first_sequence INTEGER,PRIMARY KEY(stream,operation,chat))";
                     command.CommandText += "; CREATE TABLE chat_state(stream TEXT,chat TEXT,operation TEXT,message_count INTEGER,last_activity_ticks INTEGER,head_operation TEXT,journal_bytes INTEGER,blob_count INTEGER,logical_bytes INTEGER,PRIMARY KEY(stream,chat)); CREATE TABLE chat_message(stream TEXT,chat TEXT,id TEXT,ordinal INTEGER,operation TEXT,PRIMARY KEY(stream,chat,id),UNIQUE(stream,chat,ordinal))";
-                    command.CommandText += "; CREATE TABLE chat_task_list(stream TEXT,chat TEXT,id TEXT COLLATE NOCASE,operation TEXT,PRIMARY KEY(stream,chat,id))";
+                    command.CommandText += "; CREATE TABLE chat_snapshot(stream TEXT,chat TEXT,id TEXT COLLATE NOCASE,operation TEXT,PRIMARY KEY(stream,chat,id))";
                     command.CommandText += "; CREATE TABLE chat_attachment(stream TEXT,chat TEXT,id TEXT COLLATE NOCASE,message TEXT,operation TEXT,PRIMARY KEY(stream,chat,id))";
                     command.CommandText += "; CREATE TABLE chat_selection(stream TEXT PRIMARY KEY,chat TEXT)";
                     command.CommandText += "; CREATE INDEX chat_write_history ON chat_write(stream,chat,sequence); CREATE TABLE chat_blob(stream TEXT,chat TEXT,hash TEXT,logical_bytes INTEGER,PRIMARY KEY(stream,chat,hash))";

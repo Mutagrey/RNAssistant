@@ -227,12 +227,12 @@ namespace RNAssistant.Core.Services
                 { checkpoint.SharedPublicationIssue = error.Message; }
             }
             artifact.InlineText = JsonConvert.SerializeObject(checkpoint, Formatting.None);
-            artifact.MetadataJson = JsonConvert.SerializeObject(new
+            artifact.MetadataJson = JsonConvert.SerializeObject(new ContextCheckpointMetadata
             {
-                throughMessageId = checkpoint.ThroughMessageId,
-                sourceMessageCount = checkpoint.SourceMessageCount,
-                sourceTokens = checkpoint.SourceTokens,
-                summaryTokens = checkpoint.SummaryTokens
+                ThroughMessageId = checkpoint.ThroughMessageId,
+                SourceMessageCount = checkpoint.SourceMessageCount,
+                SourceTokens = checkpoint.SourceTokens,
+                SummaryTokens = checkpoint.SummaryTokens
             });
             session.Artifacts.Add(artifact);
             session.ContextCheckpoints = session.ContextCheckpoints ?? new List<ContextCheckpoint>();

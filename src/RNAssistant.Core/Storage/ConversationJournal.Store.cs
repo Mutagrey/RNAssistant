@@ -95,6 +95,7 @@ namespace RNAssistant.Core.Storage
             session.StorageTailByteOffset = receipt.Position.Start;
             foreach (var artifact in session.Artifacts.Where(item => item.Kind == ChatArtifactKinds.TaskList && item.Id != session.ActiveTaskListArtifactId))
                 artifact.InlineText = null;
+            foreach (var artifact in session.Artifacts.Where(item => item.Kind == ChatArtifactKinds.Compaction)) artifact.InlineText = null;
         }
 
         ConversationMetadata IConversationStore.ReadMetadata(string id)
@@ -190,6 +191,8 @@ namespace RNAssistant.Core.Storage
                 session.ActivePlanDocumentArtifactId = resourceSet.ActivePlan == null ? null : ResourceUri.Parse(resourceSet.ActivePlan.Uri).Segments[2];
                 session.ActiveTaskListArtifactId = resourceSet.ActiveTask == null ? null : ResourceUri.Parse(resourceSet.ActiveTask.Uri).Segments[2];
                 session.ActiveHtmlArtifactId = resourceSet.ActiveHtml == null ? null : ResourceUri.Parse(resourceSet.ActiveHtml.Uri).Segments[2];
+                session.ActiveContextCheckpointId = resourceSet.ActiveContext == null ? null : ResourceUri.Parse(resourceSet.ActiveContext.Uri).Segments[2];
+                RestoreCheckpointProjection(session);
                 if (session.ActiveHtmlArtifactId != null) RestoreHtmlProjection(session);
                 TaskListPublication.HydrateActive(session, _bodies);
                 LoadChatReferences(session); return session;

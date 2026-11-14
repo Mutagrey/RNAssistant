@@ -480,6 +480,14 @@ namespace RNAssistant.Core.Models
         }
     }
 
+    public sealed class ContextCheckpointMetadata
+    {
+        [JsonProperty("throughMessageId")] public string ThroughMessageId { get; set; }
+        [JsonProperty("sourceMessageCount")] public int SourceMessageCount { get; set; }
+        [JsonProperty("sourceTokens")] public int SourceTokens { get; set; }
+        [JsonProperty("summaryTokens")] public int SummaryTokens { get; set; }
+    }
+
     public sealed class ContextCheckpoint
     {
         public const string CurrentPromptVersion = "context-claims-v5";

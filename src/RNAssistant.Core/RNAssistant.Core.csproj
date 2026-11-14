@@ -407,7 +407,7 @@
     <Compile Include="Storage\ConversationJournal.History.cs" />
     <Compile Include="Storage\ConversationJournal.Attachments.cs" />
     <Compile Include="Storage\ConversationJournal.Resources.cs" />
-    <Compile Include="Storage\ConversationJournal.TaskLists.cs" />
+    <Compile Include="Storage\ConversationJournal.Snapshots.cs" />
     <Compile Include="Storage\ConversationJournal.RuntimeStore.cs" />
     <Compile Include="Storage\ConversationJournal.ToolStore.cs" />
     <Compile Include="Storage\ConversationJournal.Mutations.cs" />
@@ -421,6 +421,7 @@
     <Compile Include="Storage\ConversationJournal.SpawnStore.cs" />
     <Compile Include="Storage\ConversationJournal.Run.cs" />
     <Compile Include="Storage\ConversationJournal.Context.cs" />
+    <Compile Include="Storage\ConversationJournal.ContextState.cs" />
     <Compile Include="Storage\ConversationJournal.Control.cs" />
     <Compile Include="Storage\ConversationJournal.PeerControl.cs" />
     <Compile Include="Storage\ConversationJournal.Assignments.cs" />

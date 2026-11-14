@@ -1,5 +1,40 @@
 # Session event stream
 
+## Journal context state — 2026-11-14
+
+Native ConversationJournal accepts typed context notes and local compaction through
+the existing conversation port. Notes keep their user-instruction or supplied-data /
+Office-observation role and exact payload; previews never replace source bytes.
+Workspace now supplies these notes and their authority scopes to the shared compiler,
+as Office already does. This consumer correction also applies before storage cutover.
+
+ContextCompactionRuntime remains the checkpoint producer. Its local immutable body,
+typed boundary metadata and activity are committed together; the reference manifest
+adds optional ActiveContext. Existing snapshot storage now serves Task Lists and
+compaction, with one chat_snapshot locator in JournalIndex schema 26. The source
+frame field retains its existing TaskLists name; no second format/read path or store
+is introduced. DocumentArtifactStore / ResourceJournal still owns optional shared
+context publication. A failed shared publication never becomes a successful one
+through the local checkpoint.
+
+Full load reads only the selected checkpoint body; all checkpoint artifact metadata
+stays cold on pages and headers. The selected in-memory claims must match immutable
+CAS bytes. A missing or invalid selected body fails explicitly, without silently
+choosing another summary. History edits invalidate selection; canonical history,
+checkpoint CAS roots and execution receipts remain. Summary claims cannot resolve
+Unknown or reset the addressed replay guards; independent input remains usable.
+
+CAS maintenance follows typed note/checkpoint containers once per distinct body,
+including nested instruction/evidence payloads. This traversal belongs to exclusive
+audit/backup/restore, not metadata pages or ordinary header reads. Direct storage
+usage counters do not yet attribute those nested bodies; that remains P3.
+
+Checked through actual Office/Workspace kernel requests: two compactions, exact
+notes, selected restoration, index/ack loss and idempotent retry, metadata pages,
+history invalidation, Unknown, rebuild and Workspace journal/CAS restore. Full
+application backup (Office identity and Workspace connections), fork, P3 and P7
+cutover remain open. Default writer stays ChatStore; Windows/Office evidence is open.
+
 ## Journal HTML consumers — 2026-11-14
 
 The native composition now retains document HTML selection and exact message
@@ -30,15 +65,15 @@ checkpoint/selection receipt loss, corrupt source, Unknown and restart/rebuild;
 actual Workspace version save, exact actor validation, offline-root restart/copy,
 and journal/CAS backup/restore. Workspace connection metadata is not in that backup:
 [complete owner backup remains open](stabilization/BACKLOG.md#native-workspace-connection-backup--2026-11-14).
-Context-state, fork, P3 metadata/header/working-set costs and whole-port cutover
+Context-state is covered above; fork, P3 metadata/header/working-set costs and whole-port cutover
 remain open. Default writers and Windows/Office qualification are unchanged.
 
 ## Journal Task List snapshots — 2026-11-14
 
 Task Lists remain conversation-owned. ConversationJournal appends only new immutable
 snapshot headers with CAS body addresses; the existing resource manifest retains
-membership and optional exact ActiveTask selection. JournalIndex schema 25 adds
-chat_task_list as a disposable canonical-frame locator, applied with the chat cursor
+membership and optional exact ActiveTask selection. The schema 25 task locator is
+now shared chat_snapshot in schema 26, applied with the chat cursor
 and usage counters. It is rebuilt from facts, never another authoritative store.
 Existing revisions cannot change body, metadata or parent. Historical facts keep
 CAS roots after visible history is cleared; no import, dual-write or fallback exists.

@@ -1818,7 +1818,7 @@ namespace RNAssistant.Runtime
                 var facts = ContextCompactionRuntime.BuildActiveWindow(_session).ToList();
                 if (previewResult != null) facts.Add(previewResult);
                 var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);
-                return _compiler.Compile(authority, required, facts, null, _catalog, _settings,
+                return _compiler.Compile(authority, required, facts, _session.Context?.Notes, _catalog, _settings,
                     budget, skillSurface: surface, workingSet: workingSet);
             }
 
@@ -1833,6 +1833,7 @@ namespace RNAssistant.Runtime
                 _plans.ReconcileInterrupted();
                 return _skillPublications.CaptureAuthority(active.SelectMany(item =>
                     item.ResourceEvidence ?? new List<ResourceEvidence>()).Select(item => item.ScopeId)
+                    .Concat((_session.Context?.Notes ?? new List<ContextNote>()).Where(item => item?.Evidence != null).Select(item => item.Evidence.ScopeId))
                     .Concat(new[] { TaskListPublication.Scope(_session), _plans.Scope }));
             }
 

@@ -2165,6 +2165,12 @@ checkpoint creation for both Office and the independent workspace CLI. Office's
 `ContextCompactionService` captures host authority and supplies its domain result
 projection; it has no separate compaction algorithm. CLI uses the same LlmClient
 for the bounded summary request and retains its exact request/response trace.
+Both hosts pass saved typed context notes to the same compiler: user instructions
+retain their exact CAS payload, while supplied data and Office observations retain
+their role and captured source authority. Workspace captures note scopes alongside
+its retained read scopes; a preview cannot stand in for an unavailable source.
+Native checkpoint persistence, selection and maintenance closure are described in
+[Session events](session-events.md#journal-context-state--2026-11-14).
 With auto-compression enabled, a compactable CLI budget failure permits one
 compaction operation (with the bounded response repair above), durable checkpoint
 publication, fresh authority capture and recompilation.

@@ -960,6 +960,13 @@ compares the document generation captured before the model wait. On conflict or
 unavailable source, local compaction completes, records `SharedPublicationIssue`
 and preserves the prior shared head; publication is not retried automatically.
 
+Native context-state (2026-11-14) uses that same publication owner. Local compaction
+snapshots belong to the conversation journal/CAS; only their selected body is
+loaded, while pages retain metadata and exact refs. Typed notes and checkpoint
+evidence participate in canonical backup closure. History edits invalidate the
+selected summary without erasing historical CAS roots or Unknown receipts;
+[storage contract](session-events.md#journal-context-state--2026-11-14).
+
 The immutable archive contains at most 64 claims and 512000 UTF-16 characters,
 with deduplicated exact source transcripts and separately sanitized preview text.
 Revision dependencies and the `claim-provenance` view retain evidence revisions
