@@ -18,6 +18,26 @@ namespace RNAssistant.Core.Storage
             return new DocumentArtifactStore(resources, resources, _bodies);
         }
 
+        private void RestoreHtmlProjection(ChatSession session)
+        {
+            var metadata = ConversationMetadata.From(session);
+            var owner = ResourceStore();
+            owner.ProjectRemovals(session);
+            var logical = HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId);
+            if (logical != null)
+                foreach (var artifact in owner.SnapshotHistory(metadata, logical))
+                    if (!session.Artifacts.Any(item => item.Id == artifact.Id)) session.Artifacts.Add(artifact);
+            HtmlWorkspaceNavigationService.RestoreProjection(session, artifact => {
+                try
+                {
+                    artifact.InlineText = owner.Read(metadata, ChatResourceUri.CreateArtifactRevision(session, artifact)).InlineText;
+                    return artifact.InlineText != null;
+                }
+                catch (Exception error) when (error is IOException || error is InvalidDataException || error is JsonException || error is UnauthorizedAccessException)
+                { return false; }
+            });
+        }
+
         private static bool IsPlanSnapshot(ConversationMetadata metadata, ResourceRef reference)
         {
             string owner, id; int revision;
@@ -28,13 +48,20 @@ namespace RNAssistant.Core.Storage
             return true;
         }
 
+        private static bool IsPublishedSnapshot(ConversationMetadata metadata, ResourceRef reference)
+        { return reference?.IsExact == true && DocumentArtifactStore.Owns(metadata, reference) &&
+            ChatResourceUri.ArtifactSnapshot(reference).Uri == reference.Uri; }
+
+        private static bool IsHtmlSnapshot(ConversationMetadata metadata, ResourceRef reference)
+        { return metadata.DocumentAuthorityId != null && IsPublishedSnapshot(metadata, reference) &&
+            HtmlWorkspaceIdentity.LogicalId(ResourceUri.Parse(reference.Uri).Segments[2]) != null; }
+
         private static bool IsStoredSnapshot(ConversationMetadata metadata, ResourceRef reference)
-        { return IsOriginal(metadata, reference) || IsPlanSnapshot(metadata, reference) || IsTaskSnapshot(metadata, reference); }
+        { return IsOriginal(metadata, reference) || IsPublishedSnapshot(metadata, reference) || IsTaskSnapshot(metadata, reference); }
 
         private static ResourceIdentity WorkingSetIdentity(ConversationMetadata metadata, ResourceRef reference)
         {
-            return IsPlanSnapshot(metadata, reference) ? DocumentArtifactStore.PlanIdentity(metadata.DocumentAuthorityId,
-                metadata.WorkspaceId, DocumentArtifactStore.PlanIdFromSnapshot(reference)) : reference.Identity;
+            return IsPublishedSnapshot(metadata, reference) ? ArtifactWorkingSet.Identity(metadata, reference) : reference.Identity;
         }
 
         private ConversationResourceSet ReadResourceSet(PayloadRef reference, ConversationMetadata metadata)
@@ -47,6 +74,9 @@ namespace RNAssistant.Core.Storage
                     !WorkingSetIdentity(metadata, item.Reference).Equals(item.Identity) || IsTaskSnapshot(metadata, item.Reference)) ||
                 state.ActiveTask != null && (!IsTaskSnapshot(metadata, state.ActiveTask) ||
                     !state.References.Any(item => SameRunValue(item, state.ActiveTask))) ||
+                state.ActiveHtml != null && (!IsHtmlSnapshot(metadata, state.ActiveHtml) ||
+                    !state.References.Any(item => SameRunValue(item, state.ActiveHtml)) ||
+                    state.Links.Any(item => item.Detached && item.Identity.Equals(WorkingSetIdentity(metadata, state.ActiveHtml)))) ||
                 state.ActivePlan != null && (!IsPlanSnapshot(metadata, state.ActivePlan) ||
                     !state.References.Any(item => SameRunValue(item, state.ActivePlan)) ||
                     state.Links.Any(item => item.Detached && item.Identity.Equals(WorkingSetIdentity(metadata, state.ActivePlan)))))
@@ -57,9 +87,7 @@ namespace RNAssistant.Core.Storage
 
         private PayloadRef PrepareResourceSet(ChatSession session)
         {
-            if (session.Artifacts.Any(item => item == null || item.AvailabilityIssue == null &&
-                item.Kind != ChatArtifactKinds.Attachment && item.Kind != ChatArtifactKinds.Image &&
-                item.Kind != ChatArtifactKinds.PlanDocument && item.Kind != ChatArtifactKinds.TaskList)) throw TextStoreScope();
+            if (session.Artifacts.Any(item => item == null)) throw TextStoreScope();
             var metadata = ConversationMetadata.From(session);
             var references = session.Artifacts.Select(item => ChatResourceUri.CreateArtifactRevision(session, item)).ToArray();
             if (references.Any(item => !IsStoredSnapshot(metadata, item)) || session.ArtifactLinks.Any(item => !IsStoredSnapshot(metadata, item?.Reference) || IsTaskSnapshot(metadata, item.Reference)))
@@ -70,8 +98,11 @@ namespace RNAssistant.Core.Storage
             var task = session.ActiveTaskListArtifactId == null ? null : references.SingleOrDefault(item =>
                 IsTaskSnapshot(metadata, item) && ResourceUri.Parse(item.Uri).Segments[2] == session.ActiveTaskListArtifactId);
             if (session.ActiveTaskListArtifactId != null && task == null) throw new InvalidDataException("Active task-list membership is missing.");
-            if (references.Length == 0 && session.ArtifactLinks.Count == 0 && active == null && task == null) return null;
-            return StoreChatJson(new ConversationResourceSet(references, session.ArtifactLinks, active, task));
+            var html = session.ActiveHtmlArtifactId == null ? null : references.SingleOrDefault(item =>
+                IsHtmlSnapshot(metadata, item) && ResourceUri.Parse(item.Uri).Segments[2] == session.ActiveHtmlArtifactId);
+            if (session.ActiveHtmlArtifactId != null && html == null) throw new InvalidDataException("Active HTML membership is missing.");
+            if (references.Length == 0 && session.ArtifactLinks.Count == 0 && active == null && task == null && html == null) return null;
+            return StoreChatJson(new ConversationResourceSet(references, session.ArtifactLinks, active, task, html));
         }
 
         // Called outside the conversation transaction: document authority uses its
@@ -81,15 +112,23 @@ namespace RNAssistant.Core.Storage
             var metadata = ConversationMetadata.From(session);
             var published = session.Artifacts.Where(item => item.AvailabilityIssue == null &&
                 DocumentArtifactStore.Owns(metadata, ChatResourceUri.CreateArtifactRevision(session, item))).ToArray();
-            if (published.Length == 0 && (session.DocumentAuthorityId == null ||
+            var checkpoints = messages.Select(item => item.Header.HtmlWorkspaceCheckpoint).Where(item => item != null).ToArray();
+            if (published.Length == 0 && checkpoints.Length == 0 && (session.DocumentAuthorityId == null ||
                 !messages.Any(item => item.Header.Attachments?.Count > 0))) return;
             var originals = ResourceStore();
             foreach (var artifact in published)
             {
                 var retained = originals.Read(metadata, ChatResourceUri.CreateArtifactRevision(session, artifact), false);
                 RequireArtifactProjection(artifact, retained);
+                if (artifact.Id == session.ActiveHtmlArtifactId && originals.IsRemoved(metadata, retained))
+                    throw new InvalidDataException("A removed HTML workspace cannot be selected as active.");
                 if (artifact.Id == session.ActivePlanDocumentArtifactId && PlanDocumentService.IsTombstone(retained))
                     throw new InvalidDataException("A removed Plan cannot be selected as active.");
+            }
+            foreach (var checkpoint in checkpoints)
+            {
+                if (!IsHtmlSnapshot(metadata, checkpoint)) throw new InvalidDataException("HTML checkpoint is outside this document.");
+                originals.Read(metadata, checkpoint, false);
             }
             if (session.DocumentAuthorityId == null) return;
             foreach (var message in messages.Select(item => item.Header))
@@ -106,13 +145,15 @@ namespace RNAssistant.Core.Storage
             // Local creation time was presentation metadata in the retiring Store.
             // It is now derived from the upload, never a second persisted artifact.
             var copy = JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(actual));
-            if (expected.Kind == ChatArtifactKinds.PlanDocument)
+            if (expected.Kind != ChatArtifactKinds.Attachment && expected.Kind != ChatArtifactKinds.Image)
             {
                 if (copy.InlineText != null && (Tools.TextPatternEngine.Sha256(copy.InlineText) != expected.ContentSha256 ||
                     System.Text.Encoding.UTF8.GetByteCount(copy.InlineText) != expected.ContentByteLength))
-                    throw new InvalidDataException("Plan text differs from its published snapshot.");
+                    throw new InvalidDataException("Artifact text differs from its published snapshot.");
                 // Message links are retained on the message, not rewritten into resource provenance.
-                copy.InlineText = null; copy.SourceMessageId = expected.SourceMessageId; copy.RunId = expected.RunId;
+                copy.InlineText = null;
+                if (expected.Kind == ChatArtifactKinds.PlanDocument)
+                { copy.SourceMessageId = expected.SourceMessageId; copy.RunId = expected.RunId; }
             }
             else copy.CreatedUtc = expected.CreatedUtc;
             if (!SameRunValue(copy, expected)) throw new InvalidDataException("Artifact projection differs from its immutable resource.");
@@ -143,7 +184,8 @@ namespace RNAssistant.Core.Storage
         private ChatArtifact[] ReadPageArtifacts(ConversationMetadata metadata, ConversationResourceSet state,
             IEnumerable<ResourceRef> references)
         {
-            var page = references.Where(item => IsStoredSnapshot(metadata, item)).ToArray();
+            var page = references.Where(item => item != null).Select(item => DocumentArtifactStore.Owns(metadata, item)
+                ? ChatResourceUri.ArtifactSnapshot(item) : item).Where(item => IsStoredSnapshot(metadata, item)).ToArray();
             var plans = new HashSet<string>(page.Where(item => IsPlanSnapshot(metadata, item))
                 .Select(DocumentArtifactStore.PlanIdFromSnapshot), StringComparer.Ordinal);
             // An off-page tombstone must still hide old cards. Address only the
@@ -165,8 +207,9 @@ namespace RNAssistant.Core.Storage
         public IReadOnlyList<ChatArtifactLink> Links { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceRef ActivePlan { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceRef ActiveTask { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceRef ActiveHtml { get; private set; }
         [JsonConstructor] internal ConversationResourceSet(IReadOnlyList<ResourceRef> references, IReadOnlyList<ChatArtifactLink> links,
-            ResourceRef activePlan = null, ResourceRef activeTask = null)
-        { References = references; Links = links; ActivePlan = activePlan; ActiveTask = activeTask; }
+            ResourceRef activePlan = null, ResourceRef activeTask = null, ResourceRef activeHtml = null)
+        { References = references; Links = links; ActivePlan = activePlan; ActiveTask = activeTask; ActiveHtml = activeHtml; }
     }
 }

@@ -32,6 +32,8 @@ namespace RNAssistant.Harness
         private static void JournalMutationTerminalReceipt()
         { JournalMutationTurn(false, "terminal-ack"); }
 
+        private static void JournalHtmlRuntime() { JournalMutationTurn(true, "html"); }
+
         private static void JournalTaskRuntime()
         { JournalMutationTurn(true, "task"); JournalMutationTurn(false, "task"); }
 
@@ -106,6 +108,7 @@ namespace RNAssistant.Harness
                 var uncertain = fault == "unknown" || fault == "resource-ack";
                 var plan = fault == "plan";
                 var tasks = fault == "task";
+                var html = fault == "html";
                 var recover = fault?.StartsWith("recovery-", StringComparison.Ordinal) == true;
                 if (plan)
                 {
@@ -147,8 +150,9 @@ namespace RNAssistant.Harness
                                 var request = await listener.GetContextAsync().ConfigureAwait(false);
                                 using (var reader = new StreamReader(request.Request.InputStream)) await reader.ReadToEndAsync().ConfigureAwait(false);
                                 var number = ++calls;
-                                AssertTrue(number <= (tasks ? 6 : uncertain ? 4 : 2), "finish correction remains bounded without repeating the mutation");
-                                var response = tasks ? JournalTaskResponse(number, store.Load(chat.Id)) : number == 1
+                                AssertTrue(number <= (tasks ? 6 : html ? 4 : uncertain ? 4 : 2), "finish correction remains bounded without repeating the mutation");
+                                var response = html ? JournalHtmlResponse(number, store.Load(chat.Id), new DocumentArtifactStore(resources, resources, payloads)) :
+                                    tasks ? JournalTaskResponse(number, store.Load(chat.Id)) : number == 1
                                     ? ModelProtocolWire.WriteAcceptedCall("Create the requested source.", null,
                                         new ConversationToolCall { Name = "core.write", Arguments = new JObject { ["target"] = target, ["content"] = content } })
                                     : uncertain
@@ -255,6 +259,7 @@ namespace RNAssistant.Harness
                     return;
                 }
                 var restored = store.Load(chat.Id);
+                if (html) { VerifyJournalHtmlRuntime(paths, journal, resources, restored, calls); return; }
                 if (tasks) { VerifyJournalTaskRuntime(paths, journal, resources, restored, scope, calls, office); return; }
                 if (recover)
                 {

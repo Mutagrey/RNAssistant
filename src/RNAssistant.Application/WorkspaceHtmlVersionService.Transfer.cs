@@ -37,7 +37,7 @@ namespace RNAssistant.Application
             var target = TransferTarget(requested);
             var snapshot = _artifacts.ReadWorkspaceHtml(target.WorkspaceId, target.SavedVersionId);
             var entry = _artifacts.WorkspaceHtmlVersion(target.WorkspaceId, target.SavedVersionId);
-            return new HtmlProjectImportService(_paths).ImportSnapshot(target.Title, snapshot,
+            return new HtmlProjectImportService(_paths, _files).ImportSnapshot(target.Title, snapshot,
                 new ArtifactTransferOrigin { ResourceUri = entry.ContentReference.Uri, ContentSha256 = entry.ContentFingerprint },
                 path => _artifacts.OpenWorkspaceHtmlMember(target.WorkspaceId, target.SavedVersionId, path, token), token);
         }

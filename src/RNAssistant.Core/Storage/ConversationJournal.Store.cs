@@ -138,13 +138,16 @@ namespace RNAssistant.Core.Storage
                 if (selected == null) return null;
                 var metadata = ChatMetadata(selected.Item1);
                 var state = ReadResourceSet(selected.Item1.Fact.Resources, metadata);
-                var artifacts = ReadPageArtifacts(metadata, state, selected.Item2.SelectMany(item => item.Header.ResourceRefs ?? new List<ResourceRef>()));
+                var artifacts = ReadPageArtifacts(metadata, state, selected.Item2.SelectMany(item => (item.Header.ResourceRefs ?? new List<ResourceRef>()).Concat(new[] { item.Header.HtmlWorkspaceCheckpoint })));
                 var sourceIds = new HashSet<string>(selected.Item2.Select(entry => entry.Header.Id));
+                var removed = new HashSet<string>(artifacts.Where(item => item.RemovedFromDocument).Select(item => item.Id));
+                var activeHtml = state.ActiveHtml == null ? null : ResourceUri.Parse(state.ActiveHtml.Uri).Segments[2];
                 return new ConversationMessageWindow { Metadata = metadata,
                     PageMessages = selected.Item2.Select(ReadText).ToArray(), Artifacts = artifacts,
                     DetachedArtifactIds = new HashSet<string>(artifacts.Where(item => ArtifactWorkingSet.IsDetached(metadata, state?.Links, item)).Select(item => item.Id)),
                     ApplicableTombstoneIds = new HashSet<string>(artifacts.Where(item => PlanDocumentService.IsApplicableTombstone(metadata,
                         sourceIds, item)).Select(item => item.Id)),
+                    ActiveHtmlArtifactId = removed.Contains(activeHtml) ? null : activeHtml,
                     ActiveTaskListArtifactId = state.ActiveTask == null ? null : ResourceUri.Parse(state.ActiveTask.Uri).Segments[2],
                     ActivePlanDocumentArtifactId = state.ActivePlan == null ? null : ResourceUri.Parse(state.ActivePlan.Uri).Segments[2],
                     StartIndex = Math.Max(0, beforeIndex - pageSize), TotalCount = selected.Item1.Fact.MessageCount };
@@ -186,18 +189,21 @@ namespace RNAssistant.Core.Storage
                 session.ArtifactLinks = resourceSet.Links.ToList();
                 session.ActivePlanDocumentArtifactId = resourceSet.ActivePlan == null ? null : ResourceUri.Parse(resourceSet.ActivePlan.Uri).Segments[2];
                 session.ActiveTaskListArtifactId = resourceSet.ActiveTask == null ? null : ResourceUri.Parse(resourceSet.ActiveTask.Uri).Segments[2];
+                session.ActiveHtmlArtifactId = resourceSet.ActiveHtml == null ? null : ResourceUri.Parse(resourceSet.ActiveHtml.Uri).Segments[2];
+                if (session.ActiveHtmlArtifactId != null) RestoreHtmlProjection(session);
                 TaskListPublication.HydrateActive(session, _bodies);
                 LoadChatReferences(session); return session;
             }
         }
 
-        private IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null, bool includeStorageUsage = false)
+        private IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null, bool includeStorageUsage = false, string selectedId = null)
         {
             RequireTextRoot();
             var sizes = includeStorageUsage ? _bodies.CreateStorageSizeSnapshot() : null;
             return Access((db, cursor) => {
                 var ids = new List<string>();
-                using (var command = Command(db, "SELECT chat FROM chat_card WHERE stream=$stream AND alias IS NOT NULL ORDER BY chat"))
+                if (selectedId != null) ids.Add(selectedId);
+                else using (var command = Command(db, "SELECT chat FROM chat_card WHERE stream=$stream AND alias IS NOT NULL ORDER BY chat"))
                 using (var reader = command.ExecuteReader()) while (reader.Read()) ids.Add(reader.GetString(0));
                 return (IReadOnlyList<ChatSessionHeader>)ids.Select(id => TextChat(db, id))
                     .Where(receipt => receipt != null && (host == null || MatchesAddress(receipt, host, key))).Select(receipt => {
@@ -216,6 +222,9 @@ namespace RNAssistant.Core.Storage
                     }).OrderByDescending(header => header.UpdatedUtc).ToArray();
             }, CancellationToken.None);
         }
+
+        ChatSessionHeader IConversationStore.ReadHeader(string id)
+        { return string.IsNullOrWhiteSpace(id) ? null : ReadChatHeaders(selectedId: id).SingleOrDefault(); }
 
         IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(bool includeStorageUsage)
         { return ReadChatHeaders(includeStorageUsage: includeStorageUsage); }

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 
@@ -16,16 +17,22 @@ namespace RNAssistant.Application
         private readonly AppDataPaths _paths;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
-        private readonly ChatStore _chats;
-        private readonly ResourceMutationJournal _journal;
+        private readonly IConversationStore _chats;
+        private readonly IResourceMutationJournal _journal;
         private readonly DocumentArtifactStore _artifacts;
         public event Action<BrowserVersionStateChanged> VersionChanged;
-        public WorkspaceHtmlVersionService(AppDataPaths paths)
+        public WorkspaceHtmlVersionService(AppDataPaths paths, IConversationStore chats = null, WorkspaceFileService files = null,
+            IResourceAuthorityStore authority = null, IResourceMutationJournal mutations = null)
         {
-            _paths = paths; _workspaces = new WorkspaceStore(paths); _files = new WorkspaceFileService(paths); _chats = new ChatStore(paths);
-            _journal = new ResourceMutationJournal(paths);
-            var authority = new ResourceAuthorityStore(paths);
-            _artifacts = new DocumentArtifactStore(authority, authority, new ChatBlobStore(paths));
+            if ((chats != null || files != null || authority != null || mutations != null) &&
+                (chats == null || files == null || authority == null || mutations == null))
+                throw new ArgumentException("HTML versions require the complete conversation/file/resource composition.");
+            _paths = paths; _workspaces = new WorkspaceStore(paths);
+            _files = files ?? new WorkspaceFileService(paths); _chats = chats ?? new ChatConversationStoreAdapter(new ChatStore(paths));
+            _journal = mutations ?? new ResourceMutationJournal(paths);
+            var owner = authority ?? new ResourceAuthorityStore(paths);
+            _artifacts = new DocumentArtifactStore(owner, owner as IResourceRevisionStore ??
+                throw new ArgumentException("The resource owner must retain revisions."), new ChatBlobStore(paths));
         }
 
         public BrowserResolveResult Resolve(BrowserResolveRequest request)
@@ -247,13 +254,13 @@ namespace RNAssistant.Application
                 owner.Kind == BrowserOwnerKind.Workspace && owner.ScopeId == workspaceId))
                 throw new InvalidOperationException("HTML-проект принадлежит другому контексту.");
             _workspaces.OpenConnectedHistory(workspaceId);
-            if (!string.IsNullOrEmpty(owner.ChatId) && _chats.ReadSessionHeader(owner.ChatId)?.WorkspaceId != workspaceId)
+            if (!string.IsNullOrEmpty(owner.ChatId) && _chats.ReadHeader(owner.ChatId)?.WorkspaceId != workspaceId)
                 throw new InvalidOperationException("Чат принадлежит другому проекту.");
         }
         private void RequireActor(string workspaceId, SavedVersionActor actor)
         {
             if (actor?.Kind == SavedVersionActorKind.User && actor.ChatId == null && actor.RunId == null) return;
-            var chat = actor?.Kind == SavedVersionActorKind.Run ? _chats.ReadSessionHeader(actor.ChatId) : null;
+            var chat = actor?.Kind == SavedVersionActorKind.Run ? _chats.ReadHeader(actor.ChatId) : null;
             var lifecycle = chat?.RunViewState?.Lifecycle ?? chat?.RunStatus;
             if (chat?.WorkspaceId != workspaceId || chat?.RunId != actor?.RunId ||
                 lifecycle != RunViewLifecycles.Running && lifecycle != RunViewLifecycles.AwaitingConfirmation && lifecycle != RunViewLifecycles.AwaitingUser)

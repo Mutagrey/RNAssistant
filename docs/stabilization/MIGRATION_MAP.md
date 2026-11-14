@@ -142,6 +142,18 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 HTML (2026-11-14): native conversation refs/selection/checkpoints consume
+DocumentArtifactStore / ResourceJournal; no new store, registry or index schema.
+HtmlWorkspaceNavigationService now owns reconstruction; the old ChatStore method
+only delegates and its private parser/lookup were deleted. HTML version services
+and ArtifactWorkingSetService accept existing resource ports. Workspace version
+actor checks use addressed ReadHeader; copy/import carries the supplied file owner.
+Exact SelectedSkills/pins are retained by existing run metadata and revalidated by
+SkillTaskService. Default constructors/ChatConversationStoreAdapter remain explicit
+composition, owned by these services and removed at whole-port P7. Context-state,
+fork, P3 and full owner backup remain open; no fallback/dual-write/import added.
+[Contract](../session-events.md#journal-html-consumers--2026-11-14).
+
 P1/P2 Task List (2026-11-14): native ConversationJournal/CAS retains immutable
 snapshot deltas and reference-only membership/selection. Existing JournalIndex
 schema 25 adds only a rebuildable task snapshot locator. WorkspaceTaskListObserver

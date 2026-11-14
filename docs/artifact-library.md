@@ -11,6 +11,14 @@ Plugin annotations keep their existing exact-instance source validation.
 
 ## Document HTML explicit checkpoints — 2026-11-13
 
+Native journal consumers are connected through the existing publication and version
+owners; [storage contract](session-events.md#journal-html-consumers--2026-11-14).
+Selection/navigation are derived from exact published snapshots; missing source
+keeps a noneditable recovery view and does not remove its saved selection. Workspace
+saved-project references are independent immutable working-set items. Pages read
+root metadata for member references without hydrating the aggregate. Production
+storage switch and complete per-owner backup remain separate gates.
+
 DocumentArtifactStore.HtmlVersions reuses immutable HtmlWorkspace snapshots. Save
 publishes metadata, catalog head and operation receipt; it does not republish source
 or change undo/redo durability. A generation cutoff is persisted before migration;

@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Native HTML consumers — 2026-11-14
+
+HTML подключён к native journal через Office kernel и Workspace version services:
+точные refs/selection/checkpoints, skill selection, publication/outcome proof,
+rebuild и Unknown. Pages не загружают HTML; активная проекция восстанавливается
+общим owner. Повреждённое тело оставляет recovery и независимый чат доступными.
+Workspace saved versions читаются без live root; journal/CAS restore проверен.
+Полный restore приложения открыт: backup не содержит Workspace connection metadata
+([backlog](BACKLOG.md#native-workspace-connection-backup--2026-11-14)); Office identity
+backup также открыт. Остались context-state, fork, P3, backup всех owners и
+переключение с удалением ChatStore/adapters. Default writer прежний, P4 отложена.
+Два новых сценария и 12 выбранных регрессий проходят; один старый recovery fixture
+воспроизводимо падает и на fdfcfe66, зафиксирован отдельно. Windows evidence открыт.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-html-consumers-2026-11-14).
+
 ## Native Task List consumers — 2026-11-14
 
 Task List подключён к native journal через реальные Office/Workspace consumers:

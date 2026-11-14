@@ -23,6 +23,10 @@ grace; age never replaces the exclusive publication/run boundary.
 abort. A second-process publication and a live scope run both block collection.
 Index repair has its separate short admission and need not drain live runs.
 
+[Workspace connection metadata](stabilization/BACKLOG.md#native-workspace-connection-backup--2026-11-14)
+is not yet included. Restored journal/CAS evidence does not qualify complete
+application/project restore or preserve Browser connections by itself.
+
 Internal `BackupJournals`/`RestoreJournals` are exercised only on isolated new roots
 until P7. Backup refuses mixed legacy roots; it copies every verified canonical
 segment and complete CAS closure, plus existing settings, salt and DPAPI-protected

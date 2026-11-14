@@ -35,12 +35,29 @@ namespace RNAssistant.Core.Services
             return Identity(session?.Id, session?.DocumentAuthorityId, session?.WorkspaceId, artifact);
         }
 
+        public static ResourceIdentity Identity(ConversationMetadata session, ResourceRef reference)
+        {
+            string owner, id; int revision;
+            if (reference?.IsExact != true || !DocumentArtifactStore.Owns(session, reference) ||
+                !ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out revision) ||
+                ChatResourceUri.ArtifactSnapshot(reference).Uri != reference.Uri)
+                throw new InvalidDataException("An exact owned artifact snapshot is required.");
+            return Identity(session, new ChatArtifact { Id = id, Revision = revision,
+                DocumentAuthorityId = session.DocumentAuthorityId, WorkspaceId = session.WorkspaceId,
+                Kind = id.StartsWith("plan_doc_", StringComparison.Ordinal) ? ChatArtifactKinds.PlanDocument :
+                    session.WorkspaceId != null ? ChatArtifactKinds.HtmlProjectVersion :
+                    HtmlWorkspaceIdentity.LogicalId(id) != null ? ChatArtifactKinds.HtmlWorkspace : ChatArtifactKinds.File });
+        }
+
         private static ResourceIdentity Identity(string chatId, string documentAuthorityId,
             string workspaceId, ChatArtifact artifact)
         {
             if (artifact?.Kind == ChatArtifactKinds.PlanDocument &&
                 DocumentArtifactStore.Owns(documentAuthorityId, workspaceId, ChatResourceUri.CreateArtifactRevision(chatId, artifact)))
                 return DocumentArtifactStore.PlanIdentity(documentAuthorityId, workspaceId, DocumentArtifactStore.PlanIdFromArtifact(artifact));
+            if (artifact?.Kind == ChatArtifactKinds.HtmlProjectVersion && !string.IsNullOrEmpty(workspaceId) &&
+                artifact.WorkspaceId == workspaceId && DocumentArtifactStore.Owns(documentAuthorityId, workspaceId, ChatResourceUri.CreateArtifactRevision(chatId, artifact)))
+                return ChatResourceUri.CreateArtifactRevision(chatId, artifact).Identity;
             if (artifact == null || string.IsNullOrWhiteSpace(documentAuthorityId) || artifact.DocumentAuthorityId != documentAuthorityId)
                 throw new InvalidDataException("The artifact is not owned by this document.");
             if (MarkdownDocumentIdentity.LogicalId(artifact.Id) != null)

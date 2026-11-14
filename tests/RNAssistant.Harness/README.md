@@ -159,6 +159,17 @@ addresses the single visible Chat View. Split-view tests need explicit target sc
 
 ## Storage/context optimization — 2026-11-10
 
+`journal HTML:` uses real Office skill admission/kernel create/write and shared
+selection/navigation, exact outcome proof, metadata pages, checkpoint/index/ack
+recovery, corrupt selected source and Unknown with independent input. Workspace
+covers run-owned version saves, addressed header admission, offline-root restart,
+copy through native file ports and journal/CAS restore. It does not qualify full
+application restore: Workspace connection metadata is an open backup owner.
+Relevant regressions: `journal task list:`, `journal Plan: Office`,
+`journal attachments:`, `HTML checkpoints:`, `storage: html navigation` and
+`storage: html recovery`. The recovery-blocks fixture has a separately reproduced
+baseline failure in its direct UpsertFile path; see backlog. Reuse one build.
+
 `journal task list:` covers actual Office/Workspace kernel save/update/blocked/close
 with schema admission and exact resource outcome links; bounded metadata pages,
 active-body hydration, cold history rewind, immutable revisions, index/ack failure,

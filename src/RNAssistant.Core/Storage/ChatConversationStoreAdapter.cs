@@ -39,6 +39,8 @@ namespace RNAssistant.Core.Storage
             return _store.ReadMetadata(sessionId);
         }
 
+        public ChatSessionHeader ReadHeader(string sessionId) { return _store.ReadSessionHeader(sessionId); }
+
         public void Commit(ChatSession session, ConversationCommit commit)
         {
             _store.Commit(session, commit);

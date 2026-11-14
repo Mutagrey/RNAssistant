@@ -12,6 +12,86 @@ namespace RNAssistant.Core.Services
     {
         private const int MaxRecoveryCandidates = 100;
 
+        public static void RestoreProjection(ChatSession session, Func<ChatArtifact, bool> hydrate)
+        {
+            if (session == null) return;
+            var activeId = session.ActiveHtmlArtifactId;
+            if (string.IsNullOrWhiteSpace(activeId))
+            {
+                session.HtmlWorkspace = new HtmlWorkspace();
+                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                    session, HtmlWorkspaceRecoveryStatuses.Empty, null, null, null, null, true);
+                return;
+            }
+
+            var matches = (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
+                string.Equals(item.Id, activeId, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+            var active = matches.Length == 1 && string.Equals(matches[0].Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase) ? matches[0] : null;
+            if (active == null)
+            {
+                session.HtmlWorkspace = new HtmlWorkspace();
+                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                    session,
+                    HtmlWorkspaceRecoveryStatuses.Degraded,
+                    HtmlWorkspaceRecoveryIssues.ActiveArtifactMissing,
+                    "The active HTML workspace revision metadata is missing. Select another revision before editing.",
+                    activeId,
+                    activeId,
+                    false);
+                return;
+            }
+            if (!hydrate(active))
+            {
+                session.HtmlWorkspace = new HtmlWorkspace();
+                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                    session,
+                    HtmlWorkspaceRecoveryStatuses.Degraded,
+                    HtmlWorkspaceRecoveryIssues.ActiveBodyUnavailable,
+                    "The active HTML workspace body is missing, corrupt, or cannot be decrypted. Select another revision before editing.",
+                    activeId,
+                    activeId,
+                    false);
+                return;
+            }
+            var activeSnapshot = ParseWorkspaceSnapshot(active);
+            if (activeSnapshot == null)
+            {
+                session.HtmlWorkspace = new HtmlWorkspace();
+                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
+                    session,
+                    HtmlWorkspaceRecoveryStatuses.Degraded,
+                    HtmlWorkspaceRecoveryIssues.ActiveBodyInvalid,
+                    "The active HTML workspace body is invalid. Select another revision before editing.",
+                    activeId,
+                    activeId,
+                    false);
+                return;
+            }
+
+            var workspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(activeSnapshot);
+            workspace.UpdatedUtc = active.CreatedUtc;
+            session.HtmlWorkspace = workspace;
+            HtmlWorkspaceNavigationService.RebuildHistory(session, active);
+        }
+
+        private static HtmlWorkspaceSnapshot ParseWorkspaceSnapshot(ChatArtifact artifact)
+        {
+            if (artifact == null || string.IsNullOrWhiteSpace(artifact.InlineText)) return null;
+            try
+            {
+                var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
+                if (snapshot == null) return null;
+                snapshot.Id = artifact.Id;
+                snapshot.Label = string.IsNullOrWhiteSpace(artifact.Title) ? "HTML workspace" : artifact.Title;
+                snapshot.CreatedUtc = artifact.CreatedUtc;
+                return snapshot;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
         // The caller validates the active body. Navigation needs only metadata;
         // a selected restore source is read and validated at the mutation boundary.
         public static void RebuildHistory(ChatSession session, ChatArtifact active)

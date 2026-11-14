@@ -13,9 +13,9 @@ namespace RNAssistant.Office.Services
     internal sealed class ArtifactWorkingSetService
     {
         private readonly DocumentArtifactStore _artifacts;
-        private readonly ResourceMutationJournal _mutations;
+        private readonly IResourceMutationJournal _mutations;
 
-        public ArtifactWorkingSetService(DocumentArtifactStore artifacts, ResourceMutationJournal mutations)
+        public ArtifactWorkingSetService(DocumentArtifactStore artifacts, IResourceMutationJournal mutations)
         {
             _artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
             _mutations = mutations ?? throw new ArgumentNullException(nameof(mutations));

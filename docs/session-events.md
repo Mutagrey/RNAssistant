@@ -1,5 +1,38 @@
 # Session event stream
 
+## Journal HTML consumers — 2026-11-14
+
+The native composition now retains document HTML selection and exact message
+checkpoints in the existing resource manifest/headers. Published artifact metadata,
+HTML aggregates and workspace-project snapshots keep their DocumentArtifactStore /
+ResourceJournal owner. Chat persists references only; no HTML body, navigation
+history, alternate store or index schema is added. Member references on a page
+address their root snapshot metadata. Selection rejects detached/removed or foreign
+HTML; incompatible chat-owned HTML is not imported.
+
+HtmlWorkspaceNavigationService owns projection reconstruction for both store paths;
+the former ChatStore implementation is removed. Full load hydrates only selected
+HTML and reads navigation metadata from published lineage. Missing/corrupt source
+produces explicit noneditable recovery, retaining selection and independent chat
+input. Metadata pages stay cold. Logical Unknown prevents another mutation while
+exact snapshot reads remain available; recovery never replays an operation.
+
+Office uses actual skill admission, native tool execution, publication and exact
+outcome links. Reference-only SelectedSkills and exact tool pins now survive native
+run commits; SkillTaskService still revalidates all pins for each request. Unconnected
+mutation owners, including HTML asset publication, remain explicitly rejected.
+Document/Workspace HTML version services and working-set selection accept existing
+resource ports; Workspace copy/import uses that same file owner. Run-owned version
+saves validate one addressed IConversationStore.ReadHeader without loading history.
+
+Checked: real Office kernel creation/write and selected reconstruction, pages,
+checkpoint/selection receipt loss, corrupt source, Unknown and restart/rebuild;
+actual Workspace version save, exact actor validation, offline-root restart/copy,
+and journal/CAS backup/restore. Workspace connection metadata is not in that backup:
+[complete owner backup remains open](stabilization/BACKLOG.md#native-workspace-connection-backup--2026-11-14).
+Context-state, fork, P3 metadata/header/working-set costs and whole-port cutover
+remain open. Default writers and Windows/Office qualification are unchanged.
+
 ## Journal Task List snapshots — 2026-11-14
 
 Task Lists remain conversation-owned. ConversationJournal appends only new immutable

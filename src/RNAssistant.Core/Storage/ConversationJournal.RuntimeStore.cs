@@ -35,8 +35,16 @@ namespace RNAssistant.Core.Storage
         {
             if (run == null) return;
             var state = run.KernelState; var summary = state?.Summary;
-            if ((run.SelectedSkills?.Count ?? 0) != 0 ||
-                summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId)) throw TextStoreScope();
+            if (summary != null && (summary.RunId != run.RunId || summary.TurnId != run.TurnId)) throw TextStoreScope();
+            // Procedure selections are reference-only run metadata. SkillTaskService
+            // revalidates publication and every exact tool pin before granting exposure.
+            var selected = run.SelectedSkills ?? new List<SelectedSkill>();
+            if (selected.Any(item => item == null || string.IsNullOrWhiteSpace(item.Id) || (item.Revision?.Length != 64 || item.Revision.Any(c => !Uri.IsHexDigit(c))) ||
+                item.Publication != null && !item.Publication.IsExact || item.Tools == null ||
+                item.Tools.Any(pin => pin == null || string.IsNullOrWhiteSpace(pin.Id) || (pin.Revision?.Length != 64 || pin.Revision.Any(c => !Uri.IsHexDigit(c)))) ||
+                item.Tools.Select(pin => pin.Id).Distinct(StringComparer.Ordinal).Count() != item.Tools.Count) ||
+                selected.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != selected.Count)
+                throw new InvalidDataException("Skill selections require exact immutable publication and tool pins.");
         }
 
         private string ChatMessageOperation(SqliteConnection db, string chat, string id, bool includeHidden = false)

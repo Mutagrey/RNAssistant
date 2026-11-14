@@ -126,82 +126,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private void RebuildHtmlWorkspaceProjection(ChatSession session)
-        {
-            if (session == null) return;
-            var activeId = session.ActiveHtmlArtifactId;
-            if (string.IsNullOrWhiteSpace(activeId))
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session, HtmlWorkspaceRecoveryStatuses.Empty, null, null, null, null, true);
-                return;
-            }
-
-            var active = FindHtmlArtifact(session, activeId);
-            if (active == null)
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session,
-                    HtmlWorkspaceRecoveryStatuses.Degraded,
-                    HtmlWorkspaceRecoveryIssues.ActiveArtifactMissing,
-                    "The active HTML workspace revision metadata is missing. Select another revision before editing.",
-                    activeId,
-                    activeId,
-                    false);
-                return;
-            }
-            if (!HydrateArtifact(ConversationMetadata.From(session), active))
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session,
-                    HtmlWorkspaceRecoveryStatuses.Degraded,
-                    HtmlWorkspaceRecoveryIssues.ActiveBodyUnavailable,
-                    "The active HTML workspace body is missing, corrupt, or cannot be decrypted. Select another revision before editing.",
-                    activeId,
-                    activeId,
-                    false);
-                return;
-            }
-            var activeSnapshot = ParseWorkspaceSnapshot(active);
-            if (activeSnapshot == null)
-            {
-                session.HtmlWorkspace = new HtmlWorkspace();
-                session.HtmlWorkspaceRecovery = HtmlWorkspaceNavigationService.CreateRecoveryState(
-                    session,
-                    HtmlWorkspaceRecoveryStatuses.Degraded,
-                    HtmlWorkspaceRecoveryIssues.ActiveBodyInvalid,
-                    "The active HTML workspace body is invalid. Select another revision before editing.",
-                    activeId,
-                    activeId,
-                    false);
-                return;
-            }
-
-            var workspace = HtmlWorkspaceCopyService.CreateWorkspaceFromSnapshot(activeSnapshot);
-            workspace.UpdatedUtc = active.CreatedUtc;
-            session.HtmlWorkspace = workspace;
-            HtmlWorkspaceNavigationService.RebuildHistory(session, active);
-        }
-
-        private static HtmlWorkspaceSnapshot ParseWorkspaceSnapshot(ChatArtifact artifact)
-        {
-            if (artifact == null || string.IsNullOrWhiteSpace(artifact.InlineText)) return null;
-            try
-            {
-                var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
-                if (snapshot == null) return null;
-                snapshot.Id = artifact.Id;
-                snapshot.Label = string.IsNullOrWhiteSpace(artifact.Title) ? "HTML workspace" : artifact.Title;
-                snapshot.CreatedUtc = artifact.CreatedUtc;
-                return snapshot;
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-        }
+        { HtmlWorkspaceNavigationService.RestoreProjection(session, artifact => HydrateArtifact(ConversationMetadata.From(session), artifact)); }
 
         private void RebuildContextCheckpointProjection(ChatSession session)
         {
@@ -289,14 +214,6 @@ namespace RNAssistant.Core.Storage
                 .Take(2)
                 .ToList();
             return matches.Count == 1 ? matches[0] : null;
-        }
-
-        private static ChatArtifact FindHtmlArtifact(ChatSession session, string artifactId)
-        {
-            var artifact = FindArtifact(session, artifactId);
-            return artifact != null && string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase)
-                ? artifact
-                : null;
         }
 
         private static bool ShouldHydrateForActiveSession(ChatArtifact artifact)

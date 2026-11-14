@@ -43,7 +43,31 @@ restart/clear истории, потерянное подтверждение и
 owners и индекс, без нового store/registry. Текущий контракт —
 [Повтор и восстановление](../conversation-protocol.md#повтор-и-восстановление).
 
+## Native Workspace connection backup — 2026-11-14
+
+Owner: WorkspaceStore + existing CasMaintenanceService (P6/P7, before cutover).
+The real WorkspaceHtmlVersionService confirms that BackupJournals restores saved
+project CAS and conversation refs, but not WorkspaceStore id/path associations.
+The restored Browser owner cannot resolve its connection even when the immutable
+snapshot is complete. This is not complete application/project restore. Offline-root
+reads do work after restart in the original root with the retained association.
+Include and verify the existing connection/locator/move/config owners under writer
+quiescence before exposing complete backup/restore or switching production. Do not
+recreate connections silently, infer them from model input or add another registry.
+
+## HTML recovery fixture bypasses publication — 2026-11-14
+
+Owner: Harness HTML recovery tests. `storage: html recovery blocks mutation and
+selects healthy revision` fails identically on fdfcfe66 and current sources:
+its direct UpsertFile call after body corruption reaches HtmlWorkspaceMutation.Capture
+with null parent.InlineText, throwing ArgumentNullException instead of the expected
+InvalidOperationException. This fixture bypasses the supported publication owner;
+migrate it to that owner, without restoring chat-owned HTML mutation. Native HTML
+corrupt-source recovery plus independent input and the broken-parent fixture pass.
+
 ## Native Office identity backup — 2026-11-14
+
+See also [Workspace connection backup](#native-workspace-connection-backup--2026-11-14).
 
 Owner: DocumentAuthorityRegistry + existing CasMaintenanceService backup (P6/P7).
 Actual Office history edit/clear writes its existing resource-authority/documents.json

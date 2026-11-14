@@ -1919,3 +1919,55 @@ after-state/CAS ownership.
    all-history body hydration. This shared behavior change warrants a patch even
    though native storage integration remains intermediate. Scoped diff and mandatory
    ValidateVersionFormat pass before commit; no tag, push or release.
+
+
+## P1/P2 — native HTML consumers (2026-11-14)
+
+1. Connected the next resource consumer through actual Office skill admission and
+   kernel HTML creation/write, plus Workspace saved-project services. Native Store
+   now retains exact HTML selection and message checkpoints instead of rejecting
+   them. Existing DocumentArtifactStore/ResourceJournal owns every published body,
+   revision, logical head and outcome; conversation facts retain references only.
+2. The existing resource manifest gains optional ActiveHtml. Pages normalize member
+   refs to metadata roots and retain removal/selection semantics. No new store,
+   registry, canonical format variant or index schema. Legacy chat-owned HTML stays
+   unsupported. Other published document metadata uses the same source-owner read
+   and immutable projection validation; context-state publication is not claimed.
+3. Moved HTML reconstruction out of ChatStore into existing
+   HtmlWorkspaceNavigationService; removed its private duplicate parser/lookup.
+   Current active bytes and source lineage reconstruct the disposable view. Missing
+   or corrupt bytes produce noneditable recovery without losing selection or
+   independent chat input. Workspace/Document version and working-set services use
+   injected resource ports; project copy/import retains the injected file owner.
+   Added addressed ReadHeader on the existing conversation port for exact run actor
+   checks, reusing its current header projection without transcript hydration.
+   Reference-only SelectedSkills/tool pins survive native run commits; the existing
+   skill owner revalidates exposure. Unsupported mutation owners remain rejected.
+4. Two new checks pass: actual Office skill/kernel/publication, page/checkpoint/
+   selection faults, corrupt body, Unknown and restart/rebuild; actual Workspace
+   version/run-owner guards, metadata membership, offline-root restart/copy and
+   journal/CAS restore. Twelve selected regressions pass: Task List (3), Plan kernel
+   (1), attachments (3), HTML checkpoints (3), navigation (1), broken-parent recovery
+   (1). A separate recovery-blocks fixture fails identically on archived fdfcfe66
+   and current sources at unchanged direct UpsertFile/Capture(null); backlog records
+   that unsupported test path. Native corrupt-source recovery passes. macOS/net8,
+   C#7.3 only; no full suite or Office/VSTO validation.
+5. Before: HTML snapshots/checkpoints and selected skills failed native Store
+   admission; HTML version services constructed legacy ports. After: normal message
+   pages load one selected text and the reference manifest, zero HTML bodies; full
+   HTML selection hydrates only the active aggregate. Version actor checks read no
+   chat or run bodies. Removed metadata flags are reused without another authority
+   read; chats without active HTML do not construct its projection. Metadata scans,
+   lineage enumeration, header/selection size and large aggregates remain P3/P4
+   costs; no unmeasured allocation/Windows latency claim is made.
+6. The real saved-project consumer exposed another P6/P7 dependency: journal/CAS
+   restore omits WorkspaceStore connection associations. Snapshot bytes and chat
+   refs restore, but complete application restore remains open. Recorded with the
+   existing backup owner; no inferred connection or fallback added. Remaining:
+   context-state, fork, P3, complete owner backup/quiescence and production cutover
+   with retiring ChatStore/adapters removed. Office identity backup, Windows evidence
+   and deferred P4 remain open. Default writer stays ChatStore.
+7. Canonical session/artifact/CAS docs, migration map, backlog, progress and Harness
+   guide updated. Scoped diff/links and ValidateVersionFormat checked before commit.
+   This is intermediate native integration plus behavior-preserving owner extraction;
+   no product bump (16.27.2-dev), tag, push or release.

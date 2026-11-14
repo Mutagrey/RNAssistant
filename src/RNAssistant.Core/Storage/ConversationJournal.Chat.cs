@@ -131,6 +131,8 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidOperationException("A metadata update cannot move chat ownership or replace creation identity.");
             if (fact.History != null) ValidateHistory(db, record, fact, current);
             ValidateTaskSnapshots(db, fact, ReadResourceSet(fact.Resources, fact.Card.Address));
+            if (fact.Messages.Any(item => item.Header.HtmlWorkspaceCheckpoint != null && !IsHtmlSnapshot(fact.Card.Address, item.Header.HtmlWorkspaceCheckpoint)))
+                throw new InvalidDataException("HTML checkpoint must identify an exact document snapshot.");
             ValidateMessageAttachments(db, fact);
             var added = 0;
             foreach (var message in fact.Messages)
@@ -351,11 +353,11 @@ namespace RNAssistant.Core.Storage
             if (session == null || commit == null || !session.UsesCurrentProtocol) throw new ArgumentException("A current chat and exact commit are required.");
             if (commit.RemovedMessageIds.Count != 0 && !commit.RewritesHistory ||
                 session.ParentSessionId != null || session.ParentSessionRevision != null || session.ForkedThroughMessageId != null ||
-                session.ActiveContextCheckpointId != null || session.ActiveHtmlArtifactId != null ||
+                session.ActiveContextCheckpointId != null ||
                 session.ContextCheckpoints.Count != 0 ||
                 session.ResourceCopies.Count != 0 || session.Context.Notes.Count != 0 ||
-                session.HtmlWorkspace.Files.Count != 0 || session.HtmlWorkspace.DataSources.Count != 0 ||
-                session.HtmlWorkspace.ActiveFileId != null || session.HtmlWorkspace.History.Count != 0 || session.HtmlWorkspace.RedoBranches.Count != 0)
+                session.ActiveHtmlArtifactId == null && (session.HtmlWorkspace.Files.Count != 0 || session.HtmlWorkspace.DataSources.Count != 0 ||
+                session.HtmlWorkspace.ActiveFileId != null || session.HtmlWorkspace.History.Count != 0 || session.HtmlWorkspace.RedoBranches.Count != 0))
                 throw TextStoreScope();
             RequireBasicRun(session.LastRun);
             if (session.Revision == 0 && session.Messages.Count != commit.Messages.Count) throw new InvalidOperationException("Creation omitted messages.");
@@ -394,7 +396,7 @@ namespace RNAssistant.Core.Storage
             if (message == null || string.IsNullOrWhiteSpace(message.Id) || message.CreatedUtc.Kind != DateTimeKind.Utc ||
                 message.Role != "user" && message.Role != "assistant") throw new ArgumentException("An exact user/assistant text message is required.");
             if (message.SyntheticResourceObservation ||
-                message.CompletedOperation != null || message.HtmlWorkspaceCheckpoint != null ||
+                message.CompletedOperation != null ||
                 (message.ContextClaims?.Count ?? 0) != 0)
                 throw new NotSupportedException("Runtime/resource messages require their typed journal integration.");
             if ((message.Attachments?.Count > 0 || message.AttachmentAnalysis != null) &&
