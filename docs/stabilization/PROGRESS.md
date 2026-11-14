@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Native atomic text fork — 2026-11-14
+
+Текстовые ветки подключены через Office publication observer и существующий
+Workspace fork owner: атомарный CAS-prefix, исходное происхождение calls/results и
+наследование Unknown вне видимой истории. Удаление предков, редактирование ветки,
+rebuild/restore и потеря подтверждения сохраняют guards; независимое чтение доступно.
+Три новых сценария и десять выбранных регрессий проходят host-neutral.
+Следующий шаг — fork с ресурсами/attachments/checkpoints и supplied-data copies;
+они пока явно отклоняются. Затем P3 metadata/header/context/summary usage (включая
+унаследованные payloads), полный backup owners и P7 с удалением ChatStore/adapters.
+Default writer прежний; P4 отложена, Windows/Office evidence открыт. Промежуточное
+native подключение без изменения production composition: версия остаётся 16.27.4-dev.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--native-atomic-text-fork-2026-11-14).
+
 ## Native fork preparation — 2026-11-14
 
 Подготовка fork читает точные snapshots через существующий Store-порт; Office и

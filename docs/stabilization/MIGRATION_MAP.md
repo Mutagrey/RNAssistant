@@ -142,6 +142,15 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 atomic text fork (2026-11-14): ConversationJournal accepts the frozen prefix
+through its existing commit/history owner. Original messages and execution facts
+keep their provenance; index schema 27 adds chat to existing obligation keys for
+inherited guards. No child executions or second store are created. Workspace's
+existing fork preparation is callable with the conversation port, without a new
+facade; Office keeps its publication observer. Default adapters still retire at
+P7. Resource-bearing forks, P3 and complete owner backup remain open.
+[Contract](../session-events.md#journal-atomic-text-fork--2026-11-14).
+
 P1/P2 fork preparation (2026-11-14): IConversationStore now owns explicit exact-body
 reads on a revision-fenced source. Office preparation and Workspace fork creation/
 commit no longer call ChatStore directly. ConversationJournal reuses existing
@@ -149,8 +158,8 @@ snapshot and document owners; ChatCloneService loads only selected Task/document
 HTML and retains checkpoint publication provenance. No new adapter/store added.
 ChatConversationStoreAdapter delegates the default path until whole-port P7 removes
 it and the remaining chat-owned HTML dependency-copy path; owner: current
-conversation/resource services. Native fork acceptance still rejects before write
-pending atomic history membership and inherited execution/Unknown evidence.
+conversation/resource services. Resource-bearing fork acceptance still rejects
+before write; atomic text membership and inherited Unknown are connected above.
 [Contract](../session-events.md#journal-fork-preparation--2026-11-14).
 
 P1/P2 context-state (2026-11-14): existing ConversationJournal/CAS retains typed notes,

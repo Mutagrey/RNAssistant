@@ -206,60 +206,66 @@ namespace RNAssistant.Runtime
                 if (!source.UsesCurrentProtocol)
                     throw new InvalidOperationException("Create a current-format chat before branching history.");
                 RequireIdleSession(workspace, sessionId);
-                var index = source.Messages.FindIndex(message => message != null &&
-                    string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
-                if (index < 0) throw new InvalidOperationException("Message was not found.");
-
-                var title = (source.Title ?? "Новый чат").Trim();
-                title = title.Length > 192 ? title.Substring(0, 192).TrimEnd() : title;
-                var fork = _conversationStore.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title + " (ветка)");
-                fork.WorkspaceId = workspace.WorkspaceId;
-                fork.ParentSessionId = source.Id;
-                fork.ParentSessionRevision = source.Revision;
-                fork.ForkedThroughMessageId = source.Messages[index].Id;
-                fork.Model = source.Model;
-                fork.Mode = source.Mode;
-                fork.MutationPolicy = source.MutationPolicy;
-                fork.ReasoningEnabled = source.ReasoningEnabled;
-                fork.Context = source.Context == null ? null :
-                    JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(source.Context));
-                fork.Messages = JsonConvert.DeserializeObject<List<ChatMessage>>(
-                    JsonConvert.SerializeObject(source.Messages.Take(index + 1))) ?? new List<ChatMessage>();
-                ToolProtocolMessages.ExcludeUnmatchedToolCalls(fork.Messages);
-
-                var retainedIds = WorkspaceMessageArtifactIds(fork.Messages, source);
-                var attachmentStore = new AttachmentStore(_paths);
-                foreach (var message in fork.Messages)
-                {
-                    for (var referenceIndex = 0; referenceIndex < (message.ResourceRefs?.Count ?? 0); referenceIndex++)
-                    {
-                        var reference = message.ResourceRefs[referenceIndex];
-                        string owner, artifactId; int revision;
-                        if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out artifactId, out revision)) continue;
-                        if (owner == source.Id)
-                            message.ResourceRefs[referenceIndex] = ChatResourceUri.RebaseArtifactRevision(reference, fork.Id);
-                    }
-                    string checkpointOwner, checkpointArtifact; int checkpointRevision;
-                    if (ChatResourceUri.TryParseArtifactRevision(message.HtmlWorkspaceCheckpoint,
-                            out checkpointOwner, out checkpointArtifact, out checkpointRevision) && checkpointOwner == source.Id)
-                        message.HtmlWorkspaceCheckpoint = ChatResourceUri.RebaseArtifactRevision(message.HtmlWorkspaceCheckpoint, fork.Id);
-                    attachmentStore.CloneMessageAttachments(message);
-                }
-                fork.Artifacts = (source.Artifacts ?? new List<ChatArtifact>())
-                    .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id))
-                    .Select(artifact => JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(artifact)))
-                    .ToList();
-                var retainedReferences = new HashSet<string>(fork.Messages
-                    .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
-                    .Select(reference => reference.ExactKey), StringComparer.Ordinal);
-                fork.ResourceReferenceIndex = (source.ResourceReferenceIndex ?? new List<ModelResourceReference>())
-                    .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
-                fork.ToolCallReferenceSequence = source.ToolCallReferenceSequence;
-                fork.EvidenceReferenceSequence = source.EvidenceReferenceSequence;
-                fork.ReferenceContractVersion = source.ReferenceContractVersion;
-                _conversationStore.Commit(fork, new ConversationCommit());
-                return fork;
+                return ForkHistorySession(_conversationStore, workspace, source, messageId, new AttachmentStore(_paths));
             }
+        }
+
+        internal static ChatSession ForkHistorySession(IConversationStore store, WorkspaceDescriptor workspace,
+            ChatSession source, string messageId, AttachmentStore attachments)
+        {
+            var index = source.Messages.FindIndex(message => message != null &&
+                string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
+            if (index < 0) throw new InvalidOperationException("Message was not found.");
+
+            var title = (source.Title ?? "Новый чат").Trim();
+            title = title.Length > 192 ? title.Substring(0, 192).TrimEnd() : title;
+            var fork = store.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title + " (ветка)");
+            fork.WorkspaceId = workspace.WorkspaceId;
+            fork.ParentSessionId = source.Id;
+            fork.ParentSessionRevision = source.Revision;
+            fork.ForkedThroughMessageId = source.Messages[index].Id;
+            fork.Model = source.Model;
+            fork.Mode = source.Mode;
+            fork.MutationPolicy = source.MutationPolicy;
+            fork.ReasoningEnabled = source.ReasoningEnabled;
+            fork.Context = source.Context == null ? null :
+                JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(source.Context));
+            fork.Messages = JsonConvert.DeserializeObject<List<ChatMessage>>(
+                JsonConvert.SerializeObject(source.Messages.Take(index + 1))) ?? new List<ChatMessage>();
+            ToolProtocolMessages.ExcludeUnmatchedToolCalls(fork.Messages);
+
+            var retainedIds = WorkspaceMessageArtifactIds(fork.Messages, source);
+            var attachmentStore = attachments;
+            foreach (var message in fork.Messages)
+            {
+                for (var referenceIndex = 0; referenceIndex < (message.ResourceRefs?.Count ?? 0); referenceIndex++)
+                {
+                    var reference = message.ResourceRefs[referenceIndex];
+                    string owner, artifactId; int revision;
+                    if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out artifactId, out revision)) continue;
+                    if (owner == source.Id)
+                        message.ResourceRefs[referenceIndex] = ChatResourceUri.RebaseArtifactRevision(reference, fork.Id);
+                }
+                string checkpointOwner, checkpointArtifact; int checkpointRevision;
+                if (ChatResourceUri.TryParseArtifactRevision(message.HtmlWorkspaceCheckpoint,
+                        out checkpointOwner, out checkpointArtifact, out checkpointRevision) && checkpointOwner == source.Id)
+                    message.HtmlWorkspaceCheckpoint = ChatResourceUri.RebaseArtifactRevision(message.HtmlWorkspaceCheckpoint, fork.Id);
+                attachmentStore.CloneMessageAttachments(message);
+            }
+            fork.Artifacts = (source.Artifacts ?? new List<ChatArtifact>())
+                .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id))
+                .Select(artifact => JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(artifact)))
+                .ToList();
+            var retainedReferences = new HashSet<string>(fork.Messages
+                .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
+                .Select(reference => reference.ExactKey), StringComparer.Ordinal);
+            fork.ResourceReferenceIndex = (source.ResourceReferenceIndex ?? new List<ModelResourceReference>())
+                .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
+            fork.ToolCallReferenceSequence = source.ToolCallReferenceSequence;
+            fork.EvidenceReferenceSequence = source.EvidenceReferenceSequence;
+            fork.ReferenceContractVersion = source.ReferenceContractVersion;
+            store.Commit(fork, new ConversationCommit());
+            return fork;
         }
 
         public ChatSession DeleteMessage(WorkspaceDescriptor workspace, string sessionId, string messageId)

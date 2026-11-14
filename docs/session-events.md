@@ -1,5 +1,37 @@
 # Session event stream
 
+## Journal atomic text fork — 2026-11-14
+
+Native ConversationJournal now accepts text-history forks through the existing
+Office preparation/publication observer and Workspace fork owner. One chat commit
+records immutable source address/revision/hash, prefix boundary and a CAS membership
+manifest. Message locators retain original bounded frames and CAS bodies; copied
+call/result presentation is never appended as child execution. A 140-message prefix
+does not enter the 128-message delta field, and pages do not hydrate the manifest.
+Source must be idle and exactly revision-fenced. Run, confirmation and assignment
+state cannot be resumed by fork creation; altered source evidence is rejected.
+
+The existing index copies frozen Unknown/repeat obligations, including those outside
+the visible prefix, and reserves source T/E/R aliases. Schema 27 keys context_required
+and context_dependency by chat as well as operation; source cleanup cannot change a
+child's projection. Canonical operations, result receipts and resource effect proof
+retain their original owner. Details and guards validate immutable fork ancestry.
+Current-run recovery is not inherited. No new store, registry or authority exists.
+
+Source rewrites/deletion and child history edits preserve inherited obligations.
+Rebuild and journal/CAS restore reconstruct multi-generation membership and guards.
+Lost acknowledgements retry only the same accepted command, even after source deletion.
+Incomplete inherited tool exchanges are excluded in the disposable model view;
+later history edits keep their canonical locators. Independent reads and new runs
+remain available; possible unverified effects are not replayed.
+
+Scope is text and retained runtime presentation. Forks carrying artifacts, message
+attachments, checkpoints, supplied-data notes or resource-copy plans remain explicitly
+unsupported until their publication/ownership boundary is connected. Their source
+preparation below remains available. Full-load/cloning costs, ancestry/header work
+and inherited usage attribution remain P3. Production storage stays ChatStore until
+whole-port P7; Windows/Office qualification and complete application backup are open.
+
 ## Journal fork preparation — 2026-11-14
 
 Fork preparation now reads exact artifact bodies through IConversationStore, using
@@ -18,13 +50,10 @@ shared-publication provenance and failure state instead of dropping those fields
 Office uses the conversation port for preparation; Workspace uses it for transient
 creation and commit. The existing adapter delegates only to the current default.
 
-Native fork acceptance remains explicitly unsupported. Its next boundary must
-atomically retain the selected history prefix, inherited call/result provenance and
-Unknown replay obligations, including facts outside the visible prefix. Copied
-evidence cannot become a new execution or permission to retry. Source deletion or
-rewrites must not erase inherited obligations. Active runs/confirmations are not
-resumed in a fork. Default storage remains ChatStore until whole-port P7; no
-fallback, import or dual-write is added by this preparation change.
+Text acceptance and inherited execution obligations are connected above. Forks with
+resource graphs remain explicitly unsupported; copied evidence cannot become a new
+execution or permission to retry. Default storage remains ChatStore until whole-port
+P7; no fallback, import or dual-write is added by preparation or text acceptance.
 
 ## Journal context state — 2026-11-14
 

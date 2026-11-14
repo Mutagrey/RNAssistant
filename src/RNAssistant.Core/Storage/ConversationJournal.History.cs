@@ -54,7 +54,9 @@ namespace RNAssistant.Core.Storage
                 for (var i = 0; i < messages.Length; i++)
                 {
                     var entry = saved.Entries[i]; var write = writes[entry.Operation];
-                    if (write?.Fact.Card.ChatId != session.Id || !SameRunValue(messages[i], write.Fact.Messages.Single(item => item.Header.Id == entry.Id)))
+                    RequireHistoryOwner(db, session.Id, write);
+                    var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
+                    if (!(write.Fact.Card.ChatId == session.Id ? SameRunValue(messages[i], original) : SameInheritedText(original, messages[i])))
                         throw new InvalidOperationException("History operation was reused with different text.");
                 }
                 messages = retry.Fact.Messages.ToArray();
@@ -81,8 +83,9 @@ namespace RNAssistant.Core.Storage
                     ConversationChatReceipt write;
                     if (!writesByOperation.TryGetValue(prior.Operation, out write))
                         writesByOperation.Add(prior.Operation, write = FindChatWrite(db, prior.Operation));
-                    if (write?.Fact.Card.ChatId != session.Id) throw new InvalidDataException("Foreign history locator.");
-                    if (SameRunValue(message, write.Fact.Messages.Single(item => item.Header.Id == prior.Id)))
+                    RequireHistoryOwner(db, session.Id, write);
+                    var original = write.Fact.Messages.Single(item => item.Header.Id == prior.Id);
+                    if (write.Fact.Card.ChatId == session.Id ? SameRunValue(message, original) : SameInheritedText(original, message))
                     { entries.Add(prior); continue; }
                 }
                 changed.Add(message); entries.Add(new ConversationHistoryEntry(message.Header.Id, commit.OperationId));

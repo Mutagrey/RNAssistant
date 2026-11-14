@@ -83,7 +83,7 @@ namespace RNAssistant.Harness
                 current => WorkspaceConversationService.InterruptAbandonedRun(current, store));
         }
 
-        private static void JournalMutationTurn(bool office, string fault, bool checkHistory = false, bool checkContext = false)
+        private static void JournalMutationTurn(bool office, string fault, bool checkHistory = false, bool checkContext = false, bool checkFork = false)
         {
             WithTempPaths(paths => {
                 var workspace = office ? null : new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
@@ -397,6 +397,7 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual(fault == "terminal-ack" ? 1 : uncertain ? 4 : 2, calls, "only bounded finish correction, never mutation replay");
                 if (checkHistory) JournalHistoryGuardAfterMutation(paths, journal, store.Load(chat.Id), resources, workspace, files, settings, target, content);
+                if (checkFork) VerifyJournalForkUnknown(paths, journal, store.Load(chat.Id), resources, workspace, files, settings, target, content);
                 if (checkContext && !uncertain) VerifyJournalContextHistory(journal, store.Load(chat.Id), office, executor);
             });
         }

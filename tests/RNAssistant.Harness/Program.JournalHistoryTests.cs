@@ -124,12 +124,14 @@ namespace RNAssistant.Harness
 
         private static void JournalHistoryGuardAfterMutation(AppDataPaths paths, ConversationJournal journal, ChatSession chat,
             ResourceJournal resources, WorkspaceDescriptor workspace, WorkspaceFileService files, AppSettings settings,
-            string target, string content)
+            string target, string content, ConversationResultReceipt inherited = null)
         {
             IConversationStore store = journal; var payloads = new ChatBlobStore(paths);
-            var source = chat.Messages.Single(item => item.AcceptedCallOrigin != null);
-            var terminalHash = journal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash;
-            WorkspaceConversationService.DeleteHistoryMessage(store, chat, source.Id);
+            var source = chat.Messages.SingleOrDefault(item => item.AcceptedCallOrigin != null);
+            var original = inherited ?? journal.ReadWindow(chat.Id, long.MaxValue, 8).Single();
+            var terminalHash = original.Position.Hash;
+            if (source != null) WorkspaceConversationService.DeleteHistoryMessage(store, chat, source.Id);
+            else if (inherited != null) WorkspaceConversationService.DeleteHistoryMessage(store, chat, chat.Messages[0].Id);
             AssertTrue(!store.Load(chat.Id).Messages.Any(item => item.AcceptedCallOrigin != null), "visible call/result pair was deleted");
             journal.Rebuild(); chat = store.Load(chat.Id);
             var repeated = new ToolCall("new-call", "core.write", new JObject { ["content"] = content, ["target"] = target }.ToString());
@@ -139,7 +141,7 @@ namespace RNAssistant.Harness
             var backup = Path.Combine(paths.Root, "history-backup"); JournalCasService(paths, StorageProtector.None).BackupJournals(backup);
             var restored = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "history-restore"), _ => StorageProtector.None);
             var restoredJournal = new ConversationJournal(restored, "workspace:" + workspace.WorkspaceId);
-            AssertEqual(terminalHash, restoredJournal.ReadWindow(chat.Id, long.MaxValue, 8).Single().Position.Hash, "hidden Unknown remains canonical after restore");
+            AssertEqual(terminalHash, restoredJournal.ReadContextOperation(chat.Id, original.OperationId).Result.Position.Hash, "hidden Unknown remains canonical after restore");
             AssertEqual(ToolExecutionOutcome.Unknown, ((IEventStore)restoredJournal).ReadReplayGuard(metadata, repeated).Outcome, "restored guard survives a fresh index");
 
             var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
@@ -186,11 +188,11 @@ namespace RNAssistant.Harness
                 finally { try { listener.Stop(); } catch (ObjectDisposedException) { } provider.GetAwaiter().GetResult(); }
             }
             var results = journal.ReadWindow(chat.Id, long.MaxValue, 8);
-            AssertEqual(3, results.Count, "original Unknown, rejected repeat and independent read");
-            AssertEqual(ToolExecutionOutcome.NotDispatched, results[1].Fact.Result.ExecutionProgress.Outcome, "kernel blocks before runtime preparation/dispatch");
-            AssertContains(ToolResultPersistence.ReadContent(results[1].Fact.Result, payloads), "previous identical call", "action-specific guard feedback");
-            AssertEqual(ToolExecutionOutcome.Ok, results[2].Fact.Result.ExecutionProgress.Outcome, "independent read succeeds");
-            AssertEqual(terminalHash, results[0].Position.Hash, "new work never upgrades the original Unknown");
+            AssertEqual(inherited == null ? 3 : 2, results.Count, "only this chat's own executions become result facts");
+            AssertEqual(ToolExecutionOutcome.NotDispatched, results[results.Count - 2].Fact.Result.ExecutionProgress.Outcome, "kernel blocks before runtime preparation/dispatch");
+            AssertContains(ToolResultPersistence.ReadContent(results[results.Count - 2].Fact.Result, payloads), "previous identical call", "action-specific guard feedback");
+            AssertEqual(ToolExecutionOutcome.Ok, results.Last().Fact.Result.ExecutionProgress.Outcome, "independent read succeeds");
+            AssertEqual(terminalHash, journal.ReadContextOperation(chat.Id, original.OperationId).Result.Position.Hash, "new work never upgrades the original Unknown");
             AssertEqual(content, File.ReadAllText(Path.Combine(workspace.RootPath, target)), "no repeated write");
         }
     }

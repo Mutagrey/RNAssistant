@@ -61,7 +61,7 @@ namespace RNAssistant.Core.Storage
             var operation = ChatMessageOperation(db, chat, id);
             if (operation == null) return null;
             var saved = FindChatWrite(db, operation);
-            if (saved?.Fact.Card.ChatId != chat) throw new InvalidDataException("Foreign message update locator.");
+            RequireHistoryOwner(db, chat, saved);
             return saved.Fact.Messages.Single(item => item.Header.Id == id);
         }
 

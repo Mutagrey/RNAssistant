@@ -69,7 +69,11 @@ namespace RNAssistant.Core.Storage
         void IConversationStore.Commit(ChatSession session, ConversationCommit commit)
         {
             RequireTextRoot();
-            try { var receipt = CommitChat(session, commit); ApplyChatReceipt(session, receipt); ApplyMessageReferences(commit, receipt); }
+            try
+            {
+                var receipt = CommitChat(session, commit); ApplyChatReceipt(session, receipt); ApplyMessageReferences(commit, receipt);
+                if (receipt.Fact.Fork != null && receipt.Fact.ExpectedRevision == 0) LoadChatReferences(session);
+            }
             catch (IOException)
             {
                 // Recover only this operation's receipt; a lost acknowledgement
@@ -85,6 +89,8 @@ namespace RNAssistant.Core.Storage
             if (session.Revision > receipt.Position.Sequence)
                 throw new ChatConcurrencyException("An earlier receipt cannot rewind the current chat projection.");
             if (session.Revision < receipt.Position.Sequence) session.ResourceReferenceIndex.AddRange(receipt.Fact.References ?? new ModelResourceReference[0]);
+            session.ToolCallReferenceSequence = Math.Max(session.ToolCallReferenceSequence, (receipt.Fact.Fork?.NextCall ?? 1) - 1);
+            session.EvidenceReferenceSequence = Math.Max(session.EvidenceReferenceSequence, (receipt.Fact.Fork?.NextEvidence ?? 1) - 1);
             foreach (var message in receipt.Fact.Messages.Select(item => item.Header).Concat(receipt.Fact.Tools?.Terminal == null ? new ChatMessage[0] : new[] { receipt.Fact.Tools.Terminal.Result }))
             {
                 session.ToolCallReferenceSequence = Math.Max(session.ToolCallReferenceSequence, message.ToolCallReference?.Ordinal ?? 0);
@@ -131,7 +137,7 @@ namespace RNAssistant.Core.Storage
                     var commits = ids.Select(item => item.Item2).Distinct().ToDictionary(operation => operation, operation => FindChatWrite(db, operation));
                     var entries = ids.Select(item => {
                         var write = commits[item.Item2];
-                        if (write?.Fact.Card.ChatId != id) throw new InvalidDataException("Foreign message locator.");
+                        RequireHistoryOwner(db, id, write);
                         return write.Fact.Messages.Single(message => message.Header.Id == item.Item1);
                     }).ToArray();
                     return Tuple.Create(current, entries);
@@ -170,6 +176,8 @@ namespace RNAssistant.Core.Storage
                     Title = card.Title, DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath,
                     CreatedUtc = card.CreatedUtc, Model = card.SelectedModel, ReasoningEnabled = card.ReasoningEnabled,
                     TitleAssignedByAgent = card.TitleAssignedByAgent, AgentCreation = card.AgentCreation,
+                    ParentSessionId = receipt.Fact.Fork?.Parent.Id, ParentSessionRevision = receipt.Fact.Fork?.Parent.Revision,
+                    ForkedThroughMessageId = receipt.Fact.Fork?.ThroughMessageId,
                     PreviousDocumentKeys = (card.PreviousDocumentKeys ?? new string[0]).ToList(),
                     Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
                     Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)),
@@ -184,6 +192,7 @@ namespace RNAssistant.Core.Storage
                     session.Messages.AddRange(page.PageMessages);
                     if (before == receipt.Fact.MessageCount) break;
                 }
+                if (receipt.Fact.Fork != null) ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages);
                 ApplyChatReceipt(session, receipt);
                 var resourceSet = ReadResourceSet(receipt.Fact.Resources, ChatMetadata(receipt));
                 session.Artifacts = ReadArtifacts(ChatMetadata(receipt), resourceSet.References).ToList();

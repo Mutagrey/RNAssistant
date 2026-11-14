@@ -147,9 +147,9 @@ namespace RNAssistant.Core.Storage
         private ConversationContextOperation ReadContextOperation(SqliteConnection db, string chat, string operation)
         {
             var receipt = Find(db, operation);
-            if (receipt == null || receipt.Fact.ChatId != chat) return null;
+            if (receipt == null || !InheritedFact(db, chat, receipt.Fact.ChatId, receipt.Position.Sequence)) return null;
             var result = receipt.Fact.Result;
-            var call = FindCall(db, chat, result.RunId, result.ToolCallId);
+            var call = FindCall(db, receipt.Fact.ChatId, result.RunId, result.ToolCallId);
             if (call == null) throw new InvalidDataException("Context result has no accepted call.");
             using (var command = Command(db, "SELECT unknown_effect,retry FROM context_required WHERE stream=$stream AND chat=$chat AND operation=$operation"))
             {

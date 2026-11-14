@@ -25,6 +25,12 @@ roots even after selection or visible history changes. This closes their backup 
 restore and GC reachability without copying a closure into every chat header or
 parsing arbitrary model text. Catalog attribution of nested context bytes remains P3.
 
+Native text forks retain a CAS membership manifest pointing to original journal
+frames; ancestor deletion never deletes those canonical frames or their CAS roots.
+Existing replay rebuilds inherited guard projections. Multi-generation deletion,
+rebuild and Workspace journal/CAS restore are checked; inherited per-chat usage
+attribution remains P3. This does not close complete application-owner backup.
+
 `ForScope` run leases join the existing `locks/run_*.lck`/`run-registry.lck` namespace.
 `RuntimeStorageActivity` remains held from CAS publication to acceptance or confirmed
 abort. A second-process publication and a live scope run both block collection.

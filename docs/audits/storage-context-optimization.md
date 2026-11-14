@@ -2045,3 +2045,45 @@ after-state/CAS ownership.
    and Harness guide. Version 16.27.4-dev records the shared fork improvement in
    CHANGELOG; default adapter retires at P7. Scoped diff/links and mandatory version
    validation checked before commit. Windows evidence remains open; no tag, push or release.
+
+## P1/P2 — native atomic text fork (2026-11-14)
+
+1. Advances F01/F04 through existing ConversationJournal, history/CAS/index and
+   actual Office publication / Workspace fork owners. Native text forks now commit
+   atomically; resource-bearing forks retain their explicit rejection.
+2. One bounded frame freezes source address/revision/hash and boundary; the existing
+   history manifest retains original message locators. Calls/results keep canonical
+   source ownership, without child call/result/effect records. Source must be idle;
+   runs/confirmations/assignments are not resumed. Lost acknowledgement retries the
+   same command, including after ancestor deletion; altered evidence is rejected.
+3. Removed the blanket native-fork rejection for the supported scope and same-chat
+   locator assumptions in pages/history. Workspace uses its existing fork method
+   with the Store port, extracted without another service. Schema 27 adds chat to
+   existing context-obligation/dependency keys; inherited Unknown/repeat guards and
+   reserved aliases are applied with membership in the same index transaction.
+   No new store, registry, import, dual-write or hidden fallback.
+4. Three new scenarios pass: actual Office/Workspace text fork, 140-message prefix,
+   child editing and multi-generation source deletion; before-append/after-flush/
+   index faults, exact source fencing, forgery rejection and same-command retry;
+   actual Workspace kernel repeat rejection plus independent read after inherited
+   Unknown outside the visible prefix, rebuild and journal/CAS restore. A prefix
+   cut within a tool exchange preserves derived exclusion through child edits.
+   Ten regressions pass without another build: history (4), context-state (2),
+   Task, HTML, Workspace default fork and document move (1 each). macOS/net8/C#7.3;
+   no full suite or Office/VSTO validation.
+5. Before: native Store rejected every fork. After: the 140-message fixture appends
+   less than 16 KiB to the conversation journal; a one-message page reads one text
+   body, zero membership manifests. Existing CAS payloads are reused. Fork creation
+   still explicitly loads/clones/verifies the selected history; metadata/ancestry
+   work and inherited per-chat usage attribution remain P3. No CPU/allocation or
+   Windows latency claim is made.
+6. Next: resource-bearing fork publication and ownership (artifacts, attachments,
+   checkpoints and supplied-data/definition copies), then remaining consumers/P3,
+   complete owner backup/quiescence and P7 removal of ChatStore/adapters. Unknown
+   retry-policy refinement remains its separately recorded task. P4 is deferred;
+   production composition, Office identity/Workspace backup and Windows gates remain open.
+7. Updated session/artifact/CAS contracts, migration map, progress and Harness guide.
+   This is intermediate native integration and a behavior-preserving extraction of
+   the default consumer: no product bump, version remains 16.27.4-dev. Scoped diff,
+   changed documentation links and ValidateVersionFormat checked before commit.
+   No tag, push or release.
