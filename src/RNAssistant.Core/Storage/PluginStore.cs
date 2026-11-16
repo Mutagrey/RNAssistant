@@ -5,6 +5,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
@@ -14,14 +15,25 @@ namespace RNAssistant.Core.Storage
     public sealed partial class PluginStore
     {
         private static readonly ResourceAuthorityScopeId Scope = new ResourceAuthorityScopeId("plugins", "local");
-        private readonly ResourceAuthorityStore _authority;
+        private readonly IResourceAuthorityStore _authority;
+        private readonly IResourceRevisionStore _revisions;
+        private readonly IConversationStore _conversations;
         private readonly ChatBlobStore _blobs;
         private readonly WorkspaceFileService _files;
         private readonly AppDataPaths _paths;
-        private readonly ResourceMutationJournal _journal;
-        public PluginStore(AppDataPaths paths)
-        { _paths = paths; _authority = new ResourceAuthorityStore(paths); _blobs = new ChatBlobStore(paths);
-            _files = new WorkspaceFileService(paths); _journal = new ResourceMutationJournal(paths); }
+        private readonly IResourceMutationJournal _journal;
+        public PluginStore(AppDataPaths paths, IConversationStore conversations = null, IResourceAuthorityStore authority = null,
+            IResourceMutationJournal mutations = null, WorkspaceFileService files = null, ChatBlobStore payloads = null)
+        {
+            if ((conversations != null || authority != null || mutations != null || files != null || payloads != null) &&
+                (conversations == null || authority == null || mutations == null || files == null || payloads == null))
+                throw new ArgumentException("Plugins require the complete conversation/file/resource composition.");
+            _paths = paths; _conversations = conversations;
+            _authority = authority ?? new ResourceAuthorityStore(paths);
+            _revisions = _authority as IResourceRevisionStore ?? throw new ArgumentException("The resource owner must retain revisions.");
+            _blobs = payloads ?? new ChatBlobStore(paths); _files = files ?? new WorkspaceFileService(paths);
+            _journal = mutations ?? new ResourceMutationJournal(paths);
+        }
 
         // A transient OS lease, not another registry. It protects retained plugin
         // bytes across panels/processes while the existing runtime-clear owner runs.
@@ -223,7 +235,7 @@ namespace RNAssistant.Core.Storage
             var reference = cutoff ?? head.Revision;
             while (reference != null)
             {
-                var revision = _authority.GetRevision(Scope, reference);
+                var revision = _revisions.GetRevision(Scope, reference);
                 if (revision == null) throw new PluginException("plugin_history_invalid", "История регистрации неполная.");
                 var historic = Read<PluginRegistration>(reference, "plugin-registration", false);
                 if (!string.IsNullOrEmpty(historic.ActiveReleaseId) && seen.Add(historic.ActiveReleaseId))
@@ -256,8 +268,8 @@ namespace RNAssistant.Core.Storage
         private void Publish(ResourceRef reference, string view, object record, IEnumerable<PayloadRef> parts, ResourceRef expected)
         {
             var payload = PayloadRef.FromBlob(_blobs.StoreText(JsonConvert.SerializeObject(record), "application/json"));
-            _authority.RegisterRevision(Scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload, parent: expected));
-            _authority.RegisterView(Scope, new ResourceRevisionView(reference, view, payload.Sha256, payload, ResourceCoverage.Whole(), parts));
+            _revisions.RegisterRevision(Scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload, parent: expected));
+            _revisions.RegisterView(Scope, new ResourceRevisionView(reference, view, payload.Sha256, payload, ResourceCoverage.Whole(), parts));
             var frozen = _authority.Capture(Scope);
             var before = frozen.GetHead(reference.Identity);
             if (before?.Revision?.Revision != expected?.Revision)
@@ -275,9 +287,9 @@ namespace RNAssistant.Core.Storage
                 if (published?.Knowledge != HeadKnowledge.Known || published.Revision.Revision != reference.Revision)
                     throw new PluginException("plugin_release_missing", "The exact publication is not available.");
             }
-            else if (_authority.GetRevision(Scope, reference) == null)
+            else if (_revisions.GetRevision(Scope, reference) == null)
                 throw new PluginException("plugin_release_missing", "The exact publication is not available.");
-            var data = _authority.GetView(Scope, reference, view);
+            var data = _revisions.GetView(Scope, reference, view);
             if (data?.Payload == null || data.Payload.ByteLength > 1024 * 1024)
                 throw new PluginException("plugin_release_invalid", "Invalid package metadata.");
             var json = _blobs.ReadText(data.Payload.ToBlobReference());

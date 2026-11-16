@@ -17,12 +17,12 @@ namespace RNAssistant.Office
             service.Register(new AgentConversationScope {
                 Key = "office",
                 Groups = new ConversationGroupService(_chatStore),
-                Catalog = new ConversationCatalogService(_chatStore, _toolExecutor.Payloads),
+                Catalog = new ConversationCatalogService(_conversationStore, _toolExecutor.Payloads),
                 Contains = session => session?.WorkspaceId == null && _chatSessions.IsCurrentDocument(session),
                 ReadCatalog = () => {
                     var host = _adapter.HostName;
                     var documentKey = _adapter.DocumentKey;
-                    return _chatStore.ListHeaders(includeStorageUsage: false)
+                    return _conversationStore.ListHeaders(includeStorageUsage: false)
                         .Where(header => header.WorkspaceId == null &&
                             string.Equals(header.Host, host, StringComparison.OrdinalIgnoreCase) &&
                             string.Equals(header.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))

@@ -22,10 +22,14 @@ authority are checked. `MaxCollaborationAgents=0` rejects access through old han
 as well. Reading does not recruit a participant or consume a place in the cap.
 No default cross-chat enumeration, worker startup, history merge or LLM summarizer.
 
-`ChatStore.ReadChatOverview` reads the existing verified SQLite projection of chat
-events: metadata, first 4 / last 32 message rows, at most 64 KiB per protected row
-and 1 MiB total admitted row payload. SQL excludes oversized payloads before managed
-materialization. At most 6 excerpts of 600 characters are exposed, with role,
+`IConversationStore.ReadOverview` reads the existing verified projection of chat
+events: metadata or first 4 / last 32 message rows. The retiring adapter keeps its
+64 KiB protected-row / 1 MiB total admission. ConversationJournal addresses the
+same bounded sample through canonical locators, admitting at most 64 KiB per text
+body / 1 MiB total before CAS hydration. Private/activity/media and reasoning bodies
+stay cold; metadata-only reads hydrate no bodies. Inherited locators remain usable
+after ancestor deletion. Both readers use the existing projection extracted into
+ChatOverviewProjection; it is not another store. At most 6 excerpts of 600 characters are exposed, with role,
 peer sender when present, timestamp and truncation. System/developer, protocol tool
 results, activity/runtime projections and model reasoning are excluded. Current v8
 assistant responses contribute only visible finish text. An incompatible stream
@@ -46,6 +50,7 @@ pins target chat/revision and payload hash, and evidence retains any exact publi
 summary dependency. `complete=true` covers only this derived observation;
 `sourceComplete=false` / `historyComplete=false` never prove a whole-history read or
 an external effect. No mutable overview head, new durable catalog or schema migration.
+Read and agent-title updates use the same bound Store port in Office/Workspace.
 Run-local revision observations authorize only addressed title metadata changes;
 callers cannot supply revisions or resource URIs. Accepted evidence survives replay/GC.
 

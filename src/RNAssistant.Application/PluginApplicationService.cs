@@ -61,12 +61,15 @@ namespace RNAssistant.Application
         {
             _paths = paths; _webRoot = webRoot; _webHost = webHost; _officeCapabilities = officeCapabilities;
             _browserCapabilities = browserCapabilities;
-            HtmlProjects = new WorkspaceHtmlVersionService(paths);
-            HtmlProjects.VersionChanged += value => VersionChanged?.Invoke(value);
-            _store = new PluginStore(paths); _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
+            _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
             Vendors = new VendorCatalog(paths, webRoot); _results = new PluginResultStore(paths);
             Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools, officeCapabilities,
                 () => PluginStore.AcquireRuntimeUse(paths), IsPluginSourceWorkspace, browserCapabilities: browserCapabilities);
+            var resources = new ResourceAuthorityStore(paths); var mutations = new ResourceMutationJournal(paths);
+            var files = new WorkspaceFileService(paths, resources, resources, mutations);
+            _store = new PluginStore(paths, Conversations.ConversationStore, resources, mutations, files, new ChatBlobStore(paths));
+            HtmlProjects = new WorkspaceHtmlVersionService(paths, Conversations.ConversationStore, files, resources, mutations);
+            HtmlProjects.VersionChanged += value => VersionChanged?.Invoke(value);
         }
 
         public PluginCatalogDto List()

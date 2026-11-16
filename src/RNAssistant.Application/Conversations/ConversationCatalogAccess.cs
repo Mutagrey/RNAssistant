@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -15,13 +16,13 @@ namespace RNAssistant.Application.Conversations
     // Bound existing persistence, shared by Office and Workspace. No new catalog/store.
     internal sealed class ConversationCatalogService
     {
-        private readonly ChatStore _store;
+        private readonly IConversationStore _store;
         private readonly ChatBlobStore _payloads;
-        internal ConversationCatalogService(ChatStore store, ChatBlobStore payloads)
+        internal ConversationCatalogService(IConversationStore store, ChatBlobStore payloads)
         { _store = store; _payloads = payloads; }
 
         internal ChatOverview Read(ChatSession scope, string id, bool metadataOnly)
-        { return _store.ReadChatOverview(scope, id, metadataOnly); }
+        { return _store.ReadOverview(scope, id, metadataOnly); }
 
         internal void Rename(ChatSession session, string title) { _store.SetAgentTitle(session, title); }
 
@@ -140,7 +141,7 @@ namespace RNAssistant.Application.Conversations
                 // Only mutation loads an idle execution object, so existing host caches
                 // and callbacks receive a complete session, never an overview projection.
                 var current = endpoint.Load();
-                if (current == null || current.Id != observed.Id || !ChatStore.SameOverviewScope(_source, current))
+                if (current == null || current.Id != observed.Id || !ChatOverviewProjection.SameScope(_source, current))
                     throw Error("The target chat is unavailable in this scope.", "chat_unavailable");
                 if (current.Revision != observed.Revision || !current.UsesCurrentProtocol)
                     throw Error("The chat changed after the overview read. Read it again before renaming.", "chat_rename_stale");

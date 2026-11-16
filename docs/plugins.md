@@ -6,6 +6,23 @@ A read-only saved preview does not hold VersionInUse. Exact command operations a
 saved preparations do. Delete revokes viewers of that entry immediately, then the
 existing version-state notification presents Removed; immutable evidence is retained.
 
+## Bound conversation reads — 2026-11-14
+
+Browser locator/version checks and plugin Run ownership use the same conversation
+port owned by WorkspaceConversationService. They read only exact metadata/header,
+never construct an independent ChatStore or load the transcript. HTML version
+services require their conversation port explicitly, including Office transfer
+consumers. PluginStore uses supplied conversation/resource/file owners for native
+publication. Supplied ports must form a complete composition; partial injection
+fails before owner creation. A missing read port cannot authorize a Run actor. Retry still resolves
+the original saved-version operation before considering a new write.
+
+These bindings preserve workspace/run checks, immutable saved sources and existing
+publication authority. They do not switch global production storage. Native plugin
+version tests cover exact actor, no-effect refusal, receipt reuse, rebuild and
+isolated journal/CAS restore; complete application-owner backup and Windows evidence
+remain separate.
+
 ## Common Browser annotations — 2026-11-13
 
 Plugins share `stageBrowserVisualSelection` with all local HTML sources. Native capture

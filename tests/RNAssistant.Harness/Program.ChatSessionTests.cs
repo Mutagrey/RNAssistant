@@ -1998,6 +1998,8 @@ namespace RNAssistant.Harness
             public ChatSession Load(string host, string key, string id)
             { RequireFullLoad(); return _inner.Load(host, key, id); }
             public ChatSession Load(string id) { RequireFullLoad(); return _inner.Load(id); }
+            public ChatOverview ReadOverview(ChatSession scope, string id, bool metadataOnly = false) { return _inner.ReadOverview(scope, id, metadataOnly); }
+            public void SetAgentTitle(ChatSession session, string value) { _inner.SetAgentTitle(session, value); }
             public ConversationMetadata ReadMetadata(string id) { return _inner.ReadMetadata(id); }
             public ChatSessionHeader ReadHeader(string id) { RequireHeaders(); return _inner.ReadHeader(id); }
             public bool LoadArtifactBody(ChatSession session, string id) { return _inner.LoadArtifactBody(session, id); }

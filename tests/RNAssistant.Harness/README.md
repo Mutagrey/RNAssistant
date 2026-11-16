@@ -594,6 +594,14 @@ storage work in the shared checkout is not included in this evidence.
 
 ## Chat overviews and addressed rename (4a.2, 2026-11-10)
 
+Native consumer follow-up: `chat overview: native` checks the actual shared catalog
+access in Office/Workspace scope, zero-body metadata, bounded hydration, observed
+rename, inherited locators and missing oversized bodies. `plugin versions: native`
+checks exact run-header admission, receipt reuse, native resource publication and
+isolated journal/CAS restore. Relevant existing checks are `chat overview:`, the
+other `plugin versions:` cases and `journal HTML: Workspace`; reuse one build.
+Neither this consumer wiring nor these checks switch or qualify production Office.
+
 Filter `chat overview:` covers bounded SQLite samples/bytes, private content filtering,
 existing published summary, incompatible metadata-only reads, restart/stable projection,
 model budget, unsupported history selectors, exact scope/disabled/delete guards,

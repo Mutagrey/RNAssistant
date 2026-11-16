@@ -55,6 +55,21 @@ host-neutral. `16.27.13-dev`; DPAPI/Windows filesystem qualification отдел�
 Storage cutover/P7 и полное восстановление owners остаются открытыми.
 
 
+## Bound catalog/plugin/browser consumers — 2026-11-14
+
+Catalog overview/agent rename переведены на IConversationStore; native reader
+использует bounded locators и общий фильтр excerpts/summary. Plugin/browser metadata
+и Run-owner checks используют порт существующего Workspace owner. HTML versions
+получают его явно; PluginStore принимает существующие resource/file/conversation
+порты. Прямые ChatStore reads/factories этих consumers удалены; native saved versions
+проходят receipt/rebuild и изолированный journal/CAS restore. `16.27.16-dev`;
+10 целевых host-neutral checks прошли в изолированном checkout с этим срезом.
+Default production writer остаётся ChatStore. Далее общая Office/Workspace scope
+composition и оставшиеся group/resource owners, P3 metadata/header/context/usage,
+полный backup owners/ключей, остановка старых writers и P7. P4 отложена;
+Windows/Office evidence и полное application restore открыты.
+[Отчёт §12](../audits/storage-context-optimization.md#p1p2--bound-catalogpluginbrowser-consumers-2026-11-14).
+
 ## Native definition-copy fork — 2026-11-14
 
 Office schema/mapping/derived и supplied-data copies подключены к native fork через

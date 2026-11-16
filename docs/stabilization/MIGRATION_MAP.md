@@ -186,6 +186,19 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+P1/P2 bound catalog/plugin/browser consumers (2026-11-14): ConversationCatalogService
+uses IConversationStore.ReadOverview/SetAgentTitle; the existing excerpt/summary
+projection is shared in Core, and the native reader addresses bounded locators.
+PluginApplicationService reuses Workspace's conversation port for metadata/run
+checks; WorkspaceHtmlVersionService requires it. PluginStore accepts the existing
+file/resource/conversation owners. Direct ChatStore factories/static helpers and
+per-endpoint adapters were removed from these consumers. ChatConversationStoreAdapter
+forwards the added operations until P7; no new adapter/store or fallback.
+Owner: existing catalog/plugin/HTML version services. Remaining global scope routing,
+group/vendor/visual-resource composition, P3 and full backup/quiescence precede
+P7 removal of the default adapters.
+[Contract](../session-events.md#bound-catalog-and-pluginbrowser-consumers--2026-11-14).
+
 P1/P2 definition-copy fork (2026-11-14): native conversation facts replace blanket
 copy/supplied-data rejection with immutable bounded CAS provenance. Existing Office
 ResourceForkService and resource publication observer remain the only copy/commit

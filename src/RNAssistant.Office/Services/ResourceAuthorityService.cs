@@ -28,6 +28,7 @@ namespace RNAssistant.Office.Services
 
         internal IResourceAuthorityStore Store { get { return _authority; } }
         internal IResourceRevisionStore Revisions { get { return _revisions; } }
+        internal IResourceMutationJournal Mutations { get { return _mutations; } }
         internal ChatBlobStore Payloads { get { return _payloads; } }
 
         // Authored logical heads retain a typed immutable-snapshot dependency;

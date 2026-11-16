@@ -11,6 +11,16 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 16.27.16-dev
+
+- Каталог чатов и plugin/browser checks используют привязанный порт истории,
+  без отдельных ChatStore для чтения metadata и проверки владельца run.
+  Неполная resource/file/conversation composition явно отклоняется.
+- Для native journal подключены bounded overview и адресное переименование:
+  metadata не загружает тела, excerpts сохраняют лимиты и фильтрацию приватных
+  данных. Plugin saved versions работают через существующие native resource-порты.
+  Default writer пока прежний; Windows/Office qualification остаётся отдельной.
+
 ### 16.27.15-dev
 
 - Отклонённые и прерванные ответы сохраняются обязательным событием внутри run:

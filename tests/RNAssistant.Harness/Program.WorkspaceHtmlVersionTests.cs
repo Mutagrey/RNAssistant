@@ -14,6 +14,13 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static WorkspaceHtmlVersionService WorkspaceHtmlVersionsFixture(AppDataPaths paths)
+        {
+            var resources = new ResourceAuthorityStore(paths); var mutations = new ResourceMutationJournal(paths);
+            return new WorkspaceHtmlVersionService(paths, new ChatConversationStoreAdapter(new ChatStore(paths)),
+                new WorkspaceFileService(paths, resources, resources, mutations), resources, mutations);
+        }
+
         private static void WorkspaceHtmlCheckpoints()
         {
             WithPluginPaths(paths => {
@@ -26,7 +33,7 @@ namespace RNAssistant.Harness
                 File.WriteAllBytes(Path.Combine(imported.RootPath, "assets/image.bin"), binary);
                 workspaces.SetHtmlProjectDefinition(workspace, definition.Fingerprint, new HtmlProjectDefinition {
                     EntryPath = definition.Definition.EntryPath, Members = definition.Definition.Members.Concat(new[] { "assets/image.bin" }).ToArray() });
-                var service = new WorkspaceHtmlVersionService(paths);
+                var service = WorkspaceHtmlVersionsFixture(paths);
                 var user = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" };
                 var source = service.Resolve(new BrowserResolveRequest { OwnerScope = user,
                     Locator = BrowserLocalLocator.ForProject(imported.WorkspaceId, imported.EntryPath) }).Target;
@@ -50,7 +57,7 @@ namespace RNAssistant.Harness
                 var savedLocator = BrowserLocalLocator.ForProject(imported.WorkspaceId, imported.EntryPath, first.Version.VersionId);
                 var saved = service.Resolve(new BrowserResolveRequest { OwnerScope = user, Locator = savedLocator }).Target;
                 Directory.Move(imported.RootPath, imported.RootPath + "-offline");
-                var restart = new WorkspaceHtmlVersionService(paths);
+                var restart = WorkspaceHtmlVersionsFixture(paths);
                 var exact = restart.Resolve(new BrowserResolveRequest { OwnerScope = user, Locator = savedLocator }).Target;
                 AssertEqual(original, restart.Source(new BrowserSourceRequest { OwnerScope = user, Locator = savedLocator,
                     Count = 32000, RequestGeneration = 1 }, exact).Text, "saved source comes only from CAS without live root");

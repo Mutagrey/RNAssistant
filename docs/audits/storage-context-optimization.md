@@ -2292,3 +2292,38 @@ after-state/CAS ownership.
    Intermediate native integration leaves default production composition unchanged,
    so no product bump/CHANGELOG entry. Scoped diff/links and mandatory version check
    precede commit; no push or release.
+
+## P1/P2 — bound catalog/plugin/browser consumers (2026-11-14)
+
+1. Advances F04/F05 through the existing ConversationCatalogService, PluginStore,
+   PluginApplicationService and WorkspaceHtmlVersionService. Scope: bounded overview,
+   attributed rename, exact browser/workspace/run admission and native plugin versions.
+2. IConversationStore owns overview/agent-title operations. Native SQL selects only
+   first four/last 32 locators; size/privacy admission precedes CAS hydration.
+   Both readers reuse the extracted existing excerpt/published-summary projection.
+   Plugin/browser consumers share the Workspace port. Native PluginStore uses the
+   supplied resource/file/conversation owners; partial composition fails explicitly.
+3. Removed direct ChatStore overview/static scope dependency, ad-hoc metadata/header
+   factories and per-endpoint adapters in these consumers. Old adapter only forwards
+   until P7. No new durable catalog, registry, store, backend fallback or dual write.
+4. Ten focused host-neutral checks pass: five chat-overview cases (including actual
+   Office/Workspace kernels), four plugin-version cases, native Workspace HTML.
+   Native tests cover metadata/privacy bounds, stale rename, inherited/deleted source,
+   absent oversized bodies, exact active Run, receipt reuse, rebuild/isolated restore
+   and incomplete composition. After the constructor guard change only affected
+   native/default plugin and native HTML cases were repeated. Tests use an isolated
+   checkout of 5bbc5e33 plus this change; concurrent lifecycle edits stayed untouched.
+   No full suite or Office/VSTO build; controller delivery still needs Windows.
+5. Metadata overview and plugin Run admission hydrate zero chat bodies. A 94-message
+   fixture samples 36 rows, hydrates 33 eligible text bodies, skips a 100,000-character
+   body and all reasoning/excluded bodies, then returns six bounded excerpts.
+   Limits remain 64 KiB/body, 1 MiB admitted text and at most 2 MiB published summary.
+   Full rename load and broad metadata/context/usage costs remain P3; no timing claim.
+6. Default writer remains ChatStore. Remaining: global Office/Workspace scope routing,
+   group and other resource-owner composition (including vendor/visual intake), P3,
+   complete backup of identity/Workspace connections/keys, writer quiescence and P7.
+   P4 remains deferred. Isolated saved-package restore does not qualify full app restore.
+7. Updated resource/session/plugin contracts, migration map, progress and Harness guide.
+   16.27.16-dev is a patch for the switched common consumers; no global storage switch,
+   push or release. Added Core files are in the old-style project. Scoped diff/links
+   and mandatory version validation precede the single completing commit.

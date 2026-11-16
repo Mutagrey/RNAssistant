@@ -41,6 +41,11 @@ namespace RNAssistant.Core.Storage
 
         public ChatSessionHeader ReadHeader(string sessionId) { return _store.ReadSessionHeader(sessionId); }
 
+        public ChatOverview ReadOverview(ChatSession scope, string id, bool metadataOnly = false)
+        { return _store.ReadChatOverview(scope, id, metadataOnly); }
+
+        public void SetAgentTitle(ChatSession session, string title) { _store.SetAgentTitle(session, title); }
+
         public bool LoadArtifactBody(ChatSession session, string artifactId) { return _store.LoadArtifactBody(session, artifactId); }
 
         public void Commit(ChatSession session, ConversationCommit commit)

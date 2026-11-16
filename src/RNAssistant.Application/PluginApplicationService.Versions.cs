@@ -186,7 +186,7 @@ namespace RNAssistant.Application
                 locator.Key != registration.PluginId || locator.VersionId != requested.SavedVersionId || requested.WorkspaceId != registration.SourceWorkspaceId ||
                 locator.Kind != BrowserLocatorKind.PluginSource && locator.Kind != BrowserLocatorKind.PluginVersion || scope == null ||
                 scope.Kind != BrowserOwnerKind.Workspace || scope.ScopeId != registration.SourceWorkspaceId ||
-                !string.IsNullOrEmpty(scope.ChatId) && new ChatStore(_paths).ReadMetadata(scope.ChatId)?.WorkspaceId != scope.ScopeId)
+                !string.IsNullOrEmpty(scope.ChatId) && Conversations.ConversationStore.ReadMetadata(scope.ChatId)?.WorkspaceId != scope.ScopeId)
                 throw new PluginException("browser_owner_changed", "Выберите точный источник плагина заново.");
             var removed = locator.VersionId != null && _store.SavedVersion(registration.PluginId, locator.VersionId, true).Removed;
             var writable = locator.VersionId == null && !Source(registration).Workspace.ReadOnly;
@@ -210,7 +210,7 @@ namespace RNAssistant.Application
         private bool RunOwns(string plugin, string chat, string run, string workspace = null)
         {
             if (string.IsNullOrEmpty(chat) || string.IsNullOrEmpty(run)) return false;
-            var header = new ChatStore(_paths).ReadSessionHeader(chat);
+            var header = Conversations.ConversationStore.ReadHeader(chat);
             if (header?.WorkspaceId != (workspace ?? _store.Get(plugin)?.SourceWorkspaceId) || header?.RunId != run) return false;
             var lifecycle = header.RunViewState?.Lifecycle ?? header.RunStatus;
             return lifecycle == RunViewLifecycles.Running || lifecycle == RunViewLifecycles.AwaitingConfirmation || lifecycle == RunViewLifecycles.AwaitingUser;

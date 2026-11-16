@@ -464,7 +464,7 @@ namespace RNAssistant.Harness
                     var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = plugin.SourceWorkspaceId, ChatId = sessionId };
                     string locator;
                     if (genericHtml) {
-                        var html = new WorkspaceHtmlVersionService(paths);
+                        var html = WorkspaceHtmlVersionsFixture(paths);
                         var definition = html.GetDefinition(new HtmlProjectDefinitionRequest { OwnerScope = owner, WorkspaceId = owner.ScopeId });
                         html.SetDefinition(new HtmlProjectDefinitionRequest { OwnerScope = owner, WorkspaceId = owner.ScopeId,
                             ExpectedFingerprint = definition.Fingerprint,
@@ -476,7 +476,7 @@ namespace RNAssistant.Harness
                     var capture = content.Annotation(content.EntryPath);
                     var acceptedSource = capture.Source;
                     if (genericHtml) {
-                        var html = new WorkspaceHtmlVersionService(paths);
+                        var html = WorkspaceHtmlVersionsFixture(paths);
                         var state = html.State(new BrowserVersionRequest { Target = content.Target });
                         var saved = html.Command(new BrowserVersionCommand { Target = content.Target, Action = BrowserVersionAction.Save,
                             ExpectedContentRevision = state.ContentRevision, ExpectedDefinitionRevision = state.DefinitionRevision,

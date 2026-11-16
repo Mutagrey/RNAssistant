@@ -14,6 +14,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -26,6 +27,10 @@ namespace RNAssistant.Harness
     internal static partial class Program
     {
         private static AgentConversationScope OverviewScope(ChatStore store, ConversationInboxService inbox,
+            ChatSession source, AppDataPaths paths, Action loaded = null, Action started = null)
+        { return OverviewScope(new ChatConversationStoreAdapter(store), inbox, source, paths, loaded, started); }
+
+        private static AgentConversationScope OverviewScope(IConversationStore store, ConversationInboxService inbox,
             ChatSession source, AppDataPaths paths, Action loaded = null, Action started = null)
         {
             var leases = ConversationLeaseService.ForOffice(paths);

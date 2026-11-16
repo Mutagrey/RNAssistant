@@ -12,6 +12,7 @@ namespace RNAssistant.Runtime
 {
     public sealed partial class WorkspaceConversationService
     {
+        internal IConversationStore ConversationStore { get { return _conversationStore; } }
         internal AgentCommunicationService AgentCommunication { get; set; }
         internal Action<string, string, WorkspaceRunEvent> AgentProgress { get; set; }
 
@@ -33,19 +34,19 @@ namespace RNAssistant.Runtime
             AgentCommunication.Register(new AgentConversationScope {
                 Key = "workspace:" + workspace.WorkspaceId,
                 Groups = new ConversationGroupService(_chats),
-                Catalog = new ConversationCatalogService(_chats, _payloads),
+                Catalog = new ConversationCatalogService(_conversationStore, _payloads),
                 Contains = session => session?.WorkspaceId == workspace.WorkspaceId,
-                ReadCatalog = () => _chats.ListHeaders(includeStorageUsage: false)
+                ReadCatalog = () => _conversationStore.ListHeaders(includeStorageUsage: false)
                     .Where(header => header.WorkspaceId == workspace.WorkspaceId)
                     .Select(header => AgentEndpoint(workspace, new AgentChatAddress { Source = "workspace", ChatId = header.Id,
                         WorkspaceId = workspace.WorkspaceId, Title = header.Title, ScopeTitle = header.DocumentTitle }, captured, key)).ToArray(),
                 Prepare = (source, title) => {
                     _workspaces.OpenConnected(workspace.WorkspaceId);
-                    var child = _chats.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title);
+                    var child = _conversationStore.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title);
                     child.WorkspaceId = workspace.WorkspaceId;
                     return child;
                 },
-                Commit = child => _chats.Commit(child, new ConversationCommit()),
+                Commit = child => _conversationStore.Commit(child, new ConversationCommit()),
                 Endpoint = address => AgentEndpoint(workspace, address, captured, key)
             });
         }
@@ -58,7 +59,7 @@ namespace RNAssistant.Runtime
             Action<ChatSession> changed = current => progress(new WorkspaceRunEvent("QueueChanged", current.LastRun?.KernelState?.Summary,
                 null, ConversationEventFeed.Cursor(current)));
             return new AgentConversationEndpoint { Address = address,
-                Runs = _activeRuns, Store = new ChatConversationStoreAdapter(_chats), Payloads = _payloads,
+                Runs = _activeRuns, Store = _conversationStore, Payloads = _payloads,
                 Changed = changed,
                 Inbox = _conversationInbox, Load = () => GetSession(_workspaces.OpenConnected(workspaceId), address.ChatId),
                 Reserve = () => ReserveRun(address.ChatId, false),

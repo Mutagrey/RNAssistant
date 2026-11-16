@@ -27,6 +27,28 @@ remain separate lifecycle work; unsaved Office view text is not process-crash st
 
 
 
+## Bound catalog and plugin/browser consumers — 2026-11-14
+
+The existing conversation port now owns bounded overview reads and attributed
+agent-title writes. Native overviews use indexed first-four/last-32 locators with
+pre-hydration byte/privacy limits; headers and metadata overviews read no bodies.
+The shared catalog access keeps exact scope, idle lease and observed-revision guards.
+Office/Workspace catalog enumeration and endpoint Store references use their bound
+port, without constructing another adapter at each access.
+
+Plugin/browser metadata and run-owner checks share the Workspace conversation
+owner; WorkspaceHtmlVersionService requires that port explicitly. PluginStore
+accepts the existing conversation/file/resource ports, and a Run Save cannot be
+admitted without its exact active header. Partial resource/file/conversation
+composition is rejected before creating owners. No backend lookup/fallback, replay or new
+store is added. Native publication/receipt/rebuild and isolated journal/CAS restore
+are checked through the existing plugin saved-version owner.
+
+This removes the direct ChatStore reads in these consumers. Global Office/Workspace
+scope composition, group/other resource-owner wiring, P3 costs and complete backup /
+writer quiescence still precede P7. Default production storage and Windows/Office
+qualification are unchanged.
+
 ## Journal definition-copy fork — 2026-11-14
 
 Native fork facts now retain the existing ResourceForkService copy provenance in

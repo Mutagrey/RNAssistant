@@ -13,7 +13,7 @@ namespace RNAssistant.Core.Storage
         private SavedVersionCatalog VersionCatalog(string id)
         {
             RequireId(id);
-            return new SavedVersionCatalog(_authority, _authority, _blobs, Scope, ResourceUri.Create("plugin", id, "saved-versions"));
+            return new SavedVersionCatalog(_authority, _revisions, _blobs, Scope, ResourceUri.Create("plugin", id, "saved-versions"));
         }
 
         public SavedVersionCatalogState VersionState(string id)
@@ -47,7 +47,7 @@ namespace RNAssistant.Core.Storage
                 var old = catalog.Operation(operationId, intent); if (old != null) return old;
                 if (actor.Kind == SavedVersionActorKind.Run)
                 {
-                    var chat = new ChatStore(_paths).ReadSessionHeader(actor.ChatId);
+                    var chat = _conversations?.ReadHeader(actor.ChatId);
                     var lifecycle = chat?.RunViewState?.Lifecycle ?? chat?.RunStatus;
                     var activeRun = lifecycle == RunViewLifecycles.Running || lifecycle == RunViewLifecycles.AwaitingConfirmation || lifecycle == RunViewLifecycles.AwaitingUser;
                     if (chat?.WorkspaceId != source.SourceWorkspaceId || chat?.RunId != actor.RunId || !activeRun)
@@ -150,7 +150,7 @@ namespace RNAssistant.Core.Storage
             if (!state.MigrationComplete)
             {
                 var releases = PublishedReleaseIds(id, state.MigrationCutoff).Select(release => new {
-                    Id = release, Created = _authority.GetRevision(Scope, ReleaseRef(id, release))?.CreatedUtc ?? DateTime.MinValue
+                    Id = release, Created = _revisions.GetRevision(Scope, ReleaseRef(id, release))?.CreatedUtc ?? DateTime.MinValue
                 }).OrderBy(item => item.Created).ThenBy(item => item.Id, StringComparer.Ordinal);
                 foreach (var item in releases)
                 {
@@ -184,8 +184,8 @@ namespace RNAssistant.Core.Storage
                 throw new SavedVersionException("version_active_changed", "The active publication changed before dispatch.");
             var exact = RegistrationRef(next.PluginId, "reg_" + Guid.NewGuid().ToString("N"));
             var payload = PayloadRef.FromBlob(_blobs.StoreText(JsonConvert.SerializeObject(next), "application/json"));
-            _authority.RegisterRevision(Scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload, before.Revision));
-            _authority.RegisterView(Scope, new ResourceRevisionView(exact, "plugin-registration", payload.Sha256, payload, ResourceCoverage.Whole()));
+            _revisions.RegisterRevision(Scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload, before.Revision));
+            _revisions.RegisterView(Scope, new ResourceRevisionView(exact, "plugin-registration", payload.Sha256, payload, ResourceCoverage.Whole()));
             return new ResourceHeadChange(exact.Identity, before, ResourceHeadState.Known(exact, frozen.Generation + 1));
         }
 

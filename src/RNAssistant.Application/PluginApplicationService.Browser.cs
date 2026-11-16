@@ -32,7 +32,7 @@ namespace RNAssistant.Application
                     return new BrowserResolveResult { Reason = BrowserRefusalCode.TargetUnavailable, Message = "Плагин недоступен в этом контексте." };
                 var workspace = locator.VersionId == null ? Source(registration).Workspace : null;
                 var workspaceId = registration.SourceWorkspaceId;
-                if (!string.IsNullOrEmpty(caller.ChatId) && new ChatStore(_paths).ReadMetadata(caller.ChatId)?.WorkspaceId != workspaceId)
+                if (!string.IsNullOrEmpty(caller.ChatId) && Conversations.ConversationStore.ReadMetadata(caller.ChatId)?.WorkspaceId != workspaceId)
                     return new BrowserResolveResult { Reason = BrowserRefusalCode.OutsideScope, Message = "Чат принадлежит другому проекту." };
                 var target = new BrowserTargetDescriptor { PluginId = registration.PluginId, WorkspaceId = workspaceId,
                     OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = workspaceId, ChatId = caller.ChatId },
@@ -138,7 +138,7 @@ namespace RNAssistant.Application
                     caller.Kind == BrowserOwnerKind.User && (caller.ScopeId != "local" || !string.IsNullOrEmpty(caller.ChatId)))
                     throw new PluginException("browser_owner_invalid", "Выберите локальный контекст Browser.");
                 if (caller.Kind == BrowserOwnerKind.Workspace && !string.IsNullOrEmpty(caller.ChatId) &&
-                    new ChatStore(_paths).ReadMetadata(caller.ChatId)?.WorkspaceId != caller.ScopeId)
+                    Conversations.ConversationStore.ReadMetadata(caller.ChatId)?.WorkspaceId != caller.ScopeId)
                     throw new PluginException("browser_owner_changed", "Чат не принадлежит выбранному проекту.");
                 var plugins = _store.List().Where(item => !item.Hidden).ToArray();
                 var ids = caller.Kind == BrowserOwnerKind.User ? _workspaces.ListConnectedMetadata().Take(200).Select(w => w.WorkspaceId)

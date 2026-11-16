@@ -153,7 +153,7 @@ namespace RNAssistant.Harness
         {
             WithPluginPaths(paths => {
                 var imported = new HtmlProjectImportService(paths).Import(HtmlProjectSourceFixture(), CancellationToken.None);
-                var service = new WorkspaceHtmlVersionService(paths);
+                var service = WorkspaceHtmlVersionsFixture(paths);
                 var target = service.Resolve(new BrowserResolveRequest { OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" },
                     Locator = BrowserLocalLocator.ForProject(imported.WorkspaceId, imported.EntryPath) }).Target;
                 using (var content = service.OpenBrowserContent(target, CancellationToken.None)) {

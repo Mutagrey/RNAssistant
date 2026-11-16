@@ -21,16 +21,15 @@ namespace RNAssistant.Application
         private readonly IResourceMutationJournal _journal;
         private readonly DocumentArtifactStore _artifacts;
         public event Action<BrowserVersionStateChanged> VersionChanged;
-        public WorkspaceHtmlVersionService(AppDataPaths paths, IConversationStore chats = null, WorkspaceFileService files = null,
+        public WorkspaceHtmlVersionService(AppDataPaths paths, IConversationStore chats, WorkspaceFileService files = null,
             IResourceAuthorityStore authority = null, IResourceMutationJournal mutations = null)
         {
-            if ((chats != null || files != null || authority != null || mutations != null) &&
-                (chats == null || files == null || authority == null || mutations == null))
+            if (chats == null || files == null || authority == null || mutations == null)
                 throw new ArgumentException("HTML versions require the complete conversation/file/resource composition.");
             _paths = paths; _workspaces = new WorkspaceStore(paths);
-            _files = files ?? new WorkspaceFileService(paths); _chats = chats ?? new ChatConversationStoreAdapter(new ChatStore(paths));
-            _journal = mutations ?? new ResourceMutationJournal(paths);
-            var owner = authority ?? new ResourceAuthorityStore(paths);
+            _files = files; _chats = chats;
+            _journal = mutations;
+            var owner = authority;
             _artifacts = new DocumentArtifactStore(owner, owner as IResourceRevisionStore ??
                 throw new ArgumentException("The resource owner must retain revisions."), new ChatBlobStore(paths));
         }

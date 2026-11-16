@@ -9,6 +9,7 @@ using RNAssistant.Office.Contracts;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Storage;
 using System.Threading;
 
 namespace RNAssistant.Office
@@ -23,8 +24,13 @@ namespace RNAssistant.Office
             if (metadata.DocumentAuthorityId != owner.ScopeId) throw new InvalidOperationException("Контекст документа Browser изменился.");
             return metadata;
         }
+        private DocumentArtifactStore BrowserArtifacts()
+        {
+            var resources = _toolExecutor.ResourceAuthority;
+            return new DocumentArtifactStore(resources.Store, resources.Revisions, _toolExecutor.Payloads);
+        }
         private DocumentHtmlVersionService HtmlVersions()
-        { return new DocumentHtmlVersionService(_paths, _chatStore.DocumentArtifacts); }
+        { return new DocumentHtmlVersionService(_paths, BrowserArtifacts(), _toolExecutor.ResourceAuthority.Mutations); }
         internal ChatStateResponse CreateBrowserChat(BrowserResolveRequest request)
         {
             using (_conversationLeases.AcquireMaintenance()) {
@@ -54,11 +60,18 @@ namespace RNAssistant.Office
         internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token)
         { return HtmlVersions().Command(BrowserOwner(request?.Target?.OwnerScope, request?.Action == BrowserVersionAction.Delete), request, token); }
 
+        private WorkspaceHtmlVersionService WorkspaceHtmlVersions()
+        {
+            var resources = _toolExecutor.ResourceAuthority;
+            return new WorkspaceHtmlVersionService(_paths, _conversationStore,
+                new WorkspaceFileService(_paths, resources.Store, resources.Revisions, resources.Mutations), resources.Store, resources.Mutations);
+        }
+
         internal HtmlProjectImportResult CopyBrowserProject(BrowserProjectTransferRequest request, CancellationToken token)
-        { return new WorkspaceHtmlVersionService(_paths).CopySavedProject(request?.Target, token); }
+        { return WorkspaceHtmlVersions().CopySavedProject(request?.Target, token); }
         internal RNAssistant.Office.Contracts.ArtifactTransferDownload ExportBrowserProject(BrowserProjectTransferRequest request, CancellationToken token)
         {
-            var service = new WorkspaceHtmlVersionService(_paths); var target = request?.Target;
+            var service = WorkspaceHtmlVersions(); var target = request?.Target;
             HtmlProjectExport source = null;
             var data = _resourceData.OpenWorkspaceDownload(target?.WorkspaceId,
                 () => service.TransferOwnerAvailable(target?.OwnerScope, target?.WorkspaceId), WorkspaceHtmlVersionService.MaximumExportBytes,
@@ -84,12 +97,13 @@ namespace RNAssistant.Office
             if (target.OwnerScope.ScopeId != metadata.DocumentAuthorityId || target.ChatId != metadata.Id ||
                 target.State != BrowserTargetState.Ready) throw new InvalidOperationException("Контекст исходника Browser изменился.");
             var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri));
-            var artifact = _chatStore.DocumentArtifacts.Read(metadata, reference, false);
-            if (_chatStore.DocumentArtifacts.IsRemoved(metadata, artifact)) throw new InvalidOperationException("Источник удалён из каталога.");
+            var artifacts = BrowserArtifacts();
+            var artifact = artifacts.Read(metadata, reference, false);
+            if (artifacts.IsRemoved(metadata, artifact)) throw new InvalidOperationException("Источник удалён из каталога.");
             if (artifact.ContentByteLength > 8 * 1024 * 1024) throw new InvalidOperationException("Исходник превышает лимит просмотра.");
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {
-                artifact = _chatStore.DocumentArtifacts.Read(metadata, reference);
+                artifact = artifacts.Read(metadata, reference);
                 var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
                 return BrowserSourceReader.Read(target, request, snapshot.Files.Select(file => file.Path),
                     path => snapshot.Files.Single(file => file.Path == path).Content);
@@ -105,7 +119,7 @@ namespace RNAssistant.Office
             var metadata = BrowserOwner(owner);
             var result = new List<BrowserTargetDescriptor>(); var savedFamilies = 0;
             // Current metadata roots only: no chat replay, aggregate bodies or automatic history.
-            var page = _chatStore.DocumentArtifacts.InspectCurrentMetadata(metadata, 0, 100);
+            var page = BrowserArtifacts().InspectCurrentMetadata(metadata, 0, 100);
             foreach (var artifact in page.Items)
             {
                 if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace && !BrowserTargetResolver.IsHtmlResource(artifact)) continue;
