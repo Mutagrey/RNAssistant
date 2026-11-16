@@ -38,6 +38,7 @@ namespace RNAssistant.Harness
                     var expectedRequests = reflectBeforeCorrection ? 5 : rejectFinish ? 4 : 3;
                     var requests = new string[expectedRequests];
                     string sessionId = null;
+                    WorkspaceConversationService activeService = null;
                     var server = Task.Run(async () =>
                     {
                         try
@@ -56,7 +57,7 @@ namespace RNAssistant.Harness
                                                 : new ConversationToolCall { Name = "core.find", Arguments = new JObject { ["query"] = "missing" } }
                                         }).ToJson()
                                     : number < expectedRequests
-                                        ? ScriptedVerifiedFinish(new ChatStore(paths).Load(sessionId),
+                                        ? ScriptedVerifiedFinish(activeService.ConversationStore.Load(sessionId),
                                             "Report the resource search.", "Первый ответ.", "Resources inspected.",
                                             failedRead ? new[] { "core.find" } : new[] { "core.find", "core.find" })
                                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
@@ -97,6 +98,7 @@ namespace RNAssistant.Harness
                             SmartChatTitles = false };
                         using (var service = new WorkspaceConversationService(paths))
                         {
+                            activeService = service;
                             sessionId = service.CreateSession(workspace, "История").Id;
                             var first = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                                 SessionId = sessionId, Message = "Посмотри ресурсы", Mode = ChatModes.Agent
@@ -148,18 +150,22 @@ namespace RNAssistant.Harness
                                 "model message bodies expose aliases, never canonical GUIDs");
                             AssertTrue(nextContents.Contains("\"call_index\":0") && nextContents.Contains("\"call_index\":1") && !nextContents.Contains("\"id\":\"T1\""),
                                 "model receives the original batch and indexed results");
-                            AssertTrue(calls.All(call => !string.IsNullOrWhiteSpace(call.ToolCallId) &&
-                                (string)JObject.Parse(call.Content)["tool_calls"]?[0]?["name"] == call.ToolName &&
-                                JObject.Parse(call.Content)["tool_calls"]?.Count() == 1),
+                            AssertTrue(calls.All(call => {
+                                var wire = JObject.Parse(AcceptedCallPayloadService.Hydrate(call, service.Payloads).Content);
+                                return !string.IsNullOrWhiteSpace(call.ToolCallId) &&
+                                    (string)wire["tool_calls"]?[0]?["name"] == call.ToolName && wire["tool_calls"]?.Count() == 1;
+                            }),
                                 "each v8 per-call envelope keeps one tool while runtime owns its identity");
                             AssertTrue(calls.All(call => call.AcceptedCallOrigin != null &&
                                 !string.IsNullOrWhiteSpace(call.AcceptedCallOrigin.ModelAttemptId)) &&
                                 calls[0].AcceptedCallOrigin.ModelAttemptId == calls[1].AcceptedCallOrigin.ModelAttemptId &&
                                 calls.Select(call => call.AcceptedCallOrigin.CallIndex).SequenceEqual(new[] { 0, 1 }),
                                 "batch calls keep one exact model attempt and their original positions");
-                            AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Content,
+                            AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(
+                                AcceptedCallPayloadService.Hydrate(calls[0], service.Payloads)).Content,
                                 "plugin chat presents the accepted narration after a tool call");
-                            AssertEqual("step", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Activity.Kind,
+                            AssertEqual("step", PluginApplicationService.PresentWorkspaceMessage(
+                                AcceptedCallPayloadService.Hydrate(calls[0], service.Payloads)).Activity.Kind,
                                 "workspace accepted narration joins the shared run feed");
                             var reflection = PluginApplicationService.PresentWorkspaceMessage(new ChatMessage
                             {
@@ -173,10 +179,9 @@ namespace RNAssistant.Harness
                             AssertEqual("Проверяю результат.", reflection.Activity.StepMessage,
                                 "workspace reflection keeps the visible commentary");
                         }
-                        string oldCallMessageId = null, oldCallId = null, oldToolName = null;
-                        AcceptedToolCallOrigin oldOrigin = null;
                         using (var reopened = new WorkspaceConversationService(paths))
                         {
+                            activeService = reopened;
                             var next = reopened.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                                 SessionId = sessionId, Message = "Продолжай", Mode = ChatModes.Agent
                             }, settings, () => "test-key").GetAwaiter().GetResult();
@@ -187,110 +192,24 @@ namespace RNAssistant.Harness
                                 (string)JObject.Parse((string)item["content"])["message"] == "Первый ответ." &&
                                 (string)JObject.Parse((string)item["content"])["action"] == "finish"),
                                 "next request retains the full accepted finish decision");
-                            var corrupted = reopened.GetSession(workspace, sessionId);
-                            AssertTrue(corrupted.Messages.Any(item => item.Role == "assistant" && item.ProtocolMessage &&
+                            var current = reopened.GetSession(workspace, sessionId);
+                            AssertTrue(current.Messages.Any(item => item.Role == "assistant" && item.ProtocolMessage &&
                                 item.Content.Contains("\"message\":\"Первый ответ.\"")),
                                 "model projection leaves the durable v8 response intact");
-                            var oldCall = corrupted.Messages.First(message => message.Role == "assistant" &&
+                            var oldCall = current.Messages.First(message => message.Role == "assistant" &&
                                 message.AcceptedCallOrigin != null && message.ToolName == "core.find");
-                            oldCallMessageId = oldCall.Id;
-                            oldCallId = oldCall.ToolCallId;
-                            oldToolName = oldCall.ToolName;
-                            oldOrigin = oldCall.AcceptedCallOrigin;
+                            var callId = oldCall.ToolCallId; var callName = oldCall.ToolName;
+                            var origin = oldCall.AcceptedCallOrigin;
                             oldCall.ToolCallId = null; oldCall.ToolName = null; oldCall.AcceptedCallOrigin = null;
-                            AssertContains(PluginApplicationService.PresentWorkspaceMessage(oldCall).Content, "неполная",
-                                "a corrupted v8 call is not presented as accepted history");
-                            new ChatStore(paths).Commit(corrupted,
-                                new RNAssistant.Core.Persistence.ConversationCommit(new[] { oldCall }));
+                            RuntimeThrows<System.IO.InvalidDataException>(() => reopened.ConversationStore.Commit(current,
+                                new RNAssistant.Core.Persistence.ConversationCommit(new[] { oldCall })));
+                            var retained = reopened.ConversationStore.Load(sessionId).Messages.Single(message => message.Id == oldCall.Id);
+                            AssertEqual(callId, retained.ToolCallId, "rejected v8 replacement cannot erase accepted call identity");
+                            AssertEqual(callName, retained.ToolName, "rejected v8 replacement cannot erase accepted tool name");
+                            AssertEqual(origin.ModelAttemptId, retained.AcceptedCallOrigin.ModelAttemptId,
+                                "rejected v8 replacement cannot erase accepted batch origin");
                         }
                         server.GetAwaiter().GetResult();
-                        using (var corruptedService = new WorkspaceConversationService(paths))
-                        {
-                            var invalidRequest = new WorkspaceSubmitInputRequest {
-                                SessionId = sessionId, RequestId = "invalid-v8-history-retry",
-                                Message = "Ещё раз", Mode = ChatModes.Agent
-                            };
-                            InvalidOperationException rejected = null;
-                            try
-                            {
-                                corruptedService.SubmitInputAsync(workspace, invalidRequest,
-                                    settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
-                                    .GetAwaiter().GetResult();
-                            }
-                            catch (InvalidOperationException error) { rejected = error; }
-                            AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace response is invalid"),
-                                "incomplete accepted call history fails before another model request");
-                            AssertTrue(corruptedService.FindAcceptedInput(workspace, invalidRequest) == null,
-                                "rejected v8 history leaves no accepted input receipt");
-                        }
-                        var forged = new ChatStore(paths).Load(sessionId);
-                        AssertTrue(!forged.Messages.Any(message => message.Role == "user" && message.Content == "Ещё раз"),
-                            "invalid v8 response history does not accept another user turn");
-                        var repairedCall = forged.Messages.Single(message => message.Id == oldCallMessageId);
-                        repairedCall.ToolCallId = oldCallId;
-                        repairedCall.ToolName = oldToolName;
-                        repairedCall.AcceptedCallOrigin = oldOrigin;
-                        new ChatStore(paths).Commit(forged,
-                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { repairedCall }));
-                        forged = new ChatStore(paths).Load(sessionId);
-                        var sibling = forged.Messages.Where(message => message.Role == "assistant" &&
-                            message.AcceptedCallOrigin != null).Skip(1).First();
-                        var siblingOrigin = sibling.AcceptedCallOrigin;
-                        foreach (var invalidIndex in new[] { 0, siblingOrigin.CallIndex + 2 })
-                        {
-                            forged = new ChatStore(paths).Load(sessionId);
-                            sibling = forged.Messages.Single(message => message.Id == sibling.Id);
-                            sibling.AcceptedCallOrigin = new AcceptedToolCallOrigin(siblingOrigin.StepId,
-                                siblingOrigin.ModelAttemptId, invalidIndex, Math.Max(siblingOrigin.CallCount.GetValueOrDefault(), invalidIndex + 1));
-                            new ChatStore(paths).Commit(forged,
-                                new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
-                            using (var batchService = new WorkspaceConversationService(paths))
-                            {
-                                var invalidBatch = new WorkspaceSubmitInputRequest {
-                                    SessionId = sessionId, RequestId = "invalid-v8-batch-origin-" + invalidIndex,
-                                    Message = "После подмены пакета", Mode = ChatModes.Agent
-                                };
-                                InvalidOperationException rejected = null;
-                                try
-                                {
-                                    batchService.SubmitInputAsync(workspace, invalidBatch, settings,
-                                        () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
-                                        .GetAwaiter().GetResult();
-                                }
-                                catch (InvalidOperationException error) { rejected = error; }
-                                AssertTrue(rejected != null && rejected.Message.Contains("Stored batch"),
-                                    "calls from a broken v8 batch sequence cannot be rejoined");
-                                AssertTrue(batchService.FindAcceptedInput(workspace, invalidBatch) == null,
-                                    "bad v8 batch origin does not accept a new input");
-                                AssertEqual(expectedRequests, served, "bad v8 batch origin cannot cause a model request");
-                            }
-                        }
-                        forged = new ChatStore(paths).Load(sessionId);
-                        sibling = forged.Messages.Single(message => message.Id == sibling.Id);
-                        sibling.AcceptedCallOrigin = siblingOrigin;
-                        new ChatStore(paths).Commit(forged,
-                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
-                        forged = new ChatStore(paths).Load(sessionId);
-                        var forgedResult = forged.Messages.First(message => message.Role == "user" &&
-                            message.ToolName == "core.find");
-                        forgedResult.ToolName = "different.tool";
-                        new ChatStore(paths).Commit(forged,
-                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { forgedResult }));
-                        using (var invalidService = new WorkspaceConversationService(paths))
-                        {
-                            InvalidOperationException rejected = null;
-                            try
-                            {
-                                invalidService.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
-                                    SessionId = sessionId, Message = "После подмены результата", Mode = ChatModes.Agent
-                                }, settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
-                                    .GetAwaiter().GetResult();
-                            }
-                            catch (InvalidOperationException error) { rejected = error; }
-                            AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace tool result is invalid"),
-                                "a result whose saved tool name differs from its wire is refused before replay");
-                            AssertEqual(expectedRequests, served, "corrupt result cannot cause another model request");
-                        }
                     }
                     finally { listener.Stop(); }
                 }
