@@ -85,6 +85,23 @@ namespace RNAssistant.Core.Persistence
         }
     }
 
+    // A read-only state projection for one bounded message page. Session.Messages
+    // contains only that page, so callers must use MessageCount and never submit
+    // this projection as a writable full session.
+    internal sealed class ConversationStateWindow
+    {
+        internal ChatSession Session { get; private set; }
+        internal ConversationMessageWindow Window { get; private set; }
+        internal int MessageCount { get; private set; }
+
+        internal ConversationStateWindow(ChatSession session, ConversationMessageWindow window, int messageCount)
+        {
+            Session = session ?? throw new System.ArgumentNullException(nameof(session));
+            Window = window;
+            MessageCount = messageCount;
+        }
+    }
+
     public sealed class ConversationMessageWindow
     {
         public ConversationMetadata Metadata { get; set; }

@@ -877,14 +877,18 @@ namespace RNAssistant.Application
             var workspace = RequireProjectWorkspace(request.WorkspaceId);
             var workspaceMs = timer.ElapsedMilliseconds;
             ReportChatReadStage(reportStage, "workspace", workspaceMs - leaseMs);
-            var session = Conversations.RefreshSession(workspace, request.SessionId);
+            var observed = Conversations.ReadStateWindow(workspace, request.SessionId,
+                ChatMessageWindowViewDto.PageSize);
             var loadMs = timer.ElapsedMilliseconds;
             ReportChatReadStage(reportStage, "load", loadMs - workspaceMs);
-            if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
-            var snapshot = Conversations.ReadState(workspace, session);
+            if (observed == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
+            var session = observed.Session;
+            var snapshot = Conversations.ReadState(workspace, session, observed.MessageCount);
             var stateMs = timer.ElapsedMilliseconds;
             ReportChatReadStage(reportStage, "state", stateMs - loadMs);
-            var messages = PresentWorkspaceWindow(workspace, session, session.Messages.Count);
+            var messages = observed.Window == null
+                ? PresentWorkspaceWindow(workspace, session, session.Messages.Count)
+                : PresentWorkspaceWindow(workspace, observed.Window);
             ReportChatReadStage(reportStage, "messages", timer.ElapsedMilliseconds - stateMs);
             return new ProjectChatStateDto { Project = ProjectChatProject(workspace), SessionId = session.Id,
                 GroupScopes = Conversations.ChatGroupCatalog(new[] { RNAssistant.Core.Services.ChatSessionHeaderFactory.Create(session) }),

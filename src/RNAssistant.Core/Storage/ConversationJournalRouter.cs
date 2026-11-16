@@ -223,6 +223,13 @@ namespace RNAssistant.Core.Storage
             return journal == null ? null : Conversations(journal).ReadMessageWindow(host, documentKey, chatId, beforeIndex, pageSize);
         }
 
+        internal ConversationStateWindow ReadStateWindow(string host, string documentKey,
+            string chatId, int pageSize)
+        {
+            var journal = ForChat(chatId);
+            return journal == null ? null : journal.ReadStateWindow(chatId, host, documentKey, pageSize);
+        }
+
         public bool IsPersisted(ChatSession session)
         { return session != null && Conversations(For(session)).IsPersisted(session); }
 

@@ -142,6 +142,24 @@ namespace RNAssistant.Runtime
             return _workspaces.ReadMessageWindow(_conversationStore, workspace, sessionId, beforeIndex, pageSize);
         }
 
+        // ProjectChat polling reads only the state shell and latest page. Recovery
+        // remains the existing full, lease-fenced path and is selected from the
+        // canonical run lifecycle rather than an HTTP/transport assumption.
+        internal ConversationStateWindow ReadStateWindow(WorkspaceDescriptor workspace,
+            string sessionId, int pageSize)
+        {
+            if (workspace == null || string.IsNullOrWhiteSpace(sessionId))
+                throw new ArgumentException("Workspace and session are required.");
+            var observed = _conversationRouter.ReadStateWindow("Workspace", workspace.WorkspaceId,
+                sessionId, pageSize);
+            if (observed == null) return null;
+            if (observed.Session.WorkspaceId != workspace.WorkspaceId)
+                throw new InvalidDataException("The session is not associated with this workspace.");
+            if (!ConversationRecoveryService.NeedsInterruption(observed.Session.LastRun)) return observed;
+            var recovered = RefreshSession(workspace, sessionId);
+            return recovered == null ? null : new ConversationStateWindow(recovered, null, recovered.Messages.Count);
+        }
+
         // Chat activation may reconcile a stopped owner; plain inspection stays read-only.
         internal ChatSession RefreshSession(WorkspaceDescriptor workspace, string sessionId)
         {

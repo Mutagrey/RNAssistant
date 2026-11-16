@@ -2,6 +2,7 @@ using System;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using System.IO;
+using System.Diagnostics;
 using System.Linq;
 using System.Globalization;
 using RNAssistant.Core.Models;
@@ -167,6 +168,69 @@ namespace RNAssistant.Harness
                 var page = store.ReadMessageWindow(session.Id, count, 8);
                 AssertEqual(8L, journal.ChatBodyReads - bodies, "only requested message bodies are hydrated");
                 AssertEqual((count - 8).ToString("D8", CultureInfo.InvariantCulture), page.PageMessages.First().Id, "page order");
+
+                // Warm the same SQLite/CAS path without retaining a loaded session.
+                journal.ReadStateWindow(session.Id, "Word", "cost", ChatMessageWindowViewDto.PageSize);
+                store.Load(session.Id);
+                records = journal.Journal.ReadRecords; bytes = journal.Journal.ReadBytes;
+                bodies = journal.ChatBodyReads; allocated = GC.GetAllocatedBytesForCurrentThread();
+                var timings = new double[30];
+                for (var poll = 0; poll < timings.Length; poll++)
+                {
+                    var timer = Stopwatch.StartNew();
+                    var state = journal.ReadStateWindow(session.Id, "Word", "cost", ChatMessageWindowViewDto.PageSize);
+                    timings[poll] = timer.Elapsed.TotalMilliseconds;
+                    AssertEqual(count, state.MessageCount, "state poll retains the total count");
+                    AssertEqual(Math.Min(count, ChatMessageWindowViewDto.PageSize), state.Window.PageMessages.Count,
+                        "state poll hydrates one bounded latest page");
+                    AssertEqual(Math.Max(0, count - ChatMessageWindowViewDto.PageSize), state.Window.StartIndex,
+                        "state poll retains the canonical page offset");
+                }
+                Array.Sort(timings);
+                var p50 = timings[(timings.Length - 1) / 2];
+                var p95 = timings[(int)Math.Ceiling(timings.Length * 0.95) - 1];
+                var pollBodies = journal.ChatBodyReads - bodies;
+                var pollRecords = journal.Journal.ReadRecords - records;
+                var pollBytes = journal.Journal.ReadBytes - bytes;
+                var pollAllocation = GC.GetAllocatedBytesForCurrentThread() - allocated;
+                AssertTrue(pollBodies <= timings.Length * (Math.Min(count, ChatMessageWindowViewDto.PageSize) + 2),
+                    "state polls hydrate no earlier message page");
+                AssertTrue(pollRecords <= timings.Length * 16, "state-poll journal records are bounded independently of H");
+                Console.WriteLine("journal-state-poll H={0}: bodyReads={1}, records={2}, bytes={3}, allocated={4}, p50ms={5:F3}, p95ms={6:F3}",
+                    count, pollBodies, pollRecords, pollBytes, pollAllocation, p50, p95);
+
+                if (Environment.GetEnvironmentVariable("RNA_PROJECT_CHAT_COST") == "1")
+                {
+                    records = journal.Journal.ReadRecords; bytes = journal.Journal.ReadBytes;
+                    bodies = journal.ChatBodyReads; allocated = GC.GetAllocatedBytesForCurrentThread();
+                    var fullTimings = new double[30];
+                    for (var poll = 0; poll < fullTimings.Length; poll++)
+                    {
+                        var timer = Stopwatch.StartNew();
+                        var full = store.Load(session.Id);
+                        fullTimings[poll] = timer.Elapsed.TotalMilliseconds;
+                        AssertEqual(count, full.Messages.Count, "full-load comparison retains exact history");
+                    }
+                    Array.Sort(fullTimings);
+                    var fullP50 = fullTimings[(fullTimings.Length - 1) / 2];
+                    var fullP95 = fullTimings[(int)Math.Ceiling(fullTimings.Length * 0.95) - 1];
+                    var fullBodies = journal.ChatBodyReads - bodies;
+                    var fullRecords = journal.Journal.ReadRecords - records;
+                    var fullBytes = journal.Journal.ReadBytes - bytes;
+                    var fullAllocation = GC.GetAllocatedBytesForCurrentThread() - allocated;
+                    AssertTrue(fullBodies >= count * fullTimings.Length,
+                        "full-load comparison hydrates every historical body");
+                    AssertTrue(count < 1000 || pollBodies * 4 < fullBodies,
+                        "bounded polling removes history-proportional body hydration for long chats");
+                    Console.WriteLine("journal-full-poll H={0}: bodyReads={1}, records={2}, bytes={3}, allocated={4}, p50ms={5:F3}, p95ms={6:F3}",
+                        count, fullBodies, fullRecords, fullBytes, fullAllocation, fullP50, fullP95);
+                }
+
+                store.SetTitle(session, "Late metadata");
+                var lateState = journal.ReadStateWindow(session.Id, "Word", "cost", ChatMessageWindowViewDto.PageSize);
+                AssertEqual("Late metadata", lateState.Session.Title, "poll observes a late metadata update");
+                AssertEqual(session.Revision, lateState.Session.Revision, "poll returns the exact late revision");
+                AssertEqual(count, lateState.MessageCount, "late metadata does not reload history");
                 var message = new ChatMessage { Role = "user", Content = "One appended message" };
                 session.Messages.Add(message); bodies = journal.ChatBodyReads; records = journal.Journal.ReadRecords;
                 bytes = journal.Journal.ReadBytes; allocated = GC.GetAllocatedBytesForCurrentThread();

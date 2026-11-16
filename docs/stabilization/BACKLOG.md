@@ -44,6 +44,10 @@ Addressed `chat.rename` is closed host-neutral in `17.3.15-dev`: exact target me
 receipts cover observed revision, busy/deleted/stale refusal, lost acknowledgement and
 source/target rebuild isolation.
 
+Bounded `ProjectChat` polling is closed host-neutral in `17.3.16-dev`: unchanged reads
+load one state shell and the latest 80-message page; only a lifecycle that requires
+interruption goes through the existing lease-fenced full recovery path.
+
 ## Remaining storage consumers after native cutover — audit 2026-11-16
 
 These are bounded follow-ups to the current composition, not a second migration
@@ -54,7 +58,6 @@ backup must be retained.
 | Priority / owner | Current boundary | Acceptance |
 | --- | --- | --- |
 | P1 / CasMaintenanceService.Backup + application owners | Internal native backup refuses retained legacy/VBA/resource files; it does not promise a complete mixed profile or external project/manifest/trash closure. VbaJournalStore still writes its own journal. | Inventory every claimed owner and coordinate writers; restore a mixed profile into a separate root without original folders. Verify identity, bytes, receipts and CAS closure, interruption and no replay. Keep unsupported scopes explicit. Existing Office/Workspace identity backup is already implemented. |
-| P1 / PluginApplicationService.ProjectChat → WorkspaceConversationService.RefreshSession | A paged UI response still follows full session load. ConversationJournal.Store.LoadTextChatOnce reads all message pages and resource projections before the small response window is selected. | Unchanged polling uses metadata/cursor/current run and bounded message reads. Compare 100/1,000/10,000-message chats over 30 polls; measure read bytes, allocations and p50/p95 while preserving preview, input receipts, recovery and late metadata. |
 | P2 / ConversationJournal.Events + ConversationInboxService | ReadControls reads all control frames before receipt and afterSequence filtering; ReadUndelivered groups the input history again. | Exact receipt, current pending inputs and bounded suffix queries through the existing index, with transition/identity/revision checks and identical rebuild results. No unrelated historical frame reads for a point receipt. |
 | P2 / ResourceJournal.Queries.Capture | Every capture hydrates all heads in the scope under the append lock; model snapshots and mutation preparation call it. Commit history itself is already lazy. | Addressed heads or required ranges through the existing index with a frozen generation, currentness and Unknown guards. Measure unrelated-head growth and lock hold time; no second authority cache/store. |
 

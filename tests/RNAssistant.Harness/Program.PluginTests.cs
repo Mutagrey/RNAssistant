@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -1173,11 +1174,13 @@ namespace RNAssistant.Harness
                     var session = service.Conversations.GetSession(workspace, created.SessionId);
                     var messages = Enumerable.Range(0, 170).Select(index => new ChatMessage {
                         Role = "user", Content = "Message " + index }).ToList();
-                    messages.Insert(30, new ChatMessage { Role = ToolResultRoles.User, ProtocolMessage = true,
-                        ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                        Content = "private protocol body" });
-                    session.Messages.AddRange(messages);
-                    new ChatStore(paths).Commit(session, new ConversationCommit(messages));
+                    messages.Insert(30, new ChatMessage { Role = "user", Content = "Retained page marker" });
+                    for (var start = 0; start < messages.Count; start += 100)
+                    {
+                        var batch = messages.Skip(start).Take(100).ToArray();
+                        session.Messages.AddRange(batch);
+                        service.Conversations.ConversationStore.Commit(session, new ConversationCommit(batch));
+                    }
 
                     var latest = service.ProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
                         SessionId = created.SessionId });
@@ -1188,9 +1191,8 @@ namespace RNAssistant.Harness
                         WorkspaceId = workspaceId, SessionId = created.SessionId,
                         BeforeIndex = latest.MessageStartIndex });
                     AssertEqual(11, middle.StartIndex, "previous page follows raw indexes");
-                    AssertTrue(middle.Messages[19].ProtocolMessage && middle.Messages[19].Content == null &&
-                        middle.Messages[19].Role == ToolResultRoles.User,
-                        "paged protocol body remains hidden without shifting indexes");
+                    AssertEqual("Retained page marker", middle.Messages[19].Content,
+                        "paged history retains exact raw indexes");
                     var oldest = service.ProjectChatMessages(new ProjectChatHistoryRequest {
                         WorkspaceId = workspaceId, SessionId = created.SessionId,
                         BeforeIndex = middle.StartIndex });
@@ -1204,17 +1206,25 @@ namespace RNAssistant.Harness
                         WorkspaceId = other, SessionId = created.SessionId, BeforeIndex = 91 }), "project_chat_missing");
 
                     session = service.Conversations.GetSession(workspace, created.SessionId);
-                    session.LastRun = LargePendingRuntimeRun();
-                    new ChatStore(paths).Save(session);
-                    File.Delete(Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Single());
-                    var eventPath = SessionEventFile(paths, session);
-                    var canonical = File.ReadAllBytes(eventPath);
+                    var initial = CheckpointState("broken-run", RunLifecycle.Running, 0, 0);
+                    session.LastRun = new ChatRunRecord { RunId = initial.Summary.RunId,
+                        TurnId = initial.Summary.TurnId, RuntimeId = "previous", Status = "running",
+                        KernelState = initial, ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                    var beforeRunBlobs = new HashSet<string>(Directory.GetFiles(paths.ChatBlobDirectory,
+                        "*.blob", SearchOption.AllDirectories), StringComparer.Ordinal);
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.Started,
+                        session.LastRun.KernelState.Summary, limits: session.LastRun.KernelState.Limits),
+                        new ChatMessage[0]).Persist(service.Conversations.ConversationStore.CommitRun, session);
+                    File.Delete(Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories)
+                        .Single(path => !beforeRunBlobs.Contains(path)));
+                    var canonical = StorageJournal.Inventory(paths).SelectMany(stream => stream.Segments)
+                        .ToDictionary(path => path, File.ReadAllBytes);
                     var retained = service.ProjectChatMessages(new ProjectChatHistoryRequest {
                         WorkspaceId = workspaceId, SessionId = created.SessionId, BeforeIndex = 1 });
                     AssertEqual("Message 0", retained.Messages.Single().Content,
                         "Workspace history pages do not require the unavailable execution body");
-                    RuntimeThrows<RuntimePayloadUnavailableException>(() => service.Conversations.GetSession(workspace, session.Id));
-                    AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(eventPath)),
+                    RuntimeThrows<InvalidDataException>(() => service.Conversations.GetSession(workspace, session.Id));
+                    AssertTrue(canonical.All(item => item.Value.SequenceEqual(File.ReadAllBytes(item.Key))),
                         "page inspection preserves the unresolved operation and history");
                 }
             });

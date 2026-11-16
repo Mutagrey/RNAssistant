@@ -89,7 +89,8 @@ namespace RNAssistant.Runtime
             return ReadState(workspace, session);
         }
 
-        internal WorkspaceSessionSnapshot ReadState(WorkspaceDescriptor workspace, ChatSession session)
+        internal WorkspaceSessionSnapshot ReadState(WorkspaceDescriptor workspace, ChatSession session,
+            int? totalMessageCount = null)
         {
             var preview = ModelProgress(session);
             return new WorkspaceSessionSnapshot
@@ -113,7 +114,8 @@ namespace RNAssistant.Runtime
                 ContextReceipt = session.LastContextReceipt, ContextUsage = ReadContextUsage(session), Acceptance = session.LastRun?.WorkspaceAcceptance,
                 UserInput = GetPendingQuestions(session), TaskList = GetTaskList(session), Plan = GetPlan(workspace, session),
                 InterruptedToolId = session.LastRun?.InterruptedToolId, InterruptedPath = session.LastRun?.InterruptedFilePath,
-                InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible, MessageCount = session.Messages.Count,
+                InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible,
+                MessageCount = totalMessageCount ?? session.Messages.Count,
                 Presentation = Presentation(workspace, session), ModelProgress = preview.Progress,
                 ModelProgressUnavailable = !preview.ReachedOwner
             };

@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.16-dev
+
+- Обычное обновление чата Workspace/plugin больше не перечитывает всю историю:
+  состояние и последняя 80-сообщенческая страница загружаются одним bounded-срезом.
+  Полная загрузка остаётся только для существующего lease-fenced recovery.
+
 ### 17.3.15-dev
 
 - Native `chat.rename` снова поддерживает точное переименование другой вкладки.

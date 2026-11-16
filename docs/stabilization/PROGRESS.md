@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Bounded ProjectChat state polling — 2026-11-17
+
+Implemented host-neutral / In Review, `17.3.16-dev`. `PluginApplicationService.ProjectChat`
+now reads one canonical state shell and the latest 80-message page through
+`ConversationJournal`; it no longer calls full `LoadTextChatOnce` for unchanged polling.
+The bounded state retains the exact revision/hash cursor, current run and kernel state,
+context receipt/usage, active Task List/Plan/compaction projections, pending questions,
+input receipts, late metadata and the existing model preview. A canonical lifecycle
+that requires interruption still enters the existing lease-fenced full recovery path.
+
+The stale plugin-history fixture now writes through the native journal in bounded batches
+and commits its pending run through `ConversationRunCommit`; it verifies later pages do not
+need an unavailable run body. Cost comparison over 30 polls at 100/1,000/10,000 messages
+keeps 2,430 message-body reads and 180 journal records at every history size. At 10,000
+messages the legacy full-load comparison performed 300,030 body reads and 18,120 journal
+records; p50/p95 were 6.881/7.774 ms versus 812.358/851.225 ms. Read bytes fell from
+390,048,150 to 3,874,710 and current-thread allocations from 56,067,454,944 to 515,246,448.
+
+`journal text: bounded metadata header and append` and
+`plugins: project chat history uses shared pages` pass. Windows/Office/WebView2 latency,
+DPAPI and real-profile qualification remain separate gates.
+
 ## Addressed native chat rename — 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.15-dev`. Native Office/Workspace/plugin

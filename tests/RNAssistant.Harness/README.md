@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+## Bounded ProjectChat polling — 2026-11-17
+
+`journal text: bounded metadata header and append` compares 30 unchanged polls at 100,
+1,000 and 10,000 messages using the core `ReadStateWindow` port. Message-body reads and
+journal records stay fixed; `RNA_PROJECT_CHAT_COST=1` also prints the legacy full-load
+p50/p95, bytes and allocations for comparison, and verifies late metadata. `plugins:
+project chat history uses shared pages` verifies the production plugin consumer, exact page
+offsets and an unavailable run body without changing history. Windows/WebView2 latency
+remains separate.
+
 ## Bounded journal index admission — 2026-11-16
 
 Filter `storage optimization: journal index admission is bounded` holds the shared

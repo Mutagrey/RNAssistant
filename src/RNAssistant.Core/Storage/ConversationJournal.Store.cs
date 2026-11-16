@@ -121,48 +121,143 @@ namespace RNAssistant.Core.Storage
 
         private ConversationMessageWindow ReadChatWindow(string id, string host, string key, int beforeIndex, int pageSize)
         {
-            if (pageSize < 1 || pageSize > 100 || beforeIndex < 0) throw new ArgumentOutOfRangeException(nameof(pageSize));
+            ValidateMessageWindow(beforeIndex, pageSize);
+            RequireTextRoot();
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                var selected = SelectChatWindow(id, host, key, beforeIndex, pageSize);
+                return selected == null ? null : ProjectChatWindow(selected.Item1, selected.Item2,
+                    beforeIndex, pageSize, includeActiveState: false).Item1;
+            }
+        }
+
+        // A polling read gets one exact revision of the header/state and the latest
+        // bounded page. It never materializes earlier message pages or their bodies.
+        internal ConversationStateWindow ReadStateWindow(string id, string host, string key, int pageSize)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return null;
+            if (pageSize < 1 || pageSize > 100) throw new ArgumentOutOfRangeException(nameof(pageSize));
             RequireTextRoot();
             using (RuntimeStorageActivity.Acquire(_paths))
             {
                 var selected = Access((db, cursor) => {
                     var current = TextChat(db, id);
                     if (current == null || host != null && !MatchesAddress(current, host, key)) return null;
-                    if (beforeIndex > current.Fact.MessageCount) throw new ArgumentOutOfRangeException(nameof(beforeIndex));
-                    var ids = new List<Tuple<string, string>>();
-                    using (var command = Command(db, "SELECT id,operation FROM chat_message WHERE stream=$stream AND chat=$chat AND ordinal >= $start AND ordinal < $before ORDER BY ordinal"))
-                    {
-                        command.Parameters.AddWithValue("$chat", id); command.Parameters.AddWithValue("$start", Math.Max(0, beforeIndex - pageSize));
-                        command.Parameters.AddWithValue("$before", beforeIndex);
-                        using (var reader = command.ExecuteReader()) while (reader.Read()) ids.Add(Tuple.Create(reader.GetString(0), reader.GetString(1)));
-                    }
-                    if (ids.Count != Math.Min(beforeIndex, pageSize)) throw new InvalidDataException("Message page contains missing ordinals.");
-                    var commits = ids.Select(item => item.Item2).Distinct().ToDictionary(operation => operation, operation => FindChatWrite(db, operation));
-                    var importedChunks = new Dictionary<string, ConversationTextEntry[]>();
-                    var entries = ids.Select(item => {
-                        var write = commits[item.Item2];
-                        RequireHistoryOwner(db, id, write);
-                        return ProjectInheritedText(SavedChatEntry(db, write, item.Item1, importedChunks), write.Fact.Card.Address, id);
-                    }).ToArray();
-                    return Tuple.Create(current, entries);
+                    return Tuple.Create(current, ReadWindowEntries(db, id, current.Fact.MessageCount, pageSize),
+                        ReadPendingDeliveryEntries(db, id));
                 }, CancellationToken.None);
                 if (selected == null) return null;
-                var metadata = ChatMetadata(selected.Item1);
-                var state = ReadResourceSet(selected.Item1.Fact.Resources, metadata);
-                var artifacts = ReadPageArtifacts(metadata, state, selected.Item2.SelectMany(item => (item.Header.ResourceRefs ?? new List<ResourceRef>()).Concat(new[] { item.Header.HtmlWorkspaceCheckpoint })));
-                var sourceIds = new HashSet<string>(selected.Item2.Select(entry => entry.Header.Id));
-                var removed = new HashSet<string>(artifacts.Where(item => item.RemovedFromDocument).Select(item => item.Id));
-                var activeHtml = state.ActiveHtml == null ? null : ResourceUri.Parse(state.ActiveHtml.Uri).Segments[2];
-                return new ConversationMessageWindow { Metadata = metadata,
-                    PageMessages = selected.Item2.Select(ReadText).ToArray(), Artifacts = artifacts,
-                    DetachedArtifactIds = new HashSet<string>(artifacts.Where(item => ArtifactWorkingSet.IsDetached(metadata, state?.Links, item)).Select(item => item.Id)),
-                    ApplicableTombstoneIds = new HashSet<string>(artifacts.Where(item => PlanDocumentService.IsApplicableTombstone(metadata,
-                        sourceIds, item)).Select(item => item.Id)),
-                    ActiveHtmlArtifactId = removed.Contains(activeHtml) ? null : activeHtml,
-                    ActiveTaskListArtifactId = state.ActiveTask == null ? null : ResourceUri.Parse(state.ActiveTask.Uri).Segments[2],
-                    ActivePlanDocumentArtifactId = state.ActivePlan == null ? null : ResourceUri.Parse(state.ActivePlan.Uri).Segments[2],
-                    StartIndex = Math.Max(0, beforeIndex - pageSize), TotalCount = selected.Item1.Fact.MessageCount };
+                var projected = ProjectChatWindow(selected.Item1, selected.Item2,
+                    selected.Item1.Fact.MessageCount, pageSize, includeActiveState: true);
+                var window = projected.Item1;
+                var resources = projected.Item2;
+                var session = CreateSessionShell(selected.Item1);
+                ApplyChatReceipt(session, selected.Item1);
+                var pageIds = new HashSet<string>(window.PageMessages.Select(item => item.Id), StringComparer.Ordinal);
+                session.Messages.AddRange(selected.Item3.Where(item => !pageIds.Contains(item.Header.Id))
+                    .Select(item => item.Header.CopyForContext()));
+                session.Messages.AddRange(window.PageMessages);
+                session.Artifacts.AddRange(window.Artifacts.GroupBy(item => item.Id, StringComparer.Ordinal).Select(group => group.First()));
+                session.ArtifactLinks = resources.Links.ToList();
+                session.ActivePlanDocumentArtifactId = window.ActivePlanDocumentArtifactId;
+                session.ActiveTaskListArtifactId = window.ActiveTaskListArtifactId;
+                session.ActiveHtmlArtifactId = window.ActiveHtmlArtifactId;
+                session.ActiveContextCheckpointId = resources.ActiveContext == null ? null :
+                    ResourceUri.Parse(resources.ActiveContext.Uri).Segments[2];
+                RestoreCheckpointProjection(session);
+                TaskListPublication.HydrateActive(session, _bodies);
+                return new ConversationStateWindow(session, window, window.TotalCount);
             }
+        }
+
+        private Tuple<ConversationChatReceipt, ConversationTextEntry[]> SelectChatWindow(string id,
+            string host, string key, int beforeIndex, int pageSize)
+        {
+            return Access((db, cursor) => {
+                var current = TextChat(db, id);
+                if (current == null || host != null && !MatchesAddress(current, host, key)) return null;
+                if (beforeIndex > current.Fact.MessageCount) throw new ArgumentOutOfRangeException(nameof(beforeIndex));
+                return Tuple.Create(current, ReadWindowEntries(db, id, beforeIndex, pageSize));
+            }, CancellationToken.None);
+        }
+
+        private ConversationTextEntry[] ReadWindowEntries(SqliteConnection db, string id,
+            int beforeIndex, int pageSize)
+        {
+            var ids = new List<Tuple<string, string>>();
+            using (var command = Command(db, "SELECT id,operation FROM chat_message WHERE stream=$stream AND chat=$chat AND ordinal >= $start AND ordinal < $before ORDER BY ordinal"))
+            {
+                command.Parameters.AddWithValue("$chat", id);
+                command.Parameters.AddWithValue("$start", Math.Max(0, beforeIndex - pageSize));
+                command.Parameters.AddWithValue("$before", beforeIndex);
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read()) ids.Add(Tuple.Create(reader.GetString(0), reader.GetString(1)));
+            }
+            if (ids.Count != Math.Min(beforeIndex, pageSize)) throw new InvalidDataException("Message page contains missing ordinals.");
+            var commits = ids.Select(item => item.Item2).Distinct().ToDictionary(operation => operation, operation => FindChatWrite(db, operation));
+            var importedChunks = new Dictionary<string, ConversationTextEntry[]>();
+            return ids.Select(item => {
+                var write = commits[item.Item2];
+                RequireHistoryOwner(db, id, write);
+                return ProjectInheritedText(SavedChatEntry(db, write, item.Item1, importedChunks), write.Fact.Card.Address, id);
+            }).ToArray();
+        }
+
+        private ConversationTextEntry[] ReadPendingDeliveryEntries(SqliteConnection db, string id)
+        {
+            var messageIds = new List<string>();
+            using (var command = Command(db, "SELECT i.message FROM input_state i JOIN chat_message m ON m.stream=i.stream AND m.chat=i.recipient AND m.id=i.message WHERE i.stream=$stream AND i.recipient=$chat AND i.status='Delivering' AND m.ordinal>=0 ORDER BY m.ordinal LIMIT 129"))
+            {
+                command.Parameters.AddWithValue("$chat", id);
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read()) messageIds.Add(reader.GetString(0));
+            }
+            if (messageIds.Count > 128) throw new InvalidDataException("Pending delivery projection exceeds its bound.");
+            var importedChunks = new Dictionary<string, ConversationTextEntry[]>();
+            var entries = new List<ConversationTextEntry>();
+            foreach (var messageId in messageIds)
+            {
+                var operation = ChatMessageOperation(db, id, messageId);
+                if (operation == null) continue;
+                var write = FindChatWrite(db, operation);
+                RequireHistoryOwner(db, id, write);
+                entries.Add(ProjectInheritedText(SavedChatEntry(db, write, messageId, importedChunks),
+                    write.Fact.Card.Address, id));
+            }
+            return entries.ToArray();
+        }
+
+        private Tuple<ConversationMessageWindow, ConversationResourceSet> ProjectChatWindow(
+            ConversationChatReceipt receipt, ConversationTextEntry[] entries, int beforeIndex, int pageSize,
+            bool includeActiveState)
+        {
+            var metadata = ChatMetadata(receipt);
+            var state = ReadResourceSet(receipt.Fact.Resources, metadata);
+            var pageReferences = entries.SelectMany(item =>
+                (item.Header.ResourceRefs ?? new List<ResourceRef>()).Concat(new[] { item.Header.HtmlWorkspaceCheckpoint }));
+            var references = includeActiveState ? pageReferences.Concat(new[] {
+                state.ActivePlan, state.ActiveTask, state.ActiveContext }).Where(item => item != null) : pageReferences;
+            var artifacts = ReadPageArtifacts(metadata, state, references);
+            var sourceIds = new HashSet<string>(entries.Select(entry => entry.Header.Id));
+            var removed = new HashSet<string>(artifacts.Where(item => item.RemovedFromDocument).Select(item => item.Id));
+            var activeHtml = state.ActiveHtml == null ? null : ResourceUri.Parse(state.ActiveHtml.Uri).Segments[2];
+            var window = new ConversationMessageWindow {
+                Metadata = metadata,
+                PageMessages = entries.Select(ReadText).ToArray(), Artifacts = artifacts,
+                DetachedArtifactIds = new HashSet<string>(artifacts.Where(item => ArtifactWorkingSet.IsDetached(metadata, state?.Links, item)).Select(item => item.Id)),
+                ApplicableTombstoneIds = new HashSet<string>(artifacts.Where(item => PlanDocumentService.IsApplicableTombstone(metadata,
+                    sourceIds, item)).Select(item => item.Id)),
+                ActiveHtmlArtifactId = removed.Contains(activeHtml) ? null : activeHtml,
+                ActiveTaskListArtifactId = state.ActiveTask == null ? null : ResourceUri.Parse(state.ActiveTask.Uri).Segments[2],
+                ActivePlanDocumentArtifactId = state.ActivePlan == null ? null : ResourceUri.Parse(state.ActivePlan.Uri).Segments[2],
+                StartIndex = Math.Max(0, beforeIndex - pageSize), TotalCount = receipt.Fact.MessageCount };
+            return Tuple.Create(window, state);
+        }
+
+        private static void ValidateMessageWindow(int beforeIndex, int pageSize)
+        {
+            if (pageSize < 1 || pageSize > 100 || beforeIndex < 0)
+                throw new ArgumentOutOfRangeException(nameof(pageSize));
         }
 
         ChatSession IConversationStore.Load(string id) { return LoadTextChat(id, null, null); }
@@ -186,21 +281,7 @@ namespace RNAssistant.Core.Storage
             {
                 var receipt = ReadChat(id);
                 if (receipt == null || host != null && !MatchesAddress(receipt, host, key)) return null;
-                var card = receipt.Fact.Card; var address = card.Address;
-                var session = new ChatSession { Id = id, Host = address.Host, DocumentKey = address.DocumentKey,
-                    WorkspaceId = address.WorkspaceId, DocumentAuthorityId = address.DocumentAuthorityId,
-                    Title = card.Title, DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath,
-                    CreatedUtc = card.CreatedUtc, Model = card.SelectedModel, ReasoningEnabled = card.ReasoningEnabled,
-                    TitleAssignedByAgent = card.TitleAssignedByAgent, AgentCreation = card.AgentCreation,
-                    ParentSessionId = receipt.Fact.Fork?.Parent.Id, ParentSessionRevision = receipt.Fact.Fork?.Parent.Revision,
-                    ForkedThroughMessageId = receipt.Fact.Fork?.ThroughMessageId,
-                    ResourceCopies = ReadForkCopies(receipt.Fact.Fork, id),
-                    PreviousDocumentKeys = (card.PreviousDocumentKeys ?? new string[0]).ToList(),
-                    Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
-                    Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)),
-                    LastRun = LoadChatRun(receipt.Fact),
-                    LastContextReceipt = receipt.Fact.ContextReceipt == null ? null : JsonConvert.DeserializeObject<ContextReceipt>(ReadChatBody(receipt.Fact.ContextReceipt)) };
-                session.Context.Host = address.Host; session.Context.DocumentKey = address.DocumentKey;
+                var session = CreateSessionShell(receipt);
                 for (var before = Math.Min(100, receipt.Fact.MessageCount); before > 0; before = Math.Min(before + 100, receipt.Fact.MessageCount))
                 {
                     var start = session.Messages.Count;
@@ -211,8 +292,9 @@ namespace RNAssistant.Core.Storage
                 }
                 if (receipt.Fact.Fork != null) ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages);
                 ApplyChatReceipt(session, receipt);
-                var resourceSet = ReadResourceSet(receipt.Fact.Resources, ChatMetadata(receipt));
-                session.Artifacts = ReadArtifacts(ChatMetadata(receipt), resourceSet.References).ToList();
+                var metadata = ChatMetadata(receipt);
+                var resourceSet = ReadResourceSet(receipt.Fact.Resources, metadata);
+                session.Artifacts = ReadArtifacts(metadata, resourceSet.References).ToList();
                 session.ArtifactLinks = resourceSet.Links.ToList();
                 session.ActivePlanDocumentArtifactId = resourceSet.ActivePlan == null ? null : ResourceUri.Parse(resourceSet.ActivePlan.Uri).Segments[2];
                 session.ActiveTaskListArtifactId = resourceSet.ActiveTask == null ? null : ResourceUri.Parse(resourceSet.ActiveTask.Uri).Segments[2];
@@ -223,6 +305,30 @@ namespace RNAssistant.Core.Storage
                 TaskListPublication.HydrateActive(session, _bodies);
                 LoadChatReferences(session); return session;
             }
+        }
+
+        private ChatSession CreateSessionShell(ConversationChatReceipt receipt)
+        {
+            var card = receipt.Fact.Card;
+            var address = card.Address;
+            var session = new ChatSession {
+                Id = card.ChatId, Host = address.Host, DocumentKey = address.DocumentKey,
+                WorkspaceId = address.WorkspaceId, DocumentAuthorityId = address.DocumentAuthorityId,
+                Title = card.Title, DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath,
+                CreatedUtc = card.CreatedUtc, Model = card.SelectedModel, ReasoningEnabled = card.ReasoningEnabled,
+                TitleAssignedByAgent = card.TitleAssignedByAgent, AgentCreation = card.AgentCreation,
+                ParentSessionId = receipt.Fact.Fork?.Parent.Id, ParentSessionRevision = receipt.Fact.Fork?.Parent.Revision,
+                ForkedThroughMessageId = receipt.Fact.Fork?.ThroughMessageId,
+                ResourceCopies = ReadForkCopies(receipt.Fact.Fork, card.ChatId),
+                PreviousDocumentKeys = (card.PreviousDocumentKeys ?? new string[0]).ToList(),
+                Mode = card.Policy.Mode, MutationPolicy = card.Policy.MutationPolicy,
+                Context = JsonConvert.DeserializeObject<DocumentContext>(ReadChatBody(receipt.Fact.Context)),
+                LastRun = LoadChatRun(receipt.Fact),
+                LastContextReceipt = receipt.Fact.ContextReceipt == null ? null :
+                    JsonConvert.DeserializeObject<ContextReceipt>(ReadChatBody(receipt.Fact.ContextReceipt)) };
+            session.Context.Host = address.Host;
+            session.Context.DocumentKey = address.DocumentKey;
+            return session;
         }
 
         private IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null, bool includeStorageUsage = false, string selectedId = null)
