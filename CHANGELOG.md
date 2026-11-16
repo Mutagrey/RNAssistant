@@ -25,6 +25,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
   начата без импорта старых данных.
 - `html.project.register` schema приведена к закрытому validator contract: поля
   имеют описания, а неподдерживаемый `uniqueItems` удалён.
+- Browser source больше не отвергает один и тот же путь из-за регистра или повторов
+  в legacy/captured member set. Plugin package GET разрешает регистр пути без
+  неоднозначности, а отсутствующий asset получает обычный 404 вместо ошибочного
+  bridge failure. Один повреждённый dynamic tool schema больше не блокирует
+  регистрацию остальных tools.
 
 ### 16.27.20-dev
 

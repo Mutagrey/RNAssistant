@@ -329,6 +329,9 @@ Workspace Agent/Plan registers `core.tools.search/read` and uses the shared Core
 Plugin and bound-Office contributions remain discoverable and use exact admission.
 The composition-owned profile is not a model argument or a permission override.
 Chat and unavailable/read-only filesystem tools retain their mode/catalog filters.
+An invalid contribution schema is excluded before runtime registration, so one stale
+or malformed dynamic tool cannot prevent other Workspace tools from registering.
+The registry remains strict; the rejected tool is never exposed or callable.
 
 A completed schema result stages membership only after terminal persistence. At the
 next request, the existing skill compiler and ModelRequestPreparation test the full

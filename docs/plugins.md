@@ -54,6 +54,9 @@ streamed CAS payloads and sorted file scopes/held read handles through publicati
 The resolved package is bounded to 512 files/256 MiB; vendor bytes remain exact CAS
 references. No sequential re-read/mtime scan is treated as an atomic snapshot.
 Check creates no user version. Explicit Save owns the user checkpoint.
+Package GET resolves a case-only path alias to one captured member; collisions remain
+forbidden. A missing optional asset is a normal 404, not a 403 bridge failure, while
+origin, method and package authority checks stay unchanged.
 
 
 Статус: основа v1, 2026-10-19. Владелец — application plugin services;

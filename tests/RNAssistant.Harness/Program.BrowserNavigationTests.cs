@@ -87,6 +87,10 @@ namespace RNAssistant.Harness
             RuntimeThrows<InvalidOperationException>(() => BrowserSourceReader.Read(saved, source, new[] { "index.html" }, path => "changed"));
             source.Path = "../secret";
             RuntimeThrows<InvalidOperationException>(() => BrowserSourceReader.Read(saved, source, new[] { "index.html" }, path => "12345"));
+            var canonical = BrowserSourceReader.Read(saved, new BrowserSourceRequest { Path = "INDEX.HTML", Count = 5, RequestGeneration = 10 },
+                new[] { "index.html", "INDEX.HTML" }, path => "12345");
+            AssertEqual("index.html", canonical.Path, "case-only source aliases resolve to the captured member");
+            AssertEqual(1, canonical.Files.Count, "duplicate source members are listed once");
         }
 
         private static void BrowserLocalAddressesAndScope()

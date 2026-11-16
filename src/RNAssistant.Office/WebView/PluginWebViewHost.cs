@@ -203,6 +203,11 @@ namespace RNAssistant.Office.WebView
                     var headers=BrowserNetworkPolicy.Headers(mime);
                     e.Response=_core.Environment.CreateWebResourceResponse(Body(bytes),200,"OK",headers);
                 }
+                catch(PluginException error) when(error.Code=="package_file_missing")
+                {
+                    if(!_closed)e.Response=_core.Environment.CreateWebResourceResponse(new MemoryStream(),404,"Plugin resource not found",BrowserNetworkPolicy.Headers("text/plain"));
+                    Diagnostics.RuntimeLog.Debug("Plugin resource not found: " + e.Request.Uri);
+                }
                 catch(Exception error)
                 {
                     if(!_closed)e.Response=_core.Environment.CreateWebResourceResponse(new MemoryStream(),403,"Plugin request refused",BrowserNetworkPolicy.Headers("text/plain"));

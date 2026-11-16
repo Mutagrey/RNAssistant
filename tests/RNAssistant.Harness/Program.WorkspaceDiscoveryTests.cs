@@ -23,6 +23,28 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspaceSkipsInvalidToolContribution()
+        {
+            WithTempPaths(paths =>
+            {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "invalid-tool"));
+                var valid = PackageTool("fixture.valid", ToolExposure.Direct, "fixture.valid.v1");
+                var invalid = PackageTool("fixture.invalid", ToolExposure.Direct, "fixture.invalid.v1");
+                invalid.ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"entry.Path\":{\"type\":\"string\"}},\"required\":[],\"additionalProperties\":false}";
+                Func<WorkspaceDescriptor, ChatSession, IReadOnlyList<WorkspaceToolContribution>> contributions =
+                    (_, __) => new[] {
+                        new WorkspaceToolContribution { Entry = valid, Handler = new DiscoveryFixtureRead(() => { }) },
+                        new WorkspaceToolContribution { Entry = invalid, Handler = new DiscoveryFixtureRead(() => { }) }
+                    };
+                using (var service = new WorkspaceConversationService(paths, extraTools: contributions))
+                {
+                    var ids = service.AvailableToolIds(workspace);
+                    AssertTrue(ids.Contains("fixture.valid"), "one malformed package schema does not break the remaining catalog");
+                    AssertTrue(!ids.Contains("fixture.invalid"), "malformed package schema is not registered");
+                }
+            });
+        }
+
         private static void WorkspaceDiscoveryAdmitsAndRestoresExactTools()
         {
             WithTempPaths(paths =>

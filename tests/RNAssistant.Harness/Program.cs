@@ -188,6 +188,7 @@ namespace RNAssistant.Harness
                 Test("workspace: chat model preferences and wire", WorkspaceChatModelPreferences),
                 Test("workspace: accepted call history survives a new turn", () => WorkspaceAcceptedCallHistory()),
                 Test("workspace: failed read activity preserves outcome and target", () => WorkspaceAcceptedCallHistory(failedRead: true)),
+                Test("workspace: invalid tool contribution does not break catalog", WorkspaceSkipsInvalidToolContribution),
                 Test("workspace: discovery admission restart and binding drift", WorkspaceDiscoveryAdmitsAndRestoresExactTools),
                 Test("workspace: strict prepared requests preserve call history", () => WorkspaceAcceptedCallHistory(true)),
                 Test("workspace: copy identity conflict and read-only association", WorkspaceRejectsCopyConflict),

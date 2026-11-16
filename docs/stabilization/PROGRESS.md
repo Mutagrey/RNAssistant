@@ -18,6 +18,13 @@ within a fixed bound. This is not Windows/Office qualification: DPAPI, WebView2,
 power loss, old-process quiescence and mixed-generation application restore remain
 open. P4 remains deferred.
 
+Photo-log follow-up excludes malformed dynamic tool schemas individually, tolerates
+case-only/repeated Browser source members over the same captured path, and serves a
+missing plugin asset as 404 instead of a bridge error. Focused Workspace, local Browser
+and plugin-history checks pass. The existing `workspace: discovery admission restart
+and binding drift` check still ends `Cancelled` on this dirty baseline before the
+focused turn completes; it is not treated as passing evidence.
+
 ## Scope-routed conversation journals — 2026-11-16
 
 Internal / In Review. Existing per-scope `ConversationJournal` owners now sit behind

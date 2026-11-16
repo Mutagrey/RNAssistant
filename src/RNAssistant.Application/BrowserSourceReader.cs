@@ -15,11 +15,13 @@ namespace RNAssistant.Application
         {
             if (request == null || request.Offset < 0 || request.Count < 1 || request.Count > 32000 || request.RequestGeneration < 0)
                 throw new ArgumentException("Некорректная страница исходника.");
-            var paths = members.Take(513).ToArray();
-            if (paths.Length == 0 || paths.Length > 512 || paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length)
-                throw new InvalidOperationException("Состав источников недоступен или превышает 512 файлов.");
-            var path = request.Path ?? target.EntryPath ?? paths[0];
-            if (!paths.Contains(path, StringComparer.Ordinal)) throw new InvalidOperationException("Файл не входит в выбранный источник.");
+            var paths = (members ?? Enumerable.Empty<string>()).Where(member => !string.IsNullOrEmpty(member))
+                .Distinct(StringComparer.OrdinalIgnoreCase).Take(513).ToArray();
+            if (paths.Length == 0) throw new InvalidOperationException("Источник не содержит доступных файлов.");
+            if (paths.Length > 512) throw new InvalidOperationException("Источник содержит более 512 уникальных файлов.");
+            var requestedPath = request.Path ?? target?.EntryPath ?? paths[0];
+            var path = paths.FirstOrDefault(item => string.Equals(item, requestedPath, StringComparison.OrdinalIgnoreCase));
+            if (path == null) throw new InvalidOperationException("Файл не входит в выбранный источник: " + requestedPath);
             var text = read(path);
             if (text == null || text.Length > 4 * 1024 * 1024) throw new InvalidOperationException("Исходник превышает лимит текстового просмотра.");
             string revision;
