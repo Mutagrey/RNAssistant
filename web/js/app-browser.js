@@ -212,14 +212,15 @@
       },
       status: function (message) { surface.waiting(label(), message); }
     });
-    versionViews.set(target.browserTabId, function (change) {
+    var versionView = function (change) {
       var value = current && current.target, changed = change.target;
       if (value && (value.pluginId ? value.pluginId === changed.pluginId : value.logicalId ? value.documentId === changed.documentId && value.logicalId === changed.logicalId :
         value.kind === changed.kind && value.workspaceId === changed.workspaceId)) {
         if (change.reason === "Delete" && change.versionId && change.versionId === value.savedVersionId) { targetInvalidated = true; if (active) reloadInvalidated(); }
         else if (active) versionControls.refresh();
       }
-    });
+    };
+    versionViews.set(target.browserTabId, versionView);
     function reloadInvalidated() { targetInvalidated = false; command("Reload").catch(function (error) { targetInvalidated = true; fail(error); }); }
     async function refreshSource() {
       if (!active || disposed || !current || !sourceInvalidated) return;
@@ -444,7 +445,10 @@
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
       deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
+      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads();
+        if (live.get(target.browserTabId) === apply) live.delete(target.browserTabId);
+        if (versionViews.get(target.browserTabId) === versionView) versionViews.delete(target.browserTabId);
+        versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
         pageFind.dispose(); annotationHost.dispose(); if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
         RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
     };

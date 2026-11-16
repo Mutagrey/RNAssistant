@@ -1,5 +1,12 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Browser repeated reset — In Review, 2026-11-16
+
+Repeated Browser reset changes only ownership of existing source/version callbacks;
+it adds no control, geometry, color, spacing or provider-specific visual variant.
+The current tab keeps the same source/version surfaces after an older generation is
+disposed. Chromium/WebView2 visual verification remains separate.
+
 ## Полная резервная копия — In Review, 2026-11-16
 
 Backup controls используют существующие `model-compatibility-panel`,

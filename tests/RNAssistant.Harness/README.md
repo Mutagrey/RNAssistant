@@ -1,5 +1,12 @@
 # RNAssistant Harness
 
+## Browser repeated reset ownership — 2026-11-16
+
+Node `bridge-bootstrap.test.js` now also recreates one Browser tab ID twice, disposes
+the older view and verifies newer live-source and version callbacks still reach the
+replacement. The full 25-group bootstrap run passes `node` checks. Chromium, Windows
+and WebView2 qualification remain separate.
+
 ## Workspace missing chat observer — 2026-11-16
 
 Node `workspace-missing-chat-observer.test.js` loads the production conversation

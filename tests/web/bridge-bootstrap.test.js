@@ -69,6 +69,7 @@ function installRestoredBrowserStartup(fixture) {
   installChatProjection(context);
   let domReady, browserDescriptor, starts = 0;
   const views = [], errors = [], pluginCatalogs = [], postStates = [];
+  let versionRefreshes = 0;
   const noop = () => {};
   function element() {
     return { dataset: {}, classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
@@ -100,7 +101,9 @@ function installRestoredBrowserStartup(fixture) {
   context.RNAssistantBrowserAnnotations = { create: lifecycle };
   context.RNAssistantBrowserFind = { create: lifecycle };
   context.RNAssistantBrowserActions = { mount: lifecycle };
-  context.RNAssistantArtifactVersions = { mountBrowser: lifecycle };
+  context.RNAssistantArtifactVersions = { mountBrowser: () => Object.assign(lifecycle(), {
+    refresh: () => { versionRefreshes += 1; }
+  }) };
   context.RNAssistantBrowserTarget = { preferenceLocator: value => value };
   context.RNAssistantDockWorkspace = { registerView(name, descriptor) { if (name === "browser") browserDescriptor = descriptor; },
     bind() {
@@ -130,7 +133,8 @@ function installRestoredBrowserStartup(fixture) {
   };
   vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-browser.js"), "utf8"), context, { filename: "app-browser.js" });
   vm.runInContext(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8"), context, { filename: "app.js" });
-  return { start: () => domReady(), views, errors, pluginCatalogs, pluginStatus, postStates, starts: () => starts };
+  return { start: () => domReady(), views, errors, pluginCatalogs, pluginStatus, postStates,
+    starts: () => starts, versionRefreshes: () => versionRefreshes };
 }
 
 async function settleStartup() {
@@ -268,6 +272,37 @@ function browserReply(request, revision = 1) {
     assert.equal(commands("Reload")[0].payload.sessionId, "restored-page");
     startup.views[0].dispose();
     console.log("PASS bridge bootstrap: plugin import during Browser open invalidates once after exact session attachment");
+  }
+
+  {
+    const fixture = createContext(), startup = installRestoredBrowserStartup(fixture);
+    const { context, posted, deliver } = fixture;
+    const commands = action => posted.filter(request => request.type === "browserCommand" && request.payload.action === action);
+    startup.start(); completeStartup(fixture); await settleStartup();
+    const firstOpen = commands("Open")[0];
+    deliver({ id: firstOpen.id, ok: true, payload: browserReply(firstOpen) }); await settleStartup();
+    deliver({ id: commands("Attach")[0].id, ok: true, payload: browserReply(firstOpen, 2) }); await settleStartup();
+
+    context.RNAssistantDockWorkspace.bind(); await settleStartup();
+    const secondOpen = commands("Open")[1];
+    assert.ok(secondOpen, "reset recreates the same Browser tab identity");
+    deliver({ id: secondOpen.id, ok: true, payload: browserReply(secondOpen, 1) }); await settleStartup();
+    deliver({ id: commands("Attach")[1].id, ok: true, payload: browserReply(secondOpen, 2) }); await settleStartup();
+    startup.views[0].dispose();
+
+    const updated = Object.assign(browserReply(secondOpen, 3), {
+      url: "/plugins/restored/source/next.html", documentGeneration: 2,
+      target: { kind: "PluginSource", state: "Ready", pluginId: "restored", capabilities: { source: true, preview: true } }
+    });
+    context.RNAssistantBrowser.apply(updated);
+    assert.equal(startup.views[1].route().locator, "/plugins/restored/source/next.html",
+      "disposing an older reset generation cannot unregister the live replacement");
+    const refreshes = startup.versionRefreshes();
+    context.RNAssistantBrowser.versionsChanged({ target: { pluginId: "restored" }, reason: "Update" });
+    assert.ok(startup.versionRefreshes() > refreshes,
+      "disposing an older reset generation cannot unregister the replacement's version invalidation");
+    startup.views[1].dispose();
+    console.log("PASS bridge bootstrap: repeated reset preserves live source and version ownership");
   }
 
   for (const outcome of ["success", "failure", "timeout"]) {

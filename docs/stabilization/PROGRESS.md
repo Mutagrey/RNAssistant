@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Browser repeated-reset ownership — 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.3-dev`. Browser runtime events and saved
+version notifications are registered by `browserTabId`; repeated clear/reinitialize
+can replace a view before the old view is disposed. Unconditional disposal previously
+deleted the replacement's live source and version callbacks. Disposal now removes an
+entry only when it still owns that exact callback. Two Browser tabs with one tab ID
+recreated across resets therefore retain source presentation and version invalidation
+on the current generation.
+
+`bridge-bootstrap.test.js` now recreates the same Browser tab twice, disposes the older
+view, applies a newer source snapshot and sends a version change. It verifies both the
+live route and version refresh reach the replacement. Twenty-five bootstrap groups
+pass in the same Node run. This is host-neutral state evidence; Chromium/
+Windows/WebView2 qualification remains open.
+
 ## Workspace missing-chat observer terminal — 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.2-dev`. A cached running/pending

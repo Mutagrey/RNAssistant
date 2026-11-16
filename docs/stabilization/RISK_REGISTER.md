@@ -54,9 +54,11 @@ Remaining evidence, in priority order:
 3. **P1 if an earlier wrong binding occurred:** already misbound registry/history
    requires evidence-backed recovery. The patch prevents new cross-document
    bindings and does not guess the identity of existing immutable facts.
-4. **P2:** native Browser selected-source presentation and version invalidation
-   across two tabs after repeated clear/reset. Existing mixed-generation restore,
-   old-writer quiescence, power-loss and Chromium/WebView2 gates remain open.
+4. **P2, fixed host-neutral:** repeated clear/reset can recreate a Browser tab before
+   its old generation disposes; conditional callback removal preserves selected-source
+   presentation and version invalidation on the replacement. Chromium/WebView2 visual
+   evidence, old-writer quiescence, power loss and mixed-generation Office handoff
+   remain separate release gates.
 
 Use synthetic data in a separate test profile. Windows evidence from the user is
 screen photos only; do not request logs, files, dumps or diagnostic archives.

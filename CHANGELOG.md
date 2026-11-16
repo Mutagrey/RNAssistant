@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.3-dev
+
+- Повторная очистка/инициализация с двумя Browser-вкладками больше не позволяет
+  старому экземпляру вкладки снять live source или version callbacks нового
+  экземпляра с тем же tab ID. После reset выбранный source продолжает обновляться,
+  а уведомления сохранённых версий доходят до текущей вкладки.
+
 ### 17.3.2-dev
 
 - Исчезнувший Workspace-чат с сохранённым running/pending snapshot больше не

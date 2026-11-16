@@ -1,5 +1,12 @@
 # План модернизации production UI
 
+## Browser repeated reset ownership — In Review, 2026-11-16
+
+Scope: existing Browser view lifecycle and callback maps, without UI restructuring.
+`bridge-bootstrap.test.js` now creates one tab ID twice, disposes the older generation
+and checks current live-source and version invalidation. Focused Node evidence passes;
+Chromium/Windows/WebView2 visual and native qualification remain open.
+
 ## Полная резервная копия — In Review, 2026-11-16
 
 Scope: существующая Diagnostics application surface, общий Dialog/button/panel и

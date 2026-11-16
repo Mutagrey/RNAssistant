@@ -1,5 +1,16 @@
 # Universal Browser: статус
 
+## Repeated reset ownership — 2026-11-16
+
+`17.3.3-dev` fixes a tab-generation ownership race. `live` source delivery and saved
+version notifications are keyed by Browser tab ID; after repeated clear/initialize a
+new view can register before the old view is disposed. Disposal now removes a map
+entry only when the disposing view still owns the exact callback. The old generation
+can close its own session without unregistering the live source or version updates of
+its replacement. `bridge-bootstrap.test.js` recreates one tab twice and verifies both
+source application and version refresh on the second view. Windows/WebView2 evidence
+remains open.
+
 ## Browser controls and automatic handoff — 2026-11-16
 
 Preview toolbar now swaps Reload for Stop only while the page is starting, hides all

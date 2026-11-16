@@ -1,5 +1,13 @@
 # Архитектура UI RNAssistant
 
+## Browser repeated reset — In Review, 2026-11-16
+
+`app-browser.js` keeps existing live-source and version callbacks keyed by Browser tab
+ID. During repeated clear/reinitialize, disposal of an older view removes its map entry
+only when that entry still points to the disposing callback. A replacement view for the
+same tab ID retains its own source application and version invalidation; no second
+Browser registry or durable source state is introduced.
+
 ## Полная резервная копия — In Review, 2026-11-16
 
 `app-diagnostics.js` остаётся presentation owner в существующей Diagnostics
