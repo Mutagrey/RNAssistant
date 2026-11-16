@@ -121,34 +121,60 @@ namespace RNAssistant.Core.Storage
                 var run = CurrentRun(db, session.Id);
                 if (run == null || run.Fact.RunId != runId || current.Fact.Run?.RunId != runId)
                     throw new InvalidOperationException("Finish evidence belongs to another run.");
-                var calls = new HashSet<Tuple<string, string>>();
+                var calls = new HashSet<Tuple<string, string, string>>();
                 using (var command = Command(db, "SELECT call FROM call_fact WHERE stream=$stream AND chat=$chat AND run=$run"))
                 {
                     command.Parameters.AddWithValue("$chat", session.Id); command.Parameters.AddWithValue("$run", runId);
-                    using (var reader = command.ExecuteReader()) while (reader.Read()) calls.Add(Tuple.Create(runId, reader.GetString(0)));
+                    using (var reader = command.ExecuteReader()) while (reader.Read()) calls.Add(Tuple.Create(session.Id, runId, reader.GetString(0)));
                 }
                 foreach (var alias in references)
                 {
                     string normalized;
                     if (!ModelReference.TryNormalize(alias, out normalized) || normalized[0] != 'E') continue;
-                    using (var command = Command(db, "SELECT operation FROM result_fact WHERE stream=$stream AND chat=$chat AND ordinal=$ordinal"))
-                    {
-                        command.Parameters.AddWithValue("$chat", session.Id);
-                        command.Parameters.AddWithValue("$ordinal", new ModelReference(ModelReferenceKind.Evidence, normalized).Ordinal);
-                        var result = Find(db, command.ExecuteScalar() as string)?.Fact;
-                        if (result == null) continue;
-                        if (result.ChatId != session.Id || result.Result.EvidenceReference?.Alias != normalized)
-                            throw new InvalidDataException("Evidence alias locator mismatch.");
-                        calls.Add(Tuple.Create(result.Result.RunId, result.Result.ToolCallId));
-                    }
+                    var result = FindFinishResult(db, current, normalized);
+                    if (result != null) calls.Add(Tuple.Create(result.ChatId, result.Result.RunId, result.Result.ToolCallId));
                 }
                 var facts = new List<ConversationFinishEvidenceAdmission.Fact>();
-                foreach (var call in calls) AddFinishFacts(db, session.Id, call.Item1, call.Item2, facts);
+                foreach (var call in calls) AddFinishFacts(db, call.Item1, call.Item2, call.Item3, facts);
                 var retained = facts.Select(item => item.Message.Id).Distinct(StringComparer.Ordinal)
                     .Where(id => ChatMessageOperation(db, session.Id, id) != null).ToArray();
                 return new FinishEvidenceSnapshot(new SessionEventPosition(session.Id, current.Position.Sequence, current.Position.Hash),
                     facts, retained);
             }, CancellationToken.None);
+        }
+
+        private ConversationResultFact FindFinishResult(SqliteConnection db, ConversationChatReceipt chat, string alias)
+        {
+            var ordinal = new ModelReference(ModelReferenceKind.Evidence, alias).Ordinal;
+            var through = chat.Position.Sequence;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            while (true)
+            {
+                if (!seen.Add(chat.Fact.Card.ChatId)) throw new InvalidDataException("Cyclic fork provenance.");
+                using (var command = Command(db, "SELECT operation FROM result_fact WHERE stream=$stream AND chat=$chat AND ordinal=$ordinal AND sequence<=$through"))
+                {
+                    command.Parameters.AddWithValue("$chat", chat.Fact.Card.ChatId);
+                    command.Parameters.AddWithValue("$ordinal", ordinal);
+                    command.Parameters.AddWithValue("$through", through);
+                    var receipt = Find(db, command.ExecuteScalar() as string);
+                    if (receipt != null)
+                    {
+                        if (receipt.Fact.ChatId != chat.Fact.Card.ChatId || receipt.Position.Sequence > through ||
+                            receipt.Fact.Result.EvidenceReference?.Alias != alias)
+                            throw new InvalidDataException("Evidence alias locator mismatch.");
+                        return receipt.Fact;
+                    }
+                }
+                // Forks retain original execution owners. Follow only the frozen
+                // ancestry; child membership below still fences the copied prefix
+                // and later removals. No execution facts become child-owned.
+                var fork = chat.Fact.Fork;
+                if (fork == null || ordinal >= fork.NextEvidence) return null;
+                chat = FindChatWrite(db, fork.ParentOperation, fork.Parent.Id);
+                if (chat == null || chat.Position.Sequence > fork.Parent.Revision)
+                    throw new InvalidDataException("Fork lost its retained source provenance.");
+                through = fork.Parent.Revision;
+            }
         }
 
         private void AddFinishFacts(SqliteConnection db, string chat, string run, string call,
@@ -179,7 +205,7 @@ namespace RNAssistant.Core.Storage
             using (RuntimeStorageActivity.Acquire(_paths))
             {
                 var receipts = Access((db, cursor) => {
-                    if (mode == SessionEventReadMode.RequireCompleteInputJournal) RequireInputRevision(db, session);
+                    if (mode == SessionEventReadMode.RequireCompleteInputJournal) RequireInputRevision(db, session, allowTransient: true);
                     else RequireChatRevision(session, TextChat(db, session.Id));
                     var operations = new List<string>();
                     using (var command = Command(db, mode == SessionEventReadMode.RequireCompleteInputJournal

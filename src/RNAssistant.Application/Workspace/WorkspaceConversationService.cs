@@ -1237,15 +1237,18 @@ namespace RNAssistant.Runtime
                     throw new InvalidOperationException("The bound Office result projection is unavailable.");
                 _attachmentStore = new AttachmentStore(paths);
                 if (session != null) _mediaUpdates.AddRange(ResourceMediaMessages.Release(session.Messages));
-                var browserSet = session == null ? null : browser?.ForOwner(new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace,
-                    ScopeId = workspace.WorkspaceId, ChatId = session.Id }, session, _settings, browserRunId ?? session.LastRun?.RunId, CaptureMedia);
-                var projection = office?.ModelProjection ?? browserSet?.ModelProjection;
-                _compiler = new ModelContextCompiler(payloads, projection);
                 if ((resourceAuthority == null) != (resourceMutations == null))
                     throw new ArgumentException("Resource authority and mutation journal must be supplied together.");
                 var sharedResources = resourceAuthority as ResourceJournal;
                 var authorityStore = resourceAuthority ?? (sharedResources = new ResourceJournal(paths));
                 var mutations = resourceMutations ?? sharedResources;
+                var revisions = authorityStore as IResourceRevisionStore ??
+                    throw new ArgumentException("Resource owner must provide revisions.", nameof(resourceAuthority));
+                var browserSet = session == null ? null : browser?.ForOwner(new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace,
+                    ScopeId = workspace.WorkspaceId, ChatId = session.Id }, session, _settings, browserRunId ?? session.LastRun?.RunId,
+                    CaptureMedia, authorityStore, revisions, mutations, payloads);
+                var projection = office?.ModelProjection ?? browserSet?.ModelProjection;
+                _compiler = new ModelContextCompiler(payloads, projection);
                 _taskLists = new WorkspaceTaskListObserver(paths, conversations, payloads, session, authorityStore, mutations, mutationOrigin);
                 _plans = new WorkspacePlanService(paths, conversations, payloads, workspace, session, artifacts, authorityStore, mutations, mutationOrigin);
                 _modelTrace = new ModelTracePersistenceService(events);
@@ -1268,8 +1271,7 @@ namespace RNAssistant.Runtime
                 var entries = new List<ToolCatalogEntry>();
                 _catalogAuthority = authorityStore;
                 _skillPublications = new SkillPublicationService(authorityStore,
-                    authorityStore as IResourceRevisionStore ?? throw new ArgumentException("Resource owner must provide revisions.", nameof(resourceAuthority)),
-                    mutations, payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
+                    revisions, mutations, payloads, new SkillStore(paths), "Workspace", WorkspaceSkillProvider.GetSkills());
                 _skillCatalog = new SkillCatalogService("Workspace", _skillPublications.Capture);
                 Register(registry, entries, SkillLoadToolHandler.Entry(),
                     new SkillLoadToolHandler(session, () => _skills, () => _toolPack, _settings, AdmitSkillSelection));

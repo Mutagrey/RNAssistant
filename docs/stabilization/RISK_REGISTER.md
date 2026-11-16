@@ -1,5 +1,34 @@
 # Stabilization risk register
 
+## Storage-v2 review corrections — host-neutral fixed, qualification open, 2026-11-16
+
+Owners: ChatSessionService / native journal input and finish readers, shared
+run-registry coordination, resource composition, Browser source/version owners.
+`17.1.1-dev` corrects the reproduced compile/startup/create-chat failures, foreign
+Office scope misbinding, inherited fork finish rejection, protected Browser/Workspace/
+plugin failures, unknown patch inspection dead end and Browser source/reset defects.
+The focused native and actual-controller evidence is recorded in
+[PROGRESS](PROGRESS.md#storage-v2-review-corrections--2026-11-16).
+
+Remaining evidence, in priority order:
+
+1. **P1:** Windows multi-window document switching/Save As and run-registry
+   exclusion, including async tool/skill saves and cancellation of exact-lease wait.
+   Host-neutral thread and child-process checks do not qualify COM/VSTO behavior.
+2. **P1 when protection is enabled:** actual DPAPI key access across Browser reads,
+   default Workspace project creation and saved plugin visual-selection intake.
+   Changing protection settings with nonempty `storage-v2` still needs a targeted
+   root-guard check; no additional reproduced settings defect is asserted here.
+3. **P1 if an earlier wrong binding occurred:** already misbound registry/history
+   requires evidence-backed recovery. The patch prevents new cross-document
+   bindings and does not guess the identity of existing immutable facts.
+4. **P2:** native Browser selected-source presentation and version invalidation
+   across two tabs after repeated clear/reset. Existing mixed-generation restore,
+   old-writer quiescence, power-loss and Chromium/WebView2 gates remain open.
+
+Use synthetic data in a separate test profile. Windows evidence from the user is
+screen photos only; do not request logs, files, dumps or diagnostic archives.
+
 ## Photo package F01–F12 — host-neutral closed, Windows evidence open, 2026-11-16
 
 Owner: AgentKernel / finish admission, Workspace HTML definition, Browser/VBA

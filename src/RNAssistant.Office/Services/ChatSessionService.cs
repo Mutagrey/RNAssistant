@@ -9,6 +9,7 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
@@ -551,7 +552,8 @@ namespace RNAssistant.Office.Services
         {
             // Addressed creation must neither replace an active draft nor select
             // the child. The caller has already validated the exact live target.
-            var session = _conversations.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, title);
+            var session = _conversations.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, title,
+                source.DocumentAuthorityId);
             session.DocumentAuthorityId = source.DocumentAuthorityId;
             session.DocumentPath = source.DocumentPath;
             return session;
@@ -565,7 +567,8 @@ namespace RNAssistant.Office.Services
                 _conversations.ListHeaders(includeStorageUsage: false).FirstOrDefault(header => header.WorkspaceId == null && header.DocumentAuthorityId == documentAuthorityId);
             if (source == null || string.IsNullOrEmpty(source.DocumentKey))
                 throw new InvalidOperationException("Документ страницы отсутствует в рабочей области. Откройте его перед созданием чата.");
-            var session = _conversations.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, title);
+            var session = _conversations.CreateTransient(source.Host, source.DocumentKey, source.DocumentTitle, title,
+                source.DocumentAuthorityId);
             session.DocumentAuthorityId = source.DocumentAuthorityId; session.DocumentPath = source.DocumentPath;
             _conversations.Commit(session, new ConversationCommit());
             return session;
@@ -580,7 +583,8 @@ namespace RNAssistant.Office.Services
             var documentPath = CurrentDocumentPath();
             PrepareCurrentDocumentBinding(host, documentKey, runtimeKey, documentTitle, documentPath, false);
             var session = _conversations.CreateTransient(host, documentKey, documentTitle,
-                string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
+                string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim(),
+                _documentAuthorityRegistry == null ? null : ResolveDocumentAuthority(host, documentKey, documentPath));
             BindDocumentAuthority(session, host, runtimeKey, documentPath);
             UpdateCurrentDocumentMetadata(session, documentPath);
             return session;
@@ -609,9 +613,10 @@ namespace RNAssistant.Office.Services
                 host.Trim(),
                 documentKey.Trim(),
                 string.IsNullOrWhiteSpace(documentTitle) ? "Document" : documentTitle.Trim(),
-                string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
+                string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim(),
+                _documentAuthorityRegistry == null ? null : ResolveDocumentAuthority(host, documentKey, documentPath));
             session.DocumentPath = string.IsNullOrWhiteSpace(documentPath) ? null : documentPath.Trim();
-            BindDocumentAuthority(session, host, null, session.DocumentPath);
+            if (_documentAuthorityRegistry == null) BindDocumentAuthority(session, host, null, session.DocumentPath);
             if (persist) _conversations.Commit(session, new ConversationCommit());
             SetActiveSession(session);
             return session;
@@ -628,6 +633,56 @@ namespace RNAssistant.Office.Services
             }
             session.DocumentAuthorityId = _documentAuthorityRegistry.Resolve(
                 host, runtimeKey, locator, session.DocumentAuthorityId).Id;
+        }
+
+        internal string ResolveConversationScope(string host, string documentKey)
+        {
+            return "document:" + ResolveDocumentAuthority(host, documentKey, null);
+        }
+
+        private string ResolveDocumentAuthority(string host, string documentKey, string documentPath)
+        {
+            if (_documentAuthorityRegistry == null || string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(documentKey))
+                throw new InvalidOperationException("An exact Office document address is required.");
+            host = host.Trim(); documentKey = documentKey.Trim();
+            if (string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(documentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase))
+                return _documentAuthorityRegistry.Resolve(host, _adapter.RuntimeDocumentKey, CurrentDocumentPath()).Id;
+
+            // A selected historical chat is not the current Office target. Its
+            // authority is immutable metadata; resolving it must not rebind the
+            // active document or overwrite another locator in the registry.
+            if (_activeSession?.WorkspaceId == null && !string.IsNullOrWhiteSpace(_activeSession?.DocumentAuthorityId) &&
+                string.Equals(_activeSession.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_activeSession.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+                return _activeSession.DocumentAuthorityId;
+            var known = _conversations.ListHeaders(includeStorageUsage: false)
+                .Where(header => header.WorkspaceId == null &&
+                    string.Equals(header.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(header.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase))
+                .Select(header => header.DocumentAuthorityId).Distinct(StringComparer.Ordinal).ToArray();
+            if (known.Length != 0)
+            {
+                if (known.Length != 1 || string.IsNullOrWhiteSpace(known[0]))
+                    throw new InvalidOperationException("The Office document address has no unambiguous authority.");
+                return known[0];
+            }
+
+            // New addressed drafts may precede any chat. Use their explicit
+            // locator, a path-bearing key, or the exact open-document catalog
+            // entry; never substitute metadata from the active adapter.
+            var locator = ResolveDocumentPath(documentPath, documentKey);
+            if (string.IsNullOrWhiteSpace(locator))
+            {
+                var catalog = _adapter as IOfficeDocumentCatalog;
+                var matches = (catalog?.ListOpenDocuments() ?? new OpenOfficeDocumentDto[0])
+                    .Where(item => string.Equals(item.Host, host, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(item.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (matches.Length == 1) locator = matches[0].Path;
+            }
+            if (string.IsNullOrWhiteSpace(locator))
+                throw new InvalidOperationException("The selected Office document is unavailable. Open that document before creating its chat.");
+            return _documentAuthorityRegistry.Resolve(host, null, locator).Id;
         }
 
         public ChatSession DeleteAndSelectNext(ChatSession current)

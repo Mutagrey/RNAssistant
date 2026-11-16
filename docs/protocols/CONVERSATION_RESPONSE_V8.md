@@ -347,8 +347,10 @@ admission rereads the selected accepted/start/terminal JSONL records and checks
 their identities, ordering, trusted eligibility and retained history membership.
 The exact accepted body is hydrated only for cited calls. Current-run accepted
 IDs must still agree with kernel state and have terminal facts; old errors and
-uncited payloads are not revalidated on every finish. A fork's canonical seed owns
-copied bindings. Pending, removed, foreign and invented evidence is
+uncited payloads are not revalidated on every finish. Native forks retain the original
+execution owner through frozen fork ancestry and source revision; admission also
+requires the selected child's retained history membership. Execution facts are not
+copied into the child. Pending, removed, foreign and invented evidence is
 rejected. Failed/unknown outcomes can support honest unsatisfied or
 unverified claims. An `ok` result or a macro dispatch alone does not prove a
 user-requested effect. Existing effect read-back, unknown-effect guards,

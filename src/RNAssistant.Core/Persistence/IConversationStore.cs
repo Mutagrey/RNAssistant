@@ -6,7 +6,10 @@ namespace RNAssistant.Core.Persistence
     public interface IConversationStore
     {
         ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle);
-        ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title);
+        // A supplied Office authority is resolved by the runtime before creating
+        // the draft; it is never inferred from a different active document.
+        ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title,
+            string documentAuthorityId = null);
         ChatSession Load(string host, string documentKey, string sessionId);
         ChatSession Load(string sessionId);
         ConversationMetadata ReadMetadata(string sessionId);

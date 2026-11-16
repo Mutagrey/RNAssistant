@@ -15,7 +15,8 @@ namespace RNAssistant.Office
                 EnsureNoActiveRuns();
                 _resourceData.CloseTransfers();
                 _paths.ClearRuntimeData();
-                _resourceAuthorityStore.ResetAfterRuntimeDataClear();
+                // Journal owners open their disposable projection per operation;
+                // only the remaining identity/legacy caches need invalidation.
                 _documentAuthorityRegistry.ResetAfterRuntimeDataClear();
                 _legacyChatStore.ResetAfterRuntimeDataClear();
                 _chatSessions.Reset();

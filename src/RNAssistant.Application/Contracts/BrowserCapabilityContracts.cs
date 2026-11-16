@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Runtime.Contracts;
 
@@ -11,7 +12,9 @@ namespace RNAssistant.Application.Contracts
     public interface IBrowserCapabilityContribution
     {
         BrowserCapabilitySet ForOwner(BrowserOwnerScope owner, ChatSession session, AppSettings settings,
-            string runId, Action<string, IReadOnlyList<ChatAttachment>> captureMedia);
+            string runId, Action<string, IReadOnlyList<ChatAttachment>> captureMedia,
+            IResourceAuthorityStore authority, IResourceRevisionStore revisions,
+            IResourceMutationJournal mutations, ChatBlobStore payloads);
     }
 
     public sealed class BrowserCapabilitySet

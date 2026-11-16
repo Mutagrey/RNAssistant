@@ -401,6 +401,16 @@ namespace RNAssistant.Core.Tools
                     var dispatched = context.TargetMayHaveDispatched(i);
                     row.Status = effects[i].Status = dispatched ? ResourceTargetStatus.Unknown : ResourceTargetStatus.Rejected;
                     row.WriteStarted = effects[i].WriteStarted = dispatched;
+                    if (dispatched)
+                    {
+                        // Completion publication can fail after the target wrote.
+                        // Keep the prepared identity inspectable without inventing
+                        // an after revision or upgrading the uncertain outcome.
+                        var plan = prepared.Targets[i].Plan;
+                        effects[i].Effect = new ResourceEffect("patch_unknown_" + Guid.NewGuid().ToString("N"),
+                            ResourceMutationToolCatalog.Patch, ResourceEffectOutcome.UnknownAfterDispatch,
+                            new[] { new ResourceImpact(plan.EffectIdentity ?? plan.Source.Identity, ResourceImpactRelation.Exact) });
+                    }
                     row.Diagnostic = dispatched ? PatchDiagnostic.Unknown() : PatchDiagnostic.From(ex);
                     break;
                 }

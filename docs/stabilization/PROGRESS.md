@@ -1,5 +1,41 @@
 # Stabilization progress
 
+## Storage-v2 review corrections — 2026-11-16
+
+Implemented host-neutral / In Review, `17.1.1-dev`, reviewed against
+`d5f0569a2800df2dd0e919eaa2ddadf2dd786a48` and reconciled with the newer `main`.
+Production controller compilation, first-draft inbox reads and nested run-registry
+coordination are corrected. Exact Office document authority is resolved before draft
+creation; group tools follow the source document. Native fork finish evidence follows
+frozen ancestry and retained child membership. Uncertain patch completion retains its
+known inspection target without clearing Unknown/replay guards.
+
+Browser receives the runtime's protected resource/CAS ports; default Workspace and
+plugin readers load the configured protector. Browser Source selects the current
+member, and plugin reset recreates dependent owners with one HTML version forwarder.
+See [Session events](../session-events.md), [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
+[Text mutations](../text-mutations.md), [Browser contracts](../browser/03_CONTRACTS.md)
+and [Harness guide](../../tests/RNAssistant.Harness/README.md) for the owned contracts.
+
+Harness build and real-controller MockDemo compilation pass with 0 errors (2 and 11
+warnings). The clean MockDemo build currently needs a temporary, non-committed
+`DemoSettingsService.SaveDiagnosticLogOptions` shim because the newer diagnostics
+slice omitted it; that independent fixture gap is recorded in
+[BACKLOG](BACKLOG.md).
+Final focused Harness checks pass 20/20: input 5, Office scope 3, coordination 3,
+existing lease/maintenance 2, fork finish 2, uncertain patch 1 and Browser/protection 4.
+MockDemo chat creation, artifact transfer and Browser discussion/screenshot/export
+smokes pass. Protocol v8 passes 185 cases / 2414 assertions; version validation and
+diff checks pass. Synthetic HMAC+AES source-linked application probes also confirm
+default Workspace project creation and saved plugin annotation provenance.
+
+Windows/.NET Framework/VSTO/Office/WebView2/DPAPI remain unqualified. The socket/
+named-pipe-dependent discovery/media checks and Chromium UI checks were not qualified
+in this environment. Their affected Workspace discovery/media fixtures now read
+native ports; the broader MockDemo resource-workflow fixture still needs conversion.
+Existing full application restore, old-writer quiescence and power-loss gates remain
+open. No automatic repair of previously misbound document identities is included.
+
 ## Diagnostic file viewer and retention — 2026-11-16
 
 Implemented host-neutral / In Review, `17.1.0-dev`. Existing Diagnostics application

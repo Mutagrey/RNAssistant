@@ -23,11 +23,19 @@ namespace RNAssistant.Office.Services
         private readonly DocumentAuthorityRegistry _documents;
         private readonly DocumentArtifactStore _artifacts;
         private readonly ArtifactWorkingSetService _links;
-        private readonly ResourceAuthorityStore _authority;
+        private readonly IResourceAuthorityStore _authority;
+        private readonly IResourceRevisionStore _revisions;
         private readonly ChatBlobStore _blobs;
         internal ArtifactCatalogService(DocumentAuthorityRegistry documents, DocumentArtifactStore artifacts,
-            ArtifactWorkingSetService links, ResourceAuthorityStore authority, ChatBlobStore blobs)
-        { _documents = documents; _artifacts = artifacts; _links = links; _authority = authority; _blobs = blobs; }
+            ArtifactWorkingSetService links, IResourceAuthorityStore authority, ChatBlobStore blobs,
+            IResourceRevisionStore revisions = null)
+        {
+            _documents = documents; _artifacts = artifacts; _links = links;
+            _authority = authority ?? throw new ArgumentNullException(nameof(authority));
+            _revisions = revisions ?? authority as IResourceRevisionStore ??
+                throw new ArgumentException("The artifact catalog requires resource revisions.", nameof(revisions));
+            _blobs = blobs;
+        }
 
         private IReadOnlyList<DocumentAuthorityEntry> Documents(ChatSession actor)
         {
@@ -225,7 +233,7 @@ namespace RNAssistant.Office.Services
                 json = new UTF8Encoding(false, true).GetString(_artifacts.ExportBytes(source, exact));
             else {
                 var head = _authority.GetHead(scope, exact.Identity);
-                var view = _authority.GetView(scope, exact, "text");
+                var view = _revisions.GetView(scope, exact, "text");
                 var payload = view?.Coverage?.Kind == ResourceCoverageKinds.Whole ? view.Payload : null;
                 if (head == null || payload == null)
                     throw new InvalidDataException("Нет полного сохранённого снимка зависимости. Откройте исходный документ и сохраните данные проекта.");

@@ -234,6 +234,9 @@ stateRevision guard. Core catalog entry identity is not its ordinal or release I
 `IBrowserCapabilityContribution` связывается с реальным Workspace owner/chat/run,
 не с Office target. Browser branch core.find/read/search использует существующие
 semantic handlers и authority; Office route не принимает Browser target/scope.
+Workspace передаёт существующие authority/revision/mutation/CAS ports в `ForOwner`;
+Browser использует ту же protection policy и ключ, без отдельного default store.
+После runtime reset следующий run получает ports нового conversation owner.
 `IBrowserMediaSource` возвращает native-only bounded BrowserMediaCapture и проверяет
 его актуальность. Отсутствие провайдера, privacy proof или exact viewport — отказ.
 CAS хранит PNG и metadata immutable observation; ToolResultMaterialization и
@@ -253,10 +256,18 @@ Unavailable не даёт BrowserPageHandle. F2b подтверждает тол
 с явным executionAvailable:false.
 ReadBrowserSource материализует один разрешённый member (bounded owner read),
 выдаёт максимум 32K символов и проверяет hash при следующей странице.
+При отсутствии явного `Path` сначала выбирается `RelativePath` текущей Browser
+цели, затем `EntryPath`. Явный путь остаётся override внутри captured member set;
+отсутствующий selected member получает отказ, без подмены на entry.
 Повторы member paths и различия только в регистре схлопываются до одного captured
 path; запрошенный путь канонизируется к нему. До 512 уникальных members, пустой или
 превышающий лимит набор получает отдельный явный отказ вместо неоднозначного
 «недоступен или превышен».
+
+`PluginApplicationService.ResetAfterRuntimeDataClear` пересоздаёт dependent stores
+и HTML version service из новых conversation ports. Старый `VersionChanged`
+forwarder отписывается, новый подписывается один раз; последующие Save/Delete
+снова уведомляют все Browser consumers точной версии и Workspace scope.
 
 
 ## F0 host-neutral contracts — 2026-11-13

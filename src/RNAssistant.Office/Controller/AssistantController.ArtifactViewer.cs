@@ -38,7 +38,7 @@ namespace RNAssistant.Office
         private ArtifactCatalogService ArtifactCatalog()
         {
             return new ArtifactCatalogService(_documentAuthorityRegistry, _artifacts,
-                _artifactWorkingSet, _resourceAuthorityStore, _toolExecutor.Payloads);
+                _artifactWorkingSet, _resourceAuthorityStore, _toolExecutor.Payloads, _resourceAuthorityStore);
         }
 
         public ArtifactCatalogResponse ListArtifactCatalog(ArtifactCatalogRequest request)

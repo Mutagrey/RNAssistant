@@ -35,12 +35,7 @@ namespace RNAssistant.Application
             if (paths == null) throw new ArgumentNullException(nameof(paths));
             _paths = paths;
             _workspaces = new WorkspaceStore(paths);
-            if (files == null)
-            {
-                var resources = new ResourceJournal(paths);
-                files = new WorkspaceFileService(paths, resources, resources, resources);
-            }
-            _files = files;
+            _files = files ?? new WorkspaceFileService(paths);
             _projects = new TabularProjectStore(_files);
         }
 

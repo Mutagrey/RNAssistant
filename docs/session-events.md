@@ -10,6 +10,30 @@ files and run recovery receive those existing owners explicitly. The active writ
 no longer construct `ChatStore`, `ChatConversationStoreAdapter` or
 `ChatEventStoreAdapter`.
 
+Workspace Browser contributions receive the same authority, revision, mutation and
+CAS ports for each run, including the configured protection key. They do not create
+an unprotected journal. Runtime clear removes the canonical data; journal owners
+reopen the disposable projection on the next operation. Plugin reset recreates all
+conversation-dependent owners together and transfers HTML version notifications to
+the new owner, detaching the previous one.
+
+Default Workspace application and plugin readers load the configured protector
+before creating resource owners. A missing configured key rejects construction;
+they cannot install an unprotected journal beside protected CAS.
+
+A new, uncommitted chat may read an empty input journal before its first submit.
+This exception requires revision zero, the exact document/workspace scope and an
+unused chat ID across retained cards, including tombstones. It creates no durable
+chat and does not relax persisted, stale, deleted or foreign identity checks.
+
+Run reservation, maintenance and nested journal/CAS activity share one synchronous
+run-registry coordination owner per canonical path and thread. Reentry does not
+flow to Task.Run; asynchronous tool/skill mutations acquire and release the gate
+inside their worker. Waiting for an occupied exact run lease releases the registry
+between attempts so the current owner can publish its terminal journal facts.
+Maintenance still excludes new reservations and observes the existing activity and
+exact run leases.
+
 A retained `ChatStore` instance is read-only maintenance input used to inventory CAS
 references for the preserved legacy generation. It performs no active chat/resource
 write. On a load interrupted by a concurrent metadata revision, the journal retries a
@@ -43,6 +67,14 @@ shared index resolves an addressed chat to its canonical stream; creation,
 catalog, selection, move, delete, Store and event operations resolve the exact
 document authority or workspace identity through the existing address fields.
 The router owns no facts, mutable registry or second read model.
+
+Office resolves the selected document authority before creating a transient chat.
+Only an exact current host/key may use the adapter's runtime identity and current
+path. Historical addresses use their retained authority; a new addressed document
+uses its explicit path or exact catalog entry. Unknown or ambiguous addresses are
+rejected. The runtime-only authority argument is validated against the destination
+journal. Group tools resolve their owner from the exact source session on each call,
+so switching the active document does not retain the startup document's group scope.
 
 Missing index recovery scans canonical stream headers once before rebuilding the
 single disposable index. Unknown chats do not inherit another scope or create a
@@ -261,6 +293,12 @@ child's projection. Canonical operations, result receipts and resource effect pr
 retain their original owner. Details and guards validate immutable fork ancestry.
 Current-run recovery is not inherited. No new store, registry or authority exists.
 
+Finish admission resolves inherited E aliases through that frozen ancestry and its
+source revision, then rereads the original call/start/terminal records. The selected
+child must still retain the complete exchange. Nested forks and source rewrites do
+not rebind that proof; results created in a parent after the frozen revision cannot
+become child evidence. A child's own later alias is resolved to its own execution.
+
 Source rewrites/deletion and child history edits preserve inherited obligations.
 Rebuild and journal/CAS restore reconstruct multi-generation membership and guards.
 Lost acknowledgements retry only the same accepted command, even after source deletion.
@@ -271,8 +309,9 @@ remain available; possible unverified effects are not replayed.
 This initial slice covers text and retained runtime presentation; shared resources
 and checkpoints are connected above. Other local graphs still require their copy/publication
 boundary. Their source preparation below remains available. Full-load/cloning costs, ancestry/header work
-and inherited usage attribution remain P3. Production storage stays ChatStore until
-whole-port P7; Windows/Office qualification and complete application backup are open.
+and inherited usage attribution remain P3. Production roots now use the journal
+composition described above; Windows/Office qualification and complete application
+backup are open.
 
 ## Journal fork preparation — 2026-11-14
 

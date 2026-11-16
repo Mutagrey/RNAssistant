@@ -14,6 +14,7 @@ using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.WebView
 {
@@ -73,7 +74,7 @@ namespace RNAssistant.Office.WebView
             _bridge.WindowHost = windowHost;
             _plugins = new RNAssistant.Application.PluginApplicationService(controller.StoragePaths, webRoot,
                 officeCapabilities: new WorkspaceOfficeCapabilities(() => _controller),
-                browserCapabilities: new BrowserCapabilityService(controller.StoragePaths, () => _externalBrowser));
+                browserCapabilities: new BrowserCapabilityService(() => _externalBrowser));
             _bridge.Plugins = _plugins;
             _lifetimeCancellation = new System.Threading.CancellationTokenSource();
             CreateWebViewControl();

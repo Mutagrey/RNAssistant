@@ -1,5 +1,33 @@
 # RNAssistant Harness
 
+## Storage-v2 review corrections — 2026-11-16
+
+Focused filters: `office journal scope:`, `journal owners: runtime data clear`,
+`journal input: transient inbox before first commit`,
+`storage coordination:`,
+`journal fork: inherited finish evidence`, `journal fork: finish evidence prefix`,
+`patch: completion failure`, `local browser: shared protected resource ports`,
+`local browser: runtime reset retains HTML notifications`, and
+`local browser: source-only sessions and exact history`.
+`workspace: default storage requires configured protection` additionally checks
+that the default Workspace application and PluginStore reject a protected root
+without its key before publishing a resource journal or CAS body.
+These exercise addressed Office creation/selection/deletion and Save As, dynamic
+group scope, same journal owners after clear, frozen nested-fork evidence, removed
+or foreign exchanges, uncertain patch inspection with retained replay guards,
+HMAC/encrypted Browser journal/CAS, selected source members, and repeated reset with
+real HTML Save/Delete notifications. The Office adapter and native page are fixtures.
+
+Compile both the Harness and `demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj`:
+the Harness substitutes a controller stub and cannot detect production controller
+compile failures. On current `main`, the clean MockDemo build first has an independent
+missing `DemoSettingsService.SaveDiagnosticLogOptions` shim from the diagnostics
+slice; see BACKLOG. `workspace: discovery admission restart and binding drift` and
+`local browser: standalone Workspace media reaches model wire once` now read native
+conversation/event ports in their fixtures; they require local HTTP/named-pipe
+support. Their unavailable environment is not passing evidence. Windows/.NET
+Framework/VSTO/Office/WebView2/DPAPI qualification remains separate.
+
 ## Diagnostic files — 2026-11-16
 
 Filter `diagnostic logs:` runs six focused checks: typed production log-controller

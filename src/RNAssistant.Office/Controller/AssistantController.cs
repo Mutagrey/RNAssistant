@@ -238,10 +238,7 @@ namespace RNAssistant.Office
 
         private string ResolveConversationScope(string host, string documentKey)
         {
-            if (!string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Conversation belongs to another Office host.");
-            return "document:" + _documentAuthorityRegistry.Resolve(host, _adapter.RuntimeDocumentKey,
-                _adapter.DocumentPath).Id;
+            return _chatSessions.ResolveConversationScope(host, documentKey);
         }
 
         internal WorkspaceFileService WorkspaceFiles { get { return _workspaceFiles; } }

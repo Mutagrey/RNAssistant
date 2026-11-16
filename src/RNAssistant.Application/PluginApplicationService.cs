@@ -41,11 +41,8 @@ namespace RNAssistant.Application
         private readonly HashSet<string> _revoked = new HashSet<string>();
         private bool _disposed;
         private Task _closing;
-        private readonly PluginResultStore _results;
-        private readonly WorkspaceFileService _files;
-        private readonly ResourceJournal _resources;
-        private readonly ResourceJournal _mutations;
-        private readonly ChatBlobStore _payloads;
+        private PluginResultStore _results;
+        private WorkspaceFileService _files;
         private sealed class Candidate
         {
             public PluginReleaseRecord Package;
@@ -66,17 +63,33 @@ namespace RNAssistant.Application
             _paths = paths; _webRoot = webRoot; _webHost = webHost; _officeCapabilities = officeCapabilities;
             _browserCapabilities = browserCapabilities;
             _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
-            Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools, officeCapabilities,
-                () => PluginStore.AcquireRuntimeUse(paths), IsPluginSourceWorkspace, browserCapabilities: browserCapabilities);
-            _resources = (ResourceJournal)Conversations.ResourceAuthority;
-            _mutations = (ResourceJournal)Conversations.ResourceMutations;
-            _files = Conversations.WorkspaceFiles; _payloads = Conversations.Payloads;
-            Vendors = new VendorCatalog(paths, webRoot, _resources, _resources, _payloads);
-            _results = new PluginResultStore(paths, _files);
-            _store = new PluginStore(paths, Conversations.ConversationStore, _resources, _mutations, _files, _payloads);
-            HtmlProjects = new WorkspaceHtmlVersionService(paths, Conversations.ConversationStore, _files, _resources, _mutations);
-            HtmlProjects.VersionChanged += value => VersionChanged?.Invoke(value);
+            InitializeConversationServices();
         }
+
+        private void InitializeConversationServices()
+        {
+            var conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
+                () => PluginStore.AcquireRuntimeUse(_paths), IsPluginSourceWorkspace, browserCapabilities: _browserCapabilities);
+            try
+            {
+                var resources = conversations.ResourceAuthority;
+                var mutations = conversations.ResourceMutations;
+                var files = conversations.WorkspaceFiles;
+                var payloads = conversations.Payloads;
+                var vendors = new VendorCatalog(_paths, _webRoot, resources, conversations.ResourceRevisions, payloads);
+                var results = new PluginResultStore(_paths, files);
+                var store = new PluginStore(_paths, conversations.ConversationStore, resources, mutations, files, payloads);
+                var htmlProjects = new WorkspaceHtmlVersionService(_paths, conversations.ConversationStore, files, resources, mutations);
+                if (HtmlProjects != null) HtmlProjects.VersionChanged -= ForwardHtmlVersionChanged;
+                Conversations = conversations; _files = files; Vendors = vendors; _results = results; _store = store;
+                HtmlProjects = htmlProjects;
+                HtmlProjects.VersionChanged += ForwardHtmlVersionChanged;
+            }
+            catch { conversations.Dispose(); throw; }
+        }
+
+        private void ForwardHtmlVersionChanged(BrowserVersionStateChanged value)
+        { VersionChanged?.Invoke(value); }
 
         public PluginCatalogDto List()
         { using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync) { RequireOpen(); return new PluginCatalogDto { Error = StartupError, DefaultSourceParent = DefaultSourceParent, Items = _store.List().Where(item => !item.Hidden).Select(Item).ToArray() }; } }
@@ -200,11 +213,10 @@ namespace RNAssistant.Application
                 if (_instances.Count != 0 || _calls.Count != 0) throw new PluginException("plugins_busy", "Plugin instances must drain before runtime clear.");
                 foreach (var grant in _data.Values) grant.Dispose();
                 _data.Clear(); _candidates.Clear(); _revoked.Clear();
+                _savedIntents.Clear(); _savedPreparations.Clear();
                 Conversations.Dispose();
-                Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
-                    () => PluginStore.AcquireRuntimeUse(_paths), IsPluginSourceWorkspace, browserCapabilities: _browserCapabilities);
-                _store = new PluginStore(_paths, Conversations.ConversationStore, _resources, _mutations, _files, _payloads);
-                HtmlProjects = new WorkspaceHtmlVersionService(_paths, Conversations.ConversationStore, _files, _resources, _mutations);
+                _results.Dispose();
+                InitializeConversationServices();
             }
         }
         public PluginItemDto Connect(PluginConnectRequest request)

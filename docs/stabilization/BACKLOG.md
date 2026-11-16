@@ -1,5 +1,16 @@
 # RNAssistant backlog
 
+## MockDemo diagnostic settings shim — observed 2026-11-16
+
+Owner: `demo/RNAssistant.MockDemo/DemoSettingsService.cs`, source-linked by
+`DiagnosticLogStore`. Current `main` excludes the production `SettingsService` from
+MockDemo, but the demo shim lacks `SaveDiagnosticLogOptions`; a clean MockDemo build
+therefore fails with CS1061 before compiling the production controller. Add the
+matching retention-only settings update and build this project cleanly. This is
+independent of the storage-v2 review corrections: their actual-controller compile was
+verified with a temporary, non-committed shim, and no demo compatibility change is
+included in that slice.
+
 ## Bridge bootstrap fixture — observed 2026-11-16
 
 Owner: `tests/web/bridge-bootstrap.test.js`. The existing Node fixture fails with

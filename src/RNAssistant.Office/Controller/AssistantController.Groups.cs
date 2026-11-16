@@ -3,6 +3,7 @@ using System.Linq;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office
 {

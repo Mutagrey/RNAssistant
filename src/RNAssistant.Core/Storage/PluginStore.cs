@@ -31,7 +31,7 @@ namespace RNAssistant.Core.Storage
             _paths = paths; _conversations = conversations;
             if (authority == null)
             {
-                var resources = new ResourceJournal(paths);
+                var resources = new ResourceJournal(paths, new SettingsService(paths).LoadStorageProtector());
                 authority = resources; mutations = resources;
                 files = new WorkspaceFileService(paths, resources, resources, resources);
             }

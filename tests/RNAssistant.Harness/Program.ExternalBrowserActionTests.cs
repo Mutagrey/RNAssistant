@@ -154,9 +154,10 @@ namespace RNAssistant.Harness
                 var session = new ChatSession { Id = "workspace-browser", WorkspaceId = "workspace" };
                 var source = new HarnessBrowserActionSource { Target = new BrowserPageHandle(session.Id, "page", 1) };
                 executor.ExternalBrowserReadSource = source;
-                var bound = new BrowserCapabilityService(FixturePaths.Value, () => source).ForOwner(new BrowserOwnerScope {
+                var bound = new BrowserCapabilityService(() => source).ForOwner(new BrowserOwnerScope {
                     Kind = BrowserOwnerKind.Workspace, ScopeId = session.WorkspaceId, ChatId = session.Id },
-                    session, new AppSettings(), "run", null);
+                    session, new AppSettings(), "run", null, executor.ResourceAuthority.Store, executor.ResourceAuthority.Revisions,
+                    executor.ResourceAuthority.Mutations, executor.Payloads);
                 var registry = new ToolHandlerRegistry();
                 foreach (var contribution in bound.Tools)
                     registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(contribution.Entry.Id,

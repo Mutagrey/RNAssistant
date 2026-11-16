@@ -17,6 +17,12 @@ publication. Supplied ports must form a complete composition; partial injection
 fails before owner creation. A missing read port cannot authorize a Run actor. Retry still resolves
 the original saved-version operation before considering a new write.
 
+The default PluginStore used by retained visual-selection validation also loads the
+configured storage protector. Its resource journal and CAS must use the same key as
+the publishing application; an unavailable configured key fails before owner
+creation. Runtime clear replaces all PluginApplicationService conversation-dependent
+services together and reconnects HTML version notifications once to the new owner.
+
 These bindings preserve workspace/run checks, immutable saved sources and existing
 publication authority. They do not switch global production storage. Native plugin
 version tests cover exact actor, no-effect refusal, receipt reuse, rebuild and

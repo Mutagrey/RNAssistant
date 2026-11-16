@@ -17,17 +17,20 @@ namespace RNAssistant.Office.Services
     // The same Browser gateway/actions as Office, with no borrowed Office target or COM gate.
     internal sealed class BrowserCapabilityService : IBrowserCapabilityContribution
     {
-        private readonly AppDataPaths _paths;
         private readonly Func<IBrowserReadSource> _source;
-        internal BrowserCapabilityService(AppDataPaths paths, Func<IBrowserReadSource> source) { _paths = paths; _source = source; }
+        internal BrowserCapabilityService(Func<IBrowserReadSource> source)
+        { _source = source ?? throw new ArgumentNullException(nameof(source)); }
         public BrowserCapabilitySet ForOwner(BrowserOwnerScope owner, ChatSession session, AppSettings settings,
-            string runId, Action<string, IReadOnlyList<ChatAttachment>> captureMedia)
+            string runId, Action<string, IReadOnlyList<ChatAttachment>> captureMedia,
+            IResourceAuthorityStore authorityStore, IResourceRevisionStore revisions,
+            IResourceMutationJournal mutations, ChatBlobStore payloads)
         {
             if (session == null || owner == null || owner.Kind != BrowserOwnerKind.Workspace ||
                 owner.ChatId != session.Id || owner.ScopeId != session.WorkspaceId)
                 throw new InvalidOperationException("Browser contribution requires the exact Workspace chat.");
-            var store = new ResourceJournal(_paths); var blobs = new ChatBlobStore(_paths);
-            var authority = new ResourceAuthorityService(store, store, store, blobs);
+            if (mutations == null) throw new ArgumentNullException(nameof(mutations));
+            if (payloads == null) throw new ArgumentNullException(nameof(payloads));
+            var authority = new ResourceAuthorityService(authorityStore, revisions, mutations, payloads);
             var gateway = new ResourceGatewayService(null, null, null, authority: authority, externalBrowser: _source);
             return new BrowserCapabilitySet {
                 ModelProjection = ModelToolResultProjection.Instance,

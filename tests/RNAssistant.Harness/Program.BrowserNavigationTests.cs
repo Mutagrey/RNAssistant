@@ -91,6 +91,16 @@ namespace RNAssistant.Harness
                 new[] { "index.html", "INDEX.HTML" }, path => "12345");
             AssertEqual("index.html", canonical.Path, "case-only source aliases resolve to the captured member");
             AssertEqual(1, canonical.Files.Count, "duplicate source members are listed once");
+            var memberTarget = new BrowserTargetDescriptor { EntryPath = "index.html", RelativePath = "pages/detail.html" };
+            var members = new[] { "index.html", "pages/detail.html" };
+            var addressed = BrowserSourceReader.Read(memberTarget, new BrowserSourceRequest { Count = 100 }, members, path => path);
+            AssertEqual("pages/detail.html", addressed.Path, "source opens the member selected by the current local address");
+            AssertEqual("pages/detail.html", addressed.Text, "source body belongs to the selected member, not the entrypoint");
+            var explicitMember = BrowserSourceReader.Read(memberTarget, new BrowserSourceRequest { Path = "index.html", Count = 100 }, members, path => path);
+            AssertEqual("index.html", explicitMember.Path, "an explicit source file selection takes priority over the local address");
+            memberTarget.RelativePath = "missing.html";
+            RuntimeThrows<InvalidOperationException>(() => BrowserSourceReader.Read(memberTarget,
+                new BrowserSourceRequest { Count = 100 }, members, path => path));
         }
 
         private static void BrowserLocalAddressesAndScope()

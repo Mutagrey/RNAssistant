@@ -13,20 +13,18 @@ namespace RNAssistant.Application.Conversations
     {
         private readonly string _directory;
         private readonly Func<string, string> _fileName;
-        private readonly string _coordinationFile;
+        private readonly AppDataPaths _coordinationPaths;
         private readonly string _leasePattern;
-        private readonly ThreadLocal<CoordinationLockState> _coordinationState =
-            new ThreadLocal<CoordinationLockState>();
 
         private ConversationLeaseService(string directory, Func<string, string> fileName,
-            string coordinationFile, string leasePattern)
-        { _directory = directory; _fileName = fileName; _coordinationFile = coordinationFile;
+            AppDataPaths coordinationPaths, string leasePattern)
+        { _directory = directory; _fileName = fileName; _coordinationPaths = coordinationPaths;
             _leasePattern = leasePattern; }
 
         internal static ConversationLeaseService ForOffice(AppDataPaths paths)
         {
             return new ConversationLeaseService(paths == null ? null : Path.Combine(paths.Root, "locks"),
-                id => "run_" + AppDataPaths.SafeFileName(id) + ".lck", "run-registry.lck", "run_*.lck");
+                id => "run_" + AppDataPaths.SafeFileName(id) + ".lck", paths, "run_*.lck");
         }
 
         internal static ConversationLeaseService ForWorkspace(AppDataPaths paths)
@@ -44,7 +42,7 @@ namespace RNAssistant.Application.Conversations
                 !(scope.StartsWith("document:", StringComparison.Ordinal) || scope.StartsWith("workspace:", StringComparison.Ordinal)) || scope.EndsWith(":", StringComparison.Ordinal))
                 throw new ArgumentException("An exact document/workspace scope is required.");
             return new ConversationLeaseService(Path.Combine(paths.Root, "locks"),
-                id => "run_scope_" + TextPatternEngine.Sha256(scope + "\n" + id) + ".lck", "run-registry.lck", "run_*.lck");
+                id => "run_scope_" + TextPatternEngine.Sha256(scope + "\n" + id) + ".lck", paths, "run_*.lck");
         }
 
         // Short coordination excludes a concurrent Office-wide maintenance
@@ -53,77 +51,37 @@ namespace RNAssistant.Application.Conversations
         internal IDisposable Reserve(string conversationId, bool wait = false,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            using (AcquireMaintenance()) return AcquireExact(conversationId, wait, cancellationToken);
-        }
-
-        internal IDisposable AcquireMaintenance()
-        {
-            if (_directory == null || _coordinationFile == null) return null;
-            var current = _coordinationState.Value;
-            if (current != null)
-            {
-                current.Depth++;
-                return new CoordinationLockLease(this, current);
-            }
-            StorageFileSystem.EnsureRegularDirectory(_directory);
-            var path = Path.Combine(_directory, _coordinationFile);
-            if (File.Exists(path) && StorageFileSystem.IsReparsePoint(path))
-                throw new IOException("Conversation coordination lease cannot be a link.");
+            var path = ExactLeasePath(conversationId);
+            if (path == null) return null;
             var deadline = DateTime.UtcNow.AddSeconds(10);
             while (true)
             {
-                try
+                using (AcquireMaintenance(cancellationToken))
                 {
-                    var state = new CoordinationLockState
-                    {
-                        Depth = 1,
-                        Stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)
-                    };
-                    _coordinationState.Value = state;
-                    return new CoordinationLockLease(this, state);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+                    catch (IOException) { if (!wait || DateTime.UtcNow >= deadline) throw; }
                 }
-                catch (IOException)
-                {
-                    if (DateTime.UtcNow >= deadline)
-                        throw new InvalidOperationException("Не удалось начать операцию: другое окно RNAssistant обновляет состояние запусков.");
-                    Thread.Sleep(25);
-                }
-                catch (UnauthorizedAccessException ex)
-                { throw new InvalidOperationException("Не удалось получить системную блокировку RNAssistant.", ex); }
+                // The owner of this exact run may need the registry to publish
+                // its next journal fact before it can release the run lease.
+                if (cancellationToken.CanBeCanceled) cancellationToken.WaitHandle.WaitOne(20);
+                else Thread.Sleep(20);
             }
         }
 
-        private void ReleaseMaintenance(CoordinationLockState state)
+        internal IDisposable AcquireMaintenance() { return AcquireMaintenance(CancellationToken.None); }
+
+        private IDisposable AcquireMaintenance(CancellationToken cancellationToken)
         {
-            if (state == null || state.Depth <= 0) return;
-            if (--state.Depth > 0) return;
-            if (ReferenceEquals(_coordinationState.Value, state)) _coordinationState.Value = null;
-            state.Stream.Dispose();
+            if (_coordinationPaths == null) return null;
+            try { return RuntimeStorageActivity.AcquireCoordination(_coordinationPaths, cancellationToken); }
+            catch (IOException ex)
+            { throw new InvalidOperationException("Не удалось начать операцию: другое окно RNAssistant обновляет состояние запусков.", ex); }
+            catch (UnauthorizedAccessException ex)
+            { throw new InvalidOperationException("Не удалось получить системную блокировку RNAssistant.", ex); }
         }
 
-        private sealed class CoordinationLockState
-        {
-            internal int Depth;
-            internal FileStream Stream;
-        }
-
-        private sealed class CoordinationLockLease : IDisposable
-        {
-            private readonly ConversationLeaseService _owner;
-            private readonly CoordinationLockState _state;
-            private int _disposed;
-
-            internal CoordinationLockLease(ConversationLeaseService owner, CoordinationLockState state)
-            { _owner = owner; _state = state; }
-
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) == 0) _owner.ReleaseMaintenance(_state);
-            }
-        }
-
-        private IDisposable AcquireExact(string conversationId, bool wait = false,
-            CancellationToken cancellationToken = default(CancellationToken))
+        private string ExactLeasePath(string conversationId)
         {
             if (string.IsNullOrWhiteSpace(conversationId))
                 throw new ArgumentException("A conversation ID is required.", nameof(conversationId));
@@ -132,15 +90,13 @@ namespace RNAssistant.Application.Conversations
             var path = Path.Combine(_directory, _fileName(conversationId));
             if (File.Exists(path) && StorageFileSystem.IsReparsePoint(path))
                 throw new IOException("Conversation lease cannot be a link.");
-            cancellationToken.ThrowIfCancellationRequested();
-            return wait ? StorageFileSystem.AcquireWriteLock(path, cancellationToken) :
-                new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return path;
         }
 
         internal bool IsHeld(string conversationId)
         {
             if (_directory == null) return false;
-            try { using (AcquireExact(conversationId)) return false; }
+            try { using (new FileStream(ExactLeasePath(conversationId), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) return false; }
             catch (IOException) { return true; }
             catch (UnauthorizedAccessException) { return true; }
         }

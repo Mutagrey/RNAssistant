@@ -19,9 +19,12 @@ namespace RNAssistant.Core.Storage
             return _store.LoadOrCreateActive(host, documentKey, documentTitle);
         }
 
-        public ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title)
+        public ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title,
+            string documentAuthorityId = null)
         {
-            return _store.CreateTransient(host, documentKey, documentTitle, title);
+            var session = _store.CreateTransient(host, documentKey, documentTitle, title);
+            session.DocumentAuthorityId = documentAuthorityId;
+            return session;
         }
 
         public ChatSession Load(string host, string documentKey, string sessionId)

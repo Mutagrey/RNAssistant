@@ -12,8 +12,9 @@ namespace RNAssistant.Core.Storage
 {
     internal sealed partial class ConversationJournal
     {
-        private bool RequireInputRevision(SqliteConnection db, ConversationMetadata metadata)
+        private bool RequireInputRevision(SqliteConnection db, ConversationMetadata metadata, bool allowTransient = false)
         {
+            if (allowTransient && IsTransientInputRead(db, metadata)) return false;
             var current = TextChat(db, metadata.Id);
             if (current?.Position.Sequence == metadata.Revision)
             { RequireChatRevision(metadata, current); return true; }
@@ -21,6 +22,27 @@ namespace RNAssistant.Core.Storage
             RequireChatRevision(metadata, position == null || current == null ? null :
                 new ConversationChatReceipt(current.Fact, current.Operation, position));
             return false;
+        }
+
+        private bool IsTransientInputRead(SqliteConnection db, ConversationMetadata metadata)
+        {
+            if (metadata == null || metadata.Revision != 0 || string.IsNullOrWhiteSpace(metadata.Id) ||
+                string.IsNullOrWhiteSpace(metadata.Host) || string.IsNullOrWhiteSpace(metadata.DocumentKey) ||
+                (_scope.StartsWith("workspace:", StringComparison.Ordinal)
+                    ? metadata.Host != "Workspace" || metadata.WorkspaceId != _scope.Substring(10) ||
+                        metadata.DocumentKey != metadata.WorkspaceId || metadata.DocumentAuthorityId != null
+                    : metadata.DocumentAuthorityId != _scope.Substring(9) || metadata.WorkspaceId != null ||
+                        metadata.Host == "Workspace")) return false;
+
+            // The UI reads a new draft before its first commit. Only an unused
+            // identity has an empty inbox: retained cards include deletion
+            // receipts, and a foreign persisted ID cannot become a local draft.
+            using (var command = db.CreateCommand())
+            {
+                command.CommandText = "SELECT 1 FROM chat_card WHERE chat=$chat LIMIT 1";
+                command.Parameters.AddWithValue("$chat", metadata.Id);
+                return command.ExecuteScalar() == null;
+            }
         }
 
         private ConversationInputState PrepareChatInput(SqliteConnection db, ChatSession session,
@@ -123,7 +145,8 @@ namespace RNAssistant.Core.Storage
             IReadOnlyList<ConversationInputRecord> records)
         {
             Access((db, cursor) => {
-                var current = RequireInputRevision(db, ConversationMetadata.From(session));
+                var current = RequireInputRevision(db, ConversationMetadata.From(session),
+                    allowTransient: facts.Count == 0 && records.Count == 0);
                 foreach (var record in records.Where(item => item.Change.Input?.Status == ConversationInputStatus.Applied))
                 {
                     var input = RequireChatInputEvent(db, session.Id, record.Event);

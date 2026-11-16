@@ -11,6 +11,7 @@ using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -50,6 +51,7 @@ namespace RNAssistant.Harness
         {
             foreach (var vision in new[] { true, false }) WithTempPaths(paths =>
             {
+                var conversations = (IConversationStore)new ConversationJournalRouter(paths, (host, key) => "workspace:" + key);
                 var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
                 var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
                 using (var listener = new HttpListener())
@@ -66,7 +68,7 @@ namespace RNAssistant.Harness
                                     "Inspect the local page viewport.", null, calls: new[] { new ConversationToolCall {
                                         Name = "core.read", Arguments = new JObject { ["type"] = "browser",
                                             ["target"] = ExternalBrowserResourceProvider.Target, ["representation"] = "media" } } }).ToJson()
-                                    : i == 1 && vision ? ScriptedVerifiedFinish(new ChatStore(paths).Load(chatId),
+                                    : i == 1 && vision ? ScriptedVerifiedFinish(conversations.Load(chatId),
                                         "Report the inspected viewport.", "Viewport inspected.", "Read the viewport.", "core.read")
                                     : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                         "Report the request status.", vision ? "Hello again." : "Viewport media unavailable.",
@@ -79,7 +81,7 @@ namespace RNAssistant.Harness
                     try {
                         var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "plugin-source"));
                         var source = new HarnessBrowserMediaSource();
-                        var browser = new BrowserCapabilityService(paths, () => source);
+                        var browser = new BrowserCapabilityService(() => source);
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "fixture-model",
                             StreamResponses = false, AutoCompressContext = false, SmartChatTitles = false,
                             AgentResponseMode = AgentResponseModes.JsonObject, AutoConfirmToolActions = true,
@@ -108,7 +110,7 @@ namespace RNAssistant.Harness
                         if (!vision) AssertTrue(requests[1]["messages"].Any(item => item["content"]?.Type == JTokenType.String &&
                             ((string)item["content"]).Contains("\"loaded\":false")) && second.Contains("resource_media_unavailable") && !second.Contains("data:image/"),
                             "non-vision media returns explicit unavailable instead of loaded success");
-                        var saved = new ChatStore(paths).Load(chatId);
+                        var saved = conversations.Load(chatId);
                         AssertEqual(vision, saved.Messages.Where(message => message.Role == "assistant").Any(message =>
                             message.ResourceEvidence.Any(evidence => evidence.View == "media")), "only the response to delivered image pixels receives media evidence");
                         AssertTrue(!saved.Messages.Last(message => message.Role == "assistant").ResourceEvidence.Any(evidence => evidence.View == "media"),
@@ -129,9 +131,11 @@ namespace RNAssistant.Harness
                 var source = new HarnessBrowserMediaSource { Target = new BrowserPageHandle(session.Id, "fixture-page", 1,
                     browserTabId: "fixture-tab", ownerScope: owner) };
                 IReadOnlyList<ChatAttachment> attachments = null;
+                var resources = new ResourceJournal(paths);
+                var payloads = new ChatBlobStore(paths);
                 Func<string, ToolHandlerResult> read = target => {
-                    var contribution = new BrowserCapabilityService(paths, () => source).ForOwner(owner, session, new AppSettings(),
-                        "run", (_, media) => attachments = media);
+                    var contribution = new BrowserCapabilityService(() => source).ForOwner(owner, session, new AppSettings(),
+                        "run", (_, media) => attachments = media, resources, resources, resources, payloads);
                     var call = new ToolCall(Guid.NewGuid().ToString("N"), "core.read", "{}");
                     var context = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "test", ResourceReadToolHandler.Policy),
                         "run", "turn", "step", DateTime.UtcNow, false, 1);

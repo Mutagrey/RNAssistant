@@ -39,7 +39,7 @@ namespace RNAssistant.Application.Conversations
             lock (_sync)
             {
                 RequireEnabled(limit);
-                domain = Scope(source).Groups;
+                domain = Scope(source).GroupsFor(source);
             }
             if (domain == null) throw new AgentCommunicationException("agent_groups_unavailable", "Группы этой области недоступны.");
             var groups = domain.Read(source);
@@ -89,7 +89,7 @@ namespace RNAssistant.Application.Conversations
         private HashSet<string> GroupMembers(ChatSession source, string name)
         {
             ConversationGroupService domain;
-            lock (_sync) domain = Scope(source).Groups;
+            lock (_sync) domain = Scope(source).GroupsFor(source);
             var group = domain?.Read(source).SingleOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
             if (group == null) throw new AgentCommunicationException("agent_group_missing", "Группа не найдена.");
             return new HashSet<string>(group.Members.Select(AgentChatAddress.IdFor), StringComparer.Ordinal);

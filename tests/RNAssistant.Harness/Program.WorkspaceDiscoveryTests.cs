@@ -12,6 +12,7 @@ using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -49,6 +50,8 @@ namespace RNAssistant.Harness
         {
             WithTempPaths(paths =>
             {
+                var journal = new ConversationJournalRouter(paths, (host, key) => "workspace:" + key);
+                var conversations = (IConversationStore)journal;
                 var probe = new TcpListener(IPAddress.Loopback, 0);
                 probe.Start(); var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
                 using (var listener = new HttpListener())
@@ -83,7 +86,7 @@ namespace RNAssistant.Harness
                                             new ConversationToolCall { Name = "fixture.extra", Arguments = new JObject() }
                                         }).ToJson();
                                 else if (index == 2)
-                                    content = ScriptedVerifiedFinish(new ChatStore(paths).Load(sessionId),
+                                    content = ScriptedVerifiedFinish(conversations.Load(sessionId),
                                         "Report the completed inspection.", "Inspected.", "The read completed.",
                                         CapabilityToolCatalog.SearchToolId, CapabilityToolCatalog.ReadToolId,
                                         CapabilityToolCatalog.ReadToolId, "fixture.extra");
@@ -151,8 +154,8 @@ namespace RNAssistant.Harness
                                 "tool_pack_state")?["stage"] == "restore"), "drift is explicit");
                         AssertTrue(Enumerable.Range(0, 5).All(index => !offered(index, "fixture.special")), "schema read cannot admit skill-only tools");
                         AssertEqual(1, executions, "restart and drift never replay effects");
-                        var session = new ChatStore(paths).Load(sessionId);
-                        AssertEqual(1, new ChatStore(paths).ReadEvents(session.Host, session.DocumentKey, session.Id)
+                        var session = conversations.Load(sessionId);
+                        AssertEqual(1, ((IEventStore)journal).Read(ConversationMetadata.From(session), SessionEventReadMode.RequireComplete)
                             .Count(item => item.Type == SessionEventTypes.ToolPackExtensionAccepted), "one canonical admission event");
                     }
                     finally { listener.Stop(); }

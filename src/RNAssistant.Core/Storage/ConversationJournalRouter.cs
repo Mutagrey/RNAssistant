@@ -120,8 +120,12 @@ namespace RNAssistant.Core.Storage
         public ChatSession LoadOrCreateActive(string host, string documentKey, string documentTitle)
         { return Conversations(For(host, documentKey)).LoadOrCreateActive(host, documentKey, documentTitle); }
 
-        public ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title)
-        { return Conversations(For(host, documentKey)).CreateTransient(host, documentKey, documentTitle, title); }
+        public ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title,
+            string documentAuthorityId = null)
+        {
+            var journal = documentAuthorityId == null ? For(host, documentKey) : Journal("document:" + documentAuthorityId);
+            return Conversations(journal).CreateTransient(host, documentKey, documentTitle, title, documentAuthorityId);
+        }
 
         public ChatSession Load(string host, string documentKey, string sessionId)
         {

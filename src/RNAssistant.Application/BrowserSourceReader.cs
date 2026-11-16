@@ -19,7 +19,7 @@ namespace RNAssistant.Application
                 .Distinct(StringComparer.OrdinalIgnoreCase).Take(513).ToArray();
             if (paths.Length == 0) throw new InvalidOperationException("Источник не содержит доступных файлов.");
             if (paths.Length > 512) throw new InvalidOperationException("Источник содержит более 512 уникальных файлов.");
-            var requestedPath = request.Path ?? target?.EntryPath ?? paths[0];
+            var requestedPath = request.Path ?? target?.RelativePath ?? target?.EntryPath ?? paths[0];
             var path = paths.FirstOrDefault(item => string.Equals(item, requestedPath, StringComparison.OrdinalIgnoreCase));
             if (path == null) throw new InvalidOperationException("Файл не входит в выбранный источник: " + requestedPath);
             var text = read(path);

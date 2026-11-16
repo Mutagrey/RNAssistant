@@ -11,6 +11,27 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.1.1-dev
+
+- Исправлены ошибки сборки production controller после перехода на `storage-v2`,
+  чтение пустого inbox нового draft и вложенная координация journal-операций при
+  создании/обслуживании чатов.
+- Новый чат выбранного документа получает его authority до создания draft;
+  каталог, выбор, удаление и группы больше не используют scope другого активного
+  документа. Save As сохраняет существующую identity.
+- Finish в native fork принимает доставленное evidence сохранённого prefix через
+  frozen ancestry исходного owner. Удалённые, чужие и появившиеся позже результаты
+  остаются недопустимыми; execution facts не копируются.
+- Browser, default Workspace application и plugin readers используют согласованную
+  защиту journal/CAS. Защищённые HTML/табличные проекты и источники аннотаций больше
+  не читаются через отдельный owner без ключа.
+- Неопределённый результат `core.patch` сохраняет известную цель для inspection.
+  Полное свежее чтение снимает требование inspection, сохраняя Unknown effect и
+  запрет автоматического replay.
+- Browser Source открывает выбранный member проекта. После очистки runtime data
+  HTML Save/Delete снова уведомляют Browser consumers через новый owner, а старые
+  подписки и preparations отзываются.
+
 ### 17.1.0-dev
 
 - Диагностика → Приложение → Журнал читает сохранённые Runtime/Desktop логи прямо

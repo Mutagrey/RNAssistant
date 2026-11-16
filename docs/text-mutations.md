@@ -232,7 +232,11 @@ Read-back подтверждает применение текста, а не п
 `nextAction` — подсказка, не разрешение на повторный dispatch. Unknown сохраняется
 в существующем runtime outcome/recovery; перед следующей записью требуется
 reconciliation, автоматического replay пакета нет. Ошибка после dispatch не
-превращается в `Rejected`. Preview/candidates и journal evidence не доказывают,
+превращается в `Rejected`. Если публикация completion бросила исключение, общий
+Unknown effect сохраняет exact identity подготовленной цели без выдуманной
+after-revision. Новый полный mutable read этой цели может закрыть требование
+inspection; он не превращает прежний effect в Verified и не снимает запрет его
+автоматического повтора. Preview/candidates и journal evidence не доказывают,
 что after-source доставлен: это определяет context compiler.
 
 Core и Office model projections сохраняют те же исходы и bounded diagnostics,

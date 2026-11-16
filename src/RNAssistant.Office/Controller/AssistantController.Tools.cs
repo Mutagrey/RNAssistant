@@ -67,12 +67,12 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             try
             {
-                using (_conversationLeases.AcquireMaintenance())
+                return await Task.Run(() =>
                 {
-                    EnsureNoActiveRuns();
-                    var session = LoadAddressedSession(payload.ChatId);
-                    return await Task.Run(() =>
+                    using (_conversationLeases.AcquireMaintenance())
                     {
+                        EnsureNoActiveRuns();
+                        var session = LoadAddressedSession(payload.ChatId);
                         var mutations = new ToolEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _toolCatalog).PrepareMutations(session, payload, token);
                         var results = new List<ToolMutationResultDto>();
                         try
@@ -88,8 +88,8 @@ namespace RNAssistant.Office
                         finally { _toolCatalog.InvalidateDocumentVbaTools(); }
                         return new ToolLibraryMutationResponse { Type = ToolLibraryMutationResponse.ContractType,
                             ContractVersion = ToolLibraryResponse.CurrentContractVersion, Results = results, Library = GetTools() };
-                    }, token).ConfigureAwait(false);
-                }
+                    }
+                }, token).ConfigureAwait(false);
             }
             finally { _resourceData.CloseUpload(payload.ChatId, payload.UploadLeaseId, ToolEditorResourceService.Owner); }
         }
@@ -122,12 +122,12 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             try
             {
-                using (_conversationLeases.AcquireMaintenance())
+                return await Task.Run(() =>
                 {
-                    EnsureNoActiveRuns();
-                    var session = LoadAddressedSession(payload.ChatId);
-                    return await Task.Run(() =>
+                    using (_conversationLeases.AcquireMaintenance())
                     {
+                        EnsureNoActiveRuns();
+                        var session = LoadAddressedSession(payload.ChatId);
                         var mutations = new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
                             .PrepareCoreMutations(session, payload, token);
                         var results = new List<SkillMutationResultDto>();
@@ -140,8 +140,8 @@ namespace RNAssistant.Office
                         }
                         return new SkillLibraryMutationResponse { Type = SkillLibraryMutationResponse.ContractType,
                             ContractVersion = SkillLibraryResponse.CurrentContractVersion, Results = results, Library = GetSkills() };
-                    }, token).ConfigureAwait(false);
-                }
+                    }
+                }, token).ConfigureAwait(false);
             }
             finally { _resourceData.CloseUpload(payload.ChatId, payload.UploadLeaseId, SkillEditorResourceService.Owner); }
         }
@@ -174,20 +174,20 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             try
             {
-                using (_conversationLeases.AcquireMaintenance())
+                return await Task.Run(() =>
                 {
-                    EnsureNoActiveRuns();
-                    var session = LoadAddressedSession(payload.ChatId);
-                    return await Task.Run(() =>
+                    using (_conversationLeases.AcquireMaintenance())
                     {
+                        EnsureNoActiveRuns();
+                        var session = LoadAddressedSession(payload.ChatId);
                         var body = new SkillEditorResourceService(_toolExecutor.ResourceGateway, _resourceData, _skillCatalog)
                             .PrepareReferenceMutation(session, payload, token);
                         token.ThrowIfCancellationRequested();
                         var result = _toolExecutor.ExecuteSkillLibraryReferenceMutation("upsert", body.SkillId, body.Path,
                             body.Content, body.ExpectedPackageRevision);
                         return SkillReferenceMutationResult(result, body.Path, false);
-                    }, token).ConfigureAwait(false);
-                }
+                    }
+                }, token).ConfigureAwait(false);
             }
             finally { _resourceData.CloseUpload(payload.ChatId, payload.UploadLeaseId, SkillEditorResourceService.Owner); }
         }

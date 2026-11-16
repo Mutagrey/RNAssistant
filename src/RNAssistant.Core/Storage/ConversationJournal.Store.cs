@@ -54,8 +54,12 @@ namespace RNAssistant.Core.Storage
         private static bool MatchesAddress(ConversationChatReceipt receipt, string host, string key)
         { return receipt != null && receipt.Fact.Card.Address.Host == host && receipt.Fact.Card.Address.DocumentKey == key; }
 
-        ChatSession IConversationStore.CreateTransient(string host, string key, string documentTitle, string title)
+        ChatSession IConversationStore.CreateTransient(string host, string key, string documentTitle, string title,
+            string documentAuthorityId)
         {
+            if (documentAuthorityId != null && (string.IsNullOrWhiteSpace(documentAuthorityId) ||
+                _scope != "document:" + documentAuthorityId || string.Equals(host, "Workspace", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("The draft authority belongs to another conversation scope.");
             RequireTextRoot();
             var session = new ChatSession { Host = host, DocumentKey = key, DocumentTitle = documentTitle,
                 Title = string.IsNullOrWhiteSpace(title) ? "New chat" : title,

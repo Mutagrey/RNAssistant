@@ -2008,8 +2008,8 @@ namespace RNAssistant.Harness
                 return _inner.ReadHeader(id, includeStorageUsage);
             }
             public bool LoadArtifactBody(ChatSession session, string id) { return _inner.LoadArtifactBody(session, id); }
-            public ChatSession CreateTransient(string host, string key, string title, string name)
-            { return _inner.CreateTransient(host, key, title, name); }
+            public ChatSession CreateTransient(string host, string key, string title, string name, string documentAuthorityId = null)
+            { return _inner.CreateTransient(host, key, title, name, documentAuthorityId); }
             public void Commit(ChatSession session, ConversationCommit commit) { _inner.Commit(session, commit); }
             public void CommitRun(ConversationRunCommit commit) { _inner.CommitRun(commit); }
             public void SetTitle(ChatSession session, string value) { _inner.SetTitle(session, value); }

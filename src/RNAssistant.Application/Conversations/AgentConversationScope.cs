@@ -15,6 +15,10 @@ namespace RNAssistant.Application.Conversations
         internal Action<ChatSession> Commit;
         internal Func<AgentChatAddress, AgentConversationEndpoint> Endpoint;
         internal ConversationGroupService Groups;
+        internal Func<ChatSession, ConversationGroupService> ResolveGroups;
         internal ConversationCatalogService Catalog;
+
+        internal ConversationGroupService GroupsFor(ChatSession session)
+        { return ResolveGroups == null ? Groups : ResolveGroups(session); }
     }
 }
