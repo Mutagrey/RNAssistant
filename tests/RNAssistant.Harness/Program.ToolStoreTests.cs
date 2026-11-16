@@ -622,13 +622,12 @@ namespace RNAssistant.Harness
                     FakeOfficeAdapter adapter)
             {
                 var tools = executor.GetControllerTools().ToList();
-                var promptSave = JObject.Parse(tools.Single(tool =>
-                    tool.Id == PromptToolCatalog.SaveToolId)
-                    .ArgumentSchemaJson);
-                AssertTrue(promptSave.SelectToken("properties.promptKey") != null &&
-                        promptSave.SelectToken("properties.value") != null &&
-                        ((JObject)promptSave["properties"]).Count == 2,
-                    "prompt save exposes one key/value pair");
+                AssertTrue(tools.All(tool => tool.Id != PromptToolCatalog.SaveToolId),
+                    "direct prompt save is retired from the model catalog");
+                var corePatch = JObject.Parse(tools.Single(tool =>
+                    tool.Id == ResourceMutationToolCatalog.Patch).ArgumentSchemaJson);
+                AssertEqual("array", corePatch.SelectToken("properties.targets.type").ToString(),
+                    "prompt edits use the current structured core.patch contract");
 
                 var toolUpsert = JObject.Parse(tools.Single(tool =>
                     tool.Id == ToolAuthoringCatalog.UpsertToolId)
@@ -668,17 +667,24 @@ namespace RNAssistant.Harness
                     promptAuthoring.Contains("core.read") && promptAuthoring.Contains("prompt default"), "prompt guidance compares exact current/default resources");
 
                 string error;
+                var currentPrompt = new JObject
+                {
+                    ["targets"] = new JArray(new JObject
+                    {
+                        ["target"] = "prompt: systemPrompt",
+                        ["edits"] = new JArray(new JObject { ["old"] = "old", ["new"] = "new" })
+                    })
+                }.ToString(Formatting.None);
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
                         new ToolCall("current_prompt",
-                            PromptToolCatalog.SaveToolId,
-                            "{\"promptKey\":\"systemPrompt\",\"value\":\"text\"}"),
+                            ResourceMutationToolCatalog.Patch, currentPrompt),
                         out error),
-                    "one-key prompt history is replayable");
+                    "current prompt patch history is replayable");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                         new ToolCall("old_prompt",
                             PromptToolCatalog.SaveToolId,
-                            "{\"systemPrompt\":\"text\"}"), out error),
-                    "multi-field prompt history requires reset");
+                            "{\"promptKey\":\"systemPrompt\",\"value\":\"text\"}"), out error),
+                    "retired direct prompt history requires reset");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
                         new ToolCall("old_validate",
                             "common.tools_validate", "{}"), out error),
@@ -697,12 +703,12 @@ namespace RNAssistant.Harness
                     "skill core history rejects reference arguments");
 
                 var mismatchedManifest = CustomTool(
-                    "Excel", "excel.avg_calculator");
+                    "Excel", "excel.avg.calculator");
                 var mismatchedUpsert = new ToolInvocation
                 {
                     ToolId = ToolAuthoringCatalog.UpsertToolId
                 };
-                mismatchedUpsert.Arguments["id"] = "custom.avg_calculator";
+                mismatchedUpsert.Arguments["id"] = "custom.avg.calculator";
                 mismatchedUpsert.Arguments["components"] =
                     ToolComponentsPayload(mismatchedManifest);
                 var mismatch = executor.ExecuteManual(
@@ -727,7 +733,7 @@ namespace RNAssistant.Harness
                 {
                     ToolId = ToolAuthoringCatalog.UpsertToolId
                 };
-                missingManifest.Arguments["id"] = "custom.missing_manifest";
+                missingManifest.Arguments["id"] = "custom.missing.manifest";
                 missingManifest.Arguments["components"] = new JArray(
                     new JObject
                     {
@@ -745,7 +751,7 @@ namespace RNAssistant.Harness
                     "manifest parse error is not masked as an invalid custom host");
 
                 var objectManifestTool = CustomTool(
-                    "Excel", "custom.object_components");
+                    "Excel", "custom.object.components");
                 objectManifestTool.Components[0].Code =
                     objectManifestTool.Components[0].Code.Replace(
                         "\"components\":[\"RNA_Test\"]",
@@ -755,7 +761,7 @@ namespace RNAssistant.Harness
                     ToolId = ToolAuthoringCatalog.UpsertToolId
                 };
                 objectManifestUpsert.Arguments["id"] =
-                    "custom.object_components";
+                    "custom.object.components";
                 objectManifestUpsert.Arguments["components"] =
                     ToolComponentsPayload(objectManifestTool);
                 var objectManifest = executor.ExecuteManual(

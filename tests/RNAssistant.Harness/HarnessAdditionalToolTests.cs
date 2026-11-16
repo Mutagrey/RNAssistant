@@ -648,7 +648,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!HasTool(store.Load(), tool.Id), "validation does not save");
 
                 var unsafeIdentity = CustomToolWithParameter(
-                    "excel.customer_lookup", "customerId",
+                    "excel.customer.lookup", "customerId",
                     "Customer identifier.");
                 var rejected = executor.ValidateToolDefinition(unsafeIdentity);
                 AssertEqual("tool_parameter_rationale_required",
@@ -656,16 +656,16 @@ namespace RNAssistant.Harness
                     "plumbing-shaped custom argument requires rationale");
                 AssertEqual("tool_parameter_rationale_required",
                     executor.ValidateToolDefinition(CustomToolWithParameter(
-                        "excel.uri_lookup", "uri", "Resource URI."))
+                        "excel.uri.lookup", "uri", "Resource URI."))
                         .ErrorCode,
                     "runtime URI-shaped custom argument requires rationale");
                 AssertTrue(executor.ValidateToolDefinition(
-                        CustomToolWithParameter("excel.valid_state", "valid",
+                        CustomToolWithParameter("excel.valid.state", "valid",
                             "Whether the current domain state is valid."))
                         .Success,
                     "ordinary names ending in lowercase id are not false positives");
                 var reviewedIdentity = CustomToolWithParameter(
-                    "excel.customer_lookup", "customerId",
+                    "excel.customer.lookup", "customerId",
                     "Domain identity rationale: customer record explicitly selected by the user.");
                 AssertTrue(executor.ValidateToolDefinition(reviewedIdentity).Success,
                     "explicit domain identity rationale is accepted");
