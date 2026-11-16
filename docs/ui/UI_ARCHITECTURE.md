@@ -24,6 +24,12 @@ inbox observers только этой панели, сохраняет draft и 
 Ручной retry читает тот же ID; успешное адресное чтение возвращает наблюдение.
 Другой активный чат не подставляется.
 
+Workspace run observer применяет тот же exact-view terminal rule к typed
+`project_chat_missing`: cached running/pending snapshot больше не создаёт повторный
+10-second tick, activation/hide и progress push не оживляют view; успешный retry
+того же address восстанавливает polling по новому snapshot. Draft и соседний
+выбранный чат не меняются.
+
 `app-legacy-recovery.js` владеет ограниченной presentation в существующей Diagnostics
 Health: чтением архива и явным переносом поддерживаемых чатов/регистраций в native
 хранилища. Native owners проверяют исходную identity, revision, scope и сохраняют

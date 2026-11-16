@@ -73,16 +73,16 @@
     return current;
   }
   function createRunObserver(view, read, changed, failed, progressChanged) {
-    var target = null, generation = 0, lastPushAt = 0, polling = false;
+    var target = null, generation = 0, lastPushAt = 0, polling = false, terminal = false;
     var observer = view.observe({
       current: function () { return target ? { source: "workspace", workspaceId: target.workspaceId,
         sessionId: target.sessionId, generation: generation } : null; },
       read: read, changed: changed, failed: failed, interval: 10000,
       shouldPoll: function () { return !lastPushAt || Date.now() - lastPushAt >= 30000; }
     });
-    return { select: function (snapshot, pending) {
+    function select(snapshot, pending) {
       var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
-      var observe = !!(workspaceId && sessionId &&
+      var observe = !terminal && !!(workspaceId && sessionId &&
         (pending || runStatus(field(snapshot, "state")) === "running"));
       if (!target || target.workspaceId !== workspaceId || target.sessionId !== sessionId) {
         if (target || workspaceId && sessionId) ++generation;
@@ -93,32 +93,37 @@
         polling = observe;
         if (polling) observer.start(); else observer.stop();
       }
-    }, acceptProgress: function (payload) {
-      var owner = view.projection(), selected = owner && owner.snapshot();
-      if (!view.matches(conversationTarget(selected)) || !target || target.workspaceId !== field(payload, "workspaceId") ||
-          target.sessionId !== field(payload, "sessionId")) return;
-      var preview = field(payload, "modelProgress"), state = field(selected, "state");
-      if (field(state, "runId") && field(payload, "runId") &&
-          field(state, "runId") !== field(payload, "runId")) return;
-      lastPushAt = Date.now();
-      if (field(payload, "phase") === "session_changed") {
-        if (field(payload, "cursor") !== field(state, "cursor")) observer.refresh();
-        return;
-      }
-      if (field(preview, "unsavedAttempt")) {
-        RNAssistantConversationState.retainUnsavedAttempt(selected, field(preview, "runId"),
-          field(preview, "unsavedAttempt"), field(preview, "stepId"));
-        changed(selected); return;
-      }
-      if (!preview || !state || runStatus(state) !== "running" ||
-          field(state, "runId") !== field(preview, "runId")) { observer.refresh(); return; }
-      var existing = field(state, "modelProgress");
-      var accepted = RNAssistantConversationState.modelProgress(existing, preview, field(state, "runId"));
-      if (accepted === existing) return;
-      state.modelProgress = accepted;
-      if (progressChanged) progressChanged(selected);
-      else changed(selected);
-    } };
+    }
+    return { select: select,
+      fail: function () { terminal = true; polling = false; observer.stop(); },
+      recover: function (snapshot, pending) { terminal = false; select(snapshot, pending); },
+      acceptProgress: function (payload) {
+        if (terminal) return;
+        var owner = view.projection(), selected = owner && owner.snapshot();
+        if (!view.matches(conversationTarget(selected)) || !target || target.workspaceId !== field(payload, "workspaceId") ||
+            target.sessionId !== field(payload, "sessionId")) return;
+        var preview = field(payload, "modelProgress"), state = field(selected, "state");
+        if (field(state, "runId") && field(payload, "runId") &&
+            field(state, "runId") !== field(payload, "runId")) return;
+        lastPushAt = Date.now();
+        if (field(payload, "phase") === "session_changed") {
+          if (field(payload, "cursor") !== field(state, "cursor")) observer.refresh();
+          return;
+        }
+        if (field(preview, "unsavedAttempt")) {
+          RNAssistantConversationState.retainUnsavedAttempt(selected, field(preview, "runId"),
+            field(preview, "unsavedAttempt"), field(preview, "stepId"));
+          changed(selected); return;
+        }
+        if (!preview || !state || runStatus(state) !== "running" ||
+            field(state, "runId") !== field(preview, "runId")) { observer.refresh(); return; }
+        var existing = field(state, "modelProgress");
+        var accepted = RNAssistantConversationState.modelProgress(existing, preview, field(state, "runId"));
+        if (accepted === existing) return;
+        state.modelProgress = accepted;
+        if (progressChanged) progressChanged(selected);
+        else changed(selected);
+      } };
   }
   function button(label, className, icon, action) {
     var node = document.createElement("button"); node.type = "button"; node.className = className;
@@ -163,6 +168,7 @@
   function createPanelAdapter(component) {
     var target = component.target, node = component.node, composer = component.composer;
     var owner = component.view.bindProjection(snapshotSource(target), latestSnapshot), uploading = false, cancelling = false, pageRead = null, historyGeneration = 0;
+    var unavailable = false;
     function snapshot() { return owner.snapshot() || { sessionId: target.sessionId, project: { workspaceId: target.workspaceId }, messages: [], state: {} }; }
     function state() { return field(snapshot(), "state") || {}; }
     function draft() { return readWorkspaceDraft(target); }
@@ -180,24 +186,31 @@
       component.hasSnapshot = true;
       var title = field(state(), "title"); if (title) RNAssistantDockWorkspace.setTitle(RNAssistantConversationPanel.key(target), title);
       component.contextOwner = snapshot().project && snapshot().project.pluginId ? "plugin" : "project";
-      observer.select(snapshot(), pending()); component.render();
+      unavailable = false; observer.recover(snapshot(), pending()); component.render();
       RNAssistantProjectChats.refreshTree();
       if (selected() === component) { if (window.RNAssistantPlugins) RNAssistantPlugins.onChatSnapshot(snapshot()); RNAssistantChatInspector.render(); }
       return true;
     }
+    function readFailed(error) {
+      if (error && (error.code === "project_chat_missing" || error.code === "chat_session_not_found")) {
+        unavailable = true; ++historyGeneration;
+        observer.fail(); history.stop();
+      }
+      component.loadFailed(error);
+    }
     function read() { return RNAssistantProjectChats.read(target, component); }
-    var observer = createRunObserver(component.view, read, accept, component.loadFailed,
+    var observer = createRunObserver(component.view, read, accept, readFailed,
       function () { component.stream(false); });
     var history = component.view.observe({ current: function () { return target; }, read: read, changed: accept,
-      failed: component.loadFailed });
+      failed: readFailed });
     function refresh(options) {
       if (!component.isCurrent()) return Promise.resolve();
-      component.loading = !component.hasSnapshot; component.loadError = ""; component.render();
+      component.loading = !component.hasSnapshot || unavailable; component.loadError = ""; component.render();
       if (options && options.latestMessages) {
         var generation = ++historyGeneration;
         return read().then(function (value) {
           if (component.isCurrent() && generation === historyGeneration) accept(value, options);
-        }).catch(function (error) { if (generation === historyGeneration) component.loadFailed(error); });
+        }).catch(function (error) { if (generation === historyGeneration) readFailed(error); });
       }
       return history.refresh();
     }

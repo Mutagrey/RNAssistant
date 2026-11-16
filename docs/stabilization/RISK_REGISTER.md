@@ -21,8 +21,9 @@ Priority and disposition for the observed profile upgrade:
    Typed failure stops only that view; successful explicit same-ID retry can resume.
 5. **P2, fixed host-neutral:** pre-mutation plugin catalog can hide a completed
    connection. Mutation refresh now runs after the preceding read.
-6. **P2, open conditional case:** Workspace/plugin cached running/pending chat can
-   retain a 10-second observer after `project_chat_missing`; see BACKLOG.
+6. **P2, fixed host-neutral:** cached running/pending Workspace chat no longer retains
+   its 10-second observer after `project_chat_missing`; exact retry restores polling
+   while transient errors do not stop it.
 
 P1 qualification remains actual Windows migration/restore/retry with the old profile
 and configured DPAPI protection; archive paths/status should be photographed on screen.

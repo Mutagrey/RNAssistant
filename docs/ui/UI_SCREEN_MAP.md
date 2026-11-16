@@ -91,6 +91,9 @@ Office/Workspace/plugin используют одну ленту, live-блок 
 Initial failure показывает причину и «Повторить загрузку» вместо пустого чата.
 Refresh failure оставляет историю, draft, раскрытия и позицию чтения; retry
 повторяет только адресное чтение. Результат/вопрос A открывается для A при фокусе B.
+Для typed `project_chat_missing` cached Workspace view прекращает свой 10-second
+observer до успешного ручного retry того же чата; retry не выбирает другой chat и
+не очищает draft.
 
 ## Browser screenshot — In Review, 2026-11-14
 

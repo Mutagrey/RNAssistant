@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.2-dev
+
+- Исчезнувший Workspace-чат с сохранённым running/pending snapshot больше не
+  опрашивается каждые 10 секунд после typed `project_chat_missing`. Останавливается
+  только этот observer; черновик и выбранный соседний чат сохраняются. Успешный
+  ручной retry того же чата восстанавливает обычное наблюдение.
+
 ### 17.3.1-dev
 
 - Смена режима или ключа защиты истории теперь блокируется и для непустого

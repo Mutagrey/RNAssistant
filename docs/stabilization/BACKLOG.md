@@ -1,14 +1,13 @@
 # RNAssistant backlog
 
-## Workspace missing running chat poll — observed 2026-11-16
+## Workspace missing running chat poll — closed host-neutral 2026-11-16
 
-P2, open conditional scenario. `app-workspace-chat.js` observes cached running/pending
-chats every 10 seconds. If such a chat disappears, `project_chat_missing` is already
-typed, but the failure handler presents it without stopping that observer. A fresh
-empty restored view without running/pending state does not start this loop. Apply
-the same exact-view terminal/retry behavior as Office, with a targeted stale-response
-test; do not clear another chat or automatically substitute its state. The photo's
-Office inbox 1.2-second loop is separately fixed in 17.2.0-dev.
+Owner: `app-workspace-chat.js` exact-view run observer. `project_chat_missing` now
+stops only that observer and prevents activation/hide/progress from reviving it.
+Successful explicit retry of the same address restores normal polling when needed;
+transient errors do not become terminal. Draft, other chats and active selection are
+preserved. `workspace-missing-chat-observer.test.js` covers the lifecycle. Windows/
+WebView2 visual evidence remains separate.
 
 ## MockDemo diagnostic settings shim — closed host-neutral 2026-11-16
 

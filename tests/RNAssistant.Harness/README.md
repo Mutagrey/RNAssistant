@@ -1,5 +1,13 @@
 # RNAssistant Harness
 
+## Workspace missing chat observer — 2026-11-16
+
+Node `workspace-missing-chat-observer.test.js` loads the production conversation
+observer/view plus `app-workspace-chat.js`. It checks a cached running snapshot, typed
+`project_chat_missing` terminal stop, repeated timer/activation attempts, exact retry,
+transient recovery, draft preservation and no selection substitution. No Chromium or
+native WebView2 qualification is claimed.
+
 ## Native protection root guard — 2026-11-16
 
 Filter `settings: protection guard includes native history` creates a native-only

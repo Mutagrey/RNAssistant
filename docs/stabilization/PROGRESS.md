@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Workspace missing-chat observer terminal — 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.2-dev`. A cached running/pending
+Workspace chat previously kept its 10-second run observer after typed
+`project_chat_missing`; activation and hide/show could restart the same read. The
+existing per-view observer now enters a terminal state only for typed missing chat,
+stops its timer and rejects later progress pushes. A successful explicit retry of the
+same address clears the terminal state and restores polling only when that snapshot
+still has a pending/running run. Transient failures retain normal polling. Draft and
+active-chat selection remain untouched.
+
+Node `workspace-missing-chat-observer.test.js` passes. It covers a cached running
+snapshot, terminal stop, repeated ticks, activation/hide/show, preserved draft and
+selection, successful exact retry and transient recovery. This is source-linked
+host-neutral evidence; Windows/WebView2 visual qualification remains separate.
+
 ## Native protection-change root guard — 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.1-dev`. `SettingsService` previously
