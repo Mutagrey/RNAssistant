@@ -1983,10 +1983,11 @@ dispatch, independent file access, multi-head Office publication, unknown recove
 lost acknowledgement, index rebuild and resource-journal/CAS restore. The mutation
 slice above adds the first kernel call/result linkage. Production composition now
 uses the resource journal for active writes while legacy JSONL remains preserved and
-unimported. Real Office evidence remains separate. Backup of resource journals is not
-a full application backup: live
-workspace identities/locators, move intents and other owners need the P6/P7 integration
-check before enabling restore. [Slice report](audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
+unimported. Real Office evidence remains separate. Application backup v3 now combines
+resource journals with Workspace identities/locators, move intents and the other local
+application owners; external project contents remain a separate cold-filesystem copy.
+See [CAS maintenance](cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
+[Slice report](audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
 
 ### Current production composition
 

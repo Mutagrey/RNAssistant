@@ -1,5 +1,18 @@
 # RNAssistant Harness
 
+## Full application backup and clean restore — 2026-11-16
+
+Focused filter `application backup:` builds the Harness once and runs one mixed-root
+case. It creates legacy and native journals, a Workspace identity and local
+tool/skill/asset files; checks the v3 manifest and copied CAS/owners; excludes the
+native index, logs and result staging; restores to a new root with index rebuild and
+existing external project validation; then checks destination and byte-tamper
+refusal. Use `--no-build` only after that successful build.
+
+This is host-neutral evidence. Actual DPAPI/current-user restore, Windows
+FileStream/filesystem durability, old-binary quiescence, power loss, WebView2 UI and
+cold backup of external Workspace/project files remain separate gates.
+
 ## Post-upgrade restore and explicit migration — 2026-11-16
 
 `legacy recovery:` runs two cases, each with plaintext and HMAC/AES fixtures:

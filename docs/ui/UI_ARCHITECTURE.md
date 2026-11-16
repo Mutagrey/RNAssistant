@@ -1,5 +1,16 @@
 # Архитектура UI RNAssistant
 
+## Полная резервная копия — In Review, 2026-11-16
+
+`app-diagnostics.js` остаётся presentation owner в существующей Diagnostics
+application surface. Общий `RNAssistantDialog` принимает один path или две строки
+`backup/destination`; `button compact` запускает typed bridge, а Core
+`CasMaintenanceService` владеет validation, staging, owners, CAS closure и rebuild.
+UI показывает только принятый typed result, внешние roots и отсутствующие проекты;
+второй store, Dialog или Shell route не вводятся. Текущий Office process после
+восстановления не переключается: выбранный restored data root применяется отдельным
+запуском. Контракт — [CAS maintenance](../cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
+
 ## Restore после смены хранилища — In Review, 2026-11-16
 
 Boot создаёт initialize promise до синхронного Dock restore. Browser ждёт готовности

@@ -127,9 +127,11 @@ their owner locks. The HTML fixture now constructs the actual Browser owner from
 the restored root; saved content resolves with the original folder unavailable,
 and explicit reconnection preserves identity after a move. No inferred connections
 or additional registry. The former fixture accidentally reused the source owner.
-Remaining before P7: external project/manifest/trash preservation for any claimed
-full application restore, production writer quiescence, composition/cutover and
-Windows evidence. See [backup contract](../cas-maintenance.md#identity-owners-in-internal-backup-v2--2026-11-15).
+Closed host-neutral for application-local owners by
+`rnassistant-application-backup-v3`; external Workspace files, manifests/trash and
+live document contents are recorded by path but remain an explicit cold-filesystem
+operation. Old-binary quiescence, power loss and Windows evidence remain open. See
+[backup contract](../cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
 
 ## HTML recovery fixture bypasses publication — 2026-11-14
 
@@ -153,9 +155,10 @@ bindings fail closed; the ordinary registry's sanitizing Load is not used for
 backup validation. Office history/definition fixtures exercise isolated restoration
 through the real identity/resource consumers. Save As does not recreate the old
 locator as an alias. DPAPI files remain protected byte copies.
-Remaining before P7: real Windows/DPAPI/Office qualification, live document and
-memory-only identity boundaries, complete application-owner inventory and production
-writer quiescence. No production storage switch or complete Office restore claim.
+Application backup v3 includes the existing identity owner and the complete local
+application inventory while keeping live/memory-only document boundaries explicit.
+Real Windows/DPAPI/Office qualification, old-process quiescence and power loss remain
+open; no running Office process is switched or qualified by the host-neutral restore.
 
 ## Native session-summary storage attribution — 2026-11-13
 

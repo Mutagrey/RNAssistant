@@ -1,5 +1,16 @@
 # План модернизации production UI
 
+## Полная резервная копия — In Review, 2026-11-16
+
+Scope: существующая Diagnostics application surface, общий Dialog/button/panel и
+typed bridge к Core `CasMaintenanceService`. Новый route, Dock view, modal component
+или store не создаётся. UI передаёт абсолютные backup/destination paths; Core
+проверяет manifest, owners и CAS closure, строит индекс и публикует только новый
+каталог. Success показывает external roots; текущий процесс не переключается.
+Целевая проверка — MockDemo/Harness и `node --check app-diagnostics.js`; Windows
+WebView2 wide/narrow/125% visual review остаётся открытым. Канонический runtime
+контракт — [CAS maintenance](../cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
+
 ## Restore и доступ к прежним данным — In Review, 2026-11-16
 
 Scope: порядок init/restore, адресный missing-chat terminal, чтение архива и явный

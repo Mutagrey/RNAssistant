@@ -217,16 +217,17 @@ plugin active roots use ConversationJournalRouter plus ResourceJournal for Store
 event, group, resource, file, HTML, vendor, plugin and run ports. Active adapter/
 ChatStore constructors were removed; one ChatStore remains read-only for legacy CAS
 inventory. Existing generation is preserved without import or dual-write. Remaining
-gates are Windows x64/Office x64/WebView2/DPAPI, power loss, quiescence of already
-running old binaries and full mixed-generation application restore.
+gates are Windows x64/Office x64/WebView2/DPAPI, power loss and quiescence of already
+running old binaries. Mixed-generation application backup/restore v3 is exposed as a
+clean separate-root operation; switching the running Office process remains open.
 
 Storage-v2 root isolation (2026-11-16): new canonical journals, resource lock
 namespace and the disposable index use `storage-v2`; a create-only generation
 marker identifies the root. Legacy `chats/` and `resource-authority/*.jsonl` remain
-preserved and are not consulted by the new owners. Backup allowlists follow the new
-paths while mixed-generation application backup stays closed. Owner: Core
-StorageJournal/JournalStorageRoot. Production Office/Workspace constructors still
-use the retiring adapters; scope-routing composition and one switch remain P7.
+preserved and are not consulted by the new owners. Backup has separate isolated v2
+and mixed-generation application-v3 envelopes. Owner: Core
+StorageJournal/JournalStorageRoot and CasMaintenanceService. The separate-root v3
+restore does not replace the live root or qualify old-writer quiescence.
 
 Conversation scope routing (2026-11-16): internal `ConversationJournalRouter`
 composes existing per-scope journals through the shared index and canonical address

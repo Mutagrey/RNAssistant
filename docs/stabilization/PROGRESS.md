@@ -1,5 +1,26 @@
 # Stabilization progress
 
+## Full application backup and clean restore — 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.0-dev`. Existing `CasMaintenanceService`
+now owns `rnassistant-application-backup-v3`: it snapshots validated legacy and
+`storage-v2` canonical data, CAS, settings/DPAPI bytes, drafts, prompts, attachments,
+local assets, tools, skills, plugin/vendor files and Workspace/Office identities.
+The manifest records file SHA-256 values, protection identity and external Workspace
+roots. Restore verifies and authenticates the manifest, validates owners and CAS
+closure in private staging, rebuilds the native index and publishes only to a new
+destination outside the live root. Typed bridge and Diagnostics commands expose the
+operation; external projects, live documents, WebView state, logs and result staging
+remain explicit exclusions. Contract: [CAS maintenance](../cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
+
+Targeted Harness `application backup:` passes 1/1 after a successful Harness build
+(two existing PDF CA1416 warnings). It covers a mixed legacy/native root, external
+Workspace identity, local owners, excluded derived data, clean restore/rebuild,
+destination refusal and byte tamper refusal. This is not Windows/DPAPI/WebView2
+qualification. Old-binary quiescence, power-loss durability, switching the running
+Office process to a restored root and cold filesystem backup of external projects
+remain open release gates.
+
 ## Post-upgrade restore and explicit migration — 2026-11-16
 
 Implemented host-neutral / In Review, `17.2.0-dev`, based on

@@ -98,6 +98,8 @@ namespace RNAssistant.Office.Contracts
         [BridgeOperationPolicy(true, 300)] SetHtmlProjectDefinition,
         GetCasHealth,
         CollectCasGarbage,
+        [BridgeOperationPolicy(true, 300)] CreateApplicationBackup,
+        [BridgeOperationPolicy(true, 300)] RestoreApplicationBackup,
         [BridgeOperationPolicy(true)] ListLegacyChats,
         [BridgeOperationPolicy(true)] ReadLegacyTranscript,
         ImportLegacyChat,

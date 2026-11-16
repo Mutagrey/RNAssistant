@@ -771,6 +771,16 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CollectCasGarbage:
                         responsePayload = _controller.CollectCasGarbage();
                         break;
+                    case BridgeOperationId.CreateApplicationBackup:
+                        var backupRequest = Payload<ApplicationBackupRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() =>
+                            _controller.CreateApplicationBackup(backupRequest), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.RestoreApplicationBackup:
+                        var restoreRequest = Payload<ApplicationRestoreRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() =>
+                            _controller.RestoreApplicationBackup(restoreRequest), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetModelCatalog:
                         var modelCatalog = Payload<ModelCatalogPayload>(payload);
                         responsePayload = await Task.Run(() => _controller.GetModelCatalogAsync(

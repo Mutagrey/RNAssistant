@@ -33,6 +33,9 @@ namespace RNAssistant.Core.Storage
         // Source calls hold AcquireBackupLease; restore validates a private root.
         // No external workspace directory or manifest is read or rewritten here.
         internal string[] GetBackupFiles()
+        { string[] ignored; return GetBackupFiles(out ignored); }
+
+        internal string[] GetBackupFiles(out string[] workspaceRoots)
         {
             RequireBackupDirectory(_paths.WorkspaceDirectory);
             var files = new List<string>();
@@ -89,6 +92,8 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("Workspace backup contains an orphan path association.");
             files.AddRange(WorkspaceFileService.GetBackupFiles(_paths,
                 identities.ToDictionary(item => item.Key, item => item.Value.RootPath, StringComparer.Ordinal)));
+            workspaceRoots = identities.Values.Select(item => item.RootPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(item => item, StringComparer.OrdinalIgnoreCase).ToArray();
             return files.OrderBy(path => path, StringComparer.Ordinal).ToArray();
         }
 

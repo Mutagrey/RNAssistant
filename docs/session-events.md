@@ -1,5 +1,18 @@
 # Session event stream
 
+## Full application backup v3 — 2026-11-16
+
+The current application envelope is `rnassistant-application-backup-v3`, owned by
+`CasMaintenanceService`. It supersedes the open mixed-generation backup note in the
+historical cutover sections below. The manifest covers validated legacy and native
+journals, CAS, settings/DPAPI bytes, drafts/prompts, attachments/local assets,
+tools/skills/vendors, managed plugin/HTML copies and Workspace/Office identities.
+Restore verifies the manifest and byte closure, rebuilds the native index and publishes
+only to a new root outside the live root. External projects/live documents remain a
+separate cold-filesystem operation. Old-writer quiescence, power loss and Windows/
+Office/DPAPI qualification remain open. Contract:
+[CAS maintenance](cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
+
 ## Explicit native history import — 2026-11-16
 
 The requested upgrade recovery supports an explicit transfer from a retained legacy

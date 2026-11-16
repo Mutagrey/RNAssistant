@@ -972,6 +972,20 @@
                   </div>
                   <div class="model-compatibility-results" id="casHealthResults" aria-live="polite"></div>
                 </section>
+
+                <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="applicationBackupTitle">
+                  <div class="model-compatibility-head">
+                    <div>
+                      <h3 id="applicationBackupTitle">Полная резервная копия приложения</h3>
+                      <p>Сохраняет оба поколения истории, CAS, настройки и ключи, плагины, инструменты, навыки, вложения и Workspace-идентичности. Внешние проекты и открытые документы в архив не копируются; их пути записываются для проверки.</p>
+                    </div>
+                    <div class="cas-health-actions">
+                      <button class="button compact" id="createApplicationBackupButton" type="button">Создать копию</button>
+                      <button class="button compact" id="restoreApplicationBackupButton" type="button">Восстановить в новый каталог</button>
+                    </div>
+                  </div>
+                  <pre class="cas-health-details" id="applicationBackupResults" aria-live="polite">Путь к копии и отдельному пустому каталогу восстановления вводится вручную.</pre>
+                </section>
                 <div class="danger-zone diagnostics-danger-zone">
                   <div>
                     <div class="danger-zone-title">Сброс локальных данных</div>
@@ -1165,7 +1179,7 @@
   <script src="js/app-logs.js?v=diagnostic-files-20261116"></script>
   <script src="js/app-legacy-recovery.js?v=storage-import-20261116"></script>
   <script src="js/app-diagnostics-navigation.js?v=storage-recovery-20261116"></script>
-  <script src="js/app-diagnostics.js?v=storage-recovery-20261116"></script>
+  <script src="js/app-diagnostics.js?v=application-backup-20261116"></script>
   <script src="js/app-model-diagnostics.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2-materials-s3b2"></script>
   <script src="js/app-browser-target.js?v=browser-p2b-20261111-local-interactive-20261113"></script>

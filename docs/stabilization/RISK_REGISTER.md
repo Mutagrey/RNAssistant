@@ -27,7 +27,9 @@ Priority and disposition for the observed profile upgrade:
 P1 qualification remains actual Windows migration/restore/retry with the old profile
 and configured DPAPI protection; archive paths/status should be photographed on screen.
 Do not ask this user for files/log exports, and do not erase profiles to make the
-test pass. Existing mixed-generation backup, old-writer and power-loss gates remain.
+test pass. Mixed-generation application backup/restore is implemented host-neutral
+as a verified separate-root operation in `17.3.0-dev`; old-writer, power-loss and
+Windows/DPAPI/Office qualification gates remain.
 
 ## Storage-v2 review corrections — host-neutral fixed, qualification open, 2026-11-16
 
@@ -156,9 +158,9 @@ Owner: Core persistence/context. Isolated append/query/repair, single-resource
 linkage and all-stream CAS closure/backup have host-neutral evidence. Production
 Office/Workspace/plugin now use the storage-v2 conversation/resource composition;
 one ChatStore remains read-only for legacy CAS inventory. Multi-target P3/P4 work,
-old-process quiescence, mixed-generation application backup and release
-qualification remain open. Windows provider/filesystem, DPAPI, power loss and Office
-delivery remain separate.
+old-process quiescence and release qualification remain open. Application-v3 backup
+covers both generations and local owners, but Windows provider/filesystem, DPAPI,
+power loss, cold external-project backup and Office delivery remain separate.
 
 Three existing failures reproduce on clean `d0ab9d09`: oversized source continuity
 expects the retired developer role; archived media presentation's hydration flag

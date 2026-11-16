@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Полная резервная копия — In Review, 2026-11-16
+
+Backup controls используют существующие `model-compatibility-panel`,
+`model-compatibility-head`, `cas-health-actions`, `button compact` и общий
+`RNAssistantDialog`. Одно- и двухстрочные absolute paths вставляются через
+`rna-form-control compact`; результат — существующий monospace details block.
+Dialog владеет focus/escape/progress/error; JS не создаёт параллельный modal.
+Длинные paths wrap без нового размера/цвета; narrow/125% visual acceptance открыта.
+
 ## Прежние данные — In Review, 2026-11-16
 
 Архив и explicit import занимают существующую Health surface: общий panel/header, `button`,

@@ -328,4 +328,72 @@ namespace RNAssistant.Office.Contracts
             };
         }
     }
+
+    public sealed class ApplicationBackupRequest
+    {
+        [JsonProperty("path", Required = Required.Always)]
+        public string Path { get; set; }
+    }
+
+    public sealed class ApplicationRestoreRequest
+    {
+        [JsonProperty("backupPath", Required = Required.Always)]
+        public string BackupPath { get; set; }
+
+        [JsonProperty("destinationPath", Required = Required.Always)]
+        public string DestinationPath { get; set; }
+    }
+
+    public sealed class ApplicationBackupResponse
+    {
+        [JsonProperty("format")] public string Format { get; set; }
+        [JsonProperty("destination")] public string Destination { get; set; }
+        [JsonProperty("fileCount")] public int FileCount { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+        [JsonProperty("externalWorkspaceRoots")]
+        public IReadOnlyList<string> ExternalWorkspaceRoots { get; set; }
+
+        public static ApplicationBackupResponse From(RNAssistant.Core.Storage.ApplicationBackupResult source)
+        {
+            if (source == null) return null;
+            return new ApplicationBackupResponse
+            {
+                Format = source.Format,
+                Destination = source.Destination,
+                FileCount = source.FileCount,
+                ByteLength = source.ByteLength,
+                ExternalWorkspaceRoots = source.ExternalWorkspaceRoots
+            };
+        }
+    }
+
+    public sealed class ApplicationRestoreResponse
+    {
+        [JsonProperty("format")] public string Format { get; set; }
+        [JsonProperty("destination")] public string Destination { get; set; }
+        [JsonProperty("fileCount")] public int FileCount { get; set; }
+        [JsonProperty("byteLength")] public long ByteLength { get; set; }
+        [JsonProperty("externalWorkspaceRoots")]
+        public IReadOnlyList<string> ExternalWorkspaceRoots { get; set; }
+        [JsonProperty("missingExternalWorkspaceRoots")]
+        public IReadOnlyList<string> MissingExternalWorkspaceRoots { get; set; }
+        [JsonProperty("indexRebuilt")] public bool IndexRebuilt { get; set; }
+        [JsonProperty("restartRequired")] public bool RestartRequired { get; set; }
+
+        public static ApplicationRestoreResponse From(RNAssistant.Core.Storage.ApplicationRestoreResult source)
+        {
+            if (source == null) return null;
+            return new ApplicationRestoreResponse
+            {
+                Format = source.Format,
+                Destination = source.Destination,
+                FileCount = source.FileCount,
+                ByteLength = source.ByteLength,
+                ExternalWorkspaceRoots = source.ExternalWorkspaceRoots,
+                MissingExternalWorkspaceRoots = source.MissingExternalWorkspaceRoots,
+                IndexRebuilt = source.IndexRebuilt,
+                RestartRequired = source.RestartRequired
+            };
+        }
+    }
 }

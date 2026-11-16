@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;
@@ -35,6 +36,24 @@ namespace RNAssistant.Office
             RuntimeLog.Info("CAS GC: deleted " + result.DeletedBlobCount + " blob(s), " +
                 result.DeletedStoredByteLength + " stored byte(s); completed=" + result.Completed + ".");
             return CasGarbageCollectionResponse.From(result);
+        }
+
+        public ApplicationBackupResponse CreateApplicationBackup(ApplicationBackupRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            return ApplicationBackupResponse.From(_casMaintenanceService.BackupApplication(request.Path));
+        }
+
+        public ApplicationRestoreResponse RestoreApplicationBackup(ApplicationRestoreRequest request)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            using (_conversationLeases.AcquireMaintenance())
+            {
+                EnsureNoActiveRuns();
+                return ApplicationRestoreResponse.From(CasMaintenanceService.RestoreApplication(
+                    request.BackupPath, request.DestinationPath,
+                    paths => new SettingsService(paths).LoadStorageProtector()));
+            }
         }
 
         private void ReportModelRequestDiagnostics(LlmRequestDiagnosticUpdate update)

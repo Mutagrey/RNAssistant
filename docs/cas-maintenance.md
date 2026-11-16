@@ -126,6 +126,37 @@ DPAPI restore requires its original supported Windows identity; that qualificati
 and filesystem power-loss/Office checks remain open. No Settings UI backup command
 or production format switch is claimed by these internal APIs.
 
+## Full application backup and clean restore — In Review 2026-11-16
+
+`rnassistant-application-backup-v3` is the application-level envelope owned by the
+existing `CasMaintenanceService`. Creation holds the shared maintenance gate, plugin
+exclusive lease, Workspace catalog/locator locks and document identity lock while it
+inventories both storage generations. It requires complete, validated legacy and
+native closure, then copies raw legacy JSONL/VBA/resource journals, canonical
+`storage-v2` streams, every verified CAS object, settings, DPAPI-protected key files,
+chat drafts, prompt backups, attachments, tools, skills, local assets, plugin icons,
+vendor bytes, managed plugin/HTML project copies and Workspace/Office identity owners.
+The index, logs, WebView profile, locks, temporary files, plugin staging/preview and
+plugin result staging are excluded.
+
+The manifest records every file's byte length and SHA-256, the protection profile and
+distinct external Workspace root paths. Plaintext profiles use SHA-256 manifest
+integrity; HMAC/AES profiles authenticate the manifest with the existing history key.
+Restore verifies the manifest and every copied byte, validates legacy/native owners
+and CAS reachability in a private staging root, rebuilds the disposable native index,
+then publishes only to a previously absent destination. Existing destinations and
+corrupt, incomplete or cross-profile backups are refused. The destination must be
+outside the live application root; the current runtime is not switched in place.
+
+External Workspace files, their `.rnassistant` manifests/trash, live Office documents,
+memory-only bindings and unsaved editor state remain outside this envelope. Their
+recorded roots let restore report missing projects and preserve existing identities
+without guessing or replaying live operations. A complete machine-level recovery also
+back up those external directories with the file system while no process is writing.
+The same Windows user identity is required for copied DPAPI files. Old-binary
+quiescence, power-loss durability and Windows/Office/WebView2 qualification remain
+open release gates.
+
 ## Reachability audit
 
 Native catalog usage is a disposable projection of retained conversation facts:

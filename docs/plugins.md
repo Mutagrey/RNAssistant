@@ -75,8 +75,9 @@ services together and reconnects HTML version notifications once to the new owne
 These bindings preserve workspace/run checks, immutable saved sources and existing
 publication authority. They do not switch global production storage. Native plugin
 version tests cover exact actor, no-effect refusal, receipt reuse, rebuild and
-isolated journal/CAS restore; complete application-owner backup and Windows evidence
-remain separate.
+isolated journal/CAS restore. Application backup v3 includes retained registrations,
+publications and managed source copies; external source contents and Windows evidence
+remain separate. See [CAS maintenance](cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
 
 ## Common Browser annotations — 2026-11-13
 

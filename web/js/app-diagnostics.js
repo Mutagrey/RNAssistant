@@ -271,6 +271,65 @@ async function collectCasGarbage() {
   }
 }
 
+function applicationBackupStatus(value) {
+  var lines = [];
+  lines.push("Каталог: " + modelDiagnosticValue(value, "Destination", "destination", ""));
+  lines.push("Файлов: " + modelDiagnosticValue(value, "FileCount", "fileCount", 0) + " · " +
+    formatStorageBytes(modelDiagnosticValue(value, "ByteLength", "byteLength", 0)));
+  var roots = modelDiagnosticValue(value, "ExternalWorkspaceRoots", "externalWorkspaceRoots", []) || [];
+  if (roots.length) lines.push("Внешние Workspace (в архив не копировались):\n" + roots.join("\n"));
+  var missing = modelDiagnosticValue(value, "MissingExternalWorkspaceRoots", "missingExternalWorkspaceRoots", []) || [];
+  if (missing.length) lines.push("Не найдены на этой машине:\n" + missing.join("\n"));
+  if (modelDiagnosticValue(value, "IndexRebuilt", "indexRebuilt", false)) lines.push("Индекс восстановлен из журналов.");
+  if (modelDiagnosticValue(value, "RestartRequired", "restartRequired", false))
+    lines.push("Текущий процесс не переключён: используйте восстановленный каталог как data root после перезапуска.");
+  return lines.join("\n\n");
+}
+
+function createApplicationBackup() {
+  RNAssistantDialog.open({
+    title: "Создать полную резервную копию",
+    message: "Укажите полный путь нового каталога вне текущего data root. Существующий каталог не перезаписывается. Внешние проекты и открытые документы нужно сохранить отдельно.",
+    label: "Каталог резервной копии",
+    maximumLength: 32767,
+    submitLabel: "Создать копию",
+    validate: function (value) { return value.trim() ? null : "Укажите путь к новому каталогу."; },
+    onSubmit: async function (value) {
+      var path = value.trim();
+      var root = $("applicationBackupResults");
+      if (root) root.textContent = "Проверяю оба поколения истории и целостность CAS…";
+      var result = await send("createApplicationBackup", { path: path });
+      if (root) root.textContent = applicationBackupStatus(result);
+      log("Полная резервная копия создана: " + modelDiagnosticValue(result, "Destination", "destination", path) + ".", "success");
+    }
+  });
+}
+
+function restoreApplicationBackup() {
+  RNAssistantDialog.open({
+    title: "Восстановить данные приложения",
+    message: "Первая строка — существующий каталог резервной копии. Вторая — новый пустой каталог назначения. Проверка, owners, CAS closure и индекс выполняются до публикации; текущий процесс не переключается.",
+    label: "Копия и новый каталог назначения",
+    multiline: true,
+    maximumLength: 65535,
+    value: "",
+    submitLabel: "Проверить и восстановить",
+    validate: function (value) {
+      var lines = value.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+      return lines.length === 2 ? null : "Укажите две строки: каталог копии и новый каталог назначения.";
+    },
+    onSubmit: async function (value) {
+      var lines = value.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+      if (lines.length !== 2) throw new Error("Укажите две строки: каталог копии и новый каталог назначения.");
+      var root = $("applicationBackupResults");
+      if (root) root.textContent = "Проверяю подписи, closure, owners и восстанавливаю индекс…";
+      var result = await send("restoreApplicationBackup", { backupPath: lines[0], destinationPath: lines[1] });
+      if (root) root.textContent = applicationBackupStatus(result);
+      log("Данные восстановлены в отдельный каталог: " + lines[1] + ".", "success");
+    }
+  });
+}
+
 function bindDiagnosticsActions() {
   RNAssistantDiagnostics.bind();
   if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.bind();
@@ -279,4 +338,6 @@ function bindDiagnosticsActions() {
   $("refreshPerformanceDiagnosticsButton").addEventListener("click", performanceDiagnostics.render);
   $("auditCasButton").addEventListener("click", auditCasHealth);
   $("collectCasButton").addEventListener("click", collectCasGarbage);
+  $("createApplicationBackupButton").addEventListener("click", createApplicationBackup);
+  $("restoreApplicationBackupButton").addEventListener("click", restoreApplicationBackup);
 }

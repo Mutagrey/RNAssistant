@@ -1,5 +1,16 @@
 # Карта экранов, навигации и состояний
 
+## Полная резервная копия — In Review, 2026-11-16
+
+Диагностика → Приложение → Задержки и хранилище содержит один Health panel:
+«Создать копию» открывает общий Dialog с путём нового каталога; «Восстановить в
+новый каталог» принимает двумя строками backup и destination. Existing/new path
+validation принадлежит Core. Busy не закрывает принятую команду; success показывает
+file count/bytes и external roots, unknown/error не заявляет публикацию. Restore
+success сообщает, что индекс построен, а текущий процесс не переключён. Long paths
+переносятся в `pre`, controls доступны в narrow/125%; нативной визуальной проверки
+этого среза пока нет.
+
 ## Восстановление после обновления — In Review, 2026-11-16
 
 Восстановленная Browser-вкладка ждёт готовности приложения. После успешного retry
@@ -939,7 +950,7 @@ conversation singleton; параметризованные chat IDs ниже —
 | Диагностика: Запуски, фильтры, события/trajectory/payload | [diagnostics-navigation](../../web/js/app-diagnostics-navigation.js), run-journal/trajectory/payload | diagnostics:runs, tool view | scoped loading, live follow, paged events, pending cancel, read errors |
 | Reader запроса: Состав/Ответ/Изменения | [model-context](../../web/js/app-model-context.js), model-context-details / model-context-contents | singleton `request`, exact owner/run/event внутри reader, центр или справа | metadata-first, lazy bodies, unavailable/truncated, bounded retained views |
 | Лаборатория моделей | [model-diagnostics](../../web/js/app-model-diagnostics.js) | diagnostics:lab | selected scenario, running/cancel requested/finished/failed, redacted evidence |
-| Приложение: health/performance и журнал | [diagnostics](../../web/js/app-diagnostics.js), [logs](../../web/js/app-logs.js) | diagnostics:application | connected/unavailable, timings, log filters/copy/clear; не второй task runtime |
+| Приложение: health/performance, backup и журнал | [diagnostics](../../web/js/app-diagnostics.js), [logs](../../web/js/app-logs.js) | diagnostics:application | connected/unavailable, timings, verified backup/restore, log filters/copy/clear; не второй task runtime |
 
 В «Подключение → Дополнительные параметры» список называется «HTTP-доступ
 HTML-превью»: точные адреса HTTP bridge, не ограничение сайтов external Browser.

@@ -400,6 +400,7 @@
     <Compile Include="Storage\ResourceMutationJournal.cs" />
     <Compile Include="Storage\CasMaintenanceService.cs" />
     <Compile Include="Storage\CasMaintenanceService.Backup.cs" />
+    <Compile Include="Storage\CasMaintenanceService.ApplicationBackup.cs" />
     <Compile Include="Storage\DisposablePair.cs" />
     <Compile Include="Storage\EventProtectionSupport.cs" />
     <Compile Include="Storage\JsonFileStore.cs" />

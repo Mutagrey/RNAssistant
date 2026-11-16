@@ -141,6 +141,69 @@ namespace RNAssistant.Harness
                 });
         }
 
+        private static void ApplicationBackupRestoresBothGenerations()
+        {
+            WithTempPaths(paths => {
+                var parent = Path.GetDirectoryName(paths.Root);
+                var projectRoot = Path.Combine(parent, "project-" + Guid.NewGuid().ToString("N"));
+                var backup = Path.Combine(parent, "application-backup-" + Guid.NewGuid().ToString("N"));
+                var restoredRoot = Path.Combine(parent, "application-restore-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    var legacy = new ChatStore(paths, () => StorageProtector.None)
+                        .Create("Excel", "legacy-document", "Legacy.xlsx", "Legacy chat");
+                    var nativeStore = new ConversationJournal(paths, "document:application-backup", StorageProtector.None);
+                    var native = nativeStore.CreateChat("application-native", "native-document", "Native", ConversationRunPolicy.For(ChatModes.Agent));
+                    var workspaces = new WorkspaceStore(paths);
+                    workspaces.Open(projectRoot);
+                    Directory.CreateDirectory(Path.Combine(paths.ToolsDirectory, "common", "custom"));
+                    File.WriteAllText(Path.Combine(paths.ToolsDirectory, "common", "custom", "tool.json"), "{\"id\":\"custom\"}");
+                    Directory.CreateDirectory(Path.Combine(paths.SkillsDirectory, "custom"));
+                    File.WriteAllText(Path.Combine(paths.SkillsDirectory, "custom", "SKILL.md"), "# Custom");
+                    Directory.CreateDirectory(Path.Combine(paths.Root, "assets"));
+                    File.WriteAllText(Path.Combine(paths.Root, "assets", "asset.txt"), "retained asset");
+                    Directory.CreateDirectory(Path.Combine(paths.Root, "logs"));
+                    File.WriteAllText(Path.Combine(paths.Root, "logs", "runtime.log"), "excluded log");
+                    Directory.CreateDirectory(Path.Combine(paths.Root, "plugin-results", "result"));
+                    File.WriteAllText(Path.Combine(paths.Root, "plugin-results", "result", "value.txt"), "excluded result");
+                    var result = JournalCasService(paths, StorageProtector.None).BackupApplication(backup);
+                    AssertEqual(1, result.ExternalWorkspaceRoots.Count, "backup records its external workspace root");
+                    AssertTrue(File.Exists(Path.Combine(backup, "backup.json")), "application manifest is published");
+                    AssertTrue(File.Exists(Path.Combine(backup, "data", "chats", AppDataPaths.SafeFileName("Excel|legacy-document"),
+                        AppDataPaths.SafeFileName(legacy.Id) + ".events.jsonl")), "legacy chat is copied");
+                    AssertTrue(Directory.EnumerateFiles(Path.Combine(backup, "data", "storage-v2", "conversation-streams"),
+                        "*.jsonl", SearchOption.AllDirectories).Any(), "native stream is copied");
+                    AssertTrue(!File.Exists(Path.Combine(backup, "data", "storage-v2", "index.sqlite")), "derived native index is omitted");
+                    AssertTrue(!Directory.Exists(Path.Combine(backup, "data", "logs")), "optional logs are omitted");
+                    AssertTrue(!Directory.Exists(Path.Combine(backup, "data", "plugin-results")), "result staging is omitted");
+
+                    var restored = CasMaintenanceService.RestoreApplication(backup, restoredRoot, _ => StorageProtector.None);
+                    var restoredPaths = restored.RestoredPaths;
+                    AssertTrue(restored.IndexRebuilt && restored.RestartRequired, "restore reports rebuild and explicit restart");
+                    AssertEqual(0, restored.MissingExternalWorkspaceRoots.Count, "existing external workspace is reported available");
+                    AssertTrue(new ChatStore(restoredPaths).ListHeaders(false).Any(item => item.Id == legacy.Id), "legacy chat restores");
+                    AssertTrue(StorageJournal.Inventory(restoredPaths).Single().Segments.All(File.Exists), "native journal restores");
+                    AssertEqual("retained asset", File.ReadAllText(Path.Combine(restoredPaths.Root, "assets", "asset.txt")), "local asset restores byte-exactly");
+                    AssertTrue(File.Exists(Path.Combine(restoredPaths.Root, "tools", "common", "custom", "tool.json")), "tool package restores");
+                    AssertTrue(File.Exists(Path.Combine(restoredPaths.Root, "skills", "custom", "SKILL.md")), "skill package restores");
+                    AssertTrue(File.Exists(JournalIndex.IndexPath(restoredPaths)), "native index is rebuilt in the restored root");
+                    AssertTrue(!Directory.Exists(Path.Combine(restoredPaths.Root, "logs")), "excluded logs stay excluded");
+                    RuntimeThrows<IOException>(() => CasMaintenanceService.RestoreApplication(backup, restoredPaths.Root, _ => StorageProtector.None));
+
+                    File.AppendAllText(Path.Combine(backup, "data", "assets", "asset.txt"), "corrupt");
+                    var corruptTarget = restoredPaths.Root + "-corrupt";
+                    RuntimeThrows<InvalidDataException>(() => CasMaintenanceService.RestoreApplication(backup, corruptTarget, _ => StorageProtector.None));
+                    AssertTrue(!Directory.Exists(corruptTarget), "tampered application backup publishes no destination");
+                }
+                finally
+                {
+                    if (Directory.Exists(projectRoot)) Directory.Delete(projectRoot, true);
+                    if (Directory.Exists(backup)) Directory.Delete(backup, true);
+                    if (Directory.Exists(restoredRoot)) Directory.Delete(restoredRoot, true);
+                }
+            });
+        }
+
         private static void StorageJournalIdentityBackupValidation()
         {
             WithTempPaths(paths => {

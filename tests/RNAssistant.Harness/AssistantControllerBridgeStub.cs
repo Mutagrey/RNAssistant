@@ -339,6 +339,8 @@ namespace RNAssistant.Office
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
         public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
         public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
+        public ApplicationBackupResponse CreateApplicationBackup(ApplicationBackupRequest request) { return new ApplicationBackupResponse { Format = CasMaintenanceService.ApplicationBackupFormat, Destination = request.Path }; }
+        public ApplicationRestoreResponse RestoreApplicationBackup(ApplicationRestoreRequest request) { return new ApplicationRestoreResponse { Format = CasMaintenanceService.ApplicationBackupFormat, Destination = request.DestinationPath, IndexRebuilt = true, RestartRequired = true }; }
         internal Func<CancellationToken, Task<ModelCatalogResponse>> ModelCatalogWork { get; set; }
         public Task<ModelCatalogResponse> GetModelCatalogAsync(AppSettings settings, string apiKey, CancellationToken token)
         {
