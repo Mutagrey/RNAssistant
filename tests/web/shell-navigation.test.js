@@ -62,7 +62,7 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   await page.evaluate(()=>window.shellNodes=['messages','chatForm','chatInspector'].map(id=>document.getElementById(id)||RNAssistantConversationPanel.office('preview-chat').node(id)));
   assert.equal(await opened(),true);await rail.click();assert.equal(await opened(),false);await rail.click();assert.equal(await opened(),true);await settled();
   const actions=await page.locator('.dock-group-actions').first().evaluate(n=>[...n.children].map(n=>[n.offsetWidth,n.offsetHeight,n.firstElementChild.getBoundingClientRect().width]));
-  assert.deepEqual(actions,Array(2).fill([25,25,14]),'shared control size must not stretch Demo buttons to 34px');
+  assert.deepEqual(actions,Array(4).fill([25,25,14]),'shared control size must not stretch Demo buttons to 34px');
   // A topbar toggle hides the tool group, retaining its DOM and dimensions.
   const inspectorWidth=(await page.locator('#chatInspector').boundingBox()).width;
   await page.locator('#toggleChatInspectorButton').click();

@@ -422,13 +422,23 @@
       hostStatus: window.PrototypeFixtures ? "Mock · без подключения к Office" : state.bridgeUnavailable ? "Нет связи с хостом" : "Локальное пространство" } });
   }
   function header(group) {
-    var root = element("div", "dock-group-actions"); root.dataset.groupId = group.id;
-    root.appendChild(button("Выбрать экран", "plus", function () { openChooser(group, "within"); }));
-    var actions = button("Действия с вкладкой", "more", function () {
+    var root = element("div", "dock-group-actions"), splitButtons = []; root.dataset.groupId = group.id;
+    function updateSplitButtons() {
       var canSplit = !compact && host.clientWidth >= 560;
+      splitButtons.forEach(function (entry) {
+        entry.button.disabled = !canSplit || (entry.direction === "right" ? group.api.width < 560 : group.api.height < 420);
+        entry.button.title = entry.button.disabled ? "Недостаточно места для ещё одной области" : entry.label;
+      });
+    }
+    [["Выбрать экран", "plus", "within"], ["Открыть экран справа", "split-right", "right"], ["Открыть экран снизу", "split-below", "below"]]
+      .forEach(function (item) {
+        var control = button(item[0], item[1], function () { openChooser(group, item[2]); });
+        root.appendChild(control);
+        if (item[2] !== "within") splitButtons.push({ button: control, direction: item[2], label: item[0] });
+      });
+    var dimensions = group.api.onDidDimensionsChange(updateSplitButtons); updateSplitButtons();
+    var actions = button("Действия с вкладкой", "more", function () {
       RNAssistantActionMenu.open(actions, [
-        { label: "Открыть экран справа", icon: "split-right", disabled: !canSplit || group.api.width < 560, onSelect: function () { openChooser(group, "right"); } },
-        { label: "Открыть экран снизу", icon: "split-below", disabled: !canSplit || group.api.height < 420, onSelect: function () { openChooser(group, "below"); } },
         { label: api.hasMaximizedGroup() ? "Восстановить группу" : "Развернуть группу", icon: api.hasMaximizedGroup() ? "compress" : "fit",
           onSelect: function () { if (api.hasMaximizedGroup()) api.exitMaximizedGroup(); else if (group.activePanel) group.activePanel.api.maximize(); changed(); } },
         { separator: true }
@@ -441,7 +451,7 @@
         }]
       ].map(function (item) { return { label: item[0], icon: item[1], onSelect: item[2] }; })), { className: "dock-group-menu" });
     }); actions.setAttribute("aria-haspopup", "menu"); root.appendChild(actions);
-    return { element: root, init: function () {}, dispose: function () { RNAssistantActionMenu.closeWithin(root); } };
+    return { element: root, init: function () {}, dispose: function () { dimensions.dispose(); RNAssistantActionMenu.closeWithin(root); } };
   }
   function validateLayout(layout) {
     if (!layout || !layout.grid || !layout.panels) return false;

@@ -38,7 +38,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#baseUrlInput").inputValue(), "https://draft.invalid/v1");
     await page.evaluate(() => renderSettings());
     assert.equal(await page.locator("#baseUrlInput").inputValue(), "https://draft.invalid/v1", "background render cannot erase an edited form");
-    await groupAction("Открыть экран справа");
+    await page.locator(".dv-groupview").filter({ has: settings }).getByRole("button", { name: "Открыть экран справа", exact: true }).click();
     await page.locator(".dock-screen-chooser input").fill("Настройки");
     await page.locator(".dock-screen-chooser").getByRole("button", { name: "Настройки", exact: true }).click();
     assert.equal(await settings.count(), 1); assert.equal(await page.locator(".dock-group-actions").count(), 3);

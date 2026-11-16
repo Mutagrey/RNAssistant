@@ -179,8 +179,7 @@ const { chromium } = require("playwright");
       else { await page.locator('#hostWindowMenu').click(); await page.getByRole('menuitem',{name:'Компоновка…',exact:true}).click(); }
     }
     // Placement preserves the singleton reader, exact owner and selected message.
-    await page.locator('.dv-groupview').filter({has:page.locator('[data-tab-panel-id="request"]')}).getByRole('button',{name:'Действия с вкладкой',exact:true}).click();
-    await page.getByRole('menuitem',{name:'Открыть экран справа',exact:true}).click();
+    await page.locator('.dv-groupview').filter({has:page.locator('[data-tab-panel-id="request"]')}).getByRole('button',{name:'Открыть экран справа',exact:true}).click();
     await page.locator('.dock-screen-chooser input').fill('Запрос модели');
     await page.locator('.dock-screen-chooser').getByRole('button', { name: 'Запрос модели', exact: true }).click();
     assert.equal(await page.locator('[data-tab-panel-id="request"]').count(), 1);

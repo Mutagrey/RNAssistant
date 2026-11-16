@@ -9,15 +9,16 @@ const {withPreviewPage}=require('./preview-session');
   await input.fill('Черновик при переносе');
   await page.evaluate(()=>{window.dockProbe={nodes:['chatForm','messages','chatInput'].map(id=>RNAssistantConversationPanel.office('preview-chat').node(id)),calls:[]};const old=send;send=(type,...args)=>{dockProbe.calls.push(type);return old(type,...args);};});
   async function groupAction(tab,name){await page.locator('.dv-groupview').filter({has:tab}).getByRole('button',{name:'Действия с вкладкой',exact:true}).click();await page.getByRole('menuitem',{name,exact:true}).click();}
+  async function split(tab,name){await page.locator('.dv-groupview').filter({has:tab}).getByRole('button',{name,exact:true}).click();}
   const before=(await input.boundingBox()).width;
   await groupAction(chat,'Развернуть группу');await page.waitForFunction(width=>document.querySelector('[data-chat-node=chatInput]').getBoundingClientRect().width>width+200,before);
   await groupAction(chat,'Восстановить группу');
   await groupAction(chat,'Собрать в одну группу');
-  await groupAction(chat,'Открыть экран справа');
+  await split(chat,'Открыть экран справа');
   await page.locator('.dock-screen-chooser input').fill('Инспектор');await page.locator('.dock-screen-chooser input').press('Enter');
   assert.equal(await inspector.count(),1);assert.equal(await page.locator('.dock-group-actions').count(),2);
   assert.equal(await page.locator('[data-tab-panel-id^="choose-"]').count(),0);
-  await groupAction(chat,'Открыть экран снизу');await page.locator('.dock-screen-chooser input').fill('Инспектор');
+  await split(chat,'Открыть экран снизу');await page.locator('.dock-screen-chooser input').fill('Инспектор');
   await page.locator('.dock-screen-chooser').getByRole('button',{name:'Инспектор',exact:true}).click();
   await page.waitForFunction(()=>document.getElementById('chatInspector').getBoundingClientRect().top>document.querySelector('[data-chat-node=chatForm]').getBoundingClientRect().top);
   const boxes=await Promise.all([page.locator('[data-chat-node=chatForm]').boundingBox(),page.locator('#chatInspector').boundingBox()]);assert.ok(boxes[1].y>boxes[0].y);

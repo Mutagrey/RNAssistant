@@ -11,6 +11,11 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.0.2-dev
+
+- В заголовке группы Dockview снова доступны отдельные кнопки «Открыть экран
+  справа» и «Открыть экран снизу»; остальные команды остаются в меню «…».
+
 ### 17.0.0-dev
 
 - Office, Workspace и plugin теперь используют один canonical conversation/resource
