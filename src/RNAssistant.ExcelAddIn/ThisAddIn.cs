@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Office.Core;
 using RNAssistant.Office;
 using RNAssistant.OfficeHosts;
+using RNAssistant.Office.WebView;
 using Excel = Microsoft.Office.Interop.Excel;
 
 namespace RNAssistant.ExcelAddIn
@@ -133,7 +134,8 @@ namespace RNAssistant.ExcelAddIn
                     _officeDispatcher));
                 runtime.OfficeHostChatRequested = host => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, host);
                 runtime.OfficeChatSelectionRequested = chatId => OfficeHostChatCoordinator.SelectFromPanelAsync(runtime, chatId);
-                var pane = CustomTaskPanes.Add(runtime.CreatePaneControl(), "RN Assistant", window);
+                AssistantPaneControl paneControl = runtime.CreatePaneControl();
+                var pane = CustomTaskPanes.Add(paneControl, "RN Assistant", window);
                 pane.Width = 1200;
                 entry = new PaneEntry { Window = window, Pane = pane, Runtime = runtime };
                 _panes[key] = entry;
