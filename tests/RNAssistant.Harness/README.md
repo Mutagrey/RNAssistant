@@ -1,5 +1,19 @@
 # RNAssistant Harness
 
+## Storage-v2 production composition — 2026-11-16
+
+Focused filters: `journal text:`, `journal routing:`, `workspace: chat model
+preferences and wire`, `workspace: create reopen session and relocate`, `plugins:
+source chats share project history`, `plugins: project chat fork preserves exact
+prefix`, `plugins: results and prepared authority stay scoped`, `plugins: workspace
+uses common message attachments`, `plugins: vendor resolution is separate from
+admission`, `journal groups: scoped`, and `storage optimization: canonical closure
+and backup restore`. Together they cover active conversation/resource ports,
+Workspace/plugin restart and history, attachments, plugin publication/result scope,
+vendor resolution, groups and clean restore. They do not qualify Windows/Office/DPAPI/
+WebView2, old-process quiescence, power loss or full mixed-generation application
+restore.
+
 ## Scope-routed journals — 2026-11-16
 
 Focused filter `journal routing:` exercises the existing Office `ChatSessionService`

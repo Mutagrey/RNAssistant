@@ -19,7 +19,8 @@ namespace RNAssistant.Core.Storage
         private const int MaximumRecordBytes = 128 * 1024;
         private const string ManifestView = "web-project-manifest";
         private const string VerificationView = "web-verification";
-        private readonly ResourceAuthorityStore _authority;
+        private readonly IResourceAuthorityStore _authority;
+        private readonly IResourceRevisionStore _revisions;
         private readonly ChatBlobStore _payloads;
         private readonly WorkspaceFileService _files;
         private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
@@ -37,7 +38,20 @@ namespace RNAssistant.Core.Storage
 
         public WorkspaceWebSnapshotStore(AppDataPaths paths, WorkspaceFileService files, Func<StorageProtector> protectionProvider = null)
         {
-            _authority = new ResourceAuthorityStore(paths);
+            var authority = new ResourceJournal(paths,
+                protectionProvider == null ? new SettingsService(paths).LoadStorageProtector() : protectionProvider());
+            _authority = authority;
+            _revisions = authority;
+            _payloads = new ChatBlobStore(paths, protectionProvider);
+            _files = files ?? throw new ArgumentNullException(nameof(files));
+        }
+
+        internal WorkspaceWebSnapshotStore(AppDataPaths paths, WorkspaceFileService files,
+            Func<StorageProtector> protectionProvider, IResourceAuthorityStore authority,
+            IResourceRevisionStore revisions)
+        {
+            _authority = authority ?? throw new ArgumentNullException(nameof(authority));
+            _revisions = revisions ?? throw new ArgumentNullException(nameof(revisions));
             _payloads = new ChatBlobStore(paths, protectionProvider);
             _files = files ?? throw new ArgumentNullException(nameof(files));
         }
@@ -205,12 +219,12 @@ namespace RNAssistant.Core.Storage
                 throw Unavailable("Snapshot metadata exceeds its bound.");
             var payload = PayloadRef.FromBlob(_payloads.StoreText(json, "application/json"));
             var scope = Scope(workspace);
-            _authority.RegisterRevision(scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload,
+            _revisions.RegisterRevision(scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload,
                 parent: expected, dependencies: dependencies));
-            _authority.RegisterView(scope, new ResourceRevisionView(reference, viewName, payload.Sha256,
+            _revisions.RegisterView(scope, new ResourceRevisionView(reference, viewName, payload.Sha256,
                 payload, ResourceCoverage.Whole(), parts));
             foreach (var diagnostic in diagnostics ?? Enumerable.Empty<WebDiagnosticDescriptor>())
-                _authority.RegisterView(scope, new ResourceRevisionView(reference, diagnostic.View,
+                _revisions.RegisterView(scope, new ResourceRevisionView(reference, diagnostic.View,
                     diagnostic.Payload.Sha256, diagnostic.Payload, ResourceCoverage.Whole()));
             for (var retry = 0; retry < 8; retry++)
             {
@@ -238,10 +252,10 @@ namespace RNAssistant.Core.Storage
                 change.After.Knowledge == HeadKnowledge.Known && change.After.Revision.Uri == reference.Uri &&
                 change.After.Revision.Revision == reference.Revision)))
                 throw Unavailable("Exact web resource has not been published in this workspace.");
-            var view = _authority.GetView(scope, reference, viewName);
+            var view = _revisions.GetView(scope, reference, viewName);
             if (view?.Payload == null || view.Coverage?.Kind != ResourceCoverageKinds.Whole ||
                 view.Payload.ByteLength > MaximumRecordBytes || view.ContentSha256 != view.Payload.Sha256 ||
-                _authority.GetRevision(scope, reference)?.ContentSha256 != view.ContentSha256)
+                _revisions.GetRevision(scope, reference)?.ContentSha256 != view.ContentSha256)
                 throw Unavailable("Exact web resource view is unavailable.");
             return view;
         }

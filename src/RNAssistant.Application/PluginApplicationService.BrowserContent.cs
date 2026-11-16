@@ -19,7 +19,7 @@ namespace RNAssistant.Application
                 var session = Conversations.GetSession(workspace, capture.Owner.ChatId);
                 if (session == null) throw new InvalidOperationException("Чат аннотации недоступен.");
                 WorkspaceVisualSelectionService.RequireSource(_paths, workspace,
-                    new ChatAttachment { VisualSelectionSource = capture.Source, VisualSelectionPage = capture.Page });
+                    new ChatAttachment { VisualSelectionSource = capture.Source, VisualSelectionPage = capture.Page }, _files);
                 return new AttachmentStore(_paths).StageVisualSelection(session.Id, request.Selection, capture.Title,
                     request.Comment, request.AnnotationNumber, capture.Source, capture.Page);
             }

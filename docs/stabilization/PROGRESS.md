@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Storage-v2 production cutover — 2026-11-16
+
+Implemented host-neutral / In Review, `17.0.0-dev`. Office, Workspace and plugin
+application roots now share the canonical conversation/router/resource/index
+composition. Active production constructors no longer create `ChatStore`,
+`ChatConversationStoreAdapter` or `ChatEventStoreAdapter`; the one retained
+`ChatStore` is read-only CAS inventory for preserved legacy data. Groups, file and
+HTML owners, vendor catalog, plugin registrations/results and resource mutations all
+receive the new ports explicitly. The UI reports that the generation starts a new
+history while preserving old bytes.
+
+Focused checks pass: `journal text:` 3/3; scope routing; Workspace model/open/move;
+plugin source history, fork, results, vendor and attachment flow; scoped groups;
+canonical closure/restore. A concurrent metadata revision during full load now retries
+within a fixed bound. This is not Windows/Office qualification: DPAPI, WebView2,
+power loss, old-process quiescence and mixed-generation application restore remain
+open. P4 remains deferred.
+
 ## Scope-routed conversation journals — 2026-11-16
 
 Internal / In Review. Existing per-scope `ConversationJournal` owners now sit behind

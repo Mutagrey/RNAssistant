@@ -157,7 +157,12 @@ namespace RNAssistant.Harness
                 FixturePaths.Value = previousPaths;
                 if (Directory.Exists(root))
                 {
-                    Directory.Delete(root, true);
+                    for (var attempt = 0; ; attempt++)
+                    {
+                        try { Directory.Delete(root, true); break; }
+                        catch (IOException) when (Directory.Exists(root) && attempt < 4)
+                        { Thread.Sleep(50); }
+                    }
                 }
             }
         }

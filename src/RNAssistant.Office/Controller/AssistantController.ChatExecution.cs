@@ -693,7 +693,7 @@ namespace RNAssistant.Office
 
         private SendChatResponse CreateSendChatResponse(ChatSession session, AppSettings settings, ChatTurnResult completion)
         {
-            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _artifacts);
             settings = ResolveChatSettings(session, settings);
             var activeId = session.Id;
             var timer = Stopwatch.StartNew();
@@ -701,8 +701,6 @@ namespace RNAssistant.Office
             var toolsMs = timer.ElapsedMilliseconds;
             var skills = GetSkills();
             var skillsMs = timer.ElapsedMilliseconds - toolsMs;
-            var fullReplays = _chatStore.HeaderFullReplayCount;
-            var incrementalReplays = _chatStore.HeaderIncrementalReplayCount;
             var chats = _chatSessions.GetChatSummaries(activeId);
             var chatsMs = timer.ElapsedMilliseconds - toolsMs - skillsMs;
             int messageStartIndex;
@@ -748,8 +746,6 @@ namespace RNAssistant.Office
                     "ms, skills=" + skillsMs + "ms, chats=" + chatsMs +
                     "ms, state=" + (timer.ElapsedMilliseconds - toolsMs - skillsMs - chatsMs) +
                     "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) +
-                    ", headerFullReplays=" + (_chatStore.HeaderFullReplayCount - fullReplays) +
-                    ", headerIncrementalReplays=" + (_chatStore.HeaderIncrementalReplayCount - incrementalReplays) +
                     ", casRefs=" + chats.Sum(item => item.CasBlobCount) + ".");
             return response;
         }

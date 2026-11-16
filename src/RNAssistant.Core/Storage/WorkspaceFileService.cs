@@ -124,9 +124,11 @@ namespace RNAssistant.Core.Storage
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _blobs = new ChatBlobStore(paths, protectionProvider);
-            _authority = new ResourceAuthorityStore(paths);
-            _revisions = (IResourceRevisionStore)_authority;
-            _journal = new ResourceMutationJournal(paths);
+            var resources = new ResourceJournal(paths,
+                protectionProvider == null ? new SettingsService(paths).LoadStorageProtector() : protectionProvider());
+            _authority = resources;
+            _revisions = resources;
+            _journal = resources;
         }
 
         internal WorkspaceFileService(AppDataPaths paths, IResourceAuthorityStore authority,

@@ -93,8 +93,10 @@ namespace RNAssistant.Office.Services
             result.ResourceFind = new BoundOfficeResource(result.ResourceFind);
             result.ResourceRead = new BoundOfficeResource(result.ResourceRead);
             result.ResourceSearch = new BoundOfficeResource(result.ResourceSearch);
+            Func<ToolExecutionContext, ResourceMutationOrigin> origin = null;
+            if (_executor.ResourceOrigin != null) origin = context => _executor.ResourceOrigin(session, context);
             result.MutationObserver = new ResourceMutationAuthorityObserver(
-                _executor.ResourceAuthority, new ResourceMutationJournal(_paths), session, _executor.Payloads);
+                _executor.ResourceAuthority, _executor.ResourceMutations, session, _executor.Payloads, origin: origin);
             return result;
         }
 

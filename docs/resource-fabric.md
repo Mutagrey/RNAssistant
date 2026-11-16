@@ -371,8 +371,9 @@ its bound gate. Both persist before publication. In the native composition,
 ConversationJournal/CAS owns immutable Task snapshots and selection; the resource
 journal owns logical head/effect proof. Load hydrates only the active bounded body,
 metadata pages stay cold, and history rewind loads just its selected body.
-Default ChatStore composition is temporary until whole-port P7; no adapter/store
-is added. [Native Task contract](session-events.md#journal-task-list-snapshots--2026-11-14).
+Production Office/Workspace/plugin composition now supplies the shared conversation
+journal and resource ports; the old aggregate is maintenance-only. No extra adapter
+or store was added. [Native Task contract](session-events.md#journal-task-list-snapshots--2026-11-14).
 
 The file owner publishes mutation effects. Guarded `resources.delete` moves an accepted
 UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an
@@ -1980,10 +1981,10 @@ observer list moved to the journal owner; no second notification registry was ad
 Checked host-neutral: actual file create/replace/delete/restore/move, interrupted
 dispatch, independent file access, multi-head Office publication, unknown recovery,
 lost acknowledgement, index rebuild and resource-journal/CAS restore. The mutation
-slice above adds the first kernel call/result linkage; other semantic owners and
-production composition remain open. Default composition still uses the old resource backend; the new owner refuses
-legacy resource JSONL rather than importing it. Root cutover and real Office evidence
-remain separate. Backup of resource journals is not a full application backup: live
+slice above adds the first kernel call/result linkage. Production composition now
+uses the resource journal for active writes while legacy JSONL remains preserved and
+unimported. Real Office evidence remains separate. Backup of resource journals is not
+a full application backup: live
 workspace identities/locators, move intents and other owners need the P6/P7 integration
 check before enabling restore. [Slice report](audits/storage-context-optimization.md#p1p2--direct-resource-ports-2026-11-11).
 
@@ -2500,7 +2501,7 @@ labels beside the actual model source block: `data.ref` on a delivered
 `core.read`, or `ref` on a hydrated current-source header. No floating
 `resource_refs` list is emitted. `R1` is scoped logical identity; `v2` is the
 ordinal of an observed exact revision, not a resource authority generation or edit
-count. One ChatStore allocator records bindings from typed message observations and
+count. One canonical conversation-store allocator records bindings from typed message observations and
 exact saved-request links in the existing chat stream. Inspector only reads bindings;
 resource grouping uses scope/URI/revision, never display aliases. Same scope/URI/revision keeps its label; another scope cannot share identity.
 The model still supplies semantic targets, never these labels as a revision/guard.

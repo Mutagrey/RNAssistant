@@ -64,7 +64,7 @@ namespace RNAssistant.Office
         {
             var resources = _toolExecutor.ResourceAuthority;
             return new WorkspaceHtmlVersionService(_paths, _conversationStore,
-                new WorkspaceFileService(_paths, resources.Store, resources.Revisions, resources.Mutations), resources.Store, resources.Mutations);
+                _workspaceFiles, resources.Store, resources.Mutations);
         }
 
         internal HtmlProjectImportResult CopyBrowserProject(BrowserProjectTransferRequest request, CancellationToken token)

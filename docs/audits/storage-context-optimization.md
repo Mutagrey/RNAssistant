@@ -6,6 +6,30 @@ Decision: [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md).
 Baseline inspected at `eed95756`, after `ecb7612d`; unrelated unfinished chat-overview
 and Browser edits are preserved. This file records evidence, not a second contract.
 
+## P7 — storage-v2 production composition (2026-11-16)
+
+1. F04/F05/P7: Office, Workspace and plugin now instantiate the existing
+   ConversationJournalRouter, ResourceJournal, DocumentArtifactStore,
+   WorkspaceFileService and ChatBlobStore once per application owner.
+2. Active writers no longer construct ChatStore or its Store/event adapters. Groups,
+   Plan/Task, HTML, vendor, plugin, workspace file, attachment and run paths receive
+   the canonical resource/conversation ports explicitly. One legacy ChatStore remains
+   read-only for old-generation CAS reachability.
+3. No import, dual-write or fallback was added. Legacy chats/resource JSONL/CAS/keys/
+   settings/tools/skills/workspace associations remain in place; the new generation is
+   explicitly announced in Init state.
+4. Focused Harness passes cover journal text/routing, Workspace model/open/move,
+   plugin source/fork/results/vendor/attachment flows, groups and canonical restore.
+   The build has two existing PDF platform warnings; no VSTO/Office build was run.
+5. No extra body hydration is introduced by composition. A concurrent metadata
+   revision during full load restarts the read at most twice; successful reads remain
+   exact and bounded.
+6. Open release gates: Windows x64/Office x64/WebView2/DPAPI behavior, power-loss,
+   quiescence of existing old binaries, full mixed-generation application restore and
+   removal of the legacy read-only CAS inventory after its preservation period.
+7. Version is `17.0.0-dev` because the storage contract intentionally starts a new
+   history generation. Updated canonical docs and Changelog; P4 remains deferred.
+
 ## P7 prerequisite — scope-routed conversation journals (2026-11-16)
 
 1. F04/P7 composition: `ConversationJournalRouter` maps exact document/workspace

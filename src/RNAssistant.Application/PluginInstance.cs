@@ -72,11 +72,12 @@ namespace RNAssistant.Application
         internal Task CommandCompleted { get { return CommandOperation ? _commandCompleted.Task : Task.CompletedTask; } }
         internal void CompleteCommand() { _commandCompleted.TrySetResult(true); }
 
-        internal PluginInstance(AppDataPaths paths, PluginReleaseRecord release, bool preview, bool command = false, bool mayWrite = true)
+        internal PluginInstance(AppDataPaths paths, PluginReleaseRecord release, bool preview, bool command = false, bool mayWrite = true,
+            WorkspaceFileService files = null)
         {
             ResultOwnerId = Id; Release = release; Manifest = PluginPackageFiles.ParseManifest(release.ManifestJson);
             Preview = preview; CommandOperation = command; MayWrite = mayWrite;
-            _files = new WorkspaceFileService(paths);
+            _files = files ?? new WorkspaceFileService(paths);
             _stagingRoot = Path.Combine(paths.Root, "plugin-staging", Id);
             _runtimeUse = PluginStore.AcquireRuntimeUse(paths);
         }

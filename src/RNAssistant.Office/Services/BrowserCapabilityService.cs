@@ -26,8 +26,8 @@ namespace RNAssistant.Office.Services
             if (session == null || owner == null || owner.Kind != BrowserOwnerKind.Workspace ||
                 owner.ChatId != session.Id || owner.ScopeId != session.WorkspaceId)
                 throw new InvalidOperationException("Browser contribution requires the exact Workspace chat.");
-            var store = new ResourceAuthorityStore(_paths); var blobs = new ChatBlobStore(_paths);
-            var authority = new ResourceAuthorityService(store, store, new ResourceMutationJournal(_paths), blobs);
+            var store = new ResourceJournal(_paths); var blobs = new ChatBlobStore(_paths);
+            var authority = new ResourceAuthorityService(store, store, store, blobs);
             var gateway = new ResourceGatewayService(null, null, null, authority: authority, externalBrowser: _source);
             return new BrowserCapabilitySet {
                 ModelProjection = ModelToolResultProjection.Instance,

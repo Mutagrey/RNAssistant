@@ -26,7 +26,10 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         internal AppDataPaths StoragePaths { get { return _paths; } }
         private readonly SettingsService _settingsService;
-        private readonly ChatStore _chatStore;
+        private readonly ChatStore _legacyChatStore;
+        private readonly ChatBlobStore _payloads;
+        private readonly ConversationJournalRouter _conversationRouter;
+        private readonly DocumentArtifactStore _artifacts;
         private readonly ArtifactWorkingSetService _artifactWorkingSet;
         private readonly IConversationStore _conversationStore;
         private readonly IEventStore _eventStore;
@@ -39,7 +42,8 @@ namespace RNAssistant.Office
         private readonly ToolStore _toolStore;
         private readonly VbaJournalStore _vbaJournalStore;
         private readonly DocumentAuthorityRegistry _documentAuthorityRegistry;
-        private readonly ResourceAuthorityStore _resourceAuthorityStore;
+        private readonly ResourceJournal _resourceAuthorityStore;
+        private readonly WorkspaceFileService _workspaceFiles;
         private readonly ResourceDataPlaneService _resourceData;
         private readonly ResourceDataRouter _resourceDataRouter;
         public event EventHandler<ResourceAuthorityChangedEventArgs> ResourceAuthorityChanged
@@ -88,20 +92,27 @@ namespace RNAssistant.Office
             _paths = paths ?? AppDataPaths.CreateDefault();
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
-            _chatStore = new ChatStore(_paths, () => _settingsService.LoadStorageProtector());
-            _chatStore.PerformanceLog = RuntimeLog.Info;
-            _artifactWorkingSet = new ArtifactWorkingSetService(_chatStore.DocumentArtifacts, new ResourceMutationJournal(_paths));
-            _conversationStore = new ChatConversationStoreAdapter(_chatStore);
-            _eventStore = new ChatEventStoreAdapter(_chatStore);
+            Func<StorageProtector> protection = () => _settingsService.LoadStorageProtector();
+            // The legacy aggregate remains read-only maintenance input for retained
+            // old CAS. It is not used by any active conversation or resource writer.
+            _legacyChatStore = new ChatStore(_paths, protection);
+            _legacyChatStore.PerformanceLog = RuntimeLog.Info;
+            _payloads = new ChatBlobStore(_paths, protection);
+            _resourceAuthorityStore = new ResourceJournal(_paths, protection());
+            _documentAuthorityRegistry = new DocumentAuthorityRegistry(_paths);
+            _conversationRouter = new ConversationJournalRouter(_paths, ResolveConversationScope, protection());
+            _artifacts = new DocumentArtifactStore(_resourceAuthorityStore, _resourceAuthorityStore, _payloads);
+            _workspaceFiles = new WorkspaceFileService(_paths, _resourceAuthorityStore, _resourceAuthorityStore, _resourceAuthorityStore);
+            _artifactWorkingSet = new ArtifactWorkingSetService(_artifacts, _resourceAuthorityStore);
+            _conversationStore = _conversationRouter;
+            _eventStore = _conversationRouter;
             _inbox = ConversationInboxService.AcquireShared(_paths.Root, _eventStore);
             _modelTracePersistence = new ModelTracePersistenceService(_eventStore, RuntimeLog.Info);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
-            _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore, _chatStore.DocumentArtifacts);
+            _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore, _artifacts);
             _toolStore = new ToolStore(_paths);
             var skillStore = new SkillStore(_paths);
             _vbaJournalStore = new VbaJournalStore(_paths, () => _settingsService.LoadStorageProtector());
-            _documentAuthorityRegistry = new DocumentAuthorityRegistry(_paths);
-            _resourceAuthorityStore = new ResourceAuthorityStore(_paths);
             _toolExecutor = new OfficeToolExecutor(
                 _adapter,
                 _vbaJournalStore,
@@ -110,11 +121,13 @@ namespace RNAssistant.Office
                 () => _settingsService.Load(),
                 settings => _settingsService.Save(settings),
                 _paths,
-                _chatStore.LoadArtifactBody,
+                _conversationStore.LoadArtifactBody,
                 (attachment, maxChars) => _attachmentStore.ReadExtractedText(attachment, maxChars),
                 _resourceAuthorityStore,
                 (session, commit) => _conversationStore.Commit(session, commit),
-                attachment => _attachmentStore.ReadBytes(attachment));
+                attachment => _attachmentStore.ReadBytes(attachment),
+                _resourceAuthorityStore,
+                (session, context) => _conversationRouter.MutationOrigin(session, context));
             _toolExecutor.MigratePromptSchemaIfNeeded(
                 published => _settingsService.HasPromptMigrationEvidence(published),
                 () => _settingsService.Save(_settingsService.Load()));
@@ -133,7 +146,7 @@ namespace RNAssistant.Office
             _conversationApplication = new ConversationApplicationService(_inbox, _activeRuns);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,
-                _chatStore,
+                _legacyChatStore,
                 _vbaJournalStore,
                 () => _settingsService.LoadStorageProtector(),
                 _conversationLeases.AcquireMaintenance,
@@ -154,7 +167,7 @@ namespace RNAssistant.Office
             _chatHistoryEditService = new ChatHistoryEditService(
                 RemovePendingAgentToolsForSession,
                 (session, reason) => CancelPendingActivities(session, reason),
-                _chatStore.LoadArtifactBody);
+                _conversationStore.LoadArtifactBody);
             _llmClient = new LlmClient(
                 () => _settingsService.LoadApiKey(),
                 attachment => AttachmentImageService.ReadForModel(_attachmentStore, attachment),
@@ -221,6 +234,16 @@ namespace RNAssistant.Office
             _syncRoot = new object();
             _pendingAgentTools = new Dictionary<string, PendingAgentTool>(StringComparer.OrdinalIgnoreCase);
         }
+
+        private string ResolveConversationScope(string host, string documentKey)
+        {
+            if (!string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Conversation belongs to another Office host.");
+            return "document:" + _documentAuthorityRegistry.Resolve(host, _adapter.RuntimeDocumentKey,
+                _adapter.DocumentPath).Id;
+        }
+
+        internal WorkspaceFileService WorkspaceFiles { get { return _workspaceFiles; } }
 
         private void ConfigureModelTrace(LlmRequestOptions options, bool captureRaw)
         {
@@ -289,6 +312,7 @@ namespace RNAssistant.Office
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
                 ToolsPath = _paths.ToolsDirectory,
                 SkillsPath = _paths.SkillsDirectory,
+                HistoryStorageNotice = "История и ресурсные связи переведены на новый формат. Новые чаты начинаются с новой истории; прежние данные сохранены отдельно и не импортируются.",
                 QuickAction = DequeueQuickAction()
             };
             if (includeChatState) PopulateChatState(session, response, settings: settings);

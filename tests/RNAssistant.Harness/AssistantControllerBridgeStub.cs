@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
@@ -15,6 +16,7 @@ namespace RNAssistant.Office
     public sealed class AssistantController
     {
         internal IBrowserReadSource BrowserReadSource { get; private set; }
+        internal WorkspaceFileService WorkspaceFiles { get; private set; }
         internal void SetExternalBrowserReadSource(IBrowserReadSource source) { BrowserReadSource = source; }
         internal RNAssistant.Core.Storage.AppDataPaths StoragePaths { get; }
         internal IReadOnlyList<RNAssistant.Application.Conversations.ConversationActiveSnapshot> ActiveChatRuns()
@@ -33,7 +35,12 @@ namespace RNAssistant.Office
             throw new NotSupportedException("Office endpoint requires the real controller."); }
         internal bool StopActiveChatRun(string chatId, string runId) { return false; }
         public AssistantController() : this(RNAssistant.Core.Storage.AppDataPaths.CreateDefault()) { }
-        public AssistantController(RNAssistant.Core.Storage.AppDataPaths paths) { StoragePaths = paths; }
+        public AssistantController(RNAssistant.Core.Storage.AppDataPaths paths)
+        {
+            StoragePaths = paths;
+            var resources = new ResourceJournal(paths);
+            WorkspaceFiles = new WorkspaceFileService(paths, resources, resources, resources);
+        }
         internal event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
         public void PublishModelDiagnostics(LlmRequestDiagnosticUpdate update) { ModelRequestDiagnostics?.Invoke(update); }
         public Task InboxWorkersDrained { get { return Task.CompletedTask; } }

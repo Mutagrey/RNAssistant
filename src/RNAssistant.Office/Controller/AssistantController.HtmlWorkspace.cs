@@ -55,7 +55,7 @@ namespace RNAssistant.Office
             {
                 try
                 {
-                    return ChatDiagnosticsScope.ReadWorkspaceMetadata(_paths, _chatStore,
+                    return ChatDiagnosticsScope.ReadWorkspaceMetadata(_paths, _conversationStore,
                         workspaceId.Substring(diagnosticOwner.Length + 1), chatId) != null;
                 }
                 catch (Exception error) when (error is InvalidOperationException || error is ArgumentException ||
@@ -260,7 +260,7 @@ namespace RNAssistant.Office
         {
             if (!_chatSessions.IsCurrentDocument(session))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: open the document of this chat before editing HTML.");
-            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _artifacts);
             HtmlWorkspaceActionGuard.Validate(session, request);
         }
 
@@ -277,7 +277,7 @@ namespace RNAssistant.Office
 
         private HtmlWorkspaceResponse HtmlWorkspaceState(ChatSession session, bool redoChoiceRequired = false)
         {
-            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _artifacts);
             int messageStartIndex;
             var visibleMessages = ChatCloneService.CloneRecentMessagesForBridge(session, out messageStartIndex);
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, visibleMessages);

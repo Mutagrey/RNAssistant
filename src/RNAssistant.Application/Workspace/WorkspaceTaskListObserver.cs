@@ -32,7 +32,12 @@ namespace RNAssistant.Runtime
         {
             _session = session; _chats = chats; _payloads = payloads;
             if ((authority == null) != (journal == null)) throw new ArgumentException("Resource authority and mutation journal must be supplied together.");
-            _authority = authority ?? new ResourceAuthorityStore(paths); _journal = journal ?? new ResourceMutationJournal(paths);
+            if (authority == null)
+            {
+                var resources = new ResourceJournal(paths);
+                authority = resources; journal = resources;
+            }
+            _authority = authority; _journal = journal;
             _revisions = _authority as IResourceRevisionStore ?? throw new ArgumentException("Task-list authority must retain its revisions.");
             _origin = origin;
         }

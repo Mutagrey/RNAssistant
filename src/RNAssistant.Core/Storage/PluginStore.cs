@@ -29,10 +29,16 @@ namespace RNAssistant.Core.Storage
                 (conversations == null || authority == null || mutations == null || files == null || payloads == null))
                 throw new ArgumentException("Plugins require the complete conversation/file/resource composition.");
             _paths = paths; _conversations = conversations;
-            _authority = authority ?? new ResourceAuthorityStore(paths);
+            if (authority == null)
+            {
+                var resources = new ResourceJournal(paths);
+                authority = resources; mutations = resources;
+                files = new WorkspaceFileService(paths, resources, resources, resources);
+            }
+            _authority = authority;
             _revisions = _authority as IResourceRevisionStore ?? throw new ArgumentException("The resource owner must retain revisions.");
             _blobs = payloads ?? new ChatBlobStore(paths); _files = files ?? new WorkspaceFileService(paths);
-            _journal = mutations ?? new ResourceMutationJournal(paths);
+            _journal = mutations;
         }
 
         // A transient OS lease, not another registry. It protects retained plugin
@@ -246,8 +252,10 @@ namespace RNAssistant.Core.Storage
 
         public byte[] ReadFile(PluginReleaseRecord release, string path)
         {
-            var file = release.Files.SingleOrDefault(item => item.Path == path);
-            if (file == null) throw new PluginException("package_file_missing", "File is outside the captured package.");
+            var file = release.Files.SingleOrDefault(item => string.Equals(item.Path, path, StringComparison.Ordinal));
+            if (file == null)
+                file = release.Files.SingleOrDefault(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+            if (file == null) throw new PluginException("package_file_missing", "File is not in the captured package: " + path);
             return _blobs.ReadBytes(file.Payload.ToBlobReference()) ?? throw new PluginException("plugin_release_invalid", "Captured package file is unavailable.");
         }
 

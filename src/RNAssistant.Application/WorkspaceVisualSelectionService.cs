@@ -8,7 +8,8 @@ namespace RNAssistant.Application
     // Source validation shared by staging, chat intake and retained presentation.
     public static class WorkspaceVisualSelectionService
     {
-        public static ResourceRef RequireSource(AppDataPaths paths, WorkspaceDescriptor workspace, ChatAttachment attachment)
+        public static ResourceRef RequireSource(AppDataPaths paths, WorkspaceDescriptor workspace, ChatAttachment attachment,
+            WorkspaceFileService files = null)
         {
             var source = attachment?.VisualSelectionSource;
             ResourceAddress address;
@@ -25,7 +26,7 @@ namespace RNAssistant.Application
                     throw new InvalidOperationException("Аннотация принадлежит другому workspace.");
             } else if (address.Provider == "file" && page != null) {
                 // A newer working file cannot replace the captured source.
-                new WorkspaceFileService(paths).DescribeExactSource(workspace, page.Path, source);
+                (files ?? new WorkspaceFileService(paths)).DescribeExactSource(workspace, page.Path, source);
             } else throw new InvalidOperationException("Источник аннотации не поддерживается.");
             return source;
         }

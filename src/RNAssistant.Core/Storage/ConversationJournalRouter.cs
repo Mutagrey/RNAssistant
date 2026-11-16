@@ -234,6 +234,9 @@ namespace RNAssistant.Core.Storage
         public bool PrepareInterruptedRunRecovery(ChatSession session, string runId)
         { return Conversations(For(session)).PrepareInterruptedRunRecovery(session, runId); }
 
+        internal ResourceMutationOrigin MutationOrigin(ChatSession session, ToolExecutionContext context)
+        { return For(session).MutationOrigin(session, context); }
+
         public bool RetainedReplayGuards { get { return true; } }
         public bool AtomicAgentDelivery { get { return true; } }
 

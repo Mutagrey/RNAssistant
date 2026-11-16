@@ -21,7 +21,7 @@ namespace RNAssistant.Application
     {
         internal const string ToolId = "html.project.register";
         internal const string SchemaJson =
-            "{\"type\":\"object\",\"properties\":{\"entryPath\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":1024},\"members\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":512,\"uniqueItems\":true,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":1024}}},\"required\":[\"entryPath\",\"members\"],\"additionalProperties\":false}";
+            "{\"type\":\"object\",\"properties\":{\"entryPath\":{\"type\":\"string\",\"description\":\"Workspace-relative HTML entry file for the project definition.\",\"minLength\":1,\"maxLength\":1024},\"members\":{\"type\":\"array\",\"description\":\"Workspace-relative HTML, CSS, JavaScript and data files owned by the project.\",\"minItems\":1,\"maxItems\":512,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":1024}}},\"required\":[\"entryPath\",\"members\"],\"additionalProperties\":false}";
         private readonly WorkspaceDescriptor _workspace;
         private readonly string _chatId;
         private readonly WorkspaceHtmlVersionService _html;

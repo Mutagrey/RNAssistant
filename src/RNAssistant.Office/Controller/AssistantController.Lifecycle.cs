@@ -17,7 +17,7 @@ namespace RNAssistant.Office
                 _paths.ClearRuntimeData();
                 _resourceAuthorityStore.ResetAfterRuntimeDataClear();
                 _documentAuthorityRegistry.ResetAfterRuntimeDataClear();
-                _chatStore.ResetAfterRuntimeDataClear();
+                _legacyChatStore.ResetAfterRuntimeDataClear();
                 _chatSessions.Reset();
                 lock (_syncRoot) _pendingAgentTools.Clear();
             }

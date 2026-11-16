@@ -61,7 +61,7 @@ namespace RNAssistant.Runtime
                                 var current = _workspaces.LoadSession(_conversationStore, workspace, sessionId);
                                 if (!ChatTitleBuilder.CanReplaceAutoTitle(current, draft)) return;
                                 if (string.Equals(current.Title, title, StringComparison.Ordinal)) return;
-                                _chats.SetTitle(current, title);
+                                _conversationStore.SetTitle(current, title);
                                 progress?.Invoke(new WorkspaceRunEvent("TitleChanged", summary, null,
                                     ConversationEventFeed.Cursor(current)));
                                 return;

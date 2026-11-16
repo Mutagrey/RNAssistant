@@ -36,7 +36,7 @@ namespace RNAssistant.Runtime
                         !string.Equals(draft.ContentType, "application/json", StringComparison.OrdinalIgnoreCase) ||
                         draft.Size < 1 || draft.Size > HtmlVisualSelectionPolicy.MaximumBodyBytes)
                         throw new InvalidOperationException("Выделение HTML недействительно. Выберите элемент заново.");
-                    RNAssistant.Application.WorkspaceVisualSelectionService.RequireSource(_paths, workspace, draft);
+                    RNAssistant.Application.WorkspaceVisualSelectionService.RequireSource(_paths, workspace, draft, _files);
                     HtmlVisualSelectionPolicy.ReadCapturedBody(attachments.ReadBytes(draft));
                 }
             }

@@ -50,8 +50,8 @@ namespace RNAssistant.Office.Services
             _estimationSettings = estimationSettings;
             _payloads = payloads ?? new ChatBlobStore(paths);
             _eventStore = eventStore;
-            var store = authority == null ? new ResourceAuthorityStore(paths) : null;
-            _authority = authority ?? new ResourceAuthorityService(store, store, new ResourceMutationJournal(paths), _payloads);
+            var store = authority == null ? new ResourceJournal(paths) : null;
+            _authority = authority ?? new ResourceAuthorityService(store, store, store, _payloads);
         }
 
         public PromptContextInspectorResponse Inspect(

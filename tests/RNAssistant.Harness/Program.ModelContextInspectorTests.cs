@@ -226,10 +226,10 @@ namespace RNAssistant.Harness
                     "application/json", "run", "turn", "step");
                 var foreignEvent = chats.AppendTrace(foreign, SessionEventTypes.LlmRequest,
                     new LlmTraceRecord { RequestId = "shared-id" }, "{}", "application/json", "run", "turn", "step");
-                var loaded = ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, session.Id);
+                var loaded = ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, ConversationStore(chats), workspace.WorkspaceId, session.Id);
                 AssertTrue(!((object)loaded is ChatSession), "workspace diagnostics return metadata without a writable history");
-                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, other.WorkspaceId, session.Id));
-                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, ""));
+                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, ConversationStore(chats), other.WorkspaceId, session.Id));
+                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, ConversationStore(chats), workspace.WorkspaceId, ""));
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var eventStore = new ChatEventStoreAdapter(chats);
@@ -275,10 +275,10 @@ namespace RNAssistant.Harness
                     AssertEqual(version, chats.Load(session.Id).Revision, "diagnostic reads do not change history");
                 }
                 System.IO.Directory.Delete(workspace.RootPath, true);
-                AssertEqual(session.Id, ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, session.Id).Id,
+                AssertEqual(session.Id, ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, ConversationStore(chats), workspace.WorkspaceId, session.Id).Id,
                     "saved exchange remains readable while the source folder is unavailable");
                 workspaces.HideProject(workspace.WorkspaceId);
-                RuntimeThrows<System.IO.InvalidDataException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, chats, workspace.WorkspaceId, session.Id));
+                RuntimeThrows<System.IO.InvalidDataException>(() => ChatDiagnosticsScope.ReadWorkspaceMetadata(paths, ConversationStore(chats), workspace.WorkspaceId, session.Id));
             });
         }
 

@@ -1,4 +1,27 @@
 # Session event stream
+## Storage-v2 production composition — 2026-11-16
+
+Office, Workspace and plugin application roots now use the same production
+composition: `ConversationJournalRouter` for conversation/event ports,
+`ResourceJournal` for authority/revision/mutation ports, one `DocumentArtifactStore`,
+`WorkspaceFileService` and `ChatBlobStore`. Groups, Plan/Task observers, HTML
+versions, vendor packages, plugin registrations/results, attachments, workspace
+files and run recovery receive those existing owners explicitly. The active writers
+no longer construct `ChatStore`, `ChatConversationStoreAdapter` or
+`ChatEventStoreAdapter`.
+
+A retained `ChatStore` instance is read-only maintenance input used to inventory CAS
+references for the preserved legacy generation. It performs no active chat/resource
+write. On a load interrupted by a concurrent metadata revision, the journal retries a
+consistent full read a bounded two times rather than returning a mixed projection.
+
+The new generation starts with empty history. Legacy chat and resource JSONL, CAS,
+settings, keys, tools, skills, workspace associations and documents remain untouched
+and are not imported. Initial UI state identifies this reset. Real Windows x64,
+Office x64, DPAPI and WebView2 behavior, writer quiescence across old processes,
+power-loss durability and full mixed-generation application restore remain release
+qualification gates.
+
 ## Isolated storage-v2 root — 2026-11-16
 
 Canonical `ConversationJournal`, `ResourceJournal`, `StorageJournal` inventory and
@@ -9,10 +32,8 @@ chat and resource JSONL files remain untouched and are neither imported nor read
 the new owner. Immutable CAS, settings, keys and identity owners remain with their
 current owners until the combined production composition switch.
 
-This is a P7 prerequisite, not a default-writer cutover. Office and Workspace still
-construct the retiring `ChatStore`/resource adapters. Global scope routing, combined
-writer switch, mixed-generation application backup and Windows/Office evidence
-remain open.
+The root is now the default writer target. A read-only legacy CAS inventory remains;
+mixed-generation application backup and Windows/Office evidence remain open.
 
 ## Scope-routed journal composition — 2026-11-16
 
@@ -27,8 +48,8 @@ Missing index recovery scans canonical stream headers once before rebuilding the
 single disposable index. Unknown chats do not inherit another scope or create a
 journal. Actual `ChatSessionService` and `WorkspaceStore` consumers pass across
 three scopes, addressed restart/index-loss recovery and host/key mismatch refusal.
-Production Office/Workspace roots are still composed on the retiring adapters; the
-combined cutover and Windows/Office evidence remain open.
+Production roots now use this router. Windows/Office evidence and cross-process old
+writer quiescence remain open.
 
 ## Retained model attempts — 2026-11-14
 

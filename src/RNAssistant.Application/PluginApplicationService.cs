@@ -30,7 +30,7 @@ namespace RNAssistant.Application
         private readonly IWorkspaceWebVerifierFactory _webHost;
         private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
         private readonly IBrowserCapabilityContribution _browserCapabilities;
-        private readonly PluginStore _store;
+        private PluginStore _store;
         private readonly PluginIconLibrary _icons;
         private readonly WorkspaceStore _workspaces;
         private readonly object _sync = new object();
@@ -42,6 +42,10 @@ namespace RNAssistant.Application
         private bool _disposed;
         private Task _closing;
         private readonly PluginResultStore _results;
+        private readonly WorkspaceFileService _files;
+        private readonly ResourceJournal _resources;
+        private readonly ResourceJournal _mutations;
+        private readonly ChatBlobStore _payloads;
         private sealed class Candidate
         {
             public PluginReleaseRecord Package;
@@ -62,13 +66,15 @@ namespace RNAssistant.Application
             _paths = paths; _webRoot = webRoot; _webHost = webHost; _officeCapabilities = officeCapabilities;
             _browserCapabilities = browserCapabilities;
             _icons = new PluginIconLibrary(paths); _workspaces = new WorkspaceStore(paths);
-            Vendors = new VendorCatalog(paths, webRoot); _results = new PluginResultStore(paths);
             Conversations = new WorkspaceConversationService(paths, webHost, CaptureTools, officeCapabilities,
                 () => PluginStore.AcquireRuntimeUse(paths), IsPluginSourceWorkspace, browserCapabilities: browserCapabilities);
-            var resources = new ResourceAuthorityStore(paths); var mutations = new ResourceMutationJournal(paths);
-            var files = new WorkspaceFileService(paths, resources, resources, mutations);
-            _store = new PluginStore(paths, Conversations.ConversationStore, resources, mutations, files, new ChatBlobStore(paths));
-            HtmlProjects = new WorkspaceHtmlVersionService(paths, Conversations.ConversationStore, files, resources, mutations);
+            _resources = (ResourceJournal)Conversations.ResourceAuthority;
+            _mutations = (ResourceJournal)Conversations.ResourceMutations;
+            _files = Conversations.WorkspaceFiles; _payloads = Conversations.Payloads;
+            Vendors = new VendorCatalog(paths, webRoot, _resources, _resources, _payloads);
+            _results = new PluginResultStore(paths, _files);
+            _store = new PluginStore(paths, Conversations.ConversationStore, _resources, _mutations, _files, _payloads);
+            HtmlProjects = new WorkspaceHtmlVersionService(paths, Conversations.ConversationStore, _files, _resources, _mutations);
             HtmlProjects.VersionChanged += value => VersionChanged?.Invoke(value);
         }
 
@@ -197,6 +203,8 @@ namespace RNAssistant.Application
                 Conversations.Dispose();
                 Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
                     () => PluginStore.AcquireRuntimeUse(_paths), IsPluginSourceWorkspace, browserCapabilities: _browserCapabilities);
+                _store = new PluginStore(_paths, Conversations.ConversationStore, _resources, _mutations, _files, _payloads);
+                HtmlProjects = new WorkspaceHtmlVersionService(_paths, Conversations.ConversationStore, _files, _resources, _mutations);
             }
         }
         public PluginItemDto Connect(PluginConnectRequest request)
@@ -235,7 +243,7 @@ namespace RNAssistant.Application
                     !System.Text.RegularExpressions.Regex.IsMatch(chosenIcon, "^[A-Za-z][A-Za-z0-9_-]{0,63}$"))
                     throw new PluginException("plugin_icon_invalid", "Choose a built-in or saved icon.");
                 var workspace = _workspaces.Open(rootPath, true, true);
-                var files = new WorkspaceFileService(_paths);
+                var files = _files;
                 var manifest = new PluginManifestV1 { FormatVersion = 1, HostProtocol = 1, Id = "plugin-" + Guid.NewGuid().ToString("N"),
                     Name = request.Name, Version = "1.0.0", Entry = "index.html", Icon = savedIcon == null ? chosenIcon == "draw" ? "puzzle" : chosenIcon : "icon.svg",
                     Files = savedIcon == null ? new[] { "plugin.json", "index.html", "app.js", "style.css", "commands.js", "README.md" } :
@@ -414,7 +422,7 @@ namespace RNAssistant.Application
                     _store.ReadRelease(new PluginReleaseIdentity(request.PluginId, registration.ActiveReleaseId));
                 if (release.SourceWorkspaceId != registration.SourceWorkspaceId)
                     throw new PluginException("plugin_selection_changed", "Версия принадлежит другому workspace.");
-                var instance = new PluginInstance(_paths, release, preview) { Results = _results,
+                var instance = new PluginInstance(_paths, release, preview, files: _files) { Results = _results,
                     SavedVersionId = !string.IsNullOrEmpty(request.CandidateId) ? null : request.VersionId ?? registration.ActiveSavedVersionId }; _instances.Add(instance.Id, instance);
                 return new PluginViewDto { InstanceId = instance.Id, PluginId = request.PluginId,
                     ReleaseId = release.ReleaseId, Preview = preview, EntryUrl = instance.EntryUrl };
@@ -574,7 +582,7 @@ namespace RNAssistant.Application
             var command = context.Manifest.Commands.SingleOrDefault(value => value.Id == commandId);
             if (command == null) throw new PluginException("plugin_command_missing", "Command is not part of this exact plugin package.");
             ValidateJson(argumentsJson, command.ArgumentsSchema);
-            var operation = new PluginInstance(_paths, context.Release, context.Preview, true, command.WritesData) { OnDispatch = onDispatch, Results = _results, ResultOwnerId = context.ResultOwnerId, SavedVersionId = context.SavedVersionId };
+            var operation = new PluginInstance(_paths, context.Release, context.Preview, true, command.WritesData, _files) { OnDispatch = onDispatch, Results = _results, ResultOwnerId = context.ResultOwnerId, SavedVersionId = context.SavedVersionId };
             if (context.Data != null) { await operation.BindAsync(context.Data).ConfigureAwait(false); await operation.InheritSourcesAsync(context).ConfigureAwait(false); }
             var tracked = false;
             try
@@ -731,7 +739,7 @@ namespace RNAssistant.Application
                     ResourceRef source = null;
                     string releaseId = null;
                     try {
-                        source = WorkspaceVisualSelectionService.RequireSource(_paths, workspace, item);
+                        source = WorkspaceVisualSelectionService.RequireSource(_paths, workspace, item, _files);
                         var address = ResourceUri.Parse(source.Uri);
                         if (address.Provider == "plugin") releaseId = address.Segments[2];
                     } catch (InvalidOperationException) { }

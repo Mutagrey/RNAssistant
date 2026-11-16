@@ -188,6 +188,14 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+Storage-v2 production cutover (2026-11-16, `17.0.0-dev`): Office, Workspace and
+plugin active roots use ConversationJournalRouter plus ResourceJournal for Store,
+event, group, resource, file, HTML, vendor, plugin and run ports. Active adapter/
+ChatStore constructors were removed; one ChatStore remains read-only for legacy CAS
+inventory. Existing generation is preserved without import or dual-write. Remaining
+gates are Windows x64/Office x64/WebView2/DPAPI, power loss, quiescence of already
+running old binaries and full mixed-generation application restore.
+
 Storage-v2 root isolation (2026-11-16): new canonical journals, resource lock
 namespace and the disposable index use `storage-v2`; a create-only generation
 marker identifies the root. Legacy `chats/` and `resource-authority/*.jsonl` remain

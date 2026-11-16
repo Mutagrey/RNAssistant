@@ -37,7 +37,7 @@ namespace RNAssistant.Office
 
         private ArtifactCatalogService ArtifactCatalog()
         {
-            return new ArtifactCatalogService(_documentAuthorityRegistry, _chatStore.DocumentArtifacts,
+            return new ArtifactCatalogService(_documentAuthorityRegistry, _artifacts,
                 _artifactWorkingSet, _resourceAuthorityStore, _toolExecutor.Payloads);
         }
 
@@ -75,7 +75,7 @@ namespace RNAssistant.Office
                 var artifact = _resourceData.ConsumeUpload(ConversationMetadata.From(session), request.UploadLeaseId, ArtifactCatalogService.Owner,
                     (bytes, name, type) => {
                         token.ThrowIfCancellationRequested();
-                        using (new ResourceMutationJournal(_paths).AcquireScope(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId))))
+                        using (_resourceAuthorityStore.AcquireScope(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId))))
                             return ArtifactCatalog().Import(session, bytes, name, type, request.OperationId);
                     }, token);
                 AttachTransferredArtifact(session, artifact);
@@ -90,7 +90,7 @@ namespace RNAssistant.Office
                 var source = ArtifactCatalog().Export(session, request);
                 token.ThrowIfCancellationRequested();
                 ChatArtifact artifact;
-                using (new ResourceMutationJournal(_paths).AcquireScope(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId))))
+                using (_resourceAuthorityStore.AcquireScope(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId))))
                     artifact = ArtifactCatalog().Import(session, source.Bytes, source.FileName, source.ContentType, request.OperationId, source.Origin);
                 AttachTransferredArtifact(session, artifact);
             });
@@ -166,7 +166,7 @@ namespace RNAssistant.Office
             var session = LoadArtifactViewerSession(request.ChatId);
             return new RunChangesService(
                 artifact => RunChangesService.ReadRetainedSource(session, artifact,
-                    _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
+                    _conversationStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
                 id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id,
                     RunChangesService.MaximumSourceCharacters), _toolExecutor.ResourceGateway.Authority)
@@ -178,7 +178,7 @@ namespace RNAssistant.Office
             if (request == null) throw new ArgumentNullException(nameof(request));
             var session = LoadArtifactViewerSession(request.ChatId);
             var changes = new RunChangesService(
-                artifact => RunChangesService.ReadRetainedSource(session, artifact, _chatStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
+                artifact => RunChangesService.ReadRetainedSource(session, artifact, _conversationStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
                 id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id, RunChangesService.MaximumSourceCharacters),
                 _toolExecutor.ResourceGateway.Authority);

@@ -61,8 +61,9 @@ Office/application restore qualification.
 abort. A second-process publication and a live scope run both block collection.
 Index repair has its separate short admission and need not drain live runs.
 
-Internal `BackupJournals`/`RestoreJournals` are exercised only on isolated new roots
-until P7. Backup refuses mixed legacy roots; it copies every verified canonical
+`BackupJournals`/`RestoreJournals` operate on the new canonical root while the active
+runtime uses storage-v2. Backup still refuses mixed legacy roots because a complete
+application backup of both generations is not yet defined; it copies every verified canonical
 segment and complete CAS closure, plus existing settings, salt and DPAPI-protected
 key files and the identity owners below. It does not include SQLite, orphans,
 locks or optional diagnostics.

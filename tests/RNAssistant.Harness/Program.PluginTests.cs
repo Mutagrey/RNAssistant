@@ -692,13 +692,15 @@ namespace RNAssistant.Harness
                     var root = Path.Combine(paths.Root, "upload-project"); Directory.CreateDirectory(root);
                     var workspaceId = service.ConnectProjectWorkspace(new ProjectConnectionRequest { RootPath = root }).SelectedWorkspaceId;
                     var sessionId = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId }).SessionId;
-                    var chats = new ChatStore(paths);
+                    var chats = service.Conversations.ConversationStore;
                     var session = chats.Load(sessionId);
                     var projectFiles = Directory.GetFiles(root, "*", SearchOption.AllDirectories);
                     var original = new string('a', 127) + "😀" + new string('b', 1024 * 1024) + "EXACT-TAIL";
                     var bytes = Encoding.UTF8.GetBytes(original);
                     var attachments = new AttachmentStore(paths);
-                    var ingestion = new RNAssistant.Office.Services.ChatResourceIngestionService(attachments, chats.DocumentArtifacts);
+                    var artifacts = new DocumentArtifactStore(service.Conversations.ResourceAuthority,
+                        service.Conversations.ResourceRevisions, service.Conversations.Payloads);
+                    var ingestion = new RNAssistant.Office.Services.ChatResourceIngestionService(attachments, artifacts);
                     ChatAttachment draft;
                     using (var data = new RNAssistant.Office.Services.ResourceDataPlaneService(
                         new RNAssistant.Office.Services.ResourceGatewayService(), (chat, owner) =>
@@ -760,6 +762,7 @@ namespace RNAssistant.Harness
                         tail.Evidence.Single().Immutable, "bounded continuation reads the committed tail with immutable evidence");
                     user.ResourceRefs.Clear();
                     RuntimeThrows<ResourceRequestException>(() => provider.Read(target, 128));
+                    service.CloseAsync().GetAwaiter().GetResult();
                 }
             });
         }
@@ -809,6 +812,9 @@ namespace RNAssistant.Harness
                     var instance = service.FindInstance(new Uri(historicalView.EntryUrl).GetLeftPart(UriPartial.Authority));
                     AssertEqual(original, Encoding.UTF8.GetString(service.ReadPackageFile(instance, "app.js")),
                         "historical preview serves frozen package bytes");
+                    AssertEqual(original, Encoding.UTF8.GetString(service.ReadPackageFile(instance, "APP.JS")),
+                        "package requests resolve Windows-style member casing to captured bytes");
+                    PluginFailure(() => service.ReadPackageFile(instance, "favicon.ico"), "package_file_missing");
                     service.CloseInstanceAsync(historicalView.InstanceId).GetAwaiter().GetResult();
                     SavedFailure(() => service.ActivateSavedVersion(new PluginActivateRequest { PluginId = item.PluginId,
                         VersionId = firstVersion, ExpectedActiveReleaseId = "stale", OperationId = "stale" }), "version_active_changed");
@@ -965,7 +971,7 @@ namespace RNAssistant.Harness
                     var session = service.Conversations.GetSession(workspace, firstId);
                     var message = new ChatMessage { Role = "user", Content = "Первое обсуждение плагина" };
                     session.Messages.Add(message);
-                    new ChatStore(paths).Commit(session, ConversationCommit.UserInput(message));
+                    service.Conversations.ConversationStore.Commit(session, ConversationCommit.UserInput(message));
                     var second = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId, Title = "Второе обсуждение" });
                     secondId = second.SessionId;
                     AssertTrue(firstId != secondId && second.Messages.Count == 0, "new chat has a distinct identity and empty history");
@@ -973,6 +979,12 @@ namespace RNAssistant.Harness
                     AssertEqual(item.PluginId, project.PluginId, "common tree links source chats back to their plugin");
                     AssertEqual(item.Name, project.Name, "common tree labels source history with the plugin name");
                     AssertEqual(2, project.Chats.Count, "both conversations appear in the main tree");
+                    AssertTrue(!Directory.EnumerateFiles(paths.ChatDirectory, "*.jsonl", SearchOption.AllDirectories).Any(),
+                        "production plugin composition writes no legacy chat stream");
+                    AssertTrue(!Directory.EnumerateFiles(paths.ResourceAuthorityDirectory, "*.jsonl", SearchOption.AllDirectories).Any(),
+                        "production plugin composition writes no legacy resource stream");
+                    AssertTrue(Directory.EnumerateFiles(paths.JournalConversationDirectory, "*.jsonl", SearchOption.AllDirectories).Any(),
+                        "source chats use the storage-v2 conversation journal");
                     AssertEqual(message.Content, service.ProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId,
                         SessionId = firstId }).Messages.Single().Content, "creating another chat preserves the first history");
                     AssertEqual(message.Id, service.ProjectChatSessionForPresentation(item.SourceWorkspaceId, firstId)
@@ -1021,7 +1033,7 @@ namespace RNAssistant.Harness
                         System.Text.Encoding.UTF8.GetBytes("Точное вложение"), source.SessionId));
                     attachmentStore.CommitToCas(first);
                     ChatMessageAttachmentService.Link(session, first);
-                    var store = new ChatStore(paths);
+                    var store = service.Conversations.ConversationStore;
                     store.Commit(session, ConversationCommit.UserInput(first));
                     var second = new ChatMessage { Role = "user", Content = "Будущий шаг" };
                     session.Messages.Add(second);
@@ -1065,10 +1077,11 @@ namespace RNAssistant.Harness
                     AssertTrue(service.Conversations.GetTaskList(taskChild).Available,
                         "production Workspace consumer publishes the child's task authority after durable read-back");
                     taskChild = service.Conversations.DeleteMessage(workspace, taskChild.Id, taskChild.Messages.Last().Id);
-                    var authority = new ResourceAuthorityStore(paths);
+                    var authority = service.Conversations.ResourceAuthority;
                     AssertEqual(HeadKnowledge.Unavailable, authority.GetHead(TaskListPublication.Scope(taskChild),
                         TaskListPublication.Identity(taskChild)).Knowledge, "public delete resets Task authority with history");
-                    PublishWorkspaceTask(paths, new ChatConversationStoreAdapter(store), taskChild);
+                    PublishWorkspaceTask(paths, store, taskChild, authority,
+                        service.Conversations.ResourceMutations);
                     AssertTrue(service.Conversations.GetTaskList(taskChild).Available, "Tasks remain editable after public deletion");
                 }
             });
@@ -1600,7 +1613,7 @@ namespace RNAssistant.Harness
                 var workspace=new WorkspaceStore(paths).Open(item.SourceRoot,false,true);
                 var session = service.Conversations.CreateSession(workspace, "Version tools");
                 session.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn", Status = "running" };
-                new ChatStore(paths).Save(session);
+                service.Conversations.ConversationStore.Commit(session, new ConversationCommit());
                 var registry = new ToolHandlerRegistry();
                 foreach (var tool in service.CaptureTools(workspace, session)) registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(tool.Entry.Id,
                     tool.Entry.Description, tool.Entry.ArgumentSchemaJson), tool.Entry.Policy, tool.Entry.Binding), tool.Handler);

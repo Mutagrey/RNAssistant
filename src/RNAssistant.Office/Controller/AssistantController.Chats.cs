@@ -24,7 +24,7 @@ namespace RNAssistant.Office
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             var session = workspaceId == null ? _chatSessions.LoadDiagnosticsMetadata(chatId) :
-                ChatDiagnosticsScope.ReadWorkspaceMetadata(_paths, _chatStore, workspaceId, chatId);
+                ChatDiagnosticsScope.ReadWorkspaceMetadata(_paths, _conversationStore, workspaceId, chatId);
             ChatDiagnosticsScope.Require(session, chatId, workspaceId);
             return session;
         }
@@ -335,8 +335,6 @@ namespace RNAssistant.Office
             var timer = Stopwatch.StartNew();
             EnsureStartupRecovery();
             var recoveryMs = timer.ElapsedMilliseconds;
-            var fullReplays = _chatStore.HeaderFullReplayCount;
-            var incrementalReplays = _chatStore.HeaderIncrementalReplayCount;
             string activeId;
             var chats = _chatSessions.GetChatCatalogForOfficeState(out activeId);
             var response = new ChatCatalogResponse { ActiveChatId = activeId,
@@ -346,8 +344,6 @@ namespace RNAssistant.Office
                     "Chat catalog timing: recovery=" + recoveryMs + "ms, catalog=" +
                     (timer.ElapsedMilliseconds - recoveryMs) + "ms, chats=" +
                     (response.Chats == null ? 0 : response.Chats.Count) +
-                    ", headerFullReplays=" + (_chatStore.HeaderFullReplayCount - fullReplays) +
-                    ", headerIncrementalReplays=" + (_chatStore.HeaderIncrementalReplayCount - incrementalReplays) +
                     ", casRefs=" + (response.Chats == null ? 0 : response.Chats.Sum(item => item.CasBlobCount)) + ".");
             return response;
         }
@@ -793,7 +789,7 @@ namespace RNAssistant.Office
         private void PopulateChatState(ChatSession session, ChatStateResponse response,
             bool includeCatalog = true, AppSettings settings = null)
         {
-            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _chatStore.DocumentArtifacts);
+            HtmlWorkspaceEditorResourceService.RefreshSelected(session, _artifacts);
             var timer = Stopwatch.StartNew();
             var activeId = session.Id;
             int messageStartIndex;

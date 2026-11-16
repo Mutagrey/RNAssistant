@@ -21,7 +21,8 @@ namespace RNAssistant.Core.Storage
     {
         private readonly string _directory, _webRoot;
         private readonly AppDataPaths _paths;
-        private readonly ResourceAuthorityStore _authority;
+        private readonly IResourceAuthorityStore _authority;
+        private readonly IResourceRevisionStore _revisions;
         private readonly ChatBlobStore _blobs;
         private static readonly ResourceAuthorityScopeId Scope = new ResourceAuthorityScopeId("vendors", "local");
         private sealed class Supply
@@ -48,7 +49,18 @@ namespace RNAssistant.Core.Storage
         {
             _paths = paths;
             _directory = Path.Combine(paths.Root, "vendors"); _webRoot = webRoot;
-            _authority = new ResourceAuthorityStore(paths); _blobs = new ChatBlobStore(paths);
+            var authority = new ResourceJournal(paths);
+            _authority = authority; _revisions = authority; _blobs = new ChatBlobStore(paths);
+        }
+
+        internal VendorCatalog(AppDataPaths paths, string webRoot, IResourceAuthorityStore authority,
+            IResourceRevisionStore revisions, ChatBlobStore blobs)
+        {
+            _paths = paths;
+            _directory = Path.Combine(paths.Root, "vendors"); _webRoot = webRoot;
+            _authority = authority ?? throw new ArgumentNullException(nameof(authority));
+            _revisions = revisions ?? throw new ArgumentNullException(nameof(revisions));
+            _blobs = blobs ?? throw new ArgumentNullException(nameof(blobs));
         }
 
         public IReadOnlyList<VendorManifestV1> List()
@@ -183,15 +195,15 @@ namespace RNAssistant.Core.Storage
         private void PinVersion(string id, string version, string digest)
         {
             var reference = new ResourceRef(ResourceUri.Create("vendor", id, "version", version), "1");
-            var current = _authority.GetRevision(Scope, reference);
+            var current = _revisions.GetRevision(Scope, reference);
             if (current != null)
             {
                 if (_blobs.ReadText(current.Payload.ToBlobReference()) != digest) throw new PluginException("vendor_version_changed", "An observed vendor version changed. Publish a new version.");
                 return;
             }
             var payload = PayloadRef.FromBlob(_blobs.StoreText(digest, "text/plain"));
-            _authority.RegisterRevision(Scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload));
-            _authority.RegisterView(Scope, new ResourceRevisionView(reference, "vendor-identity", payload.Sha256, payload, ResourceCoverage.Whole()));
+            _revisions.RegisterRevision(Scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload));
+            _revisions.RegisterView(Scope, new ResourceRevisionView(reference, "vendor-identity", payload.Sha256, payload, ResourceCoverage.Whole()));
             var frozen = _authority.Capture(Scope);
             _authority.Publish(ResourceAuthorityCommit.Create(Scope, frozen.Generation, null,
                 new[] { new ResourceHeadChange(reference.Identity, frozen.GetHead(reference.Identity), ResourceHeadState.Known(reference, frozen.Generation + 1, "vendor-identity")) },

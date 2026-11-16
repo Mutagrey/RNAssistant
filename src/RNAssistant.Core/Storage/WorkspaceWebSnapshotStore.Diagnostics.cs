@@ -44,7 +44,7 @@ namespace RNAssistant.Core.Storage
             var item = record.Diagnostics.SingleOrDefault(value => value.Kind == kind);
             if (item == null || item.State != WebDiagnosticState.Captured)
                 throw Unavailable(item?.Error ?? "This verification has no recorded diagnostic of this kind.");
-            var view = _authority.GetView(Scope(workspace), verification, item.View);
+            var view = _revisions.GetView(Scope(workspace), verification, item.View);
             if (view?.Coverage?.Kind != ResourceCoverageKinds.Whole || view.Parts.Count != 0 ||
                 !SamePayload(view.Payload, item.Payload) || view.ContentSha256 != item.Payload.Sha256)
                 throw Unavailable("Exact browser diagnostic view is unavailable or mismatched.");

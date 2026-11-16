@@ -43,7 +43,7 @@ namespace RNAssistant.Office
             using (var content = OpenBrowserContent(request?.Target, token)) {
                 if (content.HtmlWorkspace == null) throw new InvalidOperationException("Выберите HTML workspace для автономного экспорта.");
                 var target = content.Target; var metadata = BrowserOwner(target.OwnerScope, target.Immutable);
-                var artifact = _chatStore.DocumentArtifacts.Read(metadata, ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri)), false);
+                var artifact = _artifacts.Read(metadata, ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri)), false);
                 var payload = new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, "application/json; charset=utf-8");
                 var session = LoadAddressedSession(metadata.Id); _toolExecutor.BindResourceAuthority(session);
                 ResourceDownloadOpenResponse source = null; HtmlResourceExport resources = null;
@@ -68,8 +68,8 @@ namespace RNAssistant.Office
             if (target?.State != BrowserTargetState.Ready) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED");
             var current = ResolveBrowserLocator(new BrowserResolveRequest { OwnerScope = target.OwnerScope, Locator = target.DisplayLocator }).Target;
             if (current?.ResourceUri != target.ResourceUri || current.State != BrowserTargetState.Ready) throw new InvalidOperationException("RESOURCE_WORKSPACE_CHANGED");
-            var artifact = _chatStore.DocumentArtifacts.Read(metadata, ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri)));
-            if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace || _chatStore.DocumentArtifacts.IsRemoved(metadata, artifact)) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED");
+                var artifact = _artifacts.Read(metadata, ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri)));
+            if (artifact.Kind != ChatArtifactKinds.HtmlWorkspace || _artifacts.IsRemoved(metadata, artifact)) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED");
             var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
             var sources = snapshot.DataSources.Where(source => source.Name == name).ToArray();
             if (sources.Length != 1) throw new InvalidOperationException("RESOURCE_BINDING_UNKNOWN");
@@ -86,19 +86,19 @@ namespace RNAssistant.Office
                 target.SavedVersionId != requested.SavedVersionId) throw new InvalidOperationException("The exact document HTML is unavailable.");
             var metadata = BrowserOwner(target.OwnerScope, target.Immutable);
             var reference = ChatResourceUri.ArtifactSnapshot(new ResourceRef(target.ResourceUri));
-            var artifact = _chatStore.DocumentArtifacts.Read(metadata, reference, false);
+                var artifact = _artifacts.Read(metadata, reference, false);
             Action validate = () => {
                 BrowserOwner(target.OwnerScope, target.Immutable);
                 var current = ResolveBrowserLocator(request).Target;
                 if (current?.State != BrowserTargetState.Ready || current.ResourceUri != target.ResourceUri ||
-                    current.SavedVersionId != target.SavedVersionId || _chatStore.DocumentArtifacts.IsRemoved(metadata, artifact))
+                    current.SavedVersionId != target.SavedVersionId || _artifacts.IsRemoved(metadata, artifact))
                     throw new InvalidOperationException("The document HTML binding changed or was removed.");
             };
             validate(); token.ThrowIfCancellationRequested();
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {
                 if (artifact.ContentByteLength > 16 * 1024 * 1024) throw new InvalidOperationException("HTML snapshot exceeds 16 MiB.");
-                artifact = _chatStore.DocumentArtifacts.Read(metadata, reference);
+                artifact = _artifacts.Read(metadata, reference);
                 var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
                 var files = snapshot.Files.ToDictionary(file => file.Path, file => file.Content, StringComparer.Ordinal);
                 var entry = snapshot.Files.SingleOrDefault(file => file.Id == snapshot.ActiveFileId && file.Kind == "html") ?? snapshot.Files.FirstOrDefault(file => file.Kind == "html");

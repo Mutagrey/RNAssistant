@@ -240,7 +240,7 @@ namespace RNAssistant.Runtime
                         Attachments = input.Attachments, AgentCommunication = input.AgentCommunication };
                     _session.Messages.Add(message);
                     LinkInputAttachments(_session, message);
-                    _owner._chats.Commit(_session, ConversationCommit.UserInput(message));
+                    _owner._conversationStore.Commit(_session, ConversationCommit.UserInput(message));
                 }
                 return Task.FromResult(AgentMessage.User(ConversationInputMessage.ModelText(_session.Messages.First(m => m.Id == input.Id))));
             }

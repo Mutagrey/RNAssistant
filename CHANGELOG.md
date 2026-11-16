@@ -11,6 +11,21 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.0.0-dev
+
+- Office, Workspace и plugin теперь используют один canonical conversation/resource
+  journal в `storage-v2`. После обновления начинается новая история, а прежние чаты,
+  CAS, настройки, ключи, tools, skills, workspace associations и immutable bodies
+  остаются отдельно и не импортируются. Старый aggregate больше не является active
+  writer; он сохранён только для read-only CAS inventory старого поколения.
+- Scope router обслуживает документы и проекты поверх общего disposable index;
+  группы, plugin registrations, workspace files, HTML versions, vendor packages и
+  resource mutations используют существующие journal/authority owners без
+  dual-write или скрытого legacy fallback. Первый экран сообщает, что новая история
+  начата без импорта старых данных.
+- `html.project.register` schema приведена к закрытому validator contract: поля
+  имеют описания, а неподдерживаемый `uniqueItems` удалён.
+
 ### 16.27.20-dev
 
 - Нормальный возврат макроса теперь получает принимаемый честный финал без

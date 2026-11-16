@@ -18,7 +18,8 @@ namespace RNAssistant.Application
         private readonly Dictionary<string,Result> _results=new Dictionary<string,Result>();
         private readonly object _sync=new object();
         private bool _closed;
-        public PluginResultStore(AppDataPaths paths){_paths=paths;_files=new WorkspaceFileService(paths);}
+        public PluginResultStore(AppDataPaths paths, WorkspaceFileService files = null)
+        { _paths = paths; _files = files ?? new WorkspaceFileService(paths); }
         public PluginFrameResult Publish(PluginInstance instance,string name,string staged,CancellationToken token)
         {
             lock(_sync)

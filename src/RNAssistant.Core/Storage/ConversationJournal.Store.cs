@@ -165,6 +165,18 @@ namespace RNAssistant.Core.Storage
 
         private ChatSession LoadTextChat(string id, string host, string key)
         {
+            for (var attempt = 0; ; attempt++)
+            {
+                try { return LoadTextChatOnce(id, host, key); }
+                catch (ChatConcurrencyException error) when (attempt < 2 &&
+                    (error.Message.StartsWith("The event read requires", StringComparison.Ordinal) ||
+                     error.Message.StartsWith("Chat changed during explicit full load", StringComparison.Ordinal)))
+                { Thread.Sleep(1); }
+            }
+        }
+
+        private ChatSession LoadTextChatOnce(string id, string host, string key)
+        {
             using (RuntimeStorageActivity.Acquire(_paths))
             {
                 var receipt = ReadChat(id);

@@ -40,9 +40,14 @@ namespace RNAssistant.Runtime
                 throw new InvalidOperationException("Plan access requires this workspace's independent session.");
             _workspace = workspace; _session = session; _chats = chats; _payloads = payloads;
             if ((authority == null) != (mutations == null)) throw new ArgumentException("Plan authority and mutation journal must be supplied together.");
-            _authority = authority ?? new ResourceAuthorityStore(paths);
+            if (authority == null)
+            {
+                var resources = new ResourceJournal(paths);
+                authority = resources; mutations = resources;
+            }
+            _authority = authority;
             _revisions = _authority as IResourceRevisionStore ?? throw new ArgumentException("Plan authority must provide revisions.", nameof(authority));
-            _journal = mutations ?? new ResourceMutationJournal(paths); _origin = origin;
+            _journal = mutations; _origin = origin;
             _owner = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
         }
 

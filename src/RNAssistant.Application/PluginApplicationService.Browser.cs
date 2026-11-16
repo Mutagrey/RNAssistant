@@ -62,7 +62,7 @@ namespace RNAssistant.Application
                 }
                 else
                 {
-                    try { manifest = PluginPackageFiles.ParseManifest(new WorkspaceFileService(_paths).ReadText(workspace, "plugin.json").Text); }
+                    try { manifest = PluginPackageFiles.ParseManifest(_files.ReadText(workspace, "plugin.json").Text); }
                     catch (PluginException error)
                     {
                         target.EntryPath = "plugin.json"; target.Capabilities.SaveVersion = false;
@@ -89,7 +89,7 @@ namespace RNAssistant.Application
                     ? request.OwnerScope.ScopeId == "local" && string.IsNullOrEmpty(request.OwnerScope.ChatId)
                     : request.OwnerScope.Matches(target.OwnerScope)))
                     throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
-                var files = new WorkspaceFileService(_paths);
+                var files = _files;
                 if (target.Kind == BrowserTargetKind.PluginRelease)
                 {
                     var release = _store.ReadSavedRelease(target.PluginId, target.SavedVersionId);

@@ -878,6 +878,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("quickAction")]
         public string QuickAction { get; set; }
+
+        [JsonProperty("historyStorageNotice", NullValueHandling = NullValueHandling.Ignore)]
+        public string HistoryStorageNotice { get; set; }
     }
 
     public sealed class BridgeBootstrapResponse

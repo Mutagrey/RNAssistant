@@ -60,13 +60,15 @@ namespace RNAssistant.Runtime
                 var continuation = waiting ? AgentRunContinuation.RestoreWait(session.LastRun.KernelState, 0, history)
                     : AgentRunContinuation.RestoreCheckpoint(session.LastRun.KernelState, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
-                var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace,
+                var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace,
                     session, settings, apiKeyProvider, progress, acceptance, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace, session),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => _activeRuns.SetModelProgress(session.Id, request.RunId, value),
-                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
-                if (!waiting) _chats.CloseOpenSteps(session, request.RunId, "interrupted", "Explicit continuation after the previous invocation stopped.");
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics,
+                    agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities,
+                    resourceAuthority: _resources, resourceMutations: _resources,
+                    mutationOrigin: context => _conversationRouter.MutationOrigin(session, context));
                 // The kernel's first mandatory append claims this cursor. No new
                 // input, run ID, budget or accepted tool call is manufactured.
                 acceptance.State = acceptance.Requested ? WorkspaceAcceptanceState.Pending : WorkspaceAcceptanceState.NotRequested;
@@ -85,7 +87,7 @@ namespace RNAssistant.Runtime
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);
                         session.LastRun.WorkspaceAcceptance = acceptance;
-                        _chats.Commit(session, new ConversationCommit());
+                        _conversationStore.Commit(session, new ConversationCommit());
                     }
                     StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary, progress);
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),

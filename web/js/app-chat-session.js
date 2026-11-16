@@ -364,6 +364,7 @@ function applyInitState(init, options) {
   renderVisibleSecondarySurfaces();
   if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.ready();
   log("Initialized " + init.host);
+  if (init.historyStorageNotice && window.RNAssistantShellLayout) RNAssistantShellLayout.notice(init.historyStorageNotice);
   if (init.quickAction && !init.detailDeferred && !(options && options.preserveSelection)) {
     runQuickAction(init.quickAction);
   }

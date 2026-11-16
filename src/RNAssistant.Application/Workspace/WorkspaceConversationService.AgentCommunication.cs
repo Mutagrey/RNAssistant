@@ -16,16 +16,32 @@ namespace RNAssistant.Runtime
         internal AgentCommunicationService AgentCommunication { get; set; }
         internal Action<string, string, WorkspaceRunEvent> AgentProgress { get; set; }
 
+        private ConversationGroupService NativeGroups(ChatSession scope)
+        {
+            return new ConversationGroupService(_conversationStore, DocumentArtifactStore.PlanScope(scope),
+                _resources, _resources, _resources, _payloads,
+                (session, context) => _conversationRouter.MutationOrigin(session, context));
+        }
+
         public System.Collections.Generic.IReadOnlyList<RNAssistant.Application.Contracts.ConversationGroupScopeView> ChatGroupCatalog(
             System.Collections.Generic.IEnumerable<ChatSessionHeader> headers)
-        { return new ConversationGroupService(_chats).Catalog(headers); }
+        {
+            return (headers ?? new ChatSessionHeader[0])
+                .GroupBy(header => header.WorkspaceId)
+                .SelectMany(group => {
+                    var header = group.First();
+                    var scope = new ChatSession { Host = "Workspace", DocumentKey = header.WorkspaceId,
+                        WorkspaceId = header.WorkspaceId };
+                    return NativeGroups(scope).Catalog(group);
+                }).ToArray();
+        }
 
         public RNAssistant.Application.Contracts.ChangeChatGroupResponse ChangeChatGroup(RNAssistant.Application.Contracts.ChangeChatGroupRequest request)
         {
             var workspace = _workspaces.OpenConnected(request.WorkspaceId);
             var scope = string.IsNullOrEmpty(request.SessionId) ? new ChatSession { Id = null, Host = "Workspace",
                 DocumentKey = workspace.WorkspaceId, WorkspaceId = workspace.WorkspaceId } : GetSession(workspace, request.SessionId);
-            return new ConversationGroupService(_chats).Change(scope, request);
+            return NativeGroups(scope).Change(scope, request);
         }
 
         internal void RegisterAgentScope(WorkspaceDescriptor workspace, AppSettings settings, Func<string> key)
@@ -33,7 +49,8 @@ namespace RNAssistant.Runtime
             var captured = settings.Clone();
             AgentCommunication.Register(new AgentConversationScope {
                 Key = "workspace:" + workspace.WorkspaceId,
-                Groups = new ConversationGroupService(_chats),
+                Groups = NativeGroups(new ChatSession { Host = "Workspace", DocumentKey = workspace.WorkspaceId,
+                    WorkspaceId = workspace.WorkspaceId }),
                 Catalog = new ConversationCatalogService(_conversationStore, _payloads),
                 Contains = session => session?.WorkspaceId == workspace.WorkspaceId,
                 ReadCatalog = () => _conversationStore.ListHeaders(includeStorageUsage: false)

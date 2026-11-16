@@ -60,6 +60,8 @@ namespace RNAssistant.Office.Tools
         internal RNAssistant.Application.Conversations.ConversationInboxService AgentInbox { get; set; }
         internal RNAssistant.Core.Agent.IRunExecutionAdmission ExecutionAdmission { get; private set; }
         internal ResourceAuthorityService ResourceAuthority { get { return _resourceAuthority; } }
+        internal IResourceMutationJournal ResourceMutations { get { return _resourceMutationJournal; } }
+        internal Func<ChatSession, ToolExecutionContext, ResourceMutationOrigin> ResourceOrigin { get { return _resourceOrigin; } }
         internal ChatBlobStore Payloads { get; private set; }
 
         internal HostRuntime DocumentRuntime { get { return _hostRuntime; } }
@@ -103,8 +105,14 @@ namespace RNAssistant.Office.Tools
             _promptSettingsService = new PromptSettingsService(
                 loadSettings, saveSettings);
             _hostRuntime = new HostRuntime(adapter, paths);
-            resourceAuthorityStore = resourceAuthorityStore ?? new ResourceAuthorityStore(paths);
-            _resourceMutationJournal = resourceMutationJournal ?? new ResourceMutationJournal(paths);
+            if (resourceAuthorityStore == null)
+            {
+                var resources = new ResourceJournal(paths);
+                resourceAuthorityStore = resources;
+                resourceMutationJournal = resources;
+            }
+            _resourceMutationJournal = resourceMutationJournal ??
+                resourceAuthorityStore as IResourceMutationJournal ?? new ResourceMutationJournal(paths);
             _resourceOrigin = resourceOrigin;
             var resourceRevisions = resourceAuthorityStore as IResourceRevisionStore ?? throw new ArgumentException("The authority owner must supply revision access.");
             _resourceAuthority = new ResourceAuthorityService(resourceAuthorityStore, resourceRevisions, _resourceMutationJournal,

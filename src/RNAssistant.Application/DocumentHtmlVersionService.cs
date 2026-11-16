@@ -15,7 +15,7 @@ namespace RNAssistant.Application
         private readonly DocumentArtifactStore _artifacts;
         private readonly IResourceMutationJournal _journal;
         public DocumentHtmlVersionService(AppDataPaths paths, DocumentArtifactStore artifacts, IResourceMutationJournal mutations = null)
-        { _journal = mutations ?? new ResourceMutationJournal(paths); _artifacts = artifacts; }
+        { _journal = mutations ?? new ResourceJournal(paths); _artifacts = artifacts; }
         private static void RequireOwner(ConversationMetadata owner, BrowserOwnerScope caller)
         {
             if (owner == null || caller?.Kind != BrowserOwnerKind.Document || caller.ScopeId != owner.DocumentAuthorityId || caller.ChatId != owner.Id)
