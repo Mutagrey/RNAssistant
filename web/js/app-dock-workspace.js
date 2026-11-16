@@ -627,7 +627,7 @@
       chooser: function () { openChooser(api.activeGroup || api.groups[0], "within"); },
       layout: function (trigger) {
         menu(trigger, [["Чат и инспектор", "panel", reset], ["Одна группа вкладок", "layers", join],
-          ["Сохранить раскладку", "check", function () { try { localStorage.setItem(savedKey, JSON.stringify(preferenceLayout(api.toJSON()))); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
+          ["Сохранить раскладку", "save", function () { try { localStorage.setItem(savedKey, JSON.stringify(preferenceLayout(api.toJSON()))); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
           ["Вернуть сохранённую", "refresh", function () { try { var layout = normalizeLayout(JSON.parse(localStorage.getItem(savedKey))).layout; if (validateLayout(layout)) {
             if (!canClose(api.panels.filter(function (item) { return !layout.panels[item.id]; }))) return;
             restoring = true; wideLayout = null; restoreLayout(layout); preservePreference = false; restoring = false; changed(); notice("Раскладка восстановлена");

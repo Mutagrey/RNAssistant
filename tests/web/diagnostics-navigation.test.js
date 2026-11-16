@@ -176,7 +176,7 @@ const { chromium } = require("playwright");
     await screenshot("request-json-wide");
     async function openLayout() {
       if (await page.locator('#workspaceLayout').isVisible()) await page.locator('#workspaceLayout').click();
-      else { await page.locator('#hostWindowMenu').click(); await page.getByRole('menuitem',{name:'Компоновка…',exact:true}).click(); }
+      else { await page.locator('#hostWindowMenu').click(); await page.getByRole('menuitem',{name:'Расположение панелей…',exact:true}).click(); }
     }
     // Placement preserves the singleton reader, exact owner and selected message.
     await page.locator('.dv-groupview').filter({has:page.locator('[data-tab-panel-id="request"]')}).getByRole('button',{name:'Открыть экран справа',exact:true}).click();

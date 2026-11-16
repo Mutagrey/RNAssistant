@@ -13,17 +13,18 @@
 #workspaceContextIcon .office-app-mark { width: var(--shell-icon); height: var(--shell-icon); }
 #workspaceSectionTitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-topbar-actions, .workspace-view-actions { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
-.workspace-panel-controls { display: flex; align-items: center; gap: 1px; padding-right: var(--space-2); margin-right: var(--space-1); border-right: 1px solid var(--line); }
+.workspace-panel-controls { display: flex; align-items: center; gap: var(--space-1); }
 .workspace-topbar .icon-btn { flex: 0 0 var(--shell-control); display: grid; place-items: center; width: var(--shell-control); height: var(--shell-control); min-height: var(--shell-control); padding: 5px; border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); }
-.workspace-topbar .icon-btn:hover, .workspace-menu-button:hover { color: var(--ink); background: var(--surface-hover); }
+.workspace-topbar .icon-btn:is(:hover, [aria-expanded="true"]) { color: var(--ink); background: var(--surface-hover); }
 .workspace-topbar .icon-btn svg { width: var(--shell-icon); height: var(--shell-icon); }
-.workspace-menu-button { display: flex; align-items: center; gap: 6px; height: var(--shell-control); padding: 0 var(--space-2); border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); font-size: var(--text-sm); }
-.workspace-menu-button svg { width: var(--shell-icon); height: var(--shell-icon); }
 .shell .workspace-topbar .product-mobile-menu-button { position: static; flex-shrink: 0; }
 .workspace-topbar [hidden] { display: none !important; }
 .host-window-controls { display: flex; align-items: center; gap: 0; padding-left: var(--space-2); margin-left: var(--space-1); border-left: 1px solid var(--line); }
 .host-window-controls #hostWindowClose { margin-left: var(--space-1); }
 .integrated-window-chrome .workspace-topbar { user-select: none; }
+/* Integrated hosts expose layout once, through the window menu. Other hosts keep the layout button. */
+.integrated-window-chrome .workspace-view-actions { display: none; }
+.host-window-menu { --menu-width: var(--shell-window-menu-width); }
 .native-window-drag .workspace-topbar { -webkit-app-region: drag; app-region: drag; }
 .native-window-drag .workspace-topbar :is(button, input, select, textarea, a, [role="button"], [contenteditable], [tabindex]) { -webkit-app-region: no-drag; app-region: no-drag; }
 .integrated-window-chrome .workspace-context { min-width: var(--shell-window-drag-width); }
@@ -95,8 +96,7 @@ html[data-host-presentation="Compact"] .split-layout[data-navigation] { grid-tem
 }
 @media (max-width: 760px) {
   .workspace-topbar { gap: 8px; padding-inline: 8px; }
-  .workspace-menu-button > span, .workspace-statusbar button > span, #workspaceLayoutStatus { display: none; }
-  .workspace-menu-button { width: 28px; padding: 5px; }
+  .workspace-statusbar button > span, #workspaceLayoutStatus { display: none; }
   .workspace-statusbar button { margin-left: auto; }
 }
 

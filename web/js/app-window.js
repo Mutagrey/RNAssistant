@@ -3,11 +3,20 @@
   var capabilities = null, current = null, busy = false, bound = false, readySent = false, initializing = false, pendingSwitch = false;
   function compact() { return current && document.documentElement.dataset.hostPresentation === "Compact"; }
   function notice(error) { RNAssistantShellLayout.notice(error.detail || error.message || String(error)); }
-  function control(id, label, icon) {
+  function unavailable(name) {
+    if (!capabilities || !current || busy || current.visibility === "ShuttingDown") return true;
+    if (name === "ShowCompact") return !capabilities.compactPresentation || current.canCompact === false;
+    if (name === "Park" || name === "SetAutoCollapse") return !capabilities.companion;
+    if (name === "SetPinned") return !capabilities.pin;
+    if (name === "Maximize") return current.canMaximize === false;
+    if (name === "Restore") return current.canRestore === false;
+    return false;
+  }
+  function control(id, label, icon, action) {
     var node = document.getElementById(id);
     node.title = label; node.setAttribute("aria-label", label);
     if (icon && node.dataset.icon !== icon) { node.dataset.icon = icon; node.innerHTML = RNAssistantIcons.render(icon); }
-    node.disabled = busy || !current || current.visibility === "ShuttingDown";
+    node.disabled = unavailable(action);
     return node;
   }
   function render() {
@@ -15,18 +24,18 @@
     if (!controls) return;
     controls.hidden = !capabilities || !current || !current.chromeReady;
     if (!capabilities || !current) return;
-    control("hostWindowPresentation", compact() ? "Свернуть в помощник" : "Компактное окно", compact() ? "windowCapsule" : "windowCompact");
+    control("hostWindowPresentation", compact() ? "Свернуть в помощник" : "Компактное окно",
+      compact() ? "windowCapsule" : "windowCompact", compact() ? "Park" : "ShowCompact");
     control("hostWindowClose", "Закрыть RNAssistant", "close");
-    control("hostWindowMenu", "Действия с окном", "more");
-    var status = [current.presentation, current.visibility, current.pinned ? "pin" : "auto",
-      current.chromeReady ? "web chrome" : "загрузка панели", current.anchorAvailable ? "Office anchor" : "нет Office anchor"];
-    if (current.diagnostic) status.push(current.diagnostic);
-    document.getElementById("hostWindowMenu").title = "Действия с окном · " + status.join(" · ");
+    control("hostWindowMenu", "Вид и окно", "more");
   }
   function apply(snapshot) {
     if (!snapshot || !Number.isSafeInteger(snapshot.revision) || current && snapshot.revision <= current.revision) return;
+    var previousDiagnostic = current && current.diagnostic;
     current = snapshot;
     present();
+    // Surface a new host error once, without turning the ordinary menu into a diagnostic view.
+    if (current.diagnostic && current.diagnostic !== previousDiagnostic) notice(current.diagnostic);
   }
   function present() {
     if (!current) return;
@@ -39,7 +48,7 @@
     render();
   }
   async function command(name, value) {
-    if (!capabilities || busy) throw new Error("Оконная команда сейчас недоступна.");
+    if (unavailable(name)) throw new Error("Оконная команда сейчас недоступна.");
     busy = true; render();
     try {
       var payload = { command: name }; if (typeof value === "boolean") payload.value = value;
@@ -99,25 +108,59 @@
         await command(replacement ? "SwitchDocument" : "Shutdown");
       } });
   }
+  function toggleSetting(trigger, name, value) {
+    // Checkbox menu items stay open by default. Close before the native command so
+    // an old snapshot cannot expose another toggle while its ACK is pending.
+    RNAssistantActionMenu.closeAll();
+    trigger.focus({ preventScroll: true });
+    request(name, value);
+  }
+  function windowSettings(trigger) {
+    if (unavailable()) return;
+    RNAssistantActionMenu.open(trigger, [
+      { label: "Сворачивать при смене фокуса", checked: !!current.autoCollapse && !current.pinned,
+        disabled: unavailable("SetAutoCollapse") || current.pinned,
+        status: current.pinned ? "Недоступно, пока включено «Оставлять окно открытым»" : "Сворачивать окно в помощник при уходе фокуса",
+        onSelect: function () { toggleSetting(trigger, "SetAutoCollapse", !current.autoCollapse); } },
+      { label: "Вернуть окно на экран", icon: "fit", disabled: unavailable("ResetPlacement"),
+        onSelect: function () { request("ResetPlacement"); } },
+      { separator: true },
+      { label: "Назад", icon: "back", onSelect: function () { menu(trigger); } }
+    ], { label: "Настройки окна", compact: true, className: "host-window-menu" });
+  }
   function menu(trigger) {
+    if (unavailable()) return;
     function inFull(action) { if (!window.RNAssistantWindow.inFull(action)) action(); }
+    function visible(id) {
+      var node = document.getElementById(id);
+      return !!(node && node.getClientRects().length && getComputedStyle(node).visibility !== "hidden");
+    }
+    var fromCompact = compact(), mode = fromCompact ? "ShowFull" : "Park", size = current.canRestore ? "Restore" : "Maximize";
     var entries = [
-      { label: compact() ? "Полное окно" : "Компактное окно", icon: "windowCompact", onSelect: function () { request(compact() ? "ShowFull" : "ShowCompact"); } },
-      { label: "Свернуть в помощник", icon: "windowCapsule", onSelect: function () { request("Park"); } },
-      { label: current.canRestore ? "Восстановить размер окна" : "Развернуть окно", icon: "fit", onSelect: function () { request(current.canRestore ? "Restore" : "Maximize"); } },
-      { label: "Не сворачивать автоматически", icon: "pin", status: current.pinned ? "Включено" : "Выключено", onSelect: function () { request("SetPinned", !current.pinned); } },
-      { label: "Автоматически убирать окно", icon: "compress", status: current.autoCollapse ? "Включено" : "Выключено", onSelect: function () { request("SetAutoCollapse", !current.autoCollapse); } },
-      { label: "Вернуть окно на экран", icon: "fit", onSelect: function () { request("ResetPlacement"); } },
-      { separator: true },
-      { label: "Навигация", icon: "panel", onSelect: function () { inFull(function () { RNAssistantShellLayout.setNavigationOpen(!RNAssistantShellLayout.isNavigationOpen()); }); } },
-      { label: "Инспектор", icon: "panel", onSelect: function () { inFull(function () { RNAssistantDockWorkspace.toggleTools(); }); } },
-      { label: "Открыть…", icon: "layers", onSelect: function () { inFull(function () { RNAssistantShellLayout.command("chooser", trigger); }); } },
-      { label: "Компоновка…", icon: "panel", onSelect: function () { inFull(function () { RNAssistantShellLayout.command("layout", trigger); }); } },
-      { separator: true },
-      { label: current.presentation + " · " + current.visibility, informational: true }
+      { label: compact() ? "Полное окно" : "Свернуть в помощник", icon: compact() ? "windowRestore" : "windowCapsule",
+        disabled: unavailable(mode), onSelect: function () { request(mode); } },
+      { label: current.canRestore ? "Восстановить размер окна" : "Развернуть окно",
+        icon: current.canRestore ? "windowRestore" : "windowMaximize", disabled: unavailable(size),
+        onSelect: function () { request(size); } },
+      { label: "Оставлять окно открытым", icon: "pin", checked: !!current.pinned, disabled: unavailable("SetPinned"),
+        status: "Не сворачивать окно при переходе к документу; без закрепления поверх других окон",
+        onSelect: function () { toggleSetting(trigger, "SetPinned", !current.pinned); } },
+      { separator: true }
     ];
-    if (current.diagnostic) entries.push({ label: current.diagnostic, informational: true });
-    RNAssistantActionMenu.open(trigger, entries);
+    // Wide Full has direct panel controls; native Compact/narrow hides them.
+    // Use rendered visibility so CSS breakpoints and zoom remain the sole owner.
+    if (!visible("productMobileMenuButton")) entries.push({ label: "Навигация", icon: "panelLeft",
+      onSelect: function () { inFull(function () { RNAssistantShellLayout.setNavigationOpen(fromCompact || !RNAssistantShellLayout.isNavigationOpen()); }); } });
+    if (!visible("toggleChatInspectorButton")) entries.push({ label: "Инспектор", icon: "panel",
+      onSelect: function () { inFull(function () {
+        if (fromCompact) RNAssistantDockWorkspace.show("inspector"); else RNAssistantDockWorkspace.toggleTools();
+      }); } });
+    if (compact()) entries.push({ label: "Открыть…", icon: "layers",
+      onSelect: function () { inFull(function () { RNAssistantShellLayout.command("chooser", trigger); }); } });
+    entries.push({ label: "Расположение панелей…", icon: "layout",
+      onSelect: function () { inFull(function () { RNAssistantShellLayout.command("layout", trigger); }); } },
+      { label: "Настройки окна…", icon: "settings", onSelect: function () { windowSettings(trigger); } });
+    RNAssistantActionMenu.open(trigger, entries, { label: "Вид и окно", compact: true, className: "host-window-menu" });
   }
   function bootstrap(value) {
     if (!value || !value.capabilities || !value.state) return;

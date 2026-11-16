@@ -15,6 +15,8 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => !state.initializePromise && RNAssistantConversationPanel.office('preview-chat'));
     assert.equal(await page.locator('#hostWindowControls').isVisible(), false, 'unsupported hosts keep native controls hidden');
+    assert.ok(await page.locator('#workspaceLayout').isVisible(), 'other hosts retain the layout entry');
+    assert.equal(await page.locator('#workspaceLayout').textContent(), '', 'layout uses an accessible icon without a long toolbar label');
     await page.evaluate(() => {
       const chat = RNAssistantConversationPanel.office('preview-chat');
       RNAssistantConversationPanel.open(chat.route);
@@ -49,12 +51,22 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
         if (payload.command === 'Park') { current.presentation = 'Companion'; current.visibility = 'ContextHidden'; }
         if (payload.command === 'Shutdown' || payload.command === 'SwitchDocument') current.visibility = 'ShuttingDown';
         if (payload.command === 'SetPinned') current.pinned = payload.value;
+        if (payload.command === 'SetAutoCollapse') current.autoCollapse = payload.value;
         current.revision++; return {accepted: true, state: {...current}};
       };
       RNAssistantWindow.bootstrap({capabilities: {integratedChrome: true, nativeDragRegions: true, compactPresentation: true, companion: true, pin: true}, state: {...current}});
     });
     await page.waitForFunction(() => document.documentElement.classList.contains('integrated-window-chrome'));
     assert.ok(await page.evaluate(() => document.documentElement.classList.contains('native-window-drag')));
+    assert.equal(await page.locator('#workspaceLayout').isVisible(), false, 'native layout is exposed once through the window menu');
+    assert.equal(await page.locator('.workspace-topbar-actions button:visible').count(), 5, 'wide native toolbar has five compact controls');
+    await page.locator('#hostWindowMenu').click();
+    for (const name of ['Навигация', 'Инспектор', 'Компактное окно', 'Открыть…'])
+      assert.equal(await page.getByRole('menuitem', {name, exact: true}).count(), 0, 'wide menu omits direct action: ' + name);
+    assert.equal(await page.locator('.host-window-menu .rna-action-menu-info, .host-window-menu small').count(), 0, 'no raw status or second detail rows');
+    assert.equal(await page.locator('#hostWindowMenu').getAttribute('title'), 'Вид и окно');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'hostWindowMenu');
     // Older WebView2 still gets the same controls; only header dragging uses the bridge.
     await page.evaluate(() => {
       windowProbe.state.revision++;
@@ -102,7 +114,21 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     for (const id of ['hostWindowMenu', 'hostWindowPresentation', 'hostWindowClose']) assert.ok(await page.locator('#' + id).isVisible());
     assert.equal(await page.locator('#hostWindowControls button').count(), 3, 'one compact window control group');
     await page.locator('#hostWindowMenu').click();
-    await page.getByRole('menuitem', {name: /Не сворачивать автоматически/}).click();
+    for (const name of ['Полное окно', 'Навигация', 'Инспектор', 'Открыть…'])
+      assert.ok(await page.getByRole('menuitem', {name, exact: true}).isVisible(), 'Compact retains ' + name);
+    assert.equal(await page.getByRole('menuitem', {name: 'Свернуть в помощник', exact: true}).count(), 0, 'Compact does not duplicate its presentation button');
+    await page.getByRole('menuitemcheckbox', {name: 'Оставлять окно открытым', exact: true}).click();
+    await page.waitForFunction(() => !document.getElementById('hostWindowMenu').disabled);
+    assert.equal(await page.getByRole('menu').count(), 0, 'setting closes before the next native snapshot');
+    await page.locator('#hostWindowMenu').click();
+    await page.getByRole('menuitem', {name: 'Настройки окна…', exact: true}).click();
+    const autoCollapse = page.getByRole('menuitemcheckbox', {name: 'Сворачивать при смене фокуса', exact: true});
+    assert.ok(await autoCollapse.isDisabled());
+    assert.equal(await autoCollapse.getAttribute('aria-checked'), 'false', 'pin suppresses the effective auto-collapse state');
+    assert.equal(await page.evaluate(() => windowProbe.state.autoCollapse), true, 'pin preserves the saved auto-collapse preference');
+    await page.getByRole('menuitem', {name: 'Назад', exact: true}).click();
+    assert.equal(await page.getByRole('menuitemcheckbox', {name: 'Оставлять окно открытым', exact: true}).getAttribute('aria-checked'), 'true');
+    await page.keyboard.press('Escape');
     await page.locator('#hostWindowMenu').focus(); await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'hostWindowPresentation', 'keyboard controls remain reachable');
     await page.evaluate(() => RNAssistantWindow.apply({...windowProbe.state, revision: 1, pinned: false}));
@@ -125,15 +151,21 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.evaluate(() => windowProbe.set('Compact'));
     await page.setViewportSize({width: 420, height: 520});
     await page.evaluate(() => windowProbe.set('FullNormal'));
+    await page.locator('#hostWindowMenu').click();
+    assert.ok(await page.getByRole('menuitem', {name: 'Навигация', exact: true}).isVisible(), 'narrow Full retains hidden navigation control');
+    assert.ok(await page.getByRole('menuitem', {name: 'Инспектор', exact: true}).isVisible(), 'narrow Full retains hidden inspector control');
+    await page.keyboard.press('Escape');
     await page.setViewportSize({width: 1280, height: 900});
     await page.waitForTimeout(250);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout), 'late native resize preserves full placement');
+    await page.evaluate(() => windowProbe.set('Compact'));
     await page.locator('#hostWindowMenu').click();
     await page.getByRole('menuitem', {name: 'Открыть…', exact: true}).click();
+    await page.waitForFunction(() => document.documentElement.dataset.hostPresentation === 'FullNormal');
     await page.locator('.dock-screen-chooser input').waitFor();
     await page.locator('[data-tab-panel-id^="choose-"]').getByRole('button').click();
     await page.locator('#hostWindowMenu').click();
-    await page.getByRole('menuitem', {name: 'Компоновка…', exact: true}).click();
+    await page.getByRole('menuitem', {name: 'Расположение панелей…', exact: true}).click();
     await page.getByRole('menuitem', {name: 'Сохранить раскладку', exact: true}).waitFor();
     await page.keyboard.press('Escape');
     // Opening a complex tool from Compact goes through the native Full command first.
