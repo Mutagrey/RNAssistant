@@ -4,7 +4,7 @@ using System.Text;
 
 namespace RNAssistant.Core.Storage
 {
-    public sealed class ProtectedSecretStore
+    public sealed class ProtectedSecretStore : ISecretStore
     {
         public static byte[] ProtectBytes(byte[] bytes)
         {

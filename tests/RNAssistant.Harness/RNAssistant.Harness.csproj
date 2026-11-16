@@ -5,6 +5,7 @@
     <LangVersion>7.3</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <DefineConstants>$(DefineConstants);RNA_DPAPI_SECRETS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json">

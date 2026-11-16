@@ -48,10 +48,11 @@ RNA_BASE_URL=https://example.invalid RNA_MODEL=model-name RNA_API_KEY=... \
 ```
 
 Use an actual approved OpenAI-compatible endpoint and model; the URL above is
-only a placeholder. Keys are read from `RNA_API_KEY` or `OPENAI_API_KEY`, never
-from CLI arguments or the workspace manifest. `run --session <id> --message ...`
-continues a saved chat as a new turn. `inspect --workspace <path> --session <id>`
-shows its saved state; `sessions --workspace <path>` lists workspace chats.
+only a placeholder. Keys are read from `RNA_API_KEY` or `OPENAI_API_KEY`, and a
+custom history secret from `RNA_HISTORY_SECRET`; secrets are never read from CLI
+arguments or the workspace manifest. `run --session <id> --message ...` continues
+a saved chat as a new turn. `inspect --workspace <path> --session <id>` shows its
+saved state; `sessions --workspace <path>` lists workspace chats.
 
 For local model comparisons, pull only the needed tag and create its bounded
 Ollama profile from `config/ollama/`:

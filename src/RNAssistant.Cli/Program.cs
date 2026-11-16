@@ -1030,7 +1030,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna resume --workspace <path> --session <id> [--jsonl]  (close an abandoned run, show pending action or request new input; never replay tools)");
             Console.WriteLine("rna approve --workspace <path> --session <id> --pending <id> [--base-url <url>] [--model <name>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--jsonl]");
             Console.WriteLine("rna deny --workspace <path> --session <id> --pending <id> [--jsonl]");
-            Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_CONTEXT_TOKENS, RNA_RESPONSE_MODE, RNA_INSTRUCTION_ROLE, RNA_TOOL_RESULT_ROLE, RNA_REASONING_MODE, RNA_THINKING, RNA_MODEL_DIGEST, RNA_API_KEY or OPENAI_API_KEY. Keys are never command arguments.");
+            Console.WriteLine("LLM settings: RNA_BASE_URL, RNA_MODEL, RNA_CONTEXT_TOKENS, RNA_RESPONSE_MODE, RNA_INSTRUCTION_ROLE, RNA_TOOL_RESULT_ROLE, RNA_REASONING_MODE, RNA_THINKING, RNA_MODEL_DIGEST, RNA_API_KEY or OPENAI_API_KEY; custom history secret: RNA_HISTORY_SECRET. Secrets are never command arguments.");
             Console.WriteLine("Optional state root: RNA_STATE_ROOT (default: user application data).");
             Console.WriteLine("Exit: 0 command completed, 2 arguments, 3 input needed, 4 dependency, 5 failure, 130 cancelled.");
         }

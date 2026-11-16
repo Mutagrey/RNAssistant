@@ -1681,8 +1681,10 @@ For discovery boundary verification only, a temporary BeforeTargets=CoreCompile
 target excluded Storage/ProtectedChatDraftStore.cs from RNAssistant.Core.Net8;
 the separate Core/Runtime/CLI build then passed with zero warnings/errors. This is
 diagnostic evidence only. The production Core.Net8 project now explicitly excludes
-ProtectedChatDraftStore alongside ProtectedSecretStore and SettingsService.
-The ordinary CLI build passes with zero warnings/errors, without custom targets or
+ProtectedChatDraftStore alongside ProtectedSecretStore. SettingsService was also
+excluded at that time; later storage consumers reintroduced CS0246, fixed on
+2026-11-16 through the shared `ISecretStore` port (Office DPAPI, Net8 environment).
+The ordinary CLI build then passed with zero warnings/errors, without custom targets or
 output overrides; CLI --help exits successfully. Framework inclusion, draft data,
 DPAPI behavior and the injected-codec Harness path are unchanged. No plaintext
 fallback or new persistence implementation was added. Windows qualification remains

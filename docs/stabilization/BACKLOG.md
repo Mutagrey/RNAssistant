@@ -79,13 +79,6 @@ owners и индекс, без нового store/registry. Текущий ко�
 Это ожидание не меняется в retry fix; нормальный повтор макроса проверяется
 отдельным `vba: normal macro return permits repeated native calls`.
 
-Дополнительная CLI-проверка recovery не дошла до запуска: неизменённый
-`RNAssistant.Core.Net8.csproj` исключает `Storage/SettingsService.cs`, но
-`CasMaintenanceService.Backup`, `ChatBlobStore` и `ChatStore` уже ссылаются на этот
-тип (CS0246). Owner: Core/Runtime build composition; исправлять отдельным срезом,
-без подмены production dependency тестовым stub. Harness компилирует действующих
-owners и покрывает Office/Workspace recovery независимо от этого build gap.
-
 Durable repeat guards между новыми runs/после очистки проверены для
 `ConversationJournal`. Старый `ChatEventStoreAdapter` объявляет
 `RetainedReplayGuards=false`; retry fix эту прежнюю границу не расширяет и не

@@ -6,7 +6,7 @@ namespace RNAssistant.Core.Storage
     // SettingsService is source-linked; DPAPI is not available in this harness.
     // Only absent fixture secrets are supported. Never simulate encryption or
     // silently consume a secret file: those paths require Windows validation.
-    public sealed class ProtectedSecretStore
+    public sealed class ProtectedSecretStore : ISecretStore
     {
         public static byte[] ProtectBytes(byte[] bytes) { throw new NotSupportedException("Draft encryption requires Windows DPAPI validation."); }
         public static byte[] UnprotectBytes(byte[] bytes) { throw new NotSupportedException("Draft decryption requires Windows DPAPI validation."); }

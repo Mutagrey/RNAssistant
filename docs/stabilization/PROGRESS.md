@@ -28,9 +28,11 @@ Harness build: 0 errors; 14 focused filters проходят, включая ч�
 чтение после continuation/внешнего изменения, recovery после прежних no-op,
 четыре native macro calls, actual model-wire matrix, Office/Workspace patch owners,
 Unknown после очистки/rebuild и fresh approval. Проверки host-neutral;
-Windows/Office COM и реакция реальной модели остаются открытыми. Отдельный CLI
-smoke не запущен: исходный Core.Net8 исключает SettingsService, хотя storage
-consumers уже зависят от него. Соседний pre-existing test gap
+Windows/Office COM и реакция реальной модели остаются открытыми. CLI build gap
+закрыт отдельно 2026-11-16: CLI build проходит с 0 errors (один прежний `CS0649`),
+`--help` и isolated `workspace open` проходят. Core.Net8 включает shared
+`SettingsService` через target secret-store port; DPAPI сохранён для Office, CLI
+использует environment-only secrets. Соседний pre-existing test gap
 `vba: public tools use native runtime` (устаревшие binding revisions) остаётся
 открытым и не относится к retry fix.
 

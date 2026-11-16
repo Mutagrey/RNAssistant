@@ -10,8 +10,8 @@ namespace RNAssistant.Core.Storage
     {
         private readonly AppDataPaths _paths;
         private readonly JsonFileStore _json;
-        private readonly ProtectedSecretStore _secretStore;
-        private readonly ProtectedSecretStore _historySecretStore;
+        private readonly ISecretStore _secretStore;
+        private readonly ISecretStore _historySecretStore;
         private readonly object _protectionSync = new object();
         private StorageProtector _cachedProtector;
         private string _cachedProtectionStamp;
@@ -20,8 +20,8 @@ namespace RNAssistant.Core.Storage
         {
             _paths = paths;
             _json = new JsonFileStore();
-            _secretStore = new ProtectedSecretStore(paths.SecretFile);
-            _historySecretStore = new ProtectedSecretStore(paths.HistorySecretFile);
+            _secretStore = SettingsSecretStoreFactory.CreateApiKeyStore(paths);
+            _historySecretStore = SettingsSecretStoreFactory.CreateHistorySecretStore(paths);
         }
 
         public AppSettings Load()
@@ -138,7 +138,7 @@ namespace RNAssistant.Core.Storage
 
         public string LoadApiKey()
         {
-            return _secretStore.LoadApiKey();
+            return _secretStore.LoadSecret();
         }
 
         public void SaveApiKey(string apiKey)

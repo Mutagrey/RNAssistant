@@ -24,6 +24,9 @@
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);RNA_DPAPI_SECRETS</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
@@ -395,8 +398,10 @@
     <Compile Include="Storage\JsonlByteReader.cs" />
     <Compile Include="Storage\JsonlRecordReader.cs" />
     <Compile Include="Storage\JsonlRecordWriter.cs" />
+    <Compile Include="Storage\ISecretStore.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
     <Compile Include="Storage\ProtectedChatDraftStore.cs" />
+    <Compile Include="Storage\SettingsSecretStoreFactory.cs" />
     <Compile Include="Storage\SettingsService.cs" />
     <Compile Include="Storage\StorageProtection.cs" />
     <Compile Include="Storage\SkillStore.cs" />
