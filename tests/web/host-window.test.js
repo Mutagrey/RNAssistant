@@ -48,6 +48,8 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
         if (payload.command === 'ChromeReady') current.chromeReady = true;
         if (payload.command === 'ShowFull') current.presentation = 'FullNormal';
         if (payload.command === 'ShowCompact') current.presentation = 'Compact';
+        if (payload.command === 'Maximize') { current.presentation = 'FullMaximized'; current.canRestore = true; current.canMaximize = false; }
+        if (payload.command === 'Restore') { current.presentation = 'FullNormal'; current.canRestore = false; current.canMaximize = true; }
         if (payload.command === 'Park') { current.presentation = 'Companion'; current.visibility = 'ContextHidden'; }
         if (payload.command === 'Shutdown' || payload.command === 'SwitchDocument') current.visibility = 'ShuttingDown';
         if (payload.command === 'SetPinned') current.pinned = payload.value;
@@ -59,9 +61,23 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.waitForFunction(() => document.documentElement.classList.contains('integrated-window-chrome'));
     assert.ok(await page.evaluate(() => document.documentElement.classList.contains('native-window-drag')));
     assert.equal(await page.locator('#workspaceLayout').isVisible(), false, 'native layout is exposed once through the window menu');
-    assert.equal(await page.locator('.workspace-topbar-actions button:visible').count(), 5, 'wide native toolbar has five compact controls');
+    assert.equal(await page.locator('.workspace-topbar-actions button:visible').count(), 8, 'wide native toolbar exposes panel and window controls directly');
+    for (const id of ['productMobileMenuButton', 'toggleChatInspectorButton', 'hostWindowPin', 'hostWindowFull', 'hostWindowMaximize'])
+      assert.ok(await page.locator('#' + id).isVisible(), 'direct native toolbar control is visible: ' + id);
+    assert.equal(await page.locator('#hostWindowFull').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#hostWindowFull').isDisabled(), true, 'Full is active in Full presentation');
+    await page.locator('#hostWindowMaximize').click();
+    await page.waitForFunction(() => windowProbe.state.presentation === 'FullMaximized');
+    assert.equal(await page.locator('#hostWindowMaximize').getAttribute('aria-label'), 'Восстановить размер окна');
+    await page.locator('#hostWindowMaximize').click();
+    await page.waitForFunction(() => windowProbe.state.presentation === 'FullNormal');
+    await page.locator('#hostWindowPin').click();
+    await page.waitForFunction(() => windowProbe.state.pinned === true);
+    assert.equal(await page.locator('#hostWindowPin').getAttribute('aria-pressed'), 'true');
+    await page.locator('#hostWindowPin').click();
+    await page.waitForFunction(() => windowProbe.state.pinned === false);
     await page.locator('#hostWindowMenu').click();
-    for (const name of ['Навигация', 'Инспектор', 'Компактное окно', 'Открыть…'])
+    for (const name of ['Навигация', 'Инспектор', 'Полное окно', 'Развернуть окно', 'Оставлять окно открытым', 'Открыть…'])
       assert.equal(await page.getByRole('menuitem', {name, exact: true}).count(), 0, 'wide menu omits direct action: ' + name);
     assert.equal(await page.locator('.host-window-menu .rna-action-menu-info, .host-window-menu small').count(), 0, 'no raw status or second detail rows');
     assert.equal(await page.locator('#hostWindowMenu').getAttribute('title'), 'Вид и окно');
@@ -111,15 +127,19 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     assert.equal(compact.value, 'Черновик сохраняется'); assert.equal(compact.disposed, 0);
     assert.ok(await page.evaluate(() => windowProbe.edit && windowProbe.chat.composer.edit(windowProbe.chat.target) === windowProbe.edit), 'edit state remains owned by the same composer');
     assert.equal(compact.layout, before.layout, 'transient placement never overwrites full layout');
-    for (const id of ['hostWindowMenu', 'hostWindowPresentation', 'hostWindowClose']) assert.ok(await page.locator('#' + id).isVisible());
-    assert.equal(await page.locator('#hostWindowControls button').count(), 3, 'one compact window control group');
+    for (const id of ['productMobileMenuButton', 'toggleChatInspectorButton', 'hostWindowPin', 'hostWindowFull', 'hostWindowMaximize',
+      'hostWindowMenu', 'hostWindowPresentation', 'hostWindowClose']) assert.ok(await page.locator('#' + id).isVisible(), 'Compact keeps direct control: ' + id);
+    assert.equal(await page.locator('#hostWindowControls button').count(), 6, 'Compact keeps the full window control group');
+    assert.equal(await page.locator('#hostWindowFull').isDisabled(), false, 'Full action is available from Compact');
+    assert.equal(await page.locator('#hostWindowFull').getAttribute('aria-pressed'), 'false');
     await page.locator('#hostWindowMenu').click();
-    for (const name of ['Полное окно', 'Навигация', 'Инспектор', 'Открыть…'])
-      assert.ok(await page.getByRole('menuitem', {name, exact: true}).isVisible(), 'Compact retains ' + name);
-    assert.equal(await page.getByRole('menuitem', {name: 'Свернуть в помощник', exact: true}).count(), 0, 'Compact does not duplicate its presentation button');
-    await page.getByRole('menuitemcheckbox', {name: 'Оставлять окно открытым', exact: true}).click();
-    await page.waitForFunction(() => !document.getElementById('hostWindowMenu').disabled);
-    assert.equal(await page.getByRole('menu').count(), 0, 'setting closes before the next native snapshot');
+    for (const name of ['Полное окно', 'Навигация', 'Инспектор', 'Развернуть окно', 'Оставлять окно открытым'])
+      assert.equal(await page.getByRole('menuitem', {name, exact: true}).count(), 0, 'Compact menu omits direct action: ' + name);
+    assert.ok(await page.getByRole('menuitem', {name: 'Открыть…', exact: true}).isVisible());
+    await page.keyboard.press('Escape');
+    await page.locator('#hostWindowPin').click();
+    await page.waitForFunction(() => windowProbe.state.pinned === true);
+    assert.equal(await page.locator('#hostWindowPin').getAttribute('aria-pressed'), 'true', 'pin is stateful on the toolbar');
     await page.locator('#hostWindowMenu').click();
     await page.getByRole('menuitem', {name: 'Настройки окна…', exact: true}).click();
     const autoCollapse = page.getByRole('menuitemcheckbox', {name: 'Сворачивать при смене фокуса', exact: true});
@@ -127,7 +147,6 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     assert.equal(await autoCollapse.getAttribute('aria-checked'), 'false', 'pin suppresses the effective auto-collapse state');
     assert.equal(await page.evaluate(() => windowProbe.state.autoCollapse), true, 'pin preserves the saved auto-collapse preference');
     await page.getByRole('menuitem', {name: 'Назад', exact: true}).click();
-    assert.equal(await page.getByRole('menuitemcheckbox', {name: 'Оставлять окно открытым', exact: true}).getAttribute('aria-checked'), 'true');
     await page.keyboard.press('Escape');
     await page.locator('#hostWindowMenu').focus(); await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'hostWindowPresentation', 'keyboard controls remain reachable');
@@ -139,8 +158,7 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.evaluate(() => windowProbe.set('Compact'));
     await page.setViewportSize({width: 1280, height: 900});
     await page.evaluate(() => document.documentElement.style.zoom = '1');
-    await page.locator('#hostWindowMenu').click();
-    await page.getByRole('menuitem', {name: 'Полное окно', exact: true}).click();
+    await page.locator('#hostWindowFull').click();
     await page.waitForFunction(() => document.documentElement.dataset.hostPresentation === 'FullNormal');
     await page.waitForTimeout(250);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout), 'full placement and active panel restored');
@@ -151,10 +169,8 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.evaluate(() => windowProbe.set('Compact'));
     await page.setViewportSize({width: 420, height: 520});
     await page.evaluate(() => windowProbe.set('FullNormal'));
-    await page.locator('#hostWindowMenu').click();
-    assert.ok(await page.getByRole('menuitem', {name: 'Навигация', exact: true}).isVisible(), 'narrow Full retains hidden navigation control');
-    assert.ok(await page.getByRole('menuitem', {name: 'Инспектор', exact: true}).isVisible(), 'narrow Full retains hidden inspector control');
-    await page.keyboard.press('Escape');
+    assert.ok(await page.locator('#productMobileMenuButton').isVisible(), 'narrow Full keeps navigation in the toolbar');
+    assert.ok(await page.locator('#toggleChatInspectorButton').isVisible(), 'narrow Full keeps Inspector in the toolbar');
     await page.setViewportSize({width: 1280, height: 900});
     await page.waitForTimeout(250);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout), 'late native resize preserves full placement');
@@ -174,9 +190,7 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.waitForFunction(() => document.documentElement.dataset.hostPresentation === 'FullNormal');
     assert.ok(await page.locator('[data-tab-panel-id="settings"]').isVisible());
     await page.evaluate(() => windowProbe.set('FullMaximized'));
-    await page.locator('#hostWindowMenu').click();
-    assert.ok(await page.getByRole('menuitem', {name: 'Восстановить размер окна', exact: true}).isVisible());
-    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#hostWindowMaximize').getAttribute('aria-label'), 'Восстановить размер окна');
     await page.evaluate(() => windowProbe.set('FullNormal'));
     await page.evaluate(() => { RNAssistantDockWorkspace.close('settings'); RNAssistantDockWorkspace.close('window-probe'); });
     if (process.env.RNA_WINDOW_REVIEW) await page.screenshot({path: process.env.RNA_WINDOW_REVIEW + '-full.png'});

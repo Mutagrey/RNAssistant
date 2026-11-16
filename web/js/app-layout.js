@@ -381,11 +381,15 @@
       controls: function () { var panel = document.querySelector(".panel.active .global-nav"); return panel && panel.id; },
       isOpen: navigationIsOpen,
       setOpen: function (open) {
-        setProductNavigationOpen(open);
-        if (open && navigationMode() !== "wide") {
-          var target = document.querySelector(".panel.active .global-nav :is(button, summary, input):not([disabled]):not([hidden])");
-          if (target) target.focus({ preventScroll: true });
+        function apply() {
+          setProductNavigationOpen(open);
+          if (open && navigationMode() !== "wide") {
+            var target = document.querySelector(".panel.active .global-nav :is(button, summary, input):not([disabled]):not([hidden])");
+            if (target) target.focus({ preventScroll: true });
+          }
         }
+        if (open && window.RNAssistantWindow && RNAssistantWindow.inFull(apply)) return;
+        apply();
       }
     });
     document.getElementById("productNavigationScrim").addEventListener("click", dismissNavigation);

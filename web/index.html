@@ -52,8 +52,8 @@
   <link rel="stylesheet" href="css/app-agent.css?v=feed-stability-20261103">
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=plugin-materials-20261103">
-  <link rel="stylesheet" href="css/app-product-tokens.css?v=window-toolbar-20261116">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=window-toolbar-20261116">
+  <link rel="stylesheet" href="css/app-product-tokens.css?v=native-toolbar-actions-20261116">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=native-toolbar-actions-20261116">
   <link rel="stylesheet" href="css/app-product-components.css?v=unified-workspace-20261111">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-materials.css?v=plugin-materials-20261103-html-editors-20261103-1">
@@ -75,6 +75,9 @@
           <button type="button" class="icon-btn" id="workspaceLayout" aria-label="Расположение панелей" title="Расположение панелей" aria-haspopup="menu" aria-expanded="false"><svg data-rna-icon="layout" aria-hidden="true"></svg></button>
         </div>
         <div class="host-window-controls" id="hostWindowControls" hidden role="group" aria-label="Управление окном">
+          <button type="button" class="icon-btn" id="hostWindowPin" aria-label="Оставлять окно открытым" aria-pressed="false"></button>
+          <button type="button" class="icon-btn" id="hostWindowFull" aria-label="Полное окно" aria-pressed="false"></button>
+          <button type="button" class="icon-btn" id="hostWindowMaximize" aria-label="Развернуть окно"></button>
           <button type="button" class="icon-btn" id="hostWindowMenu" aria-label="Вид и окно" title="Вид и окно" aria-haspopup="menu" aria-expanded="false"></button>
           <button type="button" class="icon-btn" id="hostWindowPresentation" aria-label="Компактная панель"></button>
           <button type="button" class="icon-btn" id="hostWindowClose" aria-label="Закрыть RNAssistant"></button>
@@ -1092,7 +1095,7 @@
   <script src="js/app-editor-tabs.js?v=diagnostics-20261101"></script>
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
   <script src="js/app-core.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
-  <script src="js/app-icons.js?v=window-toolbar-20261116"></script>
+  <script src="js/app-icons.js?v=native-toolbar-actions-20261116"></script>
   <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-rail-popovers.js"></script>
@@ -1108,8 +1111,8 @@
   <script src="js/app-navigation-pane.js?v=navigation-20261102-html-editors-20261103-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
-  <script src="js/app-layout.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
-  <script src="js/app-window.js?v=window-toolbar-20261116"></script>
+  <script src="js/app-layout.js?v=native-toolbar-actions-20261116"></script>
+  <script src="js/app-window.js?v=native-toolbar-actions-20261116"></script>
   <script src="js/app-chat-inspector.js?v=chat-views-20261103-selected-inspector-20261113"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>

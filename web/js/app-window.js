@@ -24,6 +24,13 @@
     if (!controls) return;
     controls.hidden = !capabilities || !current || !current.chromeReady;
     if (!capabilities || !current) return;
+    var pin = control("hostWindowPin", "Оставлять окно открытым", "pin", "SetPinned");
+    pin.setAttribute("aria-pressed", String(!!current.pinned));
+    var full = control("hostWindowFull", "Полное окно", "windowFull", "ShowFull");
+    full.setAttribute("aria-pressed", String(!compact()));
+    full.disabled = full.disabled || !compact();
+    control("hostWindowMaximize", current.canRestore ? "Восстановить размер окна" : "Развернуть окно",
+      current.canRestore ? "windowRestore" : "windowMaximize", current.canRestore ? "Restore" : "Maximize");
     control("hostWindowPresentation", compact() ? "Свернуть в помощник" : "Компактное окно",
       compact() ? "windowCapsule" : "windowCompact", compact() ? "Park" : "ShowCompact");
     control("hostWindowClose", "Закрыть RNAssistant", "close");
@@ -131,30 +138,7 @@
   function menu(trigger) {
     if (unavailable()) return;
     function inFull(action) { if (!window.RNAssistantWindow.inFull(action)) action(); }
-    function visible(id) {
-      var node = document.getElementById(id);
-      return !!(node && node.getClientRects().length && getComputedStyle(node).visibility !== "hidden");
-    }
-    var fromCompact = compact(), mode = fromCompact ? "ShowFull" : "Park", size = current.canRestore ? "Restore" : "Maximize";
-    var entries = [
-      { label: compact() ? "Полное окно" : "Свернуть в помощник", icon: compact() ? "windowRestore" : "windowCapsule",
-        disabled: unavailable(mode), onSelect: function () { request(mode); } },
-      { label: current.canRestore ? "Восстановить размер окна" : "Развернуть окно",
-        icon: current.canRestore ? "windowRestore" : "windowMaximize", disabled: unavailable(size),
-        onSelect: function () { request(size); } },
-      { label: "Оставлять окно открытым", icon: "pin", checked: !!current.pinned, disabled: unavailable("SetPinned"),
-        status: "Не сворачивать окно при переходе к документу; без закрепления поверх других окон",
-        onSelect: function () { toggleSetting(trigger, "SetPinned", !current.pinned); } },
-      { separator: true }
-    ];
-    // Wide Full has direct panel controls; native Compact/narrow hides them.
-    // Use rendered visibility so CSS breakpoints and zoom remain the sole owner.
-    if (!visible("productMobileMenuButton")) entries.push({ label: "Навигация", icon: "panelLeft",
-      onSelect: function () { inFull(function () { RNAssistantShellLayout.setNavigationOpen(fromCompact || !RNAssistantShellLayout.isNavigationOpen()); }); } });
-    if (!visible("toggleChatInspectorButton")) entries.push({ label: "Инспектор", icon: "panel",
-      onSelect: function () { inFull(function () {
-        if (fromCompact) RNAssistantDockWorkspace.show("inspector"); else RNAssistantDockWorkspace.toggleTools();
-      }); } });
+    var entries = [];
     if (compact()) entries.push({ label: "Открыть…", icon: "layers",
       onSelect: function () { inFull(function () { RNAssistantShellLayout.command("chooser", trigger); }); } });
     entries.push({ label: "Расположение панелей…", icon: "layout",
@@ -175,6 +159,9 @@
     if (!bound) {
       bound = true;
       bindHeaderMove();
+      document.getElementById("hostWindowPin").onclick = function () { request("SetPinned", !current.pinned); };
+      document.getElementById("hostWindowFull").onclick = function () { request("ShowFull"); };
+      document.getElementById("hostWindowMaximize").onclick = function () { request(current.canRestore ? "Restore" : "Maximize"); };
       document.getElementById("hostWindowPresentation").onclick = function () { request(compact() ? "Park" : "ShowCompact"); };
       document.getElementById("hostWindowClose").onclick = function () { shutdown(false); };
       document.getElementById("hostWindowMenu").onclick = function () { menu(this); };

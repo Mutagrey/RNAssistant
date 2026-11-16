@@ -19,7 +19,7 @@
 .workspace-topbar .icon-btn svg { width: var(--shell-icon); height: var(--shell-icon); }
 .shell .workspace-topbar .product-mobile-menu-button { position: static; flex-shrink: 0; }
 .workspace-topbar [hidden] { display: none !important; }
-.host-window-controls { display: flex; align-items: center; gap: 0; padding-left: var(--space-2); margin-left: var(--space-1); border-left: 1px solid var(--line); }
+.host-window-controls { display: flex; align-items: center; gap: var(--space-1); padding-left: var(--space-2); margin-left: var(--space-1); border-left: 1px solid var(--line); }
 .host-window-controls #hostWindowClose { margin-left: var(--space-1); }
 .integrated-window-chrome .workspace-topbar { user-select: none; }
 /* Integrated hosts expose layout once, through the window menu. Other hosts keep the layout button. */
@@ -34,14 +34,13 @@ html[data-host-presentation="Compact"] .shell > .content { grid-column: 1; }
 html[data-host-presentation="Compact"] .shell > .content > .panel { display: none !important; }
 html[data-host-presentation="Compact"] .shell > .content > .chat-dock-host { height: 100%; width: 100%; }
 html[data-host-presentation="Compact"] :is(.section-rail, .global-nav, .split-layout[data-navigation] > .splitter,
-  .workspace-panel-controls, .workspace-view-actions, .chat-dock .dv-tabs-and-actions-container) { display: none !important; }
-html[data-host-presentation="Compact"] #productMobileMenuButton { display: none !important; }
+  .workspace-view-actions, .chat-dock .dv-tabs-and-actions-container) { display: none !important; }
 html[data-host-presentation="Compact"] .split-layout[data-navigation] { grid-template-columns: minmax(0, 1fr); }
 .host-compact-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: var(--space-3); padding: var(--space-4); text-align: center; }
 .host-compact-empty[hidden] { display: none; }
 .chat-dock-host.host-compact-no-chat > .chat-dock { visibility: hidden; }
 @media (max-width: 760px) {
-  .integrated-window-chrome .workspace-topbar :is(.workspace-panel-controls, .workspace-view-actions, #productMobileMenuButton) { display: none !important; }
+  .integrated-window-chrome .workspace-topbar :is(.workspace-view-actions, #workspaceLayout) { display: none !important; }
 }
 .workspace-statusbar { grid-column: 1 / -1; grid-row: 3; display: flex; align-items: center; gap: 6px; padding: 0 var(--space-3); border-top: 1px solid var(--line); background: var(--surface-subtle); color: var(--ink-muted); font-size: var(--text-xs); }
 #workspaceLayoutStatus { margin-left: auto; }

@@ -294,13 +294,17 @@ presentation. Compact временно максимизирует группу �
 в `AppDataPaths.NativeWindowStateFile`: schema 1, DIP относительно monitor work area,
 atomic read-merge-write по host profile под коротким межпроцессным lock вне STA.
 
-Уточнение верхней панели — In Review, 2026-11-16: `app-window` составляет оконное
-меню по принятому native snapshot и фактической видимости прямых переключателей
-панелей. Shell CSS скрывает отдельный `workspaceLayout` только при integrated
-chrome; остальные hosts сохраняют его как кнопку-иконку. Раскладкой по-прежнему
-управляет DockWorkspace через существующую Shell command. Общие ActionMenu и SVG
-registry переиспользуются; native commands, ACK/revision и переход через `inFull`
-не меняются. Runtime не получает нового UI-состояния или store.
+Уточнение верхней панели — In Review, 2026-11-16: прямые navigation, Inspector,
+pin, «Полное окно» и maximize/restore принадлежат `workspace-topbar` и остаются
+доступны в Compact/narrow. Shell CSS скрывает отдельный `workspaceLayout` только
+при integrated chrome; остальные hosts сохраняют его как кнопку-иконку. Вход в
+навигацию из Compact сначала использует существующий `inFull`, затем открывает
+панель. `app-window` обновляет `aria-pressed`/icon/label по revisioned snapshot;
+меню содержит только «Открыть…» в Compact, раскладку и редкие настройки окна.
+Раскладкой по-прежнему управляет DockWorkspace через существующую Shell command.
+Общие ActionMenu и SVG registry переиспользуются; native commands, ACK/revision
+и переход через `inFull` не меняются. Runtime не получает нового UI-состояния
+или store.
 
 Ограничения: [проверка и ревью](UI_MIGRATION_PLAN.md#native-window--in-review-2026-11-11).
 

@@ -331,26 +331,27 @@ Windows qualification открыты; далее P4a, без автоматич�
 ## Native window — In Review, 2026-11-11
 
 Уточнение по двум фото — **In Review, 2026-11-16**. Scope: presentation верхней
-панели и оконных меню; owners — existing Shell CSS, `app-window`, ActionMenu и
-SVG registry. Wide Full сокращён до пяти кнопок, narrow/Compact — до трёх;
-раскладка перенесена в native menu, а в остальных hosts остаётся кнопкой-иконкой.
-Навигация/Inspector появляются в меню только при скрытых прямых controls.
-Убраны повторяющиеся переходы Compact/Park, внутренние статусы и строки
-«Включено». Pin — флажок «Оставлять окно открытым»; автоматическое сворачивание
-и reset находятся в «Настройки окна…». Native commands/ACK/revision, `inFull`,
-drag, lifecycle и protocol сохраняются.
+панели и оконных меню; owners — existing Shell CSS, `app-window`, `app-layout`,
+ActionMenu и SVG registry. Navigation, Inspector, pin, «Полное окно» и
+maximize/restore остаются прямыми в Full, Compact и narrow; меню содержит только
+«Открыть…» в Compact, раскладку и редкие настройки. Раскладка в остальных hosts
+остаётся кнопкой-иконкой. Убраны повторяющиеся переходы и внутренние статусы.
+Автоматическое сворачивание и reset находятся в «Настройки окна…». Native
+commands/ACK/revision, `inFull`, drag, lifecycle и protocol сохраняются.
 
-Existing `host-window.test.js` обновлён под новые пункты/роли меню и проверяет
-отсутствие дублей, narrow/Compact, сохранение pin/auto-collapse preference.
+Existing `host-window.test.js` обновлён под прямые controls и проверяет отсутствие
+дублей, narrow/Compact, pin state, Full/maximize/restore и сохранение
+pin/auto-collapse preference.
 Синтаксис затронутых JS и `git diff --check` прошли. Временный Node VM smoke
 исполнил production `app-window.js`: 9 checks (меню, ACK/busy/stale/timeout,
 effective pin, reveal после Full, capabilities и одно сообщение на diagnostic)
 прошли; DOM geometry, ActionMenu и native effects заменены boundary doubles.
 Браузерные `host-window.test.js` / `shell-navigation.test.js` не выполнены:
 Chromium завершается до открытия страницы (`socket(): Operation not permitted`).
-Критерии ревью: отсутствие дублей в wide/narrow; доступность навигации, Inspector
-и раскладки после возврата из Compact; pin и зависимая настройка; Esc/focus,
-zoom и сохранённый drag участок. Визуальное принятие и реальное
+Критерии ревью: отсутствие дублей в wide/narrow; прямые панели, pin, Full и
+maximize/restore; доступность раскладки после возврата из Compact; pin и
+зависимая настройка; Esc/focus, zoom и сохранённый drag участок. Визуальное
+принятие и реальное
 Windows/WebView2 поведение открыты;
 для ручного ревью достаточно открыть оба меню, переключить Full/Compact и pin.
 Откат уточнения — только его Web/docs diff, без миграции данных.
