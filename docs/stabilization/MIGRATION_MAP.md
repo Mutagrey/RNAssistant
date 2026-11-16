@@ -196,6 +196,13 @@ paths while mixed-generation application backup stays closed. Owner: Core
 StorageJournal/JournalStorageRoot. Production Office/Workspace constructors still
 use the retiring adapters; scope-routing composition and one switch remain P7.
 
+Conversation scope routing (2026-11-16): internal `ConversationJournalRouter`
+composes existing per-scope journals through the shared index and canonical address
+fields. It adds no durable registry or facts. Actual Office/Workspace Store consumers
+cover multi-scope catalog/page/selection/move/delete and addressed index-loss recovery.
+Owner: Core conversation persistence. Production roots still construct the old
+adapters; combined Store/resource/runtime composition remains the next P7 change.
+
 P1/P2 bound catalog/plugin/browser consumers (2026-11-14): ConversationCatalogService
 uses IConversationStore.ReadOverview/SetAgentTitle; the existing excerpt/summary
 projection is shared in Core, and the native reader addresses bounded locators.

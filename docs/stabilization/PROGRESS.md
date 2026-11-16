@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Scope-routed conversation journals — 2026-11-16
+
+Internal / In Review. Existing per-scope `ConversationJournal` owners now sit behind
+one permanent router over the shared disposable index. Router operations resolve
+Office document authority or Workspace identity from canonical addresses and expose
+the existing Store/event contracts without a second registry, store or fact stream.
+An addressed missing index rebuilds once from canonical stream headers; unknown chats
+cannot inherit another scope.
+
+Focused `journal routing:` passes through actual `ChatSessionService` and
+`WorkspaceStore`: Office A, Office B and Workspace creation/catalog/page reads,
+selection, move/delete contract, event routing, address mismatch refusal and restart
+after index deletion. Harness build has 0 errors and two existing PDF CA1416 warnings.
+Production Office/Workspace roots still use the retiring adapters; combined
+Store/resource/runtime composition and Windows/Office evidence remain open.
+
 ## Storage-v2 root isolation — 2026-11-16
 
 Internal / In Review. Canonical conversation journals, the shared resource journal,

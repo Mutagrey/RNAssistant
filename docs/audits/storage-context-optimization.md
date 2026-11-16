@@ -6,6 +6,27 @@ Decision: [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md).
 Baseline inspected at `eed95756`, after `ecb7612d`; unrelated unfinished chat-overview
 and Browser edits are preserved. This file records evidence, not a second contract.
 
+## P7 prerequisite — scope-routed conversation journals (2026-11-16)
+
+1. F04/P7 composition: `ConversationJournalRouter` maps exact document/workspace
+   addresses to existing per-scope journals and delegates both `IConversationStore`
+   and `IEventStore`; it owns no durable facts or catalog.
+2. The shared index resolves addressed chat/event operations. A missing index rebuilds
+   once from canonical headers; host/key mismatch and unknown chats cannot cross scope.
+3. No production constructor was switched. Office/Workspace still use `ChatStore`;
+   the router is an isolated composition owner until the combined Store/resource/
+   runtime cutover.
+4. `journal routing:` passes through actual `ChatSessionService` and `WorkspaceStore`
+   across three scopes, addressed pages/events and restart after index deletion.
+   Harness build has 0 errors and two existing PDF CA1416 warnings.
+5. Multi-scope catalog is one header row per canonical chat; addressed reads remain
+   indexed and no transcript is hydrated by routing. Unknown IDs perform at most one
+   canonical discovery repair per router lifetime.
+6. Open: production composition, group/vendor/visual resource wiring, mixed-generation
+   backup, writer quiescence, adapter removal and Windows/Office evidence. P4 deferred.
+7. Updated session events, migration map and progress. No product bump because default
+   behavior remains the retiring backend.
+
 ## P7 prerequisite — isolated storage-v2 root (2026-11-16)
 
 1. F04/F05 storage composition: `JournalStorageRoot` now owns the explicit generation

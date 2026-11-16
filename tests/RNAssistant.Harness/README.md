@@ -1,5 +1,13 @@
 # RNAssistant Harness
 
+## Scope-routed journals — 2026-11-16
+
+Focused filter `journal routing:` exercises the existing Office `ChatSessionService`
+and Workspace `WorkspaceStore` through two document scopes and one workspace scope.
+It covers catalog/page routing, exact host/key isolation, event-store routing and a
+restarted router after deleting the disposable index. This is composition coverage,
+not a production writer switch or Windows/Office qualification.
+
 ## Photo package F01–F12 — 2026-11-16
 
 Focused filters: `model refs:`, `agent: loads and runs arbitrary macro`,

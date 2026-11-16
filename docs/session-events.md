@@ -14,6 +14,22 @@ construct the retiring `ChatStore`/resource adapters. Global scope routing, comb
 writer switch, mixed-generation application backup and Windows/Office evidence
 remain open.
 
+## Scope-routed journal composition — 2026-11-16
+
+One internal `ConversationJournalRouter` now composes the existing per-scope
+`ConversationJournal` owners for Office documents and Workspace projects. The
+shared index resolves an addressed chat to its canonical stream; creation,
+catalog, selection, move, delete, Store and event operations resolve the exact
+document authority or workspace identity through the existing address fields.
+The router owns no facts, mutable registry or second read model.
+
+Missing index recovery scans canonical stream headers once before rebuilding the
+single disposable index. Unknown chats do not inherit another scope or create a
+journal. Actual `ChatSessionService` and `WorkspaceStore` consumers pass across
+three scopes, addressed restart/index-loss recovery and host/key mismatch refusal.
+Production Office/Workspace roots are still composed on the retiring adapters; the
+combined cutover and Windows/Office evidence remain open.
+
 ## Retained model attempts — 2026-11-14
 
 Each HTTP request has one immutable AttemptId. The shared accumulator freezes one

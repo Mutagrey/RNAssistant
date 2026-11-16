@@ -794,6 +794,7 @@ namespace RNAssistant.Harness
                 Test("journal runtime: tool terminal lost acknowledgement and restore", JournalRuntimeToolReceipt),
                 Test("journal runtime: atomic checkpoint and lost acknowledgement", JournalRuntimeAtomicReceipt),
                 Test("journal text: Office and Workspace consumers", JournalTextChatConsumers),
+                Test("journal routing: Office and Workspace scopes", JournalScopeRoutingConsumers),
                 Test("journal text: lost acknowledgement rebuild and restore", JournalTextChatRecovery),
                 Test("journal text: bounded metadata header and append", JournalTextChatCostCurve),
                 Test("storage optimization: retained results queries and context", RetainedResultsQueriesAndContext),
