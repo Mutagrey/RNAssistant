@@ -2,7 +2,7 @@
 
 Status: **current production contract**. Host-neutral integration is implemented; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
 Response protocol is 8, reference contract revision is 4, new chat stream format
-is 8, and built-in prompt schema is 69. Formats 6 and 7 remain read-only history;
+is 8, and built-in prompt schema is 72. Formats 6 and 7 remain read-only history;
 intermediate 9/10 candidates were never deployed and have no compatibility path.
 Earlier format-8 histories with missing/older ReferenceContractVersion are read-only;
 new chats persist revision 4. Incompatible continuations are not hydrated or resumed;
@@ -27,9 +27,10 @@ unknown fields and authority violations still fail. Source strings and scalar
 types are never rewritten. Generated schemas and model instructions retain the
 canonical shape; normalization is local parsing, not a second wire protocol.
 
-Prompt schema 70 allows newly proposed macro invocations after runtime-confirmed
-normal return, under the current policy and progress limits. An uncertain invocation
-is still not retried automatically; normal return never proves its effect.
+Prompt schema 72 clarifies that a normally returned macro or other opaque call proves
+invocation completion, not its effect. It remains callable under the current policy
+and progress limits; an uncertain invocation is still not retried automatically, and
+normal return never proves its effect.
 The existing prompt-schema migration applies these defaults with its recovery copy.
 It retains the fresh-call rule shared between object output, strict-schema
 instructions/field descriptions and format repair: only `name` and object
@@ -96,6 +97,11 @@ user requirements; no runtime criterion registry exists. `summary` is rejected.
 Reference lookup is case-insensitive; duplicate `E1`/`e1` within one claim is invalid.
 With no eligible terminal results, including service-only calls, evidence/results
 may be empty. Otherwise at least one delivered eligible reference is required.
+Every `satisfied` claim requires its cited terminal evidence to have `Outcome=Ok`.
+A normally returned opaque call has `Outcome=Unknown`; it proves invocation
+completion, not a satisfied effect. Use `unverified` or `partially_satisfied` with
+that limitation, or read the affected state and cite the observation before claiming
+the effect. The protocol shape remains unchanged and effect health is never upgraded.
 
 ### Finish is an assertion
 

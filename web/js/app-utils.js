@@ -33,16 +33,24 @@
     return !!objectValue(message, "ProtocolMessage", "protocolMessage", false);
   };
 
+  function retainedUsage(message, key) {
+    var retained = objectValue(message, "RetainedAttempt", "retainedAttempt", null);
+    var body = objectValue(retained, "Body", "body", null);
+    return objectValue(body, key, key.charAt(0).toLowerCase() + key.slice(1), null);
+  }
   window.messageTotalTokens = function (message) {
-    return objectValue(message, "TotalTokens", "totalTokens", null);
+    var value = objectValue(message, "TotalTokens", "totalTokens", null);
+    return value === null || value === undefined ? retainedUsage(message, "TotalTokens") : value;
   };
 
   window.messagePromptTokens = function (message) {
-    return objectValue(message, "PromptTokens", "promptTokens", null);
+    var value = objectValue(message, "PromptTokens", "promptTokens", null);
+    return value === null || value === undefined ? retainedUsage(message, "PromptTokens") : value;
   };
 
   window.messageCompletionTokens = function (message) {
-    return objectValue(message, "CompletionTokens", "completionTokens", null);
+    var value = objectValue(message, "CompletionTokens", "completionTokens", null);
+    return value === null || value === undefined ? retainedUsage(message, "CompletionTokens") : value;
   };
 
   window.messageCreatedUtc = function (message) {

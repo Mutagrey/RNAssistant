@@ -1,5 +1,25 @@
 # Stabilization risk register
 
+## Photo package F01–F12 — host-neutral closed, Windows evidence open, 2026-11-16
+
+Owner: AgentKernel / finish admission, Workspace HTML definition, Browser/VBA
+routing and shared diagnostics UI. F01–F03 and F10–F12 are implemented
+host-neutral: honest invocation/effect separation for normal opaque returns, `html.project.register`
+with ordinary-Workspace discovery/open, concrete Browser path/missing-source hints,
+VBA `creation_target_invalid`/`unsupported_resource_operation`, and typed
+protocol/runtime/tool/storage labels. F04–F09 use the existing journal: metadata-only
+responses no longer expose a broken CAS loader, repaired calls keep exact ownership,
+the later `tool.result.recorded` row no longer masks execution status, empty
+reasoning cards are suppressed and the run footer includes known usage from unique
+accepted/rejected attempts with an explicit incomplete marker.
+
+Open evidence: Windows x64 + Office x64 + WebView2 photo checks for a normal macro
+return with Unknown effects, a separate A1/A2 read claim, ordinary Workspace
+`write → register → find → open`, raw/semantic attempt views and the usage footer.
+The Demo1 definition and the first failed `core.write` arguments were not disclosed;
+the implemented recovery covers the confirmed classes without guessing them. No
+Windows/Office qualification is claimed.
+
 ## Browser package audit — implementation corrected, evidence open, 2026-11-14
 
 Owner: Browser native/runtime + existing export/annotation/version services.

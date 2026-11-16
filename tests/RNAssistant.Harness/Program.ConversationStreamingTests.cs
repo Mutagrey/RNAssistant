@@ -61,11 +61,15 @@ namespace RNAssistant.Harness
             using (var stream = new ConversationStreamProgressProjector("attempt-b", true, null))
             {
                 var value = stream.End(ModelTransportOutcome.Completed, new LlmCompletionResult {
-                    Content = "{\"response\":{\"message\":\"json fallback\"}}", ReasoningContent = new string('r', 25000) });
+                    Content = "{\"response\":{\"message\":\"json fallback\"}}", ReasoningContent = new string('r', 25000),
+                    PromptTokens = 0, CompletionTokens = 12, TotalTokens = 12 });
                 AssertEqual("json fallback", value.Message, "JSON fallback uses the same snapshot projection");
                 AssertEqual(false, value.IsEventStream, "requested SSE is not observed SSE");
                 AssertEqual(24000, value.Reasoning.Length, "reasoning is bounded");
                 AssertTrue(value.ReasoningTruncated, "truncation is explicit");
+                AssertEqual(0, value.PromptTokens, "explicit provider zero is retained on the attempt");
+                AssertEqual(12, value.CompletionTokens, "completion usage is retained on the attempt");
+                AssertEqual(12, value.TotalTokens, "total usage is retained on the attempt");
             }
             Action<LlmStreamUpdate> late = null;
             var endedAttempts = new List<ConversationAttemptSnapshot>();

@@ -278,6 +278,32 @@ Mode, read-only и доступность owner фильтруют этот сп
 подмешиваются в начальную схему. Остальные descriptors подключаются через существующий
 exact admission `core.tools.read` или зависимости выбранного skill.
 
+### HTML registration, Browser target and VBA creation recovery — 2026-11-16
+
+`html.project.register {entryPath,members}` is the narrow agent transition over the
+existing Workspace HTML definition owner. It prepares against the exact chat/run,
+validates canonical existing members, creates only an absent definition and returns
+`registered` with `changed` plus a `core.find {type:"browser",query:"<entry>"}` next
+action. An identical definition is `VerifiedNoChange`; a different one returns
+`project_definition_conflict` without a write. A read-back failure after the atomic
+manifest write is `Unknown` and is not retried automatically. Registration does not
+open Browser, save a version, activate a plugin or turn an Office document into a
+Workspace project. Files remain owned by `core.write`.
+
+`browser.open` still requires the exact current-run semantic target delivered by
+`core.find`. A raw relative path is rejected as `browser_target_path` with the
+Workspace discovery call (`type=browser`) or Office discovery call
+(`scope=browser`). A missing exact source explains `html.project.register` in an
+ordinary Workspace; absence of a narrow search result never proves the owner has no
+source or that the network blocked it.
+
+`office.macro.run` normal return still has `Outcome=Unknown`; it records
+`OpaqueActionCompleted` and supports only an explicit unverified/partial invocation
+limitation, never a verified effect. A bare new VBA module name is now rejected as `creation_target_invalid` with
+the exact `VBA module: <name>` form. An existing supported target with an
+unsupported operation is `unsupported_resource_operation`; neither becomes the
+generic `resource_mutation_conflict`.
+
 Контракт текста, patch, upsert, recovery и имён задаёт
 [Text mutations](text-mutations.md). Профиль сохраняет exact policy/binding и порядок
 каталога. Единственная schema `core.patch` — `targets[].edits[]` с `old/new`

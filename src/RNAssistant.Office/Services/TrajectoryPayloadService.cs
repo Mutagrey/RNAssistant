@@ -39,8 +39,10 @@ namespace RNAssistant.Office.Services
                 var matches = _events.Read(session, SessionEventReadMode.RequireComplete)
                     .Where(item => item != null && string.Equals(item.EventId, eventId, StringComparison.Ordinal)).Take(2).ToArray();
                 cancellation.ThrowIfCancellationRequested();
-                if (matches.Length != 1 || matches[0].SessionId != session.Id || matches[0].Payload == null)
+                if (matches.Length != 1 || matches[0].SessionId != session.Id)
                     throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: exact event payload evidence is unavailable or ambiguous.");
+                if (matches[0].Payload == null)
+                    throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: this event is metadata-only; raw bytes were not retained.");
                 var source = PayloadRef.FromBlob(matches[0].Payload);
                 if (source.ByteLength > MaximumSourceBytes)
                     throw new InvalidOperationException("RESOURCE_BATCH_TOO_LARGE: diagnostic payload verification is limited to 32 MiB.");

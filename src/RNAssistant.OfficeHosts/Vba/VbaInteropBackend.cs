@@ -177,7 +177,7 @@ namespace RNAssistant.OfficeHosts.Vba
                         request.MacroName),
                     request.Arguments);
                 return VbaBackendActionResult.Ok(
-                    "Macro ran: " + request.MacroName,
+                    "Macro returned normally: " + request.MacroName + ". Its effects were not verified.",
                     new { output = output });
             }, "office_tool_error", true);
         }

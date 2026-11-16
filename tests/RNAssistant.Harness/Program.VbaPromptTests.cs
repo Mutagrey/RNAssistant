@@ -125,6 +125,25 @@ namespace RNAssistant.Harness
             AssertTrue(module == null, "malformed resource data creates no observation");
         }
 
+        private static void VbaCreationTargetRecovery()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
+                var session = NewSession(adapter);
+                var bare = PrepareVbaNative(executor, session, Command("core.write",
+                    "target", "Module1", "resourceType", "StdModule", "content", "Sub Module1Run()\nEnd Sub"));
+                AssertEqual(ToolExecutionOutcome.Error, bare.Record.Outcome, "bare module names do not select a resource owner");
+                AssertContains(bare.Record.Result.DataJson, "creation_target_invalid", "bare creation target has a specific code");
+                AssertContains(bare.Record.Result.Message, "VBA module: Module1", "recovery names the exact supported target");
+                var qualified = PrepareVbaNative(executor, session, Command("core.write",
+                    "target", "VBA module: Module1", "resourceType", "StdModule", "content", "Sub Module1Run()\nEnd Sub"));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, qualified.Record.Outcome,
+                    "the supported VBA creation target still prepares normally");
+            });
+        }
+
         private static void VbaPublicToolsUseNativeRuntime()
         {
             WithTempExecutor(delegate(

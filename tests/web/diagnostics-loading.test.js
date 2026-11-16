@@ -83,7 +83,7 @@ const { chromium } = require("playwright");
     const request = nav.getByRole("button", { name: "Запрос 1", exact: true });
     await request.click();
     await nav.locator('[data-tree-key="row-1"]').waitFor();
-    assert.match(await detail.textContent(), /Ответ принят/);
+    assert.match(await detail.textContent(), /Протокол ответа принят/);
     const mounted = await nav.locator('[role="treeitem"]').count();
     await request.click(); await request.click();
     assert.equal(await nav.locator('[role="treeitem"]').count(), mounted, "re-expanding reuses already mounted children");

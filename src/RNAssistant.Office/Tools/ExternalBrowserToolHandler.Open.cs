@@ -28,9 +28,14 @@ namespace RNAssistant.Office.Tools
             var source = _source?.Invoke() as IBrowserOpenSource;
             var owner = ExternalBrowserResourceProvider.Owner(_session);
             var name = ToolArgumentReader.String(context.Arguments, "target", "");
+            if (IsRelativePathTarget(name))
+                throw Error("target is a file path, not a Browser source. Run discovery and pass the exact returned target: " +
+                    DiscoveryHint(name) + ". In an ordinary Workspace without a Browser source, discover html.project.register first and declare the existing entry and members.", "browser_target_path");
             var targets = source?.OpenableTargetsFor(owner).Where(t => t.SemanticTarget == name).ToArray() ?? new BrowserOpenableTarget[0];
-            if (targets.Length > 1) throw Error("Several sources share this name. Select an unambiguous source; no active-tab fallback is allowed.", "resource_target_ambiguous");
-            if (targets.Length != 1) throw Error("Find one exact local Browser source in this conversation before opening.", "browser_source_unavailable");
+            if (targets.Length > 1) throw Error("Several sources share this name. Select an unambiguous source; no active-tab fallback is allowed. " + DiscoveryHint(name), "resource_target_ambiguous");
+            if (targets.Length != 1) throw Error("No exact local Browser source matches this target in the current owner. " + DiscoveryHint(name) +
+                (string.IsNullOrWhiteSpace(_session.WorkspaceId) ? "" :
+                    " If the page exists but no source is listed, discover html.project.register, register its entryPath and members, then repeat core.find in this run."), "browser_source_unavailable");
             var selected = targets[0]; var reference = ExternalBrowserResourceProvider.SourceReference(_session, selected);
             if (!_session.Messages.Any(m => m.RunId == context.Execution.RunId && m.Role == "tool" && m.ToolName == ResourceToolCatalog.FindToolId &&
                 m.ResourceRefs != null && m.ResourceRefs.Any(r => r.Uri == reference.Uri)))
@@ -74,6 +79,26 @@ namespace RNAssistant.Office.Tools
                 context.CompleteFailure(error); throw;
             }
         }
+
+        private static bool IsRelativePathTarget(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && !value.StartsWith("Browser source: ", StringComparison.Ordinal) &&
+                (value.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                 value.IndexOf('/') >= 0 || value.IndexOf('\\') >= 0);
+        }
+
+        private string DiscoveryHint(string target)
+        {
+            var query = target ?? string.Empty;
+            var separator = Math.Max(query.LastIndexOf('/'), query.LastIndexOf('\\'));
+            if (separator >= 0) query = query.Substring(separator + 1);
+            if (query.Length > 120) query = query.Substring(0, 120);
+            var request = string.IsNullOrWhiteSpace(_session.WorkspaceId)
+                ? new Newtonsoft.Json.Linq.JObject { ["scope"] = "browser", ["query"] = query }
+                : new Newtonsoft.Json.Linq.JObject { ["type"] = "browser", ["query"] = query };
+            return "core.find " + request.ToString(Formatting.None);
+        }
+
         private sealed class OpenResult
         {
             [JsonProperty("status")] public string Status { get; set; }

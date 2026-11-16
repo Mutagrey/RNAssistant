@@ -83,10 +83,7 @@
   function matchesFilter(row, filter) {
     if (filter === "problems") return isProblem(row);
     if (filter === "attempts") return !!requestCause(row) || ["cancelled", "rejected"].indexOf(rowStatus(row)) >= 0;
-    if (filter === "api") {
-      var payload = payloadAction(row);
-      return !!(payload && payload.api);
-    }
+    if (filter === "api") return /^(model\.request\.prepared|llm\.request|llm\.response)$/.test(rowKind(row));
     if (filter === "model") return isModel(row);
     if (filter === "tools") return isTool(row);
     if (filter === "effects") return isEffect(row);
@@ -275,11 +272,11 @@
 
   function payloadAction(row) {
     var kind = rowKind(row);
-    var ids = sourceIds(row);
-    if (ids.length !== 1) return null;
+    var eventId = payloadEventId(row);
+    if (!eventId) return null;
     if (kind === "model.request.prepared" || kind === "llm.request") {
       return {
-        eventId: ids[0],
+        eventId: eventId,
         label: "Показать запрос к модели",
         title: "Запрос к модели",
         api: true
@@ -287,7 +284,7 @@
     }
     if (kind === "llm.response") {
       return {
-        eventId: ids[0],
+        eventId: eventId,
         label: "Показать ответ модели",
         title: "Ответ модели",
         api: true
@@ -295,7 +292,7 @@
     }
     if (kind === "model.attempt.rejected" || kind === "agent.response.rejected") {
       return {
-        eventId: ids[0],
+        eventId: eventId,
         label: "Показать отклонённый ответ",
         title: "Отклонённый ответ модели",
         rejected: true,
@@ -303,6 +300,22 @@
       };
     }
     return null;
+  }
+
+  function payloadEventId(row) {
+    var raw = value(row, "DataJson", "dataJson", null);
+    if (raw === null || raw === undefined || raw === "" || !window.RNAssistantJsonViewer) return null;
+    var parsed = RNAssistantJsonViewer.parse(typeof raw === "string" ? raw : JSON.stringify(raw));
+    if (!parsed.ok || parsed.root.type !== "object") return null;
+    var payloads = parsed.root.entries.filter(function (entry) {
+      return entry.key.value === "payload" || entry.key.value === "Payload";
+    });
+    if (payloads.length !== 1 || payloads[0].value.type !== "object") return null;
+    var ids = payloads[0].value.entries.filter(function (entry) {
+      return entry.key.value === "eventId" || entry.key.value === "EventId";
+    });
+    if (ids.length !== 1 || ids[0].value.type !== "string" || !ids[0].value.value) return null;
+    return ids[0].value.value;
   }
 
   function createPayloadView(row, options) {
@@ -519,7 +532,7 @@
     });
     runs.forEach(function (run, runId) {
       run.runId = runId;
-      var exchanges = new Map(), seeds = new Map(), links = { request: new Map(), attempt: new Map(), step: new Map() }, calls = new Map();
+      var exchanges = new Map(), seeds = new Map(), links = { request: new Map(), attempt: new Map(), step: new Map() }, calls = new Map(), conflicts = new Set();
       function register(node, fields) {
         ["request", "attempt", "step"].forEach(function (field) {
           var id = fields[field]; if (!id || !runId) return;
@@ -547,6 +560,15 @@
         var steps = links.step.get(fields.step);
         return steps && steps.size === 1 ? Array.from(steps)[0] : null;
       }
+      function explicitConflict(fields) {
+        if (fields.request) return !links.request.has(fields.request);
+        if (fields.attempt) return !links.attempt.has(fields.attempt);
+        if (!fields.step) return false;
+        var steps = links.step.get(fields.step);
+        // A shared logical step is ambiguous metadata, not a contradictory
+        // owner. An unknown explicit step remains a real conflict.
+        return !steps || steps.size === 0;
+      }
       function seed(row, request) {
         var fields = identity(row), node = resolve(fields, !request);
         if (!node) {
@@ -564,11 +586,22 @@
       }
       run.rows.filter(isRequest).forEach(function (row) { seed(row, true); });
       run.rows.filter(isReply).forEach(function (row) { seed(row, false); });
+      // A repair request names the rejected source attempt. Attach its typed
+      // disposition to that original exchange without inventing a new owner.
+      run.rows.filter(isRequest).forEach(function (row) {
+        var cause = requestCause(row), source = value(cause, "SourceModelAttemptId", "sourceModelAttemptId", "");
+        var nodes = source && links.attempt.get(source);
+        if (!nodes || nodes.size !== 1) return;
+        var target = Array.from(nodes)[0];
+        target.dispositionKind = value(cause, "Kind", "kind", "");
+        target.dispositionFeedback = value(cause, "Feedback", "feedback", "");
+      });
       run.rows.forEach(function (row) {
         var call = correlation(row, "ToolCallId"); if (!call || !runId) return;
         var fields = identity(row), owner = resolve(fields, true);
         if (!calls.has(call)) calls.set(call, new Set());
-        if (owner || fields.attempt || fields.request || fields.step) calls.get(call).add(owner);
+        if (owner) calls.get(call).add(owner);
+        else if (explicitConflict(fields)) conflicts.add(call);
       });
       var bookkeeping = [], unbound = [];
       run.rows.forEach(function (row) {
@@ -576,7 +609,7 @@
         var fields = identity(row), owner = seeds.get(row) || resolve(fields, true);
         if (!owner && !fields.attempt && !fields.request) {
           var known = calls.get(correlation(row, "ToolCallId"));
-          if (known && known.size === 1) owner = Array.from(known)[0];
+          if (known && known.size === 1 && !conflicts.has(correlation(row, "ToolCallId"))) owner = Array.from(known)[0];
         }
         if (owner) owner.rows.push(row);
         else if (isTool(row)) unbound.push(row);
@@ -632,7 +665,8 @@
     if (node.type === "exchange") return terminalRow(node.rows, ["model.response.accepted", "model.attempt.rejected", "agent.response.rejected", "llm.failure"]) ||
       terminalRow(node.rows, ["llm.response"]) || node.request;
     if (node.type === "action") return issue || terminalRow(node.rows,
-      ["tool.execution.completed", "tool.execution.finished", "tool.result.recorded", "domain.effect.verified"]) || node.rows[node.rows.length - 1];
+      ["tool.execution.completed", "tool.execution.finished", "domain.effect.verified"]) ||
+      terminalRow(node.rows, ["tool.result.recorded"]) || node.rows[node.rows.length - 1];
     return node.rows.slice().sort(function (a, b) { return issuePriority(b) - issuePriority(a); })[0];
   }
 
@@ -646,9 +680,19 @@
     if (node.type === "service") return node.rows.some(hasUnknownEffect) ? "Не подтверждено" : problem ? "Есть проблемы" : countLabel(node.rows.length, ["событие", "события", "событий"]);
     if (node.type === "exchange") {
       if (!node.request) return "Запрос не найден в выборке";
+      var rejection = terminalRow(node.rows, ["model.attempt.rejected", "agent.response.rejected"]);
+      if (rejection) {
+        if (node.dispositionKind === "CompletionRejected") return "Завершение отклонено";
+        if (node.dispositionKind === "PartialFinishRecheck") return "Частичный итог отклонён";
+        var causeKind = node.rows.map(function (item) { return value(requestCause(item), "Kind", "kind", ""); })
+          .filter(Boolean)[0];
+        if (causeKind === "CompletionRejected") return "Завершение отклонено";
+        if (causeKind === "PartialFinishRecheck") return "Частичный итог отклонён";
+        if (isFinishRejectionCode(value(rejection, "ErrorCode", "errorCode", ""))) return "Завершение отклонено";
+        return "Ответ отклонён";
+      }
       if (!row || isRequest(row)) return "Ответ не найден в выборке";
-      if (rowKind(row) === "model.response.accepted") return "Ответ принят";
-      if (rowStatus(row) === "rejected") return "Ответ отклонён";
+      if (rowKind(row) === "model.response.accepted") return "Протокол ответа принят";
       return rowKind(row) === "llm.response" ? "Ответ получен" : statusLabel(rowStatus(row));
     }
     if (node.type === "run") {
@@ -663,6 +707,13 @@
 
   function visibleNode(node, filter) {
     return node.rows.some(function (row) { return matchesFilter(row, filter); });
+  }
+
+  function isFinishRejectionCode(code) {
+    return ["contradictory_outcome", "contradictory_assessment", "missing_finish_results",
+      "missing_finish_evidence", "missing_invocation_evidence", "invalid_finish_results",
+      "invalid_assessment", "invalid_claim_basis", "nonterminal_evidence", "undelivered_evidence",
+      "unknown_evidence", "completion_requirements_unmet"].indexOf(String(code || "").toLowerCase()) >= 0;
   }
 
   function visitTree(nodes, callback, path) {
@@ -748,6 +799,9 @@
     var choice = appendText(controls, "select", "rna-form-control compact rn-run-journal-data-kind", "");
     choice.setAttribute("aria-label", "Содержимое события");
     var payload = createPayloadView(row, options);
+    if (!payload && /^(llm\.request|llm\.response|model\.request\.prepared|model\.attempt\.rejected|agent\.response\.rejected)$/.test(rowKind(row)))
+      appendText(host, "p", "rn-run-journal-detail-meta",
+        "Точные байты этой попытки не сохранены. Доступны метаданные события; сохранённое семантическое содержимое показано в истории попытки.");
     [["data", "Данные"], ["evidence", "Связи"]].concat(payload ? [["payload", "Содержимое"]] : []).forEach(function (item) {
       var option = appendText(choice, "option", "", item[1]); option.value = item[0];
     });
@@ -856,6 +910,13 @@
   function groupSummary(node) {
     var cause = node.type === "exchange" && requestCause(node.request);
     if (cause) return requestCauseLabel(cause) + ": " + boundedText(value(cause, "Feedback", "feedback", ""), 2000);
+    if (node.type === "exchange" && node.dispositionFeedback)
+      return requestCauseLabel({ Kind: node.dispositionKind }) + ": " + boundedText(node.dispositionFeedback, 2000);
+    if (node.type === "exchange") {
+      var rejected = terminalRow(node.rows, ["model.attempt.rejected", "agent.response.rejected"]);
+      if (rejected) return displayCause(rejected) ||
+        ("Код: " + boundedText(value(rejected, "ErrorCode", "errorCode", "ответ отклонён"), 240));
+    }
     var row = representative(node), summary = row && displayCause(row);
     if (summary) return summary;
     if (node.type === "run" || node.type === "exchange") return "";

@@ -42,6 +42,11 @@ namespace RNAssistant.Core.ModelProtocol
         [JsonProperty]
         public ModelTransportOutcome TransportOutcome { get; internal set; }
         [JsonProperty] public bool OutputTruncated { get; internal set; }
+        // Optional numeric provider usage for this exact attempt. Zero is real;
+        // absence remains unknown and is never replaced by an estimate.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? PromptTokens { get; internal set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? CompletionTokens { get; internal set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? TotalTokens { get; internal set; }
         public bool TransportEnded { get { return TransportOutcome != ModelTransportOutcome.Receiving; } }
     }
 
@@ -86,6 +91,7 @@ namespace RNAssistant.Core.ModelProtocol
         private int _pending;
         private bool _sawContent, _messageTruncated, _reasoningTruncated, _outputTruncated;
         private bool? _isEventStream;
+        private int? _promptTokens, _completionTokens, _totalTokens;
         private ModelTransportOutcome _outcome;
         public ConversationAttemptSnapshot Snapshot { get { lock (_sync) return Capture(); } }
 
@@ -142,6 +148,9 @@ namespace RNAssistant.Core.ModelProtocol
                     _outputTruncated = completion.Termination == LlmCompletionTermination.OutputLimit;
                     if (_reasoning.Length == 0) Append(_reasoning, completion.ReasoningContent, ref _reasoningTruncated);
                     _reasoningTruncated |= completion.ReasoningTruncated;
+                    _promptTokens = completion.PromptTokens;
+                    _completionTokens = completion.CompletionTokens;
+                    _totalTokens = completion.TotalTokens;
                 }
                 Append(_message, _extractor.Complete(), ref _messageTruncated);
                 _messageTruncated |= _message.Length > 0 && !_extractor.MessageCompleted;
@@ -187,7 +196,8 @@ namespace RNAssistant.Core.ModelProtocol
                 Reason = _reason.ToString(), Decision = _decision.ToString(), Refusal = _refusal.ToString(),
                 ReasonTruncated = _reasonTruncated, DecisionTruncated = _decisionTruncated, RefusalTruncated = _refusalTruncated,
                 MessageTruncated = _messageTruncated, ReasoningTruncated = _reasoningTruncated,
-                IsEventStream = _isEventStream, TransportOutcome = _outcome, OutputTruncated = _outputTruncated };
+                IsEventStream = _isEventStream, TransportOutcome = _outcome, OutputTruncated = _outputTruncated,
+                PromptTokens = _promptTokens, CompletionTokens = _completionTokens, TotalTokens = _totalTokens };
         }
 
         private void Publish()

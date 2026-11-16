@@ -25,7 +25,6 @@ namespace RNAssistant.Core.ModelProtocol
             "Avoid restating the task, lengthy deliberation or claiming an unexecuted action succeeded. ";
         public const string CriterionGuidance =
             "criterion is a short statement of one original user requirement, without copied source, logs or repeated explanation. ";
-
         public const string UnknownEffectGuidance =
             "An unknown effect requires investigation. Before finish, successfully read each affected exact current resource after the unconfirmed operation. " +
             "Inspection requires a fresh, complete whole-resource live read; partial ranges and immutable historical snapshots do not satisfy it. " +
@@ -45,6 +44,7 @@ namespace RNAssistant.Core.ModelProtocol
             "Required outcome is the model's task assessment: completed (all results satisfied), partial (some achieved and some incomplete work: partially_satisfied or a mix), " +
             "or unable_to_complete (no satisfied/partially_satisfied task results). Assess requested outcomes, not incidental successful discovery steps. " +
             "reason briefly explains why finishing is justified now; message must be nonblank and give the actual answer/result, a concise explanation and any unfinished work or verification limits. " +
+            "A normally returned opaque call proves invocation completion, not a satisfied effect: report it as unverified or partially_satisfied with that limit, and read the affected state before claiming a result. " +
             "For a simple direct answer, one clear sentence is enough. Use the user's language. " +
             "Outcome and result assessments are model claims; runtime checks evidence independently. " +
             "If indispensable user input is needed, choose execute with the available question tool. " +
@@ -100,7 +100,7 @@ namespace RNAssistant.Core.ModelProtocol
             ReasonGuidance + CriterionGuidance +
             "Choose execute when a useful authorized tool step remains. " + ExecuteGuidance +
             SchemaReflectionInstruction +
-            "Choose finish only to deliver the answer or honest outcomes now. Assess original user criteria; cite issued eligible evidence (E1, E2) from terminal results of this chat delivered in this request. Discovery/schema/skill loading can finish with empty evidence. " +
+            "Choose finish only to deliver the answer or honest outcomes now. Assess original user criteria. A normal opaque return is invocation completion, not a satisfied effect: use unverified or partially_satisfied and state the limit unless a suitable read-back proves the result. Cite issued eligible evidence (E1, E2) from terminal results of this chat delivered in this request. Discovery/schema/skill loading can finish with empty evidence. " +
             "Model assessments do not prove effects; failed or unknown outcomes cannot be reported as verified changes. " +
             "Runtime issues E1 for an eligible terminal result; R1@v2 is an observed resource version. R references are never finish evidence; R is never a tool argument. Reference lookup is case-insensitive, without changing targets or source text. Ask indispensable questions through the question tool. Follow the current reflections_remaining. " +
             "Do not repeat accepted calls merely to obtain another receipt or invent evidence. " + FinishGuidance;

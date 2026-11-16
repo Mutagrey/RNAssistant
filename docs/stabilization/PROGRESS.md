@@ -1,5 +1,30 @@
 # Stabilization progress
 
+## Photo package F01–F12 baseline — 2026-11-16
+
+Host-neutral implementation / In Review. A normally returned opaque macro gets an
+accepted honest unverified/partial finish; it confirms invocation while effect health
+stays Unknown, without adding a protocol field. Ordinary Workspace
+HTML gets an exact `html.project.register` transition over the existing definition
+owner, followed by current-run Browser discovery and the existing `browser.open`.
+Browser relative-path/missing-source and VBA bare-creation failures return concrete
+recovery; typed tool/storage statuses, repaired-call ownership, metadata-only
+payload availability, empty reasoning suppression and unique-attempt usage projection
+are shared across Office/Workspace/plugin paths. `16.27.20-dev`.
+
+Checks: Harness build 0 errors (two existing CA1416 platform warnings); Protocol v8
+185 cases/2414 assertions; `model refs:` 12/12; macro invocation, ordinary Workspace
+HTML registration/discovery/open, Browser recovery and VBA creation recovery pass;
+`local browser:` 15/15; conversation stream timer/terminal usage pass; Node
+`run-journal`, `context-usage` and `run-view-state` 8/8 pass. The Playwright
+`agent-activity-layout` fixture could not run because `playwright` is not installed
+locally; its new empty-reasoning assertions remain to be run in an environment with
+that existing dependency.
+
+Open: Windows x64 + Office x64 + WebView2 photo evidence for macro normal return,
+A1/A2 read-back, ordinary Workspace registration/open, raw/semantic attempt views,
+and the run usage footer. No Windows/Office qualification is claimed.
+
 ## Per-chat storage summaries — 2026-11-15
 
 Active session summaries now use the existing addressed Store usage projection;

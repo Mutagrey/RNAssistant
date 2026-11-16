@@ -78,7 +78,10 @@ adjacency never fills a gap. Each row appears once; step numbers are positions i
 the loaded selection, not reconstructed runtime ordinals. Filtering retains the
 matching ancestor paths. Bulk problem expansion is limited to 50 source rows plus
 their ancestors. JSON/body reading remains explicit; collapsing any ancestor
-unmounts hidden readers, cancels body loads and suppresses late delivery.
+unmounts hidden readers, cancels body loads and suppresses late delivery. An accepted
+call origin is the primary action link. A shared logical StepId used by several model
+attempts does not erase that exact origin and never adds a null owner; a second
+different exact owner or an unknown explicit step remains a conflict.
 
 The category selector and shared action menus retain exact navigation. Changing a
 view retains the selected chat/run filter. Back restores the preceding same-source
@@ -235,7 +238,7 @@ storage. Projection correlation IDs are collapsed under a technical section, whi
 source-range action still returns to raw JSONL rows. Missing evidence and `ui.projected`
 retain their non-proof wording.
 
-New `llm.response` events keep compact actual token usage inline beside the immutable CAS response reference. Older streams fall back to token usage in replayable assistant-message operations. Cost is shown only when the provider persisted it in `usage`; RNAssistant does not recalculate historical cost from mutable current price tables.
+New `llm.response` events keep compact actual token usage inline beside the immutable CAS response reference. Retained attempts also keep optional numeric usage on their existing atomic body, so the run footer can include accepted, format-rejected, runtime-rejected and repair attempts. Deduplicate by RequestId/ModelAttemptId, not by visible message; a missing or partial response remains unknown rather than zero. Older streams fall back to token usage in replayable assistant-message operations. Cost is shown only when the provider persisted it in `usage`; RNAssistant does not recalculate historical cost from mutable current price tables.
 
 ## Visibility projection
 

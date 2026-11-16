@@ -2358,6 +2358,7 @@ namespace RNAssistant.Harness
                     ModelProtocolWire.WriteAcceptedCall("Inspect the current workbook after the opaque macro.",
                         "Проверяю доступное состояние книги.", new ConversationToolCall {
                             Name = "excel.inspect", Arguments = new JObject { ["kind"] = "sheets" } }),
+                    null,
                     null
                 });
                 var session = NewSession(adapter);
@@ -2371,13 +2372,13 @@ namespace RNAssistant.Harness
                     if (response == null)
                     {
                         var evidence = session.Messages.Where(message => message.EvidenceReference != null && message.Activity == null &&
-                            (message.ToolName == VbaToolCatalog.RunMacro || message.ToolName == "excel.inspect"))
+                            message.ToolName == VbaToolCatalog.RunMacro)
                             .Select(message => message.EvidenceReference.Alias).ToArray();
-                        AssertEqual(2, evidence.Length, "macro dispatch and subsequent inspection are cited");
+                        AssertEqual(1, evidence.Length, "the normal macro return is cited");
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Report macro dispatch without claiming an effect.", "Макрос выполнен.",
-                            results: new[] { new ConversationResultClaim("Macro dispatched; effect unverified.",
-                                evidence, ConversationAssessment.Unverified) }, outcome: ConversationOutcome.UnableToComplete);
+                            "Report the normal invocation with an explicit effect limitation.", "SimpleMacro вызван и штатно завершился. Его изменения отдельно не проверялись.",
+                            results: new[] { new ConversationResultClaim("Запустить SimpleMacro; эффект не проверен.",
+                                evidence, ConversationAssessment.PartiallySatisfied) }, outcome: ConversationOutcome.Partial);
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
@@ -2392,7 +2393,7 @@ namespace RNAssistant.Harness
                     }, tools, null)
                     .GetAwaiter().GetResult();
 
-                AssertEqual(5, calls.Count, "schema loads, macro execution, inspection and final response");
+                AssertEqual(6, calls.Count, "schema loads, macro execution, inspection, partial recheck and final response");
                 var initialCallable = ResponseSchemaCallNames(requestOptions[0].ResponseSchemaJson).ToArray();
                 var admittedCallable = ResponseSchemaCallNames(requestOptions[1].ResponseSchemaJson).ToArray();
                 AssertTrue(!initialCallable.Contains("office.macro.run", StringComparer.OrdinalIgnoreCase) &&
@@ -2406,9 +2407,13 @@ namespace RNAssistant.Harness
                     "public native arguments are serialized only at the hidden backend boundary");
                 AssertContains(FlattenSimple(calls[1]), "\"kind\":\"tool-schema\"", "macro schema evidence reaches execution step");
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
-                AssertContains(result.AssistantText, "Макрос выполнен.", "macro result returns to the model");
-                AssertContains(result.AssistantText, "состояние 1 операций записи осталось неизвестным",
-                    "unknown macro effect remains explicit in the user-visible result");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle,
+                    "normal macro return completes the invocation requirement with an honest partial outcome");
+                AssertEqual("partial", result.RunViewState.ModelOutcome, "the model reports the unverified effect honestly");
+                AssertEqual("partially_satisfied", result.RunViewState.ModelResults.Single().Assessment,
+                    "the invocation limitation remains explicit without a new protocol field");
+                AssertContains(result.AssistantText, "SimpleMacro вызван и штатно завершился", "normal return reaches the user");
+                AssertContains(result.AssistantText, "изменения отдельно не проверялись", "unknown effects remain explicit");
             });
         }
 

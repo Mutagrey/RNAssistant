@@ -2198,6 +2198,11 @@ Finish `outcome` remains inside the accepted v8 response body. `RunViewState.Mod
 is its replayable model-assessment projection, not a second task verdict or source
 of runtime health/effect counts. Earlier outcome-less finishes are refused by
 preflight; no outcome is guessed, no source body is rewritten or removed.
+Finish claims keep the existing `criterion/evidence/assessment` shape. A normally
+returned opaque call remains `Unknown` and may support only an explicit
+unverified/partial assessment; the cited call/terminal and effect health stay owned
+by their existing canonical events. No extra claim-scope field or second evidence
+store is added.
 
 ## Conversation input queue
 

@@ -71,6 +71,13 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.match(runView.failureReasonLabel("reflection_limit"), /промежуточных решений/);
   assert.match(runView.failureReasonLabel("ReflectionDisabled"), /Рефлексия отключена.*корректировка не запрашивалась/);
   assert.match(runView.failureReasonLabel("repeated_tool_no_progress"), /отклонённые действия/);
+  assert.match(runView.failureReasonLabel("repeated_finish_no_progress"), /Итог трижды отклонён/);
+  const protocolFailure = runView.normalize(Object.assign(state("protocol-failure", "failed"), {
+    Reason: "ProtocolExhausted",
+    Narrative: "Ответ модели не выполнен после 3 попыток: contradictory_outcome: results[0] conflicts with Unknown."
+  }));
+  assert.match(runView.runNotice(protocolFailure).text, /Ответ модели отклонён.*contradictory_outcome/,
+    "protocol exhaustion keeps the concrete last rejection");
   assert.equal(runView.runNotice(runView.normalize(state("completed"))), null);
   const completedUnknown = runView.normalize(Object.assign(state("completed-unknown"), {
     ExecutionHealth: "unknown", UnknownEffects: 1, UnverifiedWrites: 1
@@ -161,6 +168,8 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   ["renderMessages", "renderContext", "renderContextMeter", "renderModelControls"].forEach(name => {
     ui[name] = () => {};
   });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-groups.js"), "utf8"), ui,
+    { filename: "app-chat-groups.js" });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-state.js"), "utf8"), ui,
     { filename: "app-chat-state.js" });
   // This fixture checks catalog/transcript delivery; composer owns draft I/O.
@@ -193,11 +202,11 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
     RunViewState: state("run-new", "running") };
   const selectedNode = ui.chatTreeNode(olderRunning);
   assert.equal(selectedNode.status, "", "selected terminal detail outranks an older running catalog entry");
-  assert.equal(selectedNode.actions[1].disabled, false, "an older running catalog does not block chat actions");
+  assert.equal(selectedNode.actions[2].disabled, false, "an older running catalog does not block chat actions");
   const differentRun = ui.chatTreeNode({ Id: "chat-a", Title: "Chat A", Revision: 8,
     RunViewState: state("run-next", "running") });
   assert.equal(differentRun.status, "unknown", "a newer run keeps its own status");
-  assert.equal(differentRun.actions[1].disabled, true, "the next run still protects chat actions");
+  assert.equal(differentRun.actions[2].disabled, true, "the next run still protects chat actions");
   const transcript = ui.state.messages;
   assert.equal(ui.applyChatPreferenceStateForChat({ chatId: "chat-a", sessionRevision: 8,
     model: "model-new", mode: "agent", reasoningEnabled: true }, "chat-a"), true);

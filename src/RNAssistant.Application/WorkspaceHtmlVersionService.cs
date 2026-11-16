@@ -236,8 +236,31 @@ namespace RNAssistant.Application
         public HtmlProjectDefinitionState GetDefinition(HtmlProjectDefinitionRequest request)
         { RequireOwner(request.OwnerScope, request.WorkspaceId); return _workspaces.GetHtmlProjectDefinition(_workspaces.OpenConnected(request.WorkspaceId)); }
         public HtmlProjectDefinitionState SetDefinition(HtmlProjectDefinitionRequest request, CancellationToken token)
-        { RequireOwner(request.OwnerScope, request.WorkspaceId); return _workspaces.SetHtmlProjectDefinition(_workspaces.OpenConnected(request.WorkspaceId),
-            request.ExpectedFingerprint, request.Definition, token); }
+        { return SetDefinition(request, null, null, token); }
+
+        // Agent registration binds the exact current run and marks the manifest
+        // write boundary immediately before the existing atomic publication.
+        internal HtmlProjectDefinitionState SetDefinition(HtmlProjectDefinitionRequest request, SavedVersionActor actor,
+            Action beforeWrite, CancellationToken token)
+        {
+            RequireOwner(request.OwnerScope, request.WorkspaceId);
+            if (actor != null) RequireActor(request.WorkspaceId, actor);
+            return _workspaces.SetHtmlProjectDefinition(_workspaces.OpenConnected(request.WorkspaceId),
+                request.ExpectedFingerprint, request.Definition, token, beforeWrite);
+        }
+
+        internal void RequireDefinitionRun(BrowserOwnerScope owner, string runId)
+        {
+            RequireOwner(owner, owner.ScopeId);
+            RequireActor(owner.ScopeId, new SavedVersionActor { Kind = SavedVersionActorKind.Run,
+                ChatId = owner.ChatId, RunId = runId });
+        }
+
+        internal void ValidateDefinition(HtmlProjectDefinitionRequest request, CancellationToken token)
+        {
+            RequireOwner(request.OwnerScope, request.WorkspaceId);
+            _workspaces.ValidateHtmlProjectDefinition(_workspaces.OpenConnected(request.WorkspaceId), request.Definition, token);
+        }
 
         private BrowserTargetDescriptor Target(BrowserTargetDescriptor target)
         {

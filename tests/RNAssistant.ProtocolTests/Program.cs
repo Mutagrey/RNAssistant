@@ -107,6 +107,7 @@ internal static class Program
         Case("duplicate evidence", Finish(Change(Claim("satisfied"), "evidence", new JArray("call-1", "call-1"))), "duplicate_evidence", schemaValid: true);
         foreach (var bad in new JToken[] { new JValue("ok"), new JValue("Satisfied"), new JValue(0) })
             Case("bad assessment " + bad, Finish(Change(Claim("satisfied"), "assessment", bad)), "invalid_assessment");
+        Case("claim basis field is not part of the wire", Finish(Change(Claim("satisfied"), "basis", "result")), "invalid_finish_results");
     }
 
     private static void FinishOutcomes()

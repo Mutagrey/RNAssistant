@@ -1,5 +1,14 @@
 # RNAssistant backlog
 
+## Photo package F01–F12 — closed host-neutral — 2026-11-16
+
+Owner: AgentKernel/finish admission, Workspace HTML/Browser and shared diagnostics.
+All reproducible host-neutral defects from the 2026-11-15 photo package are
+implemented and covered by focused checks; the remaining work is the separate
+Windows/Office/WebView2 evidence listed in
+[RISK_REGISTER](RISK_REGISTER.md).
+No further broad feature work is implied.
+
 ## Workspace Task fork authority — 2026-11-14
 
 Owner: WorkspaceConversationService / WorkspaceTaskListObserver / TaskListPublication.

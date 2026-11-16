@@ -1,14 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using Newtonsoft.Json;
 using System.Linq;
 using System.Threading;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
+using RNAssistant.Core.Tools.Contracts;
 
 namespace RNAssistant.Harness
 {
@@ -110,6 +116,111 @@ namespace RNAssistant.Harness
                 var authority = new ResourceAuthorityStore(paths);
                 AssertEqual(snapshot.Members.Count, authority.GetRevision(DocumentArtifactStore.WorkspaceHtmlScope(imported.WorkspaceId), record.ContentReference).Dependencies.Count,
                     "manifest retains every exact file dependency for reachability");
+            });
+        }
+
+        private static void WorkspaceHtmlAgentRegistration()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new WorkspaceStore(paths);
+                var root = Path.Combine(paths.Root, "html-registration");
+                var workspace = store.Open(root, true);
+                Directory.CreateDirectory(root);
+                File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>Registered</title>");
+                var chats = new ChatStore(paths);
+                var conversations = new ChatConversationStoreAdapter(chats);
+                var session = conversations.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, "Registration");
+                session.WorkspaceId = workspace.WorkspaceId;
+                session.LastRun = new ChatRunRecord { RunId = "run-register", TurnId = "turn-register", Status = RunViewLifecycles.Running };
+                chats.Commit(session, new ConversationCommit());
+                var resources = new ResourceAuthorityStore(paths);
+                var mutations = new ResourceMutationJournal(paths);
+                var service = new WorkspaceHtmlVersionService(paths, conversations,
+                    new WorkspaceFileService(paths, resources, resources, mutations), resources, mutations);
+                var tool = new WorkspaceHtmlRegistrationTool(workspace, session.Id, service,
+                    run => run == "run-register" && conversations.ReadHeader(session.Id)?.RunId == run);
+                Func<string, IDictionary<string, object>, ToolHandlerContext> context = (callId, arguments) =>
+                {
+                    var call = new ToolCall(callId, WorkspaceHtmlRegistrationTool.ToolId, JObject.FromObject(arguments).ToString(Formatting.None));
+                    var policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1);
+                    var executionContext = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "fixture", policy, null),
+                        "run-register", "turn-register", "step-" + callId, DateTime.UtcNow, true, 8);
+                    return new ToolHandlerContext(executionContext, arguments, null, () => { }, null);
+                };
+                var single = new Dictionary<string, object> { ["entryPath"] = "index.html", ["members"] = new JArray("index.html") };
+                var prepare = tool.PrepareAsync(context("call-one", single), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, prepare.Result.Status, prepare.Result.Message);
+                var dispatched = false;
+                var executeContext = new ToolHandlerContext(new ToolExecutionContext(
+                    new ToolCall("call-one", WorkspaceHtmlRegistrationTool.ToolId, JObject.FromObject(single).ToString(Formatting.None)),
+                    new ToolPolicySnapshot(WorkspaceHtmlRegistrationTool.ToolId, "fixture", new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1), null),
+                    "run-register", "turn-register", "step-call-one", DateTime.UtcNow, true, 8, prepare.PreparedStateJson),
+                    single, prepare.PreparedStateJson, () => dispatched = true, null);
+                var registered = tool.ExecuteAsync(executeContext, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, registered.Result.Status, registered.Result.Message);
+                AssertEqual(ToolEffectEvidence.VerifiedChange, registered.Effect, "new definition reports a verified change");
+                AssertTrue(dispatched, "registration marks the write boundary");
+                var resultJson = JObject.Parse(registered.Result.DataJson);
+                AssertEqual("registered", (string)resultJson["status"], "typed registration status");
+                AssertTrue((bool)resultJson["changed"], "new registration changed metadata");
+                AssertEqual("core.find", (string)resultJson["nextAction"]["tool"], "registration points to current-run discovery");
+                AssertEqual("browser", (string)resultJson["nextAction"]["arguments"]["type"], "workspace discovery uses type=browser");
+                AssertEqual("index.html", (string)resultJson["nextAction"]["arguments"]["query"], "entry is the discovery query");
+                var definition = store.GetHtmlProjectDefinition(workspace);
+                AssertEqual("index.html", definition.Definition.EntryPath, "owner stores the entry");
+                AssertEqual(1, definition.Definition.Members.Length, "owner stores the explicit member list");
+
+                var manifestPath = Path.Combine(root, ".rnassistant", "workspace.json");
+                var manifestBefore = File.ReadAllText(manifestPath);
+                var repeatPrepare = tool.PrepareAsync(context("call-two", single), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Ok, repeatPrepare.Result.Status, repeatPrepare.Result.Message);
+                var repeatContext = new ToolHandlerContext(new ToolExecutionContext(
+                    new ToolCall("call-two", WorkspaceHtmlRegistrationTool.ToolId, JObject.FromObject(single).ToString(Formatting.None)),
+                    new ToolPolicySnapshot(WorkspaceHtmlRegistrationTool.ToolId, "fixture", new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1), null),
+                    "run-register", "turn-register", "step-call-two", DateTime.UtcNow, true, 8, repeatPrepare.PreparedStateJson),
+                    single, repeatPrepare.PreparedStateJson, () => { }, null);
+                var unchanged = tool.ExecuteAsync(repeatContext, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolEffectEvidence.VerifiedNoChange, unchanged.Effect, "identical registration is a verified no-change");
+                AssertTrue(!(bool)JObject.Parse(unchanged.Result.DataJson)["changed"], "identical registration is not a write");
+                AssertEqual(manifestBefore, File.ReadAllText(manifestPath), "no-change leaves the manifest byte-for-byte unchanged");
+
+                File.WriteAllText(Path.Combine(root, "race.js"), "console.log('race');");
+                var racePrepare = tool.PrepareAsync(context("call-race", single), CancellationToken.None).GetAwaiter().GetResult();
+                store.SetHtmlProjectDefinition(workspace, definition.Fingerprint, new HtmlProjectDefinition {
+                    EntryPath = "index.html", Members = new[] { "index.html", "race.js" } });
+                var raceContext = new ToolHandlerContext(new ToolExecutionContext(
+                    new ToolCall("call-race", WorkspaceHtmlRegistrationTool.ToolId, JObject.FromObject(single).ToString(Formatting.None)),
+                    new ToolPolicySnapshot(WorkspaceHtmlRegistrationTool.ToolId, "fixture", new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1), null),
+                    "run-register", "turn-register", "step-call-race", DateTime.UtcNow, true, 8, racePrepare.PreparedStateJson),
+                    single, racePrepare.PreparedStateJson, () => { }, null);
+                var race = tool.ExecuteAsync(raceContext, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Error, race.Result.Status, "a changed definition invalidates prepared no-change");
+                AssertEqual("project_definition_changed", (string)JObject.Parse(race.Result.DataJson)["code"],
+                    "concurrent definition change is not overwritten");
+                AssertEqual(ToolEffectEvidence.None, race.Effect, "stale no-change has no effect");
+                var raced = store.GetHtmlProjectDefinition(workspace);
+                store.SetHtmlProjectDefinition(workspace, raced.Fingerprint, definition.Definition);
+
+                File.WriteAllText(Path.Combine(root, "app.js"), "console.log('app');");
+                var changed = new Dictionary<string, object> { ["entryPath"] = "index.html", ["members"] = new JArray("index.html", "app.js") };
+                var conflict = tool.PrepareAsync(context("call-three", changed), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Error, conflict.Result.Status, conflict.Result.Message);
+                AssertEqual("project_definition_conflict", (string)JObject.Parse(conflict.Result.DataJson)["code"],
+                    "a different definition is never overwritten");
+                AssertEqual(definition.Fingerprint, store.GetHtmlProjectDefinition(workspace).Fingerprint, "conflict keeps the original definition");
+
+                var missing = new Dictionary<string, object> { ["entryPath"] = "missing.html", ["members"] = new JArray("missing.html") };
+                var missingPrepare = tool.PrepareAsync(context("call-four", missing), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Error, missingPrepare.Result.Status, missingPrepare.Result.Message);
+                AssertEqual("project_member_missing", (string)JObject.Parse(missingPrepare.Result.DataJson)["code"],
+                    "missing members are rejected before dispatch");
+
+                session.LastRun.Status = RunViewLifecycles.Completed;
+                chats.Commit(session, new ConversationCommit());
+                var stale = tool.PrepareAsync(context("call-five", single), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolResultStatus.Error, stale.Result.Status, "a completed run cannot register");
+                AssertContains(stale.Result.Message, "действующий run", "stale run rejection names the guard");
             });
         }
     }

@@ -6,13 +6,14 @@ function reasoningValue(message, pascal, camel, fallback) {
 }
 
 function messageHasReasoning(message) {
-  var text = reasoningValue(message, "ReasoningContent", "reasoningContent", "");
+  var text = String(reasoningValue(message, "ReasoningContent", "reasoningContent", "") || "");
   var tokens = reasoningValue(message, "ReasoningTokens", "reasoningTokens", null);
-  return !!text || tokens !== null && tokens !== undefined;
+  return text.trim().length > 0 || typeof tokens === "number" && isFinite(tokens) && tokens > 0;
 }
 
 function reasoningBlock(text, tokens, live, truncated) {
-  if (!text && (tokens === null || tokens === undefined)) return null;
+  if (!String(text || "").trim() && !live &&
+      !(typeof tokens === "number" && isFinite(tokens) && tokens > 0)) return null;
   var details = document.createElement("details");
   details.open = !!live;
   var summary = document.createElement("summary");

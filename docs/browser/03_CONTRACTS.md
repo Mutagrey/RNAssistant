@@ -939,6 +939,16 @@ version Save binds both definition fingerprint and exact captured content finger
 Manual User provenance omits chat; Run requires the real active source run. The
 checkpoint record does not grant new file access or native execution.
 
+Agent registration (`html.project.register`) uses the same definition owner and
+prepares the exact run with the current fingerprint. It creates an absent definition
+or returns a verified no-change; it never replaces a different definition. The
+manifest write boundary precedes atomic publication and a lost read-back is Unknown.
+Registration returns only the declared entry/members and a `core.find` next action.
+Dock opening remains a separate `browser.open` operation over the exact target
+returned by current-run discovery; registration itself creates no tab, content
+session, save version or native execution authority. A relative `index.html` path
+is not a semantic target and receives the discovery hint instead of a network error.
+
 ## Document checkpoint binding — 2026-11-13
 
 A live document project uses `/resources/{logicalId}`, a checkpoint uses

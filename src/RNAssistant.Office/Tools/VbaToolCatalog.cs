@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Tools
                 "Mutates document: Delete an existing StdModule, ClassModule or verified CodeOnly MSForm. Runtime reads it, validates the type and absence of Designer state, and creates a rollback backup; no separate read call is required. Document modules belong to their Office object and cannot be removed as standalone VBA components. Forms with Designer state are unsupported because code backup cannot restore that state.",
                 ModuleNameSchema(), ToolEffect.Write, ToolVerification.Tool);
             yield return Projection(RunMacro,
-                "May execute arbitrary VBA code: Run an existing macro in the exact bound Excel, Word, or PowerPoint document without a manifest or allowlist. Pass module/procedure name; runtime replaces any incoming document qualifier with the bound document name before Office Application.Run. The macro may affect files or external state; use only when execution is requested and inspect state after the call.",
+                "May execute arbitrary VBA code: Run an existing macro in the exact bound Excel, Word, or PowerPoint document without a manifest or allowlist. Pass module/procedure name; runtime replaces any incoming document qualifier with the bound document name before Office Application.Run. A successful result confirms normal return only; the macro effect remains unknown. The macro may affect files or external state, so use only when execution is requested and inspect any required state after the call.",
                 RunMacroSchema(), ToolEffect.External, ToolVerification.None);
         }
 

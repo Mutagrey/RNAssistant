@@ -117,7 +117,26 @@ function messageUsageText(message) {
   if (completion !== null) {
     parts.push("ответ " + chatTokenNumber(completion));
   }
+  if (message && message.UnknownUsageAttempts > 0)
+    return "учтено " + parts.join(" · ") + "; расход " + message.UnknownUsageAttempts +
+      (message.UnknownUsageAttempts === 1 ? " попытки" : " попыток") + " неизвестен";
   return (message && message.UsageIncomplete ? "неполные данные API: " : "") + parts.join(" · ");
+}
+
+function chatAttemptKey(message) {
+  var retained = message && (message.RetainedAttempt || message.retainedAttempt);
+  var body = retained && (retained.Body || retained.body);
+  var values = [message && (message.ResponseModelAttemptId || message.responseModelAttemptId),
+    message && (message.ModelAttemptId || message.modelAttemptId),
+    body && (body.AttemptId || body.attemptId)];
+  for (var index = 0; index < values.length; index += 1)
+    if (typeof values[index] === "string" && values[index]) return values[index];
+  return null;
+}
+
+function chatHasUsage(message) {
+  return [messagePromptTokens(message), messageCompletionTokens(message), messageTotalTokens(message)]
+    .some(function (value) { return validChatTokenCount(value) !== null; });
 }
 
 function chatRunTokenUsage(messages, startIndex, endIndex) {
@@ -126,29 +145,43 @@ function chatRunTokenUsage(messages, startIndex, endIndex) {
   while (runId && first > 0 && messageProtocolMessage(messages[first - 1]) &&
       messageRunId(messages[first - 1]) === runId) first -= 1;
 
-  var protocol = [], visible = [];
+  var candidates = [];
   for (var index = first; index < endIndex; index += 1) {
     var message = messages[index];
     if (messageRole(message) !== "assistant" || runId && messageRunId(message) !== runId) continue;
     if (messageProtocolMessage(message)) {
       var origin = message.AcceptedCallOrigin || message.acceptedCallOrigin;
       // A batch has one provider response; only its first call carries usage.
-      if (!origin || Number(origin.CallIndex !== undefined ? origin.CallIndex : origin.callIndex) === 0) protocol.push(message);
+      if (!origin || Number(origin.CallIndex !== undefined ? origin.CallIndex : origin.callIndex) === 0) candidates.push(message);
       continue;
     }
-    var values = [messagePromptTokens(message), messageCompletionTokens(message), messageTotalTokens(message)];
-    if (!values.some(function (value) { return validChatTokenCount(value) !== null; })) continue;
-    visible.push(message);
+    if (chatHasUsage(message) || message.RetainedAttempt || message.retainedAttempt) candidates.push(message);
   }
-  // A terminal runtime projection may repeat the final accepted response's
-  // usage. The accepted protocol records count each provider answer once.
-  var source = protocol.length ? protocol : visible;
+  // Accepted calls, rejected/repair attempts and terminal projections may repeat
+  // one provider answer. Count each exact attempt once, never twice.
+  var hasProtocol = candidates.some(function (message) { return messageProtocolMessage(message); });
+  if (hasProtocol) candidates = candidates.filter(function (message) {
+    return messageProtocolMessage(message) || !!chatAttemptKey(message);
+  });
+  var source = [], seen = {};
+  candidates.forEach(function (message) {
+    var key = chatAttemptKey(message);
+    if (key) {
+      if (Object.prototype.hasOwnProperty.call(seen, key)) return;
+      seen[key] = true;
+    }
+    source.push(message);
+  });
   if (!source.length) return null;
   var usage = { PromptTokens: null, CompletionTokens: null, TotalTokens: null,
+    KnownAttempts: 0, UnknownUsageAttempts: 0,
     UsageIncomplete: source.some(function (message) {
       return [messagePromptTokens(message), messageCompletionTokens(message), messageTotalTokens(message)]
         .some(function (value) { return validChatTokenCount(value) === null; });
     }) };
+  source.forEach(function (message) {
+    if (chatHasUsage(message)) usage.KnownAttempts += 1; else usage.UnknownUsageAttempts += 1;
+  });
   [["PromptTokens", messagePromptTokens], ["CompletionTokens", messageCompletionTokens],
     ["TotalTokens", messageTotalTokens]].forEach(function (field) {
     source.forEach(function (message) {

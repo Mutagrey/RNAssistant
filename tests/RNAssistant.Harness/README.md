@@ -1,5 +1,18 @@
 # RNAssistant Harness
 
+## Photo package F01–F12 — 2026-11-16
+
+Focused filters: `model refs:`, `agent: loads and runs arbitrary macro`,
+`workspace html: agent registration`, `local browser: ordinary Workspace HTML`,
+`local browser: recovery distinguishes path`, `vba: creation target recovery` and
+`conversation: stream timer`. They cover honest invocation/effect separation, exact HTML
+definition registration/conflict/run ownership, ordinary Workspace discovery/open,
+Browser recovery hints, VBA creation-target routing and numeric usage retained on an
+attempt. Node checks: `tests/web/run-journal.test.js`, `tests/web/context-usage.test.js`
+and `tests/web/run-view-state.test.js`. `agent-activity-layout.test.js` gained the
+empty-reasoning cases but requires its existing Playwright dependency.
+Windows/WebView2 remains separate evidence.
+
 ## Retry policy — 2026-11-15
 
 Focused filters: `kernel: repeated live read advisory`, `kernel: progress advisory`,

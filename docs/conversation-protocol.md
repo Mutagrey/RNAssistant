@@ -428,7 +428,7 @@ and format-8 execution streams with [typed short references](decisions/ADR-0018-
 Formats 6/7 remain read-only. Intermediate 9/10 candidates have no compatibility path.
 Format-8 history must satisfy the current accepted-call and reference contract. Dated v7 audit and qualification records below
 are historical and do not define the current wire contract. The production JSON
-profile uses reference revision 4 / prompt schema 69: calls stay in content,
+profile uses reference revision 4 / prompt schema 72: calls stay in content,
 results use typed user-role batches and no automatic schema fallback exists.
 The runtime context retains Markdown/YAML with separate callable/loadable catalogs;
 the [role map](protocols/CONVERSATION_RESPONSE_V8.md#runtime-presentation-and-message-roles--2026-11-02)
@@ -447,6 +447,12 @@ terminal evidence, effects and explicit task acceptance. Accepted finish ends th
 run, but does not establish whole-task success. Questions go through
 `common.questions_ask`. The exact shape, correction and reflection-limit behavior
 are owned by the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md).
+A normally returned opaque call (`OpaqueActionCompleted=true`, effect remains
+`Unknown`) proves invocation completion only. It may be reported as `unverified` or
+`partially_satisfied`; a `satisfied` claim still requires successful evidence. A
+macro run request therefore gets an accepted honest finish without claiming A1/A2 or
+other effects; a requested effect needs an exact read-back observation. No extra
+claim-scope field is added to the wire.
 An admitted `finish/partial` after tool calls gets one bounded reconsideration while
 run budgets remain; `finish` is never itself a request to continue.
 Semantic rejection supplies a bounded quoted proposal and specific correction,

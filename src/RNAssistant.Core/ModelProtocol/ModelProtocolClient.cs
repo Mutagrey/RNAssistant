@@ -175,7 +175,7 @@ namespace RNAssistant.Core.ModelProtocol
                     cancellationToken.ThrowIfCancellationRequested();
                     if (identicalRejection)
                         return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
-                            "Модель повторила тот же некорректный ответ. Действия не выполнялись: " + lastError), contextUsage);
+                            "Модель повторила тот же некорректный ответ. Действия из этого ответа не выполнялись: " + lastError), contextUsage);
                     if (parsed.ErrorKind == ConversationResponseError.ReflectionDisabled)
                         return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ReflectionDisabled,
                             "Рефлексия отключена для этого запуска, но модель вернула reflection. Ответ отклонён без запроса на корректировку."), contextUsage);

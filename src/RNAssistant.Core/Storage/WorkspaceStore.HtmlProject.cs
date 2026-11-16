@@ -51,7 +51,8 @@ namespace RNAssistant.Core.Storage
         }
 
         public HtmlProjectDefinitionState SetHtmlProjectDefinition(WorkspaceDescriptor workspace,
-            string expectedFingerprint, HtmlProjectDefinition definition, CancellationToken token = default(CancellationToken))
+            string expectedFingerprint, HtmlProjectDefinition definition, CancellationToken token = default(CancellationToken),
+            Action beforeWrite = null)
         {
             ValidateDescriptor(workspace);
             if (workspace.ReadOnly) throw new WorkspaceFileException("workspace_read_only", "Project configuration is read-only.");
@@ -68,6 +69,7 @@ namespace RNAssistant.Core.Storage
                 token.ThrowIfCancellationRequested();
                 if (DefinitionState(canonical).Fingerprint == expectedFingerprint) return DefinitionState(canonical);
                 manifest.HtmlProject = canonical; manifest.HtmlEntryPath = null;
+                if (beforeWrite != null) beforeWrite();
                 StorageFileSystem.WriteAllTextAtomic(path, JsonConvert.SerializeObject(manifest, Formatting.Indented), Utf8);
                 using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
@@ -78,6 +80,15 @@ namespace RNAssistant.Core.Storage
                     return verified;
                 }
             }
+        }
+
+        public void ValidateHtmlProjectDefinition(WorkspaceDescriptor workspace, HtmlProjectDefinition definition,
+            CancellationToken token = default(CancellationToken))
+        {
+            ValidateDescriptor(workspace);
+            var canonical = CanonicalDefinition(definition);
+            foreach (var member in canonical.Members) WorkspaceFileService.ValidateCapturePath(workspace, member);
+            token.ThrowIfCancellationRequested();
         }
 
         private IDisposable DefinitionLease(WorkspaceDescriptor workspace, CancellationToken token)

@@ -467,7 +467,40 @@ namespace RNAssistant.Office.Tools
                     args["source"] = selected.Target; args["name"] = destination.Substring(6);
                 }
             }
-            if (prepared.Operation == null) throw new InvalidDataException("This resource owner does not support the requested operation. Use an explicit editable source target.");
+            if (prepared.Operation == null)
+            {
+                if (selected != null)
+                    throw new ResourceRequestException("This resource target does not support the requested operation. Use an operation supported by its owner.",
+                        "unsupported_resource_operation", false);
+                if (_id == ResourceMutationToolCatalog.Write)
+                {
+                    var type = Value(input, "resourceType");
+                    if (IsVbaComponentType(type))
+                        throw new ResourceRequestException("A new VBA module needs an explicit owner prefix. Use target: \"VBA module: " +
+                            (IsBareVbaModuleName(target) ? target : "Module1") + "\" and resourceType: " +
+                            (string.Equals(type, "ClassModule", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(type, "MSForm", StringComparison.OrdinalIgnoreCase) ? type : "StdModule") + ". A bare name does not select VBA.",
+                            "creation_target_invalid", false);
+                    throw new ResourceRequestException("No supported resource owner matches this creation target. Use an explicit category such as " +
+                        "\"VBA module: Module1\", \"HTML file: index.html in HTML workspace: <target>\", \"file: <name>\", or \"note: <title>\".",
+                        "creation_target_invalid", false);
+                }
+                throw new InvalidDataException("This resource owner does not support the requested operation. Use an explicit editable source target.");
+            }
+        }
+
+        private static bool IsBareVbaModuleName(string target)
+        {
+            return !string.IsNullOrWhiteSpace(target) && target.Length <= 31 &&
+                (char.IsLetter(target[0]) || target[0] == '_') &&
+                target.All(value => char.IsLetterOrDigit(value) || value == '_');
+        }
+
+        private static bool IsVbaComponentType(string value)
+        {
+            return string.Equals(value, "StdModule", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "ClassModule", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "MSForm", StringComparison.OrdinalIgnoreCase);
         }
 
         private IDictionary<string, object> Arguments(ResourceMutationPrepared prepared, ToolHandlerContext context, string before, CancellationToken token)

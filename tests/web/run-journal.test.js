@@ -90,9 +90,11 @@ function row(sequence, kind, status, extra = {}) {
 
 const rows = [
   row(1, "turn.started", "running", { RunId: "run-1", TurnId: "turn-1" }),
-  row(2, "model.request.prepared", "prepared", { RunId: "run-1", ModelAttemptId: "attempt-1" }),
+  row(2, "model.request.prepared", "prepared", { RunId: "run-1", ModelAttemptId: "attempt-1",
+    DataJson: '{"payload":{"eventId":"evt-2"}}' }),
   row(3, "llm.response", "received", { RunId: "run-1", ModelAttemptId: "attempt-1" }),
-  row(4, "model.attempt.rejected", "rejected", { RunId: "run-1", ModelAttemptId: "attempt-1", FailureCount: 1, DataTruncated: true }),
+  row(4, "model.attempt.rejected", "rejected", { RunId: "run-1", ModelAttemptId: "attempt-1", FailureCount: 1, DataTruncated: true,
+    DataJson: '{"payload":{"eventId":"evt-4"}}' }),
   row(5, "tool.call.recorded", "accepted", { RunId: "run-1", ToolCallId: "call-1", ToolId: "html.source.write" }),
   row(6, "domain.effect.verified", "committed", { RunId: "run-1", ToolCallId: "call-1", MutationId: "mutation-1" }),
   row(7, "diagnostic.evidence.missing", "missing", { RunId: "run-1", ToolCallId: "call-2", FailureCount: 1, SourceEventSeqs: [5, 7], SourceEventIds: ["evt-5", "evt-7"] }),
@@ -190,8 +192,10 @@ function selectTree(key) {
 
   const retryRows = [
     row(1, "llm.request", "prepared", { RunId: "retry-run", ModelAttemptId: "original" }),
-    row(2, "llm.response", "received", { RunId: "retry-run", ModelAttemptId: "original" }),
-    row(3, "llm.response", "received", { RunId: "another-run", ModelAttemptId: "original" }),
+    row(2, "llm.response", "received", { RunId: "retry-run", ModelAttemptId: "original",
+      DataJson: '{"payload":{"eventId":"evt-2"}}' }),
+    row(3, "llm.response", "received", { RunId: "another-run", ModelAttemptId: "original",
+      DataJson: '{"payload":{"eventId":"evt-3"}}' }),
     row(4, "llm.request", "prepared", { RunId: "retry-run", ModelAttemptId: "corrective", RequestCause: {
       Kind: "CompletionRejected", SourceModelAttemptId: "original", Feedback: "READ_BACK_REQUIRED: inspect the written range."
     } })
@@ -291,6 +295,48 @@ function selectTree(key) {
   context.RNAssistantRunJournal.render(root, parts, { activeToolCallId: "c" });
   assert.match(root.querySelector(".rn-run-journal-part").textContent, /усечены/);
   console.log("PASS journal: exact grouping, unknown scope, lossless arguments and results");
+
+  const metadataOnly = [row(1, "llm.response", "received", { RunId: "metadata", ModelAttemptId: "m1" })];
+  context.RNAssistantRunJournal.render(root, metadataOnly, options);
+  selectTree(metadataOnly[0].Id);
+  assert.match(root.textContent, /Точные байты этой попытки не сохранены/,
+    "metadata-only response does not offer a broken CAS loader");
+
+  const repairRows = [
+    row(1, "llm.request", "prepared", { RunId: "repair", StepId: "logical", ModelAttemptId: "a1" }),
+    row(2, "llm.response", "received", { RunId: "repair", StepId: "logical", ModelAttemptId: "a1" }),
+    row(3, "llm.request", "prepared", { RunId: "repair", StepId: "logical", ModelAttemptId: "a2", RequestCause: {
+      Kind: "FormatRepair", SourceModelAttemptId: "a1", Feedback: "Return valid JSON." } }),
+    row(4, "tool.call.recorded", "accepted", { RunId: "repair", StepId: "logical", ModelAttemptId: "a2", ToolCallId: "read", ToolId: "core.read" }),
+    row(5, "tool.execution.started", "running", { RunId: "repair", StepId: "logical", ToolCallId: "read", ToolId: "core.read" }),
+    row(6, "tool.execution.completed", "completed", { RunId: "repair", StepId: "logical", ToolCallId: "read", ToolId: "core.read" }),
+    row(7, "tool.result.recorded", "recorded", { RunId: "repair", ToolCallId: "read", ToolId: "core.read" }),
+    row(8, "turn.ended", "completed", { RunId: "repair", TurnId: "turn-repair" })
+  ];
+  context.RNAssistantRunJournal.render(root, repairRows, options);
+  const repairedAction = treeEntries().find(entry => entry.node.title === "Чтение источника");
+  assert.ok(repairedAction, "repaired call remains attached to an action");
+  assert.ok(repairedAction.parents.some(key => key.indexOf("exchange") >= 0),
+    "a2 exact call origin survives the shared logical step");
+  selectTree(repairedAction.node.key);
+  assert.match(root.querySelector(".rn-run-journal-detail").textContent, /Завершено/,
+    "execution status is not overwritten by the later journal write");
+  assert.doesNotMatch(root.querySelector(".rn-run-journal-detail").textContent, /Чтение источника · Записано/);
+
+  const finishRows = [
+    row(1, "llm.request", "prepared", { RunId: "finish", StepId: "finish-step", ModelAttemptId: "finish-a1" }),
+    row(2, "model.response.accepted", "accepted", { RunId: "finish", StepId: "finish-step", ModelAttemptId: "finish-a1" }),
+    row(3, "model.attempt.rejected", "rejected", { RunId: "finish", StepId: "finish-step", ModelAttemptId: "finish-a1",
+      ErrorCode: "contradictory_outcome", Summary: "completed conflicts with an unverified result." }),
+    row(4, "turn.ended", "failed", { RunId: "finish", TurnId: "turn-finish" })
+  ];
+  context.RNAssistantRunJournal.render(root, finishRows, options);
+  selectTree(treeNodes[0].children[0].key);
+  assert.match(root.querySelector(".rn-run-journal-detail").textContent, /Завершение отклонено/,
+    "protocol acceptance is not shown as a successful finish");
+  assert.match(root.querySelector(".rn-run-journal-detail").textContent, /contradictory_outcome|unverified/,
+    "runtime rejection keeps the concrete cause");
+  console.log("PASS journal: payload availability, repaired call ownership, execution status and finish disposition");
 
   const page = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");
   const trajectory = fs.readFileSync(path.join(__dirname, "../../web/js/app-trajectory.js"), "utf8");

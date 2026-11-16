@@ -21,6 +21,7 @@ namespace RNAssistant.Application
             var tools = new List<WorkspaceToolContribution>();
             lock (_sync)
             {
+                tools.Add(HtmlProjectRegistration(workspace, session));
                 foreach (var plugin in _store.List().Where(item => !item.Hidden))
                 {
                     if (plugin.SourceWorkspaceId == workspace.WorkspaceId)
@@ -46,6 +47,23 @@ namespace RNAssistant.Application
                 }
             }
             return tools;
+        }
+
+        private WorkspaceToolContribution HtmlProjectRegistration(WorkspaceDescriptor workspace, ChatSession session)
+        {
+            var policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false,
+                new[] { ChatModes.Agent }, 1);
+            var entry = new ToolCatalogEntry {
+                Id = WorkspaceHtmlRegistrationTool.ToolId, Name = WorkspaceHtmlRegistrationTool.ToolId,
+                Description = "Register this ordinary Workspace's existing HTML entry and members with the existing HTML project definition owner. Creates only an absent definition; an identical definition is a verified no-change. A different definition is never overwritten. Registration does not open Browser: afterward call core.find type=browser in this run and pass the exact returned target to browser.open.",
+                ArgumentSchemaJson = WorkspaceHtmlRegistrationTool.SchemaJson, Policy = policy,
+                Binding = new ToolBinding(WorkspaceHtmlRegistrationTool.ToolId + ".v1", scope: "workspace"),
+                Host = "Common", Enabled = true, BuiltIn = true, AgentCanRun = true,
+                MutatesLocalState = true, RequiresConfirmation = true, RiskLevel = 1, Scope = "workspace"
+            };
+            return new WorkspaceToolContribution { Entry = entry,
+                Handler = new WorkspaceHtmlRegistrationTool(workspace, session?.Id, HtmlProjects,
+                    runId => RunOwnsWorkspace(session?.Id, runId, workspace.WorkspaceId)) };
         }
         private static JObject EmptySchema()
         { return JObject.Parse("{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}"); }

@@ -95,7 +95,8 @@ namespace RNAssistant.Core.Persistence
                 if (invalid != null)
                     return FinishAdmission.Reject("contradictory_assessment", "results[" + index + "].assessment=satisfied cites " +
                         invalid + " (" + byAlias[invalid].Message.ExecutionProgress.Outcome + "). " +
-                        "Cite successful evidence for this criterion, or correct its assessment and use a consistent outcome. " +
+                        "A normal opaque return proves invocation, not a satisfied effect. Report that limitation as unverified or partially_satisfied, " +
+                        "or inspect the expected state and cite that observation before marking the effect satisfied. " +
                         "Do not repeat an accepted operation merely to change its citation.", index);
             }
             return FinishAdmission.Allow();

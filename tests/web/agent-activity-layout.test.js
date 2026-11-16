@@ -538,6 +538,15 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.keptCall = keptFeed.querySelector(".agent-transcript-entry");
     });
     assert.match(await feed.innerText(), /Вызов завершён/);
+    await page.evaluate(() => {
+      if (messageHasReasoning({ ReasoningTokens: 0 })) throw new Error("empty zero-token reasoning created a card");
+      if (messageHasReasoning({ ReasoningTokens: null })) throw new Error("empty null-token reasoning created a card");
+      if (reasoningBlock("", 0, false, false) !== null) throw new Error("empty zero-token reasoning block was rendered");
+      if (!messageHasReasoning({ ReasoningContent: "Сохранившийся текст", ReasoningTokens: 0 })) throw new Error("text with zero tokens must remain visible");
+      const textBlock = reasoningBlock("Сохранившийся текст", 0, false, false);
+      if (!textBlock || !textBlock.textContent.includes("Сохранившийся текст") || !textBlock.textContent.includes("0 токенов"))
+        throw new Error("real reasoning text with a zero count was lost");
+    });
     assert.equal(await feed.locator(".agent-run-notice, .presentation-unknown").count(), 0,
       "normal macro return has no warning card while unknown effect remains in its evidence");
     const keptSummary = feed.locator(".agent-activity-toggle > summary").first();

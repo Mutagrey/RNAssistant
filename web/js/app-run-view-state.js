@@ -188,7 +188,7 @@
   }
 
   // Kernel reasons only: never infer a timeout/effect from arbitrary diagnostic text.
-  function failureReasonLabel(reason) {
+  function failureReasonLabel(reason, detail) {
     var labels = {
       interrupted: "Предыдущий запуск прерван. Сохранённые результаты доступны в истории.",
       interrupted_unknown: "Запуск прерван. Результат действия неизвестен — проверьте документ.",
@@ -197,7 +197,7 @@
       infrastructure: "Не удалось выполнить запрос к модели.",
       provider_refused: "Сервис модели отклонил запрос.",
       missing_model_result: "Модель не вернула ответ.",
-      protocolexhausted: "Модель не вернула ответ в нужном формате.",
+      protocolexhausted: "Модель не вернула допустимый ответ после нескольких попыток.",
       reflectiondisabled: "Рефлексия отключена. Модель вернула недопустимое действие; корректировка не запрашивалась.",
       invalid_model_response: "Модель не вернула ответ в нужном формате.",
       invalid_accepted_response: "Модель не вернула ответ в нужном формате.",
@@ -210,15 +210,24 @@
       repeated_tool_no_progress: "Модель повторила отклонённые действия без продвижения. Запуск остановлен.",
       no_tool_progress: "Модель повторила описание прогресса без действия или завершения. Запуск остановлен.",
       outputtruncated: "Ответ модели обрезан по лимиту выходных токенов. Увеличьте лимит ответа или уменьшите объём изменения.",
-      repeated_unknown_tool_call: "Результат предыдущего действия неизвестен — проверьте документ перед повтором."
+      repeated_unknown_tool_call: "Результат предыдущего действия неизвестен — проверьте документ перед повтором.",
+      repeated_finish_no_progress: "Итог трижды отклонён проверкой выполнения без новых результатов. Запуск остановлен; последний ответ не принят.",
+      contradictory_outcome: "Итог отклонён: утверждения модели противоречат сведениям о выполнении.",
+      invalid_finish_results: "Итог отклонён: структура критериев или ссылок не соответствует протоколу."
     };
-    return labels[String(reason || "").toLowerCase()] || "Выполнение остановлено из-за ошибки. Подробности — в диагностике.";
+    var key = String(reason || "").toLowerCase();
+    if (key === "protocolexhausted" && String(detail || "").trim()) {
+      var explanation = String(detail).replace(/\s+/g, " ").trim();
+      if (explanation.length > 600) explanation = explanation.slice(0, 599) + "…";
+      return "Ответ модели отклонён: " + explanation;
+    }
+    return labels[key] || "Выполнение остановлено из-за ошибки. Подробности — в диагностике.";
   }
 
   function runNotice(viewState) {
     if (!viewState) return null;
     if (viewState.lifecycle === "failed")
-      return { title: "Работа остановлена", text: failureReasonLabel(viewState.reason), warning: false };
+      return { title: "Работа остановлена", text: failureReasonLabel(viewState.reason, viewState.narrative), warning: false };
     return null;
   }
 

@@ -139,7 +139,28 @@ assert.equal(runUsage.UsageIncomplete, false, "silent extra calls in the same re
 runUsage = c.chatRunTokenUsage([accepted, { Role: "assistant", RunId: "r", ProtocolMessage: true }], 0, 2);
 assert.equal(runUsage.TotalTokens, 110);
 assert.equal(runUsage.UsageIncomplete, true);
-assert.match(c.messageUsageText(runUsage), /неполные данные API/);
+assert.match(c.messageUsageText(runUsage), /неполные данные API|неизвестен/);
 runUsage = c.chatRunTokenUsage([{ Role: "assistant", RunId: "r", ProtocolMessage: true }], 0, 1);
 assert.match(c.messageUsageText(runUsage), /API не сообщил/);
+const rejectedAttempt = { Role: "assistant", RunId: "r", RuntimeProjection: true,
+  RetainedAttempt: { Body: { AttemptId: "attempt-rejected", PromptTokens: 100, CompletionTokens: 12, TotalTokens: 112 } } };
+runUsage = c.chatRunTokenUsage([accepted, rejectedAttempt], 0, 2);
+assert.equal(runUsage.TotalTokens, 222, "rejected provider attempts contribute their known usage");
+assert.equal(runUsage.KnownAttempts, 2);
+assert.equal(runUsage.UsageIncomplete, false);
+const identifiedAccepted = { ...accepted, ResponseModelAttemptId: "attempt-accepted" };
+const repeatedProjection = { ...identifiedAccepted, ProtocolMessage: false, RuntimeProjection: true };
+runUsage = c.chatRunTokenUsage([identifiedAccepted, repeatedProjection], 0, 2);
+assert.equal(runUsage.TotalTokens, 110, "one attempt repeated by terminal projection is counted once");
+const missingAttempt = { Role: "assistant", RunId: "r", RuntimeProjection: true,
+  RetainedAttempt: { Body: { AttemptId: "attempt-missing", Message: "rejected" } } };
+runUsage = c.chatRunTokenUsage([accepted, missingAttempt], 0, 2);
+assert.equal(runUsage.UnknownUsageAttempts, 1);
+assert.match(c.messageUsageText(runUsage), /неизвестен/);
+const explicitZero = { Role: "assistant", RunId: "r", ProtocolMessage: true,
+  PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0 };
+runUsage = c.chatRunTokenUsage([explicitZero], 0, 1);
+assert.equal(runUsage.TotalTokens, 0, "an explicit provider zero is known usage");
+assert.equal(runUsage.UsageIncomplete, false);
+assert.match(c.messageUsageText(runUsage), /^0 токенов/);
 console.log("PASS context usage: run totals expose missing usage without double-counting projections");

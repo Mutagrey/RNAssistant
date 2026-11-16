@@ -81,6 +81,41 @@ namespace RNAssistant.Harness
                     if (i == 1) AssertTrue(finish(new ConversationResultClaim[0], new string[0]).Accepted,
                         "service-only work can finish without inventing evidence");
                 }
+                var opaquePolicy = new ToolPolicy(ToolEffect.External, ToolVerification.None, false, false, new[] { "agent" });
+                var opaqueCall = new ToolCall("canonical-opaque", "test.opaque", "{}");
+                ids.Add(opaqueCall.Id);
+                var opaqueContext = new ToolExecutionContext(opaqueCall, new ToolPolicySnapshot(opaqueCall.Name, "fixture", opaquePolicy),
+                    summary.RunId, summary.TurnId, "step-opaque", DateTime.UtcNow, false, 1);
+                var opaqueAccepted = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall { Id = opaqueCall.Id, Name = opaqueCall.Name },
+                    "", "Run the macro.", null, ToolResultRoles.User, new AcceptedToolCallOrigin(opaqueContext.StepId, "attempt-opaque", 0));
+                opaqueAccepted.RunId = summary.RunId;
+                session.Messages.Add(opaqueAccepted);
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                    summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Run the macro.", "", new[] { opaqueCall })), new[] { opaqueAccepted }).Persist(store.CommitRun, session);
+                var opaqueActivity = new ChatMessage { Role = "assistant", RunId = summary.RunId, ExcludeFromModelContext = true,
+                    Activity = new ChatActivity { RunId = summary.RunId, StepId = opaqueContext.StepId, ToolId = opaqueCall.Name, ToolCallId = opaqueCall.Id } };
+                session.Messages.Add(opaqueActivity);
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                    summary, toolContext: opaqueContext), new ChatMessage[0], opaqueActivity).Persist(store.CommitRun, session);
+                var opaqueRecord = new ToolExecutionRecord(opaqueContext, ToolExecutionOutcome.Unknown,
+                    opaqueContext.StartedUtc.AddMilliseconds(1), "Macro returned normally.", "{\"source\":\"runtime\"}",
+                    mayHaveDispatched: true, evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,
+                        ToolEffectEvidence.Unreported, invocationCompleted: true));
+                new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                    summary, execution: opaqueRecord), new ChatMessage[0], opaqueActivity).Persist(store.CommitRun, session);
+                var opaqueEvidence = opaqueActivity.EvidenceReference.Alias;
+                var defaultResult = new ConversationResultClaim("Run the macro.", new[] { opaqueEvidence }, ConversationAssessment.Satisfied);
+                var defaultResultAdmission = finish(new[] { defaultResult }, new[] { opaqueEvidence });
+                AssertEqual("contradictory_assessment", defaultResultAdmission.Code,
+                    "normal opaque return never becomes a satisfied effect");
+                AssertContains(defaultResultAdmission.Message, "unverified or partially_satisfied",
+                    "rejection offers the honest invocation limitation");
+                AssertTrue(finish(new[] { new ConversationResultClaim("Run the macro; effect not verified.",
+                    new[] { opaqueEvidence }, ConversationAssessment.Unverified) }, new[] { opaqueEvidence }).Accepted,
+                    "normal opaque completion supports an explicit unverified limitation");
+                AssertTrue(finish(new[] { new ConversationResultClaim("Run the macro; effect not verified.",
+                    new[] { opaqueEvidence }, ConversationAssessment.PartiallySatisfied) }, new[] { opaqueEvidence }).Accepted,
+                    "normal opaque completion supports a partial invocation result");
                 var failed = new ConversationResultClaim("Read failed.", new[] { "e1" }, ConversationAssessment.Unverified);
                 var satisfied = new ConversationResultClaim("Read succeeded.", new[] { "e2" }, ConversationAssessment.Satisfied);
                 AssertTrue(finish(new[] { failed }, new[] { "E1" }).Accepted, "failed eligible result can support an honest limitation");
@@ -92,13 +127,13 @@ namespace RNAssistant.Harness
                 AssertEqual(0, rejectedClaim.ClaimIndex.Value, "rejection locates the specific claim");
                 AssertContains(rejectedClaim.Message, "E1 (Error)", "rejection names the actual incompatible evidence");
                 var reopened = new ChatStore(paths).Load(session.Id);
-                AssertEqual(3L, reopened.ToolCallReferenceSequence, "call high water survives SQLite/replay");
-                AssertEqual(2L, reopened.EvidenceReferenceSequence, "evidence high water is independent");
+                AssertEqual(4L, reopened.ToolCallReferenceSequence, "call high water survives SQLite/replay");
+                AssertEqual(3L, reopened.EvidenceReferenceSequence, "evidence high water is independent");
                 AssertEqual(ConversationResponse.ReferenceContractVersion, reopened.ReferenceContractVersion, "reference boundary is durable");
-                var last = reopened.Messages.Single(message => message.Activity?.ToolCallId == ids.Last());
+                var last = reopened.Messages.Single(message => message.Activity?.ToolCallId == ids[2]);
                 var trace = store.AppendTrace(reopened, SessionEventTypes.LlmRequest, new LlmTraceRecord {
                     ContextMessages = new List<ContextMessagePresentation> { new ContextMessagePresentation {
-                        Role = "assistant", ToolCallId = ids.Last(), EvidenceReference = last.EvidenceReference,
+                        Role = "assistant", ToolCallId = ids[2], EvidenceReference = last.EvidenceReference,
                         Presentation = ContextPresentationKind.Summary } } }, "{}", "application/json", summary.RunId, summary.TurnId, null);
                 using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {

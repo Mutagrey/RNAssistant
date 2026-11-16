@@ -209,9 +209,14 @@ namespace RNAssistant.Application
 
         private bool RunOwns(string plugin, string chat, string run, string workspace = null)
         {
+            return RunOwnsWorkspace(chat, run, workspace ?? _store.Get(plugin)?.SourceWorkspaceId);
+        }
+
+        internal bool RunOwnsWorkspace(string chat, string run, string workspace)
+        {
             if (string.IsNullOrEmpty(chat) || string.IsNullOrEmpty(run)) return false;
             var header = Conversations.ConversationStore.ReadHeader(chat);
-            if (header?.WorkspaceId != (workspace ?? _store.Get(plugin)?.SourceWorkspaceId) || header?.RunId != run) return false;
+            if (string.IsNullOrEmpty(workspace) || header?.WorkspaceId != workspace || header?.RunId != run) return false;
             var lifecycle = header.RunViewState?.Lifecycle ?? header.RunStatus;
             return lifecycle == RunViewLifecycles.Running || lifecycle == RunViewLifecycles.AwaitingConfirmation || lifecycle == RunViewLifecycles.AwaitingUser;
         }
