@@ -825,7 +825,7 @@ namespace RNAssistant.Office
             response.ChatReadOnly = session != null && !session.UsesCurrentProtocol;
             response.ActiveChatReasoning = session != null && session.ReasoningEnabled;
             response.Chats = chats;
-            response.GroupScopes = ChatGroupCatalog(chats ?? new[] { _chatSessions.GetChatSummary(session) });
+            response.GroupScopes = ChatGroupCatalog(chats ?? new[] { _chatSessions.GetChatSummary(session, includeStorageUsage: false) });
             response.Documents = documents;
             response.Context = context;
             response.Messages = bridgeMessages;

@@ -15,6 +15,19 @@ unchanged iteration/tool budgets. Existing definite-failure/unknown/confirmation
 `tool runtime: read results`/`prepared state` checks retain the safety boundary.
 No real-model, Windows or Office COM qualification is implied.
 
+## Per-chat storage summaries — 2026-11-15
+
+`journal storage usage:` runs four regressions for active summary/catalog parity:
+two chats sharing one segment, independent writes and selection, reopen/rebuild/
+backup restore, exact lost-ACK retry and stale revision, JSONL warning boundaries,
+missing/restored CAS, legacy and transient summaries. Usage reads hydrate zero
+bodies and perform bounded indexed frame reads. Threshold fixtures use synthetic
+values in the existing disposable index, not giant journal files. Pair with
+`journal usage:`, `storage: headers report JSONL and CAS usage`,
+`chat sessions: recovery omits storage usage` and
+`chat sessions: catalog avoids active history`. The recovery check also forbids
+storage reads for the group-only summary used on each tool-result refresh.
+
 ## Local Browser provider cutover — 2026-11-13
 
 Current UI checks: `html-editor-views`, `html-project-import`, `browser-source-diff`,

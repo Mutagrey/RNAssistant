@@ -10,7 +10,8 @@ namespace RNAssistant.Core.Persistence
         ChatSession Load(string host, string documentKey, string sessionId);
         ChatSession Load(string sessionId);
         ConversationMetadata ReadMetadata(string sessionId);
-        ChatSessionHeader ReadHeader(string sessionId);
+        // Addressed metadata; presentation may request fresh advisory CAS sizes.
+        ChatSessionHeader ReadHeader(string sessionId, bool includeStorageUsage = false);
         ChatOverview ReadOverview(ChatSession scope, string sessionId, bool metadataOnly = false);
         // Explicit artifact preparation on an already loaded, revision-fenced chat.
         // Does not reload its transcript or substitute a newer resource revision.

@@ -236,8 +236,8 @@ namespace RNAssistant.Core.Storage
             }, CancellationToken.None);
         }
 
-        ChatSessionHeader IConversationStore.ReadHeader(string id)
-        { return string.IsNullOrWhiteSpace(id) ? null : ReadChatHeaders(selectedId: id).SingleOrDefault(); }
+        ChatSessionHeader IConversationStore.ReadHeader(string id, bool includeStorageUsage)
+        { return string.IsNullOrWhiteSpace(id) ? null : ReadChatHeaders(selectedId: id, includeStorageUsage: includeStorageUsage).SingleOrDefault(); }
 
         IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(bool includeStorageUsage)
         { return ReadChatHeaders(includeStorageUsage: includeStorageUsage); }

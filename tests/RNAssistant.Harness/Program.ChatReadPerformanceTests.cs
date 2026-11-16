@@ -215,6 +215,11 @@ namespace RNAssistant.Harness
                 AssertEqual(0L, metadata.CasStoredByteLength, "metadata does not calculate advisory storage usage");
                 AssertEqual(0, metadata.CasMissingBlobCount, "omitted usage is not reported as a missing body");
                 AssertTrue(full.CasStoredByteLength > 0, "the ordinary catalog still computes current usage");
+                guard.ForbidHeaderReads = true; guard.ForbidFullLoads = true;
+                var groupMetadata = service.GetChatSummary(session, includeStorageUsage: false);
+                AssertEqual(session.DocumentKey, groupMetadata.DocumentKey, "group-only summary keeps its document address");
+                AssertEqual(session.Revision, groupMetadata.Revision, "group-only summary keeps the live revision");
+                AssertEqual(0L, groupMetadata.CasStoredByteLength, "per-tool group refresh reads no storage usage");
             });
         }
 

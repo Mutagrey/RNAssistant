@@ -466,9 +466,20 @@ Office ChatSessionService.GetChatSummaries and WorkspaceStore.ListSessions consu
 these fields through their existing Store port. Lost acknowledgement, failed index
 application, rebuild/restore and Unknown/resource outcomes retain exact counters.
 Physical size enumeration remains proportional to referenced hashes/CAS prefixes;
-broader metadata/header optimization remains P3. Session-based summaries still use
-the scope cursor length; their per-chat attribution remains an explicit P3/P7 gap
-in [BACKLOG](stabilization/BACKLOG.md#native-session-summary-storage-attribution--2026-11-13).
+broader metadata/header optimization remains P3.
+
+Session-based summaries request the same usage with the existing addressed
+`ReadHeader(chatId, includeStorageUsage: true)`. `ChatSessionHeaderFactory` combines
+that advisory snapshot with live session fields; it never derives usage from
+`StorageByteLength`, which remains the physical append/recovery cursor. Reading
+usage cannot advance the session revision or make a stale writer current. A
+`chat.selected` fact is included even when the live session receipt is unchanged.
+Transient sessions have zero persisted usage. Metadata-only factory callers and
+`ReadHeader`'s default `includeStorageUsage: false` do not enumerate CAS sizes.
+Fresh summary/catalog reads share the existing counters and CAS size owner without
+loading message bodies or replaying healthy indexed histories. Rebuild and restore
+still validate canonical journals and recreate the same disposable index.
+
 Text history rewrites are connected above; resource-bearing history/consumers,
 production cutover and Windows evidence remain open.
 

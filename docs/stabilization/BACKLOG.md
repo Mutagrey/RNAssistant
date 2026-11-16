@@ -133,12 +133,12 @@ writer quiescence. No production storage switch or complete Office restore claim
 ## Native session-summary storage attribution — 2026-11-13
 
 Owner: Core conversation projection / Office summary consumer (P3/P7).
-Native Store catalogs now use per-chat indexed usage, but ChatSessionHeaderFactory
-still obtains JsonlByteLength from ChatSession.StorageByteLength, which native
-receipt/peer cursors set to the current scope segment end. Session-based summaries
-can therefore differ from the catalog and include unrelated chat bytes. Replace
-that presentation input through the existing metadata owner before cutover; retain
-the exact cursor separately. No second store or weakening of revision guards.
+Resolved in the local change of 2026-11-15, pending review: session-based summaries
+request per-chat usage through the existing addressed Store header, including
+fresh CAS sizes and missing-body warnings. ChatSessionHeaderFactory no longer
+interprets StorageByteLength as usage; the physical append/recovery cursor and
+revision guards remain unchanged. No additional index, store or global cache.
+Broader P3 metadata optimization, native P7 cutover and Windows evidence remain open.
 
 ## Retired Markdown discovery fixture — 2026-11-13
 

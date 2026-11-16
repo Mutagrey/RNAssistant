@@ -39,7 +39,8 @@ namespace RNAssistant.Core.Storage
             return _store.ReadMetadata(sessionId);
         }
 
-        public ChatSessionHeader ReadHeader(string sessionId) { return _store.ReadSessionHeader(sessionId); }
+        public ChatSessionHeader ReadHeader(string sessionId, bool includeStorageUsage = false)
+        { return _store.ReadSessionHeader(sessionId, includeStorageUsage); }
 
         public ChatOverview ReadOverview(ChatSession scope, string id, bool metadataOnly = false)
         { return _store.ReadChatOverview(scope, id, metadataOnly); }

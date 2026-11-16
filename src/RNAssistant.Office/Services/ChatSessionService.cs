@@ -534,9 +534,9 @@ namespace RNAssistant.Office.Services
             get { return _activeSession != null && !_conversations.IsPersisted(_activeSession) ? _activeSession.Id : null; }
         }
 
-        internal ChatSessionSummary GetChatSummary(ChatSession session)
+        internal ChatSessionSummary GetChatSummary(ChatSession session, bool includeStorageUsage = true)
         {
-            return ToSummary(session, _adapter.HostName, IsCurrentDocument(session) ? session.DocumentKey : null);
+            return ToSummary(session, _adapter.HostName, IsCurrentDocument(session) ? session.DocumentKey : null, includeStorageUsage);
         }
 
         public ChatSession CreatePersistentChat(string title)
@@ -817,9 +817,12 @@ namespace RNAssistant.Office.Services
             return summaries;
         }
 
-        private ChatSessionSummary ToSummary(ChatSession session, string currentHost, string currentDocumentKey)
+        private ChatSessionSummary ToSummary(ChatSession session, string currentHost, string currentDocumentKey,
+            bool includeStorageUsage = true)
         {
-            return ToSummary(ChatSessionHeaderFactory.Create(session), currentHost, currentDocumentKey);
+            var storageUsage = includeStorageUsage && session.Revision > 0
+                ? _conversations.ReadHeader(session.Id, includeStorageUsage: true) : null;
+            return ToSummary(ChatSessionHeaderFactory.Create(session, storageUsage), currentHost, currentDocumentKey);
         }
 
         private ChatSessionSummary ToSummary(ChatSessionHeader header, string currentHost, string currentDocumentKey)

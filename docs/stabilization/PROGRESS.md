@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Per-chat storage summaries — 2026-11-15
+
+Active session summaries now use the existing addressed Store usage projection;
+physical append/recovery cursors remain separate. `ChatSessionHeaderFactory`
+combines current presentation fields with advisory JSONL/CAS counters and warning
+state from `ReadHeader(includeStorageUsage: true)`, without loading history.
+Group-only refresh keeps its metadata-only path. `16.27.19-dev`, In Review.
+
+Harness build: 0 errors; four new `journal storage usage:` checks and six paired
+checks pass, including shared-segment attribution, selection, lost acknowledgement,
+rebuild/restore, warning boundaries, missing CAS, legacy/transient summaries and
+group-only no-usage refresh. Host-neutral only; native P7 cutover and Windows/
+Office qualification remain open. Contract:
+[Session events](../session-events.md#journal-catalog-storage-usage--2026-11-13).
+
 ## Retry admission and progress advice — 2026-11-15
 
 `AgentProgressTracker` больше не запрещает четвёртый одинаковый успешный вызов.

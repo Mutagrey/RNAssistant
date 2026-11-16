@@ -2001,7 +2001,12 @@ namespace RNAssistant.Harness
             public ChatOverview ReadOverview(ChatSession scope, string id, bool metadataOnly = false) { return _inner.ReadOverview(scope, id, metadataOnly); }
             public void SetAgentTitle(ChatSession session, string value) { _inner.SetAgentTitle(session, value); }
             public ConversationMetadata ReadMetadata(string id) { return _inner.ReadMetadata(id); }
-            public ChatSessionHeader ReadHeader(string id) { RequireHeaders(); return _inner.ReadHeader(id); }
+            public ChatSessionHeader ReadHeader(string id, bool includeStorageUsage = false)
+            {
+                RequireHeaders();
+                if (includeStorageUsage && ForbidStorageUsage) throw new InvalidOperationException("Unexpected CAS size scan.");
+                return _inner.ReadHeader(id, includeStorageUsage);
+            }
             public bool LoadArtifactBody(ChatSession session, string id) { return _inner.LoadArtifactBody(session, id); }
             public ChatSession CreateTransient(string host, string key, string title, string name)
             { return _inner.CreateTransient(host, key, title, name); }

@@ -418,6 +418,8 @@ namespace RNAssistant.Core.Models
             new List<RNAssistant.Core.ModelProtocol.ModelResourceReference>();
         [JsonIgnore]
         internal string StorageHeadHash { get; set; }
+        // Physical append/recovery cursor; a shared journal segment end is not
+        // per-chat usage. User-facing sizes belong to the Store header projection.
         [JsonIgnore]
         internal long StorageByteLength { get; set; }
         [JsonIgnore]

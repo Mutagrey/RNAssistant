@@ -699,13 +699,14 @@ namespace RNAssistant.Core.Storage
             return null;
         }
 
-        internal ChatSessionHeader ReadSessionHeader(string chatId)
+        internal ChatSessionHeader ReadSessionHeader(string chatId, bool includeStorageUsage = false)
         {
             if (string.IsNullOrWhiteSpace(chatId)) return null;
+            var storageSizes = includeStorageUsage ? _blobs.CreateStorageSizeSnapshot() : null;
             foreach (var path in SafeFindSessionFiles(chatId))
             {
                 // Exact existing header projection: no transcript or message CAS hydration.
-                var header = LoadHeader(path, null, null, null, null, null);
+                var header = LoadHeader(path, null, null, null, storageSizes, null);
                 if (header != null && string.Equals(header.Id, chatId, StringComparison.OrdinalIgnoreCase)) return header;
             }
             return null;
