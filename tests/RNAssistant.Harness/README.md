@@ -3,9 +3,9 @@
 ## Bounded journal index admission — 2026-11-16
 
 Filter `storage optimization: journal index admission is bounded` holds the shared
-section lock, verifies typed `index_sections_busy`, bounds the wait and confirms the
-intent lease is released. Full repair and the mandatory durable write remain separate
-owners.
+section and repair locks, verifies typed `index_sections_busy` / `index_repair_busy`,
+bounds both waits and confirms intent leases are released. The mandatory durable
+write remains a separate owner.
 
 ## Browser repeated reset ownership — 2026-11-16
 

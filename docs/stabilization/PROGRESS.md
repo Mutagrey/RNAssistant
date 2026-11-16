@@ -2,15 +2,17 @@
 
 ## Bounded journal index admission — 2026-11-16
 
-Implemented host-neutral / In Review, `17.3.13-dev`. Normal conversation/resource
+Implemented host-neutral / In Review, `17.3.14-dev`. Normal conversation/resource
 journal index-section admission now waits at most 30 seconds and returns typed
 `index_sections_busy`; the intent lease is released when section admission fails.
-Full index repair deliberately remains unbounded because it may exceed a short
-admission deadline. The durable commit itself is still synchronous and mandatory;
-this slice bounds the pre-write lock admission path, not the durability boundary.
+Full index repair has a separate five-minute admission limit and returns typed
+`index_repair_busy`; once admitted, the actual repair duration remains unbounded.
+The durable commit itself is still synchronous and mandatory; this slice bounds
+the pre-write lock admission path, not the durability boundary.
 
-`storage optimization: journal index admission is bounded` holds the section lock,
-verifies the typed bounded failure and that a later admission can proceed. Harness
+`storage optimization: journal index admission is bounded` holds the section and
+repair locks, verifies both typed bounded failures and that a later admission can
+proceed. Harness
 build and version validation pass. Windows/Office/WebView2 qualification remains
 separate.
 

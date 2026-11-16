@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.14-dev
+
+- Вход в полный repair индекса журнала теперь тоже имеет bounded ожидание (5 минут);
+  фактическая длительность repair после получения lock не ограничена. Это завершает
+  bounded admission для обычных операций и repair без отмены обязательной записи.
+
 ### 17.3.13-dev
 
 - Ожидание доступа к секциям индекса журнала больше не бесконечно: обычные commit/read

@@ -363,6 +363,19 @@ namespace RNAssistant.Harness
                     AssertTrue(File.Exists(Path.Combine(paths.Root, "locks", "index-repair.lck")),
                         "the intent lease is released after a bounded section failure");
                 }
+                var repairLockPath = Path.Combine(paths.Root, "locks", "index-repair.lck");
+                using (var heldRepair = new FileStream(repairLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                {
+                    var clock = Stopwatch.StartNew();
+                    WorkspaceFileException refused = null;
+                    try { JournalIndexAdmission.Repair(paths, CancellationToken.None, TimeSpan.FromMilliseconds(50)).Dispose(); }
+                    catch (WorkspaceFileException error) { refused = error; }
+                    clock.Stop();
+                    AssertEqual("index_repair_busy", refused == null ? null : refused.Code,
+                        "full repair cannot wait indefinitely for another repair owner");
+                    AssertTrue(clock.ElapsedMilliseconds < 5000,
+                        "repair admission has a bounded wait while the actual repair stays unbounded after acquisition");
+                }
             });
         }
 

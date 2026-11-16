@@ -2,10 +2,10 @@
 
 ## Bounded journal index admission — 2026-11-16
 
-Owner: `JournalIndexAdmission`. Normal `Enter` now uses the same bounded lock wait as
-the other storage admission paths and releases its intent lease when the section is
-busy. The change does not cancel a mandatory append, add a timeout to full index
-repair or introduce a second writer.
+Owner: `JournalIndexAdmission`. Normal `Enter` now uses a bounded section wait and
+full `Repair` uses a separate bounded admission wait; both release their intent lease
+when busy. The actual repair duration and mandatory append are not cancelled, and no
+second writer is introduced.
 
 ## Office edit continuation lifecycle — W5, 2026-11-16
 

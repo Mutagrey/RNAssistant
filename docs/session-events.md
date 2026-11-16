@@ -251,9 +251,10 @@ projection. ConversationRunOwner retains the latest preview/unsaved body for vie
 reopen through existing Office/Workspace reads. ConversationModelProgress carries
 AttemptId, revision, sequence, all visible fields and frozen transport outcome;
 UI uses the same full-snapshot reducer. Only successful commits promise restart
-persistence. Normal journal index-section admission now has a bounded wait and a typed
-`index_sections_busy` failure; full repair and the durable write itself remain
-synchronous and mandatory. Uncommitted text is not process-crash storage.
+persistence. Normal journal index-section admission has a bounded wait and typed
+`index_sections_busy` failure; full repair has a separate bounded admission and
+`index_repair_busy`. The actual repair and durable write remain synchronous and
+mandatory once admitted. Uncommitted text is not process-crash storage.
 
 
 

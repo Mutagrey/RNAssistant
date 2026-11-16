@@ -11,21 +11,22 @@ namespace RNAssistant.Core.Storage
         internal static IDisposable Enter(AppDataPaths paths, CancellationToken token,
             TimeSpan? timeout = null)
         {
-            using (WaitForLock(Intent(paths), token, timeout))
-                return WaitForLock(Sections(paths), token, timeout);
+            using (WaitForLock(Intent(paths), token, timeout, "index_sections_busy"))
+                return WaitForLock(Sections(paths), token, timeout, "index_sections_busy");
         }
 
-        internal static IDisposable Repair(AppDataPaths paths, CancellationToken token)
+        internal static IDisposable Repair(AppDataPaths paths, CancellationToken token, TimeSpan? timeout = null)
         {
-            var intent = WaitForLock(Intent(paths), token, null);
-            try { return new RepairLease(intent, WaitForLock(Sections(paths), token, null)); }
+            var admission = timeout ?? TimeSpan.FromMinutes(5);
+            var intent = WaitForLock(Intent(paths), token, admission, "index_repair_busy");
+            try { return new RepairLease(intent, WaitForLock(Sections(paths), token, admission, "index_repair_busy")); }
             catch { intent.Dispose(); throw; }
         }
 
         private static string Intent(AppDataPaths paths) { return Path.Combine(paths.Root, "locks", "index-repair.lck"); }
         private static string Sections(AppDataPaths paths) { return Path.Combine(paths.Root, "locks", "index-sections.lck"); }
 
-        private static IDisposable WaitForLock(string path, CancellationToken token, TimeSpan? timeout)
+        private static IDisposable WaitForLock(string path, CancellationToken token, TimeSpan? timeout, string busyCode)
         {
             StorageFileSystem.EnsureRegularDirectory(Path.GetDirectoryName(path));
             var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(30));
@@ -36,8 +37,8 @@ namespace RNAssistant.Core.Storage
                 catch (IOException error) when (IsSharingConflict(error))
                 {
                     if (DateTime.UtcNow >= deadline)
-                        throw new WorkspaceFileException("index_sections_busy",
-                            "Не удалось получить доступ к секциям индекса. Повторите после завершения другой операции.");
+                        throw new WorkspaceFileException(busyCode,
+                            "Не удалось получить доступ к индексу. Повторите после завершения другой операции.");
                     // A full streaming repair may exceed the short append-lock
                     // timeout. Park with cancellation; unrelated I/O errors surface.
                     if (token.CanBeCanceled) token.WaitHandle.WaitOne(20); else Thread.Sleep(20);
