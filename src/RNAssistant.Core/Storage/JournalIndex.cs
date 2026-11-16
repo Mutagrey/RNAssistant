@@ -47,12 +47,13 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        internal static string IndexPath(AppDataPaths paths) { return Path.Combine(paths.Root, "index.sqlite"); }
+        internal static string IndexPath(AppDataPaths paths) { JournalStorageRoot.Ensure(paths); return paths.JournalIndexFile; }
 
         internal static SqliteConnection Open(AppDataPaths paths, string path = null)
         {
+            JournalStorageRoot.Ensure(paths);
             ChatStore.InitializeSqliteProvider();
-            var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path ?? IndexPath(paths), Pooling = false, DefaultTimeout = 10 }.ToString());
+            var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path ?? paths.JournalIndexFile, Pooling = false, DefaultTimeout = 10 }.ToString());
             try
             {
                 db.Open();

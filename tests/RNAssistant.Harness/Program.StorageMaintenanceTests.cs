@@ -158,7 +158,8 @@ namespace RNAssistant.Harness
                     ExpectedStateRevision = state.StateRevision, ExpectedContentRevision = state.ContentRevision,
                     ExpectedDefinitionRevision = state.DefinitionRevision, OperationId = "identity-local-save" });
                 AssertEqual(BrowserVersionOutcome.Saved, saved.Outcome, "user-local HTML saved without a chat: " + saved.Message);
-                AssertTrue(!Directory.Exists(Path.Combine(paths.Root, "conversation-streams")), "resource-only HTML fixture has no conversation identity to infer from");
+                AssertTrue(!Directory.EnumerateFiles(paths.JournalConversationDirectory, "*.jsonl", SearchOption.AllDirectories).Any(),
+                    "resource-only HTML fixture has no conversation identity to infer from");
                 var movedRoot = workspace.RootPath + "-moved";
                 Directory.Move(workspace.RootPath, movedRoot);
                 workspace = workspaces.ConnectProject(movedRoot, false);

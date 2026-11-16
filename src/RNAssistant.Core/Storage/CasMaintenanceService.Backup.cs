@@ -65,6 +65,7 @@ namespace RNAssistant.Core.Storage
                         var sources = snapshot.JournalStreams.SelectMany(stream => stream.Segments)
                             .Concat(snapshot.References.Select(reference => _blobs.PathFor(reference.Sha256)))
                             .Concat(KeyProfileFiles.Select(name => Path.Combine(_paths.Root, name)).Where(File.Exists))
+                            .Concat(new[] { _paths.JournalGenerationFile }.Where(File.Exists))
                             .Concat(ownerFiles)
                             .Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal);
                         foreach (var source in sources)
@@ -196,8 +197,11 @@ namespace RNAssistant.Core.Storage
             var allowed = parts.Length == 1 && KeyProfileFiles.Contains(relative) ||
                 parts.Length == 3 && parts[0] == "chat-blobs" && LowerHex(parts[1], 2) && parts[2].Length == 69 &&
                     parts[2].EndsWith(".blob", StringComparison.Ordinal) && LowerHex(parts[2].Substring(0, 64), 64) && parts[2].StartsWith(parts[1], StringComparison.Ordinal) ||
-                parts.Length == 3 && parts[0] == "conversation-streams" && LowerHex(parts[1], 64) && SegmentName(parts[2]) ||
-                parts.Length == 2 && parts[0] == "resource-stream" && SegmentName(parts[1]) ||
+                parts.Length == 4 && parts[0] == "storage-v2" && parts[1] == "conversation-streams" &&
+                    LowerHex(parts[2], 64) && SegmentName(parts[3]) ||
+                parts.Length == 4 && parts[0] == "storage-v2" && parts[1] == "resource-authority" &&
+                    parts[2] == "resource-stream" && SegmentName(parts[3]) ||
+                relative == "storage-v2/generation.json" ||
                 relative == DocumentAuthorityRegistry.BackupRelativePath || WorkspaceStore.IsBackupRelativePath(relative);
             if (!allowed) throw new InvalidDataException("Unknown backup file owner.");
             var path = Path.GetFullPath(root);

@@ -6,6 +6,26 @@ Decision: [ADR-0019](../decisions/ADR-0019-bounded-jsonl-storage.md).
 Baseline inspected at `eed95756`, after `ecb7612d`; unrelated unfinished chat-overview
 and Browser edits are preserved. This file records evidence, not a second contract.
 
+## P7 prerequisite — isolated storage-v2 root (2026-11-16)
+
+1. F04/F05 storage composition: `JournalStorageRoot` now owns the explicit generation
+   root and create-only marker for existing `StorageJournal`/`ConversationJournal`/
+   `ResourceJournal`/SQLite owners.
+2. Canonical conversations, resource stream and mutation locks use `storage-v2`;
+   legacy chat/resource JSONL may coexist and remains outside every new reader.
+3. No production Office/Workspace consumer was switched. The old constructors remain
+   until one combined composition change; there is no dual-write, import or fallback.
+4. `journal text:` passes 3/3 after deliberately placing legacy files. Focused
+   canonical-closure and identity-backup checks pass; build has two existing PDF
+   platform warnings. No Office/VSTO/Windows run.
+5. Canonical journal/index records remain bounded and rebuildable. The root change
+   adds no history-body hydration and no per-scope index.
+6. Open P7 gates: scope routing, combined Store/resource/runtime switch, mixed-generation
+   application backup, old-writer quiescence, removal of `ChatStore`/adapters and
+   Windows/Office screen evidence. P4 remains deferred.
+7. Updated session events, CAS maintenance contract, migration map and progress. No
+   product bump because the default behavior remains the retiring backend.
+
 ## P0 baseline — 2026-11-10
 
 Confirmed current paths: Workspace `AppendAsync/WireResult` stores complete result

@@ -17,6 +17,11 @@ namespace RNAssistant.Harness
         private static void JournalTextChatConsumers()
         {
             WithTempPaths(paths => {
+                Directory.CreateDirectory(paths.ChatDirectory);
+                var legacyChatPath = Path.Combine(paths.ChatDirectory, "legacy-chat.jsonl");
+                var legacyResourcePath = Path.Combine(paths.ResourceAuthorityDirectory, "legacy-resource.jsonl");
+                File.WriteAllText(legacyChatPath, "preserved legacy history");
+                File.WriteAllText(legacyResourcePath, "preserved legacy resources");
                 var scope = "document:" + DocumentAuthorityId.Create().Id;
                 var journal = new ConversationJournal(paths, scope);
                 IConversationStore store = journal;
@@ -67,8 +72,9 @@ namespace RNAssistant.Harness
                     "Workspace consumer uses the same journal page");
                 AssertEqual(workspace.WorkspaceId, workspaces.LoadSession(workspaceStore, workspace, workspaceChat.Id).WorkspaceId, "Workspace ownership");
                 AssertEqual(1, workspaces.ListSessions(workspaceStore, workspace).Length, "Workspace catalog");
-                AssertTrue(!Directory.Exists(paths.ChatDirectory) || !Directory.EnumerateFiles(paths.ChatDirectory, "*", SearchOption.AllDirectories).Any(),
-                    "new Store creates no legacy chat files");
+                AssertEqual("preserved legacy history", File.ReadAllText(legacyChatPath), "new Store leaves legacy chat bytes untouched");
+                AssertEqual("preserved legacy resources", File.ReadAllText(legacyResourcePath), "new resource owner leaves legacy resource bytes untouched");
+                AssertTrue(File.Exists(paths.JournalGenerationFile), "new Store publishes an explicit generation marker");
                 var before = StorageJournal.Inventory(paths).SelectMany(stream => stream.Segments).ToDictionary(file => file, File.ReadAllBytes);
                 RuntimeThrows<NotSupportedException>(() => store.Commit(loaded, new ConversationCommit(removed: new[] { user.Id })));
                 var protocol = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseModelAttemptId = "unaccepted",

@@ -21,8 +21,7 @@ namespace RNAssistant.Core.Storage
         private void RequireTextRoot()
         {
             if (_textStoreRootChecked) return;
-            if (Directory.Exists(_paths.ChatDirectory) && Directory.EnumerateFiles(_paths.ChatDirectory, "*", SearchOption.AllDirectories).Any())
-                throw new InvalidOperationException("The new journal Store requires a separate root; legacy chat data is not imported.");
+            JournalStorageRoot.Ensure(_paths);
             _textStoreRootChecked = true;
         }
 

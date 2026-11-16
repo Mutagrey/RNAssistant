@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Storage-v2 root isolation — 2026-11-16
+
+Internal / In Review. Canonical conversation journals, the shared resource journal,
+resource locks, inventory and the disposable SQLite index now live under an explicit
+`storage-v2` root guarded by a create-only generation marker. Legacy `chats/` and
+legacy resource JSONL remain untouched; the new owners neither import nor reject
+their coexistence. Immutable CAS and identity owners remain shared. Backup paths and
+clean restore include the marker and new canonical paths.
+
+Harness build: 0 errors, two existing PDF CA1416 warnings. `journal text:` passes
+3/3, including preservation of deliberate legacy chat/resource files, and the focused
+canonical-closure and identity-backup checks pass. This is a P7 prerequisite, not a
+default-writer switch. Office/Workspace scope routing, combined production
+composition, mixed-generation application backup, writer quiescence and Windows/Office
+evidence remain open.
+
 ## Photo package F01–F12 baseline — 2026-11-16
 
 Host-neutral implementation / In Review. A normally returned opaque macro gets an

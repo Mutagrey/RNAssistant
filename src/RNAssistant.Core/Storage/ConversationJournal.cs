@@ -32,8 +32,7 @@ namespace RNAssistant.Core.Storage
             _paths = paths; _scope = scope;
             _protector = protector ?? StorageProtector.None;
             _bodies = new ChatBlobStore(paths, () => protector ?? StorageProtector.None);
-            Journal = new StorageJournal(Path.Combine(paths.Root, "conversation-streams",
-                RNAssistant.Core.Tools.TextPatternEngine.Sha256(scope)), scope, protector);
+            Journal = new StorageJournal(JournalStorageRoot.ConversationDirectory(paths, scope), scope, protector);
         }
 
         internal ConversationResultReceipt CommitResult(string chatId, string operationId, string callId, string toolName,

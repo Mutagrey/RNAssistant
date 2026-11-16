@@ -323,13 +323,13 @@ namespace RNAssistant.Harness
                 AssertEqual(24, journal.ReadWindow("parent", long.MaxValue, 128).Count, "all parent receipts survive shared repair");
                 AssertEqual("E1", journal.Receipt("result:child:0").Fact.Result.EvidenceReference.Alias, "child E1");
                 AssertEqual("E1", journal.Receipt("result:parent:0").Fact.Result.EvidenceReference.Alias, "parent E1");
-                var before = Directory.EnumerateFiles(Path.Combine(paths.Root, "conversation-streams"), "*.jsonl", SearchOption.AllDirectories)
+                var before = Directory.EnumerateFiles(paths.JournalConversationDirectory, "*.jsonl", SearchOption.AllDirectories)
                     .ToDictionary(path => path, File.ReadAllBytes);
-                File.WriteAllText(Path.Combine(paths.Root, "index.sqlite"), "broken disposable index");
+                File.WriteAllText(paths.JournalIndexFile, "broken disposable index");
                 AssertEqual(retained.Position.Hash, other.Receipt("result").Position.Hash, "corrupt shared index rebuilds exact cross-scope receipt");
                 AssertEqual(24, journal.ReadWindow("child", long.MaxValue, 128).Count, "repair discovers streams independently of the broken index");
                 foreach (var pair in before) AssertTrue(pair.Value.SequenceEqual(File.ReadAllBytes(pair.Key)), "repair preserves canonical prefix");
-                using (var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(paths.Root, "index.sqlite"), Pooling = false }.ToString()))
+                using (var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = paths.JournalIndexFile, Pooling = false }.ToString()))
                 {
                     db.Open(); using (var command = db.CreateCommand()) { command.CommandText = "DROP TABLE result_fact"; command.ExecuteNonQuery(); }
                 }

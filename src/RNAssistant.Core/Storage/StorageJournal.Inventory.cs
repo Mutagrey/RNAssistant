@@ -13,8 +13,9 @@ namespace RNAssistant.Core.Storage
         // with no cursor. Unknown entries fail closed; no recursive link traversal.
         internal static IReadOnlyList<JournalStream> Inventory(AppDataPaths paths)
         {
+            JournalStorageRoot.Ensure(paths);
             var streams = new List<JournalStream>();
-            var conversations = Path.Combine(paths.Root, "conversation-streams");
+            var conversations = paths.JournalConversationDirectory;
             CheckDirectory(conversations);
             if (Directory.Exists(conversations))
                 foreach (var directory in Directory.EnumerateFileSystemEntries(conversations))
@@ -24,7 +25,9 @@ namespace RNAssistant.Core.Storage
                         throw new InvalidDataException("Unknown conversation stream entry.");
                     AddStream(streams, directory, false);
                 }
-            var resources = Path.Combine(paths.Root, "resource-stream");
+            var resourceOwner = paths.JournalResourceDirectory;
+            CheckDirectory(resourceOwner);
+            var resources = Path.Combine(resourceOwner, "resource-stream");
             CheckDirectory(resources);
             if (Directory.Exists(resources)) AddStream(streams, resources, true);
             return streams;

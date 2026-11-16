@@ -22,6 +22,11 @@ namespace RNAssistant.Core.Storage
         public string WebViewUserDataDirectory { get; private set; }
         public string AttachmentDirectory { get; private set; }
         public string ResourceAuthorityDirectory { get; private set; }
+        public string JournalStorageDirectory { get; private set; }
+        public string JournalConversationDirectory { get; private set; }
+        public string JournalResourceDirectory { get; private set; }
+        public string JournalIndexFile { get; private set; }
+        public string JournalGenerationFile { get; private set; }
         public string WorkspaceDirectory { get; private set; }
         public string PluginIconDirectory { get; private set; }
 
@@ -54,6 +59,11 @@ namespace RNAssistant.Core.Storage
                 ChatBlobDirectory = Path.Combine(root, "chat-blobs"),
                 AttachmentDirectory = Path.Combine(root, "attachments"),
                 ResourceAuthorityDirectory = Path.Combine(root, "resource-authority"),
+                JournalStorageDirectory = Path.Combine(root, "storage-v2"),
+                JournalConversationDirectory = Path.Combine(root, "storage-v2", "conversation-streams"),
+                JournalResourceDirectory = Path.Combine(root, "storage-v2", "resource-authority"),
+                JournalIndexFile = Path.Combine(root, "storage-v2", "index.sqlite"),
+                JournalGenerationFile = Path.Combine(root, "storage-v2", "generation.json"),
                 WorkspaceDirectory = Path.Combine(root, "workspaces"),
                 PluginIconDirectory = Path.Combine(root, "plugin-icons"),
                 WebViewUserDataDirectory = Path.Combine(root, "webview")
@@ -72,6 +82,9 @@ namespace RNAssistant.Core.Storage
             EnsureManagedDirectory(ChatBlobDirectory);
             EnsureManagedDirectory(AttachmentDirectory);
             EnsureManagedDirectory(ResourceAuthorityDirectory);
+            EnsureManagedDirectory(JournalStorageDirectory);
+            EnsureManagedDirectory(JournalConversationDirectory);
+            EnsureManagedDirectory(JournalResourceDirectory);
             EnsureManagedDirectory(WorkspaceDirectory);
             EnsureManagedDirectory(PluginIconDirectory);
             EnsureManagedDirectory(WebViewUserDataDirectory);
@@ -89,6 +102,7 @@ namespace RNAssistant.Core.Storage
                 EnsureManagedDirectory(VbaJournalDirectory);
                 EnsureManagedDirectory(AttachmentDirectory);
                 EnsureManagedDirectory(ResourceAuthorityDirectory);
+                EnsureManagedDirectory(JournalStorageDirectory);
                 if (File.Exists(ChatDraftFile) && StorageFileSystem.IsReparsePoint(ChatDraftFile))
                     throw new IOException("Chat draft file cannot be a reparse point.");
                 ClearDirectory(ChatDirectory);
@@ -96,6 +110,7 @@ namespace RNAssistant.Core.Storage
                 ClearDirectory(VbaJournalDirectory);
                 ClearDirectory(AttachmentDirectory);
                 ClearDirectory(ResourceAuthorityDirectory);
+                ClearDirectory(JournalStorageDirectory);
                 using (StorageFileSystem.AcquireWriteLock(ChatDraftFile + ".lck"))
                     if (File.Exists(ChatDraftFile)) File.Delete(ChatDraftFile);
             }

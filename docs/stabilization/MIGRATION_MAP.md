@@ -188,6 +188,14 @@ pages и отклоняют неоднозначный semantic target. Renderer
 
 ## Storage/context optimization — 2026-11-10
 
+Storage-v2 root isolation (2026-11-16): new canonical journals, resource lock
+namespace and the disposable index use `storage-v2`; a create-only generation
+marker identifies the root. Legacy `chats/` and `resource-authority/*.jsonl` remain
+preserved and are not consulted by the new owners. Backup allowlists follow the new
+paths while mixed-generation application backup stays closed. Owner: Core
+StorageJournal/JournalStorageRoot. Production Office/Workspace constructors still
+use the retiring adapters; scope-routing composition and one switch remain P7.
+
 P1/P2 bound catalog/plugin/browser consumers (2026-11-14): ConversationCatalogService
 uses IConversationStore.ReadOverview/SetAgentTitle; the existing excerpt/summary
 projection is shared in Core, and the native reader addresses bounded locators.

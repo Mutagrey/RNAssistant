@@ -84,7 +84,7 @@ namespace RNAssistant.Core.Storage
                 var operation = "authority:" + commit.CommitId;
                 var receipt = Commit(operation, new ResourceJournalFact { Kind = "resource.authority", Scope = commit.ScopeId, Authority = commit }, CancellationToken.None);
                 var duplicate = receipt.Duplicate;
-                if (!duplicate) NotifyAuthority(_paths.ResourceAuthorityDirectory, commit);
+                if (!duplicate) NotifyAuthority(JournalStorageRoot.ResourceDirectory(_paths), commit);
                 return new AuthorityCommitResult(!duplicate, duplicate, Capture(commit.ScopeId));
             }
         }
@@ -139,8 +139,8 @@ namespace RNAssistant.Core.Storage
             token.ThrowIfCancellationRequested();
             // Keep the existing domain lease identity. Only the canonical metadata
             // backend changes; the lease still spans guard, dispatch and read-back.
-            StorageFileSystem.EnsureRegularDirectory(_paths.ResourceAuthorityDirectory);
-            var path = Path.Combine(_paths.ResourceAuthorityDirectory, "mutation-" + Key(scope.ToString()) + ".lck");
+            StorageFileSystem.EnsureRegularDirectory(_paths.JournalResourceDirectory);
+            var path = Path.Combine(_paths.JournalResourceDirectory, "mutation-" + Key(scope.ToString()) + ".lck");
             return waitForOwner ? StorageFileSystem.AcquireWriteLock(path, token) :
                 new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         }

@@ -323,6 +323,7 @@
     <Compile Include="Services\TrajectoryRunProjection.cs" />
     <Compile Include="Services\TrajectoryExportService.cs" />
     <Compile Include="Storage\AppDataPaths.cs" />
+    <Compile Include="Storage\JournalStorageRoot.cs" />
     <Compile Include="Storage\PluginPackageFiles.cs" />
     <Compile Include="Storage\PluginIconLibrary.cs" />
     <Compile Include="Storage\PluginIconSvg.cs" />

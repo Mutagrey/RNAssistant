@@ -8,8 +8,11 @@ directory write lock; encoding stays outside that lock. This also closes the
 
 ## New-generation journal closure and backup — 2026-11-10
 
-The collector independently inventories `conversation-streams/<scope-hash>` and
-`resource-stream`, including streams absent from SQLite. Segment gaps, unknown
+The collector independently inventories `storage-v2/conversation-streams/<scope-hash>`
+and `storage-v2/resource-authority/resource-stream`, including streams absent from
+SQLite. `storage-v2/generation.json` is create-only generation authority; legacy
+`chats/` and legacy resource JSONL remain separate and are never inferred as a new
+stream. Segment gaps, unknown
 files, links, unknown fact kinds, incomplete tails and mismatched reducer cursors
 block collection. Only the known append/publication locks and unpublished create-only header
 staging names are noncanonical. Maintenance does not truncate/adopt tails.

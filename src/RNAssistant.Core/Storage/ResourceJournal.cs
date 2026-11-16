@@ -23,11 +23,10 @@ namespace RNAssistant.Core.Storage
         internal ResourceJournal(AppDataPaths paths, StorageProtector protector = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths)); _protector = protector ?? StorageProtector.None;
-            if (Directory.Exists(paths.ResourceAuthorityDirectory) && Directory.EnumerateFiles(paths.ResourceAuthorityDirectory, "*.jsonl").Any())
-                throw new InvalidOperationException("Resource journal requires a new root; legacy resources must remain separately preserved.");
+            JournalStorageRoot.Ensure(paths);
             _bodies = new ChatBlobStore(paths, () => _protector);
-            RegisterObserver(paths.ResourceAuthorityDirectory, this);
-            Journal = new StorageJournal(Path.Combine(paths.Root, "resource-stream"), "resources", _protector);
+            RegisterObserver(JournalStorageRoot.ResourceDirectory(paths), this);
+            Journal = new StorageJournal(JournalStorageRoot.ResourceDirectory(paths), "resources", _protector);
         }
 
         internal ResourceJournalReceipt Prepare(string operation, MutationAttempt attempt, CancellationToken token = default(CancellationToken))

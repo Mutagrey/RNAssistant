@@ -1,4 +1,19 @@
 # Session event stream
+## Isolated storage-v2 root — 2026-11-16
+
+Canonical `ConversationJournal`, `ResourceJournal`, `StorageJournal` inventory and
+the disposable SQLite index now address one explicit `storage-v2` root. A
+create-only `generation.json` records the generation; conversation stream and
+resource locks no longer alias legacy chat/resource directories. Existing legacy
+chat and resource JSONL files remain untouched and are neither imported nor read by
+the new owner. Immutable CAS, settings, keys and identity owners remain with their
+current owners until the combined production composition switch.
+
+This is a P7 prerequisite, not a default-writer cutover. Office and Workspace still
+construct the retiring `ChatStore`/resource adapters. Global scope routing, combined
+writer switch, mixed-generation application backup and Windows/Office evidence
+remain open.
+
 ## Retained model attempts — 2026-11-14
 
 Each HTTP request has one immutable AttemptId. The shared accumulator freezes one
