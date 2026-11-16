@@ -1309,16 +1309,18 @@ namespace RNAssistant.Runtime
                         Schema("entryPath", true), false,
                         new WebVerifierHandler(webHost.Create(_resources, webSnapshots, workspace), session?.Id, acceptance?.WebChecks), requiresConfirmation: true, independentRead: false, executesCode: true);
                 {
-                    foreach (var entry in ResourceMutationToolCatalog.GetTools())
+                    foreach (var entry in ResourceMutationToolCatalog.GetTools(mutationOrigin != null ? 1 : ResourcePatch.MaximumTargets))
                     {
                         var handler = new FileHandler(files, workspace,
                             entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered, _plans.Handler(_delivered), mutationOrigin);
-                        Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
+                        Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ?
+                            (IToolHandler)new ResourcePatchBatchHandler(handler, mutationOrigin != null ? 1 : ResourcePatch.MaximumTargets) : handler);
                     }
                 }
                 if (agentCommunication != null && agentCommunication.IsEnabled(settings.MaxCollaborationAgents)) foreach (var entry in AgentCommunicationToolCatalog.GetTools())
                     Register(registry, entries, entry, new AgentCommunicationToolHandler(agentCommunication, agentInbox, session, settings.MaxCollaborationAgents));
-                Register(registry, entries, ChatRenameToolHandler.Entry(), new ChatRenameToolHandler(session, chatCatalog.Rename));
+                Register(registry, entries, ChatRenameToolHandler.Entry(mutationOrigin == null),
+                    new ChatRenameToolHandler(session, chatCatalog.Rename, mutationOrigin == null));
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);

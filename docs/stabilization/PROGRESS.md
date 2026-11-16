@@ -1,5 +1,52 @@
 # Stabilization progress
 
+## Native tool contract corrective patch — 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.6-dev`, integrated onto the current
+`17.3.5-dev` baseline. The base already contains explicit chat/plugin migration and
+native bounded context-port wiring; neither is repeated or replaced. The dispatch/
+tool-result path now uses typed runtime policy and exact existing domain receipts
+instead of the isolated storage/observer tool allowlists. Normal-return opaque
+invocation witnesses permit a distinct next accepted call; historical Unknown
+effects remain Unknown. Verified coarse invalidation no longer blocks the next
+mutation. Unresolved dispatches still stop preparation.
+
+One-target patch validates the exact owner receipt and accepted target; lost
+publication acknowledgement stays Unknown. Result projections use the canonical
+effect/id, and terminal validation shares its ephemeral accepted-call cache with
+the out-of-lock hydration retry. Self-title/no-op metadata is atomic. Native schemas
+and handlers explicitly limit patch to one resource per call and rename to the
+current chat pending multi-owner/cross-chat proof. Typed VBA preparation supplies
+the live restore target instead of an invalidated project container.
+
+Workspace accepts chat-scoped `session_changed` for a new run before filtering
+run-specific model progress. Exact view/generation, hidden catch-up and disposal
+fences remain. Resource owner inventory now validates native scope-lock siblings
+for GC and internal backup; the old-directory mutation fixture is corrected without
+weakening its refusal assertion. Full mixed application backup is still open.
+
+Final targeted evidence on the patched sources: Harness and real-controller
+MockDemo builds have 0 errors (2/11 existing warnings), with C# 7.3. Harness passes
+30/30: native tools 12, journal mutation 3, journal resources 3, journal runtime 4,
+legacy chat import 4, legacy plugin import 3, arbitrary macro compatibility 1.
+Actual-controller `--missing-chat-inbox-test` and `--legacy-migration-test` pass.
+Three Node entries pass: Workspace run observer, shared conversation observer and
+Workspace v8 view. Version validation and whitespace checks pass.
+
+Post-integration audit corrected the stale `.resource.v5` test expectation and
+updated the legacy VBA schema assertions to the current `targets[].edits[]` contract.
+The current native composition remains 12/12. The bare historical `vba:` filter is
+not current qualification: 66/107 still contains retired private-owner fixtures,
+recorded separately in [BACKLOG](BACKLOG.md#historical-vba-harness-baseline--observed-2026-11-16).
+
+Contracts: [Session events](../session-events.md#native-tool-outcomes-and-successive-writes--2026-11-16),
+[Text mutations](../text-mutations.md), [VBA journal](../vba-mutation-journal.md#native-authority-intent--2026-11-16),
+[CAS inventory](../cas-maintenance.md), [Harness](../../tests/RNAssistant.Harness/README.md#native-tool-contract-and-workspace-run-notices--2026-11-16).
+Remaining ranked owners/acceptance are in [BACKLOG](BACKLOG.md).
+Windows/.NET Framework/Office/VSTO/WebView2/DPAPI, Chromium rendering and actual
+retained-profile acceptance remain open. No commit, push, deployment or user-profile
+repair is implied by this patch.
+
 ## Office accepted-run configuration — W5, 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.5-dev`. New Office runs now record the
@@ -142,7 +189,8 @@ is still open.
 Windows/.NET Framework/Office/WebView2/DPAPI and wide/narrow/125% UI acceptance remain
 open; do not clear the preserved profile before review. Workspace/plugin observers
 with an already-running/pending cached missing chat have a separate conditional P2
-polling issue in [BACKLOG](BACKLOG.md#workspace-missing-running-chat-poll--observed-2026-11-16).
+polling issue that was later closed in
+[BACKLOG](BACKLOG.md#workspace-missing-running-chat-poll--closed-host-neutral-2026-11-16).
 No commit, push, release or automatic user-data repair is implied.
 
 ## Storage-v2 review corrections — 2026-11-16
@@ -321,9 +369,9 @@ Windows/Office COM и реакция реальной модели остают�
 закрыт отдельно 2026-11-16: CLI build проходит с 0 errors (один прежний `CS0649`),
 `--help` и isolated `workspace open` проходят. Core.Net8 включает shared
 `SettingsService` через target secret-store port; DPAPI сохранён для Office, CLI
-использует environment-only secrets. Соседний pre-existing test gap
-`vba: public tools use native runtime` (устаревшие binding revisions) остаётся
-открытым и не относится к retry fix.
+использует environment-only secrets. Прежний test gap
+`vba: public tools use native runtime` (устаревшие binding revisions) исправлен в
+`17.3.6-dev`; текущий test проверяет `.resource.v6`/`.resource.v2`.
 
 ## Internal identity backup extension — 2026-11-15
 

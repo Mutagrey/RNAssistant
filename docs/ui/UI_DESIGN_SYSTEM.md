@@ -72,6 +72,8 @@ Context meter по уточнению пользователя остаётся 
 Общий ConversationPanel использует существующий notice и link-button для ошибки
 чтения/retry над лентой. Accepted content сохраняется, новый empty state при ошибке
 не рисуется. Office/Workspace используют один markup; проверены 420 px и 125%.
+Исправление перехода между queued Workspace runs от 2026-11-16 использует те же
+loading/running/terminal состояния. Геометрия, кнопки и tokens не меняются.
 
 ## Browser screenshot — In Review, 2026-11-14
 

@@ -26,11 +26,30 @@ namespace RNAssistant.Core.Storage
                     AddStream(streams, directory, false);
                 }
             var resourceOwner = paths.JournalResourceDirectory;
-            CheckDirectory(resourceOwner);
+            ValidateResourceOwner(paths);
             var resources = Path.Combine(resourceOwner, "resource-stream");
             CheckDirectory(resources);
             if (Directory.Exists(resources)) AddStream(streams, resources, true);
             return streams;
+        }
+
+        // Scope locks are the only noncanonical siblings of resource-stream.
+        // Their names grant no permission to discard bytes or follow links.
+        internal static void ValidateResourceOwner(AppDataPaths paths)
+        {
+            var directory = paths.JournalResourceDirectory;
+            CheckDirectory(directory);
+            if (!Directory.Exists(directory)) return;
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+            {
+                var name = Path.GetFileName(entry);
+                if (name == "resource-stream") { CheckDirectory(entry); continue; }
+                if (StorageFileSystem.IsReparsePoint(entry) || Directory.Exists(entry) ||
+                    name.Length != 77 || !name.StartsWith("mutation-", StringComparison.Ordinal) ||
+                    !name.EndsWith(".lck", StringComparison.Ordinal) || !LowerHash(name.Substring(9, 64)) ||
+                    new FileInfo(entry).Length != 0)
+                    throw new InvalidDataException("Resource owner contains an unknown entry or a nonempty mutation lock.");
+            }
         }
 
         private static void CheckDirectory(string path)

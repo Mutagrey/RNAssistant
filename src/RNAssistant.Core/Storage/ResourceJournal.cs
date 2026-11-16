@@ -101,7 +101,7 @@ namespace RNAssistant.Core.Storage
             {
                 var fact = JObject.FromObject(proposed).ToObject<ResourceJournalFact>();
                 ValidateShape(fact);
-                if (fact.Kind == "resource.prepared" && fact.Call != null) VerifyCall(fact.Call);
+                if (fact.Kind == "resource.prepared" && fact.Call != null) VerifyCall(fact.Call, fact.PreviousInvocation);
                 foreach (var reference in References(fact)) Verify(reference);
                 var fingerprint = Fingerprint(fact);
                 return Access((db, cursor) => {
@@ -132,7 +132,8 @@ namespace RNAssistant.Core.Storage
                 if (AttemptScope(db, fact.Attempt.AttemptId) != null) throw new InvalidOperationException("Resource attempt is already prepared.");
                 var head = Head(db, fact.Scope, fact.Attempt.Target);
                 if (fact.Attempt.ExpectedRevision != null && head?.Revision?.Revision != fact.Attempt.ExpectedRevision ||
-                    head != null && head.Knowledge == HeadKnowledge.Unknown)
+                    head != null && head.Knowledge == HeadKnowledge.Unknown && !AllowsAggregatePreparation(db, fact) ||
+                    fact.PreviousInvocation != null && (head == null || head.Knowledge != HeadKnowledge.Unknown))
                     throw new ResourceAuthorityConflictException("Prepared resource revision changed.");
                 fact.PreparedHead = head;
                 return;
@@ -220,6 +221,9 @@ namespace RNAssistant.Core.Storage
         }
 
         private ResourceHeadState Head(SqliteConnection db, ResourceAuthorityScopeId scope, ResourceIdentity identity)
+        { return HeadOf(HeadReceipt(db, scope, identity)?.Fact, identity.Uri); }
+
+        private ResourceJournalReceipt HeadReceipt(SqliteConnection db, ResourceAuthorityScopeId scope, ResourceIdentity identity)
         {
             using (var command = Command(db, "SELECT operation FROM resource_head WHERE scope=$scope AND uri=$uri", scope))
             {
@@ -229,8 +233,30 @@ namespace RNAssistant.Core.Storage
                 var receipt = Find(db, scope, operation);
                 if (HeadOf(receipt?.Fact, identity.Uri) == null)
                     throw new InvalidDataException("Resource head locator is inconsistent.");
-                return HeadOf(receipt.Fact, identity.Uri);
+                return receipt;
             }
+        }
+
+        private static bool IsAggregatePreparation(MutationAttempt attempt)
+        {
+            return attempt.ExpectedRevision == null && attempt.IntendedImpacts.Any(impact =>
+                impact.Identity.Equals(attempt.Target) && impact.Relation == ResourceImpactRelation.Subtree);
+        }
+
+        private bool AllowsAggregatePreparation(SqliteConnection db, ResourceJournalFact fact)
+        {
+            if (fact.Call == null || !IsAggregatePreparation(fact.Attempt)) return false;
+            var previous = HeadReceipt(db, fact.Scope, fact.Attempt.Target);
+            // Coarse invalidation after a verified change is not an unresolved
+            // effect. Exact targets and version-pinned preparations stay closed.
+            if (previous?.Fact.Authority == null || previous.Effect == null) return false;
+            if (previous.Effect.Outcome == ResourceEffectOutcome.VerifiedChanged || previous.Effect.Outcome == ResourceEffectOutcome.Restored)
+                return fact.PreviousInvocation == null;
+            var completion = fact.PreviousInvocation;
+            return previous.Unknown && previous.Fact.Call != null && completion != null &&
+                JsonConvert.SerializeObject(previous.Fact.Call.Origin) == JsonConvert.SerializeObject(completion.Origin) &&
+                JsonConvert.SerializeObject(fact.Call.Origin) != JsonConvert.SerializeObject(completion.Origin) &&
+                JsonConvert.SerializeObject(ResourceOutcomeLink.From(previous)) == JsonConvert.SerializeObject(completion.Outcome);
         }
 
         private static long Generation(SqliteConnection db, ResourceAuthorityScopeId scope)
@@ -289,8 +315,8 @@ namespace RNAssistant.Core.Storage
                 Apply(db, record.Operation, record.Fingerprint, Decode(record), position); applied = position;
             }, record => {
                 var fact = Decode(record); ValidateTransition(db, fact);
-                if (fact.Kind == "resource.prepared" && fact.Call != null && CallKey(fact.Call) != verifiedCall)
-                    throw new CallProofNeeded(fact.Call);
+                if (fact.Kind == "resource.prepared" && fact.Call != null && CallKey(fact.Call, fact.PreviousInvocation) != verifiedCall)
+                    throw new CallProofNeeded(fact.Call, fact.PreviousInvocation);
                 foreach (var reference in References(fact))
                     if (!verified.Contains(ReferenceKey(reference))) throw new ReferenceNeeded(reference);
             }, token, recover);
@@ -304,12 +330,12 @@ namespace RNAssistant.Core.Storage
             var verified = new HashSet<string>(StringComparer.Ordinal); string verifiedCall = null;
             while (true)
             {
-                PayloadRef required = null; ResourceCallLink call = null;
+                PayloadRef required = null; CallProofNeeded call = null;
                 using (Journal.AcquireAppendLock(token))
                 using (var db = JournalIndex.Open(_paths, path))
                 { try { CatchUp(db, verified, token, recover, verifiedCall); return; }
-                    catch (ReferenceNeeded error) { required = error.Reference; } catch (CallProofNeeded error) { call = error.Call; } }
-                if (call != null) { VerifyCall(call); verifiedCall = CallKey(call); }
+                    catch (ReferenceNeeded error) { required = error.Reference; } catch (CallProofNeeded error) { call = error; } }
+                if (call != null) { VerifyCall(call.Call, call.Completion); verifiedCall = CallKey(call.Call, call.Completion); }
                 else { Verify(required); verified.Add(ReferenceKey(required)); }
             }
         }
@@ -321,20 +347,20 @@ namespace RNAssistant.Core.Storage
                 var verified = new HashSet<string>(StringComparer.Ordinal); var repaired = false; string verifiedCall = null;
                 while (true)
                 {
-                    PayloadRef required = null; ResourceCallLink call = null;
+                    PayloadRef required = null; CallProofNeeded call = null;
                     try
                     {
                         using (JournalIndexAdmission.Enter(_paths, token))
                         using (Journal.AcquireAppendLock(token))
                         using (var db = JournalIndex.Open(_paths))
                         { try { return action(db, CatchUp(db, verified, token, verifiedCall: verifiedCall)); }
-                            catch (ReferenceNeeded error) { required = error.Reference; } catch (CallProofNeeded error) { call = error.Call; } }
+                            catch (ReferenceNeeded error) { required = error.Reference; } catch (CallProofNeeded error) { call = error; } }
                     }
                     catch (SqliteException error) when (!repaired && JournalIndex.IsDamaged(error))
                     { repaired = true; JournalIndex.Repair(_paths, _protector, false, token); continue; }
                     catch (JournalIndex.IndexVersionMismatch) when (!repaired)
                     { repaired = true; JournalIndex.Repair(_paths, _protector, false, token); continue; }
-                    if (call != null) { VerifyCall(call); verifiedCall = CallKey(call); }
+                    if (call != null) { VerifyCall(call.Call, call.Completion); verifiedCall = CallKey(call.Call, call.Completion); }
                     else { Verify(required); verified.Add(ReferenceKey(required)); }
                 }
             }
@@ -350,6 +376,8 @@ namespace RNAssistant.Core.Storage
 
         private static void ValidateShape(ResourceJournalFact fact)
         {
+            if (fact?.PreviousInvocation != null && (fact.Kind != "resource.prepared" || fact.Call == null))
+                throw new InvalidDataException("Completed invocation proof belongs only to a new native preparation.");
             if (fact?.Call != null && (fact.Attempt == null || fact.Attempt.AttemptId != ConversationResourceBinding.ForCall(
                 fact.Call.Origin.ConversationScope, fact.Call.Origin.ChatId, fact.Call.Origin.RunId, fact.Call.Origin.CallId,
                 fact.Scope, fact.Attempt.Target).AttemptId)) throw new InvalidDataException("Foreign resource call binding.");
@@ -371,6 +399,7 @@ namespace RNAssistant.Core.Storage
             object value = fact.Kind == "resource.prepared" ? (object)fact.Attempt : fact.Kind == "resource.published" ? (object)fact.Publication :
                 new { fact.Scope, fact.AttemptId };
             if (fact.Kind == "resource.prepared" && fact.Call != null) value = new { Command = value, fact.Call };
+            if (fact.PreviousInvocation != null) value = new { Command = value, fact.PreviousInvocation };
             return RNAssistant.Core.Tools.TextPatternEngine.Sha256(fact.Kind + "\n" + JsonConvert.SerializeObject(value));
         }
         internal static IEnumerable<PayloadRef> CanonicalReferences(JournalRecord record)
@@ -381,11 +410,18 @@ namespace RNAssistant.Core.Storage
             .Concat(ViewOf(fact)?.Parts ?? new PayloadRef[0]).Where(reference => reference != null).GroupBy(ReferenceKey).Select(group => group.First()); }
         private void Verify(PayloadRef reference)
         { if (!_bodies.HasVerifiedReference(reference.ToBlobReference())) throw new InvalidDataException("Resource body is unavailable before acceptance."); }
-        private void VerifyCall(ResourceCallLink call)
-        { new ConversationJournal(_paths, call.Origin.ConversationScope, _protector).VerifyMutation(call); }
-        private static string CallKey(ResourceCallLink call) { return JsonConvert.SerializeObject(call); }
+        private void VerifyCall(ResourceCallLink call, ResourceInvocationCompletion completion)
+        {
+            new ConversationJournal(_paths, call.Origin.ConversationScope, _protector).VerifyMutation(call);
+            if (completion != null) new ConversationJournal(_paths, completion.Origin.ConversationScope, _protector).VerifyOpaqueCompletion(completion);
+        }
+        private static string CallKey(ResourceCallLink call, ResourceInvocationCompletion completion)
+        { return completion == null ? JsonConvert.SerializeObject(call) : JsonConvert.SerializeObject(new { call, completion }); }
         private sealed class CallProofNeeded : Exception
-        { internal readonly ResourceCallLink Call; internal CallProofNeeded(ResourceCallLink call) { Call = call; } }
+        {
+            internal readonly ResourceCallLink Call; internal readonly ResourceInvocationCompletion Completion;
+            internal CallProofNeeded(ResourceCallLink call, ResourceInvocationCompletion completion) { Call = call; Completion = completion; }
+        }
         private static string ReferenceKey(PayloadRef reference) { return reference.Sha256 + ":" + reference.ByteLength + ":" + reference.ProtectionKeyId; }
         private static bool SameHead(ResourceHeadState left, ResourceHeadState right)
         { return left == null ? right == null : right != null && left.SameAuthority(right); }
@@ -402,6 +438,7 @@ namespace RNAssistant.Core.Storage
         public string AttemptId { get; set; }
         public MutationAttempt Attempt { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceCallLink Call { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ResourceInvocationCompletion PreviousInvocation { get; set; }
         public ResourcePublication Publication { get; set; }
         public long Generation { get; set; }
         public bool AdvancesHead { get; set; }

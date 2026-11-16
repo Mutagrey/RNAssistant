@@ -905,6 +905,12 @@ inbox/approval/context/media readers ещё связаны с текущим own
 
 ### S2b.4: lifecycle чтений и доставка поздних ответов
 
+Уточнение 2026-11-16: `session_changed` адресован разговору и может сообщать о
+следующем запуске очереди. После проверки workspace/session он перечитывает
+canonical snapshot независимо от RunId уже показанного запуска. Само уведомление
+не заменяет run; model progress по-прежнему принимается только для exact RunId.
+Ожидающий completed/idle view не получает постоянного polling timer.
+
 Owner — ConversationView / существующий ConversationObserver. View создаёт
 подписки через `observe(options)`, передаёт им свой binding scope и владеет
 suspend/resume/dispose. Office inbox, его дополнительное чтение истории и

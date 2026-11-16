@@ -9,6 +9,70 @@ transient errors do not become terminal. Draft, other chats and active selection
 preserved. `workspace-missing-chat-observer.test.js` covers the lifecycle. Windows/
 WebView2 visual evidence remains separate.
 
+## Native mutation receipt completeness — 2026-11-16
+
+P1 functional continuation; partial correction in `17.3.6-dev`. Production native
+calls now reach their existing owners and retain exact results for the qualified
+single-owner families; coarse aggregate invalidation no longer blocks the next
+verified mutation or a separately accepted normal-return opaque invocation. Genuine
+Unknown remains guarded. These checks use production journal composition, not only
+the older ChatStore-backed macro fixtures.
+
+Remaining work, in order:
+
+1. ResourceJournal / ConversationJournal: several exact owner attempts and outcome
+   receipts for one accepted `core.patch` call. Native schema/handler currently
+   permit one target and refuse larger packages before any write. Acceptance:
+   at least two real domain owners, every target's exact retained outcome, partial
+   failure, stale second target, lost ACK before/after publication, restart and no
+   replay. Do not replace the receipts with a synthetic aggregate or a tool-name
+   exception; increase the advertised limit only with that proof.
+2. ConversationCatalogAccess / ConversationJournal: addressed `chat.rename` needs
+   an exact target metadata commit receipt linked to the source call. Native
+   schema currently exposes self only and handler rejects stale addressed calls
+   before mutation. Acceptance: current/foreign workspace scope, observed revision,
+   busy target, target deletion, lost ACK and both chat rebuilds; no source-chat
+   substitution. Same-chat atomic rename is covered by the corrective patch.
+3. Add a production-composition execution matrix for the remaining published
+   mutation families (Word/PowerPoint, move/copy, prompt/catalog and plugin owners).
+   A descriptor or fake legacy adapter test alone is insufficient. Verify
+   prepare → source dispatch → exact owner publication → terminal → reopen/rebuild,
+   confirmation and failure after dispatch. This is a qualification gap, not a
+   claim that every untested family has a reproduced defect.
+
+P1 release evidence remains real Windows/Office/WebView2/DPAPI and retained-profile
+import; use photos only. Legacy import and bounded native context-port wiring are
+already in `06664fc`; do not reopen them as missing implementation. Full mixed
+application backup, bounded full-session/inbox reads and existing Workspace missing
+chat polling tasks remain independent.
+
+## Remaining storage consumers after native cutover — audit 2026-11-16
+
+These are bounded follow-ups to the current composition, not a second migration
+roadmap. The code paths remain in `06664fc`; Windows latency is not measured here.
+Existing native context selection, lazy resource commit history and identity-owner
+backup must be retained.
+
+| Priority / owner | Current boundary | Acceptance |
+| --- | --- | --- |
+| P1 / CasMaintenanceService.Backup + application owners | Internal native backup refuses retained legacy/VBA/resource files; it does not promise a complete mixed profile or external project/manifest/trash closure. VbaJournalStore still writes its own journal. | Inventory every claimed owner and coordinate writers; restore a mixed profile into a separate root without original folders. Verify identity, bytes, receipts and CAS closure, interruption and no replay. Keep unsupported scopes explicit. Existing Office/Workspace identity backup is already implemented. |
+| P1 / PluginApplicationService.ProjectChat → WorkspaceConversationService.RefreshSession | A paged UI response still follows full session load. ConversationJournal.Store.LoadTextChatOnce reads all message pages and resource projections before the small response window is selected. | Unchanged polling uses metadata/cursor/current run and bounded message reads. Compare 100/1,000/10,000-message chats over 30 polls; measure read bytes, allocations and p50/p95 while preserving preview, input receipts, recovery and late metadata. |
+| P2 / ConversationJournal.Events + ConversationInboxService | ReadControls reads all control frames before receipt and afterSequence filtering; ReadUndelivered groups the input history again. | Exact receipt, current pending inputs and bounded suffix queries through the existing index, with transition/identity/revision checks and identical rebuild results. No unrelated historical frame reads for a point receipt. |
+| P2 / ResourceJournal.Queries.Capture | Every capture hydrates all heads in the scope under the append lock; model snapshots and mutation preparation call it. Commit history itself is already lazy. | Addressed heads or required ranges through the existing index with a frozen generation, currentness and Unknown guards. Measure unrelated-head growth and lock hold time; no second authority cache/store. |
+
+The Workspace missing-chat observer case is closed above. `17.3.6-dev` corrects
+new-run `session_changed` filtering, not the already corrected missing-target polling.
+
+## Historical VBA Harness baseline — observed 2026-11-16
+
+Owner: `tests/RNAssistant.Harness/Program.VbaPromptTests.cs`. The broad `vba:` filter
+reports 66/107 on the current tree because 41 historical cases still exercise retired
+private ids such as `vba.module.patch`, old macro text and pre-native owner fixtures.
+Current production qualification uses `native tools:` plus named owner cases. Do not
+describe the bare filter as green. Migrate or remove each retired case only together
+with its direct owner and corresponding production-composition coverage; no production
+behavior is changed or declared broken by this historical fixture drift alone.
+
 ## MockDemo diagnostic settings shim — closed host-neutral 2026-11-16
 
 Owner: `demo/RNAssistant.MockDemo/DemoSettingsService.cs`, source-linked by
@@ -106,11 +170,11 @@ restart/clear истории, потерянное подтверждение и
 owners и индекс, без нового store/registry. Текущий контракт —
 [Повтор и восстановление](../conversation-protocol.md#повтор-и-восстановление).
 
-Соседний test gap: `vba: public tools use native runtime` уже на исходном `5bbc5e33`
-ожидает старые binding revisions `.resource.v5`/`.resource.v1`, тогда как текущий
-`ResourceMutationToolCatalog.BindingFor` выдаёт `.resource.v6`/`.resource.v2`.
-Это ожидание не меняется в retry fix; нормальный повтор макроса проверяется
-отдельным `vba: normal macro return permits repeated native calls`.
+The former `vba: public tools use native runtime` test gap is corrected in
+`17.3.6-dev`: it now expects the current `.resource.v6`/`.resource.v2` bindings.
+The production-composition repeat path is covered by
+`native tools: macro normal return and repeated invocation`; the non-origin VBA
+fixture separately proves that a missing conversation witness fails closed.
 
 Durable repeat guards между новыми runs/после очистки проверены для
 `ConversationJournal`. Старый `ChatEventStoreAdapter` объявляет

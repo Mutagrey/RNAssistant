@@ -440,6 +440,7 @@ namespace RNAssistant.Office.Services
 
     internal sealed class ResourceMutationAuthorityObserver : IToolMutationObserver
     {
+        internal bool HasConversationOrigin { get { return _origin != null; } }
         private readonly ResourceAuthorityService _authority;
         private readonly IResourceMutationJournal _journal;
         private readonly ChatSession _session;
@@ -474,11 +475,26 @@ namespace RNAssistant.Office.Services
             if (AgentCommunicationToolCatalog.Owns(context.Call.Name) || context.Call.Name == ChatRenameToolHandler.ToolId) return null;
             var route = ResourceMutationToolCatalog.Owns(context.Call.Name) ? RNAssistant.Office.Tools.ResourceMutationPrepared.Read(preparedStateJson) : null;
             var operation = route?.Operation ?? context.Call.Name;
-            if (_origin != null && operation != RNAssistant.Office.Tools.VbaToolCatalog.WriteModule && !PlanDocumentToolCatalog.Owns(operation) && !TaskListToolCatalog.Owns(operation) && !HtmlWorkspacePublication.Owns(operation))
-                throw new ToolMutationPreparationException("journal_mutation_owner_unavailable", "Journal mutation owner is not connected for this target.");
+            // Existing domain owners provide intent and the read-back supported
+            // by each operation. The native journal pins the accepted call and
+            // runtime entry in Prepare, then atomically publishes its authority
+            // outcome with that same origin. Opaque calls retain Unknown effects.
             if (_origin != null && TaskListToolCatalog.Owns(operation) && _persistResources == null)
                 throw new ToolMutationPreparationException("task_list_persistence_unavailable", "Task-list persistence is unavailable.");
             if (route != null) { arguments = route.RoutingArguments; preparedStateJson = route.OwnerState; }
+            if (_origin != null && operation.StartsWith("vba.module.", StringComparison.Ordinal))
+            {
+                // Restore is addressed by a backup, while its existing VBA owner
+                // pins the live component. Use that prepared target for authority
+                // intent; an invalidated project container is not the write target.
+                var prepared = JsonConvert.DeserializeObject<RNAssistant.Office.Tools.VbaNativePreparedState>(preparedStateJson ?? "null");
+                if (prepared?.Version != 2 || prepared.ToolId != operation || string.IsNullOrWhiteSpace(prepared.ModuleName) ||
+                    prepared.ArgumentsSha256 != TextPatternEngine.Sha256(context.Call.ArgumentsJson))
+                    throw new ToolMutationPreparationException("vba_prepared_state_mismatch", "VBA authority intent requires its exact prepared live component.");
+                arguments = new Dictionary<string, object>(arguments ?? new Dictionary<string, object>());
+                arguments["moduleName"] = prepared.ModuleName;
+                if (!string.IsNullOrWhiteSpace(prepared.TargetModuleName)) arguments["newModuleName"] = prepared.TargetModuleName;
+            }
             var scope = ResourceMutationDomains.Scope(_authority, _session, operation);
             var expected = StringArgument(arguments, "expectedRevision");
             var browser = RNAssistant.Office.Tools.ExternalBrowserToolHandler.Owns(operation)

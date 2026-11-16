@@ -1,5 +1,27 @@
 # Current-to-target migration map
 
+## Native mutation receipt completion — 2026-11-16
+
+Owners: ConversationJournal ToolStore/References, ResourceJournal and existing
+Office/Workspace domain handlers. Removed the isolated storage tool-name gate and
+the Office resource observer's second allowlist. Typed runtime admission and exact
+accepted-call/resource proof remain. Normal-return opaque continuation uses an
+optional immutable terminal witness in the existing prepared fact, not a new store
+or retry registry. Old facts without the witness keep their existing fingerprint;
+new facts require the matching reader. No execution replay or legacy dual write.
+
+Two explicitly temporary capability bounds remain in native descriptors/handlers:
+
+| Bound | Owner / removal criterion |
+| --- | --- |
+| One resource per `core.patch` call | ResourceJournal call-outcome binding + ConversationJournal terminal proof: retain every owner attempt/receipt per accepted call, prove exact per-target aggregation and restart/lost-ACK/partial behavior before increasing the native schema limit. |
+| `chat.rename` changes only the current chat | ConversationCatalogAccess + ConversationJournal: retain the exact target metadata commit linked to the source accepted call, including target scope/revision/lease and lost-ACK proof, before exposing `agent_id` again. |
+
+Self-title proof uses metadata in the same conversation terminal. The generic batch
+handler and legacy fixture defaults are retained as existing consumers, not used
+as fallback by production. `06664fc` already contains explicit legacy import and
+`IConversationContextStore.RestoreWorkingSet` wiring; neither is replaced here.
+
 ## Office accepted-run configuration — W5, 2026-11-16
 
 Owner: `ChatSettingsResolver` for accepted-run resolution/capture/validation;

@@ -163,7 +163,7 @@ namespace RNAssistant.Core.Storage
                 var parsed = ConversationResponseHistoryReader.Read(hydrated);
                 if (!parsed.Success) throw new ArgumentException("Accepted call protocol is invalid.");
                 var fingerprint = CallFingerprint(fact);
-                var contextKey = new ContextCallKey(fingerprint, AgentProgressTracker.Signature(parsed.Response.ToolCalls[0]));
+                var contextKey = new ContextCallKey(fingerprint, AgentProgressTracker.Signature(parsed.Response.ToolCalls[0]), parsed.Response.ToolCalls[0]);
                 return Access((db, cursor) => {
                     RequireStandaloneToolCommit(db, chatId);
                     var prior = FindCall(db, chatId, call.RunId, call.ToolCallId);
@@ -242,12 +242,14 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private T Access<T>(Func<SqliteConnection, JournalCursor, T> action, CancellationToken token)
+        private T Access<T>(Func<SqliteConnection, JournalCursor, T> action, CancellationToken token,
+            Dictionary<string, ContextCallKey> preparedCallKeys = null)
         {
             using (RuntimeStorageActivity.Acquire(_paths, token))
             {
                 var verified = new HashSet<string>(StringComparer.Ordinal);
-                ResourceJournalReceipt outcome = null; var contextKeys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
+                ResourceJournalReceipt outcome = null;
+                var contextKeys = preparedCallKeys ?? new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
                 var repairAttempted = false;
                 while (true)
                 {
@@ -607,7 +609,7 @@ namespace RNAssistant.Core.Storage
                 origin.RunId != fact.Result.RunId || origin.CallId != fact.Result.ToolCallId || origin.StepId != fact.Result.ResultStepId))
                 throw new InvalidDataException("Resource outcome belongs to another accepted runtime call.");
             if (fact.Result.AuthorityCommitId != outcome.CommitId || fact.Result.ResourceEffect == null ||
-                !JToken.DeepEquals(JObject.FromObject(fact.Result.ResourceEffect), JObject.FromObject(outcome.Effect)))
+                !MatchesResourceOutcome(fact.Result.ToolName, fact.Result.ResourceEffect, outcome))
                 throw new InvalidDataException("Conversation effect disagrees with its exact resource receipt.");
             if (outcome.Unknown && (fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown ||
                 outcome.Fact.Call == null && fact.Result.EvidenceReference != null)) throw new InvalidDataException("Unknown resource outcome has no success evidence.");

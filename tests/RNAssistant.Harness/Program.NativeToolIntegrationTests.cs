@@ -1,0 +1,258 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
+using RNAssistant.Office.Services;
+using RNAssistant.Office.Tools;
+
+namespace RNAssistant.Harness
+{
+    internal static partial class Program
+    {
+        // Keep this fixture on the production router/resource owners. The older
+        // aggregate fixtures intentionally cannot qualify the native composition.
+        private sealed class NativeToolFixture
+        {
+            internal AppDataPaths Paths;
+            internal FakeOfficeAdapter Adapter;
+            internal ConversationJournalRouter Router;
+            internal ConversationJournal Journal;
+            internal ResourceJournal Resources;
+            internal OfficeToolExecutor Executor;
+            internal ChatSession Session;
+            internal AppSettings Settings;
+        }
+
+        private static void WithNativeToolFixture(Action<NativeToolFixture> test)
+        {
+            WithOfficeJournalScope((paths, adapter, identities, router, sessions) => {
+                var settings = new AppSettings { Model = "native-tool-integration", StreamResponses = false,
+                    SmartChatTitles = false, AutoCompressContext = false, AutoConfirmToolActions = true,
+                    AgentResponseMode = AgentResponseModes.JsonSchema, ContextWindowOverrideTokens = 65536,
+                    MaxAgentFormatRetries = 0, MaxAgentIterations = 12 };
+                var resources = new ResourceJournal(paths);
+                IConversationStore store = router;
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths),
+                    new ToolStore(paths), () => settings, value => settings = value, paths,
+                    loadArtifactBody: store.LoadArtifactBody, resourceAuthorityStore: resources,
+                    persistResourceFacts: store.Commit, resourceMutationJournal: resources,
+                    resourceOrigin: router.MutationOrigin);
+                var session = sessions.CreatePersistentChat("Native tool integration");
+                var fixture = new NativeToolFixture { Paths = paths, Adapter = adapter, Router = router,
+                    Journal = new ConversationJournal(paths, "document:" + session.DocumentAuthorityId),
+                    Resources = resources, Executor = executor, Session = session, Settings = settings };
+                try { test(fixture); }
+                catch
+                {
+                    foreach (var message in session.Messages.Where(item => item.ToolName != null && item.Activity == null &&
+                        item.AcceptedCallOrigin == null && item.ExecutionProgress != null && !item.ExecutionProgress.IndependentLocalRead))
+                    {
+                        var text = message.Content ?? string.Empty;
+                        Console.WriteLine("native terminal " + message.ToolName + ": " +
+                            Newtonsoft.Json.JsonConvert.SerializeObject(message.ExecutionProgress) + " " +
+                            text.Substring(0, Math.Min(1400, text.Length)));
+                    }
+                    throw;
+                }
+            });
+        }
+
+        private static string NativeCall(string name, JObject arguments)
+        {
+            return ModelProtocolWire.WriteAcceptedCall("Perform the explicitly requested operation.", null,
+                new ConversationToolCall { Name = name, Arguments = arguments });
+        }
+
+        private static ChatTurnResult RunNativeToolScript(NativeToolFixture fixture,
+            IEnumerable<string> responses, Func<string> finish)
+        {
+            var script = new Queue<string>(responses);
+            LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+                Task.FromResult(new LlmCompletionResult { Content = script.Count == 0 ? finish() : script.Dequeue() ?? finish() });
+            var service = new ConversationRunService(fixture.Adapter, fixture.Executor, fixture.Router, fixture.Router,
+                (settings, messages, options, stream, token) => FixtureCompletion(completion, settings, messages, options, stream, token));
+            var catalog = OfficeToolCatalog.ForHost(fixture.Adapter.HostName).Concat(fixture.Executor.GetControllerTools()).ToArray();
+            return service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Perform the requested test operations.",
+                fixture.Session, fixture.Session.Context, fixture.Settings, catalog, null).GetAwaiter().GetResult();
+        }
+
+        private static ChatMessage NativeTerminal(NativeToolFixture fixture, string tool)
+        {
+            return fixture.Session.Messages.Last(message => message.ToolName == tool && message.Activity == null &&
+                message.AcceptedCallOrigin == null && message.ExecutionProgress != null);
+        }
+
+        private static string NativeUnverifiedFinish(NativeToolFixture fixture, string tool, bool normalReturn)
+        {
+            var evidence = fixture.Session.Messages.Where(message => message.ToolName == tool && message.Activity == null &&
+                message.EvidenceReference != null).Select(message => message.EvidenceReference.Alias).ToArray();
+            return ModelProtocolWire.WriteAcceptedDecision("finish", "Report only the retained execution evidence.",
+                normalReturn ? "Requested invocations returned normally; their external effects remain unverified." :
+                    "The requested effect could not be verified; inspect it before retrying.",
+                outcome: normalReturn ? ConversationOutcome.Partial : ConversationOutcome.UnableToComplete,
+                results: new[] { new ConversationResultClaim("Requested operation and its effect.", evidence,
+                    normalReturn ? ConversationAssessment.PartiallySatisfied : ConversationAssessment.Unverified) });
+        }
+
+        private static void AssertNativeToolReceipt(NativeToolFixture fixture, string tool)
+        {
+            var result = NativeTerminal(fixture, tool);
+            AssertTrue(!string.IsNullOrWhiteSpace(result.AuthorityCommitId), "native result links a durable authority outcome");
+            var proof = fixture.Journal.LinkedResourceOutcome(fixture.Session.Id, result.RunId, result.ToolCallId);
+            AssertTrue(proof != null, "exact chat/run/call resource proof is readable");
+            AssertEqual(result.AuthorityCommitId, proof.CommitId, "conversation and resource receipts agree");
+            var revision = fixture.Session.Revision;
+            fixture.Journal.Rebuild();
+            var restored = ((IConversationStore)fixture.Router).Load(fixture.Session.Id);
+            AssertEqual(revision, restored.Revision, "native rebuild keeps the final conversation revision");
+            AssertEqual(RunLifecycle.Completed, restored.LastRun.KernelState.Summary.Lifecycle,
+                "the saved run is terminal after native rebuild");
+            AssertEqual(proof.Position.Hash,
+                fixture.Journal.LinkedResourceOutcome(fixture.Session.Id, result.RunId, result.ToolCallId).Position.Hash,
+                "native rebuild keeps the exact immutable effect receipt");
+        }
+
+        private static void NativeToolsMacroNormalReturn()
+        {
+            WithNativeToolFixture(fixture => {
+                var result = RunNativeToolScript(fixture, new[] {
+                    LoadToolSchemaResponse(VbaToolCatalog.RunMacro),
+                    NativeCall(VbaToolCatalog.RunMacro, new JObject { ["macroName"] = "Module1.MigrateApiKey", ["arguments"] = new JArray("value", 2, true) }),
+                    NativeCall(VbaToolCatalog.RunMacro, new JObject { ["macroName"] = "Module1.MigrateApiKey", ["arguments"] = new JArray("value", 2, true) }),
+                    LoadToolSchemaResponse("excel.inspect"),
+                    NativeCall("excel.inspect", new JObject { ["kind"] = "sheets" })
+                }, () => NativeUnverifiedFinish(fixture, VbaToolCatalog.RunMacro, true));
+                AssertEqual(2, fixture.Adapter.CountVbaCalls(FakeVbaOperation.RunMacro),
+                    "two admitted normal-return macro invocations dispatch exactly once each");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "opaque invocations can finish honestly");
+                AssertEqual(2, result.RunViewState.UnknownEffects, "normal return never certifies an external effect");
+                AssertEqual("partial", result.RunViewState.ModelOutcome, "unverified macro effects remain explicit");
+                AssertNativeToolReceipt(fixture, VbaToolCatalog.RunMacro);
+                AssertEqual(2, fixture.Adapter.CountVbaCalls(FakeVbaOperation.RunMacro), "loading and rebuilding cannot replay a macro");
+            });
+        }
+
+        private static void NativeToolsExcelVerified()
+        {
+            foreach (var autoConfirm in new[] { true, false }) WithNativeToolFixture(fixture => {
+                fixture.Settings.AutoConfirmToolActions = autoConfirm;
+                var result = RunNativeToolScript(fixture, new[] {
+                    LoadToolSchemaResponse("excel.sheet.add"),
+                    NativeCall("excel.sheet.add", new JObject { ["name"] = "NativeReport" }),
+                    LoadToolSchemaResponse("excel.range.write"),
+                    NativeCall("excel.range.write", new JObject { ["kind"] = "value", ["sheet"] = "NativeReport", ["address"] = "A1", ["value"] = 42 })
+                }, () => ScriptedVerifiedFinish(fixture.Session, "Both writes have exact results.", "Created and written.",
+                    "Create the report sheet and write A1.", "excel.sheet.add", "excel.range.write"));
+                AssertEqual(1, fixture.Adapter.ExcelSheetRequests.Count(item => item.ToolId == "excel.sheet.add"), "one sheet dispatch");
+                AssertEqual(1, fixture.Adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelWriteApplyOperation), "one range dispatch");
+                AssertEqual("42", fixture.Adapter.CellValue("NativeReport", "A1"), "typed Excel read-back agrees with live value");
+                AssertEqual(2, result.RunViewState.VerifiedWrites, "both verified writes retain their classification");
+                AssertNativeToolReceipt(fixture, "excel.range.write");
+            });
+        }
+
+        private static void NativeToolsExcelUnknownNoReplay()
+        {
+            WithNativeToolFixture(fixture => {
+                fixture.Adapter.BeforeExcelBackendCall = operation => {
+                    if (operation == FakeOfficeAdapter.ExcelWriteApplyOperation)
+                        fixture.Adapter.ThrowOnExcelBackendOperation = FakeOfficeAdapter.ExcelWriteReadOperation;
+                };
+                var arguments = new JObject { ["kind"] = "value", ["sheet"] = "Data", ["address"] = "A1", ["value"] = 73 };
+                var result = RunNativeToolScript(fixture, new[] {
+                    LoadToolSchemaResponse("excel.range.write"), NativeCall("excel.range.write", arguments),
+                    NativeCall("excel.range.write", (JObject)arguments.DeepClone()),
+                    NativeCall("excel.range.write", new JObject { ["kind"] = "value", ["sheet"] = "Data", ["address"] = "A2", ["value"] = 74 })
+                }, () => NativeUnverifiedFinish(fixture, "excel.range.write", false));
+                AssertEqual("73", fixture.Adapter.CellValue("Data", "A1"), "first dispatch may have changed the document");
+                AssertEqual(1, fixture.Adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelWriteApplyOperation),
+                    "neither identical retry nor different arguments bypass a genuine Unknown root");
+                AssertEqual(0, result.RunViewState.VerifiedWrites, "unavailable read-back cannot become verified success");
+                AssertEqual(1, result.RunViewState.UnknownEffects, "possible effect remains unknown");
+                fixture.Adapter.ThrowOnExcelBackendOperation = null;
+                fixture.Journal.Rebuild();
+                AssertEqual(1, ((IConversationStore)fixture.Router).Load(fixture.Session.Id).LastRun.KernelState.Summary.ToolCounts.WriteUnknown,
+                    "native replay preserves the unknown obligation");
+                AssertEqual(1, fixture.Adapter.ExcelBackendCalls.Count(item => item == FakeOfficeAdapter.ExcelWriteApplyOperation), "rebuild performs no dispatch");
+            });
+        }
+
+        private static void NativeToolsVbaReplace()
+        {
+            WithNativeToolFixture(fixture => {
+                fixture.Adapter.SetVbaModule("NativeModule", "Sub Main()\nDebug.Print \"before\"\nEnd Sub", "StdModule");
+                var target = "VBA module: NativeModule";
+                var result = RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.search", new JObject { ["target"] = target, ["query"] = "before", ["mode"] = "literal", ["matchCase"] = true }),
+                    NativeCall("core.replace", new JObject { ["target"] = target, ["query"] = "before", ["replacement"] = "after",
+                        ["mode"] = "literal", ["matchCase"] = true, ["expectedMatches"] = 1 })
+                }, () => ScriptedVerifiedFinish(fixture.Session, "The exact search snapshot was replaced.", "Source replaced.",
+                    "Replace the observed source text.", "core.replace"));
+                AssertContains(fixture.Adapter.GetVbaModuleCode("NativeModule"), "after", "routed VBA owner writes the replacement");
+                AssertEqual(1, fixture.Adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "replace dispatches once");
+                AssertEqual(1, result.RunViewState.VerifiedWrites, "verified VBA replacement survives native storage");
+                AssertNativeToolReceipt(fixture, "core.replace");
+            });
+        }
+
+        private static void NativeToolsSinglePatch()
+        {
+            WithNativeToolFixture(fixture => {
+                fixture.Adapter.SetVbaModule("NativePatch", "Sub Main()\nDebug.Print \"before\"\nEnd Sub", "StdModule");
+                var target = "VBA module: NativePatch";
+                var result = RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.read", new JObject { ["target"] = target }),
+                    NativeCall("core.patch", new JObject { ["targets"] = new JArray(new JObject {
+                        ["target"] = target, ["edits"] = new JArray(new JObject { ["old"] = "before", ["new"] = "after" }) }) })
+                }, () => ScriptedVerifiedFinish(fixture.Session, "The prepared source has verified after-state.", "Source patched.",
+                    "Patch the observed source.", "core.patch"));
+                AssertContains(fixture.Adapter.GetVbaModuleCode("NativePatch"), "after", "single-target patch reaches its typed owner");
+                AssertEqual(1, fixture.Adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "one patch dispatch");
+                AssertEqual(1, result.RunViewState.VerifiedWrites, "the patch aggregate retains verified outcome");
+                AssertEqual(1, NativeTerminal(fixture, "core.patch").ResourceEffect.Targets.Count,
+                    "the terminal retains its addressed per-target presentation");
+                AssertNativeToolReceipt(fixture, "core.patch");
+            });
+        }
+
+        private static void NativeToolsVbaDeleteRestore()
+        {
+            WithNativeToolFixture(fixture => {
+                const string source = "Sub Main()\nDebug.Print \"restore me\"\nEnd Sub";
+                fixture.Adapter.SetVbaModule("NativeRestore", source, "StdModule");
+                var target = "VBA module: NativeRestore";
+                RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.read", new JObject { ["target"] = target }),
+                    LoadToolSchemaResponse(ResourceMutationToolCatalog.Delete),
+                    NativeCall(ResourceMutationToolCatalog.Delete, new JObject { ["target"] = target })
+                }, () => ScriptedVerifiedFinish(fixture.Session, "Deletion has exact verified absence.", "Source removed.",
+                    "Delete the observed source.", ResourceMutationToolCatalog.Delete));
+                AssertEqual(1, fixture.Adapter.CountVbaCalls(FakeVbaOperation.DeleteModule), "delete dispatches once");
+                AssertEqual(string.Empty, fixture.Adapter.GetVbaModuleCode("NativeRestore"), "verified deletion removes the component");
+                AssertNativeToolReceipt(fixture, ResourceMutationToolCatalog.Delete);
+
+                var backup = new VbaJournalStore(fixture.Paths).List(fixture.Session.Host, fixture.Session.DocumentKey)
+                    .Where(item => item.ModuleName == "NativeRestore").OrderByDescending(item => item.CreatedUtc).First();
+                var backupTarget = VbaResourceProvider.BackupSemanticTarget(backup);
+                var restored = RunNativeToolScript(fixture, new[] {
+                    LoadToolSchemaResponse(ResourceMutationToolCatalog.Restore),
+                    NativeCall(ResourceMutationToolCatalog.Restore, new JObject { ["target"] = backupTarget })
+                }, () => ScriptedVerifiedFinish(fixture.Session, "The exact retained source was restored.", "Source restored.",
+                    "Restore the selected backup.", ResourceMutationToolCatalog.Restore));
+                AssertEqual(source, fixture.Adapter.GetVbaModuleCode("NativeRestore"), "explicit restore reuses the pinned backup bytes");
+                AssertEqual(1, fixture.Adapter.CountVbaCalls(FakeVbaOperation.CreateModule), "restore creates the component once");
+                AssertEqual(1, restored.RunViewState.VerifiedWrites, "restore retains its verified native outcome");
+                AssertNativeToolReceipt(fixture, ResourceMutationToolCatalog.Restore);
+                AssertEqual(1, fixture.Adapter.CountVbaCalls(FakeVbaOperation.CreateModule), "rebuild cannot repeat restore");
+            });
+        }
+    }
+}

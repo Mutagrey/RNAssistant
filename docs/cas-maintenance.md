@@ -17,6 +17,15 @@ files, links, unknown fact kinds, incomplete tails and mismatched reducer cursor
 block collection. Only the known append/publication locks and unpublished create-only header
 staging names are noncanonical. Maintenance does not truncate/adopt tails.
 
+Native resource-owner siblings (2026-11-16): inventory validates the entire
+`storage-v2/resource-authority` directory, not only `resource-stream`. The only
+other accepted entries are regular, empty `mutation-<64 lowercase hex>.lck` files.
+Unknown files, nested directories, links or nonempty lock files block canonical
+inventory and GC. Internal backup invokes the same owner check before staging;
+unexpected bytes cannot disappear from a successful backup by resembling a lock.
+This corrects the former old-directory check and does not extend the supported
+backup to a complete mixed-generation application profile.
+
 The same domain reducers rebuild a private temporary SQLite projection; cursor
 completeness is checked against the scanned canonical ends. The production index
 is neither trusted nor changed by audit. Typed journal owners enumerate CAS refs,

@@ -161,7 +161,7 @@ namespace RNAssistant.Harness
                         tool.Id + " is owned by native ToolRuntime");
                     var binding = tool.Binding;
                     AssertTrue(binding != null && (ResourceMutationToolCatalog.Owns(tool.Id)
-                            ? binding.HandlerId == tool.Id + (tool.Id == ResourceMutationToolCatalog.Patch ? ".resource.v5" : ".resource.v1")
+                            ? binding.HandlerId == tool.Id + (tool.Id == ResourceMutationToolCatalog.Patch ? ".resource.v6" : ".resource.v2")
                             : binding.HandlerId.StartsWith("vba.public.", StringComparison.Ordinal)),
                         tool.Id + " has an exact non-legacy handler binding");
                     AssertTrue(tool.Policy != null &&
@@ -217,42 +217,49 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaNormallyCompletedMacroAllowsRepeatedCalls()
+        private static void VbaOpaqueRepeatRequiresConversationWitness()
         {
             WithTempExecutor((executor, adapter) =>
             {
                 var session = NewSession(adapter);
                 var progress = new AgentProgressTracker();
-                var callIds = new HashSet<string>(StringComparer.Ordinal);
-                for (var index = 0; index < 4; index++)
-                {
-                    var pending = PrepareVbaNative(executor, session, Command(
-                        "office.macro.run", "macroName", "Module1.Main",
-                        "arguments", new JArray("value", 2, true)));
-                    AssertEqual(ToolEffect.External, pending.Record.Context.Policy.Policy.Effect,
-                        "the native macro retains its external-effect policy");
-                    AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome,
-                        "each new macro invocation requires fresh native confirmation");
-                    AssertTrue(callIds.Add(pending.Record.Context.Call.Id),
-                        "identical invocations have distinct runtime call IDs");
-                    string reason, message;
-                    int delay;
-                    AssertTrue(progress.CanDispatch(pending.Record.Context.Call, out reason, out message, out delay),
-                        "normal return permits another invocation without the uncertain-effect confirmation exception");
-                    var completed = ConfirmVbaNative(pending);
-                    AssertEqual(ToolExecutionOutcome.Unknown, completed.Outcome,
-                        "a completed arbitrary macro does not certify its effects");
-                    AssertTrue(completed.MayHaveDispatched, "the native macro retains its dispatch boundary");
-                    AssertEqual(ToolEffectEvidence.Unknown, completed.Evidence.Effect,
-                        "each completed invocation still has unknown effects");
-                    var observed = ToolExecutionProgress.Capture(completed);
-                    AssertTrue(completed.Evidence.InvocationCompleted && observed.OpaqueActionCompleted,
-                        "the native handler records normal return independently of effect verification");
-                    progress.Observe(completed.Context.Call, observed, completed.Result.Message,
-                        completed.ResourceEvidence, completed.ResourceEffect);
-                    AssertEqual(index + 1, adapter.CountVbaCalls(FakeVbaOperation.RunMacro),
-                        "each newly proposed invocation dispatches exactly once");
-                }
+                var first = PrepareVbaNative(executor, session, Command(
+                    "office.macro.run", "macroName", "Module1.Main",
+                    "arguments", new JArray("value", 2, true)));
+                AssertEqual(ToolEffect.External, first.Record.Context.Policy.Policy.Effect,
+                    "the native macro retains its external-effect policy");
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, first.Record.Outcome,
+                    "the first macro invocation requires explicit confirmation");
+                string reason, message;
+                int delay;
+                AssertTrue(progress.CanDispatch(first.Record.Context.Call, out reason, out message, out delay),
+                    "the progress advisory remains independent of resource replay guards");
+                var completed = ConfirmVbaNative(first);
+                AssertEqual(ToolExecutionOutcome.Unknown, completed.Outcome,
+                    "a completed arbitrary macro does not certify its effects");
+                AssertTrue(completed.MayHaveDispatched, "the native macro retains its dispatch boundary");
+                AssertEqual(ToolEffectEvidence.Unknown, completed.Evidence.Effect,
+                    "the completed invocation retains unknown effect evidence");
+                var observed = ToolExecutionProgress.Capture(completed);
+                AssertTrue(completed.Evidence.InvocationCompleted && observed.OpaqueActionCompleted,
+                    "the native handler records normal return independently of effect verification");
+                progress.Observe(completed.Context.Call, observed, completed.Result.Message,
+                    completed.ResourceEvidence, completed.ResourceEffect);
+
+                var repeated = PrepareVbaNative(executor, session, Command(
+                    "office.macro.run", "macroName", "Module1.Main",
+                    "arguments", new JArray("value", 2, true)));
+                AssertTrue(repeated.Record.Context.Call.Id != first.Record.Context.Call.Id,
+                    "the repeat is a distinct runtime call");
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, repeated.Record.Outcome,
+                    "the separate call still follows normal confirmation policy");
+                var repeatedCompleted = ConfirmVbaNative(repeated);
+                AssertEqual(ToolExecutionOutcome.Error, repeatedCompleted.Outcome,
+                    "without a conversation witness the repeated opaque effect cannot complete");
+                AssertTrue(!repeatedCompleted.MayHaveDispatched,
+                    "missing conversation proof rejects the repeat before source dispatch");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.RunMacro),
+                    "only the first invocation reaches the macro backend");
             });
         }
 
@@ -280,15 +287,19 @@ namespace RNAssistant.Harness
 
                 var patch = JObject.Parse(tools.Single(tool =>
                     tool.Id == ResourceMutationToolCatalog.Patch).ArgumentSchemaJson);
-                AssertEqual(1, ((JObject)patch["properties"]).Properties().Count(), "patch has only one text argument");
-                AssertTrue(patch.SelectToken("properties.patch.type").ToString() == "string", "patch carries target sections");
+                AssertEqual(1, ((JObject)patch["properties"]).Properties().Count(),
+                    "patch has only one structured target argument");
+                AssertEqual("array", patch.SelectToken("properties.targets.type").ToString(),
+                    "patch carries target sections");
+                AssertEqual("array", patch.SelectToken("properties.targets.items.properties.edits.type").ToString(),
+                    "each patch target carries typed edits");
                 var editingSkill = BuiltInSkillProvider.GetSkills(adapter)
                     .Single(skill => skill.Id == "skills.vba.code.editing")
                     .BodyMarkdown;
                 AssertContains(editingSkill, "Follow the current `core.patch` schema",
                     "VBA editing skill routes patch syntax to the shared schema");
-                AssertContains((string)patch.SelectToken("properties.patch.description"), "@@",
-                    "shared patch schema teaches exact hunk syntax");
+                AssertContains((string)patch.SelectToken("properties.targets.description"), "Existing sources",
+                    "shared patch schema teaches exact target edits");
 
                 var restore = JObject.Parse(tools.Single(tool =>
                     tool.Id == ResourceMutationToolCatalog.Restore).ArgumentSchemaJson);
@@ -317,14 +328,22 @@ namespace RNAssistant.Harness
                     "readable backup targets preserve sub-second identity");
 
                 string error;
+                var currentPatch = new JObject
+                {
+                    ["targets"] = PatchTargets(PatchSection("VBA module: Module1",
+                        EditSet(Edit("old", "new"))))
+                }.ToString(Formatting.None);
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("patch_current", ResourceMutationToolCatalog.Patch,
-                            "{\"patch\":\"*** Update Target: VBA module: Module1\\n@@\\n-old\\n+new\\n\"}"),
+                        new ToolCall("patch_current", ResourceMutationToolCatalog.Patch, currentPatch),
                         out error),
                     "current patch history is replayable");
+                var anchoredPatch = new JObject
+                {
+                    ["targets"] = PatchTargets(PatchSection("VBA module: Module1",
+                        EditSet(Edit("old", "new", new[] { "Sub Main()" }))))
+                }.ToString(Formatting.None);
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("patch_context", ResourceMutationToolCatalog.Patch,
-                            "{\"patch\":\"*** Update Target: VBA module: Module1\\n@@ Sub Main()\\n-old\\n+new\\n End Sub\\n\"}"),
+                        new ToolCall("patch_context", ResourceMutationToolCatalog.Patch, anchoredPatch),
                         out error),
                     "context-qualified patch history is replayable");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(

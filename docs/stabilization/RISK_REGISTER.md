@@ -1,5 +1,29 @@
 # Stabilization risk register
 
+## Native tool contract review — 2026-11-16
+
+`17.3.6-dev`, host-neutral corrected; Windows qualification remains separate.
+
+| Priority / disposition | Finding and boundary |
+| --- | --- |
+| P1 / fixed for qualified native families | Storage and Office observer used isolated mutation allowlists, rejecting registered macro/Excel/VBA/catalog calls. Typed admission now reaches existing owners with accepted-call/dispatch/outcome proof; terminal validation is retained. |
+| P1 / fixed | A coarse Unknown head after a verified change or normal opaque return could block a subsequent valid operation. A fresh native aggregate preparation requires the exact current producer and, for opaque return, its retained completed terminal. Real unresolved effects, foreign/stale proof and version-pinned targets remain guarded. |
+| P1 / fixed for one target | Patch aggregation differed from the exact owner effect; canonical proof now agrees with target/status/after-state and execution outcome. Lost ACK stays Unknown. Native multi-resource packages are rejected before writes pending full per-target receipt support. |
+| P1 / fixed for self rename; addressed capability open | Current title change/no-op is proved by accepted arguments and metadata in the same terminal. Native other-chat rename is not exposed and stale requests fail before mutation until a target-commit receipt exists. |
+| P1 / fixed | Semantic VBA backup restore selected an invalidated project as authority target. Version/operation/argument-bound prepared live component now supplies the exact target; existing source/backup/read-back guards remain. |
+| P1 / fixed narrow inventory gap | Native resource-stream sibling files were not inventoried. Unexpected/nonempty lock data now blocks GC and internal backup. This does not qualify a complete mixed profile backup. |
+| P2 / fixed | Completed Workspace view dropped a new run's session notice because of the old RunId filter. Chat-scoped refresh now precedes model-progress filtering; exact address and stale response fences remain. |
+
+Evidence: [PROGRESS](PROGRESS.md#native-tool-contract-corrective-patch--2026-11-16).
+Remaining in order: actual Windows/profile qualification; complete native
+multi-owner/cross-chat proof and untested published mutation-family matrix; mixed
+application backup/writer quiescence; full session hydration in Workspace/plugin
+polls; bounded inbox/resource-head queries. Missing Workspace observer termination
+is closed in `17.3.2-dev`.
+Concrete owners and acceptance are in [BACKLOG](BACKLOG.md). Existing explicit import,
+native `RestoreWorkingSet`, lazy resource commit history and identity-owner backup
+are already implemented and must not be described as absent.
+
 ## Post-upgrade photo incident — 2026-11-16
 
 Priority and disposition for the observed profile upgrade:
@@ -1751,6 +1775,8 @@ model-controlled; descriptions now limit absence to selected directory/depth/fil
 All six text-search checks and the workspace discovery/admission/restart test pass.
 The cloud pilot is repeated separately after the change; baseline evidence is retained.
 No data loss observed; no Office/COM execution path or production profile changed.
+
+<a id="cli-core-net8-draft-store-build-blocker--2026-10-26"></a>
 
 ## CLI Core.Net8 draft-store build blocker — 2026-10-26
 

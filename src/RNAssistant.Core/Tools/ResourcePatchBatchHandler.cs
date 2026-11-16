@@ -243,7 +243,12 @@ namespace RNAssistant.Core.Tools
     public sealed class ResourcePatchBatchHandler : IManagedMutationToolHandler, IPreparableToolHandler
     {
         public IPreparableToolHandler TargetHandler { get; private set; }
-        public ResourcePatchBatchHandler(IPreparableToolHandler targetHandler) { TargetHandler = targetHandler; }
+        private readonly int _maximumTargets;
+        public ResourcePatchBatchHandler(IPreparableToolHandler targetHandler, int maximumTargets = ResourcePatch.MaximumTargets)
+        {
+            if (maximumTargets < 1 || maximumTargets > ResourcePatch.MaximumTargets) throw new ArgumentOutOfRangeException(nameof(maximumTargets));
+            TargetHandler = targetHandler; _maximumTargets = maximumTargets;
+        }
         private sealed class OwnerTarget { public string Target { get; set; } }
         private static IReadOnlyList<ResourcePatchSection> Sections(ToolHandlerContext context)
         { return ResourcePatch.Parse(context.Execution.Call.ArgumentsJson); }
@@ -262,6 +267,7 @@ namespace RNAssistant.Core.Tools
             try { sections = Sections(context); }
             catch (Exception ex) when (ex is TextPatternException || ex is ArgumentException)
             { return InvalidArguments(PatchDiagnostic.From(ex)); }
+            if (sections.Count > _maximumTargets) return TargetLimit();
             var result = Result(sections, "preparation");
             var prepared = new ResourcePatchPreparedBatch { ArgumentsHash = TextPatternEngine.Sha256(context.Execution.Call.ArgumentsJson) };
             var identities = new HashSet<string>(StringComparer.Ordinal);
@@ -294,6 +300,11 @@ namespace RNAssistant.Core.Tools
                 JsonConvert.SerializeObject(new PatchBatchResult { Phase = "preparation", Diagnostic = diagnostic })),
                 recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
         }
+        private ToolPreparationResult TargetLimit()
+        {
+            return InvalidArguments(PatchDiagnostic.Create("patch_target_limit",
+                "This runtime can retain one exact patch outcome per call. Submit one target per call; no target was changed."));
+        }
         private static ToolPreparationResult RejectPreparation(PatchBatchResult result, int index, PatchDiagnostic diagnostic, ToolRecoveryContract recovery = null,
             IReadOnlyList<ResourceEvidence> resourceEvidence = null)
         {
@@ -310,6 +321,11 @@ namespace RNAssistant.Core.Tools
         public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
         {
             var sections = Sections(context);
+            if (sections.Count > _maximumTargets)
+            {
+                var rejection = TargetLimit();
+                return new ToolHandlerResult(rejection.Result, ToolEffectEvidence.None, recovery: rejection.Recovery);
+            }
             var result = Result(sections, "execution");
             ResourcePatchPreparedBatch prepared;
             try { prepared = ResourcePatch.ReadPreparation(context.Execution.Call.ArgumentsJson, context.PreparedStateJson); }

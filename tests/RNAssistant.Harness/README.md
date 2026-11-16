@@ -35,6 +35,35 @@ This is host-neutral evidence. Actual DPAPI/current-user restore, Windows
 FileStream/filesystem durability, old-binary quiescence, power loss, WebView2 UI and
 cold backup of external Workspace/project files remain separate gates.
 
+## Native tool contract and Workspace run notices — 2026-11-16
+
+Filter `native tools:` exercises the actual ConversationJournalRouter,
+ResourceJournal, OfficeToolExecutor and existing domain owners, with a fake Excel/
+VBA backend. It covers sequential Excel writes with automatic and explicit approval,
+normal-return macro repetition, genuine Unknown with the same and different next
+arguments, exact latest-producer/terminal witness fences, routed VBA replace and
+one-target patch, publication failure before/after the authority frame, delete and
+explicit restore, skill catalog publication and self-title/no-op metadata. Native
+rebuild verifies retained receipts and cannot dispatch. Capability checks cover the
+single-target patch schema/pre-dispatch limit and stale addressed-rename refusal.
+
+Run these integration cases alongside `journal mutation:`, `journal resources:`,
+`journal runtime:`, `legacy chat import:`, `legacy plugin import:` and the existing
+`agent: loads and runs arbitrary macro` compatibility case. The older macro helper
+alone uses a legacy adapter and did not detect the production journal dispatch gate.
+Compile both Harness and real-controller MockDemo; Harness has a controller stub.
+The broad historical `vba:` filter still contains retired private-owner fixtures
+such as `vba.module.patch`; do not use it as current native qualification. Use the
+`native tools:` composition plus the named current VBA owner cases below.
+
+Focused Node entries: `workspace-run-observer.test.js`,
+`conversation-observer.test.js` and `workspace-chat-v8.test.js`. The first reproduces
+a completed Workspace chat ignoring the next run's `session_changed`; it also checks
+exact address, old model progress rejection, hidden catch-up, A→B→A rebinding and
+disposal without adding idle polling. These run without Chromium. The separate
+browser layout/model-progress fixture requires an installed Chromium executable.
+Windows/.NET Framework/COM/VSTO/WebView2/DPAPI and photo acceptance remain open.
+
 ## Post-upgrade restore and explicit migration — 2026-11-16
 
 `legacy recovery:` runs two cases, each with plaintext and HMAC/AES fixtures:
@@ -93,9 +122,9 @@ real HTML Save/Delete notifications. The Office adapter and native page are fixt
 
 Compile both the Harness and `demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj`:
 the Harness substitutes a controller stub and cannot detect production controller
-compile failures. On current `main`, the clean MockDemo build first has an independent
-missing `DemoSettingsService.SaveDiagnosticLogOptions` shim from the diagnostics
-slice; see BACKLOG. `workspace: discovery admission restart and binding drift` and
+compile failures. The earlier missing `DemoSettingsService.SaveDiagnosticLogOptions`
+shim is corrected in `17.2.0-dev`; no external shim is now required.
+`workspace: discovery admission restart and binding drift` and
 `local browser: standalone Workspace media reaches model wire once` now read native
 conversation/event ports in their fixtures; they require local HTTP/named-pipe
 support. Their unavailable environment is not passing evidence. Windows/.NET

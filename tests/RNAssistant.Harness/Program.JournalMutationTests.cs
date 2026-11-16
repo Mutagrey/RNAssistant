@@ -379,8 +379,9 @@ namespace RNAssistant.Harness
                 else if (!office)
                 {
                     var backup = Path.Combine(paths.Root, "backup"); var maintenance = JournalCasService(paths, StorageProtector.None);
-                    var scopeLease = Directory.EnumerateFiles(paths.ResourceAuthorityDirectory, "mutation-*.lck").First();
+                    var scopeLease = Directory.EnumerateFiles(paths.JournalResourceDirectory, "mutation-*.lck").First();
                     File.WriteAllText(scopeLease, "Unexpected data must not be silently excluded.");
+                    AssertTrue(!maintenance.Audit().CanGarbageCollect, "nonempty native mutation lock blocks canonical inventory");
                     RuntimeThrows<InvalidOperationException>(() => maintenance.BackupJournals(backup));
                     File.WriteAllText(scopeLease, string.Empty); maintenance.BackupJournals(backup);
                     var recovered = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "restore"), _ => StorageProtector.None);

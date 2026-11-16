@@ -101,7 +101,8 @@ namespace RNAssistant.Office.Runtime
                     handler = new OfficeResourceMutationHandler(registration.Descriptor.Id, gateway, session,
                         vbaTools, hostRuntime, htmlWorkspaceTools, authoredFiles, markdownDocuments, searchObservation, promptTools, skillAuthoring);
                     if (registration.Descriptor.Id == ResourceMutationToolCatalog.Patch)
-                        handler = new ResourcePatchBatchHandler((IPreparableToolHandler)handler);
+                        handler = new ResourcePatchBatchHandler((IPreparableToolHandler)handler,
+                            (mutationObserver as ResourceMutationAuthorityObserver)?.HasConversationOrigin == true ? 1 : ResourcePatch.MaximumTargets);
                 }
                 else if (registration.Descriptor.Id == SkillLoadToolHandler.ToolId)
                 {
@@ -261,7 +262,8 @@ namespace RNAssistant.Office.Runtime
                 else if (registration.Descriptor.Id == ChatRenameToolHandler.ToolId)
                 {
                     binding = ChatRenameToolHandler.Binding;
-                    handler = new ChatRenameToolHandler(session, chatCatalog.Rename);
+                    handler = new ChatRenameToolHandler(session, chatCatalog.Rename,
+                        (mutationObserver as ResourceMutationAuthorityObserver)?.HasConversationOrigin != true);
                 }
                 else if (AgentCommunicationToolCatalog.Owns(registration.Descriptor.Id))
                 {

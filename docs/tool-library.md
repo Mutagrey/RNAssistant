@@ -17,13 +17,13 @@ follow an explicit rename request. Use a concise, specific title in the user's
 language; preserve explicitly user-chosen names unless the user requests a rename,
 and avoid per-step or cosmetic renames. This does not require loading a skill.
 
-`chat.rename` v2 takes `title` (trimmed, nonempty single line, at most 200 characters)
-and optional `agent_id`. Omit the address, or use self, for the current chat: Core
-`ChatRenameToolHandler` updates the bound session and the kernel persists the result.
-An address from the same document/project selects another saved chat. First read
-its `Chat overview: <agent_id>` with `core.read` in the current runtime binding;
-`ConversationCatalogAccess` retains the observed revision, bounded to 128 observations.
-Find alone does not authorize rename. Rebinding/restart may require another read.
+`chat.rename` v2 takes `title` (trimmed, nonempty single line, at most 200 characters).
+The current native Office/Workspace/plugin profile exposes only that self-title field;
+Core `ChatRenameToolHandler` updates the bound session and the kernel persists the result.
+The generic v2 handler retains its non-native addressed path for existing consumers,
+but native descriptors remove `agent_id` and reject a stale addressed request before
+any mutation. Addressed native rename remains unavailable until its exact target
+metadata commit receipt is implemented; it must not rename the source chat as a fallback.
 
 The shared Application owner acquires the existing exact chat reservation, rejects
 live/queued workers, unavailable or incompatible chats and stale observations,
@@ -34,7 +34,7 @@ uses existing CAS; a storage failure after dispatch stays unknown and is not ret
 A saved rename with failed UI notification returns a refresh warning.
 Exact binding `conversation.chat.rename.v2` permits this metadata write in Agent
 and Plan without confirmation, independently of document mutation policy.
-Cross-chat access also obeys the current agent-enabled setting and bound scope.
+The non-native addressed path also obeys the current agent-enabled setting and bound scope.
 
 Runtime draft/smart naming remains available until the agent assigns a title.
 The durable `TitleAssignedByAgent` metadata then prevents fallback or late smart
@@ -308,13 +308,15 @@ generic `resource_mutation_conflict`.
 [Text mutations](text-mutations.md). Профиль сохраняет exact policy/binding и порядок
 каталога. Единственная schema `core.patch` — `targets[].edits[]` с `old/new`
 и необязательными `anchors_before/anchors_after`; contract version 3, binding
-`.resource.v5`. Private owner commands не публикуются второй модельной schema.
+`.resource.v6`. Private owner commands не публикуются второй модельной schema.
 Результат использует прежний `rnassistant.patch` и `preparation/execution`,
 per-target statuses и bounded diagnostic `edit/code/nextAction/candidates`;
 Unknown требует `verify_effect`, без автоматического повтора.
 Смена профиля явно сбрасывает несовместимые admissions; старые вызовы
 не переименовываются и не исполняются через aliases. Explicit AllDirect остаётся
 только композиционным выбором для диагностики, не production default.
+
+<a id="shared-direct-tool-profile-selection--2026-10-26"></a>
 
 ### Shared discovery and admission — 2026-10-26
 
@@ -846,6 +848,8 @@ BOM-prefixed files and do not rewrite them. An older BOM-less file beginning wit
 literal `U+FEFF` has the same bytes as a BOM-prefixed file, so its original intent
 cannot be recovered automatically.
 
+<a id="minimal-office-bootstrap"></a>
+
 ## Mandatory all-tool contract audit (R61)
 
 R61 below records the completed family cutovers, not proof of agent continuity.
@@ -1273,6 +1277,8 @@ contract evidence; exact live-model choice and Office qualification remain open.
    rejected arguments, repairs, calls and actual API usage separately. A single
    passing trajectory does not establish reliability; fake Office does not qualify
    calculation, rendering or COM delivery. Run only checks relevant to each change.
+
+<a id="tool-ergonomics-audit--2026-10-01"></a>
 
 ## Historical tool ergonomics audit — 2026-10-01
 

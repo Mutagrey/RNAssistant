@@ -45,6 +45,11 @@ namespace RNAssistant.Core.Storage
                     var result = terminal?.Result.ToolCallId == callId ? terminal :
                         Find(db, TerminalOperation(db, chat, message.RunId, callId) as string)?.Fact;
                     message.EvidenceReference = message.AcceptedCallOrigin == null ? result?.Result.EvidenceReference : null;
+                    if (message.AcceptedCallOrigin == null && message.Activity == null && result != null)
+                    {
+                        message.ResourceEffect = result.Result.ResourceEffect;
+                        message.AuthorityCommitId = result.Result.AuthorityCommitId;
+                    }
                 }
             }
             Func<ResourceAuthorityScopeId, ResourceRef, ModelResourceReference> observe = (scope, resource) => {

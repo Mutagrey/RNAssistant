@@ -286,6 +286,23 @@ it is not a success assertion. Optional trace failures never alter journal or to
 outcomes. Read-back, guards, recovery and the journal format are unchanged. See
 [causal trace semantics](stabilization/PHASE_1B_CAUSAL_TRACE.md).
 
+## Native authority intent — 2026-11-16
+
+The production resource observer derives module mutation impacts from the existing
+`VbaNativePreparedState`, with matching version, operation and accepted-argument
+hash. This matters when `resources.restore` names a semantic backup: the prepared
+owner has resolved its live component, while the original public arguments may
+contain no `moduleName`. The module is the exact mutation target; an Unknown project
+container left by an earlier verified delete is not substituted for it. Rename
+retains both prepared source and destination names.
+
+This adds no backup-selection path, restore replay or project-health upgrade.
+Existing guard-bound backup bytes, current target/type checks, one dispatch and
+read-back remain mandatory. Native conversation/resource receipts bind that result
+to the accepted call and survive index rebuild. A separate explicit restore after a
+verified delete is covered by the production-composition integration fixture; real
+Office/VBE qualification remains open.
+
 ## Recovery
 
 On the next safe VBA access for the active document, runtime finds module and package preparations without a terminal record and compares live state with recorded before/intended hashes, types and required package ownership marker. It appends `committed`, `not_applied`, or `unknown`. Package reconciliation assesses the complete set and retains mixed per-component evidence. Recovery never retries a write, creates/deletes a component, runs a macro, or restores a backup automatically. A completed session install without a committed correlated cleanup remains `session_cleanup_required`/`recovery_required` until exact explicit cleanup succeeds.

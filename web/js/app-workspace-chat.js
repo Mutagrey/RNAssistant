@@ -103,13 +103,16 @@
         if (!view.matches(conversationTarget(selected)) || !target || target.workspaceId !== field(payload, "workspaceId") ||
             target.sessionId !== field(payload, "sessionId")) return;
         var preview = field(payload, "modelProgress"), state = field(selected, "state");
-        if (field(state, "runId") && field(payload, "runId") &&
-            field(state, "runId") !== field(payload, "runId")) return;
-        lastPushAt = Date.now();
+        // A chat invalidation may announce the next queued run. Only its canonical
+        // snapshot can replace the current run; model progress stays run-scoped.
         if (field(payload, "phase") === "session_changed") {
+          lastPushAt = Date.now();
           if (field(payload, "cursor") !== field(state, "cursor")) observer.refresh();
           return;
         }
+        if (field(state, "runId") && field(payload, "runId") &&
+            field(state, "runId") !== field(payload, "runId")) return;
+        lastPushAt = Date.now();
         if (field(preview, "unsavedAttempt")) {
           RNAssistantConversationState.retainUnsavedAttempt(selected, field(preview, "runId"),
             field(preview, "unsavedAttempt"), field(preview, "stepId"));

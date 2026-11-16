@@ -38,6 +38,9 @@ namespace RNAssistant.Core.Storage
                 using (workspaces.AcquireBackupLease())
                 using (documents.AcquireBackupLease())
                 {
+                    try { StorageJournal.ValidateResourceOwner(_paths); }
+                    catch (InvalidDataException error)
+                    { throw new InvalidOperationException("Journal backup requires a complete resource owner inventory.", error); }
                     var ownerFiles = workspaces.GetBackupFiles().Concat(documents.ValidateBackupState()).ToArray();
                     foreach (var directory in new[] { _paths.ChatDirectory, _paths.VbaJournalDirectory, _paths.ResourceAuthorityDirectory })
                         if (Directory.EnumerateFileSystemEntries(directory).Any(path => directory != _paths.ResourceAuthorityDirectory ||

@@ -327,7 +327,7 @@ namespace RNAssistant.Core.Storage
                     try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position, keys, outcome); }
                     catch (Exception error) when (error is IOException || error is SqliteException) { /* canonical receipt remains accepted */ }
                     return new ConversationChatReceipt(fact, record.Operation, position);
-                }, CancellationToken.None);
+                }, CancellationToken.None, keys);
             }
         }
 

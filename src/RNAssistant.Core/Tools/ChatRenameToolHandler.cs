@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -14,13 +15,15 @@ namespace RNAssistant.Core.Tools
         public static readonly ToolBinding Binding = new ToolBinding("conversation.chat.rename.v2");
         private readonly ChatSession _session;
         private readonly Func<string, string, Action, ChatRenameResult> _renameOther;
+        private readonly bool _addressedRenameEnabled;
 
-        public ChatRenameToolHandler(ChatSession session, Func<string, string, Action, ChatRenameResult> renameOther = null)
-        { _session = session; _renameOther = renameOther; }
+        public ChatRenameToolHandler(ChatSession session, Func<string, string, Action, ChatRenameResult> renameOther = null,
+            bool addressedRenameEnabled = true)
+        { _session = session; _renameOther = renameOther; _addressedRenameEnabled = addressedRenameEnabled; }
 
-        public static ToolCatalogEntry Entry()
+        public static ToolCatalogEntry Entry(bool addressedRenameEnabled = true)
         {
-            return new ToolCatalogEntry
+            var entry = new ToolCatalogEntry
             {
                 Id = ToolId, Host = "Common", Name = "chat_rename", BuiltIn = true,
                 Enabled = true, Scope = "session", AgentCanRun = true, MutatesLocalState = true, ContractVersion = "2",
@@ -30,6 +33,14 @@ namespace RNAssistant.Core.Tools
                 Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false,
                     new[] { ChatModes.Agent, ChatModes.Plan })
             };
+            if (!addressedRenameEnabled)
+            {
+                entry.Description = "Rename your current chat once its main task is clear or changes substantially, or when the user asks. Use a concise title in the user's language. Preserve a user-chosen title unless asked to rename. Do not rename after every step. This runtime renames only the current chat. Only title metadata changes.";
+                var schema = JObject.Parse(entry.ArgumentSchemaJson);
+                ((JObject)schema["properties"]).Remove("agent_id");
+                entry.ArgumentSchemaJson = schema.ToString(Formatting.None);
+            }
+            return entry;
         }
 
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
@@ -47,6 +58,8 @@ namespace RNAssistant.Core.Tools
                 return Rejected("Use an exact nonempty agent address or omit agent_id.");
             if (agentId != null && agentId != AgentChatAddress.IdFor(_session.Id))
             {
+                if (!_addressedRenameEnabled)
+                    return Rejected("Addressed rename cannot yet retain its exact target commit receipt. Rename this chat, or rename the other chat from its own session.");
                 if (_renameOther == null) return Rejected("Addressed chat rename is unavailable.");
                 var dispatched = false;
                 try

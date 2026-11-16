@@ -53,6 +53,9 @@ Version 12 adds topic organization through bounded `core.find/read` chat overvie
 explicit historical-data/provenance limits, and addressed `chat.rename` after a fresh
 read. Busy/stale targets are not stopped or automatically retried. It does not teach
 agents to poll every chat or expose complete histories for grouping.
+The current native Office/Workspace/plugin profile exposes only self-title rename;
+addressed rename remains available only through the non-native compatibility path
+until an exact target metadata receipt is implemented.
 The root, spawned and recruited chats share the cap; repeated messages have no separate quota.
 It tracks parallel requests by runtime message_id, validates reply_to and uses
 any/all filtered waits, prioritizes answering before

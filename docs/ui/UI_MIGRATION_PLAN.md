@@ -1569,6 +1569,13 @@ async delete/navigation, deferred history), `conversation-shared-layout`, `live-
 
 ### S2b.4: наблюдение и поздние ответы — 2026-11-02
 
+Regression fix 2026-11-16: после completed A уведомление `session_changed` нового
+run B вызывает адресное чтение до run-specific фильтра прогресса. Проверка
+`workspace-run-observer.test.js` сначала воспроизвела 0 чтений вместо 1, затем
+прошла с исправлением; покрыты foreign target, прежний progress, hidden catch-up,
+A→B→A и dispose. Существующие `conversation-observer` и `workspace-chat-v8`
+проходят в Node. Windows/WebView2 evidence отдельно; idle polling не добавлен.
+
 По «Коммит и далее» S2b.3 сохранён в `60b04d71`. Shared ConversationObserver теперь
 принадлежит конкретному view. Его lifecycle общий для Office inbox/history и
 Workspace snapshots; убраны Office singleton observer и отдельная глобальная

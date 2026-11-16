@@ -13,8 +13,10 @@ namespace RNAssistant.Core.Tools
         public static bool Owns(string id) { return id == Write || id == Patch || id == Replace || id == Move || id == Copy || id == Delete || id == Restore; }
         public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v6" : ".resource.v2")) : null; }
 
-        public static IEnumerable<ToolCatalogEntry> GetTools()
+        public static IEnumerable<ToolCatalogEntry> GetTools(int maximumPatchTargets = ResourcePatch.MaximumTargets)
         {
+            if (maximumPatchTargets < 1 || maximumPatchTargets > ResourcePatch.MaximumTargets)
+                throw new ArgumentOutOfRangeException(nameof(maximumPatchTargets));
             foreach (var id in new[] { Write, Patch, Replace, Move, Copy, Delete, Restore })
             {
                 var properties = new JObject { ["target"] = String("Exact semantic resource target, or an explicit destination for creation. Workspace: relative path; Office: VBA module: Name, HTML file: path, or an exact discovered target.") };
@@ -36,7 +38,7 @@ namespace RNAssistant.Core.Tools
                         ["new"] = String("Literal replacement; empty deletes. For insertion, include old plus added text and explicit newlines.", false),
                         ["anchors_before"] = lines.DeepClone(), ["anchors_after"] = lines.DeepClone()
                     }, new JArray("old", "new"));
-                    properties["targets"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = ResourcePatch.MaximumTargets,
+                    properties["targets"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = maximumPatchTargets,
                         ["items"] = Object(new JObject { ["target"] = String("Exact existing semantic target; never URI/revision/hash."),
                             ["edits"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 100,
                                 ["items"] = edit } }, new JArray("target", "edits")) };
@@ -50,6 +52,7 @@ namespace RNAssistant.Core.Tools
                         "Read current source or reuse delivered verified after-source. Use core.write for creation/full overwrite and core.replace for bulk replacement. " +
                         "At most 262144 JSON characters. All targets prepare before sequential writes. Wait for tool_results and inspect each target: " +
                         "Changed/Unchanged are verified; Rejected/NotStarted were not applied; Unknown needs inspection. Never replay a partial or unknown package automatically.";
+                    if (maximumPatchTargets == 1) description += " This runtime accepts one target per call. Split independent resources into separate calls.";
 
                 }
                 else if (id == Replace)

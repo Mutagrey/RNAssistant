@@ -103,8 +103,17 @@ namespace RNAssistant.Core.Storage
             // Re-entering this API is not a safe retry of an invocation. A lost
             // acknowledgement remains addressable by its deterministic attempt.
             if (Attempt(scope, attempt.AttemptId) != null) throw new InvalidOperationException("This call already prepared this resource attempt.");
+            ResourceInvocationCompletion previousInvocation = null;
+            if (IsAggregatePreparation(attempt))
+            {
+                var previous = Access((db, cursor) => HeadReceipt(db, scope, target), CancellationToken.None);
+                if (HeadOf(previous?.Fact, target.Uri)?.Knowledge == HeadKnowledge.Unknown && previous.Unknown && previous.Fact.Call != null)
+                    previousInvocation = new ConversationJournal(_paths, previous.Fact.Call.Origin.ConversationScope, _protector)
+                        .CompletedOpaqueInvocation(previous);
+            }
             return Commit("prepare:" + attempt.AttemptId, new ResourceJournalFact {
-                Kind = "resource.prepared", Scope = scope, Attempt = attempt, Call = proof }, CancellationToken.None).Fact.Attempt;
+                Kind = "resource.prepared", Scope = scope, Attempt = attempt, Call = proof,
+                PreviousInvocation = previousInvocation }, CancellationToken.None).Fact.Attempt;
         }
 
         public MutationAttempt MarkDispatchMayHaveOccurred(string attemptId)

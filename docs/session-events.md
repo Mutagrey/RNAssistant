@@ -13,6 +13,59 @@ separate cold-filesystem operation. Old-writer quiescence, power loss and Window
 Office/DPAPI qualification remain open. Contract:
 [CAS maintenance](cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
 
+## Native tool outcomes and successive writes — 2026-11-16
+
+`17.3.6-dev` completes the existing conversation/resource composition for registered
+typed mutation and opaque-action tools. Dispatch admission uses the exact captured
+runtime policy instead of a second tool-name allowlist in storage. The resource
+observer uses the existing domain intent, preparation, dispatch and read-back owner.
+Each prepared attempt still binds the accepted call and durable runtime entry;
+terminal publication requires that call's exact resource receipt, an atomic
+supported metadata change, a verified no-effect or an honest Unknown. A tool name
+alone never supplies effect proof.
+
+Native VBA module authority intent uses the exact live component already resolved
+by the typed prepared owner, bound to its version, operation and accepted arguments.
+A semantic backup target does not fall back to the invalidated project container
+as the mutation target. Explicit restore still rechecks the pinned backup/current
+component and keeps its own new dispatch/read-back/terminal lifecycle.
+
+An unversioned aggregate preparation may follow a coarse Unknown head caused by a
+verified owner change. For a normal-return opaque invocation, it additionally needs
+the exact persisted `ToolCompleted` fact with `OpaqueActionCompleted=true`, its
+resource outcome link and terminal cursor. The next accepted invocation is distinct;
+the previous head-producing receipt must still match. This optional
+`PreviousInvocation` witness is part of the prepared fact's fingerprint, is verified
+outside the resource append lock, and is checked again on rebuild. It does not
+reclassify the previous effect or prove the contents of the document. Missing,
+foreign, superseded or unconfirmed terminals do not release a genuine Unknown;
+exact/version-pinned targets keep their existing guards. Rebuild never dispatches.
+
+A one-target `core.patch` keeps its typed target aggregate only when its nested
+effect, status, after-state and impacts agree with the exact owner receipt and
+accepted target. Lost publication acknowledgement remains Unknown; a canonical
+receipt is retained only if publication actually occurred. Diagnostic impacts do
+not become authority proof. Later UI/model result projection receives the same
+canonical effect and receipt as the terminal.
+
+Current-chat `chat.rename` validates the accepted title, self target and changed/
+no-op status against metadata in that same terminal commit. It does not fabricate
+a document resource receipt. Native Office/Workspace descriptors expose only self
+rename; a stale addressed request is rejected before the other chat is changed.
+Native `core.patch` exposes one resource per call and refuses a larger package
+before preparation or dispatch. Multiple edits within that resource are supported.
+Multiple resource receipts per accepted call and a source-call-to-other-chat
+metadata receipt remain explicit follow-up work in
+[BACKLOG](stabilization/BACKLOG.md#native-mutation-receipt-completeness--2026-11-16).
+
+Focused integration cases use the actual router, resource journal and Office tool
+executor with a fake Office backend. They cover Excel sequential writes and
+confirmation, opaque return versus unresolved effect, routed VBA replace/patch/
+delete/restore, skill publication, metadata rename, lost acknowledgements and
+native rebuild. They supplement older isolated/legacy adapter fixtures and do not
+qualify COM, Windows/.NET Framework or WebView2. Legacy imports and bounded native
+context wiring are already present in base `06664fc`; this slice preserves them.
+
 ## Explicit native history import — 2026-11-16
 
 The requested upgrade recovery supports an explicit transfer from a retained legacy

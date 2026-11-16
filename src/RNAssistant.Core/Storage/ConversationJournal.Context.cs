@@ -184,14 +184,16 @@ namespace RNAssistant.Core.Storage
         private sealed class ContextCallKey
         {
             internal readonly string Fingerprint, Signature;
-            internal ContextCallKey(string fingerprint, string signature) { Fingerprint = fingerprint; Signature = signature; }
+            internal readonly ToolCall Call;
+            internal ContextCallKey(string fingerprint, string signature, ToolCall call)
+            { Fingerprint = fingerprint; Signature = signature; Call = call; }
         }
 
         private ContextCallKey PrepareContextCallKey(ChatMessage call, string fingerprint)
         {
             var parsed = ConversationResponseHistoryReader.Read(AcceptedCallPayloadService.Hydrate(call, _bodies));
             if (!parsed.Success || parsed.Response.ToolCalls.Count != 1) throw new InvalidDataException("Context call protocol is invalid.");
-            return new ContextCallKey(fingerprint, AgentProgressTracker.Signature(parsed.Response.ToolCalls[0]));
+            return new ContextCallKey(fingerprint, AgentProgressTracker.Signature(parsed.Response.ToolCalls[0]), parsed.Response.ToolCalls[0]);
         }
 
         private IReadOnlyList<string> ContextOperations(SqliteConnection db, string chat, string sql, int limit,

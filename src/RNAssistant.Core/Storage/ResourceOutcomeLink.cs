@@ -18,6 +18,22 @@ namespace RNAssistant.Core.Storage
         }
     }
 
+    // A completed opaque invocation does not prove a resource's state. Its exact
+    // terminal may permit a new, separately accepted invocation while retaining
+    // the old Unknown head and effect. A missing terminal is never such proof.
+    internal sealed class ResourceInvocationCompletion
+    {
+        public ResourceMutationOrigin Origin { get; private set; }
+        public ResourceOutcomeLink Outcome { get; private set; }
+        public JournalCursor Terminal { get; private set; }
+        [JsonConstructor]
+        internal ResourceInvocationCompletion(ResourceMutationOrigin origin, ResourceOutcomeLink outcome, JournalCursor terminal)
+        {
+            if (origin == null || outcome == null || terminal == null) throw new ArgumentException("Exact completed invocation proof is required.");
+            Origin = origin; Outcome = outcome; Terminal = terminal.Copy();
+        }
+    }
+
     // Runtime-owned binding recorded with the accepted call before resource
     // preparation/dispatch. It is not a model-facing URI or an execution request.
     internal sealed class ConversationResourceBinding

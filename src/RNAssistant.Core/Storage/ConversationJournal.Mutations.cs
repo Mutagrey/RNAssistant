@@ -52,5 +52,39 @@ namespace RNAssistant.Core.Storage
                 started.Tools.ToolName != call.ToolName || started.Tools.StepId != origin.StepId || !started.Tools.MayHaveSideEffects)
                 throw new InvalidDataException("Resource preparation does not identify its accepted runtime entry.");
         }
+
+        internal ResourceInvocationCompletion CompletedOpaqueInvocation(ResourceJournalReceipt outcome)
+        {
+            var origin = outcome?.Fact.Call?.Origin;
+            if (origin?.ConversationScope != _scope || !outcome.Unknown) return null;
+            return Access((db, cursor) => {
+                var operation = TerminalOperation(db, origin.ChatId, origin.RunId, origin.CallId);
+                var terminal = operation == null ? null : FindChatWrite(db, (string)operation);
+                if (terminal?.Fact.Tools?.Terminal?.Result.ExecutionProgress?.OpaqueActionCompleted != true) return null;
+                var proof = new ResourceInvocationCompletion(origin, ResourceOutcomeLink.From(outcome), terminal.Position);
+                ValidateOpaqueCompletion(proof, terminal.Fact);
+                return proof;
+            }, CancellationToken.None);
+        }
+
+        internal void VerifyOpaqueCompletion(ResourceInvocationCompletion proof)
+        {
+            if (proof?.Origin.ConversationScope != _scope) throw new InvalidDataException("Foreign completed invocation scope.");
+            ValidateOpaqueCompletion(proof, DecodeChatCommit(Journal.Read(proof.Terminal)));
+        }
+
+        private static void ValidateOpaqueCompletion(ResourceInvocationCompletion proof, ConversationChatCommit fact)
+        {
+            var origin = proof.Origin;
+            var tools = fact.Tools; var terminal = tools?.Terminal;
+            if (fact.Card.ChatId != origin.ChatId || fact.Run?.RunId != origin.RunId ||
+                tools?.Kind != AgentRunEventKind.ToolCompleted || tools.ResultProjection || !tools.MayHaveSideEffects ||
+                tools.CallId != origin.CallId || tools.StepId != origin.StepId || terminal?.ChatId != origin.ChatId ||
+                terminal.Result.RunId != origin.RunId || terminal.Result.ToolCallId != origin.CallId || terminal.Result.ResultStepId != origin.StepId ||
+                terminal.Result.ExecutionProgress?.Outcome != ToolExecutionOutcome.Unknown ||
+                terminal.Result.ExecutionProgress.OpaqueActionCompleted != true ||
+                terminal.Result.AuthorityCommitId != proof.Outcome.CommitId || !SameRunValue(terminal.ResourceOutcome, proof.Outcome))
+                throw new InvalidDataException("Continuation requires the exact normal-return opaque terminal and its retained Unknown outcome.");
+        }
     }
 }
