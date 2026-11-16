@@ -190,6 +190,8 @@ var draftWrites = Object.create(null);
 var draftStoreReady = false;
 var draftStoreLoadError = null;
 var draftStoreGeneration = 0;
+var draftDebounceMs = 250;
+var draftMaxWaitMs = 1000;
 function persistentDraft(key) {
   var saved = chatDraftStore()[key];
   if (key.indexOf("office:") === 0) {
@@ -213,30 +215,55 @@ function persistentDraft(key) {
       ResourceDraftIds: pending.ResourceDraftIds || [], Mode: pending.Mode, Reasoning: pending.ReasoningEnabled,
       EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision } : null };
 }
-function persistDraft(key) {
+function persistDraft(key, immediate) {
   if (!key || !draftStoreReady) return Promise.resolve();
-  var entry = draftWrites[key] || (draftWrites[key] = { revision: 0, saved: 0, running: null });
+  var entry = draftWrites[key] || (draftWrites[key] = {
+    revision: 0, saved: 0, running: null, timer: null, start: null, started: false, startedAt: 0 });
+  if (immediate && !entry.running && entry.saved === entry.revision) return Promise.resolve();
   ++entry.revision;
+
+  function schedule() {
+    if (entry.timer) window.clearTimeout(entry.timer);
+    var remaining = draftMaxWaitMs - (Date.now() - entry.startedAt);
+    if (immediate) { entry.start(); return; }
+    entry.timer = window.setTimeout(function () { entry.start(); },
+      Math.max(0, Math.min(draftDebounceMs, remaining)));
+  }
+
   if (!entry.running) {
-    var generation = draftStoreGeneration;
-    entry.running = (async function () {
-      while (entry.saved !== entry.revision && generation === draftStoreGeneration) {
-        var revision = entry.revision, snapshot = persistentDraft(key);
-        var result = await send("saveChatDraft", snapshot);
-        if (!result || result.saved !== true) throw new Error("Черновик не был сохранён.");
-        entry.saved = revision;
-      }
-    })();
-    entry.running.then(function () { entry.running = null; }, function (error) {
-      entry.running = null;
+    entry.startedAt = Date.now();
+    entry.running = new Promise(function (resolve, reject) {
+      entry.start = function () {
+        if (entry.timer) window.clearTimeout(entry.timer);
+        entry.timer = null;
+        entry.start = null;
+        entry.started = true;
+        var generation = draftStoreGeneration;
+        (async function () {
+          while (entry.saved !== entry.revision && generation === draftStoreGeneration) {
+            var revision = entry.revision, snapshot = persistentDraft(key);
+            var result = await send("saveChatDraft", snapshot);
+            if (!result || result.saved !== true) throw new Error("Черновик не был сохранён.");
+            entry.saved = revision;
+          }
+        })().then(resolve, reject);
+      };
+      schedule();
+    });
+    entry.running.then(function () {
+      entry.running = null; entry.started = false; entry.startedAt = 0;
+    }, function (error) {
+      entry.running = null; entry.started = false; entry.startedAt = 0;
       log("Черновик не сохранён: " + (error.detail || error.message), "error");
     });
+  } else if (!entry.started) {
+    schedule();
   }
   return entry.running;
 }
 function requirePersistedDraft(key) {
   if (!draftStoreReady) return Promise.reject(draftStoreLoadError || new Error("Черновики ещё не восстановлены."));
-  return persistDraft(key);
+  return persistDraft(key, true);
 }
 function flushWorkspaceDraft(target) { return requirePersistedDraft(workspaceDraftKey(target)); }
 function flushOfficeDraft(chatIdValue) { return requirePersistedDraft(officeDraftKey(chatIdValue)); }
@@ -313,9 +340,7 @@ function resetChatDrafts() {
 }
 function failChatDraftHydration(error) { draftStoreLoadError = error; }
 function flushAllChatDrafts() {
-  return Promise.all(Object.keys(draftWrites).map(function (key) {
-    return draftWrites[key].running || Promise.resolve();
-  }));
+  return Promise.all(Object.keys(draftWrites).map(function (key) { return persistDraft(key, true); }));
 }
 function forgetOfficeDraft(chatIdValue) {
   var key = officeDraftKey(chatIdValue);

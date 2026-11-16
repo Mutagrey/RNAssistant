@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Unified chat draft persistence — W9, 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.4-dev`. The existing
+`RNAssistantChatDrafts` owner now coalesces `saveChatDraft` requests per exact draft:
+250 ms debounce, 1 s maximum wait and only the latest dirty revision. Submit and
+normal shutdown call the same explicit flush barrier; `flushAll` forces every still-dirty
+draft. A failed save rejects that barrier, so shutdown does not return a successful ACK.
+Office and Workspace/plugin chat adapters keep their existing draft records and commands.
+
+`conversation-draft.test.js` passes with a virtual clock: 9 continuous edits produce one
+bounded save, the quiet period saves the last revision, submit/close flush is immediate,
+Workspace uses the same owner, and failed save blocks the shutdown ACK. Chromium and
+Windows/WebView2 visual qualification remain separate.
+
 ## Browser repeated-reset ownership — 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.3-dev`. Browser runtime events and saved

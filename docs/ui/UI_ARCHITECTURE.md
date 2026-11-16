@@ -1,5 +1,13 @@
 # Архитектура UI RNAssistant
 
+## Unified chat draft persistence — W9, In Review, 2026-11-16
+
+`RNAssistantChatDrafts` owns one coalesced writer per exact draft for Office, Workspace
+and plugin chat adapters. Keystrokes update the existing in-memory record immediately,
+while durable `saveChatDraft` requests debounce for 250 ms with a 1 s maximum wait and
+carry the latest revision. Submit/close and shutdown use the same explicit flush; failed
+save rejects the shutdown barrier instead of emitting a success ACK.
+
 ## Browser repeated reset — In Review, 2026-11-16
 
 `app-browser.js` keeps existing live-source and version callbacks keyed by Browser tab

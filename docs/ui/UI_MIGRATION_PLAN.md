@@ -1,5 +1,14 @@
 # План модернизации production UI
 
+## Unified chat draft persistence — W9, In Review, 2026-11-16
+
+Scope: existing `RNAssistantChatDrafts` and `RNAssistantConversationInput`, without a new
+store or source-specific writer. Continuous typing coalesces durable saves to one latest
+revision with 250 ms debounce and 1 s max wait; submit/close and shutdown force the same
+flush and failed save blocks the ACK. `conversation-draft.test.js` checks the bounded
+write count, quiet-period flush, immediate submit/close, shared Workspace owner and
+failed-save barrier. Windows/WebView2 qualification remains open.
+
 ## Browser repeated reset ownership — In Review, 2026-11-16
 
 Scope: existing Browser view lifecycle and callback maps, without UI restructuring.

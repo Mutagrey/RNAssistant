@@ -1,5 +1,14 @@
 # Current-to-target migration map
 
+## Unified chat draft persistence — W9, 2026-11-16
+
+Owner: `RNAssistantChatDrafts` plus the existing `RNAssistantConversationInput` flush
+barrier. One coalesced writer per exact Office/Workspace draft replaces immediate
+per-keystroke `saveChatDraft` requests. Debounce is bounded by a maximum wait and always
+writes the latest revision; explicit submit/close and shutdown force the same writer.
+No source-specific debounce, second draft store or hidden successful shutdown ACK is
+retained. Failure leaves the dirty revision available for retry.
+
 ## Explicit legacy archive reader — 2026-11-16
 
 Owner: Core ChatStore.Recovery / LegacyPluginRecoveryService; consumers: explicit
