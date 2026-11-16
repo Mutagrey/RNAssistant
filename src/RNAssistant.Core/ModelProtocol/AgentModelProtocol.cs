@@ -23,6 +23,7 @@ namespace RNAssistant.Core.ModelProtocol
         public Func<RetainedModelAttempt, Task> RetainAttemptAsync { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
         public string CompletionFeedback { get; private set; }
+        public string ProgressFeedback { get; private set; }
         public ModelRequestCause RequestCause { get; private set; }
         public FinishCorrection FinishCorrection { get; private set; }
         public int? ReflectionLimit { get; private set; }
@@ -31,7 +32,8 @@ namespace RNAssistant.Core.ModelProtocol
         internal AgentModelRequest(string runId, string turnId, string stepId,
             IEnumerable<AgentMessage> messages, string completionFeedback = null,
             int? reflectionLimit = null, int reflectionsUsed = 0, ModelRequestCause requestCause = null,
-            FinishCorrection finishCorrection = null, Func<RetainedModelAttempt, Task> retainAttemptAsync = null)
+            FinishCorrection finishCorrection = null, Func<RetainedModelAttempt, Task> retainAttemptAsync = null,
+            string progressFeedback = null)
         {
             RetainAttemptAsync = retainAttemptAsync;
             RunId = runId;
@@ -39,6 +41,7 @@ namespace RNAssistant.Core.ModelProtocol
             StepId = stepId;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             CompletionFeedback = completionFeedback;
+            ProgressFeedback = progressFeedback;
             RequestCause = requestCause;
             FinishCorrection = finishCorrection;
             ReflectionLimit = reflectionLimit;

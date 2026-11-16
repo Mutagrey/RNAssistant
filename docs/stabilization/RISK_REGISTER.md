@@ -467,7 +467,7 @@ limit + 2 (default 5). Новый kernel step получает новые бюд
 | Предыдущий identical call — Unknown | `repeated_unknown_tool_call`: автоматический replay запрещён даже после inspection. Исключение — fresh explicit confirmation для opaque action; normal-return opaque имеет отдельную policy |
 | Предыдущий call — Error | `repeated_tool_failure`, пока не выполнен typed recovery. `None` не разрешает повтор; `Replan` — новая стратегия/релевантное изменение или новая admission; `RefreshRequired` — нужное чтение/изменение; `ChangeRequired` — доказанное изменение exact dependency |
 | `RetryLater` от owner | Только новый предложенный моделью call, до 3 попыток total; задержки 250/500 мс. Это не автоматический replay любого Error |
-| Три одинаковых результата одного call | Четвёртый не dispatch: `repeated_tool_no_progress`. Три model responses подряд только с такими отказами заканчивают run; изменённый ввод/новая информация могут сбрасывать счётчик |
+| Три одинаковых результата одного call | Четвёртый вызов допускается; модель получает `runtime_context.progress_advisory`. Жёсткие границы — iteration/tool-step budgets и domain guards. Три model responses подряд только с отклонёнными вызовами по-прежнему заканчивают run; изменённый ввод/новая информация сбрасывают счётчик |
 | Exact tool/permission/binding/target guard | В частности `tool_not_exposed`, `tool_policy_changed`, `permission_denied`, `tool_mode_denied`, `tool_binding_unavailable`, preparation/confirmation errors; domain добавляет свои resource/HTML/VBA/Office codes. Отказ выдаётся как terminal tool result; следующий шаг не означает обход guard |
 | Approval / question / закрытая исходная session | Ожидание человека или невозможность dispatch. Смена активного документа не даёт другого target; model retry не чинит закрытую session |
 | Prompt budget, refusal/filter, HTTP 429/4xx, cancellation, повреждение store | Обычно terminal stop, а не provider retry. 429 не повторяется этим budget; response-format fallback отсутствует |
@@ -494,7 +494,7 @@ Core owners не менялся после сборки использованн
 | Unknown без target → свежий whole read → честный отказ | 256 requests, 2 tools, 0 admission → `iteration_limit`. Null target не удовлетворяется никаким read |
 | Unknown → два свежих смежных диапазона одной revision → отказ | На лимите 8: 8 requests, 3 tools, 0 admission → `iteration_limit`. Coverage не объединяется |
 | Контроль: Unknown → свежий exact Whole read → честный отказ | 3 requests, 2 tools → `model_finish`; health остаётся Unknown |
-| `agents.wait`, неизменный `TimedOut` и список peers | 3 calls исполняются, следующие 3 отклоняются → `repeated_tool_no_progress` после 6 model requests |
+| `agents.wait`, неизменный `TimedOut` и список peers | Timeout waits не входят в unchanged-result counter; повторы ограничены iteration/tool-step budgets, exact guards не сбрасываются |
 
 Выводы по владельцам:
 
@@ -2863,8 +2863,9 @@ The separate source-inspection finding is now fixed host-neutral: previously
 `VbaToolHandler.Effect` mapped `Ok` plus dispatch to `VerifiedChange` without a
 before/read-back comparison. The VBA mutation owner now carries typed `Changed`
 evidence from actual existence/live hashes. A fake VBE restoring the original
-casing returns `VerifiedNoChange`; three identical results reach the existing
-no-progress guard. A real identifier rename still reports a change. Exact guards,
+casing returns `VerifiedNoChange`; since the 2026-11-15 retry-policy correction,
+three identical results produce a progress advisory without blocking a new call.
+A real identifier rename still reports a change. Exact guards,
 VBE-comparable verification and unknown-effect handling remain separate.
 
 `RunChangesService` now prefers the exact source already captured by `CaptureModules`,

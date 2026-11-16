@@ -302,7 +302,9 @@ namespace RNAssistant.Harness
                 AssertTrue(pair.Item1.Length == 0 || !char.IsHighSurrogate(pair.Item1[pair.Item1.Length - 1]), "prefix never splits a surrogate pair");
             }
             var wire = ModelProtocolWire.RuntimeFeedback(new AgentModelRequest("run", "turn", "step", new AgentMessage[0],
-                finishCorrection: copy));
+                finishCorrection: copy, progressFeedback: "An unrelated repetition advisory."));
+            AssertEqual("decision_rejected", (string)wire["type"], "finish correction retains its wire classification");
+            AssertTrue(wire["progress_advisory"] == null, "repetition feedback cannot obscure a finish correction");
             AssertEqual(0, (int)wire["claim_index"], "the offending claim remains addressable even when the proposal is cut");
             AssertContains((string)wire["instruction"], "not instructions or accepted history", "quoted content grants no instruction authority");
         }
@@ -417,6 +419,7 @@ namespace RNAssistant.Harness
                 string reason, message; int delay;
                 AssertTrue(tracker.CanDispatch(new ToolCall("next", "wait", "{}"), out reason, out message, out delay, policy),
                     "restored timeout facts do not become an unchanged-result prohibition");
+                AssertEqual<string>(null, tracker.NoProgressFeedback, "elapsed waits do not produce repetition feedback");
             }
 
             var history = new List<AgentMessage>();
@@ -437,13 +440,17 @@ namespace RNAssistant.Harness
                 add("wait", new ToolExecutionProgress(ToolExecutionOutcome.Ok, resultFingerprint: "same", waitTimedOut: true));
             var restored = new AgentProgressTracker(); restored.Restore(history);
             foreach (var guard in new[] { new[] { "uncertain", "repeated_unknown_tool_call" },
-                new[] { "failed", "repeated_tool_failure" }, new[] { "snapshot", "repeated_tool_no_progress" } })
+                new[] { "failed", "repeated_tool_failure" } })
             {
                 string reason, message; int delay;
                 AssertTrue(!restored.CanDispatch(new ToolCall("again", guard[0], "{}"), out reason, out message, out delay),
                     "elapsed waits do not release other guards after replay: " + guard[0]);
                 AssertEqual(guard[1], reason, "the original guard remains exact");
             }
+            string readReason, readMessage; int readDelay;
+            AssertTrue(restored.CanDispatch(new ToolCall("again", "snapshot", "{}"), out readReason, out readMessage, out readDelay),
+                "ordinary repeated reads remain available after timeout replay");
+            AssertTrue(restored.NoProgressFeedback != null, "elapsed waits do not clear the repeated-read advisory");
         }
 
         private static async Task KernelBlocksIdenticalDefiniteFailure()
@@ -659,7 +666,8 @@ namespace RNAssistant.Harness
                         resultFingerprint: "same"), evidence, null);
                 }
                 string reason, message; int delay;
-                AssertTrue(!tracker.CanDispatch(read, out reason, out message, out delay), "three unchanged reads reach the repeat guard");
+                AssertTrue(tracker.CanDispatch(read, out reason, out message, out delay), "three unchanged reads do not prohibit a fresh observation");
+                AssertTrue(tracker.NoProgressFeedback != null, "repeated reads still produce planning feedback");
                 var write = new ToolCall("write", "write", "{}");
                 observe(write, scenario == "refresh" ? new ToolExecutionProgress(ToolExecutionOutcome.Error,
                         new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
@@ -671,12 +679,97 @@ namespace RNAssistant.Harness
                 foreach (var state in new[] { tracker, replay })
                 {
                     AssertTrue(state.CanDispatch(read, out reason, out message, out delay), "a possible change allows fresh inspection despite earlier identical reads");
-                    AssertEqual(opaque, state.CanDispatch(otherRead, out reason, out message, out delay), "a known target invalidates only its reads; an opaque effect has no narrower target");
-                    AssertTrue(!state.CanDispatch(immutableRead, out reason, out message, out delay), "immutable historical reads remain repeat-blocked");
-                    AssertTrue(!state.CanDispatch(schema, out reason, out message, out delay), "effects do not justify reloading tool schemas");
+                    AssertTrue(state.CanDispatch(otherRead, out reason, out message, out delay), "unrelated repeated reads are also safe to dispatch");
+                    AssertTrue(state.CanDispatch(immutableRead, out reason, out message, out delay), "historical repetition is advisory, not an unsafe effect");
+                    AssertTrue(state.CanDispatch(schema, out reason, out message, out delay), "schema repetition is advisory, not an unsafe effect");
+                    AssertTrue(state.NoProgressFeedback != null, "unrelated unchanged results retain their advisory after invalidation and replay");
                     AssertTrue(!state.CanDispatch(write, out reason, out message, out delay), "inspection never permits replaying the uncertain action");
+                    AssertEqual(scenario == "refresh" ? "repeated_tool_failure" : "repeated_unknown_tool_call", reason,
+                        "repetition feedback never replaces the exact recovery or safety refusal");
                 }
             }
+        }
+
+        private static async Task KernelRepeatedLiveReadAdvisorySurvivesContinuation()
+        {
+            using (var cancel = new CancellationTokenSource())
+            {
+                var f = new KernelFixture(Enumerable.Range(0, 4).Select(_ => KernelResponse(KernelCall("read")))
+                    .Concat(new[] { KernelResponse() }).ToArray());
+                f.Tools.OnExecute = (context, token) => {
+                    // The live source changes outside the agent after its third observation.
+                    var value = f.Tools.Calls.Count == 4 ? 2 : 1;
+                    return Task.FromResult(new ToolExecutionRecord(context, ToolExecutionOutcome.Ok,
+                        context.StartedUtc.AddMilliseconds(1), result: RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Observed live state",
+                            "{\"value\":" + value + "}"), resourceEvidence: new[] {
+                                new ResourceEvidence("live-" + context.Call.Id, new ResourceAuthorityScopeId("conversation", "fixture"),
+                                    new ResourceRef(InspectionTarget.Uri, "r" + value), "text", ResourceCoverage.Whole(), true, 1,
+                                    observedAt: context.StartedUtc.AddSeconds(f.Tools.Calls.Count)) }));
+                };
+                f.Store.OnAppended = fact => {
+                    if (fact.Kind == AgentRunEventKind.ToolCompleted && f.Tools.Calls.Count == 3) cancel.Cancel();
+                };
+                var limits = new AgentRunLimits(6, 5);
+                var stopped = await f.RunAsync(cancel.Token, limits);
+                AssertEqual(3, f.Tools.Calls.Count, "checkpoint follows three identical observations");
+                var tracker = new AgentProgressTracker(); tracker.Restore(stopped.AcceptedMessages);
+                AssertTrue(tracker.NoProgressFeedback != null, "terminal facts reconstruct the repetition advisory");
+                var feedback = tracker.NoProgressFeedback;
+                var continuation = AgentRunContinuation.RestoreCheckpoint(new AgentRunState(stopped.Summary, limits),
+                    f.Store.Events.Count, stopped.AcceptedMessages);
+                f.Store.OnAppended = null;
+                var result = await f.Kernel.ContinueAsync(continuation, CancellationToken.None);
+                AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "fresh observation can complete the resumed task");
+                AssertEqual(4, f.Tools.Calls.Count, "the fourth identical call reaches the live source exactly once");
+                var resumedRequest = f.Model.Requests[3];
+                AssertEqual(feedback, resumedRequest.ProgressFeedback, "the resumed model sees the advisory before choosing the fourth read");
+                AssertEqual<string>(null, resumedRequest.CompletionFeedback, "an accepted repeated read is not a rejected decision");
+                var wire = ModelProtocolWire.RuntimeFeedback(resumedRequest);
+                AssertEqual("runtime_context", (string)wire["type"], "planning advice uses the existing informational wire context");
+                AssertEqual(feedback, (string)wire["progress_advisory"], "the actual wire projection includes repetition advice");
+                var current = f.Model.Requests[4].AcceptedMessages.Last(message => message.Kind == AgentMessageKind.ToolResult);
+                AssertEqual(2, (int)JObject.Parse(current.Execution.Result.DataJson)["value"], "the model receives the changed live value");
+                AssertEqual("r2", current.ResourceEvidence.Single().Resource.Revision, "the fourth read carries the new source revision");
+                AssertEqual<string>(null, f.Model.Requests[4].ProgressFeedback, "new information clears repetition feedback");
+                AssertEqual(5, result.Summary.IterationsUsed, "continuation retains the spent model budget");
+                AssertEqual(4, result.Summary.ToolStepsUsed, "continuation retains the spent tool budget");
+            }
+        }
+
+        private static async Task KernelProgressAdvisoryPreservesInspectionPriority()
+        {
+            var unrelated = new ResourceIdentity(ResourceUri.Create("state", "conversation", "fixture", "unrelated"));
+            var f = new KernelFixture(new[] { KernelResponse(KernelCall("write")) }
+                .Concat(Enumerable.Range(0, 3).Select(_ => KernelResponse(KernelCall("read", "{\"other\":true}"))))
+                .Concat(new[] { KernelResponse(KernelCall("read")), KernelResponse() }).ToArray());
+            f.Tools.OnExecute = (context, token) => {
+                if (context.Call.Name == "write") return Task.FromResult(InspectedKernelRecord(context, ToolExecutionOutcome.Unknown));
+                var target = context.Call.ArgumentsJson == "{}" ? InspectionTarget : unrelated;
+                return Task.FromResult(new ToolExecutionRecord(context, ToolExecutionOutcome.Ok,
+                    context.StartedUtc.AddMilliseconds(1), result: RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Observed", "{\"value\":1}"),
+                    resourceEvidence: new[] { new ResourceEvidence(context.Call.Id, new ResourceAuthorityScopeId("conversation", "fixture"),
+                        new ResourceRef(target.Uri, "r1"), "text", ResourceCoverage.Whole(), true, 1,
+                        observedAt: context.StartedUtc.AddSeconds(1)) }));
+            };
+            var result = await f.RunAsync();
+            var tracker = new AgentProgressTracker(); tracker.Restore(f.Model.Requests[4].AcceptedMessages);
+            AssertTrue(tracker.InspectionRequired && tracker.NoProgressFeedback != null,
+                "the repeated unrelated reads coexist with the unresolved inspection requirement");
+            AssertEqual(ModelProtocolWire.UnknownEffectGuidance, f.Model.Requests[4].CompletionFeedback,
+                "required effect inspection takes priority over advisory feedback");
+            AssertTrue(f.Model.Requests[4].ProgressFeedback != null &&
+                ModelProtocolWire.RuntimeFeedback(f.Model.Requests[4])["progress_advisory"] == null,
+                "the wire withholds advice while an inspection requirement is pending");
+            AssertEqual<string>(null, f.Model.Requests[5].CompletionFeedback,
+                "a fresh matching observation satisfies inspection and supplies new information");
+            AssertEqual<string>(null, f.Model.Requests[5].ProgressFeedback, "new source evidence clears the repetition advisory");
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "independent work and inspection can complete");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "inspection does not upgrade the original unknown effect");
+            tracker = new AgentProgressTracker(); tracker.Restore(result.AcceptedMessages);
+            string reason, message; int delay;
+            AssertTrue(!tracker.CanDispatch(new ToolCall("retry", "write", "{}"), out reason, out message, out delay),
+                "the uncertain operation remains protected after live reads and restoration");
+            AssertEqual("repeated_unknown_tool_call", reason, "the safety guard remains independent from both advisories");
         }
 
         private static async Task KernelNeverRepeatsUnknownCallAfterInterveningSuccess()
@@ -820,8 +913,8 @@ namespace RNAssistant.Harness
         {
             foreach (var returned in new[] { true, false })
             {
-                var f = new KernelFixture(KernelResponse(KernelCall("external")),
-                    KernelResponse(KernelCall("external")), KernelResponse());
+                var f = new KernelFixture(Enumerable.Range(0, returned ? 4 : 2).Select(_ => KernelResponse(KernelCall("external")))
+                    .Concat(new[] { KernelResponse() }).ToArray());
                 f.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
                     ToolExecutionOutcome.Unknown, context.StartedUtc.AddMilliseconds(1), "Opaque result",
                     evidence: new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched,
@@ -830,10 +923,10 @@ namespace RNAssistant.Harness
                     resourceEffect: new ResourceEffect("invalidation-" + context.Call.Id, "external",
                         ResourceEffectOutcome.UnknownAfterDispatch, new[] {
                             new ResourceImpact(InspectionTarget, ResourceImpactRelation.Subtree) })));
-                var result = await f.RunAsync(limits: new AgentRunLimits(4, 5));
+                var result = await f.RunAsync(limits: new AgentRunLimits(5, 5));
                 AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
                     "broad opaque invalidation is not an impossible full-resource inspection gate");
-                AssertEqual(returned ? 2 : 1, f.Tools.Calls.Count,
+                AssertEqual(returned ? 4 : 1, f.Tools.Calls.Count,
                     "only normal return allows a newly proposed invocation under the same policy");
                 AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth, "normal return never verifies effects");
                 AssertEqual<string>(null, f.Model.Requests[1].CompletionFeedback, "no impossible inspection feedback");
@@ -847,13 +940,15 @@ namespace RNAssistant.Harness
                     out message, out delay, f.Tools.Policies["external"]), "replay preserves normal-return versus interruption");
                 if (returned)
                 {
-                    var terminal = messages.First(item => item.Kind == AgentMessageKind.ToolResult);
-                    tracker.Observe(new ToolCall("third", "external", "{}"), terminal.Progress, "same", null, null);
-                    AssertTrue(!tracker.CanDispatch(new ToolCall("fourth", "external", "{}"), out reason,
-                        out message, out delay, f.Tools.Policies["external"]), "three identical returns without new information stay bounded");
-                    AssertEqual("repeated_tool_no_progress", reason, "normal return uses the progress limit, not uncertain-dispatch protection");
+                    AssertTrue(tracker.NoProgressFeedback != null, "restored normal returns retain no-progress detection");
+                    AssertEqual(tracker.NoProgressFeedback, f.Model.Requests[3].ProgressFeedback,
+                        "the model receives repetition feedback before the fourth normal invocation");
+                    AssertEqual(4, result.Summary.ToolCounts.WriteUnknown, "each normal invocation retains its unverified effect");
+                    AssertTrue(messages.Where(item => item.Kind == AgentMessageKind.ToolResult)
+                        .All(item => item.Progress.OpaqueActionCompleted), "each dispatched normal return retains its typed completion fact");
                 }
                 tracker.ObserveUserInput();
+                AssertEqual<string>(null, tracker.NoProgressFeedback, "new user input clears planning feedback");
                 AssertEqual(returned, tracker.CanDispatch(new ToolCall("after-input", "external", "{}"), out reason,
                     out message, out delay, f.Tools.Policies["external"]), "new user input clears stale repetition counters, never uncertain-dispatch protection");
                 tracker = new AgentProgressTracker();

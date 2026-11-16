@@ -639,8 +639,8 @@ Since 2026-11-03, the macro handler explicitly records a normal backend return a
 `InvocationCompleted`. Runtime still records `Unknown` effect/outcome; kernel
 progress persists `OpaqueActionCompleted` separately. The user approved new
 model-proposed macro calls after normal return, under the same confirmation policy
-and run limits. Three identical results without new information retain the normal
-no-progress limit. A generic handler's `ok`, old records without the fact, errors,
+and run limits. Since 2026-11-15, three identical results without new information
+produce a progress advisory, not a dispatch refusal. A generic handler's `ok`, old records without the fact, errors,
 exceptions and interruptions do not grant this exception: an identical uncertain
 call still needs fresh explicit confirmation, never automatic retry. Recovery
 does not replay anything. Continuation reconstructs these facts without clearing
@@ -2747,8 +2747,9 @@ Owner: Conversation/model context; совместные границы — Core 
   восстанавливаемая проекция logical turn. JSON-порядок аргументов не обходит guard.
   Неизменённая ошибка не dispatch повторно; RetryLater допускает три попытки с
   задержками 250/500 ms. После трёх одинаковых успешных ответов без новых сведений
-  следующий такой вызов отклоняется до dispatch. Отклонение возвращается модели
-  как `NotDispatched` с причиной и вариантами recovery, а не завершает запуск:
+  модель получает `runtime_context.progress_advisory`; новые чтения и явно
+  предложенные действия проходят обычную runtime policy. Отказ по прежнему
+  failure/Unknown возвращается модели как `NotDispatched` с причиной и recovery:
   другой инструмент, изменённые аргументы и inspection остаются доступны.
   Остановка наступает только после трёх последовательных model responses,
   содержащих исключительно отклонённые повторы. Calls внутри read batch не
@@ -2759,11 +2760,12 @@ Owner: Conversation/model context; совместные границы — Core 
   ресурса позволяют продолжение. Отказы Replan и отказы без resource identity
   не сбрасываются посторонними изменениями. Unknown не очищается посторонним успешным чтением или записью.
   После unknown-effect прежние счётчики одинаковых успешных чтений затронутого
-  изменяемого ресурса сбрасываются, чтобы разрешить свежую inspection. Если эффект
+  изменяемого ресурса сбрасываются, чтобы не советовать переиспользование старого
+  наблюдения вместо свежей inspection. Если эффект
   не имеет точной области, сбрасываются счётчики чтений всех ранее наблюдавшихся
-  изменяемых ресурсов. Immutable reads и schema reads без live resource evidence,
-  отказы и запрет повтора самой uncertain operation остаются защищены.
-  Это разрешение на новое чтение, не подтверждение изменения или результата;
+  изменяемых ресурсов. Счётчики immutable/schema reads остаются advisory;
+  отказы и запрет повтора самой uncertain operation не сбрасываются.
+  Новое чтение не подтверждает изменение или результат прежней операции;
   проекция восстанавливает то же решение из terminal facts после перезапуска.
   Старый pending continuation без typed progress явно отвергается; история не удаляется.
 - Workspace `files.copy/move/patch/replace/delete` возвращают отсутствие полного
@@ -3029,21 +3031,36 @@ kernel не разбирает Excel/VBA/HTML JSON самостоятельно.
   Другой способ работы остаётся доступен; его допустимость проверяет domain owner.
 - `RetryLater`: ограниченные попытки с backoff; ожидание должно быть разрешено
   владельцем ошибки. Общий детерминированный отказ не становится retryable.
+- `ChangeRequired`: повтор разрешает только подтверждённое изменение exact
+  dependency по существующему `ToolRecoveryContract`; чтение, no-op и посторонняя
+  запись не заменяют исправление.
 - Повтор успешного read при неизменной authority/coverage может использовать
-  сохранённый payload. Повтор no-op/успеха без продвижения учитывается отдельно;
-  нельзя объявлять все повторные чтения ошибкой или запретить намеренное повторное
-  действие пользователя.
+  сохранённый payload по правилам resource owner. Сам tracker результаты не
+  кэширует и не подменяет: новый вызов проходит обычный runtime, поэтому может
+  получить актуальные данные после внешнего изменения. Три одинаковых результата
+  успешного read, no-op или нормально завершившегося opaque action дают только
+  `runtime_context.progress_advisory`. Этот сигнал не создаёт `NotDispatched`,
+  не меняет исходный успех/Unknown и не перекрывает выполненный typed recovery.
+- Advisory вычисляется из прежних terminal facts в `AgentProgressTracker`,
+  передаётся через `AgentModelRequest.ProgressFeedback` и восстанавливается при
+  continuation без нового store/registry. Inspection, finish correction и
+  reflection feedback имеют приоритет; advisory не маркируется `decision_rejected`.
 - Possible effect/`unknown` никогда автоматически не повторять. Исторические
   receipts не заменяют доменную защиту от повторной записи и reconciliation.
+  Нормальный возврат opaque action разрешает новый модельный вызов только по
+  `OpaqueActionCompleted` и действующей policy; его эффект остаётся `Unknown`.
 
 Счётчик относится к logical turn и восстанавливается при confirmation/compaction
 из уже имеющихся событий. Семантический fingerprint учитывает аргументы, target,
 coverage и релевантную authority; простое изменение порядка JSON либо текста
 комментария не считается прогрессом. Новые данные, другой запрошенный диапазон,
 исправленный аргумент, выполненный шаг или новое пользовательское намерение —
-допустимые причины продолжения. Нужен короткий bounded recovery, затем честная
-остановка с причиной; лимиты 256 iterations / 4096 tool steps — только аварийный
-предел, не стратегия устранения петли.
+допустимые причины продолжения. Три последовательных model responses только с
+отклонёнными вызовами по-прежнему останавливают run с `repeated_tool_no_progress`;
+`RetryLater` допускает не более трёх попыток с backoff. Для одинаковых допустимых
+вызовов модель получает advisory и выбирает следующий шаг; жёсткую границу задают
+существующие iteration/tool-step budgets. Отдельного запрета четвёртого успешного
+вызова больше нет. Проверки не подтверждают качество такого выбора реальной моделью.
 
 ### Порядок реализации и минимальные проверки
 

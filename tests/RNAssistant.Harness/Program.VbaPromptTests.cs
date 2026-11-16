@@ -198,6 +198,45 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void VbaNormallyCompletedMacroAllowsRepeatedCalls()
+        {
+            WithTempExecutor((executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var progress = new AgentProgressTracker();
+                var callIds = new HashSet<string>(StringComparer.Ordinal);
+                for (var index = 0; index < 4; index++)
+                {
+                    var pending = PrepareVbaNative(executor, session, Command(
+                        "office.macro.run", "macroName", "Module1.Main",
+                        "arguments", new JArray("value", 2, true)));
+                    AssertEqual(ToolEffect.External, pending.Record.Context.Policy.Policy.Effect,
+                        "the native macro retains its external-effect policy");
+                    AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome,
+                        "each new macro invocation requires fresh native confirmation");
+                    AssertTrue(callIds.Add(pending.Record.Context.Call.Id),
+                        "identical invocations have distinct runtime call IDs");
+                    string reason, message;
+                    int delay;
+                    AssertTrue(progress.CanDispatch(pending.Record.Context.Call, out reason, out message, out delay),
+                        "normal return permits another invocation without the uncertain-effect confirmation exception");
+                    var completed = ConfirmVbaNative(pending);
+                    AssertEqual(ToolExecutionOutcome.Unknown, completed.Outcome,
+                        "a completed arbitrary macro does not certify its effects");
+                    AssertTrue(completed.MayHaveDispatched, "the native macro retains its dispatch boundary");
+                    AssertEqual(ToolEffectEvidence.Unknown, completed.Evidence.Effect,
+                        "each completed invocation still has unknown effects");
+                    var observed = ToolExecutionProgress.Capture(completed);
+                    AssertTrue(completed.Evidence.InvocationCompleted && observed.OpaqueActionCompleted,
+                        "the native handler records normal return independently of effect verification");
+                    progress.Observe(completed.Context.Call, observed, completed.Result.Message,
+                        completed.ResourceEvidence, completed.ResourceEffect);
+                    AssertEqual(index + 1, adapter.CountVbaCalls(FakeVbaOperation.RunMacro),
+                        "each newly proposed invocation dispatches exactly once");
+                }
+            });
+        }
+
         private static void VbaSemanticIntentContractsAreStrict()
         {
             WithTempExecutor(delegate(
@@ -2374,16 +2413,23 @@ namespace RNAssistant.Harness
                 }
                 string reason, message;
                 int delay;
-                AssertTrue(!progress.CanDispatch(lastCall, out reason, out message, out delay),
-                    "three identical no-change results prevent another automatic write");
-                AssertEqual("repeated_tool_no_progress", reason, "case loop reaches the existing progress guard");
+                AssertTrue(progress.NoProgressFeedback != null,
+                    "three identical no-change results explain the lack of progress");
+                AssertTrue(progress.CanDispatch(lastCall, out reason, out message, out delay),
+                    "no-progress advice does not prohibit a deliberately repeated write");
                 AssertEqual(3, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only dispatched attempts wrote");
 
-                var renamed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("core.patch", "targets",
-                    PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit(source, source.Replace("fov", "viewFov").Replace("FOV", "viewFov"))))))));
+                var renamePending = PrepareVbaNative(executor, session, Command("core.patch", "targets",
+                    PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit(source, source.Replace("fov", "viewFov").Replace("FOV", "viewFov")))))));
+                AssertTrue(progress.CanDispatch(renamePending.Record.Context.Call, out reason, out message, out delay),
+                    "a corrective identifier rename remains admissible after no-progress advice");
+                var renamed = ConfirmVbaNative(renamePending);
                 AssertEqual(ToolEffectEvidence.VerifiedChange, renamed.Evidence.Effect,
                     "a real identifier rename remains a significant change");
                 AssertEqual(ResourceTargetStatus.Changed, renamed.ResourceEffect.Targets.Single().Status, "actual rename is reported");
+                progress.Observe(renamed.Context.Call, ToolExecutionProgress.Capture(renamed), renamed.Result.Message,
+                    renamed.ResourceEvidence, renamed.ResourceEffect);
+                AssertTrue(progress.NoProgressFeedback == null, "verified source change clears the no-progress advice");
             });
         }
 

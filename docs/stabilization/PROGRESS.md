@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Retry admission and progress advice — 2026-11-15
+
+`AgentProgressTracker` больше не запрещает четвёртый одинаковый успешный вызов.
+Прежние terminal facts формируют advisory в `AgentModelRequest.ProgressFeedback`;
+общая Office/Workspace wire projection передаёт его как
+`runtime_context.progress_advisory`, с приоритетом inspection/finish correction.
+Unknown guards, normal-return fact, typed recovery и run budgets сохранены;
+нового registry/recovery store нет. `16.27.18-dev`, In Review, локальный diff.
+
+Harness build: 0 errors; 14 focused filters проходят, включая четвёртое live
+чтение после continuation/внешнего изменения, recovery после прежних no-op,
+четыре native macro calls, actual model-wire matrix, Office/Workspace patch owners,
+Unknown после очистки/rebuild и fresh approval. Проверки host-neutral;
+Windows/Office COM и реакция реальной модели остаются открытыми. Отдельный CLI
+smoke не запущен: исходный Core.Net8 исключает SettingsService, хотя storage
+consumers уже зависят от него. Соседний pre-existing test gap
+`vba: public tools use native runtime` (устаревшие binding revisions) остаётся
+открытым и не относится к retry fix.
+
 ## Internal identity backup extension — 2026-11-15
 
 Implemented locally / In Review. `BackupJournals`/`RestoreJournals` now retain the
@@ -23,7 +42,8 @@ Remaining P7 gates: full application-owner inventory and external project/manife
 trash/live-document preservation, production composition and old-writer quiescence,
 real Windows/DPAPI/Office/WebView2 and power-loss evidence. Memory-only runtime
 bindings are not exported. This is an internal P6/P7 slice, not a completed product
-cutover or release; product version remains `16.27.17-dev`. No commit/push was made.
+cutover or release; product version was `16.27.17-dev` at this slice. Commit
+`74fe36c4`; no push was made.
 [Contract](../cas-maintenance.md#identity-owners-in-internal-backup-v2--2026-11-15).
 
 ## Unified native stream delivery — 2026-11-14

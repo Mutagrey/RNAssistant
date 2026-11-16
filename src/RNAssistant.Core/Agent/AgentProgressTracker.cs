@@ -44,6 +44,13 @@ namespace RNAssistant.Core.Agent
 
         internal bool RecoveryIgnored => _stepRejected && !_stepDispatched && _rejectedSteps >= 2;
 
+        // Equal results are a planning signal, not proof of unsafe replay. Live
+        // reads and new authorized actions still pass the normal runtime gates.
+        // Rebuild this advisory from the same terminal facts on continuation.
+        internal string NoProgressFeedback => _unchanged.Values.Any(count => count >= 3)
+            ? "Identical calls have returned the same observable result at least three times. Reuse current evidence or change the approach unless the task requires another live observation or a new authorized action. Existing recovery and uncertain-effect restrictions still apply."
+            : null;
+
         internal void ObserveUserInput()
         {
             // New instructions can require revisiting identical observations.
@@ -80,13 +87,6 @@ namespace RNAssistant.Core.Agent
                     policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction) return true;
                 reason = "repeated_unknown_tool_call";
                 message = "This call was not dispatched: the previous identical call may have had an effect. Inspect its actual state or choose another operation; do not repeat the uncertain effect.";
-                return false;
-            }
-            int unchanged;
-            if (_unchanged.TryGetValue(key, out unchanged) && unchanged >= 3)
-            {
-                reason = "repeated_tool_no_progress";
-                message = "This call was not dispatched: it already returned the same result three times. Reuse that result, choose another tool or change the input to obtain new information.";
                 return false;
             }
             Failure previous;
@@ -126,8 +126,9 @@ namespace RNAssistant.Core.Agent
                     .Concat(progress.Recovery?.ResourceIdentity == null ? new ResourceIdentity[0] :
                         new[] { progress.Recovery.ResourceIdentity }).Distinct().ToArray();
                 // Earlier identical reads describe the state BEFORE this possible
-                // effect. Permit fresh inspection, without releasing failed calls,
-                // immutable/schema reads or the uncertain operation's replay guard.
+                // effect. Permit fresh inspection; immutable/schema repetitions
+                // remain advisory, while failed calls and the uncertain operation's
+                // replay guard are not released.
                 foreach (var read in _mutableReadTargets)
                     if (targets.Length == 0 || read.Value.Any(target => targets.Contains(target)))
                     {
@@ -145,7 +146,7 @@ namespace RNAssistant.Core.Agent
                 }
                 if (!progress.OpaqueActionCompleted) return;
                 // A new model-proposed invocation after normal return is allowed
-                // by policy, still bounded by ordinary no-progress/run limits.
+                // by policy. Equal results advise planning; run limits still apply.
             }
             var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
             if (progress.Outcome == ToolExecutionOutcome.Error)
@@ -187,8 +188,8 @@ namespace RNAssistant.Core.Agent
                 return;
             }
             // Equal timeout receipts describe separate elapsed wait intervals,
-            // not rereading one unchanged snapshot. Keep all other replay and
-            // no-progress guards: waiting neither inspects nor repairs effects.
+            // not rereading one unchanged snapshot. Do not count them as unchanged
+            // results; waiting neither inspects nor repairs effects.
             if (progress.WaitTimedOut) return;
             var resultFingerprint = effect?.Outcome == ResourceEffectOutcome.VerifiedNoChange
                 ? "verified-no-change" : progress.ResultFingerprint;

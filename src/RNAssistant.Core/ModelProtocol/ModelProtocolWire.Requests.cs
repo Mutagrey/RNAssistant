@@ -69,6 +69,11 @@ namespace RNAssistant.Core.ModelProtocol
             if (!string.IsNullOrWhiteSpace(request.CompletionFeedback)) feedback["reason"] = request.CompletionFeedback;
             else feedback["type"] = "runtime_context";
             var correction = request.FinishCorrection;
+            // Planning advice must not describe an accepted tool result as a
+            // rejected decision or obscure a pending inspection/correction.
+            if (correction == null && string.IsNullOrWhiteSpace(request.CompletionFeedback) &&
+                !string.IsNullOrWhiteSpace(request.ProgressFeedback))
+                feedback["progress_advisory"] = request.ProgressFeedback;
             if (correction != null)
             {
                 feedback["type"] = "decision_rejected";

@@ -29,12 +29,15 @@ This is targeted coverage of the changed clone contract, not a complete baseline
 
 ## Политика повторов: recovery, чтения и макросы — 2026-11-14
 
-Статус: открыто, зафиксировано по запросу пользователя для следующего планирования
-retry/recovery. Owner: Core AgentKernel / AgentProgressTracker; domain owners —
+Статус: исправление подготовлено host-neutral 2026-11-15, In Review.
+Общий запрет четвёртого одинакового успешного вызова заменён advisory в существующем
+model request; typed recovery и Unknown replay guards сохранены. Ниже — исходный
+scope. Реальные Windows/Office и model-quality сценарии остаются открытыми.
+Owner: Core AgentKernel / AgentProgressTracker; domain owners —
 typed recovery и подтверждение состояния; ConversationJournal — сохранение guards.
 Основание: чтение текущего кода и
 [прежняя карта блокировок](RISK_REGISTER.md#карта-повторов-и-блокировок--аудит-2026-11-03).
-Это не новая Windows-репродукция и не закрытый дефект.
+Это не новая Windows-репродукция и не Windows qualification.
 
 Проблема: общий лимит трёх одинаковых результатов может запрещать полезное повторное
 чтение или намеренный повтор нормально завершившегося макроса. Ошибка патча без
@@ -46,7 +49,7 @@ typed recovery и подтверждение состояния; ConversationJou
 счётчик остаётся. Коммит `57d010b5` сохраняет guards при удалении истории и не
 закрывает эти ограничения политики.
 
-Предлагаемый отдельный срез:
+Scope исправления:
 
 1. Воспроизвести сценарии через существующие Office/Workspace consumers: патч не
    подошёл → актуальное чтение → исправленный патч; повторное чтение после изменения
@@ -69,6 +72,24 @@ restart/clear истории, потерянное подтверждение и
 завершение макроса минимальными релевантными проверками. Использовать существующие
 owners и индекс, без нового store/registry. Текущий контракт —
 [Повтор и восстановление](../conversation-protocol.md#повтор-и-восстановление).
+
+Соседний test gap: `vba: public tools use native runtime` уже на исходном `5bbc5e33`
+ожидает старые binding revisions `.resource.v5`/`.resource.v1`, тогда как текущий
+`ResourceMutationToolCatalog.BindingFor` выдаёт `.resource.v6`/`.resource.v2`.
+Это ожидание не меняется в retry fix; нормальный повтор макроса проверяется
+отдельным `vba: normal macro return permits repeated native calls`.
+
+Дополнительная CLI-проверка recovery не дошла до запуска: неизменённый
+`RNAssistant.Core.Net8.csproj` исключает `Storage/SettingsService.cs`, но
+`CasMaintenanceService.Backup`, `ChatBlobStore` и `ChatStore` уже ссылаются на этот
+тип (CS0246). Owner: Core/Runtime build composition; исправлять отдельным срезом,
+без подмены production dependency тестовым stub. Harness компилирует действующих
+owners и покрывает Office/Workspace recovery независимо от этого build gap.
+
+Durable repeat guards между новыми runs/после очистки проверены для
+`ConversationJournal`. Старый `ChatEventStoreAdapter` объявляет
+`RetainedReplayGuards=false`; retry fix эту прежнюю границу не расширяет и не
+объявляет legacy backend эквивалентным native Journal.
 
 ## Native Workspace connection backup — 2026-11-14
 

@@ -360,8 +360,9 @@ stale/error diagnostics do not become successful compact receipts.
 The runtime-context guidance identifies `Available now` as directly callable and
 explains `schemaInRequest=true`: the omitted duplicate descriptor is supplied in
 `Callable tool definitions` or `response_format.json_schema`. Another schema read
-is not a prerequisite for using the tool. The existing no-progress guard can
-reject a fourth identical schema read; this does not revoke callable membership.
+is not a prerequisite for using the tool. Three identical schema-read results
+produce a progress advisory; a fourth read is admitted by the normal runtime
+policy and does not revoke callable membership.
 
 The `skills.excel.analysis.reporting` package supplies inspection, sheet creation, range
 writes, tables, formatting and both workbook/chat charts. Standalone operations do

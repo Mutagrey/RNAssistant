@@ -1,5 +1,20 @@
 # RNAssistant Harness
 
+## Retry policy — 2026-11-15
+
+Focused filters: `kernel: repeated live read advisory`, `kernel: progress advisory`,
+`context continuity: refresh after repeated no-op`, `context continuity: bounds loops`,
+`kernel: opaque normal return`, `kernel: timed wait progress`,
+`kernel: inspection can refresh repeated read`, `tool pack: macro schema remains callable`,
+`vba: normal macro return`, `vba: VBE restored casing`.
+They cover fourth-call dispatch, externally changed live data after continuation,
+typed recovery despite old no-op fingerprints, exact whole-source requirements,
+normal macro return with Unknown effect health, informational wire feedback and
+unchanged iteration/tool budgets. Existing definite-failure/unknown/confirmation,
+`journal history: retained Unknown`, `journal history: opaque repeats` and
+`tool runtime: read results`/`prepared state` checks retain the safety boundary.
+No real-model, Windows or Office COM qualification is implied.
+
 ## Local Browser provider cutover — 2026-11-13
 
 Current UI checks: `html-editor-views`, `html-project-import`, `browser-source-diff`,
@@ -958,16 +973,18 @@ explicitly exclude manual evidence from model history. The focused follow-up pas
 92 distinct cases on the isolated protocol copy; this does not close the earlier
 17 baseline gaps. No live models or Office.
 
-`kernel: inspection can refresh repeated read after unknown` reproduces an exhausted
-read counter before a possible effect, including replay: fresh affected live reads
-are allowed, while immutable/schema reads, unrelated known targets and unknown-call
-replay remain guarded. `context continuity: bounds loops and restores progress`
-checks the existing no-progress limits. No real models or Office hosts are involved.
+`kernel: inspection can refresh repeated read after unknown` reproduces a repeated
+read counter before a possible effect, including replay: reads remain available,
+while typed failure and unknown-call replay guards retain their exact reasons.
+`context continuity: bounds loops and restores progress` checks bounded failure
+recovery, successful-call advisories and the existing run budgets. No real models
+or Office hosts are involved.
 
 `tool pack: macro schema remains callable after repeated read` reproduces the
 photographed `core.tools.read` loop in six response/history combinations: one read
 admits `office.macro.run`, the compact receipt points to the actual request schema,
-and the fourth identical read is rejected without revoking the callable tool.
+and the fourth identical read succeeds with informational progress feedback,
+without a false decision rejection or loss of callable membership.
 The macro is parsed for admission only, never executed. Existing `history protocol:`
 matrix checks fresh-call field guidance in both JSON outputs and typed repair,
 including the distinction between call `id` and `arguments.id`.

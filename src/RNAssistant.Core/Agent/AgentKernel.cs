@@ -283,7 +283,8 @@ namespace RNAssistant.Core.Agent
                             state.ConsecutiveReflections, requestCause ?? state.FinishCorrection?.RequestCause(),
                             state.FinishCorrection, retained => AppendAsync(state,
                                 new AgentRunEvent(AgentRunEventKind.ModelAttemptRetained, state.Summary(), stepId,
-                                    sourceModelAttemptId: retained.Body.AttemptId, retainedAttempt: retained))), requestCancellation.Token).ConfigureAwait(false);
+                                    sourceModelAttemptId: retained.Body.AttemptId, retainedAttempt: retained)),
+                            progressFeedback: state.Progress.NoProgressFeedback), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {

@@ -674,17 +674,26 @@ namespace RNAssistant.Harness
             var unchanged = new KernelFixture(Enumerable.Range(0, 6).Select(_ => KernelResponse(KernelCall("read"))).ToArray());
             unchanged.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
                 ToolExecutionOutcome.Ok, context.StartedUtc, result: ToolResult.Ok("loaded", "{\"content\":\"same\"}")));
-            AssertEqual("repeated_tool_no_progress", (await unchanged.RunAsync()).Summary.Reason, "successful unchanged reads also stop a loop");
-            AssertEqual(3, unchanged.Tools.Calls.Count, "the repeated success is rejected before a fourth dispatch");
-            AssertEqual(6, unchanged.Model.Requests.Count, "model receives rejection feedback before stopping");
+            AssertEqual("iteration_limit", (await unchanged.RunAsync(limits: new AgentRunLimits(6, 10))).Summary.Reason,
+                "successful unchanged reads remain bounded by the configured run budget");
+            AssertEqual(6, unchanged.Tools.Calls.Count, "every explicitly proposed read can observe the current state");
+            AssertEqual(6, unchanged.Model.Requests.Count, "the iteration budget is not reset by repeated reads");
+            AssertTrue(unchanged.Model.Requests.Take(3).All(request => request.ProgressFeedback == null),
+                "ordinary observations do not receive premature repetition advice");
+            AssertTrue(unchanged.Model.Requests.Skip(3).All(request => !string.IsNullOrWhiteSpace(request.ProgressFeedback)),
+                "repeated equal reads produce planning advice before another dispatch");
+            AssertTrue(unchanged.Model.Requests.All(request => request.CompletionFeedback == null),
+                "planning advice is not reported as a rejected decision");
 
             var noChange = new KernelFixture(Enumerable.Range(0, 6).Select(_ => KernelResponse(KernelCall())).ToArray());
             noChange.Tools.OnExecute = (context, token) => Task.FromResult(new ToolExecutionRecord(context,
                 ToolExecutionOutcome.Ok, context.StartedUtc, result: ToolResult.Ok("unchanged", "{\"operationId\":\"" + context.Call.Id + "\"}"),
                 resourceEffect: new ResourceEffect("effect_" + context.Call.Id, context.Call.Name, ResourceEffectOutcome.VerifiedNoChange)));
-            AssertEqual("repeated_tool_no_progress", (await noChange.RunAsync()).Summary.Reason,
-                "new runtime IDs do not turn repeated verified no-op mutations into progress");
-            AssertEqual(3, noChange.Tools.Calls.Count, "no-op mutation is not dispatched again after its repeated result");
+            AssertEqual("tool_step_limit", (await noChange.RunAsync(limits: new AgentRunLimits(10, 4))).Summary.Reason,
+                "newly proposed verified no-op mutations still consume the configured tool budget");
+            AssertEqual(4, noChange.Tools.Calls.Count, "no-progress advice does not reject an authorized fourth no-op");
+            AssertTrue(!string.IsNullOrWhiteSpace(noChange.Model.Requests[3].ProgressFeedback),
+                "new runtime IDs do not disguise repeated verified no-op results as progress");
 
             var batch = new KernelFixture(KernelResponse(KernelCall("read")),
                 KernelResponse(KernelCall("read"), KernelCall("read"), KernelCall("read")),
@@ -757,6 +766,70 @@ namespace RNAssistant.Harness
                 }
                 AssertTrue(!restored.Recovery.ModelProjection().ToString().Contains("rna://"), "exact recovery identity stays runtime-only");
             }
+        }
+
+        private static async Task ContextContinuityRefreshAfterRepeatedNoChange()
+        {
+            const string patch = "{\"target\":\"a.txt\",\"old\":\"before\",\"new\":\"after\"}";
+            var source = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "a.txt"), "r1");
+            var other = new ResourceRef(ResourceUri.Create("workspace", "fixture", "file", "b.txt"), "r1");
+            var recovery = new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect, ToolRetryPolicy.RefreshRequired,
+                source.Identity, "text", "a.txt", readScope: ToolRecoveryReadScope.Whole);
+            var f = new KernelFixture(
+                KernelResponse(KernelCall("write", patch)),
+                KernelResponse(KernelCall("write", patch)),
+                KernelResponse(KernelCall("write", patch)),
+                KernelResponse(KernelCall("write", patch)),
+                KernelResponse(KernelCall("write", patch)),
+                KernelResponse(KernelCall("read", "{\"target\":\"b.txt\"}")),
+                KernelResponse(KernelCall("write", patch)),
+                KernelResponse(KernelCall("read", "{\"target\":\"a.txt\",\"line\":1}")),
+                KernelResponse(KernelCall("write", patch)),
+                KernelResponse(KernelCall("read", "{\"target\":\"a.txt\"}")),
+                KernelResponse(KernelCall("write", patch)), KernelResponse());
+            var writes = 0;
+            f.Tools.OnExecute = (context, token) => {
+                if (context.Call.Name == "read")
+                {
+                    var target = context.Call.ArgumentsJson.Contains("b.txt") ? other : source;
+                    var partial = context.Call.ArgumentsJson.Contains("line");
+                    // Recovery is typed resource evidence, independent of whether
+                    // the read has new bytes or even a result fingerprint.
+                    return Task.FromResult(KernelRecord(context, resourceEvidence: new[] {
+                        new ResourceEvidence(context.Call.Id, new ResourceAuthorityScopeId("workspace", "fixture"),
+                            target, "text", partial ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 1)
+                                : ResourceCoverage.Whole(), true, 1) }));
+                }
+                writes++;
+                if (writes == 4)
+                    return Task.FromResult(new ToolExecutionRecord(context, ToolExecutionOutcome.Error, context.StartedUtc,
+                        "Patch source must be refreshed.", mayHaveDispatched: false,
+                        evidence: new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.None), recovery: recovery));
+                var effect = new ResourceEffect("effect-" + context.Call.Id, "patch",
+                    writes < 4 ? ResourceEffectOutcome.VerifiedNoChange : ResourceEffectOutcome.VerifiedChanged,
+                    new[] { new ResourceImpact(source.Identity, ResourceImpactRelation.Exact,
+                        before: source, after: writes < 4 ? source : new ResourceRef(source.Uri, "r2")) });
+                return Task.FromResult(KernelRecord(context, resourceEffect: effect));
+            };
+
+            var result = await f.RunAsync(limits: new AgentRunLimits(16, 16));
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "an explicit retry can complete after exact refresh even with three earlier no-op results");
+            AssertEqual(5, writes, "three no-ops, one definite refusal and one recovered write reach runtime");
+            AssertEqual(3, f.Tools.Calls.Count(context => context.Call.Name == "read"), "all recovery reads reach runtime");
+            var refusals = result.AcceptedMessages.Where(message => message.Progress?.Outcome == ToolExecutionOutcome.NotDispatched).ToArray();
+            AssertEqual(3, refusals.Length, "immediate retry, unrelated read and partial read cannot satisfy whole-source recovery");
+            AssertTrue(refusals.All(message => ToolRunResultFactory.Create(message.Execution).ErrorCode == "repeated_tool_failure"),
+                "the typed failure owns retry rejection independently of no-progress advice");
+            AssertTrue(!string.IsNullOrWhiteSpace(f.Model.Requests[10].ProgressFeedback),
+                "exact recovery succeeds while old no-op repetition advice is still present");
+            AssertEqual<string>(null, f.Model.Requests[10].AcceptedMessages.Last().Progress.ResultFingerprint,
+                "exact source evidence releases recovery without inventing a new result fingerprint");
+            AssertEqual<string>(null, f.Model.Requests[11].ProgressFeedback,
+                "verified change clears the previous no-progress advice");
+            AssertEqual(ResourceEffectOutcome.VerifiedChanged,
+                result.AcceptedMessages.Last(message => message.Kind == AgentMessageKind.ToolResult).ResourceEffect.Outcome,
+                "the recovered patch publishes its verified change");
         }
 
         private static void ContextContinuityChangeRecovery()

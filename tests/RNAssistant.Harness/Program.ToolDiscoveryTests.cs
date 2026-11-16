@@ -909,13 +909,17 @@ namespace RNAssistant.Harness
                         if (requests > 1)
                         {
                             var last = LastToolResult(messages.ToList(), CapabilityToolCatalog.ReadToolId);
-                            if (requests <= 4)
-                            {
-                                AssertEqual("ok", (string)last["status"], "first three identical reads succeeded");
-                                AssertTrue((bool?)last["data"]["schemaInRequest"] == true && last["data"]["descriptor"] == null,
-                                    "schema is compacted only because the request already supplies it");
-                            }
-                            else AssertEqual("repeated_tool_no_progress", (string)last["data"]["code"], "only the fourth redundant read is blocked");
+                            AssertEqual("ok", (string)last["status"], "all explicitly proposed schema reads succeed");
+                            AssertTrue((bool?)last["data"]["schemaInRequest"] == true && last["data"]["descriptor"] == null,
+                                "schema is compacted only because the request already supplies it");
+                            var runtime = messages.Single(RuntimeContextPrompt.IsRuntimeContext).Content;
+                            var feedback = RuntimeMetadataValue(runtime, "completionFeedback");
+                            AssertEqual("runtime_context", (string)feedback["type"],
+                                "actual runtime metadata never reports successful repeated reads as a rejected decision");
+                            AssertEqual(requests >= 4, !string.IsNullOrWhiteSpace((string)feedback["progress_advisory"]),
+                                "actual runtime metadata carries advice after the third equal result");
+                            AssertTrue(!messages.Any(message => ModelProtocolWire.ReadServiceMessage(message, "decision_rejected") != null),
+                                "successful repeated reads do not add a separate false decision rejection");
                             if (strict)
                                 AssertTrue(JObject.Parse(options.ResponseSchemaJson).SelectTokens("$..name.const")
                                     .Any(value => (string)value == VbaToolCatalog.RunMacro), "strict request still offers the exact macro call");
@@ -939,8 +943,8 @@ namespace RNAssistant.Harness
                             ToolResultRole = role, MaxAgentFormatRetries = 1, ContextWindowOverrideTokens = 65536 }, catalog, null)
                         .GetAwaiter().GetResult();
                     AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "schema-read run finishes: " + result.AssistantText);
-                    AssertEqual(5, requests, "three reads, one no-progress rejection and finish");
-                    AssertEqual(3, session.LastRun.KernelState.Summary.ToolCounts.ReadOk, "first reads really executed successfully");
+                    AssertEqual(5, requests, "four reads and finish without a rejected tool result");
+                    AssertEqual(4, session.LastRun.KernelState.Summary.ToolCounts.ReadOk, "the fourth schema read really executes successfully");
                     AssertTrue(!session.Messages.Any(message => message.ToolName == VbaToolCatalog.RunMacro), "no macro execution or confirmation was requested");
                 });
         }

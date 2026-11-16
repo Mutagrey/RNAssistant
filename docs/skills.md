@@ -67,8 +67,8 @@ finishes on its original deadline/event before the safe pause; observation makes
 background model calls.
 Peer inputs arrive between model requests/tool calls without cancelling in-flight
 work; calling `agents.wait` is not required for delivery. Wait has a per-call timeout
-and no cumulative quota. The remaining generic no-progress issue for repeated
-identical timeouts is recorded in the
+and no cumulative quota. Repeated identical timeouts do not enter the generic
+unchanged-result counter; they remain bounded by run budgets and exact guards in the
 [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
 
 There are 17 unique built-in skill IDs across Office and Workspace; host catalogs
