@@ -1,5 +1,12 @@
 # Current-to-target migration map
 
+## Office edit continuation lifecycle — W5, 2026-11-16
+
+Owner: `ConversationApplicationService`. The public Office edit bridge delegates to
+`ExecuteAsync`; history rewrite and the following model turn stay in the same tracked
+worker. Removed the implicit controller-owned execution path for direct edits. No second
+lifecycle, queue worker or feature flag is introduced.
+
 ## Office bridge confirmation lifecycle — W5, 2026-11-16
 
 Owner: `ConversationApplicationService`. The public Office bridge confirmation delegates to

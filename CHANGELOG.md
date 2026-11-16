@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.11-dev
+
+- Прямое редактирование сообщения Office теперь выполняется в общем application worker
+  вместе с подтверждениями и Workspace-продолжениями. Это закрывает ещё один отдельный
+  controller-lifecycle и сохраняет единый shutdown/drain.
+
 ### 17.3.10-dev
 
 - Сохранение устаревшей редакторской версии prompt/catalog снова возвращает typed

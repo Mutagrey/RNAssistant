@@ -248,7 +248,21 @@ namespace RNAssistant.Office
             return ChatState(fork);
         }
 
-        public async Task<ChatStateResponse> EditMessageAsync(
+        public Task<ChatStateResponse> EditMessageAsync(
+            string text,
+            string id,
+            int index,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            Action<ChatStateResponse> chatStateChanged = null,
+            CancellationToken cancellationToken = default(CancellationToken),
+            string runId = null)
+        {
+            return _conversationApplication.ExecuteAsync(token => EditMessageOwnedAsync(
+                text, id, index, chatId, progress, chatStateChanged, token, runId), cancellationToken);
+        }
+
+        private async Task<ChatStateResponse> EditMessageOwnedAsync(
             string text,
             string id,
             int index,

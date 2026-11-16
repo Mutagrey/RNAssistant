@@ -2660,6 +2660,10 @@ already inside that worker, calls the exact owned continuation directly instead 
 a second worker. Bridge caller cancellation and application shutdown therefore share the
 Workspace continuation lifecycle.
 
+Direct Office message edits use the same tracked owner for their history rewrite and
+following model turn. The public bridge method delegates to `ExecuteAsync`; there is no
+separate controller lifecycle for this continuation.
+
 Approval continuation (`resolveProjectChat`) uses the same tracked Application
 owner. It returns a canonical snapshot after the kernel's first persisted resume
 checkpoint consumes the exact pending confirmation, before waiting for dispatch

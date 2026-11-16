@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Office edit continuation lifecycle — W5, 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.11-dev`. The public Office
+`EditMessageAsync` bridge path now enters `ConversationApplicationService.ExecuteAsync`;
+its history rewrite and subsequent model turn remain inside that tracked worker. This
+removes another controller-owned execution lifecycle and gives direct message edits the
+same shutdown/drain and caller-cancellation ownership as Workspace continuations.
+
+`architecture: Office edit uses application owner` checks the public bridge delegation
+and absence of a second public async lifecycle. Harness build and version validation
+pass. Windows/Office/WebView2 qualification remains separate.
+
 ## Unified accepted-run configuration — W5, 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.9-dev`. Workspace continuation now calls

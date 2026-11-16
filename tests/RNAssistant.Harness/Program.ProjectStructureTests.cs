@@ -303,6 +303,18 @@ namespace RNAssistant.Harness
                 "the already-owned queue worker calls the exact continuation without nesting another application worker");
         }
 
+        private static void OfficeEditUsesApplicationOwner()
+        {
+            var root = FindHarnessRepositoryRoot();
+            var chats = File.ReadAllText(Path.Combine(root, "src", "RNAssistant.Office",
+                "Controller", "AssistantController.Chats.cs"));
+            AssertContains(chats, "_conversationApplication.ExecuteAsync(token => EditMessageOwnedAsync",
+                "direct edit continuations run inside the shared ConversationApplicationService worker");
+            AssertTrue(chats.IndexOf("public async Task<ChatStateResponse> EditMessageAsync",
+                StringComparison.Ordinal) < 0,
+                "the public edit method cannot own a second execution lifecycle");
+        }
+
         private static void RunViewConsumersUseTypedProjection()
         {
             var root = FindHarnessRepositoryRoot();
