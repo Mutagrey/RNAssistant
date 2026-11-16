@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.7-dev
+
+- Улучшение prompt template из Библиотеки снова даёт агенту исполнимую инструкцию:
+  он использует текущий `core.patch` с точным `prompt: <key>`, а не удалённый
+  `prompts.save`. Сохранение по-прежнему проходит через exact source, confirmation
+  и read-back существующего resource owner.
+
 ### 17.3.6-dev
 
 - Исправлены блокировки инструментов после перехода на новое хранилище: макросы,

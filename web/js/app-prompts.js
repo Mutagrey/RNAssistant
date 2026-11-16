@@ -509,7 +509,7 @@
       context,
       { type: "agent_prompt", key: def.key, field: def.field });
     switchTab("chat");
-    setChatInputText("Улучши RNAssistant prompt template из добавленного контекста. Если правка нужна, предложи обновленный Markdown и после подтверждения используй prompts.save для сохранения.", true);
+    setChatInputText("Улучши RNAssistant prompt template из добавленного контекста. Если правка нужна, предложи обновлённый Markdown и после подтверждения используй core.patch для точного target prompt: <key> с old/new из актуального source.", true);
   }
 
   function cancelPromptSettingsWrite() {

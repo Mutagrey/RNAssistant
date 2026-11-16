@@ -157,15 +157,18 @@ namespace RNAssistant.Harness
                     "prompt evidence retains exact source and its publication dependency");
                 var reducer = new EvidenceStateReducer();
                 AssertEqual(EvidenceState.Current, reducer.Reduce(evidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "original prompt evidence is current");
-                var saved = executor.ExecuteManual(Command(PromptToolCatalog.SaveToolId, "promptKey", "systemPrompt", "value", "# Replacement"),
+                var revised = original.Replace("Published prompt", "Revised prompt");
+                var saved = executor.ExecuteManual(Command("core.patch", "targets", PatchTargets(
+                        PatchSection("prompt: systemPrompt", EditSet(
+                            Edit("Published prompt", "Revised prompt"))))),
                     tools, new AppSettings(), false, true, session);
-                AssertTrue(saved.Success, "existing guarded save publishes the replacement: " + saved.Message);
+                AssertTrue(saved.Success, "guarded core.patch publishes the replacement: " + saved.Message);
                 AssertEqual(EvidenceState.Superseded, reducer.Reduce(evidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "saving invalidates prior prompt evidence through the shared reducer");
                 AssertEqual(EvidenceState.Current, reducer.Reduce(defaultEvidence, executor.ResourceAuthority.CaptureMany(new[] { scope })).State, "editing current prompts does not replace builtin defaults");
                 AssertEqual(original.Substring(0, 64), executor.ResourceGateway.Read(session, new ResourceReadRequest {
                     Reference = evidence.Resource, Representation = "text", MaxChars = 64 }).Result.Text, "historical prompt remains exact after save");
                 settings.SystemPrompt = "UNPUBLISHED";
-                AssertEqual("# Replacement", (string)JObject.Parse(read("prompt: systemPrompt").Result.DataJson)["text"], "mutable settings cannot bypass publication");
+                AssertEqual(revised, (string)JObject.Parse(read("prompt: systemPrompt").Result.DataJson)["text"], "mutable settings cannot bypass publication");
                 AssertEqual(0, adapter.VbaBackendCalls.Count, "prompt inspection never discovers live Office/VBA");
             });
         }
@@ -215,184 +218,42 @@ namespace RNAssistant.Harness
             WithTempPaths(delegate(AppDataPaths paths)
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
-                var global = new AppSettings { Model = "global-model", SystemPrompt = "Old prompt" };
+                var settings = new AppSettings
+                {
+                    Model = "global-model",
+                    SystemPrompt = "# Prompt\nold\n"
+                };
                 var executor = new OfficeToolExecutor(
                     adapter,
                     new VbaJournalStore(paths),
                     new SkillStore(paths),
                     new ToolStore(paths),
-                    () => global,
-                    value => global = value);
-                var runtime = global.Clone();
-                runtime.Model = "per-chat-model";
-                var definitions = executor.GetControllerTools()
-                    .Where(tool => PromptToolCatalog.Owns(tool.Id))
-                    .ToList();
-                AssertEqual(1, definitions.Count,
-                    "complete prompt family is registered");
-                var saveDefinition = definitions.Single(tool =>
-                    tool.Id == PromptToolCatalog.SaveToolId);
-                AssertEqual(ToolEffect.Write,
-                    saveDefinition.Policy.Effect,
-                    "prompt save effect");
-                AssertEqual(ToolVerification.Tool,
-                    saveDefinition.Policy.Verification,
-                    "prompt save verification");
-                AssertTrue(saveDefinition.Policy.RequiresConfirmation,
-                    "prompt save requires confirmation");
-                AssertTrue(saveDefinition.ArgumentSchemaJson.Length <
-                        CapabilityCatalogService.MaximumDescriptorCharacters,
-                    "prompt save descriptor remains discoverable");
-                AssertEqual("agent",
-                    string.Join(",", saveDefinition.Policy.AllowedModes),
-                    "prompt tools are Agent-only");
-
-                var native = executor.CreateNativeRuntime(
-                    NewSession(adapter), definitions,
-                    new AppSettings { AutoConfirmToolActions = false },
-                    "agent", false,
-                    (execution, preparation) => "prompt_pending", manualRun: true);
-                AssertTrue(native.Describe(new ToolCall(
-                        "prompt_save_policy", PromptToolCatalog.SaveToolId,
-                        "{}")) != null,
-                    "exact prompt save has a native binding");
-                AssertTrue(native.Describe(new ToolCall(
-                        "prompt_alias", PromptToolCatalog.SaveToolId
-                            .ToUpperInvariant(), "{}")) == null,
-                    "prompt save has no case alias");
-
-                var empty = executor.ExecuteManual(
-                    new ToolInvocation { ToolId = "prompts.save" },
-                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
-                    runtime,
-                    false,
-                    false);
-                AssertTrue(!empty.Success, "empty prompt save fails before confirmation");
-                AssertEqual("invalid_arguments", empty.ErrorCode,
-                    "empty prompt save is rejected by its schema");
-
-                var guardedArguments = new JObject
-                {
-                    ["promptKey"] = "systemPrompt",
-                    ["value"] = "Guarded prompt"
-                };
-                var pending = ExecutePromptNative(
-                    native, PromptToolCatalog.SaveToolId, guardedArguments);
+                    () => settings.Clone(),
+                    value => settings = value.Clone(),
+                    paths);
+                executor.CaptureCatalogs();
+                var session = NewSession(adapter);
+                var pending = PrepareVbaNative(executor, session,
+                    Command("core.patch", "targets", PatchTargets(
+                        PatchSection("prompt: systemPrompt", EditSet(
+                            Edit("old", "new", new[] { "# Prompt" }, null))))));
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation,
-                    pending.Outcome,
-                    "prompt save waits for confirmation");
-                AssertTrue(!string.IsNullOrWhiteSpace(
-                        pending.PreparedStateJson),
-                    "prompt save persists an exact preparation guard");
-                AssertEqual("Old prompt", global.SystemPrompt,
-                    "preparation does not mutate settings");
-                var guarded = ConfirmPromptNative(native, pending);
-                AssertEqual(ToolExecutionOutcome.Ok, guarded.Outcome,
-                    "confirmed prompt save succeeds");
-                AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
-                    guarded.Evidence.Dispatch,
-                    "prompt save marks its dispatch boundary");
-                AssertEqual(ToolEffectEvidence.VerifiedChange,
-                    guarded.Evidence.Effect,
-                    "prompt save verifies the written value");
-                AssertEqual("Guarded prompt", global.SystemPrompt,
-                    "confirmed prompt save mutates settings");
+                    pending.Record.Outcome,
+                    "prompt source edit waits for confirmation");
+                var completed = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome,
+                    "confirmed prompt source edit succeeds");
+                AssertEqual("# Prompt\nnew\n", settings.SystemPrompt,
+                    "published prompt source is updated");
+                AssertEqual("global-model", settings.Model,
+                    "prompt save does not copy the per-chat model into global settings");
 
-                var unchangedPending = ExecutePromptNative(
-                    native, PromptToolCatalog.SaveToolId, guardedArguments);
-                var unchanged = ConfirmPromptNative(
-                    native, unchangedPending);
-                AssertEqual(ToolExecutionOutcome.Ok, unchanged.Outcome,
-                    "unchanged prompt save succeeds");
-                AssertEqual(ToolDispatchEvidence.NotDispatched,
-                    unchanged.Evidence.Dispatch,
-                    "unchanged prompt save avoids dispatch");
-                AssertEqual(ToolEffectEvidence.VerifiedNoChange,
-                    unchanged.Evidence.Effect,
-                    "unchanged prompt save is explicit");
-
-                var stalePending = ExecutePromptNative(
-                    native, PromptToolCatalog.SaveToolId,
-                    new JObject
-                    {
-                        ["promptKey"] = "systemPrompt",
-                        ["value"] = "Intended prompt"
-                    });
-                global.SystemPrompt = "External prompt";
-                var stale = ConfirmPromptNative(native, stalePending);
-                AssertEqual(ToolExecutionOutcome.Error, stale.Outcome,
-                    "stale prompt preparation is rejected");
-                AssertEqual(ToolDispatchEvidence.NotDispatched,
-                    stale.Evidence.Dispatch,
-                    "stale prompt save does not dispatch");
-                AssertContains(stale.Result.DataJson,
-                    "prompt_settings_changed",
-                    "stale prompt save exposes a stable error code");
-                AssertEqual(ToolFailureKind.RejectedNoEffect,
-                    stale.Recovery.FailureKind,
-                    "stale prompt preparation certifies no settings effect");
-                AssertEqual(ToolRetryPolicy.Replan,
-                    stale.Recovery.RetryPolicy,
-                    "stale prompt preparation requires refreshed intent");
-
-                var ignored = new AppSettings
-                {
-                    Model = "ignored-model",
-                    SystemPrompt = "Ignored old prompt"
-                };
-                var mismatchExecutor = new OfficeToolExecutor(
-                    adapter,
-                    new VbaJournalStore(paths),
-                    new SkillStore(paths),
-                    new ToolStore(paths),
-                    () => ignored,
-                    value => { });
-                var mismatchDefinitions = mismatchExecutor
-                    .GetControllerTools()
-                    .Where(tool => PromptToolCatalog.Owns(tool.Id))
-                    .ToList();
-                var mismatchRuntime = mismatchExecutor.CreateNativeRuntime(
-                    NewSession(adapter), mismatchDefinitions,
-                    new AppSettings { AutoConfirmToolActions = true },
-                    "agent", false, manualRun: true);
-                var mismatch = ExecutePromptNative(
-                    mismatchRuntime, PromptToolCatalog.SaveToolId,
-                    new JObject
-                    {
-                        ["promptKey"] = "systemPrompt",
-                        ["value"] = "Ignored new prompt"
-                    });
-                AssertEqual(ToolExecutionOutcome.Unknown, mismatch.Outcome,
-                    "failed prompt read-back is unknown");
-                AssertEqual(ToolDispatchEvidence.MayHaveDispatched,
-                    mismatch.Evidence.Dispatch,
-                    "failed prompt read-back retains dispatch evidence");
-                AssertEqual(ToolEffectEvidence.Unknown,
-                    mismatch.Evidence.Effect,
-                    "failed prompt read-back retains unknown effect");
-
-                var promptTools = OfficeToolCatalog.ForHost(adapter.HostName)
-                    .Concat(executor.GetControllerTools()).ToList();
-                foreach (var pair in new[]
-                {
-                    new[] { "systemPrompt", "New prompt" },
-                    new[] { "agentToolsPrompt", "New tool prompt" },
-                    new[] { "agentSkillsPrompt", "New skill prompt" },
-                    new[] { "attachmentAnalysisPrompt", "New attachment prompt" }
-                })
-                {
-                    var result = executor.ExecuteManual(
-                        Command("prompts.save", "promptKey", pair[0],
-                            "value", pair[1]), promptTools, runtime,
-                        false, true);
-                    AssertTrue(result.Success,
-                        "one-key prompt save succeeds: " + pair[0]);
-                }
-                AssertEqual("New prompt", global.SystemPrompt, "global prompt updated");
-                AssertEqual("New tool prompt", global.AgentToolsPrompt, "tool prompt updated");
-                AssertEqual("New skill prompt", global.AgentSkillsPrompt, "skill prompt updated");
-                AssertEqual("New attachment prompt", global.AttachmentAnalysisPrompt, "attachment prompt updated");
-                AssertEqual("global-model", global.Model, "per-chat model is not copied into global settings");
+                string error;
+                AssertTrue(!executor.GetControllerTools().Any(tool => tool.Id == "prompts.save"),
+                    "retired direct prompt tool is not model-facing");
+                AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
+                        new ToolCall("retired_prompt", "prompts.save", "{}"), out error),
+                    "retired prompt save contract is rejected");
             });
         }
 

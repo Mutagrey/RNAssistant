@@ -30,7 +30,7 @@ function fixture(loadPrompts = true) {
       documentElement: { getAttribute: () => "light", setAttribute() {}, style: { setProperty() {} } } },
     isPanelActive: () => !!context.libraryVisible, markdown: text => text,
     RNAssistantNavigationPane: { mount(options) { return { render(nodes) { trees.push(nodes); options.tree.treeNodes = nodes; }, setState() {} }; } },
-    RNAssistantDockWorkspace: { registerTargetRoute() {} },
+    RNAssistantDockWorkspace: { registerTargetRoute() {}, isVisible() { return false; } },
     RNAssistantNavigationTree: { icon: name => `<svg data-icon="${name}"></svg>`, render: (root, nodes) => { trees.push(nodes); root.treeNodes = nodes; } },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
     modelCatalogPreview: { modelCatalog: null }, renderModelControls() {}, renderModelCapabilityList() {},
@@ -178,8 +178,11 @@ function fixture(loadPrompts = true) {
   {
     ["app-prompts.js", "app-settings.js", "app-icons.js", "app-navigation-tree.js", "app-tools.css"].forEach(file =>
       assert.match(read("index.html"), new RegExp(file.replace(/\./g, "\\.") + "\\?v=[^\"'\\s]+")));
-    assert.ok(read("js/app-prompts.js").includes("fetch: window.fetch.bind(window)"));
-    assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys and retired form reader removal");
+    const promptSource = read("js/app-prompts.js");
+    assert.ok(promptSource.includes("fetch: window.fetch.bind(window)"));
+    assert.match(promptSource, /core\.patch[^"\n]*prompt: <key>/);
+    assert.ok(!promptSource.includes("используй prompts.save"));
+    assert.ok(!read("js/app-settings.js").includes("readPromptSettings")); console.log("PASS direct-cutover delivery keys, current core.patch guidance and retired form reader removal");
   }
   console.log("OK passed=13 failed=0 total=13");
 })().catch(error => { console.error(error); process.exitCode = 1; });
