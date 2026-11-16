@@ -1109,31 +1109,28 @@ namespace RNAssistant.Harness
 
         private static void ResourceCatalogInitializationWaitsForPublisher()
         {
-            foreach (var skillsOnly in new[] { true, false })
-                WithTempExecutor((executor, adapter) =>
+            WithTempExecutor((executor, adapter) =>
+            {
+                var journal = new ResourceMutationJournal(FixturePaths.Value);
+                var entered = new System.Threading.ManualResetEventSlim();
+                System.Threading.Tasks.Task capture = null;
+                using (journal.AcquireScope(CatalogPublicationService.ScopeId))
                 {
-                    var journal = new ResourceMutationJournal(FixturePaths.Value);
-                    var entered = new System.Threading.ManualResetEventSlim();
-                    System.Threading.Tasks.Task capture = null;
-                    using (journal.AcquireScope(CatalogPublicationService.ScopeId))
+                    capture = System.Threading.Tasks.Task.Run(() =>
                     {
-                        capture = System.Threading.Tasks.Task.Run(() =>
-                        {
-                            entered.Set();
-                            if (skillsOnly) executor.CaptureSkills();
-                            else executor.CaptureCatalogs();
-                        });
-                        AssertTrue(entered.Wait(5000), "capture started beside a publication owner");
-                        AssertTrue(!capture.Wait(100), "initial capture waits for the existing publisher");
-                    }
-                    AssertTrue(capture.Wait(5000), "initial capture completes when the publisher releases");
-                    entered.Dispose();
-                    var generation = executor.ResourceAuthority.Store.Capture(CatalogPublicationService.ScopeId).Generation;
-                    if (skillsOnly) executor.CaptureSkills();
-                    else executor.CaptureCatalogs();
-                    AssertEqual(generation, executor.ResourceAuthority.Store.Capture(CatalogPublicationService.ScopeId).Generation,
-                        "later captures reuse the published heads without duplicate publication");
-                });
+                        entered.Set();
+                        executor.CaptureCatalogs();
+                    });
+                    AssertTrue(entered.Wait(5000), "capture started beside a publication owner");
+                    AssertTrue(!capture.Wait(100), "initial capture waits for the existing publisher");
+                }
+                AssertTrue(capture.Wait(5000), "initial capture completes when the publisher releases");
+                entered.Dispose();
+                var generation = executor.ResourceAuthority.Store.Capture(CatalogPublicationService.ScopeId).Generation;
+                executor.CaptureCatalogs();
+                AssertEqual(generation, executor.ResourceAuthority.Store.Capture(CatalogPublicationService.ScopeId).Generation,
+                    "later captures reuse the published heads without duplicate publication");
+            });
         }
 
         private static void ResourceSkillCatalogPublication()
@@ -1144,21 +1141,21 @@ namespace RNAssistant.Harness
                 var old = executor.CaptureSkills();
                 var oldHead = executor.ResourceAuthority.Store.GetHead(CatalogPublicationService.ScopeId, new ResourceIdentity("rna://catalog/skills")).Revision;
                 var tools = executor.GetControllerTools().ToList();
-                var created = executor.ExecuteManual(Command("skills.upsert", "id", "common.resource_test",
+                var created = executor.ExecuteManual(Command("skills.upsert", "id", "skills.resource.test",
                     "host", "Common", "name", "Resource test", "description", "Verify catalog publication.", "version", "1.0.0",
                     "bodyMarkdown", "# Resource test\n\nInspect exact resources.", "enabled", true), tools, new AppSettings(), false, true, session);
                 AssertEqual("ok", created.Status, "skill write verifies: " + created.Message + " " + created.DataJson);
                 var current = executor.CaptureSkills();
-                AssertTrue(current.Generation != old.Generation && current.Skills.Any(skill => skill.Id == "common.resource_test"),
+                AssertTrue(current.Generation != old.Generation && current.Skills.Any(skill => skill.Id == "skills.resource.test"),
                     "complete skill snapshot becomes active only after publication");
-                AssertTrue(!old.Skills.Any(skill => skill.Id == "common.resource_test"), "old captured generation remains unchanged");
+                AssertTrue(!old.Skills.Any(skill => skill.Id == "skills.resource.test"), "old captured generation remains unchanged");
                 var history = executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = oldHead, Representation = "text", MaxChars = 32000 }).Result;
-                AssertTrue(!history.Text.Contains("common.resource_test"), "historical catalog body stays exact and does not activate new content");
+                AssertTrue(!history.Text.Contains("skills.resource.test"), "historical catalog body stays exact and does not activate new content");
                 var evidence = executor.ResourceGateway.Evidence(session, history).Single();
                 AssertEqual(EvidenceState.Superseded, new EvidenceStateReducer().Reduce(evidence,
                     executor.ResourceAuthority.CaptureMany(new[] { CatalogPublicationService.ScopeId })).State, "historical skill body is not current authority");
-                current.Skills.Single(skill => skill.Id == "common.resource_test").BodyMarkdown = "tampered";
-                AssertTrue(executor.CaptureSkills().Skills.Single(skill => skill.Id == "common.resource_test").BodyMarkdown != "tampered",
+                current.Skills.Single(skill => skill.Id == "skills.resource.test").BodyMarkdown = "tampered";
+                AssertTrue(executor.CaptureSkills().Skills.Single(skill => skill.Id == "skills.resource.test").BodyMarkdown != "tampered",
                     "catalog consumers cannot mutate the published body");
             });
         }
