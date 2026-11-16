@@ -137,8 +137,9 @@ input through model read/history, content/member identity (saved-entry separatio
 still open in A3 above), changed source and
 foreign-owner refusal. `local browser:` passes 9/9, including closed annotation capture.
 `html-visual-selection-draft.test.js` covers all four providers with the common command;
-`html-annotations.test.js` covers exact recipient, stale generation, late draft cleanup
-and the unchanged overlay at 420px/125%. Mock compiles the actual controller/bridge.
+`html-annotations.test.js` covers toggle exit, exact recipient, persistent draft overlay,
+chat-draft deletion, stale generation, late draft cleanup and the overlay at 420px/125%.
+Mock compiles the actual controller/bridge.
 Native WinForms/WebView2 compilation and real Windows interactions remain open.
 
 ## 07 Inspector / final local UI — 2026-11-13
@@ -511,8 +512,9 @@ core.read новой страницы. Screenshot/image delivery и retained mul
   trusted input blocks actions even after a fresh read, stale epoch resume refuses,
   explicit resume invalidates old observation; existing effect/unknown/cursor checks pass.
 - `external-browser-read.test.js` — semantic/privacy/bounds unchanged.
-- `external-browser.test.js` — production Shell manual banner/typed resume revision,
-  hide/move/restore/close/late replies and narrow/125%; native renderer is synthetic.
+- `browser-native-layout.test.js` — production Shell loading replace, address focus,
+  rightmost overflow, automatic typed handoff, hide/move/restore/close/late replies
+  and narrow/125%; native renderer is synthetic.
 
 Визуально просмотрены [Browser wide](../ui/review/browser-control-wide.png),
 [narrow/125%](../ui/review/browser-control-narrow.png), [настройки wide](../ui/review/browser-sites-wide.png),
@@ -520,10 +522,10 @@ core.read новой страницы. Screenshot/image delivery и retained mul
 нет: fill/click всё ещё packaged probe only. Не выдавать Chrome или Harness за WebView2 qualification.
 
 Windows-ревью (Open):
-1. Во время read → fill/click нажать/ввести текст на probe: banner «Вы управляете»,
+1. Во время read → fill/click нажать/ввести текст на probe: отдельного banner нет,
    новое действие не выполняется, bound Office/Workspace Run достигает pause без LLM polling.
-2. Нажать «Продолжить агентом»: старый prepared action не replay; новая операция
-   возможна только после нового read. Проверить ввод во время animation/resume,
+2. Уйти из Browser в Shell/чат: UI отправляет typed resume; старый prepared action не replay,
+   новая операция возможна только после нового read. Проверить ввод во время animation/resume,
    hide/move/navigation и отдельный Stop: поздний release не снимает более новую паузу.
 3. Открыть внешний сайт вручную при пустом списке: страница доступна пользователю,
    model read отказывает. Добавить exact rule/маску, прочитать; отозвать — следующий

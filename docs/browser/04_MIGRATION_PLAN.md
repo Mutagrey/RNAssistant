@@ -185,8 +185,9 @@ Approved scope: пользователь «Коммит и далее давай
 отдельного списка сайтов агента при свободной ручной навигации. P6c зафиксирован
 `67a45b29`; этот срез выполнен перед возвращением к P4a.
 
-Результат: sticky manual control у native page, existing exact run pause/resume,
-«Продолжить агентом» с новым read/preparation и без очереди старых команд.
+Результат: sticky manual control у native page, existing exact run pause и typed
+resume при уходе пользователя из Browser; новое read/preparation и никакой очереди
+старых команд. Отдельного resume-banner в Browser нет.
 `BrowserAgentAllowedSites` — отдельные exact HTTP(S) origins / `*.domain` masks;
 HTML network grants остаются прежними. Owner parsing/settings — Core; admission и
 native control — Office Browser; run pause — existing Inbox/endpoint, UI — Browser view.

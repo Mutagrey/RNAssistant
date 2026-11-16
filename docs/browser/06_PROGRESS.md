@@ -1,5 +1,17 @@
 # Universal Browser: статус
 
+## Browser controls and automatic handoff — 2026-11-16
+
+Preview toolbar now swaps Reload for Stop only while the page is starting, hides all
+lower actions while the address suggestions are open, keeps the overflow trigger last,
+moves Comparison into that menu, removes exact-address copy controls and applies the
+shared accent selected state. The separate manual-control banner is removed; leaving
+Browser for the Shell/chat sends the existing exact `ResumeAgent` command while the
+agent waits during user input. Annotation has a repeat-click exit, persistent exact
+page markers, draft deletion and hover-only menu details. Focused Chromium fixtures
+were updated; Playwright is absent locally, so native Windows/WebView2 and visual
+evidence remain open.
+
 ## Discussion button and independent bindings — 2026-11-14
 
 `16.27.1-dev`: основная кнопка открывает связанный чат или создаёт новый для источника,
@@ -608,8 +620,9 @@ Office/WebView — experimental P5a native adapter. P1, P2a и P2b реализ�
 ## P6d: ручное управление и сайты агента — In Review, 2026-11-11
 
 Ручной ввод блокирует mutations страницы и запрашивает паузу exact bound Run через
-existing Inbox; другой агент не может её снять. «Продолжить агентом» инвалидирует
-старые observations/preparations; неизвестный эффект и Stop сохраняют свои guards.
+existing Inbox; другой агент не может её снять. Текущая редакция 2026-11-16 отправляет
+typed resume при явном уходе из Browser и инвалидирует старые observations/preparations;
+неизвестный эффект и Stop сохраняют свои guards.
 Отдельный список сайтов принимает exact HTTP(S) origins и `*.domain`; default deny
 для external model reads, свободная ручная навигация, отдельные HTML network grants.
 

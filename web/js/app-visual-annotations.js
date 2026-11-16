@@ -281,7 +281,7 @@
       layer.querySelectorAll(".visual-annotation-marker").forEach(function (node) {
         existing[node.dataset.annotationId] = node;
       });
-      if (!browserOpen() || context.button.getAttribute("aria-pressed") !== "true") {
+      if (!browserOpen()) {
         Object.keys(existing).forEach(function (id) { existing[id].remove(); });
         return;
       }

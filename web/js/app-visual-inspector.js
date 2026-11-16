@@ -296,7 +296,7 @@
 
   function createHost(options) {
     var frame = options.frame, button = options.button, status = options.status;
-    var generation = 0, ready = false, active = false, activating = false, selected = null, watched = [];
+    var generation = 0, ready = false, active = false, activating = false, selected = null, watched = [], activationTimer = 0;
     var pendingReveal = null, lastParentPointerExit = 0;
     var themeObserver = null;
     if (!frame || !button || !status || typeof options.send !== "function") throw new Error("Visual inspector host is incomplete.");
@@ -315,10 +315,12 @@
         type: "rnassistant-visual-inspector-control", generation: generation, operation: operation,
         watches: operation === "watch" ? watched : undefined, id: id, palette: palette };
       delete message.type;
-      Promise.resolve(options.send(message)).catch(function (error) { if (message.generation !== generation) return; ready = active = activating = false; selected = null; paint(); changed("unavailable"); status.textContent = error.message; });
+      Promise.resolve(options.send(message)).catch(function (error) { if (message.generation !== generation) return;
+        if (activationTimer) { clearTimeout(activationTimer); activationTimer = 0; }
+        ready = active = activating = false; selected = null; paint(); changed("unavailable"); status.textContent = error.message; });
     }
     function paint() {
-      button.disabled = !ready || activating || typeof options.enabled === "function" && !options.enabled();
+      button.disabled = !ready || typeof options.enabled === "function" && !options.enabled();
       button.setAttribute("aria-pressed", active ? "true" : "false");
       if (button.dataset.browserControl === "true" && window.RNAssistantIcons) {
         button.classList.add("browser-annotate");
@@ -334,6 +336,7 @@
       if (!active) status.textContent = "";
     }
     function reset() {
+      if (activationTimer) { clearTimeout(activationTimer); activationTimer = 0; }
       if (ready) control("dispose");
       generation++; ready = false; active = false; activating = false; selected = null; paint(); changed("reset");
       return generation;
@@ -352,6 +355,7 @@
       }
       if (message.type === "rnassistant-visual-inspector-activated") {
         if (activating) {
+          if (activationTimer) { clearTimeout(activationTimer); activationTimer = 0; }
           activating = false; active = true; paint(); changed();
           status.textContent = "Наведите и нажмите на элемент. Escape — выход.";
         }
@@ -362,7 +366,7 @@
           options.onLocations(message.locations);
         return;
       }
-      if (message.type === "rnassistant-visual-inspector-stopped") { active = false; activating = false; selected = null; paint(); changed("stopped"); return; }
+      if (message.type === "rnassistant-visual-inspector-stopped") { if (activationTimer) { clearTimeout(activationTimer); activationTimer = 0; } active = false; activating = false; selected = null; paint(); changed("stopped"); return; }
       if (!active || !ready) return;
       if (message.type === "rnassistant-visual-inspector-unsupported") {
         selected = null;
@@ -391,14 +395,22 @@
         (value.textExcerpt ? " · " + value.textExcerpt.slice(0, 80) : "");
     }
     function onClick() {
-      if (!ready || activating || button.disabled) return;
+      if (!ready || button.disabled) return;
+      if (activating) { deactivate(); return; }
       if (!active) {
         activating = true; control("activate"); paint();
         status.textContent = "Включаем выбор элемента…";
+        activationTimer = setTimeout(function () {
+          activationTimer = 0;
+          if (!activating) return;
+          activating = false; active = true; paint(); changed("activated");
+          status.textContent = "Наведите и нажмите на элемент. Escape — выход.";
+        }, 1500);
       } else deactivate();
     }
     function deactivate() {
       if (!active && !activating) return;
+      if (activationTimer) { clearTimeout(activationTimer); activationTimer = 0; }
       active = false; activating = false; selected = null; control("deactivate"); paint(); changed("deactivate");
     }
     function onParentPointerMove() {
@@ -423,6 +435,7 @@
       selection: function () { return selected; },
       selectionRecord: function () { return active && ready && selected ? { generation: generation, selection: selected } : null; },
       dispose: function () {
+        if (activationTimer) { clearTimeout(activationTimer); activationTimer = 0; }
         reset(); button.removeEventListener("click", onClick);
         window.removeEventListener("pointermove", onParentPointerMove, true);
         window.removeEventListener("blur", onWindowBlur);

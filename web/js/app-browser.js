@@ -29,7 +29,7 @@
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
     var sourcePage = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
-    var discussionBusy = false, createdDiscussion = null;
+    var discussionBusy = false, createdDiscussion = null, handoverPending = false, handoverRequested = false;
     function discussionContext() {
       var page = current, owner = page && page.target && page.target.ownerScope;
       if (!owner || page.status === "Home" || page.target.state !== "Ready" || !["Document", "Workspace"].includes(owner.kind))
@@ -86,12 +86,14 @@
       finally { discussionBusy = false; if (!disposed) surface.discussButton.disabled = false; }
     }
     function discuss() {
+      requestHandover();
       var context = discussionContext();
       return runDiscussion(context, function () {
         return context.page.chatBound && context.owner.chatId ? openDiscussion(context, context.owner) : newDiscussion(context);
       });
     }
     async function changeDiscussion(anchor) {
+      requestHandover();
       var context = discussionContext(), chats;
       if (context.owner.kind === "Workspace") {
         var catalog = await RNAssistantProjectChats.refreshCatalog();
@@ -120,11 +122,32 @@
       focus: function () { selectMode("preview"); RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: target.browserTabId,
         ownerScope: current.ownerScope, locator: current.url, title: current.title }); } });
     var placementKey = "", placementQueued = 0;
-    var control = document.createElement("div"); control.className = "browser-control"; control.hidden = true;
-    var controlText = document.createElement("span"); controlText.setAttribute("role", "status");
-    var resume = document.createElement("button"); resume.className = "secondary"; resume.textContent = "Продолжить агентом";
-    resume.onclick = async function () { resume.disabled = true; try { await command("ResumeAgent", { controlRevision: current.controlRevision }); } catch (error) { fail(error); } finally { resume.disabled = false; } };
-    control.append(controlText, resume); root.insertBefore(control, content);
+    function outsideBrowserControl(target) {
+      return !!target && !root.contains(target) && !(target.closest && target.closest('.rna-action-menu-popup, dialog[open], [aria-modal="true"]'));
+    }
+    function requestHandover() {
+      if (disposed || !active || !current || !current.chatBound) return;
+      handoverRequested = true;
+      sendHandover();
+    }
+    function sendHandover() {
+      if (disposed || !handoverRequested || handoverPending || !current || !current.manualControl || !current.chatBound) return;
+      var revision = current.controlRevision;
+      handoverPending = true;
+      command("ResumeAgent", { controlRevision: revision }).then(function () {
+        handoverPending = false; handoverRequested = false;
+      }, function (error) {
+        handoverPending = false; handoverRequested = false;
+        if (!disposed && current && current.manualControl) fail(error);
+      });
+    }
+    var handoverListeners = new AbortController();
+    document.addEventListener("pointerdown", function (event) {
+      if (outsideBrowserControl(event.target)) requestHandover(); else if (root.contains(event.target)) handoverRequested = false;
+    }, { capture: true, signal: handoverListeners.signal });
+    document.addEventListener("focusin", function (event) {
+      if (outsideBrowserControl(event.target)) requestHandover(); else if (root.contains(event.target)) handoverRequested = false;
+    }, { capture: true, signal: handoverListeners.signal });
     function nativeBounds(attachment) {
       var fallback = attachment && current && current.status === "Unavailable";
       var rect = (fallback ? content : viewport).getBoundingClientRect(), overlay = document.querySelector('dialog[open], [aria-modal="true"], .rna-action-menu-popup') || root.querySelector('.preview-surface-toolbar.is-address-focused, .preview-surface-completion:not([hidden]), .visual-annotation-editor');
@@ -160,6 +183,8 @@
     var providerActions = RNAssistantBrowserActions.mount(surface.actions, { target: function () { return current && current.target; },
       generation: function () { return current && current.documentGeneration; }, isCurrent: function () { return active && !disposed; },
       status: surface.status, error: fail, changeDiscussion: changeDiscussion, find: pageFind.open, canFind: pageFind.enabled,
+      compareAvailable: function () { return !!comparison && current && current.status !== "Home" && current.status !== "Removed"; },
+      compare: function () { return selectMode("diff"); },
       canScreenshot: function () { return active && !disposed && selectedMode === "preview" && current && current.status === "Ready" && current.attached && current.target.capabilities.media; },
       screenshotRequest: function () { return { browserTabId: target.browserTabId, sessionId: session, generation: current.documentGeneration }; },
       captureScreenshot: async function (request) {
@@ -282,7 +307,8 @@
     }
     function presentation() {
       surface.setDocument({ address: current && current.url || target.locator,
-        mode: selectedMode, supportedModes: current && current.status !== "Home" ? ["preview", "source"].concat(comparison ? ["diff"] : []) : [],
+        mode: selectedMode, loading: !!current && current.status === "Starting",
+        supportedModes: current && current.status !== "Home" ? ["preview", "source"] : [],
         canGoBack: current && current.canGoBack, canGoForward: current && current.canGoForward,
         back: function () { return command("Back"); }, forward: function () { return command("Forward"); },
         home: function () { return command("Home"); }, stop: function () { stopReads(); return command("Stop"); },
@@ -298,9 +324,6 @@
       if (comparison) { if (content.hidden) { comparison.activate(); layoutNative(); return; } comparison.deactivate(); }
       var nativeReady = !home && !removed && ["Starting", "Ready"].includes(current.status);
       viewport.hidden = selectedMode !== "preview" || !nativeReady;
-      control.hidden = !current.manualControl || !current.chatBound;
-      controlText.textContent = current.manualControl ? "Вы управляете" : "";
-      resume.hidden = !current.chatBound || !current.manualControl;
       empty.hidden = !home && !removed && (selectedMode === "source" || selectedMode === "preview" && nativeReady);
       layoutNative();
       source.hidden = files.hidden = home || removed || selectedMode !== "source";
@@ -341,6 +364,8 @@
         authorityRevision = -1; sourceInvalidated = false; sourceRefreshEpoch++;
       }
       current = value;
+      if (!value.manualControl) { handoverPending = false; handoverRequested = false; }
+      else sendHandover();
       if (value.visitRevision > recordedVisit && ["Ready", "Unavailable"].includes(value.status)) {
         RNAssistantDockWorkspace.recordNavigation(value); recordedVisit = value.visitRevision;
       }
@@ -401,7 +426,7 @@
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
       deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
+      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads(); live.delete(target.browserTabId); versionViews.delete(target.browserTabId); versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
         pageFind.dispose(); annotationHost.dispose(); if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
         RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
     };

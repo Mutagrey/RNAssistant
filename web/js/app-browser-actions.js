@@ -5,7 +5,7 @@
     var copies = new Map(), disposed = false, abort = new AbortController();
     var create = document.createElement("button"); create.type = "button"; create.className = "icon-btn compact preview-surface-persistent";
     create.innerHTML = RNAssistantIcons.render("copy"); create.setAttribute("aria-label", "Создать проект");
-    var more = RNAssistantActionMenu.createTrigger("Действия страницы"); more.classList.add("compact"); root.append(create, more);
+    var more = RNAssistantActionMenu.createTrigger("Действия страницы"); more.classList.add("compact", "preview-surface-actions-overflow"); root.append(create, more);
     function key(target) { return target && (target.resourceUri || target.workspaceId + ":" + target.savedVersionId); }
     function capture(target) { var generation = context.generation(); return function () { return !disposed && context.isCurrent() &&
       context.generation() === generation && key(context.target()) === key(target); }; }
@@ -45,6 +45,7 @@
       var target = context.target(); if (!target || target.state !== "Ready") return;
       var caps = target.capabilities, copy = operation(target), items = [];
       if (context.canFind && context.canFind()) items.push({ label: 'Найти на странице', icon: 'search', onSelect: context.find });
+      if (context.compareAvailable && context.compareAvailable()) items.push({ label: "Сравнение", icon: "diff", onSelect: context.compare });
       if (context.canScreenshot) items.push({ label: "Скачать снимок страницы", icon: "image", disabled: !context.canScreenshot(), onSelect: function () {
         var request = context.screenshotRequest(), accepted = capture(target);
         return RNAssistantArtifactDownload.save({ title: "rnassistant-page.png" }, { send: send, fetch: window.fetch.bind(window), signal: abort.signal,
@@ -62,12 +63,11 @@
           open: target.kind === "WorkspaceHtmlProject" ? function () { return send("exportBrowserProject", { target: target }); } : null,
           close: target.kind === "WorkspaceHtmlProject" ? function (lease) { return send("closeBrowserProjectTransfer", { target: target, leaseId: lease }); } : null }); } });
       if (caps.createProject || copy) items.push(copy && copy.result ? { label: "Открыть созданный проект", icon: "folder", onSelect: function () { return RNAssistantProjectChats.open(copy.result.workspaceId); } } :
-        { label: "Создать проект из снимка", icon: "copy", status: copy && copy.issue || (copy && copy.pending ? "Проект создаётся…" : "Копия точных исходников в приложении"), disabled: !!copy || !caps.createProject,
+        { label: "Создать проект из снимка", icon: "copy", status: copy && copy.issue || (copy && copy.pending ? "Проект создаётся…" : "Точные исходники будут скопированы в приложение как редактируемый проект"), disabled: !!copy || !caps.createProject,
           onSelect: function () { return createProject(target); } });
-      if (target.resourceUri) items.push({ label: "Копировать точную ссылку", icon: "link", onSelect: function () { return copyTextResult(target.resourceUri); } });
       if (context.changeDiscussion) items.push({ label: "Связать с другим чатом…", icon: "chat", onSelect: function () { return context.changeDiscussion(more).catch(context.error); } });
       if (!items.length) items.push({ label: "Нет дополнительных действий", disabled: true, icon: false });
-      RNAssistantActionMenu.open(more, items);
+      RNAssistantActionMenu.open(more, items, { label: "Действия страницы", compact: true });
     };
     refresh();
     return { refresh: refresh, deactivate: function () { abort.abort(); abort = new AbortController(); RNAssistantActionMenu.closeWithin(root); },

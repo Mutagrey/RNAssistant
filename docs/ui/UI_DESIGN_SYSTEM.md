@@ -187,12 +187,12 @@ External Browser fixture сохраняет narrow/125% coverage. Нового �
 
 ## Browser: ручное управление — In Review, 2026-11-11
 
-`external-browser-control` использует общий secondary button и existing spacing/type
-tokens; строка flex-wrap переносится при сужении. Текст «Вы управляете» имеет
-`role=status`, действие «Продолжить агентом» доступно с клавиатуры и disabled пока
-ожидает ответ. Никакой блокировки ручного ввода страницы или нового modal overlay.
-Settings используют прежние label/textarea/help/save components, без отдельного
-pattern editor. [Wide/narrow review](../browser/05_TEST_MATRIX.md#p6d).
+`external-browser-control` не добавляет отдельную полосу или кнопку в Browser.
+Ручной режим остаётся невидимой частью ownership: агент ждёт, пока пользователь
+работает со страницей, и получает typed resume после явного ухода в Shell/чат.
+Никакой блокировки ручного ввода страницы или нового modal overlay. Settings используют
+прежние label/textarea/help/save components, без отдельного pattern editor.
+[Wide/narrow review](../browser/05_TEST_MATRIX.md#p6d).
 
 <a id="browser-action-visualization"></a>
 ### Визуализация действий Browser — In Review, 2026-11-11
@@ -302,31 +302,36 @@ Native composer picker и recovery portal взаимоисключаются: «
 аннотация — `selection`, версии — `clock`, разделы — `layers`, обсуждение — `chat`.
 У каждой иконки есть title/aria-label; выбранный режим и выбор элемента имеют
 aria-pressed. Размеры, hover/focus/active принадлежат общим components/tokens.
-Слева: назад, вперёд, reload, selection. Затем округлый адрес; справа — provider
-controls. Публикация плагина — upload icon с tooltip; сведения — layers для CAS,
-folder для файлов. Все кнопки используют общую compact геометрию.
+Слева: назад, вперёд, reload/stop, selection. При фактической загрузке reload
+заменяется на stop; в готовом состоянии stop скрыт. Затем округлый адрес; справа —
+provider controls. Активный режим страницы/исходника использует `accent-soft` и
+`accent`, а не белый selected-фон. Публикация плагина — upload icon с tooltip;
+сведения — layers для CAS, folder для файлов. Все кнопки используют общую compact
+геометрию.
 
-Редкие действия плагина — общий ActionMenu `⋯`; версии открываются через clock.
+Редкие действия плагина и «Сравнение» — общий ActionMenu `⋯`; trigger всегда
+последний справа. Версии открываются через clock.
 История HTML и plugin также использует portalled ActionMenu, чтобы меню не сжималось
 до ширины иконки и не обрезалось Dock surface; cursor/порции принадлежат прежним owners.
 У saved HTML clock остаётся доступен при одной версии; текущая публикация и выбранный
 снимок отмечаются отдельно. Ошибка продолжения предлагает перечитать список с начала.
 Постоянной строки title/revision и поясняющей подписи под toolbar нет. Сведения
 открываются у адреса через общий ActionMenu с informational rows, без disabled opacity.
-Фокус адреса расширяет поле на всю строку; provider controls появляются под ним,
-не меняя геометрию iframe. Уход фокуса за пределы controls или Escape сворачивает поле;
+Фокус адреса расширяет поле на всю строку и скрывает нижнюю панель provider controls,
+поэтому список ресурсов остаётся доступным. Уход фокуса за пределы controls или Escape сворачивает поле;
 меню сохраняет фокус и доступность своего trigger. До 600 px ширины surface правая
 группа доступна через ⋯. File picker/source остаются у provider.
 P4a baseline: saved HTML/plugin release показывает «Сравнение» знаком двух колонок
-с +/−. Выбор baseline — общий text button/ActionMenu, файл — compact select;
+с +/− в общем меню страницы. Выбор baseline — общий text button/ActionMenu, файл — compact select;
 existing TextDiff с line numbers и add/remove цветами прокручивается внутри view.
 Пара версий и подпись отделяют исходники от данных preview. Общие tokens/controls;
 на узкой панели controls переносятся, diff не расширяет Shell. Доработка отложена,
 визуальное принятие открыто: [evidence](../browser/05_TEST_MATRIX.md#p4a).
 
 P2a (2026-11-10) добавляет строку «Создать проект из снимка» в существующее меню
-сохранения. Общие ActionMenu rows/status/disabled и compact trigger остаются владельцами
-геометрии; новых CSS/tokens нет. Во время запроса trigger выключен; Unknown оставляет
+сохранения. Общие ActionMenu rows/disabled и compact trigger остаются владельцами
+геометрии; новых CSS/tokens нет. Длинное пояснение показывается в title при наведении,
+а не отдельной видимой подписью. Во время запроса trigger выключен; Unknown оставляет
 создание недоступным с читаемым пояснением. [Ревью 1280 px](review/browser-project-import-wide.png),
 [420 px / 125%](review/browser-project-import-narrow.png). Принятие пользователем открыто.
 

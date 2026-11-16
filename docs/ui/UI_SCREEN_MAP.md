@@ -86,7 +86,10 @@ existing draft. «На странице» reveals an annotation only in an open 
 Browser with the exact saved entry; equal bytes in another version do not qualify.
 Otherwise it explains which source is required. Changing the current chat
 never changes the recipient. A page opened without a chat requires explicit chat
-binding. Page/source changes preserve the comment and require a fresh selection. The comment overlay temporarily hides the native HWND.
+binding. Draft and sent annotations keep numbered markers over the exact page even
+after selection mode closes; clicking a marker opens its editor/details. Removing a
+draft from the chat removes its overlay. Page/source changes preserve the comment
+and require a fresh selection. The comment overlay temporarily hides the native HWND.
 
 ## Browser export choices — In Review, 2026-11-13
 
@@ -97,10 +100,12 @@ Office/tool calls need the app. Offline page data is a fixed snapshot.
 
 ## Interactive local page — In Review, 2026-11-13
 
-A ready local Browser opens in «Страница». «Исходник» and «Сравнение» remain in the
-same tab; unsupported native hosts show source plus the actual unavailability reason.
-Physical takeover displays «Вы управляете» / «Продолжить агентом» with an exact
-control revision. Closing the page does not cancel the conversation run. Internal
+A ready local Browser opens in «Страница». «Исходник» remains in the toolbar and
+«Сравнение» is available from the page-actions menu when the provider supports it;
+unsupported native hosts show source plus the actual unavailability reason. Physical
+takeover pauses the exact run without a separate resume banner: the agent waits while
+the user stays in Browser, and leaving Browser hands control back through the existing
+typed resume revision. Closing the page does not cancel the conversation run. Internal
 new-window links open a scoped Dock tab; native overlays yield to Shell menus/dialogs.
 
 ## Agent open — In Review, 2026-11-13
@@ -187,11 +192,12 @@ Dockview «+» по-прежнему открывает вкладку выбо�
 ## Browser: ручное управление и доступ — In Review, 2026-11-11
 
 Клик/клавиатурный ввод/колесо в top document либо ручная навигация включают
-«Вы управляете». Над содержимым Browser появляется «Продолжить агентом»; без
-ручного режима строка скрыта. Pointermove только убирает рисованный курсор.
-Продолжение адресовано показанной session/control revision; pending блокирует
-повторный click, ошибка оставляет управление у пользователя. Новое read требуется
-перед следующим действием; close/hide не нажимают resume за пользователя.
+ручной режим. Отдельной строки «Вы управляете / Продолжить агентом» нет. Pointermove
+только убирает рисованный курсор. Пока фокус остаётся в Browser, агент ждёт; первый
+явный уход в Shell/чат отправляет typed resume для показанной session/control
+revision. Pending блокирует повторную отправку, ошибка оставляет управление у
+пользователя. Новое read требуется перед следующим действием; close/hide не
+нажимают resume за пользователя.
 
 Настройки → Подключение: небольшой индикатор «Конфигурация» без списка и пути;
 свернутый раздел «Разработчик» показывает только password и «Войти».
@@ -327,12 +333,17 @@ Windows/WebView2 остаётся отдельной проверкой.
 ## Universal Browser: toolbar и обсуждение — In Review, 2026-11-05
 
 Страницы остаются вкладками общего Dockview. Строка Browser:
-`← → ↻ [аннотация] [сведения · адрес] [▶ </> · чат · экспорт/публикация · версии · ⋯]`.
-Правая группа зависит от provider. В фокусе адрес занимает всю строку, инструменты
-раскрываются ниже; после ухода фокуса поле сворачивается. Узкая панель открывает
-правые controls через ⋯. Подпись «Сохранённый проект…» убрана. Название, версия,
+`← → (↻ | ■) [аннотация] [сведения · адрес] [▶ </> · чат · экспорт/публикация · версии · ⋯]`.
+При загрузке reload заменяется на stop; после завершения возвращается reload.
+В фокусе адрес занимает всю строку, а нижняя панель действий скрывается, чтобы не
+перекрывать список ресурсов; после ухода фокуса поле сворачивается. Узкая панель
+открывает правые controls через ⋯. Три точки всегда последние справа. «Сравнение»
+находится в ⋯, отдельной третьей кнопки режима нет. Подпись «Сохранённый проект…» убрана. Название, версия,
 зависимости и хранение открываются по иконке у адреса: «В приложении · CAS» либо
 «В папке». Это способ хранения, не публичный доступ и не обещание шифрования.
+Локальный синтетический просмотр: [toolbar](review/browser-controls-toolbar-20261116.png),
+[фокус адреса](review/browser-controls-address-20261116.png),
+[420 px / 125%](review/browser-controls-narrow-20261116.png).
 
 Saved HTML сохраняет read-only адрес, ▶ / `</>`, file picker и 32K source pages.
 Аннотация слева общая для всех локальных HTML и снимков с привязанным чатом.
@@ -358,7 +369,7 @@ Chat View рядом. Повторное нажатие активирует т�
 HTML использует свой exact chatId. Закрытие Browser не отправляет сообщения и
 не отменяет Run; аннотации остаются черновиками до отправки пользователем.
 
-Diff скрыт без capability; back/forward видны, но выключены без navigation provider.
+«Сравнение» скрыто в ⋯ без capability; back/forward видны, но выключены без navigation provider.
 P2b (2026-11-11): modes/actions подтверждает typed runtime target. До успешного чтения
 saved target проектные действия скрыты; ошибка привязки показывает явный отказ.
 Source-only не создаёт iframe. Read-only live оставляет preview, но отключает редактор

@@ -39,10 +39,12 @@
       if (check) control.setAttribute("aria-checked", String(item.checked));
       control.innerHTML = (check ? icon("check") : item.iconHtml || (item.icon === false ? "" : icon(item.icon || "right"))) + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
       if (item.status) {
-        control.classList.add("has-detail"); if (check || item.icon !== false) control.classList.add("has-icon");
-        var status = document.createElement("small"); status.textContent = item.status; control.appendChild(status);
         control.title = item.label + " · " + item.status;
-      }
+        if (!options.compact) {
+          control.classList.add("has-detail"); if (check || item.icon !== false) control.classList.add("has-icon");
+          var status = document.createElement("small"); status.textContent = item.status; control.appendChild(status);
+        }
+      } else control.title = item.label;
       if (!item.informational) control.addEventListener("click", function (event) {
         // A retained action may replace its own DOM before document.click runs.
         event.stopPropagation();

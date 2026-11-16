@@ -566,11 +566,13 @@ Native owner запрашивает паузу текущего Run исходн
 или action при ручном режиме также запрашивает паузу, если Run появился позже жеста.
 
 Typed `ResumeAgent` требует exact session/control revision и неизменившийся input epoch.
-Кнопка «Продолжить агентом» отпускает только захваченную live invocation/pause; поздний
-resume не снимает более новую паузу или Stop. Старое observation и preparation удалены,
-следующее действие требует нового чтения. Очереди отложенных кликов нет. Close не
-продолжает Run автоматически: прежние chat controls остаются способом его продолжения.
-Unknown effect этим действием не очищается; прежний close/reopen guard сохраняется.
+Отдельной кнопки в Browser нет: UI отправляет этот typed resume, когда пользователь явно
+покидает Browser в пользу Shell/чата. Resume отпускает только захваченную live
+invocation/pause; поздний resume не снимает более новую паузу или Stop. Старое observation
+и preparation удалены, следующее действие требует нового чтения. Очереди отложенных
+кликов нет. Close не продолжает Run автоматически: прежние chat controls остаются
+способом его продолжения. Unknown effect этим действием не очищается; прежний
+close/reopen guard сохраняется.
 
 Chrome проверяет actual isolated scripts и Shell; native CDP event delivery, Office
 threading и HWND ещё требуют Windows evidence. Ввод внутри iframe/отдельных окон не

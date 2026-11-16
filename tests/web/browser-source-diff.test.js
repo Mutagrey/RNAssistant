@@ -26,7 +26,8 @@ const {withPreviewPage}=require('./preview-session');
     RNAssistantBrowser.open('/projects/project/versions/v2/index.html',{kind:'Workspace',scopeId:'project'},{browserTabId:'diff-project'});
   });
   async function compare(){
-    const root=page.locator('.browser-object-view:visible');await root.getByRole('button',{name:'Сравнение',exact:true}).click();
+    const root=page.locator('.browser-object-view:visible');await root.getByRole('button',{name:'Действия страницы',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Сравнение',exact:true}).click();
     await root.getByRole('button',{name:'Сравнить с версией',exact:true}).click();await page.getByRole('menuitem',{name:'v1',exact:true}).click();
     await root.locator('.browser-source-diff-output').getByText('After',{exact:false}).waitFor();return root;
   }

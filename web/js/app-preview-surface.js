@@ -69,10 +69,7 @@
     navigation.append(back, forward, reload, home, stop, annotate);
 
     var info = iconButton("info", "Сведения о странице"); info.setAttribute("aria-haspopup", "dialog"); info.setAttribute("aria-expanded", "false");
-    var copyAddress = iconButton("copy", "Копировать адрес"); copyAddress.classList.add("preview-surface-copy-address");
-    copyAddress.onpointerdown = function (event) { event.preventDefault(); };
-    copyAddress.onclick = function () { invoke(function () { return copyTextResult(currentAddress()); }); };
-    location.append(info, address, copyAddress, completion);
+    location.append(info, address, completion);
     var tools = iconButton("more", "Инструменты страницы"); tools.classList.add("preview-surface-tools"); tools.setAttribute("aria-expanded", "false");
     toolbar.append(navigation, location, actions, tools); bar.append(toolbar, status); root.insertBefore(bar, root.firstChild);
 
@@ -111,7 +108,7 @@
     function currentAddress() { return presentation && presentation.address || currentLabel && (currentLabel.address || currentLabel.path || currentLabel.title) || options.address || ""; }
     function updateAddress() {
       if (document.activeElement !== address) address.value = currentAddress();
-      address.title = currentAddress(); address.readOnly = !(presentation && presentation.navigate); copyAddress.disabled = !currentAddress();
+      address.title = currentAddress(); address.readOnly = !(presentation && presentation.navigate);
     }
     function storage() { return currentLabel && currentLabel.storage || options.storage; }
     function infoEntries() {
@@ -140,8 +137,8 @@
       presentation = value; modeChange = onModeChange;
       if (value.supportedModes && value.supportedModes.length && !modes) {
         modes = document.createElement("div"); modes.className = "view-switch"; modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление страницы");
-        ["preview", "source", "diff"].forEach(function (mode) {
-          var button = iconButton(mode === "preview" ? "play" : mode === "source" ? "code" : "diff", mode === "preview" ? "Страница" : mode === "source" ? "Исходник" : "Сравнение");
+        ["preview", "source"].forEach(function (mode) {
+          var button = iconButton(mode === "preview" ? "play" : "code", mode === "preview" ? "Страница" : "Исходник");
           button.onclick = function () { if (modeChange) modeChange(mode); }; modeButtons[mode] = button; modes.appendChild(button);
         });
         actions.prepend(modes);
@@ -154,7 +151,8 @@
         });
       }
       back.disabled = !value.back || !value.canGoBack; forward.disabled = !value.forward || !value.canGoForward;
-      home.hidden = !value.home; stop.hidden = !value.stop;
+      reload.hidden = !!value.loading;
+      home.hidden = !value.home; stop.hidden = !value.loading;
       updateAddress(); updateInfo();
     }
     function clearDocument() {
@@ -191,7 +189,7 @@
       collapse: function () { expand(false); RNAssistantActionMenu.closeWithin(bar); },
       setDocument: setDocument, clearDocument: clearDocument, watch: watch,
       waiting: function (label, message) { detach(); show(label, message || "Загрузка…"); }, fail: fail,
-      clear: function () { detach(); expand(false); RNAssistantActionMenu.closeWithin(bar); currentLabel = null; clearDocument(); bar.hidden = true; setStatus("", false); reload.disabled = true; }
+      clear: function () { detach(); expand(false); RNAssistantActionMenu.closeWithin(bar); currentLabel = null; clearDocument(); bar.hidden = true; setStatus("", false); reload.hidden = false; reload.disabled = true; stop.hidden = true; }
     };
   }
   window.RNAssistantPreviewSurface = { attach: attach };
