@@ -40,12 +40,13 @@ namespace RNAssistant.Core.Services
             };
         }
 
-        public static void ValidateAcceptedRun(ChatSession session, AppSettings settings)
+        public static void ValidateAcceptedRun(ChatSession session, AppSettings settings, string modelDigest = null)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             var accepted = session?.LastRun?.ModelConfiguration;
             if (accepted == null) return;
             if (settings.Model != accepted.Model ||
+                modelDigest != accepted.Digest ||
                 !string.IsNullOrEmpty(accepted.EndpointSha256) && EndpointSha256(settings.BaseUrl) != accepted.EndpointSha256 ||
                 accepted.ContextWindowTokens > 0 && ModelContextBudget.ContextWindowTokens(settings) != accepted.ContextWindowTokens ||
                 settings.AgentResponseMode != accepted.AgentResponseMode ||

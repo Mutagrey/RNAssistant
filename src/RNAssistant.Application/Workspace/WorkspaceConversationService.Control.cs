@@ -50,7 +50,7 @@ namespace RNAssistant.Runtime
                     throw new InvalidOperationException("stale_run_checkpoint: inspect the session before requesting continuation.");
                 ConversationRunPolicy.ForAcceptedRun(session);
                 settings = ChatSettingsResolver.ResolveAcceptedRun(settings, session);
-                ValidateContinuationSettings(session, settings, modelDigest);
+                ChatSettingsResolver.ValidateAcceptedRun(session, settings, modelDigest);
                 RegisterAgentScope(workspace, settings, apiKeyProvider);
                 if (session.LastRun.InterruptedToolId != null || session.LastRun.InterruptedEffectPossible ||
                     session.Messages.Any(item => item.RunId == request.RunId && item.ProtocolMessage && item.ExcludeFromModelContext))
@@ -122,17 +122,5 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("Session, exact run ID and inspect cursor are required.");
         }
 
-        private static void ValidateContinuationSettings(ChatSession session, AppSettings settings, string modelDigest)
-        {
-            if (settings == null) throw new ArgumentNullException(nameof(settings));
-            ValidateMessageRoles(settings);
-            var accepted = session.LastRun.ModelConfiguration;
-            if (accepted == null || session.ReasoningEnabled != accepted.ReasoningEnabled || settings.Model != accepted.Model ||
-                ModelContextBudget.ContextWindowTokens(settings) != accepted.ContextWindowTokens ||
-                EndpointSha256(settings.BaseUrl) != accepted.EndpointSha256 || modelDigest != accepted.Digest ||
-                settings.AgentResponseMode != accepted.AgentResponseMode || settings.SystemPromptRole != accepted.SystemPromptRole ||
-                settings.ToolResultRole != accepted.ToolResultRole || settings.ReasoningRequestMode != accepted.ReasoningRequestMode)
-                throw new InvalidOperationException("Continuation must keep the accepted endpoint, model, digest, context and protocol roles/settings.");
-        }
     }
 }

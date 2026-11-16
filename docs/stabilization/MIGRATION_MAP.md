@@ -29,13 +29,12 @@ handler and legacy fixture defaults are retained as existing consumers, not used
 as fallback by production. `06664fc` already contains explicit legacy import and
 `IConversationContextStore.RestoreWorkingSet` wiring; neither is replaced here.
 
-## Office accepted-run configuration — W5, 2026-11-16
+## Unified accepted-run configuration — W5, 2026-11-16
 
 Owner: `ChatSettingsResolver` for accepted-run resolution/capture/validation;
 `ConversationRunService` records the effective metadata; Office confirmation/wait
-continuation consumes it. Workspace already owns the stricter model-digest policy; a
-later lifecycle slice will replace its private validation method with the shared helper
-when its file is free of the current parallel storage patch. No second configuration
+continuation consumes it. Workspace continuation now supplies its provider digest to the
+same validator, and its private duplicate method is removed. No second configuration
 store or feature flag is introduced.
 
 ## Unified chat draft persistence — W9, 2026-11-16

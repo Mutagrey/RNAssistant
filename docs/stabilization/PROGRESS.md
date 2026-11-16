@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Unified accepted-run configuration — W5, 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.9-dev`. Workspace continuation now calls
+`ChatSettingsResolver.ValidateAcceptedRun` with its provider digest; its private duplicate
+validation method is removed. Office and Workspace therefore share the same accepted-run
+model/endpoint/context/digest/role/reasoning policy. `chat: accepted run configuration is
+captured and validated` covers the digest mismatch, accepted-model resolution and legacy
+fallback. Windows/Office/WebView2 qualification remains separate.
+
 ## Office bridge confirmation lifecycle — W5, 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.8-dev`. The public Office

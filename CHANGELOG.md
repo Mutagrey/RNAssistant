@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.9-dev
+
+- Workspace-продолжения используют общий validator принятой конфигурации запуска
+  вместе с model digest. Локальный дубль проверки удалён; Office и Workspace
+  применяют одну policy для model/endpoint/context/roles/reasoning.
+
 ### 17.3.8-dev
 
 - Подтверждение инструмента Office теперь выполняется в том же application worker,

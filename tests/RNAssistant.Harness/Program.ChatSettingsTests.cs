@@ -69,10 +69,11 @@ namespace RNAssistant.Harness
             AssertEqual(settings.SystemPromptRole, metadata.SystemPromptRole, "accepted system prompt role");
             AssertEqual(settings.ReasoningRequestMode, metadata.ReasoningRequestMode, "accepted reasoning request mode");
             AssertEqual(true, metadata.ReasoningEnabled, "accepted reasoning state");
+            metadata.Digest = "digest-a";
 
             var resolved = ChatSettingsResolver.ResolveAcceptedRun(settings.Clone(), session);
             AssertEqual("accepted-model", resolved.Model, "continuation resolves the accepted model");
-            ChatSettingsResolver.ValidateAcceptedRun(session, resolved);
+            ChatSettingsResolver.ValidateAcceptedRun(session, resolved, "digest-a");
 
             var changed = settings.Clone();
             changed.Model = "changed-model";
@@ -80,6 +81,11 @@ namespace RNAssistant.Harness
             try { ChatSettingsResolver.ValidateAcceptedRun(session, changed); }
             catch (InvalidOperationException) { refused = true; }
             AssertTrue(refused, "a continuation cannot silently replace the accepted model");
+
+            refused = false;
+            try { ChatSettingsResolver.ValidateAcceptedRun(session, resolved, "digest-b"); }
+            catch (InvalidOperationException) { refused = true; }
+            AssertTrue(refused, "a continuation cannot replace the accepted model digest");
 
             var legacy = new ChatSession { Model = "legacy-model" };
             AssertEqual("legacy-model", ChatSettingsResolver.ResolveAcceptedRun(new AppSettings { Model = "global-model" }, legacy).Model,
