@@ -378,6 +378,7 @@ namespace RNAssistant.Core.Models
         private int LegacyMessageLimit { set { _legacyMessageLimit = value; } }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
+        public DiagnosticLogOptions DiagnosticLogs { get; set; } = new DiagnosticLogOptions();
         public string HistoryIntegrityMode { get; set; }
         public string HistoryEncryptionMode { get; set; }
         public string HistoryKeySource { get; set; }
@@ -542,6 +543,7 @@ namespace RNAssistant.Core.Models
         public AppSettings Clone()
         {
             var clone = (AppSettings)MemberwiseClone();
+            clone.DiagnosticLogs = DiagnosticLogOptions.Normalize(DiagnosticLogs);
             clone.CustomHeaders = new Dictionary<string, string>(
                 CustomHeaders ?? new Dictionary<string, string>(),
                 StringComparer.OrdinalIgnoreCase);

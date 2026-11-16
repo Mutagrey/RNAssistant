@@ -592,9 +592,32 @@
 
 .diagnostics-logs .log-section {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
+
+.panel-log-pane { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--space-2); min-height: 0; }
+.file-log-pane { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; min-width: 0; }
+.file-log-toolbar, .file-log-find, .file-log-footer, .file-log-options-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.file-log-toolbar > select { flex: 1 1 160px; width: 0; max-width: 100%; }
+.file-log-find > input { flex: 1 1 160px; width: 0; }
+.file-log-find > span, .file-log-footer > span, .file-log-retention summary > span { color: var(--ink-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.file-log-retention { flex: 0 0 auto; min-width: 0; font-size: var(--text-sm); max-height: 35%; overflow: auto; }
+.file-log-retention summary { cursor: pointer; padding: var(--space-1) 0; }
+.file-log-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: var(--space-2); margin-top: var(--space-2); }
+.file-log-options label { display: grid; gap: var(--space-1); min-width: 0; }
+.file-log-options input { width: 100%; box-sizing: border-box; }
+.file-log-options-actions, .file-log-options p { grid-column: 1 / -1; }
+.file-log-options p { margin: 0; color: var(--ink-muted); }
+.file-log-read-region { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-subtle); }
+.file-log-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--text-sm)/1.5 var(--font-mono, Consolas, monospace); color: var(--ink); }
+.file-log-text mark { color: inherit; background: var(--accent-soft); outline: 1px solid var(--accent); }
+.file-log-footer > span { flex: 1 1 180px; }
+.file-log-notice, .file-log-issues { flex: 0 0 auto; max-height: 100px; overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--text-sm); }
+.file-log-notice { color: var(--ink-muted); }
+.file-log-notice.is-error, .file-log-issues { color: var(--danger); }
+.diagnostics-logs .log-section-head { flex-wrap: wrap; }
+.diagnostics-logs .log-section-head > .mode-toggle { display: inline-flex; gap: 0; }
 
 .diagnostics-logs .log-scroll-region {
   position: relative;

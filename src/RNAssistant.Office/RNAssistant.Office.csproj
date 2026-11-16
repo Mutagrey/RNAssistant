@@ -79,6 +79,7 @@
     <Compile Include="Contracts\BridgeOperationCatalog.cs" />
     <Compile Include="Tools\JsToolHandler.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />
+    <Compile Include="Contracts\BridgeDtos.Logs.cs" />
     <Compile Include="Contracts\BridgeDtos.ModelDiagnostics.cs" />
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
     <Compile Include="Contracts\BridgeDtos.Settings.cs" />
@@ -98,6 +99,7 @@
     <Compile Include="Controller\AssistantController.Context.cs" />
     <Compile Include="Controller\AssistantController.ContextInspector.cs" />
     <Compile Include="Controller\AssistantController.Diagnostics.cs" />
+    <Compile Include="Controller\AssistantController.Logs.cs" />
     <Compile Include="Controller\AssistantController.HtmlWorkspace.cs" />
     <Compile Include="Controller\AssistantController.Lifecycle.cs" />
     <Compile Include="Controller\AssistantController.QuickActions.cs" />

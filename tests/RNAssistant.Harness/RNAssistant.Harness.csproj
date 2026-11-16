@@ -100,6 +100,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Outlook\*.cs" Link="Office\Domains\Outlook\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Domains\Vba\*.cs" Link="Office\Domains\Vba\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.Office\Diagnostics\RuntimeLog.cs" Link="Office\Diagnostics\RuntimeLog.cs" />
+    <Compile Include="..\..\src\RNAssistant.Office\Controller\AssistantController.Logs.cs" Link="Office\Controller\AssistantController.Logs.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Agent\*.cs" Link="Office\Agent\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Vba\VbaProjectSupport.cs" Link="OfficeHosts\Vba\VbaProjectSupport.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaReader.cs" Link="Office\Vba\VbaReader.cs" />

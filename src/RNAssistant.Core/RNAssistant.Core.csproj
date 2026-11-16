@@ -114,6 +114,8 @@
     <Compile Include="Models\AgentCommunication.cs" />
     <Compile Include="Models\AgentAssignment.cs" />
     <Compile Include="Models\AppSettings.cs" />
+    <Compile Include="Models\DiagnosticLogModels.cs" />
+    <Compile Include="Storage\DiagnosticLogStore.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
     <Compile Include="Models\HtmlProjectSnapshot.cs" />
     <Compile Include="Models\ResourceModels.cs" />

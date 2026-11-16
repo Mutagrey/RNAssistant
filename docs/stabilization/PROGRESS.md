@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Diagnostic file viewer and retention — 2026-11-16
+
+Implemented host-neutral / In Review, `17.1.0-dev`. Existing Diagnostics application
+surface reads bounded saved Runtime/Desktop pages, offers clear/delete actions,
+and configures automatic retention. Both writers use one bounded background queue
+and the Core diagnostic-file owner; chat journals and CAS remain outside its scope.
+Contract: [Diagnostics](../diagnostics.md).
+
+Harness `diagnostic logs:` passes 6/6, including separate processes and settings
+ownership. Existing prompt-migration archive check and two focused Node checks pass;
+build has 0 errors and two existing PDF CA1416 warnings. Chromium launch is blocked
+by environment socket policy; visual and Windows/Office/WebView2 checks stay open.
+The independent bridge-bootstrap fixture failure is recorded in BACKLOG.
+
+## Browser controls and automatic handoff — 2026-11-16
+
+In Review, `17.0.1-dev`. The production Browser toolbar now shows Stop only during
+an actual page load, folds Comparison into the rightmost actions menu, hides the
+lower action strip during address completion, uses the shared accent selected state,
+and removes exact-address copy controls. Manual takeover no longer renders a resume
+banner: the run waits while Browser owns the user interaction and receives the existing
+typed resume when the user leaves for Shell/chat. Annotation repeat-click, persistent
+markers, draft deletion and compact hover-only menu details are covered by focused
+Chromium fixtures. Playwright is unavailable locally; Windows/WebView2 and visual
+qualification remain open.
+
 ## Storage-v2 production cutover — 2026-11-16
 
 Implemented host-neutral / In Review, `17.0.0-dev`. Office, Workspace and plugin

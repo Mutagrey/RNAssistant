@@ -1,5 +1,16 @@
 # Архитектура UI RNAssistant
 
+## Файловые логи — In Review, 2026-11-16
+
+Существующая Diagnostics application/log surface имеет режимы Files/Panel;
+новая Shell или Dock view не создаётся. `app-logs.js` хранит только один ограниченный
+фрагмент файла, presentation selection и request generation. Native owner
+`DiagnosticLogStore` владеет allowlist, snapshot, retention и файловыми изменениями.
+`AssistantController.Logs` и typed bridge делегируют ему I/O вне UI/STA.
+Diagnostics navigation вызывает sync/pause/dispose: скрытая панель не опрашивает
+файлы и не применяет поздние ответы. Принятая очистка завершается независимо от
+видимости view. Детальный контракт — [Diagnostics](../diagnostics.md).
+
 W3 retained attempts (In Review, 2026-11-14): `ChatMessageViewDto.RetainedAttempt`
 поступает из обязательного kernel commit; общий `renderActivityNode` показывает
 его внутри run. Принятый snapshot не становится владельцем незаписанной истории:

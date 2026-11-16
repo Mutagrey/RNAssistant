@@ -13,7 +13,7 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office
 {
-    public sealed class AssistantController
+    public sealed partial class AssistantController
     {
         internal IBrowserReadSource BrowserReadSource { get; private set; }
         internal WorkspaceFileService WorkspaceFiles { get; private set; }
@@ -38,6 +38,7 @@ namespace RNAssistant.Office
         public AssistantController(RNAssistant.Core.Storage.AppDataPaths paths)
         {
             StoragePaths = paths;
+            _diagnosticLogs = new DiagnosticLogStore(paths.Root);
             var resources = new ResourceJournal(paths);
             WorkspaceFiles = new WorkspaceFileService(paths, resources, resources, resources);
         }

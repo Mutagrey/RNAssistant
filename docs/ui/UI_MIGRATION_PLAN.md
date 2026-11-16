@@ -1,5 +1,33 @@
 # План модернизации production UI
 
+## Файловые логи и хранение — In Review, 2026-11-16
+
+Scope: существующий Diagnostics → application/log, общий Core log owner,
+асинхронные Runtime/Desktop writers и typed bridge. Старый прямой файловый writer
+заменён; прежний transient panel log остаётся отдельным режимом той же поверхности.
+Канонический контракт — [Diagnostics](../diagnostics.md).
+
+Targeted checks: Harness `diagnostic logs:`; Node `diagnostic-files-state` и
+`performance-diagnostics`. Browser fixture `diagnostic-files.test.js` подготовлен,
+но среда блокирует запуск Chromium (socket EPERM); wide/narrow/125% visual evidence
+и Windows/Office/WebView2 qualification остаются открытыми.
+
+Ревью на Windows: 1) открыть Files и найти исключение, 2) перейти Ранее и скрыть/
+вернуть вкладку, 3) очистить текущий лог при продолжающейся записи, 4) уменьшить
+лимиты и проверить ошибки/размер, 5) убедиться, что история чата доступна.
+UI/host должны обновляться вместе; при откате исходников удалённые retention-ом
+диагностические файлы не восстанавливаются. Старый Desktop каталог не затрагивается.
+
+Browser controls and handoff correction — In Review, 2026-11-16. Reload is replaced
+by Stop only while the page status is actually loading. Address focus hides the
+lower action strip so resource suggestions are unobstructed. Diff moves into the
+page-actions menu, the overflow trigger stays rightmost, selected modes use the
+shared accent state, and copy-address/exact-link controls are removed. Manual takeover
+has no resume banner: the agent waits while Browser owns focus and receives typed
+resume when the user moves to the Shell/chat. Annotation toggling, persistent exact
+page markers, draft deletion and hover-only menu details are covered by focused
+Chromium fixtures. Windows/WebView2 visual and native evidence remains open.
+
 W3 retained attempts — In Review, 2026-11-14. Общий блок внутри run подключён
 для Office/Workspace/plugin. `retained-attempts.test.js` проверяет оба источника,
 поля/усечение и сохранность unsaved body при refresh; `stream-render-cost` — freeze

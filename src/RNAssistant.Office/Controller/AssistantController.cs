@@ -92,6 +92,7 @@ namespace RNAssistant.Office
             _paths = paths ?? AppDataPaths.CreateDefault();
             RuntimeLog.Configure(_paths.Root);
             _settingsService = new SettingsService(_paths);
+            _diagnosticLogs = new DiagnosticLogStore(_paths.Root);
             Func<StorageProtector> protection = () => _settingsService.LoadStorageProtector();
             // The legacy aggregate remains read-only maintenance input for retained
             // old CAS. It is not used by any active conversation or resource writer.

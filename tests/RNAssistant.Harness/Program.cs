@@ -37,6 +37,8 @@ namespace RNAssistant.Harness
 
         public static int Main(string[] args)
         {
+            if (args != null && args.Length == 3 && args[0] == "--diagnostic-log-probe")
+                return DiagnosticLogProcessProbe(args[1], args[2]);
             if (args != null && args.Length == 2 && args[0] == "--journal-maintenance-probe")
                 return StorageMaintenanceProbe(args[1]);
             if (args != null && args.Length == 3 && args[0] == "--storage-index-probe")
@@ -62,6 +64,12 @@ namespace RNAssistant.Harness
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
+                Test("diagnostic logs: typed bridge and fixed file scope", DiagnosticLogsBridgeUsesFixedScope),
+                Test("diagnostic logs: bounded UTF-8 pages and snapshot reset", DiagnosticLogsBoundedUtf8Pages),
+                Test("diagnostic logs: retention and diagnostic-only scope", DiagnosticLogsRetentionAndScope),
+                Test("diagnostic logs: concurrent owners and links", DiagnosticLogsConcurrentOwnersAndLinks),
+                Test("diagnostic logs: independent process writers", DiagnosticLogsIndependentProcessWriters),
+                Test("diagnostic logs: retention settings preserve other owners", DiagnosticLogsSettingsUpdatesPreserveOtherOwners),
                 Test("model diagnostics: invisible outer IDs do not fail content", ModelDiagnosticsInvisibleId),
                 Test("model diagnostics: exact history probes", ModelDiagnosticsHistory),
                 Test("model diagnostics: false success and HTTP failures", ModelDiagnosticsFailures),

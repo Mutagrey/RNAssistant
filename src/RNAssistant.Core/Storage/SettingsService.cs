@@ -75,8 +75,45 @@ namespace RNAssistant.Core.Storage
 
         public void Save(AppSettings settings, string apiKey, string historySecret)
         {
+            using (AcquireSettingsWriteLock()) SaveLocked(settings, apiKey, historySecret);
+        }
+
+        // Retention has its own UI owner. Updating it must not replay an old snapshot of model/prompt settings.
+        public void SaveDiagnosticLogOptions(DiagnosticLogOptions options)
+        {
+            if (options == null) throw new ArgumentNullException("options");
+            options.Validate();
+            using (AcquireSettingsWriteLock())
+            {
+                // Preserve the stored values without implicitly performing prompt migration or touching secrets.
+                var current = _json.Load(_paths.SettingsFile, new AppSettings());
+                current.DiagnosticLogs = options.Clone();
+                _json.Save(_paths.SettingsFile, current);
+            }
+        }
+
+        private IDisposable AcquireSettingsWriteLock()
+        {
+            var path = _paths.SettingsFile + ".lck";
+            foreach (var candidate in new[] { path, _paths.SettingsFile })
+            {
+                try
+                {
+                    if ((File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0)
+                        throw new IOException("Settings path cannot be a reparse point.");
+                }
+                catch (FileNotFoundException) { }
+                catch (DirectoryNotFoundException) { }
+            }
+            return StorageFileSystem.AcquireWriteLock(path);
+        }
+
+        private void SaveLocked(AppSettings settings, string apiKey, string historySecret)
+        {
             var normalized = Normalize((settings ?? new AppSettings()).Clone());
             var current = Load();
+            // A stale settings form cannot roll back a newer retention update.
+            normalized.DiagnosticLogs = current.DiagnosticLogs.Clone();
             var currentApiKey = LoadApiKey();
             var currentHistorySecret = LoadHistorySecret();
             var effectiveApiKey = apiKey == null ? currentApiKey : apiKey;
@@ -189,6 +226,7 @@ namespace RNAssistant.Core.Storage
         private static AppSettings Normalize(AppSettings settings)
         {
             var defaults = new AppSettings();
+            settings.DiagnosticLogs = DiagnosticLogOptions.Normalize(settings.DiagnosticLogs);
             if (settings.CustomHeaders == null)
             {
                 settings.CustomHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

@@ -987,7 +987,37 @@
 
               <div class="logs-workspace diagnostics-logs diagnostics-tab-panel" data-diagnostics-application="log">
                 <section class="log-section surface-panel padded">
-                  <div class="log-section-head"><div><strong>Журнал приложения</strong><span>Сообщения текущей панели. Сохранённые шаги и результаты — в разделе «Запуски».</span></div><button class="button compact" id="clearLogButton" type="button">Очистить экран</button></div>
+                  <div class="log-section-head"><div><strong>Журнал приложения</strong><span>Диагностические файлы и сообщения этой панели.</span></div><div class="mode-toggle" role="group" aria-label="Источник журнала"><button class="mode-button active" type="button" data-log-source="files" aria-pressed="true">Файлы</button><button class="mode-button" type="button" data-log-source="panel" aria-pressed="false">Эта панель</button></div></div>
+                  <div class="file-log-pane" id="fileLogPane">
+                    <div class="file-log-toolbar">
+                      <select class="rna-form-control compact" id="fileLogSelect" aria-label="Диагностический файл"><option value="">Файлы ещё не загружены</option></select>
+                      <button class="icon-btn compact" type="button" id="fileLogRefresh" title="Обновить список и последние записи" aria-label="Обновить список и последние записи"><svg data-rna-icon="refresh" aria-hidden="true"></svg></button>
+                      <button class="button compact" type="button" id="fileLogLive" aria-pressed="true">Автообновление</button>
+                      <button class="icon-btn compact" type="button" id="fileLogActions" title="Действия с логами" aria-label="Действия с логами" aria-haspopup="menu"><svg data-rna-icon="more" aria-hidden="true"></svg></button>
+                    </div>
+                    <div class="file-log-find">
+                      <input class="rna-form-control compact" type="search" id="fileLogSearch" maxlength="256" autocomplete="off" placeholder="Найти в показанном фрагменте" aria-label="Найти в показанном фрагменте">
+                      <button class="button compact" type="button" id="fileLogFindNext">Найти далее</button>
+                      <span id="fileLogMatches" role="status"></span>
+                    </div>
+                    <details class="file-log-retention" id="fileLogRetention">
+                      <summary>Хранение логов <span id="fileLogUsage"></span></summary>
+                      <form id="fileLogOptionsForm" class="file-log-options">
+                        <label>Один файл, МиБ<input class="rna-form-control compact" id="fileLogMaxFile" type="number" min="1" max="100" step="1" required></label>
+                        <label>Всего, МиБ<input class="rna-form-control compact" id="fileLogMaxTotal" type="number" min="2" max="1000" step="1" required></label>
+                        <label>Срок, дней<input class="rna-form-control compact" id="fileLogDays" type="number" min="1" max="365" step="1" required></label>
+                        <label>Число файлов<input class="rna-form-control compact" id="fileLogMaxFiles" type="number" min="2" max="200" step="1" required></label>
+                        <div class="file-log-options-actions"><button class="button compact" type="submit" id="fileLogSaveOptions">Применить лимиты</button><button class="button compact" type="button" id="fileLogPrune">Удалить старые сейчас</button></div>
+                        <p>Старые диагностические файлы удаляются автоматически. История чатов, результаты инструментов и документы сюда не входят.</p>
+                      </form>
+                    </details>
+                    <div class="file-log-read-region" id="fileLogReadRegion" tabindex="0" role="region" aria-label="Содержимое диагностического файла"><pre class="file-log-text" id="fileLogText">Выберите файл журнала.</pre></div>
+                    <div class="file-log-footer"><button class="button compact" type="button" id="fileLogEarlier" disabled>Ранее</button><button class="button compact" type="button" id="fileLogLatest" disabled>К последним</button><span id="fileLogStatus" role="status">Чтение начнётся при открытии журнала.</span></div>
+                    <div class="file-log-notice hidden" id="fileLogNotice" role="status"></div>
+                    <div class="file-log-issues hidden" id="fileLogIssues" role="alert"></div>
+                  </div>
+                  <div class="panel-log-pane hidden" id="panelLogPane">
+                  <div class="log-section-head"><span>Сообщения только этой панели. Сохранённые шаги — в разделе «Запуски».</span><button class="button compact" id="clearLogButton" type="button">Очистить экран</button></div>
                   <div class="log-filter-bar" role="toolbar" aria-label="Фильтр событий">
                     <button class="button compact ghost log-filter-button active" type="button" data-log-filter="all" aria-pressed="true">Все <span class="log-filter-count">0</span></button>
                     <button class="button compact ghost log-filter-button" type="button" data-log-filter="error" aria-pressed="false">Ошибки <span class="log-filter-count">0</span></button>
@@ -996,6 +1026,7 @@
                     <button class="button compact ghost log-filter-button" type="button" data-log-filter="info" aria-pressed="false">Инфо <span class="log-filter-count">0</span></button>
                   </div>
                   <div class="log-scroll-region"><pre class="log-box" id="logBox" aria-live="polite" aria-label="Журнал приложения"></pre><button class="icon-btn log-scroll-button" id="logScrollBottomButton" type="button" title="К последним событиям" aria-label="К последним событиям" aria-hidden="true" tabindex="-1"><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
+                  </div>
                 </section>
               </div>
 
@@ -1085,7 +1116,7 @@
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
   <script src="js/app-settings.js?v=deployment-config-20261112"></script>
-  <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
+  <script src="js/app-logs.js?v=diagnostic-files-20261116"></script>
   <script src="js/app-diagnostics-navigation.js?v=diagnostics-source-20261103-selected-inspector-20261113"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-model-diagnostics.js?v=diagnostics-source-20261103"></script>

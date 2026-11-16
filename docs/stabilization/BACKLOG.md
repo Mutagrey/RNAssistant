@@ -1,5 +1,14 @@
 # RNAssistant backlog
 
+## Bridge bootstrap fixture — observed 2026-11-16
+
+Owner: `tests/web/bridge-bootstrap.test.js`. The existing Node fixture fails with
+`ReferenceError: RNAssistantChatGroups is not defined` in
+`applyBridgeUnavailableState` (`app-chat-session.js`). Reproduced against an
+untouched extraction of baseline `d5f0569a`; it is independent of the log viewer.
+Add the current group dependency/stub to the fixture and rerun this one check.
+No production chat behavior change is inferred from this fixture failure.
+
 ## Photo package F01–F12 — closed host-neutral — 2026-11-16
 
 Owner: AgentKernel/finish admission, Workspace HTML/Browser and shared diagnostics.

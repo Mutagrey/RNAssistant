@@ -60,6 +60,7 @@
     });
     $("diagnosticsAppControls").classList.toggle("hidden", tab !== "application");
     $("diagnosticsScopeBar").classList.toggle("hidden", tab !== "runs");
+    if (window.RNAssistantFileLogs) RNAssistantFileLogs.sync();
   }
   function show(tab, initialize) {
     var next = ["runs", "model-lab", "application"].indexOf(tab) >= 0 ? tab : "runs";
@@ -110,6 +111,7 @@
     if (!shown) {
       if (window.RNAssistantActionMenu) RNAssistantActionMenu.closeWithin($("tab-diagnostics"));
       if (window.RNAssistantTrajectory) RNAssistantTrajectory.pause();
+      if (window.RNAssistantFileLogs) RNAssistantFileLogs.pause();
       return;
     }
     show(state.diagnosticsTab || "runs");
@@ -124,7 +126,10 @@
   }
   window.RNAssistantDiagnostics = { source: source, context: context, key: key, open: open, openCurrent: openCurrent, show: show,
     showRequest: showRequest, returnToJournal: returnToJournal, forgetRequest: forgetRequest, showJournal: showJournal, onVisible: onVisible, bind: bind,
-    onClose: function () { if (window.RNAssistantTrajectory) RNAssistantTrajectory.dispose(); },
+    onClose: function () {
+      if (window.RNAssistantTrajectory) RNAssistantTrajectory.dispose();
+      if (window.RNAssistantFileLogs) RNAssistantFileLogs.dispose();
+    },
     isVisible: function () { return window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.isVisible("diagnostics"); },
     requestVisible: function () { return window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.isVisible("request"); } };
 }());

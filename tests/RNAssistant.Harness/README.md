@@ -1,5 +1,21 @@
 # RNAssistant Harness
 
+## Diagnostic files — 2026-11-16
+
+Filter `diagnostic logs:` runs six focused checks: typed production log-controller
+partial/bridge, UTF-8 page/snapshot boundaries, retention and diagnostic-only scope,
+concurrent owners and links, two independent process writers, and stale settings
+forms preserving retention. The process probe uses `DOTNET_HOST_PATH` when set,
+otherwise `dotnet` from PATH. Pair with Node `diagnostic-files-state.test.js` and
+`performance-diagnostics.test.js`. The existing prompt-migration archive check also
+exercises the shared settings writer. No native Office build is implied.
+
+`diagnostic-files.test.js` is the browser layout/lifecycle fixture; a machine with
+working Playwright Chromium is required. This environment blocks Chromium launch
+with socket EPERM before page creation; Windows/WebView2 evidence remains open.
+The separate existing `bridge-bootstrap.test.js` fails on unmodified `d5f0569a`
+because its fixture omits `RNAssistantChatGroups`; see the backlog entry.
+
 ## Storage-v2 production composition — 2026-11-16
 
 Focused filters: `journal text:`, `journal routing:`, `workspace: chat model

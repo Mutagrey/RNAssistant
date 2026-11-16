@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
-using System.Text;
 using System.Threading;
+using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Office.Diagnostics
 {
@@ -10,227 +11,140 @@ namespace RNAssistant.Office.Diagnostics
     {
         private static readonly object Sync = new object();
         private const int MaximumQueuedRecords = 1024;
-        private static readonly Queue<string> Queue = new Queue<string>();
+        private const int MaximumQueuedCharacters = 2 * 1024 * 1024;
+        private static readonly Queue<QueuedRecord> Queue = new Queue<QueuedRecord>();
         private static readonly AutoResetEvent Signal = new AutoResetEvent(false);
-        private static string _logFile;
+        private static DiagnosticLogStore _store;
+        private static DiagnosticLogStore _desktopStore;
         private static Thread _writerThread;
         private static bool _shutdown;
         private static int _droppedRecords;
+        private static int _queuedCharacters;
         private static bool _exitHookRegistered;
+
+        private sealed class QueuedRecord
+        {
+            public DiagnosticLogStore Store;
+            public string Text;
+            public bool Desktop;
+        }
 
         public static void Configure(string rootPath)
         {
-            if (string.IsNullOrWhiteSpace(rootPath))
-            {
-                return;
-            }
-
-            var logDirectory = Path.Combine(Path.GetFullPath(rootPath), "logs");
-            Directory.CreateDirectory(logDirectory);
+            if (string.IsNullOrWhiteSpace(rootPath)) return;
+            var store = new DiagnosticLogStore(rootPath);
             lock (Sync)
             {
-                _logFile = Path.Combine(logDirectory, "rnassistant.log");
+                _store = store;
                 EnsureWriterLocked();
-                if (!_exitHookRegistered)
-                {
-                    AppDomain.CurrentDomain.ProcessExit += (sender, args) => Shutdown();
-                    AppDomain.CurrentDomain.DomainUnload += (sender, args) => Shutdown();
-                    _exitHookRegistered = true;
-                }
             }
             Info("Runtime logging configured.");
         }
 
-        public static void Info(string message)
-        {
-            Write("INFO", message, null);
-        }
-
+        public static void Info(string message) { Write("INFO", message, null); }
         public static void Debug(string message)
         {
 #if DEBUG
             Write("DEBUG", message, null);
 #endif
         }
+        public static void Error(string message) { Write("ERROR", message, null); }
+        public static void Error(string message, Exception exception) { Write("ERROR", message, exception); }
+        public static void DesktopInfo(string message) { Write("INFO", message, null, true); }
+        public static void DesktopError(string message, Exception exception) { Write("ERROR", message, exception, true); }
 
-        public static void Error(string message)
+        private static void Write(string level, string message, Exception exception, bool desktop = false)
         {
-            Write("ERROR", message, null);
-        }
-
-        public static void Error(string message, Exception exception)
-        {
-            Write("ERROR", message, exception);
-        }
-
-        private static void Write(string level, string message, Exception exception)
-        {
-            var file = _logFile;
-            if (string.IsNullOrWhiteSpace(file))
-            {
-                return;
-            }
-
-            var line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            var line = (desktop ? DateTime.UtcNow.ToString("o") : DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
                 + " [" + level + "] " + (message ?? string.Empty);
-            if (exception != null)
-            {
-                line += Environment.NewLine + exception;
-            }
-
+            if (exception != null) line += Environment.NewLine + exception;
+            // The existing count bound now also implies a byte bound before data enters the queue.
+            line = DiagnosticLogStore.BoundRecord(line);
             lock (Sync)
             {
-                if (string.IsNullOrWhiteSpace(_logFile) || _shutdown)
-                {
-                    return;
-                }
-
+                if (_shutdown) return;
+                if (desktop && _desktopStore == null) _desktopStore = new DiagnosticLogStore(Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RNAssistant"));
+                var store = desktop ? _desktopStore : _store;
+                if (store == null) return;
                 EnsureWriterLocked();
-                if (Queue.Count >= MaximumQueuedRecords)
-                {
-                    _droppedRecords++;
-                    return;
-                }
-
+                if (Queue.Count >= MaximumQueuedRecords || _queuedCharacters + line.Length > MaximumQueuedCharacters)
+                { _droppedRecords++; return; }
                 if (_droppedRecords > 0 && Queue.Count < MaximumQueuedRecords - 1)
                 {
-                    Queue.Enqueue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")
-                        + " [WARN] Runtime log dropped " + _droppedRecords + " record(s).");
-                    _droppedRecords = 0;
+                    var warning = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [WARN] Runtime log dropped " + _droppedRecords + " record(s).";
+                    if (_queuedCharacters + warning.Length + line.Length <= MaximumQueuedCharacters)
+                    {
+                        Queue.Enqueue(new QueuedRecord { Store = store, Desktop = desktop, Text = warning });
+                        _queuedCharacters += warning.Length;
+                        _droppedRecords = 0;
+                    }
                 }
-
-                Queue.Enqueue(line);
+                Queue.Enqueue(new QueuedRecord { Store = store, Desktop = desktop, Text = line });
+                _queuedCharacters += line.Length;
             }
             Signal.Set();
         }
 
         private static void EnsureWriterLocked()
         {
-            if (_writerThread != null)
+            if (_writerThread != null) return;
+            if (!_exitHookRegistered)
             {
-                return;
+                AppDomain.CurrentDomain.ProcessExit += (sender, args) => Shutdown();
+                AppDomain.CurrentDomain.DomainUnload += (sender, args) => Shutdown();
+                _exitHookRegistered = true;
             }
-
-            _writerThread = new Thread(WriterLoop);
-            _writerThread.IsBackground = true;
-            _writerThread.Name = "RNAssistant RuntimeLog";
+            _writerThread = new Thread(WriterLoop) { IsBackground = true, Name = "RNAssistant RuntimeLog" };
             _writerThread.Start();
         }
 
         private static void WriterLoop()
         {
-            StreamWriter writer = null;
-            string openedFile = null;
-            try
+            var maintenanceUtc = DateTime.MinValue;
+            while (true)
             {
-                while (true)
+                var batch = new List<string>();
+                DiagnosticLogStore store;
+                bool desktop;
+                lock (Sync)
                 {
-                    string line;
-                    string file;
-                    lock (Sync)
+                    if (_shutdown && Queue.Count == 0) return;
+                    store = Queue.Count == 0 ? (_store ?? _desktopStore) : Queue.Peek().Store;
+                    desktop = Queue.Count != 0 && Queue.Peek().Desktop;
+                    while (Queue.Count > 0 && batch.Count < 64 && ReferenceEquals(Queue.Peek().Store, store) && Queue.Peek().Desktop == desktop)
                     {
-                        if (Queue.Count == 0)
-                        {
-                            if (_shutdown)
-                            {
-                                break;
-                            }
-
-                            line = null;
-                            file = null;
-                        }
-                        else
-                        {
-                            line = Queue.Dequeue();
-                            file = _logFile;
-                        }
-                    }
-
-                    if (line == null)
-                    {
-                        Signal.WaitOne(TimeSpan.FromSeconds(2));
-                        Flush(writer);
-                        continue;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(file))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        if (!string.Equals(openedFile, file, StringComparison.OrdinalIgnoreCase))
-                        {
-                            Close(writer);
-                            writer = new StreamWriter(new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8);
-                            openedFile = file;
-                        }
-
-                        writer.WriteLine(line);
-                    }
-                    catch
-                    {
-                        Close(writer);
-                        writer = null;
-                        openedFile = null;
+                        var text = Queue.Dequeue().Text;
+                        _queuedCharacters -= text.Length;
+                        batch.Add(text);
                     }
                 }
-            }
-            finally
-            {
-                Flush(writer);
-                Close(writer);
+                try
+                {
+                    if (store != null && batch.Count > 0) store.Append(desktop
+                        ? DateTime.UtcNow.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + ".log" : "rnassistant.log", batch);
+                    if (store != null && DateTime.UtcNow - maintenanceUtc >= TimeSpan.FromSeconds(30))
+                    {
+                        store.Prune();
+                        maintenanceUtc = DateTime.UtcNow;
+                    }
+                }
+                catch
+                {
+                    // Logging cannot fault the application. The next successful write exposes the loss.
+                    lock (Sync) _droppedRecords += batch.Count;
+                }
+                if (batch.Count == 0) Signal.WaitOne(TimeSpan.FromSeconds(2));
             }
         }
 
         private static void Shutdown()
         {
             Thread writerThread;
-            lock (Sync)
-            {
-                _shutdown = true;
-                writerThread = _writerThread;
-            }
+            lock (Sync) { _shutdown = true; writerThread = _writerThread; }
             Signal.Set();
-            try
-            {
-                if (writerThread != null && writerThread != Thread.CurrentThread)
-                {
-                    writerThread.Join(500);
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        private static void Flush(StreamWriter writer)
-        {
-            try
-            {
-                if (writer != null)
-                {
-                    writer.Flush();
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        private static void Close(StreamWriter writer)
-        {
-            try
-            {
-                if (writer != null)
-                {
-                    writer.Dispose();
-                }
-            }
-            catch
-            {
-            }
+            try { if (writerThread != null && writerThread != Thread.CurrentThread) writerThread.Join(500); }
+            catch { }
         }
     }
 }

@@ -696,6 +696,31 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = _controller.GetCasHealth();
                         break;
+                    case BridgeOperationId.ListDiagnosticLogs:
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ListDiagnosticLogs(cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ReadDiagnosticLog:
+                        var logRead = Payload<DiagnosticLogReadRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadDiagnosticLog(logRead, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ClearDiagnosticLog:
+                        var logClear = Payload<DiagnosticLogFileRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ClearDiagnosticLog(logClear), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.DeleteDiagnosticLog:
+                        var logDelete = Payload<DiagnosticLogFileRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.DeleteDiagnosticLog(logDelete), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ClearDiagnosticLogs:
+                        responsePayload = await RunBridgeWorkAsync(_controller.ClearDiagnosticLogs, cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.PruneDiagnosticLogs:
+                        responsePayload = await RunBridgeWorkAsync(_controller.PruneDiagnosticLogs, cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.SaveDiagnosticLogOptions:
+                        var logOptions = Payload<DiagnosticLogOptionsDto>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.SaveDiagnosticLogOptions(logOptions), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.CollectCasGarbage:
                         responsePayload = _controller.CollectCasGarbage();
                         break;
