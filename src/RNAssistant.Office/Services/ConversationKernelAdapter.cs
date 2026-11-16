@@ -107,7 +107,7 @@ namespace RNAssistant.Office.Services
             _session = session;
             if (inbox != null)
                 _runInput = new ConversationRunInputChannel(inbox, session, ApplySteeredInputAsync,
-                    () => _progress?.Invoke("streaming", "", null));
+                    () => _progress?.Invoke("model_reset", null, null));
             _progress = progress;
             _registrar = _policy.AllowsConfirmation ? registrar : null;
             _runCancellation = cancellationToken;

@@ -111,6 +111,14 @@ namespace RNAssistant.Office
         {
             return (phase, message, activity) =>
             {
+                if (activity?.ModelProgress != null)
+                {
+                    if (_activeRuns.SetModelProgress(session.Id, runId, activity.ModelProgress))
+                        ReportExternalProgress(progress, phase, message, activity);
+                    return;
+                }
+                if (phase == "model_reset" || phase == "acting" || phase == "reflection" || phase == "tool_running")
+                    _activeRuns.SetModelProgress(session.Id, runId, null);
                 _activeRuns.Update(session.Id, runId, phase, message);
                 if (session.LastRun != null && string.Equals(
                     session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))

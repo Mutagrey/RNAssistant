@@ -336,7 +336,7 @@ namespace RNAssistant.Core.Models
         public string RunId { get; set; }
         public int? Sequence { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ModelAttemptId { get; set; }
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.ModelProtocol.RetainedModelAttempt UnsavedAttempt { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.ModelProtocol.ConversationModelProgress ModelProgress { get; set; }
         public string StepId { get; set; }
         public string StepMessage { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

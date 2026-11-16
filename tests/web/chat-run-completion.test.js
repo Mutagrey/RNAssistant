@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 class Element {
-  constructor() { this.children = []; this.className = ""; this.attributes = {}; }
+  constructor() { this.children = []; this.className = ""; this.attributes = {}; this.dataset = {}; }
   get classList() { return {
     add: name => { this.className += " " + name; },
     contains: name => this.className.split(" ").includes(name)
@@ -46,6 +46,7 @@ function ui() {
   for (const file of ["app-core.js", "app-utils.js", "app-run-view-state.js", "app-conversation-state.js", "app-chat-run.js", "app-chat-inbox.js", "app-chat-state.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), ctx, { filename: file });
   }
+  ctx.RNAssistantChatGroups = { accept: () => {}, scopeOf: () => null };
   ctx.RNAssistantNavigationTree = { icon: () => "" };
   ctx.state.activeChatId = "a";
   ctx.selectOfficeChatProjection("a");
@@ -56,10 +57,11 @@ function ui() {
     ctx.state.chats.forEach(chat => { ctx.rows[chat.Id] = ctx.chatTreeNode(chat); });
   };
   for (const name of ["renderMessages", "renderSendControls", "renderContext", "renderContextMeter", "renderModelControls"]) ctx[name] = () => {};
+  let sequence = 0;
   ctx.progress = id => receive({ data: { type: "progress", id: "inbox:" + id,
-    payload: { chatId: id, runId: "run-" + id, contentDelta: "Answer" } } });
+    payload: { chatId: id, runId: "run-" + id, modelProgress: { RunId: "run-" + id, AttemptId: "attempt-" + id, Sequence: ++sequence, Revision: sequence, Message: "Answer" } } } });
   ctx.newProgress = (id, runId) => receive({ data: { type: "progress", id: "inbox:" + id,
-    payload: { chatId: id, runId, contentDelta: "Next" } } });
+    payload: { chatId: id, runId, modelProgress: { RunId: runId, AttemptId: runId + "-attempt", Sequence: ++sequence, Revision: sequence, Message: "Next" } } } });
   ctx.finish = (id, revision = 2) => receive({ data: { type: "chatState", scope: "full", payload: {
     activeChatId: id, sessionRevision: revision, runViewState: summary(id, "completed").RunViewState,
     chats: ctx.state.chats.map(chat => chat.Id === id ? summary(id, "completed", revision) : chat),
@@ -206,7 +208,7 @@ function assertStoppedIndicator(ctx, id) {
     assert.equal(typeof descriptor.get, "function");
     assert.equal(descriptor.set, undefined, key + " has no selected copy writer");
   }
-  ctx.applyOfficeChatProgress({ chatId: "a", runId: "run-a", reasoningDelta: "r".repeat(25000) }, null, "inbox:a");
+  ctx.applyOfficeChatProgress({ chatId: "a", runId: "run-a", modelProgress: { RunId: "run-a", AttemptId: "attempt-a", Sequence: 2, Revision: 2, Message: "Answer", Reasoning: "r".repeat(24000), ReasoningTruncated: true } }, null, "inbox:a");
   assert.equal(ctx.state.liveReasoning.length, 24000, "reasoning remains bounded");
   ctx.state.activeRunViewState = ctx.RNAssistantRunViewState.normalize(summary("a", "running").RunViewState);
   assert.equal(first.snapshot().activeRunViewState, ctx.state.activeRunViewState);
@@ -214,7 +216,7 @@ function assertStoppedIndicator(ctx, id) {
   ctx.clearOfficeChatProjection();
   ctx.progress("a");
   assert.equal(ctx.state.chatRuns.a, run, "view release does not stop or replace the run");
-  assert.equal(run.stream, "AnswerAnswer", "background progress continues without a mounted source");
+  assert.equal(run.stream, "Answer", "background full snapshot does not duplicate the text");
   assert.equal(first.snapshot(), null);
   assert.equal(ctx.officeChatProjection(), null, "delivery cannot recreate a disposed source");
   assert.equal(ctx.state.liveStreamContent, null);
@@ -228,13 +230,13 @@ function assertStoppedIndicator(ctx, id) {
   ctx.restoreActiveChatRun(false);
   assert.notEqual(returned, first);
   assert.equal(returned.snapshot().liveRun, run, "returning borrows the current run without replay or copy");
-  assert.equal(ctx.state.liveStreamContent, "AnswerAnswerAnswer");
+  assert.equal(ctx.state.liveStreamContent, "Answer");
   assert.equal(first.isCurrent(), false);
   ctx.newProgress("a", "new-a");
   assert.notEqual(ctx.state.chatRuns.a, run);
   assert.equal(ctx.state.liveStreamContent, "Next", "a new run cannot inherit the previous draft");
   const runCount = Object.keys(ctx.state.chatRuns).length;
-  ctx.applyOfficeChatProgress({ contentDelta: "unaddressed" }, null, "inbox:missing");
+  ctx.applyOfficeChatProgress({ modelProgress: { Message: "unaddressed" } }, null, "inbox:missing");
   assert.equal(Object.keys(ctx.state.chatRuns).length, runCount);
   assert.equal(ctx.state.liveStreamContent, "Next");
   console.log("PASS live ownership: addressed borrowed runs, bounded reasoning, release, return and run replacement");

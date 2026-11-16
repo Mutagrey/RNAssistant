@@ -21,9 +21,12 @@ Mandatory append does not use the cancelled model-request token. A recovered exa
 receipt resolves a lost ACK without re-appending or requesting the model again.
 Failed retention stops automatic retry, removes its uncommitted row from the accepted
 native projection, and exposes an explicitly unsaved body in the existing live/view
-projection. Only a successful commit promises reopen/restart persistence. Hard I/O
-bounds of the current synchronous commit port and full native observation convergence
-remain separate lifecycle work; unsaved Office view text is not process-crash storage.
+projection. ConversationRunOwner retains the latest preview/unsaved body for view
+reopen through existing Office/Workspace reads. ConversationModelProgress carries
+AttemptId, revision, sequence, all visible fields and frozen transport outcome;
+UI uses the same full-snapshot reducer. Only successful commits promise restart
+persistence. Hard I/O bounds of the synchronous commit port remain lifecycle work;
+uncommitted text is not process-crash storage.
 
 
 

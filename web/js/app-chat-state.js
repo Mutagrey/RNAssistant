@@ -62,6 +62,17 @@ function mergeOfficeChatSnapshot(current, response, options) {
     next.activeTaskListArtifactId = response.activeTaskListArtifactId || response.ActiveTaskListArtifactId || "";
   if (response.activePlanDocumentArtifactId !== undefined || response.ActivePlanDocumentArtifactId !== undefined)
     next.activePlanDocumentArtifactId = response.activePlanDocumentArtifactId || response.ActivePlanDocumentArtifactId || "";
+  var preview = response.modelProgress || response.ModelProgress;
+  if (preview) {
+    var runId = preview.runId || preview.RunId;
+    RNAssistantConversationState.retainUnsavedAttempt(next, runId, preview.unsavedAttempt || preview.UnsavedAttempt, preview.stepId || preview.StepId);
+    if (next.activeRunViewState && next.activeRunViewState.runId === runId && next.activeRunViewState.lifecycle === "running" &&
+        typeof trackChatProgressRun === "function") {
+      var run = trackChatProgressRun(next.activeChatId, runId);
+      applyOfficeModelProgress(run, preview);
+      next.liveRun = run;
+    }
+  }
   return RNAssistantConversationState.preserveUnsavedAttempts(current, next);
 }
 function createOfficeChatProjection(chatId) {

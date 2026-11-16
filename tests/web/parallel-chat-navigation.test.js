@@ -75,7 +75,7 @@ const {chromium} = require('playwright');
       })));
       ['preview-chat', 'preview-summary'].forEach(id => {
         state.activeSends[id] = {requestId: 'inbox:' + id};
-        applyOfficeChatProgress({chatId: id, runId: 'parallel-' + id, phase: 'thinking', contentReset: true, contentDelta: 'Начало'}, null, 'inbox:' + id);
+        applyOfficeChatProgress({chatId: id, runId: 'parallel-' + id, phase: 'model_progress', modelProgress: { RunId:'parallel-'+id, AttemptId:'attempt-'+id, Sequence:1, Revision:1, Message:'Начало' }}, null, 'inbox:' + id);
       });
       renderChatSessions();
       window.parallelTree = document.querySelector('#chatSessionList .chat-navigation-tree');
@@ -88,7 +88,7 @@ const {chromium} = require('playwright');
       const started = performance.now(), gaps = []; let previous = started;
       for (let i = 0; i < 60; i++) {
         ['preview-chat', 'preview-summary'].forEach(id => applyOfficeChatProgress({
-          chatId: id, runId: 'parallel-' + id, phase: 'thinking', contentDelta: ' токен'
+          chatId: id, runId: 'parallel-' + id, phase: 'model_progress', modelProgress: { RunId:'parallel-'+id, AttemptId:'attempt-'+id, Sequence:i+2, Revision:i+2, Message:'Начало'+' токен'.repeat(i+1) }
         }, null, 'inbox:' + id));
         await new Promise(resolve => setTimeout(resolve, 20));
         const now = performance.now(); gaps.push(now - previous); previous = now;
@@ -105,7 +105,7 @@ const {chromium} = require('playwright');
       window.navigationStreamTimer = setInterval(() => {
         navigationTicks++;
         ['preview-chat', 'preview-summary'].forEach(id => applyOfficeChatProgress({
-          chatId: id, runId: 'parallel-' + id, phase: 'thinking', contentDelta: ' поток'
+          chatId: id, runId: 'parallel-' + id, phase: 'model_progress', modelProgress: { RunId:'parallel-'+id, AttemptId:'attempt-'+id, Sequence:62+navigationTicks, Revision:62+navigationTicks, Message:'Начало'+' поток'.repeat(navigationTicks) }
         }, null, 'inbox:' + id));
       }, 20);
     });

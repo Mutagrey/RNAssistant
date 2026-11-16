@@ -1,3 +1,4 @@
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Tools;
 using System;
 using System.Collections.Generic;
@@ -139,7 +140,7 @@ namespace RNAssistant.Office.Contracts
         public string SessionId { get; set; }
 
         [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)]
-        public WorkspaceModelProgress ModelProgress { get; set; }
+        public ConversationModelProgress ModelProgress { get; set; }
 
         [JsonProperty("inputReceipt", NullValueHandling = NullValueHandling.Ignore)]
         public WorkspaceInputReceipt InputReceipt { get; set; }
@@ -162,20 +163,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("activity", NullValueHandling = NullValueHandling.Ignore)]
         public ChatActivity Activity { get; set; }
 
-        [JsonProperty("reasoningDelta", NullValueHandling = NullValueHandling.Ignore)]
-        public string ReasoningDelta { get; set; }
 
-        [JsonProperty("reasoningComplete", NullValueHandling = NullValueHandling.Ignore)]
-        public bool? ReasoningComplete { get; set; }
-
-        [JsonProperty("contentDelta", NullValueHandling = NullValueHandling.Ignore)]
-        public string ContentDelta { get; set; }
-
-        [JsonProperty("contentReset", NullValueHandling = NullValueHandling.Ignore)]
-        public bool? ContentReset { get; set; }
-
-        [JsonProperty("reasoningReset", NullValueHandling = NullValueHandling.Ignore)]
-        public bool? ReasoningReset { get; set; }
     }
 
     public sealed class ChatStateMessage
@@ -792,6 +780,10 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("runViewState", NullValueHandling = NullValueHandling.Ignore)]
         public RunViewState RunViewState { get; set; }
+
+        [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)]
+        public ConversationModelProgress ModelProgress { get; set; }
+
 
         [JsonProperty("activeChatId")]
         public string ActiveChatId { get; set; }

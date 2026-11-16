@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Application.Conversations
 {
@@ -101,6 +102,9 @@ namespace RNAssistant.Application.Conversations
         private readonly object _sync = new object();
         private readonly Dictionary<string, ConversationActiveSnapshot> _runs =
             new Dictionary<string, ConversationActiveSnapshot>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ConversationModelProgress> _modelProgress =
+            new Dictionary<string, ConversationModelProgress>(StringComparer.OrdinalIgnoreCase);
+        private long _modelProgressSequence;
         private readonly ConversationLeaseService _leases;
 
         public ConversationRunOwner(ConversationLeaseService leases)
@@ -163,6 +167,7 @@ namespace RNAssistant.Application.Conversations
                         };
                         if (session != null) SetIdentity(run, session);
                         _runs[chatId] = run;
+                        _modelProgress.Remove(chatId);
                         return new ConversationRunHandle(this, chatId, runId, run.InvocationId,
                             cancellation == null ? CancellationToken.None : cancellation.Token);
                     }
@@ -186,6 +191,39 @@ namespace RNAssistant.Application.Conversations
                     if (run.Status != "cancelling") run.Phase = string.IsNullOrWhiteSpace(phase) ? run.Phase : phase;
                     run.CurrentAction = string.IsNullOrWhiteSpace(currentAction) ? run.CurrentAction : currentAction;
                 }
+            }
+        }
+
+        internal bool SetModelProgress(string chatId, string runId, ConversationModelProgress value)
+        {
+            lock (_sync)
+            {
+                ConversationActiveSnapshot run;
+                if (!_runs.TryGetValue(chatId, out run) || run.RunId != runId) return false;
+                ConversationModelProgress previous;
+                _modelProgress.TryGetValue(chatId, out previous);
+                if (value == null)
+                {
+                    if (previous?.UnsavedAttempt == null) _modelProgress.Remove(chatId);
+                    return true;
+                }
+                if (value.RunId != runId) throw new InvalidOperationException("Model preview belongs to another run.");
+                if (previous != null && previous.AttemptId == value.AttemptId &&
+                    (previous.Revision >= value.Revision || previous.TransportEnded) && value.UnsavedAttempt == null) return false;
+                value.Retrying = previous != null && previous.StepId == value.StepId &&
+                    (previous.Retrying || previous.AttemptId != value.AttemptId);
+                value.Sequence = ++_modelProgressSequence;
+                _modelProgress[chatId] = value;
+                return true;
+            }
+        }
+
+        internal ConversationModelProgress ModelProgress(string chatId, string runId)
+        {
+            lock (_sync)
+            {
+                ConversationModelProgress value;
+                return _modelProgress.TryGetValue(chatId, out value) && value.RunId == runId ? value : null;
             }
         }
 
@@ -306,6 +344,9 @@ namespace RNAssistant.Application.Conversations
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase) && (invocationId == null || run.InvocationId == invocationId))
                 {
                     _runs.Remove(chatId);
+                    ConversationModelProgress preview;
+                    if (!_modelProgress.TryGetValue(chatId, out preview) || preview.UnsavedAttempt == null)
+                        _modelProgress.Remove(chatId);
                     if (run.Cancellation != null) run.Cancellation.Dispose();
                     if (run.RunLock != null) run.RunLock.Dispose();
                 }

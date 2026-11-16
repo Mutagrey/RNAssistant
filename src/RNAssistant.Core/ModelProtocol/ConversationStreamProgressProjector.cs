@@ -11,7 +11,7 @@ namespace RNAssistant.Core.ModelProtocol
 
     // A bounded, immutable observation of one HTTP request. Transport completion
     // is not protocol admission or runtime acceptance.
-    public sealed class ConversationAttemptSnapshot
+    public class ConversationAttemptSnapshot
     {
         [JsonProperty]
         public string AttemptId { get; internal set; }
@@ -43,6 +43,29 @@ namespace RNAssistant.Core.ModelProtocol
         public ModelTransportOutcome TransportOutcome { get; internal set; }
         [JsonProperty] public bool OutputTruncated { get; internal set; }
         public bool TransportEnded { get { return TransportOutcome != ModelTransportOutcome.Receiving; } }
+    }
+
+    public sealed class ConversationModelProgress : ConversationAttemptSnapshot
+    {
+        public long Sequence { get; set; }
+        public string RunId { get; set; }
+        public string StepId { get; set; }
+        public bool Retrying { get; set; }
+        public RetainedModelAttempt UnsavedAttempt { get; set; }
+
+        public static ConversationModelProgress FromAttempt(string runId, string stepId,
+            ConversationAttemptSnapshot body, RetainedModelAttempt unsaved = null)
+        {
+            if (body == null) throw new ArgumentNullException(nameof(body));
+            return new ConversationModelProgress { RunId = runId, StepId = stepId,
+                AttemptId = body.AttemptId, Revision = body.Revision, Message = body.Message,
+                Reason = body.Reason, Decision = body.Decision, Refusal = body.Refusal,
+                Reasoning = body.Reasoning, MessageTruncated = body.MessageTruncated,
+                ReasonTruncated = body.ReasonTruncated, DecisionTruncated = body.DecisionTruncated,
+                RefusalTruncated = body.RefusalTruncated, ReasoningTruncated = body.ReasoningTruncated,
+                IsEventStream = body.IsEventStream, TransportOutcome = body.TransportOutcome,
+                OutputTruncated = body.OutputTruncated, UnsavedAttempt = unsaved };
+        }
     }
 
     // One coalesced snapshot, not an unbounded queue. All producers (including the

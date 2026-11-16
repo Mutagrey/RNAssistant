@@ -37,9 +37,11 @@ function officeTranscriptData(snapshot) {
   }
   return {
     resourceSnapshot: snapshot, messages: snapshot.messages, start: snapshot.messageStartIndex, total: snapshot.messageTotalCount,
-    live: { activities: activities, runId: runId || "", content: run && run.stream || "",
-      reasoning: run && run.reasoning || "", reasoningComplete: !!(run && run.reasoningComplete),
-      retrying: !!(run && run.streamRetrying), statusText: typeof chatModelStageText === "function" ? chatModelStageText(run) : "" }
+    live: Object.assign(RNAssistantConversationState.modelOutput(run && run.modelAttemptActive ? run.modelProgress : null),
+      { activities: activities, runId: runId || "", content: run && run.stream || "",
+        reasoning: run && run.reasoning || "", reasoningComplete: !!(run && run.reasoningComplete),
+        retrying: !!(run && run.streamRetrying) },
+      run && run.modelAttemptActive ? {} : { statusText: typeof chatModelStageText === "function" ? chatModelStageText(run) : "" })
   };
 }
 function officeMessagePresentation(view, commands, snapshot) {
@@ -677,12 +679,10 @@ function paintLiveModelOutput(section, output) {
   }
   var label = output.retrying ? "Повторная попытка…" : content || output.showStatus
     ? output.statusText || "Получаю ответ модели…" : "";
-  if (content && !output.retrying) label = "Черновик ответа · " + label;
+  if (content && !output.retrying) label = "Черновик ответа" + (output.messageTruncated ? " · сокращено" : "") + " · " + label;
   if (status.hidden !== !label) status.hidden = !label;
   if (status.textContent !== label) status.textContent = label;
-  section.liveOutput = { content: content, reasoning: reasoning,
-    reasoningComplete: reasoningComplete, reasoningTruncated: reasoningTruncated,
-    retrying: output.retrying, statusText: output.statusText, showStatus: output.showStatus };
+  section.liveOutput = Object.assign({}, output);
 }
 
 function messageUnitSignature(message) {

@@ -159,8 +159,8 @@ async function serve() {
     await normal.waitForFunction(() => state.messages.some(message =>
       String(message.Content || message.content || "").includes("Это смоделированный ответ")));
     progress.push(...await normal.evaluate(() => window.__previewProgress));
-    assert.ok(progress.some(item => item.phase === "thinking"));
-    assert.equal(progress.filter(item => item.phase === "streaming").length, 2);
+    assert.ok(progress.some(item => item.modelProgress && item.modelProgress.AttemptId));
+    assert.equal(progress.filter(item => item.phase === "model_progress").length, 3);
     assert.equal(await normal.locator("#chatInput").inputValue(), "");
     await normal.locator('.section-rail [data-section="library"]').click();
     assert.deepEqual(await normal.evaluate(() => ['core.read', 'html.source.write',

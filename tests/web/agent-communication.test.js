@@ -15,8 +15,8 @@ const assert = require('node:assert/strict'), path = require('node:path'), {spaw
   await page.waitForFunction(()=>{const c=RNAssistantConversationPanel.office('preview-summary');return c&&!c.loading;});
   await page.evaluate(()=>{
    applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'thinking',message:'Preparing peer reply'},null,'inbox:preview-summary');
-   applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'reasoning',reasoningDelta:'Peer reasoning'},null,'inbox:preview-summary');
-   applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'streaming',contentDelta:'Visible peer answer'},null,'inbox:preview-summary');
+   applyOfficeChatProgress({chatId:'preview-summary',runId:'peer-run',phase:'model_progress',
+     modelProgress:{RunId:'peer-run',AttemptId:'peer-attempt',Sequence:1,Revision:1,Reasoning:'Peer reasoning',Message:'Visible peer answer'}},null,'inbox:preview-summary');
   });
   await page.waitForFunction(()=>RNAssistantConversationPanel.office('preview-summary').node('messages').textContent.includes('Visible peer answer'));
   assert.equal(await page.evaluate(()=>state.chatRuns['preview-summary'].reasoning),'Peer reasoning','recipient reasoning uses the common progress route');

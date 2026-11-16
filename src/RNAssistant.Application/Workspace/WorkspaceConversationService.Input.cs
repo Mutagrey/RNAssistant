@@ -185,7 +185,7 @@ namespace RNAssistant.Runtime
                 _owner = owner; _session = session; _workspace = workspace;
                 _inbox = owner._conversationInbox;
                 _channel = new ConversationRunInputChannel(_inbox, session, ApplyInputAsync,
-                    () => _owner.SetModelProgress(_session.Id, null), ownsBinding: true, queuedWait: queuedWait);
+                    () => _owner._activeRuns.SetModelProgress(_session.Id, RunId, null), ownsBinding: true, queuedWait: queuedWait);
                 if (!owner._inputChannels.TryAdd(session.Id, this))
                 {
                     _channel.Dispose();

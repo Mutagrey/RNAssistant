@@ -1244,9 +1244,6 @@ namespace RNAssistant.Office.WebView
                 return;
             }
 
-            var streaming = string.Equals(phase, "streaming", StringComparison.OrdinalIgnoreCase);
-            var streamReset = streaming && string.IsNullOrEmpty(message);
-            var reasoning = activity != null && string.Equals(activity.Kind, "reasoning", StringComparison.OrdinalIgnoreCase);
             _postMessageJson(JsonConvert.SerializeObject(new ProgressMessage
             {
                 Type = "progress",
@@ -1256,15 +1253,9 @@ namespace RNAssistant.Office.WebView
                     ChatId = chatId,
                     RunId = runId,
                     Phase = phase,
-                    Message = streaming ? null : message,
-                    Activity = reasoning ? null : activity,
-                    ContentDelta = streaming && !streamReset ? message : null,
-                    ContentReset = streamReset ? (bool?)true : null,
-                    ReasoningReset = streamReset ? (bool?)true : null,
-                    ReasoningDelta = reasoning ? activity.ResultMessage : null,
-                    ReasoningComplete = reasoning
-                        ? (bool?)(string.Equals(activity.Status, "completed", StringComparison.OrdinalIgnoreCase))
-                        : null
+                    Message = message,
+                    Activity = activity?.ModelProgress == null ? activity : null,
+                    ModelProgress = activity?.ModelProgress
                 }
             }));
         }

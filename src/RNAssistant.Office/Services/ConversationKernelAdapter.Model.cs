@@ -67,8 +67,9 @@ namespace RNAssistant.Office.Services
                 preparedRequest.RetainAttemptAsync = request.RetainAttemptAsync;
                 _lastModel = await _protocol.GetResponseAsync(
                     preparedRequest,
-                    ConversationStreamProgressDelivery.ForProtocol((phase, message, activity) =>
-                    { if (_progress != null) _progress(phase, message, activity); }), cancellationToken).ConfigureAwait(false);
+                    ModelProtocolProgress.ForConversation(request.RunId, request.StepId,
+                        value => _progress?.Invoke("model_progress", null, new ChatActivity { ModelProgress = value }),
+                        () => RuntimeLog.Error("Optional model parser diagnostic append failed.")), cancellationToken).ConfigureAwait(false);
             }
             catch (PromptBudgetExceededException ex)
             {

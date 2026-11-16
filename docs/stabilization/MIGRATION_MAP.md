@@ -5,16 +5,18 @@
 Owner: ModelProtocolClient creates one Core ConversationStreamProgressProjector per
 HTTP AttemptId; AgentKernel owns accepted/retained decisions, ConversationRunCommit
 owns publication. Removed Office accumulator and Workspace inline StringBuilders/
-elapsed throttling. Office ConversationStreamProgressDelivery only translates the
-shared snapshots into its existing channel; removal condition is common typed live
-presentation delivery. No additional gap/replay/watermark protocol.
+elapsed throttling. Typed ConversationModelProgress now crosses every observer;
+ConversationRunOwner owns the latest exact run preview and unsaved body for view
+reopen. Removed ConversationStreamProgressDelivery, Office bridge delta fields,
+WorkspaceModelProgress and Workspace _liveModels cache. No additional registry,
+gap/replay/watermark protocol or temporary live adapter.
 
 Mandatory ModelAttemptRetained uses the chosen Journal's existing ModelEvent/index,
 the exact message CAS body and checkpoint in one frame. Legacy adapter supports the
 same semantic operation until the established P7 cutover. Optional rejection traces
 no longer provide retention. Common activity renderer shows retained fields inside
 the run; no new screen/store. Stop freezes received text pending the terminal fact.
-Native lifecycle and Office live delivery still need convergence; no completion claim.
+Native execution/continuation lifecycle still needs convergence; no completion claim.
 
 
 ## Unified chat addressed reads — W1, 2026-11-14
@@ -31,7 +33,7 @@ and usage carry exact targets. No temporary adapter or new observation protocol.
 All Panel sources now use app-messages renderConversationTranscript/paintConversationStream.
 Removed Workspace renderMessages/paintProgress and workspaceProgress live-leaf path.
 Resource capabilities and captured snapshot/target replace source switches. Native
-lifecycle/live delivery remains open; no alternate transcript renderer is retained.
+lifecycle remains open; no alternate transcript renderer is retained.
 
 
 ## Immutable CAS publication — W2, 2026-11-14

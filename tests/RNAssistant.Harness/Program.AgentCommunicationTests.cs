@@ -333,7 +333,7 @@ namespace RNAssistant.Harness
                         AssertTrue(lateReplyProcessed.Task.Wait(10000) && application.Drained.Wait(10000), "late peer input starts automatically without Resume");
                         var progressFrames = frames.Where(f => (string)f["type"] == "progress").ToArray();
                         AssertTrue(progressFrames.Any(f => (string)f["payload"]["chatId"] == b.Id &&
-                            !string.IsNullOrWhiteSpace((string)f["payload"]["reasoningDelta"])), "recipient model progress reaches the bridge");
+                            !string.IsNullOrWhiteSpace((string)f["payload"]["modelProgress"]?["Reasoning"])), "recipient model progress reaches the bridge");
                         AssertTrue(progressFrames.All(f => (string)f["id"] == "inbox:" + (string)f["payload"]["chatId"] &&
                             !string.IsNullOrWhiteSpace((string)f["payload"]["runId"])), "agent-started Office progress uses the common inbox route");
                     }

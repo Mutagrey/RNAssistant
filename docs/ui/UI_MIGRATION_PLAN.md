@@ -4,8 +4,11 @@ W3 retained attempts — In Review, 2026-11-14. Общий блок внутри
 для Office/Workspace/plugin. `retained-attempts.test.js` проверяет оба источника,
 поля/усечение и сохранность unsaved body при refresh; `stream-render-cost` — freeze
 при Stop и поздние deltas. Host-neutral persistence проверена отдельно. Следующие
-срезы: общая native live delivery, удаление второго lifecycle,
-draft barriers. Storage P7 и Windows qualification этим срезом не закрыты.
+срезы: удаление второго lifecycle и draft barriers. Native live delivery переключена
+на один ConversationModelProgress/RunOwner (16.27.17-dev); старые Office delta fields/
+converter и Workspace cache/DTO удалены. conversation-model-progress проверяет все
+три sources, полный snapshot/reopen/frozen late body/unsaved reopen без cancellation.
+Ревью: начать ответ → открыть соседний чат → закрыть/открыть исходный view → Stop. Storage P7 и Windows qualification этим срезом не закрыты.
 
 
 ## Unified chat W1 — In Review, 2026-11-14
@@ -18,7 +21,7 @@ instance; сохранён один AgentApproval/Questions. Header actions ад
 20 edits → 0 замен неизменного approval node, exact A/B/stale pending/retry/lost ACK,
 420 px/125% проходят. Ревью: открыть A/B → вызвать usage A при фокусе B → ответить
 на вопрос → сузить панель и открыть меню. Workspace transcript/live renderer удалён; Panel использует общий app-messages path.
-Native lifecycle/delivery и storage consumers остаются открытыми; визуальное принятие отдельно.
+Native lifecycle и оставшиеся storage consumers остаются открытыми; визуальное принятие отдельно.
 
 Сверка с e9bb52c1: Inspector уже исправлен в 93d99a85; оставшиеся F04 callbacks
 preview/questions/details/usage переключены на исходный target/scope. F08 loading

@@ -134,9 +134,9 @@ namespace RNAssistant.Office.Services
             {
                 _session.Messages.RemoveRange(firstMessage, _session.Messages.Count - firstMessage);
                 foreach (var message in appended) _pendingMessageUpdates.Remove(message);
-                _progress?.Invoke("attempt_unsaved", "Не сохранено", new ChatActivity {
-                    Kind = "model_attempt", Title = "Не сохранено", Status = "unsaved", StepId = fact.StepId,
-                    RunId = fact.Summary.RunId, ModelAttemptId = fact.SourceModelAttemptId, UnsavedAttempt = fact.RetainedAttempt });
+                _progress?.Invoke("model_progress", null, new ChatActivity {
+                    ModelProgress = ConversationModelProgress.FromAttempt(fact.Summary.RunId, fact.StepId,
+                        fact.RetainedAttempt.Body, fact.RetainedAttempt) });
                 throw;
             }
             if (fact.Kind == AgentRunEventKind.ToolCompleted)

@@ -1,3 +1,4 @@
+using RNAssistant.Core.ModelProtocol;
 using System;
 using System.IO;
 using System.IO.Pipes;
@@ -14,16 +15,16 @@ namespace RNAssistant.Runtime
     internal sealed class WorkspaceRunPreviewRead
     {
         public bool ReachedOwner { get; private set; }
-        public WorkspaceModelProgress Progress { get; private set; }
+        public ConversationModelProgress Progress { get; private set; }
         public bool CanSteer { get; private set; }
 
-        public WorkspaceRunPreviewRead(bool reachedOwner, WorkspaceModelProgress progress, bool canSteer = false)
+        public WorkspaceRunPreviewRead(bool reachedOwner, ConversationModelProgress progress, bool canSteer = false)
         { ReachedOwner = reachedOwner; Progress = progress; CanSteer = canSteer; }
     }
 
     internal sealed class WorkspaceRunPreview
     {
-        public WorkspaceModelProgress Progress { get; set; }
+        public ConversationModelProgress Progress { get; set; }
         public bool CanSteer { get; set; }
     }
 
@@ -45,7 +46,7 @@ namespace RNAssistant.Runtime
         public CancellationToken Token { get { return _run.Token; } }
 
         public WorkspaceRunControl(string scope, string sessionId, string runId, Func<string, bool> matches,
-            Func<WorkspaceModelProgress> preview, ConversationRunHandle run,
+            Func<ConversationModelProgress> preview, ConversationRunHandle run,
             Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input = null, Func<bool> acceptsInput = null,
             Func<WorkspaceInboxCommand, WorkspaceInboxReceipt> inbox = null)
         {
@@ -145,7 +146,7 @@ namespace RNAssistant.Runtime
         }
 
         private async Task ListenAsync(string name, NamedPipeServerStream first, Func<string, bool> matches,
-            Func<WorkspaceModelProgress> preview, Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input,
+            Func<ConversationModelProgress> preview, Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input,
             Func<bool> acceptsInput, Func<WorkspaceInboxCommand, WorkspaceInboxReceipt> inbox)
         {
             var pipe = first;

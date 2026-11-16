@@ -4,7 +4,11 @@ W3 retained attempts (In Review, 2026-11-14): `ChatMessageViewDto.RetainedAttemp
 поступает из обязательного kernel commit; общий `renderActivityNode` показывает
 его внутри run. Принятый snapshot не становится владельцем незаписанной истории:
 unsaved body остаётся только в существующей ограниченной live/view projection.
-Execution orchestration и Office live delivery ещё требуют объединения.
+Все sources используют ConversationModelProgress и одну проверку sequence/AttemptId/
+revision/frozen transport в ConversationState. RunOwner держит native preview;
+getChatState и Workspace read восстанавливают его через существующие observers.
+Office delta decoder и отдельный Workspace native cache/DTO удалены.
+Execution orchestration ещё требует объединения.
 
 
 ## Адресные чтения чата — In Review, 2026-11-14

@@ -132,7 +132,7 @@ const { chromium } = require('playwright');
           ReflectionDecision: 'Проверю источник.' },
           { Id: 'reflection-with-commentary', Role: 'assistant', Content: 'Отвечу после чтения.',
             ReflectionDecision: 'Сначала нужен точный источник.' },
-          { Id: 'finish-clean', Role: 'assistant', Content: 'Готово.', Results: [
+          { Id: 'finish-clean', Role: 'assistant', Content: 'Готово.', RunViewState: { RunId:'clean-run', TurnId:'turn', Lifecycle:'completed', ExecutionHealth:'clean', SuccessfulReads:0, VerifiedWrites:0, NoChangeWrites:0, UnverifiedWrites:0, FailedCalls:0, UnknownEffects:0, Reason:'model_finish', ModelResults:[{Summary:'Отчёт подготовлен', Assessment:'satisfied', Evidence:['call-1']}] }, Results: [
             { Summary: 'Отчёт подготовлен', Assessment: 'satisfied', Evidence: ['call-1'] }] },
           { Id: 'finish-unclean', Role: 'assistant', Content: 'Часть данных недоступна.', Results: [
             { Summary: 'Сверка не завершена', Assessment: 'partially_satisfied', Evidence: ['call-2'] }],
@@ -282,7 +282,7 @@ const { chromium } = require('playwright');
           for (let index = 1; index <= 30; index++)
             RNAssistantWorkspaceChat.acceptProgress({ workspaceId: snapshot.project.workspaceId,
               sessionId: snapshot.sessionId, modelProgress: Object.assign({}, current,
-                { Sequence: sequence + index, Message: 'Живое обновление без перестройки ленты.' }) });
+                { Sequence: sequence + index, Revision: (current.Revision || 0) + index, Message: 'Живое обновление без перестройки ленты.' }) });
           await new Promise(requestAnimationFrame); // Coalesced paints run once per animation frame.
           return { treeCalls, transcriptCalls, leafRetained: leaf === document.querySelector('.conversation-panel:not([inert]) [data-chat-node="messages"] .agent-stream-step'),
             textUpdated: leaf.textContent.includes('Живое обновление без перестройки ленты.') };

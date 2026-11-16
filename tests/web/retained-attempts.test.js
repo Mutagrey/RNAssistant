@@ -36,8 +36,8 @@ withPreviewPage(async ({page,errors}) => {
     RNAssistantConversationPanel.open(targets[0]);
     const panel=RNAssistantConversationPanel.find(targets[0]), snapshot=panel.snapshot();
     const unsaved={...attempt,Body:{...attempt.Body,AttemptId:'unsaved-body',Message:'Не потерять этот текст'}};
-    applyOfficeChatProgress({chatId:targets[0].sessionId,runId:'failed-run',phase:'attempt_unsaved',
-      activity:{UnsavedAttempt:unsaved}},null,'inbox:'+targets[0].sessionId);
+    applyOfficeChatProgress({chatId:targets[0].sessionId,runId:'failed-run',phase:'model_progress',
+      modelProgress:{RunId:'failed-run',AttemptId:'unsaved-body',UnsavedAttempt:unsaved}},null,'inbox:'+targets[0].sessionId);
     const next={...snapshot,messages:snapshot.messages.filter(m=>(m.id||m.Id)!=='attempt_unsaved-body'),sessionRevision:snapshot.sessionRevision+1};
     panel.accept(next);
     return panel.node('messages').textContent.includes('Не сохранено') && panel.node('messages').textContent.includes('Не потерять этот текст');

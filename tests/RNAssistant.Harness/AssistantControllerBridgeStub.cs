@@ -59,8 +59,10 @@ namespace RNAssistant.Office
             LastChatId = request.ChatId;
             LastResourceDraftIds = request.ResourceDraftIds ?? new List<string>();
             progress?.Invoke("run-input", "thinking", "Testing progress", new ChatActivity { Kind = "notice", Title = "Testing progress", Status = "running" });
-            progress?.Invoke("run-input", "streaming", string.Empty, null);
-            progress?.Invoke("run-input", "streaming", "Hel", null);
+            using (var stream = new RNAssistant.Core.ModelProtocol.ConversationStreamProgressProjector("attempt-input", false,
+                body => progress?.Invoke("run-input", "model_progress", null, new ChatActivity {
+                    ModelProgress = RNAssistant.Core.ModelProtocol.ConversationModelProgress.FromAttempt("run-input", "step-input", body) })))
+                stream.OnUpdate(new RNAssistant.Core.Llm.LlmStreamUpdate { ContentDelta = "{\"message\":\"Hel" });
             changed?.Invoke(ChatState("Generated title", request.ChatId));
             return new ChatInboxResponse { ChatId = request.ChatId, Revision = 8,
                 AcceptedInput = new ConversationInput { Id = "accepted-input", OperationId = request.OperationId, Text = request.Text } };

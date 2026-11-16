@@ -816,6 +816,7 @@ namespace RNAssistant.Office
             response.MessageTotalCount = session.Messages.Count;
             response.SessionRevision = session == null ? 0 : session.Revision;
             response.RunViewState = RunViewStateProjector.Create(session);
+            response.ModelProgress = _activeRuns.ModelProgress(session.Id, session.LastRun?.RunId);
             var runViewMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs - htmlMs - inboxMs;
             response.ActiveChatId = activeId;
             response.ActiveChatModel = session == null ? string.Empty : session.Model;

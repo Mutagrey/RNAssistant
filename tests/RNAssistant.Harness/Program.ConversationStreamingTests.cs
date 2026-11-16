@@ -117,23 +117,16 @@ namespace RNAssistant.Harness
                     (phase, message, activity) => progress.Add(Tuple.Create(phase, message, activity)))
                     .GetAwaiter().GetResult();
 
-                var streamed = progress
-                    .Where(item => item.Item1 == "streaming" && !string.IsNullOrEmpty(item.Item2))
-                    .Select(item => item.Item2)
-                    .ToArray();
-                var reasoning = progress
-                    .Where(item => item.Item3 != null && item.Item3.Kind == "reasoning")
-                    .Select(item => item.Item3)
-                    .ToList();
-                AssertEqual("Привет\nмир 😀", string.Concat(streamed), "stream exposes decoded message only");
-                AssertTrue(streamed.All(value => value.IndexOf("tool_calls", StringComparison.Ordinal) < 0 &&
-                    value.IndexOf("message", StringComparison.Ordinal) < 0), "raw envelope stays hidden");
-                AssertTrue(progress.Any(item => item.Item1 == "streaming" && item.Item2 == string.Empty),
-                    "model step starts with a stream reset");
-                AssertEqual(thinking, string.Concat(reasoning.Select(item => item.ResultMessage).ToArray()),
-                    "chunked think content is preserved");
-                AssertTrue(reasoning.Any(item => item.Status == "running"), "long thinking is shown before completion");
-                AssertEqual("completed", reasoning.Last().Status, "thinking receives a terminal update");
+                var snapshots = progress.Where(item => item.Item3?.ModelProgress != null)
+                    .Select(item => item.Item3.ModelProgress).ToArray();
+                AssertEqual("Привет\nмир 😀", snapshots.Last().Message, "snapshot exposes decoded message only");
+                AssertTrue(snapshots.All(value => value.Message.IndexOf("tool_calls", StringComparison.Ordinal) < 0),
+                    "raw envelope stays hidden");
+                AssertEqual(string.Empty, snapshots.First().Message, "model step starts with an empty snapshot");
+                AssertTrue(snapshots.Select(item => item.AttemptId).Distinct().Count() == 1, "one request identity crosses delivery");
+                AssertEqual(thinking, snapshots.Last().Reasoning, "chunked think content is preserved");
+                AssertTrue(snapshots.Any(item => item.Reasoning.Length > 0 && !item.TransportEnded), "thinking is shown before completion");
+                AssertTrue(snapshots.Last().TransportEnded, "thinking receives a terminal snapshot");
                 AssertEqual("Привет\nмир 😀", result.AssistantText, "final message matches streamed projection");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "streamed response status");
                 AssertEqual(thinking, session.Messages.Last().ReasoningContent, "thinking remains separate in history");
@@ -169,12 +162,9 @@ namespace RNAssistant.Harness
                     (phase, message, activity) => progress.Add(Tuple.Create(phase, message, activity)))
                     .GetAwaiter().GetResult();
 
-                var reasoning = progress
-                    .Where(item => item.Item3 != null && item.Item3.Kind == "reasoning")
-                    .Select(item => item.Item3.ResultMessage)
-                    .ToArray();
-                AssertEqual("Размышление продолжается.", string.Concat(reasoning),
-                    "provider reasoning fields are streamed separately");
+                var reasoning = progress.Where(item => item.Item3?.ModelProgress != null)
+                    .Select(item => item.Item3.ModelProgress.Reasoning).Last();
+                AssertEqual("Размышление продолжается.", reasoning, "provider reasoning is delivered in the shared snapshot");
                 AssertEqual("Ответ.", result.AssistantText, "provider reasoning does not enter visible message");
                 AssertEqual("Размышление продолжается.", session.Messages.Last().ReasoningContent,
                     "provider reasoning is persisted separately");
@@ -225,15 +215,9 @@ namespace RNAssistant.Harness
                     (phase, message, activity) => progressEvents.Add(Tuple.Create(phase, message, activity)))
                     .GetAwaiter().GetResult();
 
-                var streamEvents = progressEvents
-                    .Where(item => item.Item1 == "streaming")
-                    .Select(item => item.Item2)
-                    .ToList();
-                var reasoning = progressEvents
-                    .Where(item => item.Item3 != null && item.Item3.Kind == "reasoning")
-                    .Select(item => item.Item3.ResultMessage)
-                    .ToList();
-
+                var snapshots = progressEvents.Where(item => item.Item3?.ModelProgress != null)
+                    .Select(item => item.Item3.ModelProgress).ToArray();
+                var attempts = snapshots.GroupBy(item => item.AttemptId).ToArray();
                 AssertEqual(2, calls, "extra finish field gets one repair request");
                 AssertContains(requests[1].Last().Content, "action=finish forbids root field status",
                     "repair receives the first parser rejection");
@@ -246,13 +230,13 @@ namespace RNAssistant.Harness
                 AssertEqual("accepted", traces[1].Type, "repair acceptance has its own marker");
                 AssertTrue(traces[1].ResponseStatus == null, "accepted v8 marker has no model-declared lifecycle status");
                 AssertTrue(traces[1].PayloadJson == null, "accepted marker does not duplicate model content");
-                AssertEqual(4, streamEvents.Count, "each attempt emits reset and visible message");
-                AssertEqual(string.Empty, streamEvents[0], "first attempt reset");
-                AssertEqual("Жил-был потоковый черновик.", streamEvents[1], "first attempt message");
-                AssertEqual(string.Empty, streamEvents[2], "repair attempt reset");
-                AssertEqual("Исправлено.", streamEvents[3], "repaired attempt message");
-                AssertTrue(reasoning.Where(value => !string.IsNullOrEmpty(value)).SequenceEqual(new[] { "Первая мысль.", "Исправленная мысль." }),
-                    "thinking is isolated per model attempt");
+                AssertEqual(2, attempts.Length, "repair has a separate stable attempt identity");
+                AssertTrue(attempts.All(items => items.First().Message == string.Empty && items.Count(item => item.TransportEnded) == 1),
+                    "each attempt starts empty and ends transport exactly once");
+                AssertEqual("Жил-был потоковый черновик.", attempts[0].Last().Message, "first attempt message");
+                AssertEqual("Исправлено.", attempts[1].Last().Message, "repair replaces rejected body");
+                AssertEqual("Первая мысль.", attempts[0].Last().Reasoning, "first thinking is isolated");
+                AssertEqual("Исправленная мысль.", attempts[1].Last().Reasoning, "repair thinking is isolated");
                 AssertTrue(!progressEvents.Any(item =>
                     (item.Item2 ?? string.Empty).IndexOf("исправляет структуру", StringComparison.OrdinalIgnoreCase) >= 0),
                     "internal format repair is not exposed as UI status");

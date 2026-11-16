@@ -11,18 +11,30 @@ function recordChatRunActivityState(chatId, activity) {
   return copy;
 }
 
+function applyOfficeModelProgress(run, incoming) {
+  var previous = run.modelProgress;
+  var preview = RNAssistantConversationState.modelProgress(previous, incoming, run.runId);
+  if (preview === previous) return false;
+  run.modelProgress = preview;
+  var output = RNAssistantConversationState.modelOutput(preview);
+  run.stream = output.content; run.reasoning = output.reasoning;
+  run.reasoningComplete = output.reasoningComplete; run.streamRetrying = output.retrying;
+  run.modelAttemptActive = true;
+  return true;
+}
+
 // Addressed Office progress: transient run facts stay in chatRuns; the source borrows that run.
 function applyOfficeChatProgress(progress, progressPending, requestId) {
   var isChatProgress = String(requestId || "").indexOf("inbox:") === 0 || progressPending && (progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
   var progressChatId = progress.chatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
   var progressRunId = progress.runId || "";
   if (isChatProgress && !progressChatId) return;
-  if (isChatProgress && progress.phase === "attempt_unsaved" && progress.activity) {
+  var preview = progress.modelProgress, unsaved = preview && (preview.unsavedAttempt || preview.UnsavedAttempt);
+  if (isChatProgress && unsaved) {
     var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(progressChatId);
     var owner = component && component.view.projection();
     if (owner) {
-      RNAssistantConversationState.retainUnsavedAttempt(owner.snapshot(), progressRunId,
-        progress.activity.unsavedAttempt || progress.activity.UnsavedAttempt);
+      RNAssistantConversationState.retainUnsavedAttempt(owner.snapshot(), progressRunId, unsaved, preview.stepId || preview.StepId);
       component.render();
     }
     return;
@@ -36,64 +48,21 @@ function applyOfficeChatProgress(progress, progressPending, requestId) {
   }
   var selected = isChatProgress ? publishOfficeChatRun(progressChatId, state.chatRuns[progressChatId]) :
     progressChatId === state.activeChatId;
-  var contentReset = !!(progress.contentReset);
-  var reasoningReset = !!(progress.reasoningReset);
-  var contentDelta = progress.contentDelta || "";
-  var reasoningDelta = progress.reasoningDelta || "";
-  var reasoningComplete = !!(progress.reasoningComplete);
-  var hasReasoningProgress = !!(reasoningDelta || reasoningComplete);
-  var cancellingRun = isChatProgress && progressChatId && state.chatRuns[progressChatId];
-  if (cancellingRun && cancellingRun.cancelRequested &&
-      (contentReset || reasoningReset || contentDelta || hasReasoningProgress)) return;
-  if ((contentReset || reasoningReset) && isChatProgress) {
-    // A reset invalidates the draft immediately, including while a retry has no output.
-    var resetRun = progressChatId ? state.chatRuns[progressChatId] : null;
-    if (resetRun) {
-      resetRun.streamRetrying = !!resetRun.modelAttemptActive;
-      resetRun.modelAttemptActive = true;
-      if (contentReset) resetRun.stream = "";
-      if (reasoningReset) {
-        resetRun.reasoning = "";
-        resetRun.reasoningComplete = false;
-      }
-    }
-    if (!contentDelta && !hasReasoningProgress) {
-      if (!selected) scheduleChatProgressRender();
-      else if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
-      else renderMessages();
-      return;
-    }
-  }
-  if (contentDelta && isChatProgress) {
-    var contentRun = progressChatId ? state.chatRuns[progressChatId] : null;
-    if (contentRun) {
-      contentRun.stream = (contentRun.stream || "") + contentDelta;
-      contentRun.modelAttemptActive = true;
-      contentRun.streamRetrying = false;
-    }
-    if (!selected) { scheduleChatProgressRender(); return; }
-    if (typeof scheduleLiveStreamRender === "function") {
-      scheduleLiveStreamRender();
-    } else {
-      renderMessages();
-    }
+  if (preview && isChatProgress) {
+    var run = state.chatRuns[progressChatId];
+    if (run.cancelRequested && !(preview.transportEnded || preview.TransportEnded)) return;
+    if (!applyOfficeModelProgress(run, preview)) return;
+    if (!selected) scheduleChatProgressRender();
+    else if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
+    else renderMessages();
     return;
   }
-  if (hasReasoningProgress && isChatProgress) {
-    var reasoningRun = progressChatId ? state.chatRuns[progressChatId] : null;
-    if (reasoningRun) {
-      reasoningRun.modelAttemptActive = true;
-      if (reasoningDelta && reasoningRun.reasoningComplete) reasoningRun.reasoning = "";
-      reasoningRun.reasoning = (reasoningRun.reasoning || "") + reasoningDelta;
-      if (reasoningRun.reasoning.length > 24000) reasoningRun.reasoning = reasoningRun.reasoning.substring(0, 24000);
-      reasoningRun.reasoningComplete = reasoningComplete;
-    }
-    if (selected) {
-      if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
-      else renderMessages();
-    } else {
-      scheduleChatProgressRender();
-    }
+  if (progress.phase === "model_reset" && isChatProgress) {
+    var resetRun = state.chatRuns[progressChatId];
+    resetRun.modelAttemptActive = false; resetRun.stream = ""; resetRun.reasoning = "";
+    resetRun.reasoningComplete = false; resetRun.streamRetrying = false;
+    if (!selected) scheduleChatProgressRender();
+    else if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
     return;
   }
   if (isChatProgress) {

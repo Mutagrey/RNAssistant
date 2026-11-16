@@ -211,7 +211,8 @@
       messages: clone(entries), messageStartIndex: 0, messageTotalCount: entries.length,
       skills: skillLibrary(), tools: toolLibrary(), context: {},
       contextUsage: { lastPromptTokens: 6200, lastCompletionTokens: 240, lastTotalTokens: 6440, contextWindowTokens: 32000 },
-      runViewState: previewRuns[chatId] ? null : lastRunMessage && (lastRunMessage.RunViewState || lastRunMessage.runViewState) || null,
+      modelProgress: previewRuns[chatId] && previewRuns[chatId].modelProgress || null,
+      runViewState: previewRuns[chatId] ? Object.assign(runView(previewRuns[chatId].runId, previewRuns[chatId].startedUtc), { Lifecycle: "running", Reason: "", ModelResults: [] }) : lastRunMessage && (lastRunMessage.RunViewState || lastRunMessage.runViewState) || null,
       artifacts: chatId === "preview-chat" && report ? [{ id: "report", kind: "markdown",
         title: fixtures.materials[0].name, mimeType: "text/markdown", sourceMessageId: "preview-answer",
         runId: "preview-run-initial", revision: 1, inlineText: fixtures.report,
@@ -283,15 +284,19 @@
     var runId = "preview-run-" + number;
     var answer = fixtures.chat.assistant + "\n\n_Это смоделированный ответ: модель и Office не запускались._";
     var split = Math.ceil(answer.length / 2);
-    function progress(phase, message, contentDelta) {
-      if (!previewRuns[chatId] || previewRuns[chatId].runId !== runId) return;
-      previewRuns[chatId].phase = phase;
+    var sequence = 0;
+    function progress(text, ended) {
+      var run = previewRuns[chatId];
+      if (!run || run.runId !== runId) return;
+      run.phase = "model_progress";
+      run.modelProgress = { RunId: runId, StepId: "preview-step", AttemptId: runId + "-attempt",
+        Sequence: ++sequence, Revision: sequence, Message: text, Reasoning: "", TransportEnded: !!ended };
       emit({ type: "progress", id: "inbox:" + chatId,
-        payload: { chatId: chatId, runId: runId, phase: phase, message: message, contentDelta: contentDelta || "" } });
+        payload: { chatId: chatId, runId: runId, phase: "model_progress", modelProgress: run.modelProgress } });
     }
-    setTimeout(function () { emitChatState(chatId); progress("thinking", "Сверяю периоды и источники…"); }, 0);
-    setTimeout(function () { progress("streaming", null, answer.slice(0, split)); }, 220);
-    setTimeout(function () { progress("streaming", null, answer.slice(split)); }, 520);
+    setTimeout(function () { emitChatState(chatId); progress(""); }, 0);
+    setTimeout(function () { progress(answer.slice(0, split)); }, 220);
+    setTimeout(function () { progress(answer, true); }, 520);
     setTimeout(function () {
       if (!previewRuns[chatId] || previewRuns[chatId].runId !== runId) return;
       var now = new Date().toISOString();
@@ -801,7 +806,7 @@
           setTimeout(function () {
             if (projectRuns[submitting.Id] !== run) return;
             run.modelProgress = { RunId: run.runId, StepId: "preview-step", AttemptId: "preview-attempt",
-              Sequence: index + 1, Message: message, Reasoning: "" };
+              Sequence: index + 1, Revision: index + 1, TransportEnded: false, Message: message, Reasoning: "" };
             emit({ type: "progress", id: requestId, payload: { workspaceId: payload.workspaceId,
               sessionId: submitting.Id, runId: run.runId, phase: "model_progress",
               modelProgress: run.modelProgress } });

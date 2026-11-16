@@ -70,6 +70,16 @@ namespace RNAssistant.Core.ModelProtocol
     // Provisional snapshots are observations, never accepted history.
     public sealed class ModelProtocolProgress
     {
+        public static ModelProtocolProgress ForConversation(string runId, string stepId,
+            Action<ConversationModelProgress> publish, Action traceFailed = null)
+        {
+            return new ModelProtocolProgress {
+                AttemptProgress = body => publish?.Invoke(ConversationModelProgress.FromAttempt(runId, stepId, body)),
+                RetentionFailed = retained => publish?.Invoke(ConversationModelProgress.FromAttempt(runId, stepId, retained.Body, retained)),
+                OptionalTraceFailed = traceFailed
+            };
+        }
+
         public Action<ConversationAttemptSnapshot> AttemptProgress { get; set; }
         public Action<RetainedModelAttempt> RetentionFailed { get; set; }
         public Action OptionalTraceFailed { get; set; }

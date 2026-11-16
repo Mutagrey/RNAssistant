@@ -11,7 +11,7 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
-### 16.27.16-dev
+### 16.27.17-dev
 
 - Каталог чатов и plugin/browser checks используют привязанный порт истории,
   без отдельных ChatStore для чтения metadata и проверки владельца run.
@@ -20,6 +20,15 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
   metadata не загружает тела, excerpts сохраняют лимиты и фильтрацию приватных
   данных. Plugin saved versions работают через существующие native resource-порты.
   Default writer пока прежний; Windows/Office qualification остаётся отдельной.
+
+### 16.27.16-dev
+
+- Office/Workspace/plugin получают один typed snapshot потока. Закрытие/повторное
+  открытие панели восстанавливает live-ответ и «Не сохранено» из native owner без
+  нового запроса модели. Message/reason/decision/refusal/reasoning сохраняют AttemptId
+  и признаки усечения; поздние snapshots не меняют завершённое тело. Контекст у ввода.
+- Удалены Office snapshot-to-delta path и отдельные Workspace preview cache/DTO.
+  Это не завершение унификации native execution lifecycle и не Windows qualification.
 
 ### 16.27.15-dev
 

@@ -21,8 +21,31 @@
       read: async function (load) { return accept(await load(address)); } };
   }
 
+  function field(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
+  // Both observers consume full snapshots. Existing sequence and attempt revision
+  // reject delayed delivery; an ended transport body is immutable.
+  function modelProgress(previous, incoming, runId) {
+    if (!incoming || field(incoming, "runId") !== runId || !field(incoming, "attemptId")) return previous;
+    if (previous && field(previous, "runId") === runId) {
+      if (field(previous, "sequence") >= field(incoming, "sequence")) return previous;
+      if (field(previous, "attemptId") === field(incoming, "attemptId") && !field(incoming, "unsavedAttempt") &&
+          (field(previous, "transportEnded") || field(previous, "revision") >= field(incoming, "revision"))) return previous;
+    }
+    return incoming;
+  }
+  function modelOutput(preview) {
+    var ended = !!field(preview, "transportEnded"), content = field(preview, "message") || "";
+    return { content: content, reason: field(preview, "reason") || "", decision: field(preview, "decision") || "",
+      refusal: field(preview, "refusal") || "", reasoning: field(preview, "reasoning") || "",
+      reasoningComplete: ended, reasoningTruncated: !!field(preview, "reasoningTruncated"),
+      messageTruncated: !!field(preview, "messageTruncated"), reasonTruncated: !!field(preview, "reasonTruncated"),
+      decisionTruncated: !!field(preview, "decisionTruncated"), refusalTruncated: !!field(preview, "refusalTruncated"),
+      retrying: !!field(preview, "retrying") && !content, showStatus: !!preview,
+      statusText: ended ? "Проверяю ответ и сохраняю шаг…" : "Получаю ответ модели…" };
+  }
+
   // Uncommitted presentation stays in the existing bounded view projection.
-  // It is not a durable history store and is lost when this view/process closes.
+  // The native run owner restores it on reopen; process failure still loses uncommitted text.
   function retainUnsavedAttempt(snapshot, runId, attempt, stepId) {
     if (!snapshot || !attempt) return;
     var body = attempt.body || attempt.Body, id = body && (body.attemptId || body.AttemptId);
@@ -136,6 +159,7 @@
   }
 
   window.RNAssistantConversationState = { status: status, lifecycle: lifecycle,
+    modelProgress: modelProgress, modelOutput: modelOutput,
     messageWindow: messageWindow, prependMessageWindow: prependMessageWindow,
     retainUnsavedAttempt: retainUnsavedAttempt, preserveUnsavedAttempts: preserveUnsavedAttempts,
     createSnapshotSource: createSnapshotSource, createSnapshotOwner: createSnapshotOwner };

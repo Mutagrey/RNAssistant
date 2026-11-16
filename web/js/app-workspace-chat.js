@@ -51,7 +51,7 @@
     if (previousRevision === nextRevision && currentStatus === "running" &&
         incomingStatus === "running" && field(currentState, "runId") === field(incomingState, "runId") &&
         currentPreview && !field(incomingState, "modelProgressUnavailable") &&
-        (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
+        RNAssistantConversationState.modelProgress(currentPreview, incomingPreview, field(incomingState, "runId")) === currentPreview)
       incomingState.modelProgress = currentPreview;
     var merged = window.RNAssistantConversationState.messageWindow(current, incoming,
       Number.isSafeInteger(previousRevision) && previousRevision === nextRevision, !!(options && options.latestMessages));
@@ -113,8 +113,9 @@
       if (!preview || !state || runStatus(state) !== "running" ||
           field(state, "runId") !== field(preview, "runId")) { observer.refresh(); return; }
       var existing = field(state, "modelProgress");
-      if (existing && field(existing, "sequence") >= field(preview, "sequence")) return;
-      state.modelProgress = preview;
+      var accepted = RNAssistantConversationState.modelProgress(existing, preview, field(state, "runId"));
+      if (accepted === existing) return;
+      state.modelProgress = accepted;
       if (progressChanged) progressChanged(selected);
       else changed(selected);
     } };
@@ -139,11 +140,11 @@
     if (queued || status !== "running" || field(preview, "runId") !== field(snapshot, "runId")) preview = null;
     return { messages: chat.messages || [], start: field(chat, "messageStartIndex") || 0,
       total: field(chat, "messageTotalCount") || (chat.messages || []).length, emptyOptions: emptyOptions,
-      live: { activities: [], runId: status === "running" ? field(snapshot, "runId") || "" : "",
-        content: field(preview, "message") || "", reasoning: field(preview, "reasoning") || "",
-        reasoningTruncated: !!field(preview, "reasoningTruncated"), retrying: !!field(preview, "retrying"),
-        showStatus: !!preview, executionQueued: queued, statusText: queued ? "Ожидаю свободный слот выполнения…" : "Получаю ответ модели…" } };
+      live: Object.assign(RNAssistantConversationState.modelOutput(preview), { activities: [],
+        runId: status === "running" ? field(snapshot, "runId") || "" : "", executionQueued: queued },
+        queued ? { statusText: "Ожидаю свободный слот выполнения…" } : {}) };
   }
+
   function pendingUnits(component, presentation) {
     if (!component) return [];
     var chat = component.snapshot(), snapshot = field(chat, "state"), status = runStatus(snapshot);

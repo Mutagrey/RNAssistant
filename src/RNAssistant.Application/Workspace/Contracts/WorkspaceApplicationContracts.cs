@@ -1,3 +1,4 @@
+using RNAssistant.Core.ModelProtocol;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
@@ -104,7 +105,7 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("interruptedEffectPossible")] public bool? InterruptedEffectPossible { get; set; }
         [JsonProperty("messageCount")] public int MessageCount { get; set; }
         public WorkspaceRunPresentation Presentation { get; set; }
-        [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceModelProgress ModelProgress { get; set; }
+        [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)] public ConversationModelProgress ModelProgress { get; set; }
         [JsonProperty("modelProgressUnavailable", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ModelProgressUnavailable { get; set; }
     }
@@ -130,20 +131,6 @@ namespace RNAssistant.Runtime.Contracts
         public int? CompletionTokens { get; set; }
         public int? TotalTokens { get; set; }
         public int? ContextWindowTokens { get; set; }
-    }
-
-    // Transient preview, scoped to one live attempt. Never durable history or authority.
-    public sealed class WorkspaceModelProgress
-    {
-        public long Sequence { get; set; }
-        public string RunId { get; set; }
-        public string StepId { get; set; }
-        public string AttemptId { get; set; }
-        public string Message { get; set; }
-        public string Reasoning { get; set; }
-        public bool ReasoningTruncated { get; set; }
-        public bool Retrying { get; set; }
-        public RNAssistant.Core.ModelProtocol.RetainedModelAttempt UnsavedAttempt { get; set; }
     }
 
     public sealed class WorkspaceOfficeContext

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Office.Services;
 using System.Linq;
 using RNAssistant.Core.Storage;
@@ -14,6 +15,38 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void RunOwnerModelPreviewReopen()
+        {
+            WithTempPaths(paths => {
+                var owner = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths));
+                using (owner.Start("a", "run-a", null))
+                using (owner.Start("b", "run-b", null))
+                using (var stream = new ConversationStreamProgressProjector("attempt-a", false, null))
+                {
+                    stream.OnUpdate(new RNAssistant.Core.Llm.LlmStreamUpdate { ContentDelta = "{\"reason\":\"why\",\"message\":\"partial", ReasoningDelta = "thinking" });
+                    owner.SetModelProgress("a", "run-a", ConversationModelProgress.FromAttempt("run-a", "step", stream.Snapshot));
+                    AssertTrue(owner.ModelProgress("b", "run-b") == null, "neighbor panel stays independent");
+                    var reopened = owner.ModelProgress("a", "run-a");
+                    AssertEqual("partial", reopened.Message, "reopen reads native preview without another model request");
+                    AssertEqual("why", reopened.Reason, "all visible fields survive native delivery");
+                    var frozen = stream.End(ModelTransportOutcome.Cancelled);
+                    owner.SetModelProgress("a", "run-a", ConversationModelProgress.FromAttempt("run-a", "step", frozen));
+                    var revision = owner.ModelProgress("a", "run-a").Sequence;
+                    AssertTrue(!owner.SetModelProgress("a", "run-a", ConversationModelProgress.FromAttempt("run-a", "step", reopened)), "late callback ignored");
+                    AssertEqual(revision, owner.ModelProgress("a", "run-a").Sequence, "late callback cannot advance the snapshot");
+                    var unsaved = new RetainedModelAttempt(frozen, ModelProtocolDisposition.Unvalidated,
+                        ModelRuntimeDisposition.Cancelled, "Save failed");
+                    owner.SetModelProgress("a", "run-a", ConversationModelProgress.FromAttempt("run-a", "step", frozen, unsaved));
+                    owner.SetModelProgress("a", "run-a", null);
+                    AssertTrue(owner.ModelProgress("a", "run-a").UnsavedAttempt != null, "clear does not discard unsaved partial");
+                }
+                AssertEqual("partial", owner.ModelProgress("a", "run-a").Message, "unsaved partial survives terminal and view close within process");
+                AssertTrue(!owner.SetModelProgress("a", "run-a", null), "late completed owner callback is inert");
+                using (owner.Start("a", "run-new", null))
+                    AssertTrue(owner.ModelProgress("a", "run-a") == null, "new run cannot borrow an earlier preview");
+            });
+        }
+
         private static void RunOwnerSnapshotCostCurve()
         {
             WithTempPaths(paths =>

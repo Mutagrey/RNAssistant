@@ -3659,3 +3659,12 @@ The runtime fixture covers both backends, cancel after received partial, context
 exclusion and reopen; the native receipt fixture also reads the semantic event and
 rebuilds. `workspace: failed read activity` is an unresolved scripted HTTP fixture,
 not passed evidence for these changes.
+
+Native stream delivery: `conversation: live preview reopen and isolation`,
+`conversation: streams`, `conversation: resets stream`, `bridge: typed input`,
+`v8 recovery: workspace live` and the retained-attempt trio. Web:
+`conversation-model-progress.test.js` (all three sources, native snapshot reopen,
+all fields retained without extra ordinary live rows, transport freeze, unsaved reopen, close without cancellation),
+`workspace-chat-progress`, `stream-render-cost`, `chat-run-completion`.
+`product-mock-preview` retains an old `#messages` selector and is not passing evidence
+for the per-view UI. These checks do not qualify Windows/Office/WebView2.

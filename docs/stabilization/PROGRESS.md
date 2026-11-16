@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Unified native stream delivery — 2026-11-14
+
+F02/F03 / W4: один ConversationModelProgress и preview cache в существующем
+ConversationRunOwner для Office/Workspace/plugin. Office delta-конвертер, bridge
+content/reasoning deltas и отдельный Workspace cache/DTO удалены. Существующие
+observers читают полный snapshot с AttemptId/revision/sequence; terminal body frozen.
+Все видимые поля и unsaved body доступны после закрытия/повторного открытия view
+в пределах native процесса. После restart гарантированы только committed attempts.
+`16.27.17-dev`, In Review. Native: 10 адресных checks (stream/retry/retention/receipt,
+bridge/reopen). Browser: три источника, frozen late snapshots, reopen, cancel и
+30 updates → 0 full transcript/tree renders; 100 snapshots → 1 frame, 1000 history
+nodes сохранены. Локальное visual review выполнено, context у composer.
+Открыты общая execution/continuation orchestration, hard commit I/O lifetime,
+draft barriers и Windows/Office/WebView2 evidence. Старый product-mock-preview
+останавливается на прежнем #messages selector; за evidence нового компонента не принят.
+
 ## Unified chat retained attempts — 2026-11-14
 
 W3 / F01 minimal retained projection: stable AttemptId, separate transport/protocol/
@@ -10,8 +26,8 @@ received visible fields/reasoning; retry waits for commit and lost ACK uses rece
 Both backends pass reopen, cancellation and context-exclusion checks; Journal also
 passes semantic event read/rebuild/lost ACK. Shared collapsed run activity passes
 Office/Workspace web fixture, explicit truncation and unsaved refresh preservation.
-`16.27.15-dev`, In Review. Uncommitted Office text remains view-local; a durable
-commit is required for restart. Native observation/lifecycle convergence and hard
+`16.27.15-dev`, In Review. Unsaved text is now retained by the native run owner for view reopen; a durable
+commit is required for restart. Native lifecycle convergence and hard
 I/O cleanup bounds of the synchronous commit port remain open; Windows evidence
 is separate. Optional `workspace: failed read activity` fixture did not finish its
 scripted exchange within the diagnostic timeout; it is not counted as passed.
@@ -19,13 +35,12 @@ scripted exchange within the diagnostic timeout; it is not counted as passed.
 ## Unified chat stream accumulator — 2026-11-14
 
 F02 / W4 accumulation: `ModelProtocolClient` владеет одним Core projector на HTTP
-AttemptId. Office delivery переводит snapshots в прежний observer channel;
-Workspace/plugin получают тот же snapshot. Два старых accumulators удалены.
+AttemptId. Все источники получают общий typed snapshot через существующие observers. Два старых accumulators удалены.
 Память ограничена 24 000 символами на поле, очередь coalesced до одного snapshot;
 первый фрагмент синхронный, timer 100 ms, один frozen terminal при success/cancel/error.
 Core timer/late-delta, Office message/reasoning/retry и Workspace live/reopen checks
 проходят host-neutral. `16.27.15-dev`; durable retained projection описана выше.
-Native lifecycle/live delivery и Windows evidence остаются открытыми.
+Native lifecycle и Windows evidence остаются открытыми.
 
 
 ## Unified chat presentation — 2026-11-14
@@ -38,7 +53,7 @@ transcript/live renderer; Workspace renderMessages/paintProgress и live leaf у
 retry/lost ACK, resources, Workspace/plugin, scroll, narrow 420 px/125%; visual QA локально.
 Измерения: refresh заменяет 0 history nodes, 20 edits заменяют 0 approval nodes,
 30 progress updates вызывают 0 full transcript/tree renders, 1000 history nodes сохранены.
-Native lifecycle/live delivery, draft flush и storage consumers остаются открытыми.
+Native lifecycle, draft flush и оставшиеся storage consumers остаются открытыми.
 Windows/Office/WebView2 evidence и пользовательское визуальное принятие отдельно.
 `completion-guard.test.js` падает также на исходном HEAD: старое ожидание полной
 expanded evidence card. Текущее folded outcome проверено workspace-chat-run-notice.

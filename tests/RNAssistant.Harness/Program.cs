@@ -139,6 +139,7 @@ namespace RNAssistant.Harness
                 Test("conversation: retained attempt runtime history", RetainedAttemptRuntimeHistory),
                 Test("conversation: retained attempt lost acknowledgement", RetainedAttemptLostAcknowledgement),
                 Test("conversation: stream timer and terminal", ConversationStreamTerminalAndTimer),
+                Test("conversation: live preview reopen and isolation", RunOwnerModelPreviewReopen),
                 Test("conversation: streams message and thinking", ConversationStreamsMessageAndThinking),
                 Test("conversation: streams provider reasoning", ConversationStreamsProviderReasoning),
                 Test("conversation: resets stream and thinking between repairs", ConversationStreamResetsBetweenAttempts),

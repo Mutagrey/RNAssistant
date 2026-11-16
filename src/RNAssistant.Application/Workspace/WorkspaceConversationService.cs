@@ -63,31 +63,8 @@ namespace RNAssistant.Runtime
         private readonly Func<WorkspaceDescriptor, bool> _isPluginSourceWorkspace;
         private readonly Func<IDisposable> _runtimeUseLease;
         private readonly CancellationTokenSource _titleLifetime = new CancellationTokenSource();
-        private readonly ConcurrentDictionary<string, WorkspaceModelProgress> _liveModels =
-            new ConcurrentDictionary<string, WorkspaceModelProgress>(StringComparer.Ordinal);
-        private long _modelProgressSequence;
-
-        private void SetModelProgress(string sessionId, WorkspaceModelProgress value)
-        {
-            if (value != null)
-            {
-                value.Sequence = Interlocked.Increment(ref _modelProgressSequence);
-                _liveModels[sessionId] = value;
-            }
-            else {
-                WorkspaceModelProgress existing;
-                if (_liveModels.TryGetValue(sessionId, out existing) && existing.UnsavedAttempt != null) return;
-                WorkspaceModelProgress removed; _liveModels.TryRemove(sessionId, out removed);
-            }
-        }
-
-        private WorkspaceModelProgress LocalModelProgress(ChatSession session)
-        {
-            WorkspaceModelProgress value;
-            return _liveModels.TryGetValue(session.Id, out value) &&
-                (session.LastRun?.Status == "running" || value.UnsavedAttempt != null) &&
-                value.RunId == session.LastRun?.RunId ? value : null;
-        }
+        private ConversationModelProgress LocalModelProgress(ChatSession session)
+        { return _activeRuns.ModelProgress(session.Id, session.LastRun?.RunId); }
 
         private WorkspaceRunPreviewRead ModelProgress(ChatSession session)
         {
@@ -561,7 +538,7 @@ namespace RNAssistant.Runtime
                         session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
                         webHost: _webHost, extraTools: _extraTools?.Invoke(workspace, session),
                         office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
-                        pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
+                        pluginSource: IsPluginSource(workspace), modelProgress: value => _activeRuns.SetModelProgress(session.Id, session.LastRun?.RunId, value), toolProfile: _toolProfile, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, _payloads, currentRunOnly: true)),
@@ -614,7 +591,7 @@ namespace RNAssistant.Runtime
                 var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _chats.DocumentArtifacts, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace, session), office: OfficeFor(workspace, officeTarget, session, settings, runId), browserRunId: runId,
-                    pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value),
+                    pluginSource: pluginSource, modelProgress: value => _activeRuns.SetModelProgress(session.Id, session.LastRun?.RunId, value),
                     toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                 var userMessage = new ChatMessage { Id = queuedInput?.Id ?? Guid.NewGuid().ToString("N"), Role = "user",
                     Content = message ?? string.Empty, RunId = runId, AgentCommunication = queuedInput?.AgentCommunication,
@@ -764,7 +741,7 @@ namespace RNAssistant.Runtime
                     settings ?? new AppSettings(), apiKeyProvider, report, acceptance, approve, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace, session),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
-                    pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value),
+                    pluginSource: IsPluginSource(workspace), modelProgress: value => _activeRuns.SetModelProgress(session.Id, session.LastRun?.RunId, value),
                     toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics, agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities);
                 using (var inputChannel = approve ? new WorkspaceInputChannel(this, session, workspace) : null)
                 using (var control = OpenRunControl(session, runReservation, cancellationToken, inputChannel))
@@ -1169,7 +1146,7 @@ namespace RNAssistant.Runtime
             private readonly AppSettings _settings;
             private readonly IMaterializedModelProtocol _protocol;
             private readonly Action<WorkspaceRunEvent> _progress;
-            private readonly Action<WorkspaceModelProgress> _modelProgress;
+            private readonly Action<ConversationModelProgress> _modelProgress;
             private readonly WorkspaceRunAcceptance _acceptance;
             private readonly ConversationRunPolicy _mode;
             private readonly WorkspaceOfficeCapabilitySet _office;
@@ -1210,7 +1187,7 @@ namespace RNAssistant.Runtime
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
                 bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null,
                 IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null,
-                bool pluginSource = false, Action<WorkspaceModelProgress> modelProgress = null,
+                bool pluginSource = false, Action<ConversationModelProgress> modelProgress = null,
                 CallableToolProfile toolProfile = null, Action<LlmRequestDiagnosticUpdate> diagnosticProgress = null,
                 AgentCommunicationService agentCommunication = null, ConversationInboxService agentInbox = null,
                 Func<ToolExecutionContext, ResourceMutationOrigin> mutationOrigin = null,
@@ -1931,23 +1908,11 @@ namespace RNAssistant.Runtime
 
             private ModelProtocolProgress ModelProgress(AgentModelRequest request)
             {
-                string previousAttempt = null;
-                var attemptCount = 0;
-                return new ModelProtocolProgress { AttemptProgress = snapshot => {
-                    if (previousAttempt != snapshot.AttemptId) { previousAttempt = snapshot.AttemptId; attemptCount++; }
-                    var value = new WorkspaceModelProgress { RunId = request.RunId, StepId = request.StepId,
-                        AttemptId = snapshot.AttemptId, Message = snapshot.Message, Reasoning = snapshot.Reasoning,
-                        ReasoningTruncated = snapshot.ReasoningTruncated, Retrying = attemptCount > 1 };
+                return ModelProtocolProgress.ForConversation(request.RunId, request.StepId, value => {
                     _modelProgress?.Invoke(value);
                     _progress?.Invoke(new WorkspaceRunEvent("ModelProgress", _session.LastRun.KernelState.Summary,
                         null, modelProgress: value));
-                }, RetentionFailed = retained => {
-                    var value = new WorkspaceModelProgress { RunId = request.RunId, StepId = request.StepId,
-                        AttemptId = retained.Body.AttemptId, UnsavedAttempt = retained };
-                    _modelProgress?.Invoke(value);
-                    _progress?.Invoke(new WorkspaceRunEvent("ModelProgress", _session.LastRun.KernelState.Summary,
-                        null, modelProgress: value));
-                } };
+                });
             }
 
             private void CaptureMedia(string callId, IReadOnlyList<ChatAttachment> attachments)
@@ -2030,8 +1995,8 @@ namespace RNAssistant.Runtime
                 catch when (fact.Kind == AgentRunEventKind.ModelAttemptRetained)
                 {
                     _session.Messages.RemoveRange(firstMessage, _session.Messages.Count - firstMessage);
-                    var preview = new WorkspaceModelProgress { RunId = fact.Summary.RunId, StepId = fact.StepId,
-                        AttemptId = fact.SourceModelAttemptId, UnsavedAttempt = fact.RetainedAttempt };
+                    var preview = ConversationModelProgress.FromAttempt(fact.Summary.RunId, fact.StepId,
+                        fact.RetainedAttempt.Body, fact.RetainedAttempt);
                     _modelProgress?.Invoke(preview);
                     _progress?.Invoke(new WorkspaceRunEvent("ModelProgress", fact.Summary, null, modelProgress: preview));
                     throw;
@@ -2412,9 +2377,9 @@ namespace RNAssistant.Runtime
         public string Cursor { get; private set; }
         public WorkspaceInputReceipt Receipt { get; private set; }
         public WorkspaceToolActivity Activity { get; private set; }
-        public WorkspaceModelProgress ModelProgress { get; private set; }
+        public ConversationModelProgress ModelProgress { get; private set; }
         public WorkspaceRunEvent(string kind, RunSummary summary, string toolId, string cursor = null,
-            WorkspaceInputReceipt receipt = null, WorkspaceToolActivity activity = null, WorkspaceModelProgress modelProgress = null)
+            WorkspaceInputReceipt receipt = null, WorkspaceToolActivity activity = null, ConversationModelProgress modelProgress = null)
         { Kind = kind; Summary = summary; ToolId = toolId; Cursor = cursor; Receipt = receipt; Activity = activity; ModelProgress = modelProgress; }
     }
 
