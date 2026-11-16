@@ -1,5 +1,29 @@
 # Current-to-target migration map
 
+## Explicit legacy archive reader — 2026-11-16
+
+Owner: Core ChatStore.Recovery / LegacyPluginRecoveryService; consumers: explicit
+typed archive operations in Diagnostics Health. This is read-only access to the
+retained generation, separate from the production conversation/router/resource
+composition. Existing validation/reducers and configured protection are reused;
+there is no compatibility writer, automatic fallback or second durable projection.
+The retained reader may be removed only after an accepted replacement archive/export
+workflow preserves the needed access, or the user explicitly retires that generation.
+Removal does not authorize deleting retained files. No old run/effect replay is added.
+
+## Explicit legacy-to-native import — 2026-11-16
+
+Owner: ChatStore.LegacyImport reads/validates the old source; ConversationJournal
+LegacyImport/LegacyResources publish one native chat import and immutable resource
+closure. PluginStore.Recovery stages complete retained plugin metadata and publishes
+all heads plus its receipt in one native authority commit. Consumers use typed
+Application/Office contracts and the existing Diagnostics owner. Old snapshots are
+provenance, not accepted execution facts; old journals are never active writers.
+This is the explicit user-requested upgrade path, not a startup compatibility
+fallback. Native reads, new writes, index rebuild and receipt checks use only native
+owners. Source readers can be retired under the archive-reader condition above;
+native import fact decoding must remain while imported journals exist.
+
 ## Unified chat attempts and stream — W3/W4, 2026-11-14
 
 Owner: ModelProtocolClient creates one Core ConversationStreamProgressProjector per

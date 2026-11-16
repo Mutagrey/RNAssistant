@@ -13,6 +13,14 @@ using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
 {
+    public sealed class ChatSessionNotFoundException : InvalidOperationException
+    {
+        public string ChatId { get; private set; }
+        public ChatSessionNotFoundException(string chatId)
+            : base("Чат недоступен в текущем хранилище. Историю до обновления можно проверить в разделе «Прежние данные» диагностики.")
+        { ChatId = chatId; }
+    }
+
     public sealed class ChatSessionService
     {
         private readonly IOfficeApplicationAdapter _adapter;
@@ -325,7 +333,7 @@ namespace RNAssistant.Office.Services
             if (draft != null && !_activeSessionPersisted &&
                 string.Equals(draft.Id, requestedSessionId, StringComparison.OrdinalIgnoreCase))
                 return ConversationMetadata.From(draft);
-            throw new InvalidOperationException("Chat session was not found.");
+            throw new ChatSessionNotFoundException(requestedSessionId);
         }
 
         public ChatSession LoadAddressedSession(string requestedSessionId)
@@ -392,6 +400,7 @@ namespace RNAssistant.Office.Services
                 }
                 if (session == null &&
                     _activeSession != null &&
+                    !_activeSessionPersisted &&
                     !allowMissingRequestedFallback &&
                     string.Equals(requestedSessionId, _activeSessionId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -399,7 +408,7 @@ namespace RNAssistant.Office.Services
                 }
                 if (session == null && !allowMissingRequestedFallback)
                 {
-                    throw new InvalidOperationException("Chat session was not found.");
+                    throw new ChatSessionNotFoundException(requestedSessionId);
                 }
             }
             else if (!string.IsNullOrWhiteSpace(_activeSessionId) &&
@@ -888,6 +897,7 @@ namespace RNAssistant.Office.Services
                 Id = id,
                 Revision = header.Revision,
                 Host = header.Host,
+                WorkspaceId = header.WorkspaceId,
                 DocumentKey = header.DocumentKey,
                 DocumentTitle = header.DocumentTitle,
                 DocumentPath = ResolveDocumentPath(header.DocumentPath, header.DocumentKey),

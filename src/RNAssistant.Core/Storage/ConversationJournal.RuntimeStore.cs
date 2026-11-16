@@ -62,7 +62,7 @@ namespace RNAssistant.Core.Storage
             if (operation == null) return null;
             var saved = FindChatWrite(db, operation);
             RequireHistoryOwner(db, chat, saved);
-            return saved.Fact.Messages.Single(item => item.Header.Id == id);
+            return SavedChatEntry(db, saved, id);
         }
 
         private ConversationRunCheckpoint PrepareStoreCheckpoint(SqliteConnection db, ConversationRunCommit commit,

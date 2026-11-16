@@ -42,9 +42,10 @@ namespace RNAssistant.Core.Storage
                         throw new InvalidDataException("Overview sample contains missing ordinals.");
                     var writes = ids.Select(item => item.Item2).Distinct(StringComparer.Ordinal)
                         .ToDictionary(operation => operation, operation => FindChatWrite(db, operation));
+                    var importedChunks = new Dictionary<string, ConversationTextEntry[]>();
                     var entries = ids.Select(item => {
                         var write = writes[item.Item2]; RequireHistoryOwner(db, id, write);
-                        return write.Fact.Messages.Single(message => message.Header.Id == item.Item1);
+                        return SavedChatEntry(db, write, item.Item1, importedChunks);
                     }).ToArray();
                     return Tuple.Create(overview, entries);
                 }, CancellationToken.None);

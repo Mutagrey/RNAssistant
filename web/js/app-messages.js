@@ -479,6 +479,15 @@ function renderCompactionArticle(message, activity) {
   return node;
 }
 
+function markImportedHistory(node, message) {
+  if (activityValue(message, "ImportedHistory", "importedHistory", false)) {
+    var label = document.createElement("div");
+    label.className = "message-meta";
+    label.textContent = "Перенесённая история";
+    node.insertBefore(label, node.firstChild);
+  }
+  return node;
+}
 function renderMessageArticle(message, index, options) {
   options = options || {};
   var node = document.createElement("article");
@@ -492,11 +501,11 @@ function renderMessageArticle(message, index, options) {
     if (typeof appendMessageReasoning === "function") appendMessageReasoning(node, message);
     appendAcceptedResponseDetails(node, message, window.RNAssistantRunViewState.fromMessage(message));
     appendMessageFooter(node, message, index, activity, options);
-    return node;
+    return markImportedHistory(node, message);
   }
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {
-      return renderCompactionArticle(message, activity);
+      return markImportedHistory(renderCompactionArticle(message, activity), message);
     }
     var activityArticle = renderActivityArticle(message, index, activity,
       { live: false, current: false, presentation: options.presentation });
@@ -512,7 +521,7 @@ function renderMessageArticle(message, index, options) {
       }
     }
     appendMessageRunOutcome(activityArticle, message);
-    return activityArticle;
+    return markImportedHistory(activityArticle, message);
   }
   if (typeof appendMessageMediaGallery === "function") appendMessageMediaGallery(node, message, options.presentation);
   var attachments = messageVisibleAttachments(message, options.presentation);
@@ -536,7 +545,7 @@ function renderMessageArticle(message, index, options) {
   appendAcceptedResponseDetails(node, message, runView);
   appendMessageRunOutcome(node, message, runView);
   appendMessageFooter(node, message, index, null, options);
-  return node;
+  return markImportedHistory(node, message);
 }
 
 function appendMessageRunOutcome(node, message, runView) {

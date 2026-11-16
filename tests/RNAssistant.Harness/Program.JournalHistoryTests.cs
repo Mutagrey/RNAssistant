@@ -183,7 +183,7 @@ namespace RNAssistant.Harness
                         ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent, autoConfirmToolActions: true) };
                     var user = new ChatMessage { Role = "user", Content = "Continue after deletion", RunId = run };
                     chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
-                    var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
+                    var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal, journal,
                         new DocumentArtifactStore(resources, resources, payloads), files, payloads,
                         new WorkspaceWebSnapshotStore(paths, files), workspace, chat, settings, () => "fixture-key", null,
                         mutationOrigin: context => journal.MutationOrigin(chat, context), resourceAuthority: resources, resourceMutations: resources);

@@ -15,6 +15,11 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        private readonly AppDataPaths _paths;
+        private readonly SettingsService _settingsService;
+        private readonly ChatStore _legacyChatStore;
+        private readonly ConversationJournalRouter _conversationRouter;
+        private readonly DocumentAuthorityRegistry _documentAuthorityRegistry;
         internal IBrowserReadSource BrowserReadSource { get; private set; }
         internal WorkspaceFileService WorkspaceFiles { get; private set; }
         internal void SetExternalBrowserReadSource(IBrowserReadSource source) { BrowserReadSource = source; }
@@ -38,6 +43,13 @@ namespace RNAssistant.Office
         public AssistantController(RNAssistant.Core.Storage.AppDataPaths paths)
         {
             StoragePaths = paths;
+            _paths = paths;
+            _settingsService = new SettingsService(paths);
+            _legacyChatStore = new ChatStore(paths, _settingsService.LoadStorageProtector);
+            _documentAuthorityRegistry = new DocumentAuthorityRegistry(paths);
+            _conversationRouter = new ConversationJournalRouter(paths,
+                (host, key) => throw new NotSupportedException("The archive fixture requires its exact persisted scope."),
+                _settingsService.LoadStorageProtector());
             _diagnosticLogs = new DiagnosticLogStore(paths.Root);
             var resources = new ResourceJournal(paths);
             WorkspaceFiles = new WorkspaceFileService(paths, resources, resources, resources);

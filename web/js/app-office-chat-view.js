@@ -4,7 +4,7 @@
     var target = component.target, id = target.sessionId, node = component.node, composer = component.composer;
     var owner = id ? component.view.bindProjection(officeChatSource(id), mergeOfficeChatSnapshot) : null;
     if (owner) owner.accept(createOfficeChatSnapshot(id));
-    var empty = createOfficeChatSnapshot(""), uploading = false, deleting = false, pageRead = null, historyGeneration = 0;
+    var empty = createOfficeChatSnapshot(""), uploading = false, deleting = false, pageRead = null, historyGeneration = 0, unavailable = false;
     function snapshot() { return owner ? owner.snapshot() : empty; }
     function draft() { return readOfficeDraft(id); }
     function writeDraft(text) { var saved = draft(); return saveOfficeDraft(id, text, saved && saved.attachments || [], true); }
@@ -17,6 +17,7 @@
     function accept(response, options) {
       if (!owner || !owner.isCurrent()) return false;
       owner.accept(response, options);
+      if (unavailable && !response.detailDeferred) { unavailable = false; inbox.start(); }
       if (window.RNAssistantHtmlWorkspaceSurface) RNAssistantHtmlWorkspaceSurface.onSnapshot(snapshot());
       snapshot().liveRun = state.chatRuns[id] || null;
       component.loading = !!response.detailDeferred; component.loadError = "";
@@ -27,28 +28,36 @@
       if (component.isCurrent()) component.render();
       return true;
     }
+    function readFailed(error) {
+      if (error && error.code === "chat_session_not_found") {
+        unavailable = true; ++historyGeneration;
+        history.stop(); inbox.stop();
+      }
+      component.loadFailed(error);
+    }
     var history = component.view.observe({ current: function () { return id ? target : null; },
       read: function () { return loadChatState(id); }, changed: function (response) { accept(response); },
-      failed: component.loadFailed
+      failed: readFailed
     });
     var inbox = component.view.observe({ current: function () { return id ? target : null; },
-      shouldPoll: function () { return !state.bridgeUnavailable && (!state.chatInboxes[id] || running() || chatInputEchoes(id).length || (chatInbox(id).items || []).length); },
+      shouldPoll: function () { return !unavailable && !state.bridgeUnavailable && (!state.chatInboxes[id] || running() || chatInputEchoes(id).length || (chatInbox(id).items || []).length); },
       read: function () {
         var queued = new Set((chatInbox(id).items || []).map(function (item) { return item.Id; }));
         var echoes = chatInputEchoes(id).filter(function (item) { return item.OperationId; });
         var ids = echoes.filter(function (item) { return !queued.has(item.Id); }).concat(echoes.filter(function (item) { return queued.has(item.Id); }))
           .map(function (item) { return item.OperationId; }).slice(0, 128);
         return send("getChatInbox", { chatId: id, receiptOperationIds: ids });
-      }, changed: function (response) { if (response.chatId === id) applyChatInbox(response); }
+      }, changed: function (response) { if (response.chatId === id) applyChatInbox(response); },
+      failed: function (error) { if (error && error.code === "chat_session_not_found") readFailed(error); }
     });
     function refresh(options) {
       if (!id || !component.isCurrent()) return Promise.resolve();
-      component.loading = !component.hasSnapshot; component.loadError = ""; component.render();
+      component.loading = !component.hasSnapshot || unavailable; component.loadError = ""; component.render();
       if (options && options.latestMessages) {
         var generation = ++historyGeneration;
         return loadChatState(id).then(function (response) {
           if (component.isCurrent() && generation === historyGeneration) accept(response, options);
-        }).catch(function (error) { if (generation === historyGeneration) component.loadFailed(error); });
+        }).catch(function (error) { if (generation === historyGeneration) readFailed(error); });
       }
       return history.refresh();
     }
@@ -226,10 +235,11 @@
         state.draftAttachments = (draft() && draft().attachments || []).slice();
         renderChatSessions();
       },
-      activate: function () { if (id) inbox.start(); },
-      pollInbox: function () { return inbox.readNow(); },
+      activate: function () { if (id && !unavailable) inbox.start(); },
+      pollInbox: function () { return unavailable ? Promise.resolve(null) : inbox.readNow(); },
       dispose: function () { if (selectedOfficeProjection === owner) selectedOfficeProjection = null; },
       inbox: function (previous, current) {
+        if (unavailable) return;
         if (!previous || previous.epoch !== current.epoch || previous.running !== current.running || chatInboxNeedsHistory(id)) refresh();
         component.render();
       }

@@ -226,11 +226,42 @@ namespace RNAssistant.Application
             {
                 RequireOpen();
                 if (request == null) throw new ArgumentNullException(nameof(request));
-                var source = new PluginSourceWorkspace(_workspaces.Open(request.RootPath, false, true));
-                var connected = _store.Connect(source);
+                var source = new PluginSourceWorkspace(_workspaces.Open(request.RootPath, false,
+                    request.ExpectedSourceWorkspaceId == null, request.ExpectedSourceWorkspaceId));
+                var connected = _store.Connect(source, request.ExpectedPluginId);
                 _revoked.Remove(connected.PluginId);
                 return Item(connected);
             }
+        }
+
+        public PluginLegacyImportDto ImportLegacyRegistration(PluginLegacyImportRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            lock (_sync)
+            {
+                RequireOpen();
+                if (request == null) throw new ArgumentNullException(nameof(request));
+                return LegacyImportItem(_store.ImportLegacyRegistration(request.PluginId, request.ExpectedRegistrationRevision));
+            }
+        }
+
+        public PluginLegacyImportDto ReadLegacyRegistrationImport(PluginLegacyImportRequest request,
+            CancellationToken token = default(CancellationToken))
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            lock (_sync)
+            {
+                RequireOpen();
+                if (request == null) throw new ArgumentNullException(nameof(request));
+                return LegacyImportItem(_store.ReadLegacyRegistrationImport(request.PluginId, request.ExpectedRegistrationRevision, token));
+            }
+        }
+
+        private PluginLegacyImportDto LegacyImportItem(LegacyPluginImportResult result)
+        {
+            return result == null ? null : new PluginLegacyImportDto { Item = Item(result.Registration),
+                RegistrationRevision = result.RegistrationRevision, AlreadyImported = result.AlreadyImported,
+                SavedVersions = result.SavedVersions, Releases = result.Releases };
         }
 
         public PluginItemDto Create(PluginCreateRequest request)

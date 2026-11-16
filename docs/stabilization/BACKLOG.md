@@ -1,24 +1,29 @@
 # RNAssistant backlog
 
-## MockDemo diagnostic settings shim — observed 2026-11-16
+## Workspace missing running chat poll — observed 2026-11-16
+
+P2, open conditional scenario. `app-workspace-chat.js` observes cached running/pending
+chats every 10 seconds. If such a chat disappears, `project_chat_missing` is already
+typed, but the failure handler presents it without stopping that observer. A fresh
+empty restored view without running/pending state does not start this loop. Apply
+the same exact-view terminal/retry behavior as Office, with a targeted stale-response
+test; do not clear another chat or automatically substitute its state. The photo's
+Office inbox 1.2-second loop is separately fixed in 17.2.0-dev.
+
+## MockDemo diagnostic settings shim — closed host-neutral 2026-11-16
 
 Owner: `demo/RNAssistant.MockDemo/DemoSettingsService.cs`, source-linked by
-`DiagnosticLogStore`. Current `main` excludes the production `SettingsService` from
-MockDemo, but the demo shim lacks `SaveDiagnosticLogOptions`; a clean MockDemo build
-therefore fails with CS1061 before compiling the production controller. Add the
-matching retention-only settings update and build this project cleanly. This is
-independent of the storage-v2 review corrections: their actual-controller compile was
-verified with a temporary, non-committed shim, and no demo compatibility change is
-included in that slice.
+`DiagnosticLogStore`. The source demo shim now implements the matching retention-only
+`SaveDiagnosticLogOptions` update, preserving other settings. MockDemo builds without
+a temporary external shim; actual-controller inbox/archive smoke checks pass. The
+earlier slice's temporary-shim evidence remains historical.
 
-## Bridge bootstrap fixture — observed 2026-11-16
+## Bridge bootstrap fixture — closed host-neutral 2026-11-16
 
-Owner: `tests/web/bridge-bootstrap.test.js`. The existing Node fixture fails with
-`ReferenceError: RNAssistantChatGroups is not defined` in
-`applyBridgeUnavailableState` (`app-chat-session.js`). Reproduced against an
-untouched extraction of baseline `d5f0569a`; it is independent of the log viewer.
-Add the current group dependency/stub to the fixture and rerun this one check.
-No production chat behavior change is inferred from this fixture failure.
+Owner: `tests/web/bridge-bootstrap.test.js`. The fixture now includes current group
+dependencies and passes 24 groups. New actual DOMContentLoaded/transport/Browser
+cases independently reproduced and fixed the production restore-before-init defect,
+successful retry and hide/dispose behavior. This does not qualify native WebView2.
 
 ## Photo package F01–F12 — closed host-neutral — 2026-11-16
 

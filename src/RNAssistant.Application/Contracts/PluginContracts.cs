@@ -17,7 +17,26 @@ namespace RNAssistant.Application.Contracts
     public sealed class HtmlVendorSourceDto
     { [JsonProperty("js")] public string Js { get; set; } [JsonProperty("css")] public string Css { get; set; } }
     public sealed class PluginIdRequest { [JsonProperty("pluginId")] public string PluginId { get; set; } }
-    public sealed class PluginConnectRequest { [JsonProperty("rootPath")] public string RootPath { get; set; } }
+    public sealed class PluginConnectRequest
+    {
+        [JsonProperty("rootPath")] public string RootPath { get; set; }
+        // Recovery resolves these from retained native registration, never from the UI.
+        [JsonIgnore] public string ExpectedPluginId { get; set; }
+        [JsonIgnore] public string ExpectedSourceWorkspaceId { get; set; }
+    }
+    public sealed class PluginLegacyImportRequest
+    {
+        [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }
+        [JsonProperty("expectedRegistrationRevision", Required = Required.Always)] public string ExpectedRegistrationRevision { get; set; }
+    }
+    public sealed class PluginLegacyImportDto
+    {
+        [JsonProperty("item")] public PluginItemDto Item { get; set; }
+        [JsonProperty("registrationRevision")] public string RegistrationRevision { get; set; }
+        [JsonProperty("alreadyImported")] public bool AlreadyImported { get; set; }
+        [JsonProperty("savedVersions")] public int SavedVersions { get; set; }
+        [JsonProperty("releases")] public int Releases { get; set; }
+    }
     public sealed class PluginCreateRequest
     {
         [JsonProperty("name")] public string Name { get; set; }

@@ -50,6 +50,7 @@ namespace RNAssistant.Runtime
         private readonly ConversationApplicationService _conversationApplication;
         private readonly ConversationJournalRouter _conversationRouter;
         private readonly IConversationStore _conversationStore;
+        private readonly IConversationContextStore _contextStore;
         private readonly IEventStore _eventStore;
         private readonly ResourceJournal _resources;
         private readonly DocumentArtifactStore _artifacts;
@@ -103,6 +104,7 @@ namespace RNAssistant.Runtime
             _payloads = new ChatBlobStore(paths, protection);
             _conversationRouter = new ConversationJournalRouter(paths, ResolveConversationScope, protection());
             _conversationStore = _conversationRouter;
+            _contextStore = _conversationRouter;
             _eventStore = _conversationRouter;
             _conversationInbox = new ConversationInboxService(_conversationRouter);
             _conversationApplication = new ConversationApplicationService(_conversationInbox, _activeRuns);
@@ -423,7 +425,7 @@ namespace RNAssistant.Runtime
 
         public IReadOnlyList<string> AvailableToolIds(WorkspaceDescriptor workspace, string mode = ChatModes.Agent, MutationPolicy mutationPolicy = MutationPolicy.Ask)
         {
-            return new WorkspacePorts(_paths, _conversationStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
+            return new WorkspacePorts(_paths, _conversationStore, _contextStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
                 runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost,
                 extraTools: _extraTools?.Invoke(workspace, null), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile,
                 agentCommunication: AgentCommunication, agentInbox: _conversationInbox, browser: _browserCapabilities,
@@ -554,7 +556,7 @@ namespace RNAssistant.Runtime
                 if (changedPolicy && session.LastRun?.KernelState?.Summary?.Lifecycle == RunLifecycle.AwaitingConfirmation)
                 {
                     var pendingRun = session.LastRun.KernelState;
-                    var pendingPorts = new WorkspacePorts(_paths, _conversationStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace,
+                    var pendingPorts = new WorkspacePorts(_paths, _conversationStore, _contextStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace,
                         session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
                         webHost: _webHost, extraTools: _extraTools?.Invoke(workspace, session),
                         office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
@@ -603,7 +605,6 @@ namespace RNAssistant.Runtime
                 session.Mode = acceptedMode;
                 session.MutationPolicy = policy.MutationPolicy;
 
-                var previous = RestoreAcceptedHistory(session, _payloads);
                 var runId = Guid.NewGuid().ToString("N");
                 var titleSeed = ChatTitleBuilder.ResolveUserSeed(session, message);
                 var provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
@@ -611,7 +612,7 @@ namespace RNAssistant.Runtime
                 if (!string.IsNullOrWhiteSpace(provisionalTitle)) session.Title = provisionalTitle;
                 var pluginSource = IsPluginSource(workspace);
                 var officeTarget = pluginSource ? null : _officeCapabilities?.CaptureCurrentTarget();
-                var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
+                var ports = new WorkspacePorts(_paths, _conversationStore, _contextStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace, session), office: OfficeFor(workspace, officeTarget, session, settings, runId), browserRunId: runId,
                     pluginSource: pluginSource, modelProgress: value => _activeRuns.SetModelProgress(session.Id, session.LastRun?.RunId, value),
@@ -690,7 +691,7 @@ namespace RNAssistant.Runtime
                 {
                     var result = await ConversationRunCoordinator.RunAsync(
                         new AgentRunRequest(runId, runId, ConversationInputMessage.ModelText(userMessage),
-                            new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections), previous),
+                            new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections)),
                         ports, ports.Tools, ports, control.Token, input: inputChannel, suspendOnCancellation: () => _titleLifetime.IsCancellationRequested, admission: _executionAdmission).ConfigureAwait(false);
                     if (acceptedContract.Requested)
                     {
@@ -763,7 +764,7 @@ namespace RNAssistant.Runtime
                     }
                     progress?.Invoke(value);
                 };
-                var ports = new WorkspacePorts(_paths, _conversationStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace, session,
+                var ports = new WorkspacePorts(_paths, _conversationStore, _contextStore, _eventStore, _artifacts, _files, _payloads, _webSnapshots, workspace, session,
                     settings ?? new AppSettings(), apiKeyProvider, report, acceptance, approve, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace, session),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
@@ -1165,6 +1166,7 @@ namespace RNAssistant.Runtime
         internal sealed class WorkspacePorts : IModelProtocol, IRunStore
         {
             private readonly IConversationStore _conversations;
+            private readonly IConversationContextStore _contextStore;
             private readonly IEventStore _events;
             private readonly ConversationInboxService _agentInbox;
             private readonly ChatBlobStore _payloads;
@@ -1210,7 +1212,8 @@ namespace RNAssistant.Runtime
             public ToolRuntime Tools { get; private set; }
             public IReadOnlyList<string> ToolIds { get { return _catalog.Select(item => item.Id).ToArray(); } }
 
-            public WorkspacePorts(AppDataPaths paths, IConversationStore conversations, IEventStore events, DocumentArtifactStore artifacts, WorkspaceFileService files, ChatBlobStore payloads,
+            public WorkspacePorts(AppDataPaths paths, IConversationStore conversations, IConversationContextStore contextStore,
+                IEventStore events, DocumentArtifactStore artifacts, WorkspaceFileService files, ChatBlobStore payloads,
                 WorkspaceWebSnapshotStore webSnapshots, WorkspaceDescriptor workspace,
                 ChatSession session, AppSettings settings, Func<string> apiKeyProvider,
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
@@ -1223,7 +1226,8 @@ namespace RNAssistant.Runtime
                 IResourceAuthorityStore resourceAuthority = null, IResourceMutationJournal resourceMutations = null,
                 IBrowserCapabilityContribution browser = null, string browserRunId = null)
             {
-                _conversations = conversations; _events = events; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
+                _conversations = conversations; _contextStore = contextStore ?? throw new ArgumentNullException(nameof(contextStore));
+                _events = events; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
                 _agentInbox = agentInbox;
                 _webSnapshots = webSnapshots;
                 _settings = settings.Clone(); _progress = progress; _modelProgress = modelProgress; _acceptance = acceptance; _office = office;
@@ -1849,7 +1853,8 @@ namespace RNAssistant.Runtime
                 var budget = preparation.MessageBudget(required);
                 var facts = ContextCompactionRuntime.BuildActiveWindow(_session).ToList();
                 if (previewResult != null) facts.Add(previewResult);
-                var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);
+                var workingSet = _contextStore.RestoreWorkingSet(_session, 64, budget / 3,
+                    CancellationToken.None);
                 return _compiler.Compile(authority, required, facts, _session.Context?.Notes, _catalog, _settings,
                     budget, skillSurface: surface, workingSet: workingSet);
             }
@@ -1859,11 +1864,16 @@ namespace RNAssistant.Runtime
                 // Retained exact bytes are not a live read. Explicit reads and
                 // mutation preparation validate their own source under its gate.
                 cancellationToken.ThrowIfCancellationRequested();
-                var active = _session.Messages.Where(item => ContextCompactionRuntime.IsReplayMessage(item) &&
-                    ToolProtocolMessages.IsResult(item) && item.ResourceEvidence?.Count > 0).ToArray();
+                var active = ContextCompactionRuntime.BuildActiveWindow(_session).Where(item =>
+                    ContextCompactionRuntime.IsReplayMessage(item) && ToolProtocolMessages.IsResult(item) &&
+                    item.ResourceEvidence?.Count > 0).ToArray();
+                var restored = _contextStore.RestoreWorkingSet(_session, 64,
+                    Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings)), cancellationToken);
+                var bounded = restored.Operations.Concat(restored.Bodies).Select(item => item.Source)
+                    .Concat(active).ToArray();
                 _taskLists.ReconcileInterrupted();
                 _plans.ReconcileInterrupted();
-                return _skillPublications.CaptureAuthority(active.SelectMany(item =>
+                return _skillPublications.CaptureAuthority(bounded.SelectMany(item =>
                     item.ResourceEvidence ?? new List<ResourceEvidence>()).Select(item => item.ScopeId)
                     .Concat((_session.Context?.Notes ?? new List<ContextNote>()).Where(item => item?.Evidence != null).Select(item => item.Evidence.ScopeId))
                     .Concat(new[] { TaskListPublication.Scope(_session), _plans.Scope }));

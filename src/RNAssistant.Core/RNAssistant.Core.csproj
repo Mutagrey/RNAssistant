@@ -140,6 +140,7 @@
     <Compile Include="Models\HtmlVisualSelection.cs" />
     <Compile Include="Models\ChatMessageViewDto.cs" />
     <Compile Include="Models\PluginModels.cs" />
+    <Compile Include="Models\LegacyRecoveryModels.cs" />
     <Compile Include="Models\WorkspaceModels.cs" />
     <Compile Include="Models\TabularProjectModels.cs" />
     <Compile Include="Models\WebProjectSnapshotModels.cs" />
@@ -330,6 +331,8 @@
     <Compile Include="Storage\PluginIconLibrary.cs" />
     <Compile Include="Storage\PluginIconSvg.cs" />
     <Compile Include="Storage\PluginStore.cs" />
+    <Compile Include="Storage\PluginStore.Recovery.cs" />
+    <Compile Include="Storage\LegacyPluginRecoveryService.cs" />
     <Compile Include="Storage\PluginStore.Versions.cs" />
     <Compile Include="Storage\SavedVersionCatalog.cs" />
     <Compile Include="Models\SavedVersionModels.cs" />
@@ -357,6 +360,8 @@
     <Compile Include="Storage\RuntimeStorageActivity.cs" />
     <Compile Include="Storage\ChatHeaderReducer.cs" />
     <Compile Include="Storage\ChatStore.cs" />
+    <Compile Include="Storage\ChatStore.Recovery.cs" />
+    <Compile Include="Storage\ChatStore.LegacyImport.cs" />
     <Compile Include="Storage\ChatStore.Groups.cs" />
     <Compile Include="Storage\ChatEventStoreAdapter.cs" />
     <Compile Include="Storage\ChatStore.EventReader.cs" />
@@ -413,6 +418,8 @@
     <Compile Include="Storage\StorageJournal.Inventory.cs" />
     <Compile Include="Storage\ConversationJournal.cs" />
     <Compile Include="Storage\ConversationJournal.Chat.cs" />
+    <Compile Include="Storage\ConversationJournal.LegacyImport.cs" />
+    <Compile Include="Storage\ConversationJournal.LegacyResources.cs" />
     <Compile Include="Storage\ConversationJournal.Store.cs" />
     <Compile Include="Storage\ConversationJournal.Delete.cs" />
     <Compile Include="Storage\ConversationJournal.DeleteDocument.cs" />

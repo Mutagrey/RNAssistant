@@ -178,7 +178,7 @@ namespace RNAssistant.Harness
                     try
                     {
                         Func<ChatSession, WorkspaceConversationService.WorkspacePorts> workspacePorts = session =>
-                            new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
+                            new WorkspaceConversationService.WorkspacePorts(paths, store, journal, journal,
                                 new DocumentArtifactStore(resources, resources, payloads), files, payloads,
                                 new WorkspaceWebSnapshotStore(paths, files), workspace, session, settings, () => "fixture-key", null,
                                 mutationOrigin: context => journal.MutationOrigin(session, context), resourceAuthority: resources, resourceMutations: resources);

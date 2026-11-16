@@ -53,6 +53,7 @@ function installChatProjection(context) {
     "renderSendControls", "syncTokenEstimateCalibrationFromUsage", "log"]) context[name] = () => {};
   context.toolLibraryItemsFromContract = contract => contract.items;
   context.skillLibraryItemsFromContract = contract => contract.items;
+  context.RNAssistantChatGroups = { accept() {}, reset() {}, version: () => 0 };
 }
 
 function appInit(host, chatId) {
@@ -63,7 +64,212 @@ function appInit(host, chatId) {
     inbox: { chatId, inputs: [] } };
 }
 
+function installRestoredBrowserStartup(fixture) {
+  const { context, contract } = fixture;
+  installChatProjection(context);
+  let domReady, browserDescriptor, starts = 0;
+  const views = [], errors = [], pluginCatalogs = [], postStates = [];
+  const noop = () => {};
+  function element() {
+    return { dataset: {}, classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
+      style: {}, textContent: "", hidden: false, isConnected: true,
+      setAttribute: noop, append: noop, appendChild: noop, replaceChildren: noop, remove: noop,
+      addEventListener: noop, querySelector: () => null, contains: () => false,
+      getBoundingClientRect: () => ({ x: 0, y: 0, width: 800, height: 600 }) };
+  }
+  const shell = element(), pluginStatus = element();
+  context.document.body = element();
+  context.document.createElement = element;
+  context.document.getElementById = id => id === "pluginStatus" ? pluginStatus : element();
+  context.document.querySelector = selector => selector === ".shell" || selector === ".content" ? shell : null;
+  context.document.addEventListener = (name, callback) => { if (name === "DOMContentLoaded") domReady = callback; };
+  context.addEventListener = noop;
+  context.setInterval = () => 1;
+  context.requestAnimationFrame = callback => setImmediate(callback);
+  context.cancelAnimationFrame = clearImmediate;
+  context.AbortController = AbortController;
+  context.ResizeObserver = context.MutationObserver = class { observe() {} disconnect() {} };
+  context.crypto = { randomUUID: () => "startup-operation" };
+  context.innerWidth = 1280; context.innerHeight = 900;
+  const lifecycle = () => ({ activate: noop, deactivate: noop, dispose: noop, update: noop,
+    refresh: noop, reset: noop, layout: noop, busy: () => false });
+  context.RNAssistantViewerRegistry = { mount: lifecycle, unmount: noop };
+  context.RNAssistantPreviewSurface = { attach: () => ({ actions: element(), discussButton: element(),
+    status: noop, waiting: noop, collapse: noop, clear: noop, setDocument: noop,
+    fail: (label, message) => errors.push(message) }) };
+  context.RNAssistantBrowserAnnotations = { create: lifecycle };
+  context.RNAssistantBrowserFind = { create: lifecycle };
+  context.RNAssistantBrowserActions = { mount: lifecycle };
+  context.RNAssistantArtifactVersions = { mountBrowser: lifecycle };
+  context.RNAssistantBrowserTarget = { preferenceLocator: value => value };
+  context.RNAssistantDockWorkspace = { registerView(name, descriptor) { if (name === "browser") browserDescriptor = descriptor; },
+    bind() {
+      const view = browserDescriptor.create({ view: "browser", browserTabId: "restored-plugin",
+        ownerScope: { kind: "Workspace", scopeId: "plugin-workspace", chatId: "source-chat" },
+        locator: "/plugins/restored/source/index.html", title: "Restored plugin" });
+      views.push(view); view.activate();
+    },
+    eachView(type, callback) { if (type === "browser") views.forEach(callback); },
+    updateTarget: noop, updateContext: noop, recordNavigation: noop, isSectionVisible: () => false };
+  context.RNAssistantPlugins = { bind: noop, refresh: () => context.send("getPlugins", {}).then(value => pluginCatalogs.push(value.items)) };
+  context.RNAssistantActiveRuns = { start: () => { starts++; } };
+  context.RNAssistantChatDrafts = { hydrate: async () => {}, hydrationFailed: noop };
+  context.RNAssistantProjectChats = { show: noop };
+  context.RNAssistantShellLayout = { refresh: noop };
+  context.RNAssistantNavigationPane = { bindSearches: noop };
+  context.RNAssistantConversationPanel = { register: noop, ready: noop, office: () => null, each: noop, selected: () => null };
+  for (const name of ["RNAssistantMaterialView", "RNAssistantHtmlWorkspaceSurface", "RNAssistantLibraryView", "RNAssistantVbaView"])
+    context[name] = { register: noop };
+  for (const name of ["scheduleFocusStateReport", "synchronizeChatState", "bindChatActions", "bindVbaActions",
+    "bindHtmlWorkspaceActions", "bindModelActions", "bindSettingsActions", "bindLogActions", "bindDiagnosticsActions",
+    "bindTrajectoryActions", "bindToolActions", "bindSkillActions"]) context[name] = noop;
+  contract.operations.push(...["getPlugins", "browserCommand"].map(name => ({ name, idleTimeoutMs: 120000, cancellable: false })));
+  const post = context.chrome.webview.postMessage;
+  context.chrome.webview.postMessage = request => {
+    postStates.push({ type: request.type, host: context.state.host, token: context.state.bridgeToken }); post(request);
+  };
+  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-browser.js"), "utf8"), context, { filename: "app-browser.js" });
+  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8"), context, { filename: "app.js" });
+  return { start: () => domReady(), views, errors, pluginCatalogs, pluginStatus, postStates, starts: () => starts };
+}
+
+async function settleStartup() {
+  for (let index = 0; index < 4; index++) await new Promise(resolve => setImmediate(resolve));
+}
+
+function completeStartup(fixture, token = "startup-token") {
+  const init = fixture.posted.filter(request => request.type === "init").at(-1);
+  fixture.deliver({ id: init.id, ok: true, payload: { bridgeToken: token, bridgeContract: fixture.contract,
+    init: appInit("Excel", ""), browserAvailable: true } });
+}
+
+function browserReply(request, revision = 1) {
+  return { browserTabId: request.payload.browserTabId, sessionId: "restored-page", revision, documentGeneration: 1,
+    status: "Ready", title: "Restored plugin", url: "/plugins/restored/source/index.html", attached: revision > 1,
+    ownerScope: request.payload.ownerScope || { kind: "Workspace", scopeId: "plugin-workspace", chatId: "source-chat" },
+    target: { kind: "PluginSource", state: "Ready", capabilities: { source: true, preview: true } } };
+}
+
 (async function () {
+  {
+    const fixture = createContext(), startup = installRestoredBrowserStartup(fixture);
+    const { context, posted, deliver } = fixture;
+    startup.start(); await settleStartup();
+    assert.deepEqual(startup.errors, [], "restored Browser waits for startup instead of failing before init");
+    assert.deepEqual(posted.map(request => request.type), ["init"], "no restored-view request is posted before the handshake");
+    completeStartup(fixture); await settleStartup();
+    const open = posted.find(request => request.type === "browserCommand" && request.payload.action === "Open");
+    assert.ok(open, "successful startup opens the restored Browser");
+    assert.equal(open.bridgeToken, "startup-token");
+    assert.equal(open.payload.ownerScope.chatId, "source-chat");
+    assert.equal(open.payload.locator, "/plugins/restored/source/index.html");
+    assert.equal(startup.postStates.find(value => value.type === "browserCommand").host, "Excel", "application metadata precedes restored view reads");
+    context.RNAssistantBrowser.ready(); context.RNAssistantBrowser.ready(); await settleStartup();
+    assert.equal(posted.filter(request => request.type === "browserCommand").length, 1, "readiness cannot duplicate an opening session");
+    deliver({ id: open.id, ok: true, payload: browserReply(open) }); await settleStartup();
+    const attach = posted.find(request => request.type === "browserCommand" && request.payload.action === "Attach");
+    assert.ok(attach, "restored session attaches after its exact Open response");
+    deliver({ id: attach.id, ok: true, payload: browserReply(open, 2) }); await settleStartup();
+    const plugins = posted.find(request => request.type === "getPlugins");
+    deliver({ id: plugins.id, ok: true, payload: { items: [{ pluginId: "restored" }] } }); await settleStartup();
+    assert.equal(startup.pluginCatalogs[0][0].pluginId, "restored");
+    assert.equal(startup.starts(), 1);
+    assert.deepEqual(startup.errors, []);
+    startup.views[0].dispose();
+    console.log("PASS bridge bootstrap: restored Browser waits for init and opens once with its exact owner");
+  }
+
+  {
+    const fixture = createContext(), startup = installRestoredBrowserStartup(fixture);
+    const { context, posted, deliver } = fixture;
+    startup.start(); await settleStartup();
+    deliver({ id: posted.at(-1).id, ok: false, error: "Native initialization failed" }); await settleStartup();
+    assert.equal(context.state.bridgeUnavailable, true);
+    assert.equal(startup.starts(), 0, "failed initialization cannot start background readers");
+    assert.equal(posted.filter(request => request.type !== "init").length, 0, "failed initialization cannot refresh plugins or open Browser");
+    const retry = context.initialize(); await settleStartup(); completeStartup(fixture, "retry-token"); await retry; await settleStartup();
+    const opens = posted.filter(request => request.type === "browserCommand" && request.payload.action === "Open");
+    assert.equal(opens.length, 1, "successful manual retry opens the still-active restored view");
+    assert.equal(opens[0].bridgeToken, "retry-token");
+    const plugins = posted.filter(request => request.type === "getPlugins");
+    assert.equal(plugins.length, 1, "successful manual retry repopulates plugins");
+    deliver({ id: plugins[0].id, ok: true, payload: { items: [{ pluginId: "recovered" }] } }); await settleStartup();
+    assert.equal(startup.pluginCatalogs[0][0].pluginId, "recovered");
+    context.RNAssistantBrowser.ready(); await settleStartup();
+    assert.equal(posted.filter(request => request.type === "browserCommand" && request.payload.action === "Open").length, 1);
+    startup.views[0].dispose();
+    deliver({ id: opens[0].id, ok: true, payload: browserReply(opens[0]) }); await settleStartup();
+    const browserCalls = posted.filter(request => request.type === "browserCommand");
+    assert.deepEqual(browserCalls.map(request => request.payload.action), ["Open", "Close"], "late Open after disposal closes only its exact session");
+    assert.equal(browserCalls[1].payload.sessionId, "restored-page");
+    context.RNAssistantBrowser.ready(); await settleStartup();
+    assert.equal(posted.filter(request => request.type === "browserCommand").length, 2, "readiness cannot revive a disposed view");
+    console.log("PASS bridge bootstrap: successful init retry restores plugins and Browser without reviving closed views");
+  }
+
+  for (const action of ["deactivate", "dispose"]) {
+    const fixture = createContext(), startup = installRestoredBrowserStartup(fixture);
+    startup.start(); await settleStartup(); startup.views[0][action]();
+    completeStartup(fixture); await settleStartup();
+    assert.equal(fixture.posted.filter(request => request.type === "browserCommand").length, 0,
+      action + " before handshake cannot create an unseen Browser session");
+    fixture.context.RNAssistantBrowser.ready(); await settleStartup();
+    assert.equal(fixture.posted.filter(request => request.type === "browserCommand").length, 0);
+    if (action === "deactivate") {
+      startup.views[0].activate(); await settleStartup();
+      assert.equal(fixture.posted.filter(request => request.type === "browserCommand" && request.payload.action === "Open").length, 1,
+        "explicit reactivation opens the retained view once");
+      startup.views[0].dispose();
+    }
+    console.log("PASS bridge bootstrap: " + action + " during startup prevents an unwanted Browser open");
+  }
+
+  {
+    const fixture = createContext(), startup = installRestoredBrowserStartup(fixture);
+    const { context, posted, deliver } = fixture;
+    const commands = action => posted.filter(request => request.type === "browserCommand" && request.payload.action === action);
+    startup.start(); completeStartup(fixture); await settleStartup();
+    const open = commands("Open")[0];
+    const missing = revision => Object.assign(browserReply(open, revision), { status: "Unavailable", target: null, chatBound: false });
+    deliver({ id: open.id, ok: true, payload: missing(1) }); await settleStartup();
+    deliver({ id: commands("Attach")[0].id, ok: true, payload: missing(2) }); await settleStartup();
+    const route = JSON.parse(JSON.stringify(startup.views[0].route()));
+    context.RNAssistantBrowser.pluginImported("unrelated"); await settleStartup();
+    assert.equal(commands("Reload").length, 0, "another plugin's receipt cannot invalidate this restored locator");
+    context.RNAssistantBrowser.pluginImported("restored"); await settleStartup();
+    assert.equal(commands("Reload").length, 1);
+    assert.deepEqual(commands("Reload")[0].payload, { action: "Reload", browserTabId: "restored-plugin", sessionId: "restored-page", operationId: "browser-startup-operation" });
+    deliver({ id: commands("Reload")[0].id, ok: true, payload: missing(3) }); await settleStartup();
+    assert.deepEqual(JSON.parse(JSON.stringify(startup.views[0].route())), route, "receipt retry preserves exact owner, locator and source-only binding");
+    startup.views[0].deactivate(); context.RNAssistantBrowser.pluginImported("restored"); await settleStartup();
+    assert.equal(commands("Reload").length, 1, "hidden restored view defers its invalidation until activation");
+    startup.views[0].activate(); await settleStartup(); assert.equal(commands("Reload").length, 2);
+    deliver({ id: commands("Reload")[1].id, ok: true, payload: missing(4) }); await settleStartup();
+    context.RNAssistantBrowser.apply(Object.assign(missing(5), { url: "/plugins/other/source/index.html" }));
+    context.RNAssistantBrowser.pluginImported("restored"); await settleStartup();
+    assert.equal(commands("Reload").length, 2, "old restored locator is not reused after the live view navigates elsewhere");
+    startup.views[0].dispose(); context.RNAssistantBrowser.pluginImported("other"); await settleStartup();
+    assert.equal(commands("Reload").length, 2, "a receipt cannot revive a disposed Browser view");
+    assert.equal(commands("Open").length, 1, "invalidation does not create another Browser session");
+    console.log("PASS bridge bootstrap: plugin import retries only the exact existing Browser route and respects hidden, navigated and disposed views");
+  }
+
+  {
+    const fixture = createContext(), startup = installRestoredBrowserStartup(fixture);
+    const { context, posted, deliver } = fixture;
+    const commands = action => posted.filter(request => request.type === "browserCommand" && request.payload.action === action);
+    startup.start(); completeStartup(fixture); await settleStartup();
+    const open = commands("Open")[0]; context.RNAssistantBrowser.pluginImported("restored"); await settleStartup();
+    assert.equal(commands("Open").length, 1); assert.equal(commands("Reload").length, 0);
+    deliver({ id: open.id, ok: true, payload: Object.assign(browserReply(open), { status: "Unavailable", target: null }) }); await settleStartup();
+    assert.equal(commands("Reload").length, 0, "import invalidation waits for the in-flight session to attach");
+    deliver({ id: commands("Attach")[0].id, ok: true, payload: Object.assign(browserReply(open, 2), { status: "Unavailable", target: null }) }); await settleStartup();
+    assert.equal(commands("Reload").length, 1, "an Open response resolved before import cannot strand the restored unavailable page");
+    assert.equal(commands("Reload")[0].payload.sessionId, "restored-page");
+    startup.views[0].dispose();
+    console.log("PASS bridge bootstrap: plugin import during Browser open invalidates once after exact session attachment");
+  }
+
   for (const outcome of ["success", "failure", "timeout"]) {
     const { context, posted, contract, deliver, timers, expire } = createContext();
     installChatProjection(context);

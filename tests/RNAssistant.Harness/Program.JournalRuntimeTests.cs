@@ -142,7 +142,7 @@ namespace RNAssistant.Harness
                                     chat.Messages.Add(user); store.Commit(chat, ConversationCommit.UserInput(user));
                                 }
                                 var payloads = new ChatBlobStore(paths); var authority = new ResourceAuthorityStore(paths);
-                                var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
+                                var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal, journal,
                                     new DocumentArtifactStore(authority, authority, payloads), new WorkspaceFileService(paths), payloads,
                                     new WorkspaceWebSnapshotStore(paths, new WorkspaceFileService(paths)), workspace, chat, settings, () => "fixture-key", null);
                                 ConversationRunCoordinator.RunAsync(new AgentRunRequest(runId, runId, text, new AgentRunLimits(5, 5)),

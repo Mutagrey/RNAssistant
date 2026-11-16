@@ -15,7 +15,7 @@ using RNAssistant.Core.Tools.Contracts;
 
 namespace RNAssistant.Core.Storage
 {
-    internal sealed partial class ConversationJournal
+    internal sealed partial class ConversationJournal : IConversationContextStore
     {
         private const int ContextCandidateLimit = 64;
 
@@ -23,10 +23,24 @@ namespace RNAssistant.Core.Storage
         // The checked stream cursor and all selections belong to one index admission.
         internal ConversationContextWindow RestoreContext(string chat, string run, int recentResults, int workingBudget,
             CancellationToken token = default(CancellationToken))
+        { return RestoreContext(chat, run, recentResults, workingBudget, null, token); }
+
+        ContextWorkingSet IConversationContextStore.RestoreWorkingSet(ChatSession session, int recentResults,
+            int workingBudget, CancellationToken token)
+        {
+            if (session == null || session.LastRun == null || string.IsNullOrWhiteSpace(session.LastRun.RunId))
+                throw new ArgumentException("A persisted current run is required for context restoration.", nameof(session));
+            return RestoreContext(session.Id, session.LastRun.RunId, recentResults, workingBudget,
+                ConversationMetadata.From(session), token).WorkingSet;
+        }
+
+        private ConversationContextWindow RestoreContext(string chat, string run, int recentResults, int workingBudget,
+            ConversationMetadata exact, CancellationToken token)
         {
             if (string.IsNullOrWhiteSpace(chat) || string.IsNullOrWhiteSpace(run) || recentResults < 0 || recentResults > ContextCandidateLimit)
                 throw new ArgumentException("An exact context scope and bounded recent window are required.");
             return Access((db, cursor) => {
+                if (exact != null) RequireChatRevision(exact, TextChat(db, exact.Id));
                 var recent = recentResults == 0 ? new ConversationResultReceipt[0]
                     : ReadWindow(db, chat, long.MaxValue, recentResults).ToArray();
                 var active = new HashSet<string>(recent.Select(item => item.OperationId), StringComparer.Ordinal);

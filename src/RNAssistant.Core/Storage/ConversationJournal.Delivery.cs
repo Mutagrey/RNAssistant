@@ -467,7 +467,7 @@ namespace RNAssistant.Core.Storage
         { return record.Data.ToObject<T>(JsonSerializer.Create(new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error })); }
         private static ConversationCard DecodeCard(JournalRecord record)
         {
-            if (record.Kind == "chat.committed") return DecodeChatCommit(record).Card;
+            if (record.Kind == "chat.committed" || record.Kind == "chat.imported") return DecodeChatCommit(record).Card;
             if (record.Kind == "agent.spawned") return DecodeSpawn(record).Child;
             var fact = DeliveryData<ConversationCard>(record);
             if (record.Kind != "chat.created" || fact == null || record.Fingerprint != CardFingerprint(fact)) throw new InvalidDataException("Invalid conversation card.");

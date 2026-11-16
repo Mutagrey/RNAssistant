@@ -1,5 +1,34 @@
 # Stabilization risk register
 
+## Post-upgrade photo incident — 2026-11-16
+
+Priority and disposition for the observed profile upgrade:
+
+1. **P1, fixed host-neutral:** restored Browser sends before bridge initialization;
+   success-only retry now restores pending active views and plugin catalog.
+2. **P1, explicit migration implemented; Windows qualification open:** pre-cutover
+   history/plugin registrations were outside storage-v2. Diagnostics now transfers
+   supported chats into ordinary history and plugins with their saved versions and
+   configuration. Exact source pins, atomic publication, receipts, native-only CAS
+   closure and refusal on collision prevent partial or destructive restoration.
+   Legacy execution facts are not resumed. Synthetic profiles retain their bytes;
+   actual user files, identity associations and protection keys remain unverified.
+3. **P1, fixed host-neutral:** mixed Office/Workspace catalogs lost WorkspaceId in
+   ChatSessionService.ToSummary and failed while deriving group scopes. The projection
+   now preserves exact scope; real-controller migration coverage includes the mixed
+   ordinary catalog and its group scopes.
+4. **P2, fixed host-neutral:** missing Office chat polls inbox every 1.2 seconds.
+   Typed failure stops only that view; successful explicit same-ID retry can resume.
+5. **P2, fixed host-neutral:** pre-mutation plugin catalog can hide a completed
+   connection. Mutation refresh now runs after the preceding read.
+6. **P2, open conditional case:** Workspace/plugin cached running/pending chat can
+   retain a 10-second observer after `project_chat_missing`; see BACKLOG.
+
+P1 qualification remains actual Windows migration/restore/retry with the old profile
+and configured DPAPI protection; archive paths/status should be photographed on screen.
+Do not ask this user for files/log exports, and do not erase profiles to make the
+test pass. Existing mixed-generation backup, old-writer and power-loss gates remain.
+
 ## Storage-v2 review corrections — host-neutral fixed, qualification open, 2026-11-16
 
 Owners: ChatSessionService / native journal input and finish readers, shared

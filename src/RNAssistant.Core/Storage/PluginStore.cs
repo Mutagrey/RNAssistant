@@ -72,9 +72,11 @@ namespace RNAssistant.Core.Storage
             return head?.Knowledge == HeadKnowledge.Known ? Read<PluginRegistration>(head.Revision, "plugin-registration") : null;
         }
 
-        public PluginRegistration Connect(PluginSourceWorkspace source)
+        public PluginRegistration Connect(PluginSourceWorkspace source, string expectedPluginId = null)
         {
             var manifest = PluginPackageFiles.ParseManifest(_files.ReadText(source.Workspace, "plugin.json").Text);
+            if (expectedPluginId != null && manifest.Id != expectedPluginId)
+                throw new PluginException("plugin_source_changed", "Идентичность плагина в исходниках изменилась. Обновите прежний каталог перед подключением.");
             if (PluginPackageFiles.IconIsSvgPath(manifest.Icon))
                 PluginPackageFiles.ReadIconSvg(PluginPackageFiles.Read(source.Workspace.RootPath, manifest.Icon, PluginIconSvg.MaximumBytes));
             var current = Get(manifest.Id);
@@ -300,7 +302,11 @@ namespace RNAssistant.Core.Storage
             var data = _revisions.GetView(Scope, reference, view);
             if (data?.Payload == null || data.Payload.ByteLength > 1024 * 1024)
                 throw new PluginException("plugin_release_invalid", "Invalid package metadata.");
-            var json = _blobs.ReadText(data.Payload.ToBlobReference());
+            return DeserializePluginRecord<T>(_blobs.ReadText(data.Payload.ToBlobReference()));
+        }
+
+        private static T DeserializePluginRecord<T>(string json)
+        {
             if (typeof(T) == typeof(PluginRegistration))
             {
                 // Decode the previous path-array appearance into the only live SVG representation.

@@ -109,6 +109,8 @@ document.addEventListener("DOMContentLoaded", function () {
   window.RNAssistantVbaView.register(window.RNAssistantDockWorkspace);
   window.RNAssistantConversationPanel.register(window.RNAssistantDockWorkspace);
   window.RNAssistantBrowser.register(window.RNAssistantDockWorkspace);
+  // Restoring Dock synchronously activates views that already need the bridge.
+  initialize();
   window.RNAssistantDockWorkspace.bind();
   window.RNAssistantShellLayout.refresh();
   window.addEventListener("load", function () {
@@ -117,6 +119,5 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  initialize().then(function () { RNAssistantActiveRuns.start(); if (window.RNAssistantPlugins) window.RNAssistantPlugins.refresh().catch(function (error) { document.getElementById("pluginStatus").textContent = error.message; }); });
   state.syncTimer = window.setInterval(synchronizeChatState, 60000);
 });

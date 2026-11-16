@@ -1,5 +1,54 @@
 # Plugins
 
+## Explicit registration import — 2026-11-16
+
+The requested upgrade recovery adds an explicit native migration through
+`PluginStore.ImportLegacyRegistration`, exposed by typed Application/bridge
+contracts. Diagnostics → Health → Прежние данные → **Восстановить регистрацию**
+adopts the exact retained PluginId, source WorkspaceId/root, name/appearance,
+Enabled/Hidden flags, active release/version/revision and the complete supported
+saved-version catalog. Version IDs, ordinals, labels, dates, actors, removed entries
+and saved-operation receipts are retained. No plugin instance or old invocation is
+created, and import never calls Check, Apply or an executor. Enabled is preserved
+configuration; opening the plugin later uses its ordinary lifecycle.
+
+`registrationRevision` pins the full plugin namespace, including saved versions,
+not merely the current registration head. The importer validates historical
+metadata, dependencies and all package/vendor CAS bytes with the configured key.
+The source folder may be offline: retained release bytes are sufficient. Unsupported
+cross-namespace dependencies, incomplete bytes, ambiguous identities and protection
+failures refuse the whole plugin before publication. Bounds are 64 MiB per old
+journal, 8 MiB per record, 10 000 metadata revisions, 256 MiB per package and 128 KiB
+per staged metadata/atomic-heads record. An oversized catalog is reported explicitly.
+
+Immutable metadata is staged first; all plugin heads and a deterministic receipt
+are published in one native authority commit. A native PluginId without that exact
+receipt is a conflict, including a built-in seed or a registration created through
+Connect. It is never overwritten. The read-only `getLegacyPluginImport` checks the
+receipt without needing old files and returns the current registration; later native
+changes remain authoritative. If acknowledgement is lost, UI offers only that
+receipt query. A partial staging interruption does not expose a partial catalog.
+Legacy journals and source files are neither rewritten nor removed.
+
+## Explicit source reconnection — 2026-11-16
+
+Diagnostics → Health → Прежние данные explicitly lists retained registrations
+through a bounded read-only
+LegacyPluginRecoveryService. It validates the configured CAS protection, registration
+identity, saved source root, plugin.json and workspace identity; missing/changed/
+linked/incomplete sources are reported without changing the retained files.
+
+`reconnectLegacyPlugin` accepts only the retained plugin ID. Native lookup resolves
+the root and both identities, then the existing Connect path checks expected
+WorkspaceId before association writes and expected PluginId before registration.
+Those guards are runtime-only and cannot be supplied through bridge JSON. Recovery
+does not recreate source manifests. New registrations remain disabled; existing
+matching registrations retain their state. This separate source-only action does
+not transfer releases/versions; use registration import above for that purpose.
+Users may inspect the source, then perform normal Check,
+Save and explicit Apply. Plugin catalog refresh after a mutation waits for any older
+read and fetches a fresh result, so a late pre-mutation list cannot hide the change.
+
 ## Saved viewer deletion — 2026-11-13
 
 A read-only saved preview does not hold VersionInUse. Exact command operations and

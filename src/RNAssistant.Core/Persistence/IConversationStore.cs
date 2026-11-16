@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Threading;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Persistence
 {
@@ -48,6 +50,14 @@ namespace RNAssistant.Core.Persistence
         // reports whether the retained stream contained an open tool execution.
         // Projection repair and the final conversation save remain application policy.
         bool PrepareInterruptedRunRecovery(ChatSession session, string runId);
+    }
+
+    // Bounded context preparation over the canonical conversation index. This is
+    // a read port on the existing Store owner, not another cache or prompt store.
+    public interface IConversationContextStore
+    {
+        ContextWorkingSet RestoreWorkingSet(ChatSession session, int recentResults,
+            int workingBudget, CancellationToken token = default(CancellationToken));
     }
 
     // A read address and observed revision, not a partial writable session or

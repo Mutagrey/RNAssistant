@@ -310,7 +310,7 @@ namespace RNAssistant.Office
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
                 ToolsPath = _paths.ToolsDirectory,
                 SkillsPath = _paths.SkillsDirectory,
-                HistoryStorageNotice = "История и ресурсные связи переведены на новый формат. Новые чаты начинаются с новой истории; прежние данные сохранены отдельно и не импортируются.",
+                HistoryStorageNotice = "Используется новый формат истории. Прежние чаты и исходники плагинов можно проверить в разделе «Прежние данные»: Диагностика → Приложение → Задержки и хранилище.",
                 QuickAction = DequeueQuickAction()
             };
             if (includeChatState) PopulateChatState(session, response, settings: settings);

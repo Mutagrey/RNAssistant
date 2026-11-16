@@ -163,7 +163,7 @@ namespace RNAssistant.Harness
                         }
                         else
                         {
-                            var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
+                            var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal, journal,
                                 new DocumentArtifactStore(resources, resources, bodies), files, bodies,
                                 new WorkspaceWebSnapshotStore(paths, files), workspace, source, settings, () => "fixture-key", null,
                                 agentCommunication: communication, agentInbox: inbox, resourceAuthority: resources, resourceMutations: resources);

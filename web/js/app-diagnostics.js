@@ -273,6 +273,7 @@ async function collectCasGarbage() {
 
 function bindDiagnosticsActions() {
   RNAssistantDiagnostics.bind();
+  if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.bind();
   bindModelDiagnosticsLab();
   performanceDiagnostics.observeLongTasks();
   $("refreshPerformanceDiagnosticsButton").addEventListener("click", performanceDiagnostics.render);

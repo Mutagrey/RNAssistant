@@ -31,6 +31,9 @@ namespace RNAssistant.MockDemo
             if ((args ?? new string[0]).Contains("--browser-html-export-test")) return RunBrowserHtmlExportTest();
             if ((args ?? new string[0]).Contains("--artifact-transfer-test")) return RunArtifactTransferTest();
             if ((args ?? new string[0]).Contains("--chat-creation-test")) return RunChatCreationTest();
+            if ((args ?? new string[0]).Contains("--missing-chat-inbox-test")) return await RunMissingChatInboxTestAsync().ConfigureAwait(false);
+            if ((args ?? new string[0]).Contains("--legacy-recovery-test")) return await RunLegacyRecoveryTestAsync().ConfigureAwait(false);
+            if ((args ?? new string[0]).Contains("--legacy-migration-test")) return await RunLegacyMigrationTestAsync().ConfigureAwait(false);
             if ((args ?? new string[0]).Contains("--inbox-test")) return await RunInboxTestAsync().ConfigureAwait(false);
             if (options.ArtifactCommitTest)
             {

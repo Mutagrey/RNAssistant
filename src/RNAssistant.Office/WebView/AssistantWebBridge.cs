@@ -16,6 +16,7 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.WebView
 {
@@ -696,6 +697,52 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = _controller.GetCasHealth();
                         break;
+                    case BridgeOperationId.ListLegacyChats:
+                        var legacyChats = Payload<LegacyRecoveryListRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ListLegacyChats(legacyChats, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ReadLegacyTranscript:
+                        var legacyTranscript = Payload<LegacyTranscriptRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadLegacyTranscript(legacyTranscript, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ListLegacyPlugins:
+                        var legacyPlugins = Payload<LegacyRecoveryListRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ListLegacyPlugins(legacyPlugins, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ImportLegacyChat:
+                        var importChat = Payload<LegacyChatImportRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ImportLegacyChat(importChat, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.GetLegacyChatImport:
+                        var readChatImport = Payload<LegacyChatImportReadRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.GetLegacyChatImport(readChatImport, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ImportLegacyPlugin:
+                        var importPlugin = Payload<PluginLegacyImportRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() =>
+                        {
+                            if (Plugins == null) throw new PluginException("plugins_unavailable", "Plugin host is unavailable.");
+                            return Plugins.ImportLegacyRegistration(importPlugin);
+                        }, cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.GetLegacyPluginImport:
+                        var readPluginImport = Payload<PluginLegacyImportRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() =>
+                        {
+                            if (Plugins == null) throw new PluginException("plugins_unavailable", "Plugin host is unavailable.");
+                            return Plugins.ReadLegacyRegistrationImport(readPluginImport, cancellationToken);
+                        }, cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ReconnectLegacyPlugin:
+                        var legacyReconnect = Payload<LegacyPluginReconnectRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() =>
+                        {
+                            if (Plugins == null) throw new PluginException("plugins_unavailable", "Plugin host is unavailable.");
+                            var source = _controller.ResolveLegacyPluginSource(legacyReconnect, cancellationToken);
+                            return Plugins.Connect(new PluginConnectRequest { RootPath = source.SourceRoot,
+                                ExpectedPluginId = source.PluginId, ExpectedSourceWorkspaceId = source.SourceWorkspaceId });
+                        }, cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.ListDiagnosticLogs:
                         responsePayload = await RunBridgeWorkAsync(() => _controller.ListDiagnosticLogs(cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
@@ -1125,6 +1172,10 @@ namespace RNAssistant.Office.WebView
                 const string message = "Хранилище чата занято другой операцией. Дождитесь её завершения и обновите состояние чата.";
                 return SerializeFailure(id, message, message, "chat_storage_busy", false);
             }
+            catch (LegacyChatImportException ex)
+            { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
+            catch (ChatSessionNotFoundException ex)
+            { return SerializeFailure(id, ex.Message, ex.Message, "chat_session_not_found", false); }
             catch (WorkspaceApplicationException ex)
             { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
             catch (PluginException ex)

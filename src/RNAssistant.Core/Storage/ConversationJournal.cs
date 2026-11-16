@@ -227,18 +227,18 @@ namespace RNAssistant.Core.Storage
             ResourceJournalReceipt outcome = null; var contextKeys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
             while (true)
             {
-                PayloadRef required = null; ResourceOutcomeLink requiredOutcome = null; ContextCallKeyNeeded requiredCall = null;
+                IReadOnlyList<PayloadRef> required = null; ResourceOutcomeLink requiredOutcome = null; ContextCallKeyNeeded requiredCall = null;
                 using (Journal.AcquireAppendLock(token))
                 using (var db = OpenIndex(indexPath))
                 {
                     try { CatchUp(db, verified, outcome, contextKeys, token, recover); return; }
-                    catch (TailReferenceNeeded error) { required = error.Reference; }
+                    catch (TailReferenceNeeded error) { required = error.References; }
                     catch (OutcomeNeeded error) { requiredOutcome = error.Link; }
                     catch (ContextCallKeyNeeded error) { requiredCall = error; }
                 }
                 if (requiredCall != null) contextKeys[requiredCall.Fingerprint] = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
                 else if (requiredOutcome != null) outcome = new ResourceJournal(_paths, _protector).ReadOutcome(requiredOutcome);
-                else VerifyReference(required, verified);
+                else foreach (var reference in required) VerifyReference(reference, verified);
             }
         }
 
@@ -251,7 +251,7 @@ namespace RNAssistant.Core.Storage
                 var repairAttempted = false;
                 while (true)
                 {
-                    PayloadRef required = null; ResourceOutcomeLink requiredOutcome = null; ContextCallKeyNeeded requiredCall = null;
+                    IReadOnlyList<PayloadRef> required = null; ResourceOutcomeLink requiredOutcome = null; ContextCallKeyNeeded requiredCall = null;
                     try
                     {
                         using (JournalIndexAdmission.Enter(_paths, token))
@@ -259,7 +259,7 @@ namespace RNAssistant.Core.Storage
                         using (var db = OpenIndex())
                         {
                             try { return action(db, CatchUp(db, verified, outcome, contextKeys, token)); }
-                            catch (TailReferenceNeeded error) { required = error.Reference; }
+                            catch (TailReferenceNeeded error) { required = error.References; }
                             catch (OutcomeNeeded error) { requiredOutcome = error.Link; }
                             catch (ContextCallKeyNeeded error) { requiredCall = error; }
                         }
@@ -272,7 +272,7 @@ namespace RNAssistant.Core.Storage
                     // append/SQL locks, while the existing GC activity remains held.
                     if (requiredCall != null) contextKeys[requiredCall.Fingerprint] = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
                     else if (requiredOutcome != null) outcome = new ResourceJournal(_paths, _protector).ReadOutcome(requiredOutcome);
-                    else VerifyReference(required, verified);
+                    else foreach (var reference in required) VerifyReference(reference, verified);
                 }
             }
         }
@@ -308,6 +308,13 @@ namespace RNAssistant.Core.Storage
                 applied = position; contextKeys.Clear();
             }, record => {
                 IEnumerable<PayloadRef> references;
+                if (record.Kind == "chat.imported")
+                {
+                    // Verify the bounded import closure once outside append/SQL
+                    // locks, rather than replaying all occurrences per CAS body.
+                    var missing = LegacyImportReferences(DecodeChatCommit(record)).Where(reference => !verified.Contains(ReferenceKey(reference))).ToArray();
+                    if (missing.Length != 0) throw new TailReferenceNeeded(missing);
+                }
                 if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record, contextKeys, outcome);
                 else if (record.Kind == "queue.control")
                 { var control = DecodeControl(record); ValidateControl(db, record.Operation, control);
@@ -668,7 +675,11 @@ namespace RNAssistant.Core.Storage
         private static string ReferenceKey(PayloadRef reference)
         { return reference.Sha256 + ":" + reference.ByteLength + ":" + reference.ProtectionKeyId; }
         private sealed class TailReferenceNeeded : Exception
-        { internal readonly PayloadRef Reference; internal TailReferenceNeeded(PayloadRef reference) { Reference = reference; } }
+        {
+            internal readonly IReadOnlyList<PayloadRef> References;
+            internal TailReferenceNeeded(PayloadRef reference) { References = new[] { reference }; }
+            internal TailReferenceNeeded(IReadOnlyList<PayloadRef> references) { References = references; }
+        }
         private sealed class OutcomeNeeded : Exception
         { internal readonly ResourceOutcomeLink Link; internal OutcomeNeeded(ResourceOutcomeLink link) { Link = link; } }
     }

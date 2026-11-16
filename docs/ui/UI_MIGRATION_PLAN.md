@@ -1,5 +1,50 @@
 # План модернизации production UI
 
+## Restore и доступ к прежним данным — In Review, 2026-11-16
+
+Scope: порядок init/restore, адресный missing-chat terminal, чтение архива и явный
+native import поддерживаемых прежних чатов/регистраций из существующей Diagnostics
+Health. История возвращается в основной conversation store; регистрация плагина,
+сохранённые версии и публикации — в существующий plugin owner. Исходные файлы
+сохраняются. Reconnect остаётся отдельным действием для исходников. Старые execution
+facts не получают authority для продолжения run; общий message renderer помечает
+native `ImportedHistory` как «Перенесённая история».
+
+UI принимает только exact receipt для captured source/revision. Unknown допускает
+только read-only проверку, не replay. Batch ограничен текущей страницей (до 25),
+последователен и останавливается перед следующей командой по Stop/hide/Unknown.
+Принятые mutations завершаются независимо от видимости; обычные reads отменяются.
+Успех обновляет существующие каталоги и exact chat/Browser views без глобального
+initialize/select или новых вкладок. `targetDeleted` сохраняет подтверждение прежнего
+переноса, но исключает повторную запись и оживление удалённого чата.
+
+Targeted Node VM checks: `legacy-recovery-state.test.js` проверяет явные archive
+reads, bounds/cursors, textContent, receipts, lost ACK, typed refusals, targetDeleted,
+catalog refresh, batch и lifecycle. `bridge-bootstrap.test.js` исполняет настоящий
+boot/transport/Browser, включая matching plugin invalidation active/hidden/disposed,
+смену locator и receipt во время Open/Attach. Native storage/import и реальный
+controller bridge проверяются отдельно владельцами в Harness/MockDemo; Node
+результаты не являются Office/WebView2 qualification.
+
+Windows review на сохранённом старом профиле:
+
+1. Открыть восстановленные Browser/chat вкладки, проверить init failure → retry и
+   прекращение опроса отсутствующего чата. Перелистнуть архив, перенести выбранный
+   поддерживаемый чат, проверить основной список, его существующий view и метки
+   истории без смены выбранного чата.
+2. Восстановить регистрацию с версиями/публикациями; проверить plugin rail,
+   сохранённую конфигурацию и отдельно доступность исходников/результат проверки.
+   Убедиться, что matching Browser обновляется, скрытый ждёт возвращения, закрытый
+   не открывается. Source reconnect проверить как отдельное действие.
+3. Запустить перенос страницы и остановить/скрыть панель: принятая команда завершается,
+   следующая не начинается; per-item и общие счётчики согласованы. Проверить читаемость
+   статусов, фокус, перенос controls и narrow/125% layout.
+
+Windows/Office/WebView2/DPAPI и визуальное принятие остаются открытыми. Данные и
+WebView profile перед проверкой не очищать. Пользовательское evidence — только
+фотографии экрана. Неподдерживаемые старые данные получают явный отказ; отсутствие
+receipt/ошибка catalog refresh не выдаются за доказательство переноса или его отмены.
+
 ## Файловые логи и хранение — In Review, 2026-11-16
 
 Scope: существующий Diagnostics → application/log, общий Core log owner,

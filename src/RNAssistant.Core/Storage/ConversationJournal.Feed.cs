@@ -98,7 +98,7 @@ namespace RNAssistant.Core.Storage
                 // Invalidation categories, not legacy replay operations. A native
                 // chat frame carries its metadata/context plus bounded message delta.
                 changes.Add(SessionOperationTypes.SessionMetadataSet); changes.Add(SessionOperationTypes.ContextSet);
-                if (fact.Messages.Count > 0) changes.Add(SessionOperationTypes.MessageUpdated);
+                if (fact.Messages.Count > 0 || fact.LegacyImport != null) changes.Add(SessionOperationTypes.MessageUpdated);
                 if (fact.History != null) changes.Add(SessionOperationTypes.MessageRemove);
                 if (fact.Run != null || fact.History != null) changes.Add(SessionOperationTypes.RunUpdated);
             }

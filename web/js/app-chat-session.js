@@ -597,6 +597,14 @@ async function initialize() {
       state.initializePromise = null;
       if (typeof renderSendControls === "function") renderSendControls();
     }
+    if (state.bridgeUnavailable || !state.bridgeToken) return;
+    // The handshake and application projection are both accepted. Repeat these
+    // reads after a manual startup retry without awaiting views queued on init.
+    if (window.RNAssistantBrowser) RNAssistantBrowser.ready();
+    if (window.RNAssistantActiveRuns) RNAssistantActiveRuns.start();
+    if (window.RNAssistantPlugins) RNAssistantPlugins.refresh().catch(function (error) {
+      document.getElementById("pluginStatus").textContent = error.detail || error.message;
+    });
   })();
   return state.initializePromise;
 }

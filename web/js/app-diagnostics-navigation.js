@@ -61,6 +61,7 @@
     $("diagnosticsAppControls").classList.toggle("hidden", tab !== "application");
     $("diagnosticsScopeBar").classList.toggle("hidden", tab !== "runs");
     if (window.RNAssistantFileLogs) RNAssistantFileLogs.sync();
+    if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.sync();
   }
   function show(tab, initialize) {
     var next = ["runs", "model-lab", "application"].indexOf(tab) >= 0 ? tab : "runs";
@@ -112,6 +113,7 @@
       if (window.RNAssistantActionMenu) RNAssistantActionMenu.closeWithin($("tab-diagnostics"));
       if (window.RNAssistantTrajectory) RNAssistantTrajectory.pause();
       if (window.RNAssistantFileLogs) RNAssistantFileLogs.pause();
+      if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.pause();
       return;
     }
     show(state.diagnosticsTab || "runs");
@@ -129,6 +131,7 @@
     onClose: function () {
       if (window.RNAssistantTrajectory) RNAssistantTrajectory.dispose();
       if (window.RNAssistantFileLogs) RNAssistantFileLogs.dispose();
+      if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.pause();
     },
     isVisible: function () { return window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.isVisible("diagnostics"); },
     requestVisible: function () { return window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.isVisible("request"); } };

@@ -15,7 +15,7 @@ namespace RNAssistant.Core.Storage
     // Permanent composition for multiple exact conversation scopes over the one
     // canonical index. It owns no facts and delegates every operation to the
     // existing per-scope ConversationJournal.
-    internal sealed class ConversationJournalRouter : IConversationStore, IEventStore
+    internal sealed class ConversationJournalRouter : IConversationStore, IEventStore, IConversationContextStore
     {
         private readonly AppDataPaths _paths;
         private readonly StorageProtector _protector;
@@ -23,6 +23,7 @@ namespace RNAssistant.Core.Storage
         private readonly ConcurrentDictionary<string, ConversationJournal> _journals =
             new ConcurrentDictionary<string, ConversationJournal>(StringComparer.Ordinal);
         private int _indexDiscoveryAttempted;
+        internal string RootPath { get { return _paths.Root; } }
 
         internal ConversationJournalRouter(AppDataPaths paths, Func<string, string, string> resolveScope,
             StorageProtector protector = null)
@@ -139,6 +140,30 @@ namespace RNAssistant.Core.Storage
             return journal == null ? null : Conversations(journal).Load(sessionId);
         }
 
+        internal LegacyChatImportResult ImportLegacyChat(ChatSession source, Newtonsoft.Json.Linq.JObject snapshot,
+            string sourceId, long revision, CancellationToken token)
+        { return For(source).ImportLegacyChat(source, snapshot, sourceId, revision, token); }
+
+        public LegacyChatImportResult ReadLegacyImport(string chatId, string sourceId, long sourceRevision,
+            CancellationToken token = default(CancellationToken))
+        {
+            token.ThrowIfCancellationRequested();
+            var journal = ForChat(chatId);
+            if (journal != null) return journal.ReadLegacyImport(chatId, sourceId, sourceRevision, token);
+            // A flushed import can precede its first chat_card row. The ordinary
+            // negative discovery cache must not hide its durable receipt.
+            LegacyChatImportResult found = null;
+            foreach (var candidate in AllJournals())
+            {
+                token.ThrowIfCancellationRequested();
+                var receipt = candidate.ReadLegacyImport(chatId, sourceId, sourceRevision, token);
+                if (receipt == null) continue;
+                if (found != null) throw new System.IO.InvalidDataException("Import identity exists in multiple scopes.");
+                found = receipt;
+            }
+            return found;
+        }
+
         public ConversationMetadata ReadMetadata(string sessionId)
         {
             var journal = ForChat(sessionId);
@@ -237,6 +262,15 @@ namespace RNAssistant.Core.Storage
 
         public bool PrepareInterruptedRunRecovery(ChatSession session, string runId)
         { return Conversations(For(session)).PrepareInterruptedRunRecovery(session, runId); }
+
+        public ContextWorkingSet RestoreWorkingSet(ChatSession session, int recentResults,
+            int workingBudget, CancellationToken token = default(CancellationToken))
+        {
+            var journal = For(session);
+            var context = journal as IConversationContextStore;
+            if (context == null) throw new InvalidOperationException("Conversation owner does not provide bounded context restoration.");
+            return context.RestoreWorkingSet(session, recentResults, workingBudget, token);
+        }
 
         internal ResourceMutationOrigin MutationOrigin(ChatSession session, ToolExecutionContext context)
         { return For(session).MutationOrigin(session, context); }

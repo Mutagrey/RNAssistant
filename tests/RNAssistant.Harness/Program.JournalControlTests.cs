@@ -155,7 +155,7 @@ namespace RNAssistant.Harness
                                 }
                                 else
                                 {
-                                    var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
+                                    var ports = new WorkspaceConversationService.WorkspacePorts(paths, store, journal, journal,
                                         new DocumentArtifactStore(resources, resources, payloads), files, payloads,
                                         new WorkspaceWebSnapshotStore(paths, files), workspace, chat, settings, () => "fixture-key", frame => {
                                             if (chat.Id == target.Id && cold && frame.Kind == "ToolWaiting") requested.Set();

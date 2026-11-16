@@ -30,7 +30,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-models.css?v=settings-dock-20261102">
-  <link rel="stylesheet" href="css/app-workspace.css?v=request-dock-20261102">
+  <link rel="stylesheet" href="css/app-workspace.css?v=storage-recovery-20261116">
   <link rel="stylesheet" href="css/app-plugins.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-preview-surface.css?v=plugin-materials-20261103-html-editors-20261103-1-local-interactive-20261113-native-find-20261113-browser-controls-20261116">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=diagnostics-source-20261103">
@@ -908,6 +908,49 @@
               </section>
 
               <div class="diagnostics-tab-panel diagnostics-overview" data-diagnostics-application="health">
+                <section class="model-compatibility-panel diagnostics-model-panel" id="legacyRecoveryPanel" aria-labelledby="legacyRecoveryTitle">
+                  <div class="model-compatibility-head"><div>
+                    <h3 id="legacyRecoveryTitle">Прежние данные</h3>
+                    <p>Выберите прежние чаты и регистрации плагинов для переноса в основные списки. Архив можно читать до переноса; исходные файлы сохраняются.</p>
+                  </div><button class="button compact" id="legacyRecoveryRefresh" type="button">Проверить прежние данные</button></div>
+                  <p id="legacyRecoveryNotice" class="status" role="status" aria-live="polite">Проверка запускается по кнопке. Архивные файлы не изменяются.</p>
+                  <details class="legacy-recovery-section" id="legacyRecoveryChats">
+                    <summary>История чатов</summary>
+                    <p id="legacyRecoveryChatStatus" class="muted"></p>
+                    <div class="legacy-recovery-controls">
+                      <select class="rna-form-control" id="legacyRecoveryChatSelect" aria-label="Прежний чат"></select>
+                      <button class="button compact" id="legacyRecoveryRead" type="button" disabled>Открыть текст</button>
+                      <button class="button compact" id="legacyRecoveryChatFirst" type="button" disabled>К началу списка</button>
+                      <button class="button compact" id="legacyRecoveryChatNext" type="button" disabled>Следующие чаты</button>
+                    </div>
+                    <p id="legacyRecoveryChatInfo" class="muted"></p>
+                    <div class="legacy-recovery-controls">
+                      <button class="button compact" id="legacyRecoveryImportChat" type="button" disabled>Перенести в историю</button>
+                      <button class="button compact" id="legacyRecoveryCheckChat" type="button" disabled>Проверить перенос</button>
+                      <button class="button compact" id="legacyRecoveryImportPage" type="button" disabled>Перенести показанные чаты</button>
+                      <button class="button compact" id="legacyRecoveryStopImport" type="button" disabled>Остановить после текущего</button>
+                    </div>
+                    <p id="legacyRecoveryImportStatus" class="status" role="status" aria-live="polite"></p>
+                    <p id="legacyRecoveryBatchStatus" class="muted" role="status" aria-live="polite"></p>
+                    <pre id="legacyRecoveryText" class="legacy-recovery-transcript" tabindex="0" aria-label="Архивный текст чата"></pre>
+                    <div class="legacy-recovery-controls">
+                      <button class="button compact" id="legacyRecoveryTextFirst" type="button" disabled>К началу текста</button>
+                      <button class="button compact" id="legacyRecoveryTextNext" type="button" disabled>Следующий фрагмент</button>
+                      <button class="button compact" id="legacyRecoveryCopy" type="button" disabled>Копировать фрагмент</button>
+                      <span id="legacyRecoveryTextStatus" class="muted"></span>
+                    </div>
+                  </details>
+                  <details class="legacy-recovery-section" id="legacyRecoveryPlugins">
+                    <summary>Регистрации плагинов</summary>
+                    <p id="legacyRecoveryPluginStatus" class="muted"></p>
+                    <div id="legacyRecoveryPluginList" class="legacy-recovery-plugins"></div>
+                    <div class="legacy-recovery-controls">
+                      <button class="button compact" id="legacyRecoveryPluginFirst" type="button" disabled>К началу списка</button>
+                      <button class="button compact" id="legacyRecoveryPluginNext" type="button" disabled>Следующие плагины</button>
+                    </div>
+                    <p class="muted">Восстановление возвращает регистрацию, сохранённые версии и публикации. Их доступность и результаты проверок показываются отдельно. «Подключить исходники» — отдельное действие, если нужны только сохранившиеся файлы.</p>
+                  </details>
+                </section>
                 <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="performanceDiagnosticsTitle">
                   <div class="model-compatibility-head"><div>
                     <h3 id="performanceDiagnosticsTitle">Задержки текущей панели</h3>
@@ -1120,8 +1163,9 @@
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
   <script src="js/app-settings.js?v=deployment-config-20261112"></script>
   <script src="js/app-logs.js?v=diagnostic-files-20261116"></script>
-  <script src="js/app-diagnostics-navigation.js?v=diagnostics-source-20261103-selected-inspector-20261113"></script>
-  <script src="js/app-diagnostics.js?v=diagnostics-source-20261103"></script>
+  <script src="js/app-legacy-recovery.js?v=storage-import-20261116"></script>
+  <script src="js/app-diagnostics-navigation.js?v=storage-recovery-20261116"></script>
+  <script src="js/app-diagnostics.js?v=storage-recovery-20261116"></script>
   <script src="js/app-model-diagnostics.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2-materials-s3b2"></script>
   <script src="js/app-browser-target.js?v=browser-p2b-20261111-local-interactive-20261113"></script>
@@ -1189,21 +1233,21 @@
   <script src="js/app-agent-approval.js?v=chat-views-20261103"></script>
   <script src="js/app-run-changes.js?v=compact-tool-card-20261029-2"></script>
   <script src="js/app-agent.js?v=chat-continuity-20261103"></script>
-  <script src="js/app-messages.js?v=chat-welcome-20261103-html-editors-20261103-1"></script>
+  <script src="js/app-messages.js?v=legacy-history-20261116-1"></script>
   <script src="js/app-reasoning.js?v=chat-continuity-20261103"></script>
   <script src="js/app-attachments.js?v=chat-views-20261103-html-editors-20261103-1-native-selection-20261113"></script>
-  <script src="js/app-chat-session.js?v=unified-workspace-20261111"></script>
+  <script src="js/app-chat-session.js?v=storage-recovery-20261116"></script>
   <script src="js/app-chat-composer.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-inbox.js?v=chat-views-20261103"></script>
   <script src="js/app-chat-run.js?v=request-causes-20261103"></script>
   <script src="js/app-chat.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-edit.js?v=chat-views-20261103"></script>
   <script src="js/app-workspace-chat.js?v=chat-views-20261103-chat-audit-20261103-native-selection-20261113"></script>
-  <script src="js/app-office-chat-view.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103-native-selection-20261113"></script>
+  <script src="js/app-office-chat-view.js?v=storage-recovery-20261116"></script>
   <script src="js/app-agent-recovery.js?v=agent-recovery-20261104"></script>
   <script src="js/app-agent-communication.js?v=agent-recovery-menu-20261104"></script>
   <script src="js/app-conversation-panel.js?v=unified-workspace-20261111-selected-inspector-20261113"></script>
-  <script src="js/app-plugins.js?v=plugin-materials-20261103-html-editors-20261103-1-native-selection-20261113"></script>
+  <script src="js/app-plugins.js?v=storage-recovery-20261116"></script>
   <script src="js/app-project-chats.js?v=unified-workspace-20261111"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
@@ -1213,8 +1257,8 @@
   <script src="js/app-browser-actions.js?v=browser-controls-20261116"></script>
   <script src="js/app-browser-annotations.js?v=native-selection-20261113"></script>
   <script src="js/app-browser-find.js?v=native-find-20261113"></script>
-  <script src="js/app-browser.js?v=local-browser-20261113-native-selection-native-find-20261113-browser-controls-20261116"></script>
+  <script src="js/app-browser.js?v=storage-import-20261116"></script>
   <script src="js/app-active-runs.js?v=chat-parity-20261103"></script>
-  <script src="js/app.js?v=unified-workspace-20261111"></script>
+  <script src="js/app.js?v=storage-recovery-20261116"></script>
 </body>
 </html>

@@ -1,5 +1,27 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Прежние данные — In Review, 2026-11-16
+
+Архив и explicit import занимают существующую Health surface: общий panel/header, `button`,
+`rna-form-control`, muted/status и native details. Controls переносятся в узкой
+панели; длинные пути и текст переносятся без горизонтального расширения Shell.
+В DOM остаётся одна страница текста (обычно до 32 000 символов) и по 25 записей
+каталога. Все архивные title/path/error/content и сообщения переноса вставляются
+через textContent.
+
+Chat import/check/page/stop используют тот же ряд `.legacy-recovery-controls`.
+Plugin row содержит отдельные import/check/source-connect actions. Pending блокирует
+дубликаты; Unknown оставляет read-only проверку, подтверждённый результат блокирует
+новую запись. Статус привязан к исходной строке, а не к текущему selection. Выбранный
+чат и batch имеют существующий `status`/`aria-live="polite"`; прогресс разделяет
+подтверждения, отказы, Unknown и не начатые записи. Сообщение о недоступном источнике
+или неуспешной проверке не заменяется утверждением об успешном выполнении плагина.
+
+В основной общей ленте метка «Перенесённая история» использует существующий
+`message-meta`, без нового message layout, activity controls или иконки успеха.
+Layout CSS использует общие spacing/color/font tokens; новой Shell или chat UI нет.
+Windows/WebView2 wide/narrow/125% visual acceptance остаётся открытой.
+
 ## Файловые логи — In Review, 2026-11-16
 
 Viewer использует существующие `button`, `rna-form-control`, `surface-panel`,

@@ -69,7 +69,7 @@ namespace RNAssistant.Core.Storage
                 }
                 return ids;
             }
-            if (record.Kind == "chat.committed") return new[] { DecodeChatCommit(record).Card.ChatId };
+            if (record.Kind == "chat.committed" || record.Kind == "chat.imported") return new[] { DecodeChatCommit(record).Card.ChatId };
             if (record.Kind == "chat.selected") return new[] { DecodeChatSelection(record).ChatId };
             if (record.Kind == "chat.created") return new[] { DecodeCard(record).ChatId };
             if (record.Kind == "agent.spawned") { var spawn = DecodeSpawn(record); return new[] { spawn.Sender, spawn.Child.ChatId }; }

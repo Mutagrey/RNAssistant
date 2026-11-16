@@ -1,5 +1,43 @@
 # RNAssistant Harness
 
+## Post-upgrade restore and explicit migration — 2026-11-16
+
+`legacy recovery:` runs two cases, each with plaintext and HMAC/AES fixtures:
+read-only catalog/transcript paging, exact revision, Unicode cursor, protection
+failure, unchanged files and torn tail; retained plugin registration, guarded source
+identity, wrong key, missing/changed/linked sources and unchanged bytes. These are
+synthetic profiles; they cannot establish that the user's existing files survived.
+
+`legacy chat import:` covers ordinary catalogs/reads, more than 128 messages,
+protected data, marked historical rows, native-only rebuild and embedded CAS
+reachability, exact document/workspace scope, collision/tombstone refusal, durable
+receipts after edits/deletion, same-process lost acknowledgement and a new native
+tool operation after import. Imported history must not create execution proof.
+
+`legacy plugin import:` covers the retained identity/configuration and full supported
+saved-version catalog, removed entries, version receipts, offline source and vendor
+bytes; native restart/idempotence without overwriting later changes; staging
+interruption/lost acknowledgement; conflicts, missing CAS, wrong key, cross-scope
+dependencies and a changed source pin. Those refusals precede publication.
+
+The source-linked real controller/bridge is exercised by MockDemo flags
+`--missing-chat-inbox-test`, `--legacy-recovery-test` and `--legacy-migration-test`.
+They check exact typed
+missing response, independent chats/draft, explicit retry, deleted cached chat;
+explicit archive, strict address/revision, runtime-only plugin/workspace guards and
+disabled source reconnect; explicit native chat/plugin imports, ordinary catalogs,
+exact IDs, unchanged selection, receipt reads and preserved legacy/source files.
+
+Focused Node checks: `bridge-bootstrap.test.js` (24 groups),
+`legacy-recovery-state.test.js` (15 groups), `missing-chat-inbox.test.js`,
+`conversation-observer.test.js`, `chat-inbox.test.js`, `conversation-view.test.js`
+and `diagnostic-files-state.test.js`. They run without Chromium and cover the real
+boot callback, delayed init/dispose, stale plugin catalog, bounded inert archive
+text, captured import identities, lost-ACK receipt reads, bounded sequential batch,
+deleted targets, exact Browser invalidation and exact-view polling/retry.
+Windows/.NET Framework/WebView2/DPAPI and visual
+wide/narrow/125% checks remain separate. Preserve the old profile for that review.
+
 ## Storage-v2 review corrections — 2026-11-16
 
 Focused filters: `office journal scope:`, `journal owners: runtime data clear`,

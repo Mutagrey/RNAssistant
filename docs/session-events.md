@@ -1,4 +1,78 @@
 # Session event stream
+
+## Explicit native history import — 2026-11-16
+
+The requested upgrade recovery supports an explicit transfer from a retained legacy
+chat into the ordinary storage-v2 catalog. `ChatStore.ImportLegacyRecoveryChat`
+reads a pinned source/revision; `ConversationJournalRouter` and the existing native
+journal own publication. Chat ID, document/workspace scope, dates, title and readable
+messages from readable legacy formats 6/7/8 are retained. Office authority must match the persisted identity registry;
+Workspace identity must match its saved connection. The active document is never
+used as a substitute. A current chat or deletion tombstone with the same ID refuses
+import; existing data is not merged or replaced.
+
+One atomic `chat.imported` fact references an immutable original snapshot, bounded
+message chunks and a complete CAS manifest. Historical rows have explicit
+`LegacyHistory` provenance and the UI marker «Перенесённая история». Plain human
+text can remain conversation context; old protocol/tool/runtime/effect rows are
+presentation only and excluded from new model context. No native run, checkpoint,
+accepted call, input, approval or effect is fabricated from history. The ordinary
+128-message commit limit and native execution validators are unchanged. A later
+user message starts normal current-contract work; it cannot resume the old run.
+
+Saved attachments and supported immutable artifact revisions must have verified
+bytes and prior publication proof. Immutable resource metadata/snapshot heads are
+staged through the native resource owner before chat visibility. Mutable Office,
+context and workspace heads are not rewound. Original snapshot and embedded CAS
+references are reachable through the native manifest, so index rebuild and backup
+do not depend on retaining the old chat files. Bounds: 200 000 messages, 64 MiB
+snapshot/chunk/manifest, 64 messages per chunk, 256 MiB per embedded CAS object,
+1 GiB total embedded CAS bytes and 10 000 linked resource revisions. Missing or
+unsupported closure refuses the chat before publication; partial staging can leave
+only immutable resources, never a partially visible chat.
+In particular, a retained removed artifact/snapshot whose deletion cannot be
+preserved by the supported native closure refuses the whole chat. Import must not
+turn a former removal into a visible live artifact. Archive preview remains available.
+
+The receipt is keyed by exact chat/source/revision. Repeated import returns the
+prior receipt without overwriting later edits. `getLegacyChatImport` is read-only;
+after an unknown acknowledgement UI reconciles through it without replay. Receipts
+remain available after subsequent messages or deletion; `targetDeleted` prevents
+reopening a deleted chat. Current indexes are disposable (schema v28), while the
+journal and CAS remain authoritative. Legacy journals are not rewritten or deleted,
+and normal reads do not silently fall back to them. Migration is explicit rather
+than automatic on startup. Real Windows/Office/DPAPI qualification remains open.
+
+## Explicit legacy archive access — 2026-11-16
+
+The active storage-v2 composition is unchanged. Diagnostics now offers an explicit
+read-only legacy archive through `ChatStore.ReadLegacyRecoveryChats` and
+`ReadLegacyRecoveryTranscript`. The reader reuses legacy event validation,
+decryption and projection reducers; it never rebuilds SQLite, appends facts,
+selects an active chat, hydrates a continuation or resumes an old run. No implicit
+fallback or dual write is introduced. The former unconditional notice that old data
+was preserved is replaced with directions to an explicit check of the actual profile.
+
+Catalog pages contain at most 50 records (UI: 25). Transcript requests address a
+catalog source ID and exact revision with message/character cursors; one response
+contains at most 65 536 characters and 100 messages (UI: 32 000 characters).
+The text includes retained protocol/tool-call rows as inert text. Attachment names
+are shown; separate CAS result bodies remain outside this transcript. The reader
+does not claim a complete export of resources, run evidence or plugin releases.
+
+Each chat journal is bounded to 64 MiB, 8 MiB per event and 200 000 events. Changed,
+incomplete, oversized, unreadable/protected-with-wrong-key and linked paths produce
+explicit refusal/status without repair, truncation or deletion. Regular ancestor
+paths and source identities are checked; canonical files are held for read during
+validation. Existing storage/run coordination continues to exclude maintenance.
+Plugin migration and source recovery are owned by [Plugins](plugins.md#explicit-registration-import--2026-11-16).
+
+Missing addressed active-store sessions have a typed `chat_session_not_found`
+bridge failure. Only the exact selected uncommitted draft may be read from memory;
+a persisted cache cannot resurrect a deleted/unavailable chat. UI stops background
+polling for that address until a successful explicit reload. A successful addressed
+history import can trigger that reload; merely seeing the error never imports data.
+
 ## Storage-v2 production composition — 2026-11-16
 
 Office, Workspace and plugin application roots now use the same production
@@ -34,14 +108,16 @@ between attempts so the current owner can publish its terminal journal facts.
 Maintenance still excludes new reservations and observes the existing activity and
 exact run leases.
 
-A retained `ChatStore` instance is read-only maintenance input used to inventory CAS
-references for the preserved legacy generation. It performs no active chat/resource
+A retained `ChatStore` instance is read-only maintenance/archive input used to inventory CAS
+references and explicitly read the preserved legacy generation. It performs no active chat/resource
 write. On a load interrupted by a concurrent metadata revision, the journal retries a
 consistent full read a bounded two times rather than returning a mixed projection.
 
-The new generation starts with empty history. Legacy chat and resource JSONL, CAS,
-settings, keys, tools, skills, workspace associations and documents remain untouched
-and are not imported. Initial UI state identifies this reset. Real Windows x64,
+The original cutover started with empty history. Legacy chat and resource JSONL, CAS,
+settings, keys, tools, skills, workspace associations and documents were left outside
+the active reader. The explicit migration above now transfers supported selected
+history and plugin registrations without changing the retained generation. Initial
+UI state directs users to inspect and transfer their old data. Real Windows x64,
 Office x64, DPAPI and WebView2 behavior, writer quiescence across old processes,
 power-loss durability and full mixed-generation application restore remain release
 qualification gates.

@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Office.Diagnostics;
 
@@ -123,7 +124,8 @@ namespace RNAssistant.Office.Services
             _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _eventStore,
                 _policy.Mode, _text, _session, _input.Context, _input.Settings, _catalog, _skills,
                 _input.Attachments, _confirmedCommand != null, _progress, cancellationToken,
-                _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot, _catalogGeneration).ConfigureAwait(false);
+                _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot, _catalogGeneration,
+                _conversations as IConversationContextStore).ConfigureAwait(false);
         }
 
         private async Task<ModelProtocolRequest> PrepareRequestAsync(AgentModelRequest request, CancellationToken cancellationToken)

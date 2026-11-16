@@ -96,7 +96,7 @@ namespace RNAssistant.Harness
                                 (configuration, messages, options, stream, token) => client.CompleteAsync(configuration, messages, options, stream, token),
                                 null, inbox: inbox, suspendOnCancellation: () => suspending);
                             Func<ChatSession, WorkspaceConversationService.WorkspacePorts> ports = session =>
-                                new WorkspaceConversationService.WorkspacePorts(paths, store, journal,
+                                new WorkspaceConversationService.WorkspacePorts(paths, store, journal, journal,
                                     new DocumentArtifactStore(resources, resources, payloads), files, payloads,
                                     new WorkspaceWebSnapshotStore(paths, files), workspace, session, settings, () => "fixture-key",
                                     frame => { if (frame.Kind == "ToolWaiting") shutdown.Cancel(); },

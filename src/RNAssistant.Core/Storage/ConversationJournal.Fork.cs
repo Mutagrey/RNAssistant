@@ -102,7 +102,7 @@ namespace RNAssistant.Core.Storage
                 var entry = membership.Entries[index]; var write = writes[entry.Operation];
                 if (write == null || !InheritedFact(db, fork, write.Fact.Card.ChatId, write.Position.Sequence))
                     throw new InvalidDataException("Foreign fork history locator.");
-                var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
+                var original = SavedChatEntry(db, write, entry.Id);
                 RequireForkMessage(write.Fact.Card.Address, original);
                 if (!SameInheritedText(ProjectInheritedText(original, write.Fact.Card.Address, session.Id), messages[index]))
                     throw new InvalidOperationException("Fork cannot rewrite source evidence.");
@@ -189,7 +189,7 @@ namespace RNAssistant.Core.Storage
                 var write = FindChatWrite(db, group.Key); RequireHistoryOwner(db, fork.Parent.Id, write);
                 foreach (var entry in group)
                 {
-                    var original = write.Fact.Messages.Single(item => item.Header.Id == entry.Id);
+                    var original = SavedChatEntry(db, write, entry.Id);
                     RequireForkMessage(write.Fact.Card.Address, original);
                     var header = ProjectInheritedText(original, write.Fact.Card.Address, fact.Card.ChatId).Header;
                     inherited.Add(entry.Id, header);

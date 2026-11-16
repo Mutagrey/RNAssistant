@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var items=[],busy=false,savedIcons=[],selectedIconId='puzzle',customSource=false,editingPlugin=null,chatSelectionSerial=0,refreshTask=null;
+  var items=[],busy=false,savedIcons=[],selectedIconId='puzzle',customSource=false,editingPlugin=null,chatSelectionSerial=0,refreshTask=null,refreshAfter=null;
   function el(id){return document.getElementById('plugin'+id)||window.RNAssistantWorkspaceChat.node(id);}
   function item(id){return items.find(function(value){return value.pluginId===id;});}
 
@@ -10,7 +10,17 @@
   function sourcePlugin(){var snapshot=RNAssistantProjectChats.snapshot();return RNAssistantWorkspaceChat.owner()==='plugin'&&snapshot&&snapshot.project&&items.find(function(value){return value.sourceWorkspaceId===snapshot.project.workspaceId;});}
   function selectedId(){var target=RNAssistantDockWorkspace.activeTarget();var match=target&&target.view==='browser'&&/^\/plugins\/([^/]+)\//.exec(target.locator||'');return match?decodeURIComponent(match[1]):((sourcePlugin()||{}).pluginId)||null;}
   function button(label,action){var node=document.createElement('button');node.type='button';node.textContent=label;node.onclick=action;return node;}
-  async function refresh(){if(refreshTask)return refreshTask;refreshTask=loadPlugins();try{return await refreshTask;}finally{refreshTask=null;}}
+  async function refresh(options){
+    if(options&&options.afterPending&&refreshTask){
+      var previous=refreshTask;
+      if(refreshAfter&&refreshAfter.previous===previous)return refreshAfter.task;
+      var queued={previous:previous,task:null};refreshAfter=queued;
+      queued.task=(async function(){try{await previous;}catch(_){}return refresh();}());
+      try{return await queued.task;}finally{if(refreshAfter===queued)refreshAfter=null;}
+    }
+    if(refreshTask)return refreshTask;
+    refreshTask=loadPlugins();try{return await refreshTask;}finally{refreshTask=null;}
+  }
   async function loadPlugins(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
     if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
@@ -111,13 +121,13 @@
         if(item)run(function(){return openManager(item);});}));
       var remove=popovers.action('Удалить с панели',window.RNAssistantIcons.render('trash'),function(){var id=anchor.dataset.pluginId,name=anchor.dataset.railLabel;
         if(!window.confirm('Убрать «'+name+'» с панели? Исходники, данные и опубликованная версия сохранятся. Плагин можно вернуть через «+».'))return;
-        popovers.hide();run(async function(){await send('removePlugin',{pluginId:id});await refresh();status('Плагин убран с панели. Вернуть его можно через «+».');});});
+        popovers.hide();run(async function(){await send('removePlugin',{pluginId:id});await refresh({afterPending:true});status('Плагин убран с панели. Вернуть его можно через «+».');});});
       remove.className='rail-hover-danger';body.appendChild(remove);
     });
     popovers.register('plugin-add',async function(anchor,body,isCurrent){body.textContent='Загружаю…';
       var catalog=await send('getRemovedPlugins',{});if(!isCurrent())return;body.replaceChildren();
       if(!(catalog.items||[]).length){var empty=document.createElement('p');empty.className='rail-hover-empty';empty.textContent='Удалённых с панели плагинов нет.';body.appendChild(empty);}
-      (catalog.items||[]).forEach(function(item){var restore=popovers.action(item.name,window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconSvg,item.iconColor),function(){popovers.hide();run(async function(){await send('restorePlugin',{pluginId:item.pluginId});await refresh();status('Плагин возвращён на панель.');});});
+      (catalog.items||[]).forEach(function(item){var restore=popovers.action(item.name,window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconSvg,item.iconColor),function(){popovers.hide();run(async function(){await send('restorePlugin',{pluginId:item.pluginId});await refresh({afterPending:true});status('Плагин возвращён на панель.');});});
         body.appendChild(restore);});
       var line=document.createElement('div');line.className='rail-hover-separator';body.appendChild(line);
       var create=popovers.action('Создать плагин',window.RNAssistantIcons.render('plus'),function(){popovers.hide();el('Add').click();});
@@ -139,10 +149,10 @@
       if(selectedIconId!=='draw')iconBrief='';
       if(editingPlugin){
         var changed=await send('updatePluginAppearance',{pluginId:editingPlugin.pluginId,name:el('Name').value.trim(),iconId:selectedIconId==='current'?null:selectedIconId,iconColor:iconColor()});
-        editingPlugin=null;await refresh();busy=false;await select(changed.pluginId);status('Название и иконка сохранены.');return;
+        editingPlugin=null;await refresh({afterPending:true});busy=false;await select(changed.pluginId);status('Название и иконка сохранены.');return;
       }
       var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:connecting||customSource?el('Root').value.trim():null,description:task,iconDescription:iconBrief,iconId:selectedIconId,iconColor:iconColor()});
-      await refresh();status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);
+      await refresh({afterPending:true});status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);
       if(!connecting&&(task||iconBrief)){if(!await openSourceChat(null,created))return;var message='Загрузи навыки skills.workspace.plugin.authoring и skills.workspace.files. Прочитай README.md и plugin.json. ';
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';

@@ -52,6 +52,18 @@ namespace RNAssistant.Core.Storage
             Save(settings, null, null);
         }
 
+        public void SaveDiagnosticLogOptions(DiagnosticLogOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            options.Validate();
+            using (StorageFileSystem.AcquireWriteLock(_paths.SettingsFile + ".lck"))
+            {
+                var current = _json.Load(_paths.SettingsFile, new AppSettings());
+                current.DiagnosticLogs = options.Clone();
+                _json.Save(_paths.SettingsFile, current);
+            }
+        }
+
         public void Save(AppSettings settings, string apiKey, string historySecret)
         {
             var normalized = Normalize((settings ?? new AppSettings()).Clone());

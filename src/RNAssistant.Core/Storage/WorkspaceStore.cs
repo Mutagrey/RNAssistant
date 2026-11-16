@@ -28,9 +28,10 @@ namespace RNAssistant.Core.Storage
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         }
 
-        public WorkspaceDescriptor Open(string rootPath, bool createIfMissing = true, bool permitManifestWrite = true)
+        public WorkspaceDescriptor Open(string rootPath, bool createIfMissing = true, bool permitManifestWrite = true,
+            string expectedWorkspaceId = null)
         {
-            return OpenCore(rootPath, createIfMissing, permitManifestWrite, null, false);
+            return OpenCore(rootPath, createIfMissing, permitManifestWrite, expectedWorkspaceId, false);
         }
 
         public WorkspaceDescriptor ConnectProject(string rootPath, bool createIfMissing)

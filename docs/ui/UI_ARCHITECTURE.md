@@ -1,5 +1,52 @@
 # Архитектура UI RNAssistant
 
+## Restore после смены хранилища — In Review, 2026-11-16
+
+Boot создаёт initialize promise до синхронного Dock restore. Browser ждёт готовности
+bridge и application projection; скрытая/закрытая до handshake вкладка не отправляет
+Open. Успешный retry возобновляет только активные ещё не открытые Browser views и
+обновляет каталог плагинов. После изменения плагина общий plugin owner выполняет
+свежее чтение за уже начатым запросом, чтобы поздний старый каталог не скрывал результат.
+
+Office adapter обрабатывает typed `chat_session_not_found`: останавливает history/
+inbox observers только этой панели, сохраняет draft и уже показанную историю.
+Ручной retry читает тот же ID; успешное адресное чтение возвращает наблюдение.
+Другой активный чат не подставляется.
+
+`app-legacy-recovery.js` владеет ограниченной presentation в существующей Diagnostics
+Health: чтением архива и явным переносом поддерживаемых чатов/регистраций в native
+хранилища. Native owners проверяют исходную identity, revision, scope и сохраняют
+receipt; UI не выбирает путь записи и не создаёт второй durable store. Старые файлы
+сохраняются. Archive discovery, чтение текста и перенос не запускаются при startup.
+
+Chat action захватывает `sourceId + expectedRevision + chatId`, plugin action —
+`pluginId + expectedRegistrationRevision`. Подтверждение принимается только для
+этого адреса, независимо от последующей смены выбранной строки. Typed отказ до
+записи показывается отдельно. При потере ACK/неизвестном результате доступен только
+read-only запрос receipt; отсутствие receipt не запускает повторную mutation.
+`targetDeleted` сохраняет факт прежнего переноса, не восстанавливая удалённый чат.
+
+Batch захватывает максимум 25 записей текущей страницы и отправляет команды
+последовательно. Stop, hide/close и Unknown останавливают следующие команды;
+уже принятую mutation UI не отменяет. Обычные archive/receipt reads при hide/close
+отменяются, их поздние ответы игнорируются. Принятый receipt сохраняется в presentation
+своего captured address и после скрытия панели.
+
+После подтверждения существующие Office/Workspace/plugin owners обновляют основные
+каталоги. Только уже существующий exact chat view получает refresh; его observer
+откладывает чтение скрытой панели. Глобальные initialize/select и новые вкладки не
+нужны. `targetDeleted` исключает view retry. Browser invalidation относится только
+к текущему locator/target перенесённого плагина: active view перечитывается, hidden
+ждёт activation, disposed не оживает; invalidation во время Open ждёт Attach. Ошибка
+catalog refresh не отменяет durable proof. Reconnect исходников остаётся отдельным
+действием существующего PluginApplicationService.Connect и не заменяет перенос
+регистрации, её сохранённых версий и публикаций.
+
+Общий `renderMessageArticle` показывает native `ImportedHistory` как постоянную
+метку «Перенесённая история» в существующем `message-meta`. Метка не создаёт commands
+или execution facts; прежние сообщения не возобновляют run. Контракты native data —
+[Session events](../session-events.md) и [Plugins](../plugins.md).
+
 ## Файловые логи — In Review, 2026-11-16
 
 Существующая Diagnostics application/log surface имеет режимы Files/Panel;

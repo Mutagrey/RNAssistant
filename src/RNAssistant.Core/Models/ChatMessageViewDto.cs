@@ -19,6 +19,7 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string Content { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ProtocolMessage { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ExcludeFromModelContext { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ImportedHistory { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public RunViewState RunViewState { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ChatAttachmentViewDto> Attachments { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<string> ArtifactIds { get; set; }
@@ -44,6 +45,7 @@ namespace RNAssistant.Core.Models
                 Id = message.Id,
                 Role = message.Role,
                 ProtocolMessage = message.ProtocolMessage,
+                ImportedHistory = message.LegacyHistory != null,
                 RunId = message.RunId,
                 StepId = message.Activity?.StepId
             };

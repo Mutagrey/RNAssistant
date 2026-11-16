@@ -75,7 +75,7 @@ namespace RNAssistant.Core.Storage
                 { if (!reader.Read()) return null; message = reader.GetString(0); operation = reader.GetString(1); }
             }
             var receipt = FindChatWrite(db, operation);
-            var entry = receipt?.Fact.Messages.SingleOrDefault(item => item.Header.Id == message);
+            var entry = receipt == null ? null : SavedChatEntry(db, receipt, message);
             if (entry == null || !InheritedFact(db, chat, receipt.Fact.Card.ChatId, receipt.Position.Sequence) ||
                 entry.Header.Attachments.Count(item => item.Id == id) != 1)
                 throw new InvalidDataException("Attachment locator disagrees with its canonical message.");

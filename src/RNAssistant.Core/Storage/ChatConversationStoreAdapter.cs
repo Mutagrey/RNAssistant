@@ -2,10 +2,11 @@ using System;
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
-    public sealed class ChatConversationStoreAdapter : IConversationStore
+    public sealed class ChatConversationStoreAdapter : IConversationStore, IConversationContextStore
     {
         private readonly ChatStore _store;
 
@@ -142,6 +143,15 @@ namespace RNAssistant.Core.Storage
                 "interrupted",
                 "Runtime stopped before the model step reached a terminal event.");
             return openToolExecution;
+        }
+
+        public ContextWorkingSet RestoreWorkingSet(ChatSession session, int recentResults,
+            int workingBudget, System.Threading.CancellationToken token = default(System.Threading.CancellationToken))
+        {
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            token.ThrowIfCancellationRequested();
+            var active = ContextCompactionRuntime.BuildActiveWindow(session);
+            return ContextWorkingSet.Restore(session, active, workingBudget);
         }
     }
 }

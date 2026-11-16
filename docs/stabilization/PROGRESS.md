@@ -1,5 +1,53 @@
 # Stabilization progress
 
+## Post-upgrade restore and explicit migration — 2026-11-16
+
+Implemented host-neutral / In Review, `17.2.0-dev`, based on
+`99180a663f6a916803c30f1864428e6ef8802ebf`. User photos exposed two restore failures
+not covered by the earlier review: Browser activation before init promise, and
+repeated missing-session inbox requests. Both are reproduced and corrected. A
+successful retry reopens only active unopened Browser views; typed missing-session
+stops only the affected Office observers without substituting another chat. Plugin
+mutation refresh now follows older catalog reads with a fresh read.
+The real-controller migration check also exposed lost WorkspaceId in header-to-summary
+projection: mixed Office/Workspace catalogs failed during group-scope construction.
+The exact WorkspaceId is now preserved by ChatSessionService.ToSummary.
+
+The earlier storage-v2 cutover started empty catalogs without migrating existing
+profiles; the previous correction did not address that upgrade gap. At the user's
+explicit request, supported history now transfers into the ordinary native catalog
+with its original IDs, exact scope and marked historical messages. Supported plugin
+registrations transfer with saved versions, configuration and retained package bytes.
+The immutable snapshot/manifest and native receipts preserve provenance without
+fabricating old runtime proof or resuming previous effects. Conflicts and incomplete
+closure refuse publication. Archive preview and source-only reconnect remain distinct
+actions. Core readers never rewrite retained data. User-machine file preservation
+has not been established from the photos; synthetic fixture preservation is checked.
+Contracts: [Session events](../session-events.md#explicit-native-history-import--2026-11-16),
+[Plugins](../plugins.md#explicit-registration-import--2026-11-16), [UI plan](../ui/UI_MIGRATION_PLAN.md#restore-и-доступ-к-прежним-данным--in-review-2026-11-16).
+
+Validation owners and focused commands are in the [Harness guide](../../tests/RNAssistant.Harness/README.md#post-upgrade-restore-and-explicit-migration--2026-11-16).
+Archive readers, native chat/plugin import, actual-controller bridge and Node state
+checks cover separate boundaries. The demo retention shim and incomplete bootstrap
+fixture dependencies are corrected in source. Windows evidence remains independent
+of these synthetic and source-linked checks.
+
+Final targeted evidence: Harness / real-controller MockDemo builds have 0 errors
+(2/11 existing warnings); archive reader cases pass 2/2, native chat import 4/4 and
+native plugin import 3/3. All three MockDemo inbox/archive/migration flags pass.
+Seven Node entries pass (bootstrap 24 groups, recovery 15 groups, plus exact missing
+inbox/observer/inbox/view/diagnostic-file checks). Native-only chat fixtures rebuild
+without old chat/resource-authority files and read Office/Workspace originals;
+canonical reachability retains embedded old tool-result CAS bytes. The final patch
+preserves the newer `99180a6` window-toolbar changes; native Windows/visual coverage
+is still open.
+
+Windows/.NET Framework/Office/WebView2/DPAPI and wide/narrow/125% UI acceptance remain
+open; do not clear the preserved profile before review. Workspace/plugin observers
+with an already-running/pending cached missing chat have a separate conditional P2
+polling issue in [BACKLOG](BACKLOG.md#workspace-missing-running-chat-poll--observed-2026-11-16).
+No commit, push, release or automatic user-data repair is implied.
+
 ## Storage-v2 review corrections — 2026-11-16
 
 Implemented host-neutral / In Review, `17.1.1-dev`, reviewed against

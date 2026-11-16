@@ -18,7 +18,7 @@ namespace RNAssistant.Core.Storage
     internal sealed partial class ConversationJournal
     {
         internal long ChatBodyReads;
-        private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.selected" || IsChatDeletion(kind) || IsChatMove(kind); }
+        private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.imported" || kind == "chat.selected" || IsChatDeletion(kind) || IsChatMove(kind); }
 
         private static string ChatFingerprint(ConversationChatCommit fact)
         {
@@ -30,18 +30,19 @@ namespace RNAssistant.Core.Storage
         {
             if (record.Kind == "agent.spawned") return DecodeSpawn(record).Chat ?? throw new InvalidDataException("Spawn has no integrated chat.");
             var fact = DeliveryData<ConversationChatCommit>(record);
-            if (record.Kind != "chat.committed" || fact == null || record.Fingerprint != ChatFingerprint(fact))
+            if (record.Kind != "chat.committed" && record.Kind != "chat.imported" || fact == null || record.Fingerprint != ChatFingerprint(fact))
                 throw new InvalidDataException("Invalid chat commit.");
             return fact;
         }
 
-        private static IEnumerable<PayloadRef> ChatReferences(JournalRecord record)
+        private IEnumerable<PayloadRef> ChatReferences(JournalRecord record)
         {
             if (IsChatMove(record.Kind)) { DecodeChatMove(record); return new PayloadRef[0]; }
             if (record.Kind == "chat.deleted") { DecodeChatDeletion(record); return new PayloadRef[0]; }
             if (record.Kind == "document.deleted") { DecodeDocumentDeletion(record); return new PayloadRef[0]; }
             if (record.Kind == "chat.selected") { DecodeChatSelection(record); return new PayloadRef[0]; }
             var fact = DecodeChatCommit(record);
+            if (record.Kind == "chat.imported") return LegacyImportReferences(fact);
             return new[] { fact.Context, fact.ContextReceipt, fact.RunState, fact.ModelEvent?.Body, fact.History, fact.Resources, fact.Fork?.Copies }.Concat(fact.Messages.SelectMany(item => new[] { item.Body, item.Reasoning, item.Analysis }.Concat(MessageReferences(item.Header))))
                 .Concat(fact.Tools?.Terminal == null ? new PayloadRef[0] : MessageReferences(fact.Tools.Terminal.Result))
                 .Where(item => item != null).Concat(fact.Checkpoint?.References ?? new PayloadRef[0]).Concat(fact.Input?.Body == null ? new PayloadRef[0] : new[] { fact.Input.Body })
@@ -117,6 +118,9 @@ namespace RNAssistant.Core.Storage
                 return new PayloadRef[0];
             }
             var fact = DecodeChatCommit(record); ValidateChatAddress(fact.Card);
+            if (record.Kind == "chat.imported") return ValidateLegacyImport(db, record, fact);
+            if (fact.LegacyImport != null || fact.Messages.Any(item => item.Header.LegacyHistory != null))
+                throw new InvalidDataException("Historical import cannot be submitted as native execution or a message write.");
             var current = TextChat(db, fact.Card.ChatId);
             if (!SameRunValue(current?.Fact.Card.AgentCreation, fact.Card.AgentCreation))
                 throw new InvalidOperationException("Only native spawn can establish immutable child provenance.");
@@ -178,6 +182,7 @@ namespace RNAssistant.Core.Storage
 
         private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
         {
+            if (record.Kind == "chat.imported") { ApplyLegacyImport(db, record, position); return; }
             if (IsChatMove(record.Kind)) { ApplyChatMove(db, record, position); return; }
             if (record.Kind == "document.deleted") { ApplyDocumentDeletion(db, record, position); return; }
             ValidateChatFact(db, record, keys, outcome);
@@ -328,6 +333,10 @@ namespace RNAssistant.Core.Storage
 
         private ConversationTextEntry PublishText(ChatMessage message)
         {
+            // History rewrites/forks can retain an unchanged imported occurrence.
+            // The ordinary validator still rejects any new/changed imported row.
+            if (message?.LegacyHistory != null)
+                return PublishLegacyText(message, message.LegacyHistory.SourceId, message.LegacyHistory.SourceRevision);
             ConversationTextEntry.RequireText(message);
             if (message.Activity?.Kind == "model_attempt") RNAssistant.Core.Services.ConversationRunProjection.ReadRetainedAttempt(message);
             if (message.AcceptedCallOrigin != null)
@@ -410,8 +419,16 @@ namespace RNAssistant.Core.Storage
         }
         internal static void RequireText(ChatMessage message)
         {
-            if (message == null || string.IsNullOrWhiteSpace(message.Id) || message.CreatedUtc.Kind != DateTimeKind.Utc ||
-                message.Role != "user" && message.Role != "assistant") throw new ArgumentException("An exact user/assistant text message is required.");
+            if (message == null || string.IsNullOrWhiteSpace(message.Id) || message.CreatedUtc.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("An exact text occurrence is required.");
+            if (message.LegacyHistory != null)
+            {
+                if (string.IsNullOrWhiteSpace(message.LegacyHistory.SourceId) || message.LegacyHistory.SourceRevision < 1 ||
+                    !new[] { "user", "assistant", "tool", "system", "function", "developer" }.Contains(message.Role))
+                    throw new InvalidDataException("Historical occurrence lacks exact source provenance.");
+                return;
+            }
+            if (message.Role != "user" && message.Role != "assistant") throw new ArgumentException("An exact user/assistant text message is required.");
             if (message.SyntheticResourceObservation ||
                 message.CompletedOperation != null ||
                 (message.ContextClaims?.Count ?? 0) != 0)
@@ -443,10 +460,11 @@ namespace RNAssistant.Core.Storage
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationQueueControl Control { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationInputState Input { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<ModelResourceReference> References { get; internal set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ConversationLegacyImport LegacyImport { get; private set; }
         [JsonConstructor] internal ConversationChatCommit(ConversationCard card, long expectedRevision, int messageCount,
             IReadOnlyList<ConversationTextEntry> messages, PayloadRef context, DateTime createdUtc,
             ChatRunRecord run = null, PayloadRef runState = null, ConversationRunCheckpoint checkpoint = null,
-            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null, ConversationRuntimeTools tools = null, IReadOnlyList<ModelResourceReference> references = null, ConversationQueueControl control = null, ConversationInputState input = null, PayloadRef history = null, [JsonProperty("Attachments")] PayloadRef resources = null, [JsonProperty("TaskLists")] IReadOnlyList<ChatArtifact> snapshots = null, ConversationFork fork = null)
+            PayloadRef contextReceipt = null, ConversationModelEvent modelEvent = null, ConversationRuntimeTools tools = null, IReadOnlyList<ModelResourceReference> references = null, ConversationQueueControl control = null, ConversationInputState input = null, PayloadRef history = null, [JsonProperty("Attachments")] PayloadRef resources = null, [JsonProperty("TaskLists")] IReadOnlyList<ChatArtifact> snapshots = null, ConversationFork fork = null, ConversationLegacyImport legacyImport = null)
         {
             if (card == null || expectedRevision < 0 || messageCount < 0 || messages == null || messages.Count > 128 || context == null ||
                 messages.Any(item => item == null) || messages.Select(item => item.Header.Id).Distinct(StringComparer.Ordinal).Count() != messages.Count ||
@@ -458,6 +476,7 @@ namespace RNAssistant.Core.Storage
                 throw new ArgumentException("Runtime metadata and checkpoint identity disagree.");
             Tools = tools; References = references; Control = control; Input = input; History = history; Resources = resources; Snapshots = snapshots; Fork = fork;
             Run = run; RunState = runState; Checkpoint = checkpoint; ContextReceipt = contextReceipt; ModelEvent = modelEvent;
+            LegacyImport = legacyImport;
         }
     }
 

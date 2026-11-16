@@ -401,8 +401,10 @@
       return value;
     }
     async function open() {
-      if (session || opening || disposed) return opening;
+      if (session || opening || disposed || !active) return opening;
       opening = (async function () {
+        if (!state.bridgeToken && state.initializePromise) await state.initializePromise;
+        if (disposed || !active) return;
         var value = await send("browserCommand", { action: "Open", browserTabId: target.browserTabId, operationId: operationId,
           ownerScope: target.ownerScope, locator: target.locator, bindChat: target.chatBound !== false });
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
@@ -412,11 +414,27 @@
         var bounds = nativeBounds(true); placementKey = JSON.stringify(bounds);
         await command("Attach", { bounds: bounds });
         layoutNative();
+        if (active && targetInvalidated) reloadInvalidated();
       }());
       try { await opening; } finally { opening = null; }
     }
     live.set(target.browserTabId, apply);
     return { element: mount, layout: renderer.layout, annotationHost: annotationHost, canClose: function () { return !annotationHost.busy(); },
+      bridgeReady: function () { if (active && !disposed && !session && !opening) open().catch(fail); },
+      pluginImported: function (pluginId) {
+        if (disposed || !pluginId) return;
+        var value = current && current.target, locator = RNAssistantBrowserTarget.preferenceLocator(current && current.url || target.locator);
+        var parts = locator && locator.split("/"), matches = value && value.pluginId ? value.pluginId === pluginId
+          : parts && parts[1] === "plugins" && decodeURIComponent(parts[2]) === pluginId;
+        if (!matches) return;
+        if (!session) {
+          if (opening) targetInvalidated = true;
+          else if (active) open().catch(fail);
+          return;
+        }
+        targetInvalidated = true;
+        if (active) reloadInvalidated();
+      },
       authorityChanged: function (notice) {
         var value = current && current.target;
         if (!value || value.immutable || value.kind !== "HtmlWorkspace" || notice.scope !== "document:" + value.documentId ||
@@ -454,6 +472,8 @@
       return open(request.locator, request.ownerScope, { browserTabId: request.browserTabId, operationId: request.operationId, title: request.title });
     },
     bootstrap: function (value) { available = value === true; },
+    ready: function () { RNAssistantDockWorkspace.eachView("browser", function (view) { view.bridgeReady(); }); },
+    pluginImported: function (pluginId) { RNAssistantDockWorkspace.eachView("browser", function (view) { view.pluginImported(pluginId); }); },
     annotations: function (target) {
       var found = null; RNAssistantDockWorkspace.eachView("browser", function (view) {
         var owner = view.annotationHost && view.annotationHost.address();

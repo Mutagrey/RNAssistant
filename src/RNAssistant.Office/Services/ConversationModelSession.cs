@@ -24,6 +24,7 @@ namespace RNAssistant.Office.Services
         private readonly ContextCompactionService _contextCompactionService;
         private readonly AttachmentAnalysisService _attachmentAnalysisService;
         private readonly ToolPackAdmissionJournal _toolPackJournal;
+        private readonly IConversationContextStore _contextStore;
         private string _mode;
         private string _userText;
         private ChatSession _session;
@@ -50,12 +51,13 @@ namespace RNAssistant.Office.Services
 
         private ConversationModelSession(IOfficeApplicationAdapter adapter,
             ContextCompactionService contextCompactionService, AttachmentAnalysisService attachmentAnalysisService,
-            IEventStore eventStore, ChatSession session)
+            IEventStore eventStore, IConversationContextStore contextStore, ChatSession session)
         {
             _adapter = adapter;
             _contextCompactionService = contextCompactionService;
             _attachmentAnalysisService = attachmentAnalysisService;
             _toolPackJournal = new ToolPackAdmissionJournal(eventStore, session);
+            _contextStore = contextStore;
         }
 
         internal static async Task<ConversationModelSession> CreateAsync(
@@ -75,12 +77,13 @@ namespace RNAssistant.Office.Services
             Action<string, string, ChatActivity> progress,
             CancellationToken cancellationToken,
             ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
-            Func<SkillCatalogSnapshot> captureSkills = null, long? catalogGeneration = null)
+            Func<SkillCatalogSnapshot> captureSkills = null, long? catalogGeneration = null,
+            IConversationContextStore contextStore = null)
         {
             if (authority != null && !catalogGeneration.HasValue || catalogGeneration < 0)
                 throw new ArgumentException("An authority-backed model session requires its captured catalog generation.", nameof(catalogGeneration));
             var owner = new ConversationModelSession(adapter, contextCompactionService, attachmentAnalysisService,
-                eventStore, session)
+                eventStore, contextStore, session)
             {
                 _mode = mode,
                 _userText = text,
@@ -451,11 +454,13 @@ namespace RNAssistant.Office.Services
                 current.Attachments = _currentAttachments.ToList();
                 facts[currentIndex] = current;
             }
-            var archivedEvidence = ContextCompactionService.ActiveCheckpoint(_session) == null
-                ? Enumerable.Empty<ResourceEvidence>()
-                : (_session.Messages ?? new List<ChatMessage>())
-                    .SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
-                    .Where(item => item != null);
+            var workingBudget = Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings));
+            var workingSet = _contextStore == null
+                ? ContextWorkingSet.Restore(_session, facts, workingBudget)
+                : _contextStore.RestoreWorkingSet(_session, 64, workingBudget, CancellationToken.None);
+            var archivedEvidence = workingSet.Operations.Concat(workingSet.Bodies)
+                .SelectMany(item => item.Source.ResourceEvidence ?? new List<ResourceEvidence>())
+                .Where(item => item != null);
             var scopes = facts.SelectMany(item => item.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Concat(archivedEvidence)
                 .Concat((_context?.Notes ?? new List<ContextNote>()).Where(item => item.Evidence != null).Select(item => item.Evidence))
@@ -482,7 +487,6 @@ namespace RNAssistant.Office.Services
                 _authority == null ? null : TaskListPublication.Project(_session, resources.Get(TaskListPublication.Scope(_session)), _authority.Revisions, _payloads));
             if (packState != null) required.Add(packState);
             var budget = PrepareRequest(tools).MessageBudget(required);
-            var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
                 _settings, budget, enforceBudget, surface, workingSet: workingSet);
         }

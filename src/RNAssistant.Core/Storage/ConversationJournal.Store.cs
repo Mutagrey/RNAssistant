@@ -138,10 +138,11 @@ namespace RNAssistant.Core.Storage
                     }
                     if (ids.Count != Math.Min(beforeIndex, pageSize)) throw new InvalidDataException("Message page contains missing ordinals.");
                     var commits = ids.Select(item => item.Item2).Distinct().ToDictionary(operation => operation, operation => FindChatWrite(db, operation));
+                    var importedChunks = new Dictionary<string, ConversationTextEntry[]>();
                     var entries = ids.Select(item => {
                         var write = commits[item.Item2];
                         RequireHistoryOwner(db, id, write);
-                        return ProjectInheritedText(write.Fact.Messages.Single(message => message.Header.Id == item.Item1), write.Fact.Card.Address, id);
+                        return ProjectInheritedText(SavedChatEntry(db, write, item.Item1, importedChunks), write.Fact.Card.Address, id);
                     }).ToArray();
                     return Tuple.Create(current, entries);
                 }, CancellationToken.None);

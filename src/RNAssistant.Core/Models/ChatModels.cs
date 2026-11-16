@@ -139,6 +139,8 @@ namespace RNAssistant.Core.Models
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public LegacyChatHistoryProvenance LegacyHistory { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ExcludeFromModelContext { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]

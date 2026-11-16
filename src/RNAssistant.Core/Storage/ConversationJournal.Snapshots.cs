@@ -87,7 +87,7 @@ namespace RNAssistant.Core.Storage
             }
             if (operation == null) return null;
             var receipt = FindChatWrite(db, operation);
-            var artifact = receipt?.Fact.Snapshots?.SingleOrDefault(item => item.Id == id);
+            var artifact = (receipt?.Fact.LegacyImport == null ? receipt?.Fact.Snapshots : ReadLegacyManifest(receipt.Fact).Snapshots)?.SingleOrDefault(item => item.Id == id);
             if (artifact == null || !InheritedFact(db, chat, receipt.Fact.Card.ChatId, receipt.Position.Sequence))
                 throw new InvalidDataException("Snapshot locator disagrees with its canonical snapshot.");
             return artifact;

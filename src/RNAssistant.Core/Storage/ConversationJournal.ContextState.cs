@@ -142,7 +142,7 @@ namespace RNAssistant.Core.Storage
         // unbounded closure into every chat header would duplicate durable state.
         internal void ScanChatContextReferences(JournalRecord record, CasReachabilityScan scan, HashSet<string> visited)
         {
-            if (record.Kind != "chat.committed" && record.Kind != "agent.spawned") return;
+            if (record.Kind != "chat.committed" && record.Kind != "chat.imported" && record.Kind != "agent.spawned") return;
             if (record.Kind == "agent.spawned" && DecodeSpawn(record).Chat == null) return;
             var fact = DecodeChatCommit(record);
             if (visited.Add(fact.Context.Sha256))
