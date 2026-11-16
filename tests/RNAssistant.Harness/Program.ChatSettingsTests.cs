@@ -4,9 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -47,6 +50,68 @@ namespace RNAssistant.Harness
             AssertEqual("accepted-model", ChatSettingsResolver.ResolveAcceptedRun(settings, session).Model,
                 "same-run continuation uses its recorded model independently of future preferences");
             AssertEqual("global-model", settings.Model, "accepted-run resolution also leaves applied settings intact");
+        }
+
+        private static void AcceptedRunConfigurationIsCapturedAndValidated()
+        {
+            var settings = new AppSettings {
+                BaseUrl = "http://127.0.0.1:11434/v1", Model = "accepted-model",
+                AgentResponseMode = AgentResponseModes.JsonSchema,
+                SystemPromptRole = "developer", ReasoningRequestMode = ReasoningRequestModes.EnableThinking };
+            var session = new ChatSession { Model = "accepted-model", ReasoningEnabled = true };
+            var metadata = ChatSettingsResolver.CaptureRunConfiguration(settings, session);
+            session.LastRun = new ChatRunRecord { Status = "running", ModelConfiguration = metadata };
+
+            AssertEqual("accepted-model", metadata.Model, "new Office runs record their effective model");
+            AssertTrue(!string.IsNullOrEmpty(metadata.EndpointSha256), "new Office runs record their endpoint identity");
+            AssertTrue(metadata.ContextWindowTokens > 0, "new Office runs record their context budget");
+            AssertEqual(settings.AgentResponseMode, metadata.AgentResponseMode, "accepted response mode");
+            AssertEqual(settings.SystemPromptRole, metadata.SystemPromptRole, "accepted system prompt role");
+            AssertEqual(settings.ReasoningRequestMode, metadata.ReasoningRequestMode, "accepted reasoning request mode");
+            AssertEqual(true, metadata.ReasoningEnabled, "accepted reasoning state");
+
+            var resolved = ChatSettingsResolver.ResolveAcceptedRun(settings.Clone(), session);
+            AssertEqual("accepted-model", resolved.Model, "continuation resolves the accepted model");
+            ChatSettingsResolver.ValidateAcceptedRun(session, resolved);
+
+            var changed = settings.Clone();
+            changed.Model = "changed-model";
+            var refused = false;
+            try { ChatSettingsResolver.ValidateAcceptedRun(session, changed); }
+            catch (InvalidOperationException) { refused = true; }
+            AssertTrue(refused, "a continuation cannot silently replace the accepted model");
+
+            var legacy = new ChatSession { Model = "legacy-model" };
+            AssertEqual("legacy-model", ChatSettingsResolver.ResolveAcceptedRun(new AppSettings { Model = "global-model" }, legacy).Model,
+                "legacy Office continuations fall back to the persisted chat model");
+        }
+
+        private static void OfficeRunRecordsAcceptedConfiguration()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var settings = new AppSettings {
+                    BaseUrl = "http://127.0.0.1:11434/v1", Model = "accepted-run-model",
+                    AgentResponseMode = AgentResponseModes.JsonSchema,
+                    SystemPromptRole = "developer", ReasoningRequestMode = ReasoningRequestModes.EnableThinking };
+                var session = NewSession(adapter);
+                session.Mode = ChatModes.Agent;
+                session.ReasoningEnabled = true;
+                var service = CreateConversationRunService(adapter, executor,
+                    (modelSettings, messages, options, stream, token) => Task.FromResult(new LlmCompletionResult {
+                        Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer the request.", "Ответ.", results: new ConversationResultClaim[0],
+                            outcome: ConversationOutcome.Completed) }));
+                service.ExecuteAsync(ChatModes.Agent, "Ответь одним предложением.", session,
+                    NewContext(adapter), settings, new ToolCatalogEntry[0], null).GetAwaiter().GetResult();
+                var metadata = session.LastRun.ModelConfiguration;
+                AssertEqual("accepted-run-model", metadata.Model, "Office records the effective accepted model");
+                AssertEqual(settings.AgentResponseMode, metadata.AgentResponseMode, "Office records the accepted response mode");
+                AssertEqual(settings.SystemPromptRole, metadata.SystemPromptRole, "Office records the accepted system role");
+                AssertEqual(settings.ReasoningRequestMode, metadata.ReasoningRequestMode, "Office records the accepted reasoning mode");
+                AssertEqual(true, metadata.ReasoningEnabled, "Office records the accepted reasoning state");
+                ChatSettingsResolver.ValidateAcceptedRun(session, settings);
+            });
         }
 
         private static void PromptResourcesReadPublishedTemplates()

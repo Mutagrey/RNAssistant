@@ -118,7 +118,8 @@ namespace RNAssistant.Office.Services
             }
             if (session.LastRun == null || session.LastRun.KernelState != null)
                 session.LastRun = new ChatRunRecord { RunId = Guid.NewGuid().ToString("N"), StartedUtc = DateTime.UtcNow,
-                    SelectedSkills = SkillTaskService.CopySelections(session.LastRun) };
+                    SelectedSkills = SkillTaskService.CopySelections(session.LastRun),
+                    ModelConfiguration = ChatSettingsResolver.CaptureRunConfiguration(settings, session) };
             session.LastRun.ConversationPolicy = ConversationRunPolicy.ForSession(session, settings.AutoConfirmToolActions)
                 .ForPeerInput(ConversationInputMessage.Latest(session)?.AgentCommunication);
             if (string.IsNullOrWhiteSpace(session.LastRun.RunId)) session.LastRun.RunId = Guid.NewGuid().ToString("N");

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Office accepted-run configuration — W5, 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.5-dev`. New Office runs now record the
+effective `ModelRunMetadata` (model, endpoint hash, context budget, response/system/tool
+roles, reasoning mode and state). Tool confirmation and saved-wait continuation resolve
+the accepted run through `ChatSettingsResolver` and validate that configuration before
+dispatch. A changed model/endpoint/context/role no longer silently replaces an accepted
+run. Legacy Office runs without metadata continue with the persisted chat model.
+
+Focused checks: `chat: accepted run configuration is captured and validated` and
+`chat: Office run records accepted configuration`. They cover capture, accepted-model
+resolution, changed-model refusal, legacy chat-model fallback and the real Office run
+service. Windows/Office/WebView2 qualification remains separate.
+
 ## Unified chat draft persistence — W9, 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.4-dev`. The existing

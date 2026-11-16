@@ -589,6 +589,12 @@ bounded repair and provider compatibility; the kernel receives one validated
 draft, separate provider-native refusal, or typed failure. Model wording and
 `action` are never execution evidence.
 
+Office records the effective model/endpoint/context/role/reasoning configuration in
+`ModelRunMetadata` when a run starts. Confirmation and saved-wait continuation resolve
+that accepted configuration and reject a silent model or protocol-settings replacement.
+A legacy Office run without metadata uses the persisted chat model; Workspace keeps its
+existing stricter digest check.
+
 ChatStore assigns `T1`, `T2`, … at accepted-call commit and separate `E1`, `E2`, …
 only to eligible terminal results, using trusted tool policy. T stays internal;
 JSON result batches use `call_index` for pairing and optional E for evidence.

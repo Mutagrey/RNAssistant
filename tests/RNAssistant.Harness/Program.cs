@@ -580,6 +580,8 @@ namespace RNAssistant.Harness
                 Test("unified policy: retired chat cannot dispatch", RetiredChatCannotDispatch),
                 Test("chat: rereads referenced artifact on demand", ChatRereadsReferencedArtifactOnDemand),
                 Test("chat: session model overrides global settings", ChatSettingsUseSessionModelWithoutMutatingGlobalSettings),
+                Test("chat: accepted run configuration is captured and validated", AcceptedRunConfigurationIsCapturedAndValidated),
+                Test("chat: Office run records accepted configuration", OfficeRunRecordsAcceptedConfiguration),
                 Test("chat: prompt save preserves global model", PromptSavePreservesGlobalModel),
                 Test("settings: prompt schema migrates automatically", SettingsMigratePromptsOnSchemaChange),
                 Test("settings: built-in guidance uses runtime IDs and result v1", BuiltInPromptGuidanceUsesRuntimeIdsAndToolResultV1),

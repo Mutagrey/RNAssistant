@@ -60,7 +60,8 @@ namespace RNAssistant.Office
                 _inbox.Bind(session);
                 ConversationRunPolicy.ForAcceptedRun(session);
                 ConversationProtocolContext.EnsureCanContinue(session, pending.Command, _toolExecutor.Payloads);
-                var settings = ResolveChatSettings(session);
+                var settings = ChatSettingsResolver.ResolveAcceptedRun(_settingsService.Load(), session);
+                ChatSettingsResolver.ValidateAcceptedRun(session, settings);
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
                 if (!supersedePending && !MarkPendingActivityExecuting(session, pending.PendingId, runId))
                 {
@@ -210,7 +211,8 @@ namespace RNAssistant.Office
                     new OfficeDocumentExecutionExpectation { Host = session.Host, DocumentKey = session.DocumentKey,
                         RuntimeDocumentKey = session.LastRun.DocumentRuntimeKey });
                 ConversationRunPolicy.ForAcceptedRun(session);
-                var settings = ResolveChatSettings(session);
+                var settings = ChatSettingsResolver.ResolveAcceptedRun(_settingsService.Load(), session);
+                ChatSettingsResolver.ValidateAcceptedRun(session, settings);
                 var context = LoadContext(session);
                 var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
                 var skills = _skillCatalog.GetVisibleSkills().Where(skill => skill.Enabled).ToList();
