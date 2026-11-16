@@ -2655,6 +2655,11 @@ input. Workspace submit and confirmation use the same tracked operation lifetime
 but their input still enters a direct run under the exact workspace lease. Workspace
 FIFO admission and the common Web conversation controller remain separate work.
 
+Office bridge confirmations now enter the same tracked Application owner. Its queue port,
+already inside that worker, calls the exact owned continuation directly instead of nesting
+a second worker. Bridge caller cancellation and application shutdown therefore share the
+Workspace continuation lifecycle.
+
 Approval continuation (`resolveProjectChat`) uses the same tracked Application
 owner. It returns a canonical snapshot after the kernel's first persisted resume
 checkpoint consumes the exact pending confirmation, before waiting for dispatch

@@ -217,7 +217,7 @@ namespace RNAssistant.Office
             public Task ContinuePendingAsync(ChatSession session, string pendingId, System.Threading.CancellationToken token)
             {
                 var runId = session.LastRun.RunId;
-                return _owner.ConfirmAgentToolAsync(pendingId, session.Id,
+                return _owner.ConfirmAgentToolOwnedAsync(pendingId, session.Id,
                     (phase, text, activity) => _progress?.Invoke(runId, phase, text, activity),
                     token, runId, _changed, true, includeResponse: false);
             }

@@ -130,6 +130,7 @@ namespace RNAssistant.Harness
                 Test("build: portable publish replaces owned destination", PortablePublishReplacesOwnedDestination),
                 Test("architecture: Office event consumers use typed port", OfficeEventConsumersUseTypedPort),
                 Test("architecture: Office conversation consumers use typed port", OfficeConversationConsumersUseTypedPort),
+                Test("architecture: Office confirmation uses application owner", OfficeConfirmationUsesApplicationOwner),
                 Test("architecture: run view consumers use typed projection", RunViewConsumersUseTypedProjection),
                 Test("architecture: mandatory dependency direction", MandatoryDependencyDirection),
                 Test("architecture: mandatory dependency direction token boundaries", MandatoryDependencyDirectionUsesTokenBoundaries),

@@ -287,6 +287,22 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void OfficeConfirmationUsesApplicationOwner()
+        {
+            var root = FindHarnessRepositoryRoot();
+            var agent = File.ReadAllText(Path.Combine(root, "src", "RNAssistant.Office",
+                "Controller", "AssistantController.Agent.cs"));
+            var inbox = File.ReadAllText(Path.Combine(root, "src", "RNAssistant.Office",
+                "Controller", "AssistantController.Inbox.cs"));
+            AssertContains(agent, "_conversationApplication.ExecuteAsync(token => ConfirmAgentToolOwnedAsync",
+                "bridge confirmations run inside the shared ConversationApplicationService worker");
+            AssertTrue(agent.IndexOf("public async Task<ChatStateResponse> ConfirmAgentToolAsync",
+                StringComparison.Ordinal) < 0,
+                "the public bridge method cannot own a second execution lifecycle");
+            AssertContains(inbox, "_owner.ConfirmAgentToolOwnedAsync",
+                "the already-owned queue worker calls the exact continuation without nesting another application worker");
+        }
+
         private static void RunViewConsumersUseTypedProjection()
         {
             var root = FindHarnessRepositoryRoot();

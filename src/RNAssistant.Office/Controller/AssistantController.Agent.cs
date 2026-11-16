@@ -24,7 +24,21 @@ namespace RNAssistant.Office
             return ConfirmAgentToolAsync(pendingId, chatId, null, CancellationToken.None, null).GetAwaiter().GetResult();
         }
 
-        public async Task<ChatStateResponse> ConfirmAgentToolAsync(
+        public Task<ChatStateResponse> ConfirmAgentToolAsync(
+            string pendingId,
+            string chatId = null,
+            Action<string, string, ChatActivity> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken),
+            string runId = null,
+            Action<ChatStateResponse> chatStateChanged = null, bool supersedePending = false,
+            bool includeResponse = true)
+        {
+            return _conversationApplication.ExecuteAsync(token => ConfirmAgentToolOwnedAsync(
+                pendingId, chatId, progress, token, runId, chatStateChanged, supersedePending, includeResponse),
+                cancellationToken);
+        }
+
+        private async Task<ChatStateResponse> ConfirmAgentToolOwnedAsync(
             string pendingId,
             string chatId = null,
             Action<string, string, ChatActivity> progress = null,

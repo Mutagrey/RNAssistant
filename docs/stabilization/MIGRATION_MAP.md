@@ -1,5 +1,12 @@
 # Current-to-target migration map
 
+## Office bridge confirmation lifecycle — W5, 2026-11-16
+
+Owner: `ConversationApplicationService`. The public Office bridge confirmation delegates to
+`ExecuteAsync`; the already-owned Office queue port calls `ConfirmAgentToolOwnedAsync`
+directly. Removed the implicit controller-owned execution path for bridge confirmations.
+No second lifecycle, queue worker or feature flag is introduced.
+
 ## Native mutation receipt completion — 2026-11-16
 
 Owners: ConversationJournal ToolStore/References, ResourceJournal and existing

@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Office bridge confirmation lifecycle — W5, 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.8-dev`. The public Office
+`ConfirmAgentToolAsync` bridge path now enters `ConversationApplicationService.ExecuteAsync`;
+its run lease and controller work remain inside that tracked worker. The Office queue port
+calls the exact owned continuation directly, avoiding nested workers when it is already
+inside the shared application worker. This gives Office confirmations the same shutdown/
+drain and caller-cancellation ownership as Workspace continuations without a second
+controller lifecycle.
+
+`architecture: Office confirmation uses application owner` checks the public bridge
+delegation, absence of a second public async lifecycle and the non-nesting queue path.
+Harness build and version validation pass. Windows/Office/WebView2 qualification remains
+separate.
+
 ## Native tool contract corrective patch — 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.6-dev`, integrated onto the current

@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.8-dev
+
+- Подтверждение инструмента Office теперь выполняется в том же application worker,
+  что и Workspace-продолжения: shutdown/drain и отмена bridge запроса обрабатываются
+  одним владельцем. Внутренняя Office-очередь вызывает продолжение напрямую и не
+  вкладывает второй worker.
+
 ### 17.3.7-dev
 
 - Улучшение prompt template из Библиотеки снова даёт агенту исполнимую инструкцию:
