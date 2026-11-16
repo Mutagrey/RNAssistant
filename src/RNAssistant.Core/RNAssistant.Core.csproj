@@ -329,8 +329,10 @@
     <Compile Include="Models\SavedVersionModels.cs" />
     <Compile Include="Storage\VendorCatalog.cs" />
     <Compile Include="Storage\WorkspaceStore.cs" />
+    <Compile Include="Storage\WorkspaceStore.Backup.cs" />
     <Compile Include="Storage\WorkspaceStore.HtmlProject.cs" />
     <Compile Include="Storage\WorkspaceFileService.cs" />
+    <Compile Include="Storage\WorkspaceFileService.Backup.cs" />
     <Compile Include="Storage\WorkspaceFileService.CaptureSet.cs" />
     <Compile Include="Storage\WorkspaceFileService.TextEdits.cs" />
     <Compile Include="Storage\WorkspaceFileService.StreamWrite.cs" />

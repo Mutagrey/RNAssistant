@@ -2,8 +2,13 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
+using RNAssistant.Application.Contracts;
 using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
@@ -134,6 +139,154 @@ namespace RNAssistant.Harness
                 () => protector, () => leases.AcquireMaintenance(), () => {
                     if (leases.AnyHeld()) throw new InvalidOperationException("Active run or storage publication blocks maintenance.");
                 });
+        }
+
+        private static void StorageJournalIdentityBackupValidation()
+        {
+            WithTempPaths(paths => {
+                var workspaces = new WorkspaceStore(paths);
+                var workspace = workspaces.Open(Path.Combine(paths.Root, "identity-project"));
+                var resources = new ResourceJournal(paths);
+                var files = new WorkspaceFileService(paths, resources, resources, resources);
+                var original = files.CreateText(workspace, "index.html", "<main>Retain file identity</main>");
+                workspaces.SetHtmlProjectDefinition(workspace, null, new HtmlProjectDefinition { EntryPath = "index.html", Members = new[] { "index.html" } });
+                var versions = new WorkspaceHtmlVersionService(paths, ConversationStore(new ChatStore(paths)), files, resources, resources);
+                var browser = versions.Resolve(new BrowserResolveRequest { OwnerScope = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" },
+                    Locator = BrowserLocalLocator.ForProject(workspace.WorkspaceId, "index.html") }).Target;
+                var state = versions.State(new BrowserVersionRequest { Target = browser });
+                var saved = versions.Command(new BrowserVersionCommand { Target = browser, Action = BrowserVersionAction.Save,
+                    ExpectedStateRevision = state.StateRevision, ExpectedContentRevision = state.ContentRevision,
+                    ExpectedDefinitionRevision = state.DefinitionRevision, OperationId = "identity-local-save" });
+                AssertEqual(BrowserVersionOutcome.Saved, saved.Outcome, "user-local HTML saved without a chat: " + saved.Message);
+                AssertTrue(!Directory.Exists(Path.Combine(paths.Root, "conversation-streams")), "resource-only HTML fixture has no conversation identity to infer from");
+                var movedRoot = workspace.RootPath + "-moved";
+                Directory.Move(workspace.RootPath, movedRoot);
+                workspace = workspaces.ConnectProject(movedRoot, false);
+                var hidden = workspaces.Open(Path.Combine(paths.Root, "hidden-project"));
+                workspaces.HideProject(hidden.WorkspaceId);
+                var documents = new DocumentAuthorityRegistry(paths);
+                var oldLocator = Path.Combine(paths.Root, "old.xlsx");
+                var locator = Path.Combine(paths.Root, "renamed.xlsx");
+                var authority = documents.Resolve("Excel", "before-restore", oldLocator);
+                AssertEqual(authority.Id, documents.Resolve("Excel", "before-restore", locator).Id, "Save As keeps logical identity before backup");
+                var maintenance = JournalCasService(paths, StorageProtector.None);
+                var backup = Path.Combine(paths.Root, "identity-backup");
+                maintenance.BackupJournals(backup);
+                var restored = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "identity-restore"), _ => StorageProtector.None);
+                var restoredWorkspaces = new WorkspaceStore(restored);
+                AssertEqual(movedRoot, restoredWorkspaces.OpenConnectedHistory(workspace.WorkspaceId).RootPath, "a pre-backup project move retains its current association");
+                AssertTrue(!restoredWorkspaces.ListConnectedMetadata().Any(item => item.WorkspaceId == hidden.WorkspaceId), "hidden state remains owned by the restored id record");
+                var restoredResources = new ResourceJournal(restored);
+                var restoredFiles = new WorkspaceFileService(restored, restoredResources, restoredResources, restoredResources);
+                AssertEqual(original.Reference.Uri, restoredFiles.ReadText(restoredWorkspaces.OpenConnected(workspace.WorkspaceId), "index.html").Reference.Uri,
+                    "file identity is retained through move, backup and restoration");
+                var restoredDocuments = new DocumentAuthorityRegistry(restored);
+                AssertEqual(authority.Id, restoredDocuments.Resolve("Excel", "new-runtime", locator).Id, "fresh Office runtime resolves the saved identity");
+                var identityFiles = new[] {
+                    "workspaces/" + workspace.WorkspaceId + ".json",
+                    "workspaces/path-" + TextPatternEngine.Sha256(movedRoot) + ".json",
+                    "workspaces/file-locators/" + TextPatternEngine.Sha256(Path.Combine(movedRoot, "index.html")) + ".json",
+                    "resource-authority/documents.json"
+                };
+                var manifestPath = Path.Combine(backup, "backup.json");
+                var manifestBytes = File.ReadAllBytes(manifestPath);
+                var attempt = 0;
+                Action reject = () => {
+                    var target = Path.Combine(paths.Root, "rejected-identity-" + ++attempt);
+                    RuntimeThrows<InvalidDataException>(() => CasMaintenanceService.RestoreJournals(backup, target, _ => StorageProtector.None));
+                    AssertTrue(!Directory.Exists(target), "invalid identity restore publishes no destination");
+                    AssertTrue(!Directory.EnumerateDirectories(paths.Root, ".rna-backup-*").Any(), "invalid identity restore cleans its private staging root");
+                };
+                foreach (var relative in identityFiles)
+                {
+                    var path = Path.Combine(backup, "data", relative.Replace('/', Path.DirectorySeparatorChar));
+                    var bytes = File.ReadAllBytes(path);
+                    AssertTrue(bytes.SequenceEqual(File.ReadAllBytes(Path.Combine(restored.Root, relative.Replace('/', Path.DirectorySeparatorChar)))), "identity owner bytes are copied unchanged");
+                    try
+                    {
+                        File.AppendAllText(path, "corrupt"); reject();
+                        File.Delete(path); reject();
+                        File.WriteAllBytes(path, bytes);
+                        if (!OperatingSystem.IsWindows())
+                        {
+                            var outside = Path.Combine(paths.Root, "outside-identity.json");
+                            File.WriteAllBytes(outside, bytes); File.Delete(path);
+                            File.CreateSymbolicLink(path, outside); reject(); File.Delete(path);
+                        }
+                    }
+                    finally { File.WriteAllBytes(path, bytes); }
+                }
+                AssertTrue(authority.Id != restoredDocuments.Resolve("Excel", "old-path-runtime", oldLocator).Id, "old Save As locator does not become an identity alias");
+                try
+                {
+                    RewriteIdentityBackupManifest(backup, manifest => manifest.Format = "rnassistant-journal-backup-v1"); reject();
+                    File.WriteAllBytes(manifestPath, manifestBytes);
+                    var missingPair = identityFiles[1];
+                    RewriteIdentityBackupManifest(backup, manifest => manifest.Files.RemoveAll(item => item.Path == missingPair)); reject();
+                    File.WriteAllBytes(manifestPath, manifestBytes);
+                    RewriteIdentityBackupManifest(backup, manifest => manifest.Files.RemoveAll(item => item.Path.StartsWith("workspaces/", StringComparison.Ordinal) && item.Path.Split('/').Length == 2)); reject();
+                    File.WriteAllBytes(manifestPath, manifestBytes);
+                    RewriteIdentityBackupManifest(backup, manifest => manifest.Files.RemoveAll(item => item.Path.StartsWith("workspaces/file-locators/", StringComparison.Ordinal))); reject();
+                    File.WriteAllBytes(manifestPath, manifestBytes);
+                    RewriteIdentityBackupManifest(backup, manifest => manifest.Files[0].Path = "workspaces/../settings.json"); reject();
+                    File.WriteAllBytes(manifestPath, manifestBytes);
+                    var registryPath = Path.Combine(backup, "data", "resource-authority", "documents.json");
+                    var registryBytes = File.ReadAllBytes(registryPath);
+                    try
+                    {
+                        var malformed = JObject.Parse(File.ReadAllText(registryPath));
+                        ((JArray)malformed["Documents"]).Add(malformed["Documents"][0].DeepClone());
+                        File.WriteAllText(registryPath, malformed.ToString());
+                        RewriteIdentityBackupManifest(backup, manifest => {
+                            var entry = manifest.Files.Single(item => item.Path == "resource-authority/documents.json");
+                            var bytes = File.ReadAllBytes(registryPath); entry.Bytes = bytes.Length;
+                            using (var hash = SHA256.Create()) entry.Sha256 = BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
+                        });
+                        reject(); // Correct checksums do not make ambiguous authority records complete.
+                    }
+                    finally { File.WriteAllBytes(registryPath, registryBytes); }
+                }
+                finally { File.WriteAllBytes(manifestPath, manifestBytes); }
+                var sourcePair = Path.Combine(paths.Root, identityFiles[1].Replace('/', Path.DirectorySeparatorChar));
+                var sourcePairBytes = File.ReadAllBytes(sourcePair);
+                var refusedBackup = Path.Combine(paths.Root, "incomplete-identity-backup");
+                try
+                {
+                    File.Delete(sourcePair);
+                    RuntimeThrows<InvalidDataException>(() => maintenance.BackupJournals(refusedBackup));
+                    AssertTrue(!Directory.Exists(refusedBackup), "incomplete source owners cannot publish a backup");
+                }
+                finally { File.WriteAllBytes(sourcePair, sourcePairBytes); }
+                var allConnections = Directory.GetFiles(paths.WorkspaceDirectory, "*.json").ToDictionary(path => path, File.ReadAllBytes);
+                try
+                {
+                    foreach (var path in allConnections.Keys) File.Delete(path);
+                    RuntimeThrows<InvalidDataException>(() => maintenance.BackupJournals(refusedBackup));
+                    AssertTrue(!Directory.Exists(refusedBackup), "resource-only HTML cannot be backed up without its Workspace owner");
+                }
+                finally { foreach (var entry in allConnections) File.WriteAllBytes(entry.Key, entry.Value); }
+                var unknown = Path.Combine(paths.WorkspaceDirectory, "unknown-owner.json");
+                try
+                {
+                    File.WriteAllText(unknown, "{}");
+                    RuntimeThrows<InvalidDataException>(() => maintenance.BackupJournals(refusedBackup));
+                    AssertTrue(!Directory.Exists(refusedBackup), "unknown workspace state is not silently omitted");
+                }
+                finally { File.Delete(unknown); }
+                AssertTrue(!Directory.EnumerateDirectories(paths.Root, ".rna-backup-*").Any(), "rejected source backup leaves no staging root");
+            });
+        }
+
+        private static void RewriteIdentityBackupManifest(string backup, Action<JournalBackupManifest> change)
+        {
+            var path = Path.Combine(backup, "backup.json");
+            var manifest = JsonConvert.DeserializeObject<JournalBackupManifest>(File.ReadAllText(path));
+            change(manifest); manifest.Digest = null;
+            manifest.Digest = StorageProtector.None.ComputeEventHash(stream => {
+                using (var text = new StreamWriter(stream, new UTF8Encoding(false), 4096, true))
+                using (var writer = new JsonTextWriter(text)) { JsonSerializer.CreateDefault().Serialize(writer, manifest); writer.Flush(); }
+            }, manifest.HashAlgorithm, manifest.ProtectionKeyId);
+            File.WriteAllText(path, JsonConvert.SerializeObject(manifest));
         }
 
         private static void StorageJournalMaintenanceExcludesPublish()

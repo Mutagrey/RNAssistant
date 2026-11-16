@@ -73,14 +73,15 @@ owners и индекс, без нового store/registry. Текущий ко�
 ## Native Workspace connection backup — 2026-11-14
 
 Owner: WorkspaceStore + existing CasMaintenanceService (P6/P7, before cutover).
-The real WorkspaceHtmlVersionService confirms that BackupJournals restores saved
-project CAS and conversation refs, but not WorkspaceStore id/path associations.
-The restored Browser owner cannot resolve its connection even when the immutable
-snapshot is complete. This is not complete application/project restore. Offline-root
-reads do work after restart in the original root with the retained association.
-Include and verify the existing connection/locator/move/config owners under writer
-quiescence before exposing complete backup/restore or switching production. Do not
-recreate connections silently, infer them from model input or add another registry.
+Implemented locally / In Review, 2026-11-15: internal v2 backup preserves and
+validates existing Workspace id/path records, file locators and move intents under
+their owner locks. The HTML fixture now constructs the actual Browser owner from
+the restored root; saved content resolves with the original folder unavailable,
+and explicit reconnection preserves identity after a move. No inferred connections
+or additional registry. The former fixture accidentally reused the source owner.
+Remaining before P7: external project/manifest/trash preservation for any claimed
+full application restore, production writer quiescence, composition/cutover and
+Windows evidence. See [backup contract](../cas-maintenance.md#identity-owners-in-internal-backup-v2--2026-11-15).
 
 ## HTML recovery fixture bypasses publication — 2026-11-14
 
@@ -97,13 +98,16 @@ corrupt-source recovery plus independent input and the broken-parent fixture pas
 See also [Workspace connection backup](#native-workspace-connection-backup--2026-11-14).
 
 Owner: DocumentAuthorityRegistry + existing CasMaintenanceService backup (P6/P7).
-Actual Office history edit/clear writes its existing resource-authority/documents.json
-identity binding. BackupJournals currently refuses that root rather than exporting
-an incomplete closure; the new history fixture verifies the refusal. Include and
-verify this owner's identity data, together with Workspace locators/move intents
-and keys, before the production switch. Do not delete the registry, silently skip
-it or create another identity store. Workspace journal/Unknown restore is covered;
-this does not qualify complete Office/application restore.
+Implemented locally / In Review, 2026-11-15: `documents.json` is copied unchanged
+under the existing registry lock and validated strictly before backup/restore
+publication. Unsupported version, duplicate/missing fields and ambiguous identity
+bindings fail closed; the ordinary registry's sanitizing Load is not used for
+backup validation. Office history/definition fixtures exercise isolated restoration
+through the real identity/resource consumers. Save As does not recreate the old
+locator as an alias. DPAPI files remain protected byte copies.
+Remaining before P7: real Windows/DPAPI/Office qualification, live document and
+memory-only identity boundaries, complete application-owner inventory and production
+writer quiescence. No production storage switch or complete Office restore claim.
 
 ## Native session-summary storage attribution — 2026-11-13
 

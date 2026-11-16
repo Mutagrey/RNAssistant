@@ -122,7 +122,7 @@ namespace RNAssistant.Harness
                 var workspace = workspaces.CreateHiddenHtmlProject(Path.Combine(paths.Root, "project"), "Native project", "index.html");
                 var resources = new ResourceJournal(paths); var blobs = new ChatBlobStore(paths);
                 var files = new WorkspaceFileService(paths, resources, resources, resources);
-                files.CreateText(workspace, "index.html", "<main>Saved native project</main>");
+                var htmlSource = files.CreateText(workspace, "index.html", "<main>Saved native project</main>");
                 files.CreateText(workspace, "style.css", "main{color:green}");
                 workspaces.SetHtmlProjectDefinition(workspace, null, new HtmlProjectDefinition { EntryPath = "index.html", Members = new[] { "index.html", "style.css" } });
                 workspace = workspaces.ConnectProject(workspace.RootPath, false);
@@ -158,13 +158,30 @@ namespace RNAssistant.Harness
                 var copiedPaths = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "html-restore"), _ => StorageProtector.None);
                 var copiedResources = new ResourceJournal(copiedPaths); IConversationStore copiedChats = new ConversationJournal(copiedPaths, scope);
                 AssertEqual(artifact.Id, copiedChats.Load(chat.Id).Artifacts.Single().Id, "restored journal retains exact project membership");
-                Directory.Move(workspace.RootPath, workspace.RootPath + "-offline");
-                var restarted = new WorkspaceHtmlVersionService(paths, store, files, resources, resources);
+                var copiedWorkspaces = new WorkspaceStore(copiedPaths);
+                var copiedFiles = new WorkspaceFileService(copiedPaths, copiedResources, copiedResources, copiedResources);
+                var restarted = new WorkspaceHtmlVersionService(copiedPaths, copiedChats, copiedFiles, copiedResources, copiedResources);
+                var connection = copiedWorkspaces.OpenConnectedHistory(workspace.WorkspaceId);
+                AssertEqual(workspace.RootPath, connection.RootPath, "restored Workspace owner preserves its exact source association");
+                var movedRoot = workspace.RootPath + "-offline";
+                Directory.Move(workspace.RootPath, movedRoot);
                 var savedTarget = restarted.Resolve(new BrowserResolveRequest { OwnerScope = caller,
                     Locator = BrowserLocalLocator.ForProject(workspace.WorkspaceId, "index.html", result.VersionId) }).Target;
-                AssertTrue(savedTarget != null && savedTarget.State == BrowserTargetState.Ready, "actual saved-project consumer works after restart with no live root");
-                var savedOwner = new DocumentArtifactStore(copiedResources, copiedResources, new ChatBlobStore(copiedPaths));
-                AssertEqual("<main>Saved native project</main>", System.Text.Encoding.UTF8.GetString(savedOwner.ReadWorkspaceHtmlMember(workspace.WorkspaceId, result.VersionId, "index.html")), "restore reads exact CAS member");
+                AssertTrue(savedTarget != null && savedTarget.State == BrowserTargetState.Ready, "restored Browser owner resolves the saved project without the original root");
+                using (var content = restarted.OpenBrowserContent(savedTarget, CancellationToken.None))
+                using (var stream = content.Open("index.html", CancellationToken.None))
+                using (var reader = new StreamReader(stream))
+                    AssertEqual("<main>Saved native project</main>", reader.ReadToEnd(), "restored Browser content reads its exact CAS member");
+                var liveTarget = restarted.Resolve(new BrowserResolveRequest { OwnerScope = caller,
+                    Locator = BrowserLocalLocator.ForProject(workspace.WorkspaceId, "index.html") }).Target;
+                AssertTrue(liveTarget != null && liveTarget.State == BrowserTargetState.Unavailable, "offline live source is not guessed from the saved snapshot");
+                var moved = copiedWorkspaces.ConnectProject(movedRoot, false);
+                AssertEqual(workspace.WorkspaceId, moved.WorkspaceId, "explicit reconnection of the moved manifest preserves project identity");
+                AssertEqual(movedRoot, copiedWorkspaces.OpenConnectedHistory(workspace.WorkspaceId).RootPath, "reconnection updates the existing Workspace owner");
+                AssertEqual(htmlSource.Reference.Uri, copiedFiles.ReadText(moved, "index.html").Reference.Uri, "restored file locator preserves identity through project relocation");
+                Directory.CreateDirectory(workspace.RootPath);
+                RuntimeThrows<InvalidDataException>(() => copiedWorkspaces.ConnectProject(workspace.RootPath, false));
+                AssertEqual(movedRoot, copiedWorkspaces.OpenConnectedHistory(workspace.WorkspaceId).RootPath, "an unrelated occupant of the old path cannot steal the moved identity");
                 var copiedProject = restarted.CopySavedProject(savedTarget, CancellationToken.None);
                 AssertEqual(HtmlProjectImportStatus.Created, copiedProject.Status, copiedProject.Message);
                 AssertEqual("<main>Saved native project</main>", File.ReadAllText(Path.Combine(copiedProject.RootPath, copiedProject.EntryPath)), "copy uses supplied native file owner");

@@ -59,9 +59,15 @@ namespace RNAssistant.Harness
                 AssertEqual(0, store.Load(session.Id).Messages.Count, "rebuild retains clear");
                 var notices = new ConversationEventFeed(journal).Read(ConversationMetadata.From(session), beforeClear);
                 AssertTrue(notices.Events.SelectMany(item => item.Operations).Contains(SessionOperationTypes.MessageRemove), "clear invalidates the visible message page");
-                // DocumentAuthorityRegistry is a separate existing P6/P7 backup owner.
                 AssertTrue(File.Exists(Path.Combine(paths.ResourceAuthorityDirectory, "documents.json")), "Office binding retains its identity registry");
-                RuntimeThrows<InvalidOperationException>(() => JournalCasService(paths, StorageProtector.None).BackupJournals(Path.Combine(paths.Root, "backup")));
+                var backup = Path.Combine(paths.Root, "backup");
+                JournalCasService(paths, StorageProtector.None).BackupJournals(backup);
+                var copiedPaths = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "office-history-restore"), _ => StorageProtector.None);
+                var copied = ((IConversationStore)new ConversationJournal(copiedPaths, "document:history")).Load(session.Id);
+                AssertEqual(0, copied.Messages.Count, "Office clear survives complete isolated restore");
+                AssertEqual(session.DocumentAuthorityId, new DocumentAuthorityRegistry(copiedPaths)
+                    .Resolve(session.Host, "restored-office-runtime", session.DocumentPath).Id, "restored Office owner resolves the same document identity");
+                AssertEqual(session.DocumentAuthorityId, copied.DocumentAuthorityId, "journal and restored Office identity agree");
                 session.Messages.Add(resurrection);
                 RuntimeThrows<InvalidOperationException>(() => store.Commit(session, ConversationCommit.UserInput(resurrection)));
                 session.Messages.Clear(); var next = new ChatMessage { Role = "user", Content = "Continue" };

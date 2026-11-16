@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
@@ -16,6 +18,7 @@ namespace RNAssistant.Core.Storage
 
     public sealed class DocumentAuthorityRegistry
     {
+        internal const string BackupRelativePath = "resource-authority/documents.json";
         private readonly string _path;
         private static readonly object Sync = new object();
         private static readonly Dictionary<string, string> RuntimeBindings =
@@ -25,6 +28,111 @@ namespace RNAssistant.Core.Storage
         {
             if (paths == null) throw new ArgumentNullException(nameof(paths));
             _path = Path.Combine(paths.ResourceAuthorityDirectory, "documents.json");
+        }
+
+        // The maintenance gate alone does not cover identity resolution. Keep the
+        // same lock order as Resolve until the complete backup has been copied.
+        internal IDisposable AcquireBackupLease()
+        {
+            Monitor.Enter(Sync);
+            try
+            {
+                RequireBackupDirectory();
+                IsBackupFilePresent(_path);
+                var leasePath = _path + ".lck";
+                if (IsBackupFilePresent(leasePath) && new FileInfo(leasePath).Length != 0)
+                    throw new InvalidDataException("Document authority lease is not empty.");
+                return new BackupLease(StorageFileSystem.AcquireWriteLock(leasePath));
+            }
+            catch { Monitor.Exit(Sync); throw; }
+        }
+
+        // Validate the original bytes, never the repaired/deduplicated Load view.
+        // A missing file is valid for a root that has no persisted Office binding.
+        internal IReadOnlyList<string> ValidateBackupState()
+        {
+            RequireBackupDirectory();
+            if (!IsBackupFilePresent(_path)) return new string[0];
+            try
+            {
+                JObject root;
+                using (var input = File.OpenText(_path))
+                using (var reader = new JsonTextReader(input) { MaxDepth = 8, DateParseHandling = DateParseHandling.None })
+                {
+                    root = JObject.Load(reader, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+                    if (reader.Read()) throw new InvalidDataException("Trailing document authority registry data.");
+                }
+                RequireBackupFields(root, "ContractVersion", "Documents");
+                if (root["ContractVersion"].Type != JTokenType.Integer || root["ContractVersion"].ToString(Formatting.None) != "1" ||
+                    root["Documents"].Type != JTokenType.Array)
+                    throw new InvalidDataException("Unsupported document authority registry contract.");
+                foreach (var token in (JArray)root["Documents"])
+                {
+                    var item = token as JObject;
+                    RequireBackupFields(item, "AuthorityId", "Host", "Locator", "UpdatedUtc");
+                    if (item["AuthorityId"].Type != JTokenType.String || item["Host"].Type != JTokenType.String ||
+                        item["Locator"].Type != JTokenType.Null && item["Locator"].Type != JTokenType.String ||
+                        item["UpdatedUtc"].Type != JTokenType.String)
+                        throw new InvalidDataException("Invalid document authority binding shape.");
+                }
+                var state = root.ToObject<DocumentAuthorityRegistryState>(JsonSerializer.Create(
+                    new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error }));
+                var ids = new HashSet<string>(StringComparer.Ordinal);
+                var locators = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+                foreach (var item in state.Documents)
+                {
+                    if (string.IsNullOrWhiteSpace(item.AuthorityId) || item.AuthorityId != item.AuthorityId.Trim() ||
+                        string.IsNullOrWhiteSpace(item.Host) || item.Host != NormalizeHost(item.Host) ||
+                        item.Locator != null && (string.IsNullOrWhiteSpace(item.Locator) || item.Locator != item.Locator.Trim()) ||
+                        !ids.Add(item.AuthorityId))
+                        throw new InvalidDataException("Invalid or duplicate document authority identity.");
+                    if (item.Locator == null) continue;
+                    HashSet<string> hostLocators;
+                    if (!locators.TryGetValue(item.Host, out hostLocators))
+                        locators.Add(item.Host, hostLocators = new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                    if (!hostLocators.Add(item.Locator))
+                        throw new InvalidDataException("Ambiguous document authority locator.");
+                }
+                return new[] { _path };
+            }
+            catch (JsonException ex) { throw new InvalidDataException("Document authority registry is invalid.", ex); }
+        }
+
+        private void RequireBackupDirectory()
+        {
+            var directory = Path.GetDirectoryName(_path);
+            if (!StorageFileSystem.IsRegularDirectory(directory) || !StorageFileSystem.IsRegularDirectory(Path.GetDirectoryName(directory)))
+                throw new InvalidDataException("Document authority backup directory is unavailable or linked.");
+        }
+
+        private static bool IsBackupFilePresent(string path)
+        {
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(path); }
+            catch (FileNotFoundException) { return false; }
+            catch (DirectoryNotFoundException) { return false; }
+            if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+                throw new InvalidDataException("Document authority backup file cannot be a directory or link.");
+            return true;
+        }
+
+        private static void RequireBackupFields(JObject value, params string[] fields)
+        {
+            if (value == null || value.Properties().Count() != fields.Length || fields.Any(field => value.Property(field) == null))
+                throw new InvalidDataException("Incomplete or unsupported document authority registry fields.");
+        }
+
+        private sealed class BackupLease : IDisposable
+        {
+            private IDisposable _fileLease;
+            internal BackupLease(IDisposable fileLease) { _fileLease = fileLease; }
+            public void Dispose()
+            {
+                var lease = Interlocked.Exchange(ref _fileLease, null);
+                if (lease == null) return;
+                try { lease.Dispose(); }
+                finally { Monitor.Exit(Sync); }
+            }
         }
 
         public void ResetAfterRuntimeDataClear()

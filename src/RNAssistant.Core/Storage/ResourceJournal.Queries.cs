@@ -194,6 +194,23 @@ namespace RNAssistant.Core.Storage
             }, CancellationToken.None);
         }
 
+        // Backup calls this only after ScanCanonical has verified all transitions,
+        // under maintenance or in a private restore root. Read typed canonical
+        // facts directly; do not trust/create the production index or recover tails.
+        internal IReadOnlyList<string> ReadBackupIdentityReferences(out IReadOnlyList<MutationAttempt> moves)
+        {
+            var scopes = new HashSet<string>(StringComparer.Ordinal);
+            var attempts = new Dictionary<string, MutationAttempt>(StringComparer.Ordinal);
+            Journal.Scan((record, position) => {
+                var fact = Decode(record);
+                scopes.Add(fact.Scope.ToString());
+                var attempt = fact.Attempt;
+                if (attempt?.Operation == "files.move") attempts[attempt.AttemptId] = attempt;
+            }, CancellationToken.None);
+            moves = attempts.Values.ToArray();
+            return scopes.ToArray();
+        }
+
         private ResourceJournalReceipt RequireAttempt(string id)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("An exact attempt id is required.");

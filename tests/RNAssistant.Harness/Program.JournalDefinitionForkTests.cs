@@ -103,9 +103,20 @@ namespace RNAssistant.Harness
                 AssertEqual(12L, Convert.ToInt64(gateway.Read(nested, new ResourceReadRequest { Reference = nestedDerived,
                     Representation = "table", MaxRows = 1 }).Result.Table.Rows[0]["sales"]), "deleted ancestors do not revoke an explicit durable copy");
                 var backup = Path.Combine(paths.Root, "definition-backup");
-                RuntimeThrows<InvalidOperationException>(() => JournalCasService(paths, StorageProtector.None).BackupJournals(backup));
-                AssertTrue(File.Exists(Path.Combine(paths.ResourceAuthorityDirectory, "documents.json")),
-                    "full Office backup remains gated on its existing identity registry; it is never removed to export a partial backup");
+                JournalCasService(paths, StorageProtector.None).BackupJournals(backup);
+                var copiedPaths = CasMaintenanceService.RestoreJournals(backup, Path.Combine(paths.Root, "definition-restore"), _ => StorageProtector.None);
+                IConversationStore copiedChats = new ConversationJournal(copiedPaths, scope);
+                var copiedResources = new ResourceJournal(copiedPaths);
+                var copied = copiedChats.Load(nested.Id);
+                AssertEqual(nested.DocumentAuthorityId, copied.DocumentAuthorityId, "restored fork retains its authoritative document id");
+                AssertTrue(new DocumentAuthorityRegistry(copiedPaths).List().Any(item => item.AuthorityId == copied.DocumentAuthorityId),
+                    "restored registry retains the document even when the fixture fork has no live locator");
+                var copiedExecutor = JournalDefinitionExecutor(copiedPaths, copiedChats, copiedResources);
+                copiedExecutor.BindResourceAuthority(copied);
+                AssertEqual(nested.DocumentAuthorityId, copied.DocumentAuthorityId, "Office binding preserves the explicit restored identity");
+                var copiedGateway = copiedExecutor.ResourceGateway;
+                AssertEqual(12L, Convert.ToInt64(copiedGateway.Read(copied, new ResourceReadRequest { Reference = nestedDerived,
+                    Representation = "table", MaxRows = 1 }).Result.Table.Rows[0]["sales"]), "restored Office consumer reads the retained copied definition");
                 var copyJson = JsonConvert.SerializeObject(nested.ResourceCopies.OrderBy(link => link.Source.Uri, StringComparer.Ordinal)
                     .ThenBy(link => link.Source.Revision, StringComparer.Ordinal).ToArray());
                 File.Delete(new ChatBlobStore(paths).PathFor(TextPatternEngine.Sha256(copyJson)));

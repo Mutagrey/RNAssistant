@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Internal identity backup extension — 2026-11-15
+
+Implemented locally / In Review. `BackupJournals`/`RestoreJournals` now retain the
+existing Workspace id/path associations, file locators/move intents and Office
+`documents.json` under their owner locks. Source and staged owner validation reject
+incomplete/ambiguous data; canonical resource scopes also cover saved HTML without
+a chat and file identities without pending moves. Restore does not infer paths,
+resolve identities or replay effects. Internal envelope v2 rejects incomplete v1;
+production writer and durable journal formats remain unchanged.
+
+Host-neutral .NET 8 build: 0 errors, 2 existing PDF CA1416 warnings. Seven focused filters,
+9/9 checks: identity validation/move recovery, canonical closure plain + AES/HMAC,
+restored Workspace Browser, Office history, definition-copy consumers/receipts,
+maintenance/publication exclusion and old-style project source inclusion. The
+Browser fixture formerly reused source owners after restore; it now reads through
+the isolated restored root with the live project offline and checks explicit move
+reconnection. Prepared/possible-dispatch/stale completed move states survive without
+replay; corruption, missing identities/intents and malformed registries fail closed.
+
+Remaining P7 gates: full application-owner inventory and external project/manifest/
+trash/live-document preservation, production composition and old-writer quiescence,
+real Windows/DPAPI/Office/WebView2 and power-loss evidence. Memory-only runtime
+bindings are not exported. This is an internal P6/P7 slice, not a completed product
+cutover or release; product version remains `16.27.17-dev`. No commit/push was made.
+[Contract](../cas-maintenance.md#identity-owners-in-internal-backup-v2--2026-11-15).
+
 ## Unified native stream delivery — 2026-11-14
 
 F02/F03 / W4: один ConversationModelProgress и preview cache в существующем

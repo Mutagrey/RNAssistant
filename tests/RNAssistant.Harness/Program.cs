@@ -799,6 +799,8 @@ namespace RNAssistant.Harness
                 Test("storage optimization: durable pause controls and pending input", ConversationJournalQueueControls),
                 Test("storage optimization: optional diagnostics and mandatory manifest", ModelDiagnosticsManifestAndRetention),
                 Test("storage optimization: canonical closure and backup restore", StorageJournalMaintenanceAndRestore),
+                Test("storage optimization: identity backup validation", StorageJournalIdentityBackupValidation),
+                Test("storage optimization: identity backup move recovery", StorageJournalIdentityMoveRestore),
                 Test("storage optimization: maintenance excludes publication", StorageJournalMaintenanceExcludesPublish),
                 Test("storage optimization: verified cache and exact text windows", VerifiedReadCacheAndTextWindows),
                 Test("storage optimization: bounded context exclusion receipt", ContextReceiptBoundsExcludedHistory),

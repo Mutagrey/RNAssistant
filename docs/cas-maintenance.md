@@ -48,29 +48,72 @@ conversation reference enumerator. Resource journals retain copied revision payl
 and dependencies; supplied-note payloads remain in the typed context closure.
 Nested copies survive deleted ancestors and index rebuild. Isolated journal/CAS
 restore preserves copy provenance without manufacturing authority publication;
-missing copy CAS blocks load/rebuild. Full Office backup still refuses its unhandled
-identity registry. Inherited per-chat usage attribution and complete owner backup
-remain open; this is not Office/application restore qualification.
+missing copy CAS blocks load/rebuild. The internal backup now includes the existing
+Office identity registry (see the identity extension below). Inherited per-chat
+usage attribution and complete application backup remain open; this is not
+Office/application restore qualification.
 
 `ForScope` run leases join the existing `locks/run_*.lck`/`run-registry.lck` namespace.
 `RuntimeStorageActivity` remains held from CAS publication to acceptance or confirmed
 abort. A second-process publication and a live scope run both block collection.
 Index repair has its separate short admission and need not drain live runs.
 
-[Workspace connection metadata](stabilization/BACKLOG.md#native-workspace-connection-backup--2026-11-14)
-is not yet included. Restored journal/CAS evidence does not qualify complete
-application/project restore or preserve Browser connections by itself.
-
 Internal `BackupJournals`/`RestoreJournals` are exercised only on isolated new roots
 until P7. Backup refuses mixed legacy roots; it copies every verified canonical
 segment and complete CAS closure, plus existing settings, salt and DPAPI-protected
-key files. It does not include SQLite, orphans, locks or optional diagnostics.
+key files and the identity owners below. It does not include SQLite, orphans,
+locks or optional diagnostics.
 Known empty resource scope-lock files are allowed in a new root. Unexpected names,
 nonempty locks, directories and reparse points do not bypass mixed-root rejection.
-A checksum/HMAC manifest authenticates the file set. Restore creates a private root,
+A SHA-256 manifest checks integrity; protected backups use HMAC authentication of
+the file set. Restore creates a private root,
 verifies all files/semantic closure, rebuilds the index and only then publishes a
 previously absent destination. Failure cannot overwrite an existing destination.
 Original source history/keys are never deleted or imported.
+
+### Identity owners in internal backup v2 — 2026-11-15
+
+The existing manifest allowlist now includes these exact owner files, copied
+without reserializing, rebasing paths or resolving identities:
+
+| Owner | Retained canonical data |
+|---|---|
+| `WorkspaceStore` | `workspaces/ws_<id>.json` and `workspaces/path-<path hash>.json` |
+| `WorkspaceFileService` | `workspaces/file-locators/<path hash>.json` and `workspaces/file-moves/<attempt id>.json` |
+| `DocumentAuthorityRegistry` | `resource-authority/documents.json` |
+
+Backup holds the existing maintenance gate plus Workspace catalog/locator locks
+and the document registry's own monitor/file lock through validation and copying.
+The owners validate original JSON, exact names/IDs, current Workspace path pairs
+and ambiguous bindings. Both source and copied owner data must pass. Historical
+Workspace path associations and hidden-state differences remain valid; a moved
+project's current ID record stays authoritative. Canonical conversation/resource
+scopes require the corresponding Workspace/file identities, including projects
+with saved resource versions but no chat. Move metadata is checked against the
+latest verified canonical attempt: missing intent is allowed before dispatch,
+required after possible dispatch, and never used to replay an operation.
+
+Restore repeats owner and canonical closure validation in its private root before
+publishing. A saved HTML version is resolved by the restored
+`WorkspaceStore.OpenConnectedHistory` / `WorkspaceHtmlVersionService`, including
+when the live project is unavailable. Reconnecting a moved live project remains
+an explicit existing `ConnectProject` operation with its manifest and collision
+guards; neither backup nor restore searches for a replacement path.
+
+The internal envelope is `rnassistant-journal-backup-v2`. Earlier v1 backups are
+rejected because they did not preserve these owners. No default writer, journal
+format, application storage selector or production composition is switched.
+The manifest remains the sole backup file inventory; no second identity registry
+or fallback inference is introduced.
+
+External project files, `.rnassistant/workspace.json` and managed trash, live Office
+documents, memory-only `RuntimeBindings`, uncommitted editor state and unrelated
+application stores are not included. A new unsaved Office document without a
+persisted binding cannot regain its former runtime identity by locator alone;
+existing journal-owned identities are retained without inventing a locator.
+Historical document IDs need not all occur in the current registry: Save As and
+locator collisions retain their existing owner semantics. Full application restore,
+production writer quiescence/cutover and Windows qualification remain P7 gates.
 
 Plaintext and AES/HMAC restore, unknown effects, cross-owner receipts, nested refs,
 unindexed streams and corrupt/missing backup bodies are checked on macOS/net8.

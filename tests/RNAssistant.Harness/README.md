@@ -225,8 +225,9 @@ and missing selected bytes fail explicitly, and preparation publishes nothing.
 two exact mapping revisions, virtual/materialized data, supplied notes, unpublished
 copy rejection, immutable provenance, nested copies, deleted ancestors and cold
 headers/pages. Receipt faults cover append/index/lost ACK plus isolated journal/CAS
-restore; missing copy CAS fails load/rebuild. Full Office backup still refuses its
-unhandled identity registry. Production Workspace definition authoring is not added.
+restore; missing copy CAS fails load/rebuild. Office backup now restores the
+existing identity registry and rebinds retained chat identity through the actual
+executor. Production Workspace definition authoring is not added.
 Retained chat-owned HTML remains outside the native format; shared document HTML,
 Workspace originals and local Tasks/checkpoints are accepted above. Related checks:
 `shared HTML: publication selection`, `resource cutover: fork preparation fails`,
@@ -247,8 +248,11 @@ Windows/Office qualification remain separate gates.
 selection/navigation, exact outcome proof, metadata pages, checkpoint/index/ack
 recovery, corrupt selected source and Unknown with independent input. Workspace
 covers run-owned version saves, addressed header admission, offline-root restart,
-copy through native file ports and journal/CAS restore. It does not qualify full
-application restore: Workspace connection metadata is an open backup owner.
+copy through native file ports and journal/CAS restore. The Browser consumer is
+constructed entirely from restored paths/owners; its saved HTML resolves offline,
+explicit moved-manifest reconnection retains file identity, and an unrelated old
+path occupant cannot steal the association. External project files/manifests remain
+outside this internal backup; no full application restore is claimed.
 Relevant regressions: `journal task list:`, `journal Plan: Office`,
 `journal attachments:`, `HTML checkpoints:`, `storage: html navigation` and
 `storage: html recovery`. The recovery-blocks fixture has a separately reproduced
@@ -285,7 +289,8 @@ message deletion and a real Workspace kernel retry after Unknown: only the repea
 call is denied; independent read succeeds. It includes a 160-message rewrite,
 one-body page, canonical/effect retention, rebuild/Workspace restore, append/flush/
 index/partial-index faults, idempotent retry and fresh explicit opaque confirmation.
-Office documents.json remains an explicit full-backup gap (refusal is checked).
+Office `documents.json` is included and a fresh registry resolves the saved locator
+to the same authority after isolated restoration.
 Regressions: `journal runtime:`, `journal mutation: Office and Workspace write`,
 `journal confirmation: Office and Workspace resume`, `journal confirmation: lost claim`,
 `kernel: unknown call remains`. Reuse the same build; no Windows qualification.
@@ -472,8 +477,9 @@ resource publication and late outcome`, `storage optimization: canonical closure
 backup restore`, `resource cutover: atomic authority and replay`, `resource cutover:
 explicit reset invalidates cached journals`, `workspace files: recoverable delete and
 explicit restore`, and `journal runtime:`. The first bound mutation turn is covered
-above; remaining owners, production composition,
-workspace locator/move-intent backup and Windows/Office qualification remain open.
+above; existing Workspace locator/move-intent backup is covered by the identity
+slice below. Remaining application owners, production composition and Windows/Office
+qualification remain open.
 
 `journal runtime:` runs four focused checks: real Office run service and Workspace
 ports through AgentKernel and scripted HTTP (reflection/finish, restart/next turn,
@@ -515,6 +521,21 @@ New storage is not enabled in production. `RNA_STORAGE_OPT_BASELINE=1` enables t
 old aggregate/provider baseline; `RNA_STORAGE_OPT_COST=1` enables the comparable
 H=100/1000/10000 curve. Leave both unset for routine checks.
 [Evidence and open gates](../../docs/audits/storage-context-optimization.md).
+
+Internal identity backup (2026-11-15): `storage optimization: identity backup`
+runs two cases. Validation saves real project HTML through the User/local Browser
+owner without any conversation stream; tests moved/hidden associations, retained
+file identities, Office Save As, byte equality, corruption/missing files/links,
+v1 rejection, incomplete correctly checksummed manifests, ambiguous registry rows
+and unknown owner files. Move recovery covers Prepared before intent creation,
+possible dispatch, exact intent/canonical bytes, no replay, explicit relocated-root
+reconnection, missing required intent and stale completed intents after a later move.
+Pair with `storage optimization: canonical closure and backup restore`,
+`storage optimization: maintenance excludes publication`, `journal HTML: Workspace`,
+`journal history: Office`, `journal fork: definition copy` and
+`harness: production projects include all source files`. One build and these seven
+filters passed 9/9 checks on Linux/.NET 8. No real DPAPI/Office/WebView2 or power-loss
+qualification, external project file backup or production storage switch is implied.
 
 `storage optimization: bounded context exclusion receipt` compares H=100/1000/10000
 with fixed delivered content and checks the exclusion sample/counts. Pair changes
