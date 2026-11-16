@@ -587,6 +587,7 @@ namespace RNAssistant.Harness
                 Test("settings: prompt migration archives stored text", SettingsPromptMigrationArchivesStoredText),
                 Test("settings: prompt migration allows conversation dispatch", SettingsPromptMigrationAllowsConversationDispatch),
                 Test("settings: invalid numeric values are normalized", SettingsNormalizeInvalidNumericValues),
+                Test("settings: protection guard includes native history", SettingsProtectionGuardIncludesNativeHistory),
                 Test("context: compaction uses structured source claims", CompactionUsesStructuredSourceClaims),
                 Test("context: compaction repairs within configured attempts", CompactionRepairsWithinConfiguredAttempts),
                 Test("context: compaction repair must fit its request budget", CompactionRepairMustFitRequestBudget),

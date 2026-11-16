@@ -404,6 +404,15 @@ namespace RNAssistant.Core.Storage
             return StorageFileSystem.GetFilesRecursive(_paths.ChatDirectory, "*.events.jsonl", markSkipped).Any() ||
                 StorageFileSystem.GetFilesRecursive(_paths.VbaJournalDirectory, "*.events.jsonl", markSkipped).Any() ||
                 StorageFileSystem.GetFilesRecursive(_paths.ChatBlobDirectory, "*.blob", markSkipped).Any() ||
+                StorageFileSystem.GetFilesRecursive(_paths.ResourceAuthorityDirectory, "*", markSkipped)
+                    .Any(path => path.EndsWith(".authority.jsonl", StringComparison.Ordinal) ||
+                        path.EndsWith(".revisions.jsonl", StringComparison.Ordinal) ||
+                        path.EndsWith(".views.jsonl", StringComparison.Ordinal) ||
+                        path.EndsWith("mutation-attempts.jsonl", StringComparison.Ordinal)) ||
+                // storage-v2 owns both canonical segments and its disposable index. Any
+                // retained file makes a protection change ambiguous, including an index
+                // left after a crash; ClearRuntimeData removes the complete generation.
+                StorageFileSystem.GetFilesRecursive(_paths.JournalStorageDirectory, "*", markSkipped).Any() ||
                 skipped;
         }
 

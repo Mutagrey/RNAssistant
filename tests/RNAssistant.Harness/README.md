@@ -1,5 +1,12 @@
 # RNAssistant Harness
 
+## Native protection root guard — 2026-11-16
+
+Filter `settings: protection guard includes native history` creates a native-only
+journal with no legacy chat or CAS body, then verifies that changing history
+protection fails before settings/secret publication. This is a host-neutral root
+guard; actual Windows DPAPI loading, storage and re-key remain separate evidence.
+
 ## Full application backup and clean restore — 2026-11-16
 
 Focused filter `application backup:` builds the Harness once and runs one mixed-root

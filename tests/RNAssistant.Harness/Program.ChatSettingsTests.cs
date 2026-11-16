@@ -523,6 +523,30 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SettingsProtectionGuardIncludesNativeHistory()
+        {
+            WithTempPaths(paths =>
+            {
+                var service = new SettingsService(paths);
+                var original = service.Load();
+                var journal = new ConversationJournal(paths, "document:protection-guard", StorageProtector.None);
+                journal.CreateChat("create", "chat", "Protected root", ConversationRunPolicy.For(ChatModes.Agent));
+                AssertTrue(!File.Exists(paths.HistorySecretFile),
+                    "native journal fixture starts without a history secret");
+                var proposed = original.Clone();
+                proposed.HistoryIntegrityMode = HistoryIntegrityModes.HmacSha256;
+                proposed.HistoryEncryptionMode = HistoryEncryptionModes.Aes256CbcHmacSha256;
+                proposed.HistoryKeySource = HistoryKeySources.CustomSecret;
+                var error = RuntimeThrows<InvalidOperationException>(() =>
+                    service.Save(proposed, null, "native-history-secret-123"));
+                AssertContains(error.Message, "cannot change", "nonempty storage-v2 blocks a protection change");
+                AssertEqual(original.HistoryIntegrityMode, service.Load().HistoryIntegrityMode,
+                    "refused protection change leaves settings unchanged");
+                AssertTrue(!File.Exists(paths.HistorySecretFile),
+                    "refused protection change leaves its secret unpublished");
+            });
+        }
+
         private static void BuiltInPromptGuidanceUsesRuntimeIdsAndToolResultV1()
         {
             var skills = BuiltInSkillProvider.GetSkills(FakeOfficeAdapter.ForHost("Excel"));

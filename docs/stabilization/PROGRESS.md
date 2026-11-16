@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Native protection-change root guard — 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.1-dev`. `SettingsService` previously
+considered only legacy chat/VBA JSONL and CAS when protecting a history profile, so
+a native-only `storage-v2` journal could survive a key/mode change that made it
+unreadable. The root guard now also treats legacy resource journals and any retained
+file under `storage-v2` as existing history. It fails before writing settings or a
+history secret; invalid/inaccessible roots remain fail-closed. `ClearRuntimeData`
+remains the explicit path that removes the complete generation and permits a new
+profile.
+
+Targeted Harness `settings: protection guard includes native history` passes 1/1 after
+a successful build. It creates a native journal without legacy chat/CAS data, checks
+the protection-change refusal and unchanged settings/secret state. Actual Windows
+DPAPI key rotation remains open and is not replaced by the host-neutral guard.
+
 ## Full application backup and clean restore — 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.0-dev`. Existing `CasMaintenanceService`

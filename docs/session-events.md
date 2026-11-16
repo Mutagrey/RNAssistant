@@ -2190,7 +2190,10 @@ Settings → Diagnostics → History protection controls two independent feature
 - Authenticated encryption uses AES-256-CBC with HMAC-SHA256. It encrypts every chat and VBA journal event `Data` value and every committed `chat-blobs` payload; event type, sequence, time, correlation ids, hashes, key id, CAS plaintext hash/length, and content equality remain visible.
 - The selected key source is the API key by default or a separate custom secret. Both secrets are stored with DPAPI CurrentUser and never enter settings, events, diagnostics, or exports.
 - Keys are derived with PBKDF2-SHA256 and a portable installation salt, then domain-separated for encryption, ciphertext authentication, and event-chain HMAC.
-- Changing the enabled modes, key source, or effective key is rejected while event streams or CAS blobs exist. Clear Chats/Data first. In particular, rotating an API key used for protection requires clearing or a future explicit re-key operation.
+- Changing the enabled modes, key source, or effective key is rejected while legacy
+  chat/VBA/resource journals, native `storage-v2` files (including a retained derived
+  index) or CAS blobs exist. Clear Chats/Data first. In particular, rotating an API
+  key used for protection requires clearing or a future explicit re-key operation.
 - Clear Chats/Data reports a failure when a managed file or child directory cannot be removed; it never reports a completed reset while known data remains.
 - A missing settings file uses defaults. An existing unreadable, malformed, or `null` settings file fails closed; saving settings does not replace its bytes with defaults.
 - For ordinary sharing, use the disposable trajectory export and keep its default metadata redaction. Canonical protected history can still be transferred with a custom secret plus `history-protection.salt`, communicating the secret separately; never share an API key.

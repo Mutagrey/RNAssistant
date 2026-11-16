@@ -48,8 +48,8 @@ Remaining evidence, in priority order:
    Host-neutral thread and child-process checks do not qualify COM/VSTO behavior.
 2. **P1 when protection is enabled:** actual DPAPI key access across Browser reads,
    default Workspace project creation and saved plugin visual-selection intake.
-   Changing protection settings with nonempty `storage-v2` still needs a targeted
-   root-guard check; no additional reproduced settings defect is asserted here.
+   The native `storage-v2` protection-change root guard is fixed host-neutral in
+   `17.3.1-dev`; actual DPAPI behavior on Windows remains qualification evidence.
 3. **P1 if an earlier wrong binding occurred:** already misbound registry/history
    requires evidence-backed recovery. The patch prevents new cross-document
    bindings and does not guess the identity of existing immutable facts.
