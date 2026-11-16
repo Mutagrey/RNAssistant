@@ -15,7 +15,7 @@ namespace RNAssistant.Core.Storage
 {
     // Direct Store integration on the existing journal owner. Composition remains
     // isolated until all Store/resource/runtime operations pass the cutover gate.
-    internal sealed partial class ConversationJournal : IConversationStore
+    internal sealed partial class ConversationJournal : IConversationStore, IConversationInputReadStore
     {
         private bool _textStoreRootChecked;
         private void RequireTextRoot()

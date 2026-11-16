@@ -265,9 +265,9 @@ namespace RNAssistant.Application.Conversations
                     foreach (var record in ReadInboxReplay(session, 0))
                     {
                         Apply(box, record.Change, record.Event);
-                        box.Revision = record.Event.Sequence;
                         box.ViewRevision++;
                     }
+                    box.Revision = session.Revision;
                     var lostLivePause = box.AgentPause?.LiveInvocationId != null;
                     box.AgentPause = null;
                     if (lostLivePause || box.Inputs.Any(IsPending) || HasPendingWait(box.Session)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
@@ -336,22 +336,50 @@ namespace RNAssistant.Application.Conversations
                 throw new ArgumentException("Receipt lookup requires at most 128 operation IDs of 1–128 characters.");
             var requested = new HashSet<string>(receiptOperationIds ?? new string[0], StringComparer.Ordinal);
             var box = Get(session);
-            lock (box.Sync) return new ConversationInboxSnapshot
+            ConversationInboxSnapshot snapshot;
+            var receipts = new List<ConversationInboxReceipt>();
+            lock (box.Sync)
             {
-                ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision, Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase, Running = box.Running || box.Worker,
-                ActiveRun = box.Running, HasPendingWait = HasPendingWait(box.Session), Paused = box.Paused, PauseReason = box.PauseReason,
-                RunPaused = box.Session.LastRun?.KernelState?.Summary.PauseId != null, WaitTarget = SavedWaitTarget(box.Session),
-                Items = Undelivered(box.Session, box.Inputs, null).Select(Clone).ToList(),
-                Receipts = requested.Count == 0 ? new List<ConversationInboxReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
-                    .Select(input => new ConversationInboxReceipt { Id = input.Id, OperationId = input.OperationId,
-                        Revision = input.Revision, Status = input.Status }).ToList()
-            };
+                snapshot = new ConversationInboxSnapshot
+                {
+                    ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision,
+                    Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase,
+                    Running = box.Running || box.Worker, ActiveRun = box.Running,
+                    HasPendingWait = HasPendingWait(box.Session), Paused = box.Paused, PauseReason = box.PauseReason,
+                    RunPaused = box.Session.LastRun?.KernelState?.Summary.PauseId != null,
+                    WaitTarget = SavedWaitTarget(box.Session),
+                    Items = Undelivered(box.Session, box.Inputs, null).Select(Clone).ToList(),
+                    Receipts = receipts
+                };
+                foreach (var input in box.Inputs.Where(input => requested.Contains(input.OperationId)))
+                    receipts.Add(ReceiptView(input));
+            }
+            foreach (var operationId in requested.Where(id => receipts.All(item => item.OperationId != id)))
+            {
+                var accepted = ReadAccepted(session, operationId, null, false);
+                if (accepted?.Current != null) receipts.Add(ReceiptView(accepted.Current));
+            }
+            return snapshot;
         }
+
+        private static ConversationInboxReceipt ReceiptView(ConversationInput input)
+        {
+            return new ConversationInboxReceipt { Id = input.Id, OperationId = input.OperationId,
+                Revision = input.Revision, Status = input.Status };
+        }
+
         // Same read-only input projection for live Office snapshots and Workspace
         // snapshots of a different process. Workspace reads canonical events here;
         // it never treats a persisted message as still waiting for delivery.
         internal IReadOnlyList<ConversationInput> ReadUndelivered(ChatSession session, InputDelivery? delivery = null)
         {
+            var bounded = _events as IConversationInputReadStore;
+            if (bounded != null)
+            {
+                var current = bounded.ReadCurrentInputs(ConversationMetadata.From(session), session.Revision, delivery)
+                    .Where(record => record.Change.Input != null).Select(record => record.Change.Input).ToArray();
+                return Undelivered(session, current, delivery).Select(Clone).ToArray();
+            }
             var latest = new ConversationInputJournal(_events).Read(session, false, session.Revision)
                 .Where(record => record.Change.Input != null)
                 .GroupBy(record => record.Change.Input.Id, StringComparer.Ordinal)
@@ -404,7 +432,14 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync)
             {
                 AcceptedInput first;
-                if (!box.Accepted.TryGetValue(operationId, out first)) return null;
+                if (!box.Accepted.TryGetValue(operationId, out first))
+                {
+                    var recovered = ReadAccepted(session, operationId, fingerprint, false);
+                    if (recovered == null) return null;
+                    box.Accepted[operationId] = recovered;
+                    if (box.Inputs.All(item => item.OperationId != operationId)) box.Inputs.Add(Clone(recovered.Current));
+                    return recovered;
+                }
                 var current = box.Inputs.FirstOrDefault(item => item.OperationId == operationId);
                 return ProjectAccepted(first.Event, first.Initial, current, fingerprint, false);
             }
@@ -416,10 +451,12 @@ namespace RNAssistant.Application.Conversations
         {
             // Read-only receipts must use the same event prefix as the supplied
             // message projection. Another worker may append Applied after it loaded.
-            var records = new ConversationInputJournal(_events).Read(session, false, session.Revision)
-                .Where(record => record.Change.Input?.OperationId == operationId).ToArray();
-            return records.Length == 0 ? null : ProjectAccepted(records[0].Event,
-                records[0].Change.Input, records[records.Length - 1].Change.Input, fingerprint, requireRunId);
+            var bounded = _events as IConversationInputReadStore;
+            var records = bounded != null ? bounded.ReadInputReceipt(ConversationMetadata.From(session), operationId, session.Revision)
+                : new ConversationInputJournal(_events).Read(session, false, session.Revision)
+                    .Where(record => record.Change.Input?.OperationId == operationId).ToArray();
+            return records.Count == 0 ? null : ProjectAccepted(records[0].Event,
+                records[0].Change.Input, records[records.Count - 1].Change.Input, fingerprint, requireRunId);
         }
         private static AcceptedInput ProjectAccepted(SessionEvent fact, ConversationInput initial,
             ConversationInput current, string fingerprint, bool requireRunId)
@@ -730,9 +767,9 @@ namespace RNAssistant.Application.Conversations
             foreach (var record in ReadInboxReplay(box.Session, box.Revision))
             {
                 Apply(box, record.Change, record.Event);
-                box.Revision = record.Event.Sequence;
                 box.ViewRevision++;
             }
+            box.Revision = box.Session.Revision;
             var lostLivePause = box.AgentPause?.LiveInvocationId != null;
             box.AgentPause = null;
             // A recovered claim is never a license to dispatch another run.
@@ -744,15 +781,17 @@ namespace RNAssistant.Application.Conversations
         }
         private IReadOnlyList<ConversationInputRecord> ReadInboxReplay(ChatSession session, long afterSequence)
         {
-            // Validate every transition, but hydrate only the latest version of each
-            // input. Claim/applied/edit events otherwise reread the same CAS body.
+            var bounded = _events as IConversationInputReadStore;
+            if (bounded != null)
+                return bounded.ReadInputChanges(ConversationMetadata.From(session), afterSequence, session.Revision);
+            // The explicit ChatStore adapter lacks the indexed port. It still uses
+            // the validated legacy replay, rather than an implicit mixed read.
             var records = new ConversationInputJournal(_events).Read(session, false)
                 .Where(record => record.Event.Sequence > afterSequence).ToArray();
             foreach (var latest in records.Where(record => record.Change.Input != null)
                 .GroupBy(record => record.Change.Input.Id, StringComparer.Ordinal).Select(group => group.Last()))
                 latest.Change.Input.Text = _events.ReadPayload(ConversationMetadata.From(session), latest.Event) ??
                     throw new InvalidOperationException("Conversation input body is missing.");
-            // Complete all required reads before changing an existing recovery projection.
             return records;
         }
         private void ReconcilePersistedDelivery(Inbox box, bool requireAcceptedRun)

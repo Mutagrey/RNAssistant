@@ -287,6 +287,18 @@ namespace RNAssistant.Core.Persistence
         RequireCompleteAgentCommunicationJournal = 4
     }
 
+    // Optional indexed read capability for the existing inbox owner. It returns
+    // current versions at one exact chat revision and never creates a queue/cache.
+    public interface IConversationInputReadStore
+    {
+        IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> ReadCurrentInputs(
+            ConversationMetadata session, long throughSequence, RNAssistant.Core.Models.InputDelivery? delivery = null);
+        IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> ReadInputChanges(
+            ConversationMetadata session, long afterSequence, long throughSequence);
+        IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> ReadInputReceipt(
+            ConversationMetadata session, string operationId, long throughSequence);
+    }
+
     public interface IEventStore
     {
         // Explicit migration capability. The old backend uses transcript guards;

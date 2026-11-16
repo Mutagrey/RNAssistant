@@ -835,6 +835,7 @@ namespace RNAssistant.Harness
                 Test("office journal scope: agent groups follow document", OfficeJournalGroupScopeSwitch),
                 Test("journal owners: runtime data clear keeps owners usable", JournalOwnersSurviveRuntimeDataClear),
                 Test("journal input: transient inbox before first commit", JournalTransientInputRead),
+                Test("journal input: bounded current and receipt reads", JournalBoundedInputReads),
                 Test("storage coordination: native journal and resource maintenance", StorageCoordinationAllowsNativeMaintenance),
                 Test("storage coordination: worker exclusion and release", StorageCoordinationDoesNotFlowToWorkers),
                 Test("storage coordination: exact waiter permits owner publication", StorageCoordinationWaiterDoesNotBlockOwner),

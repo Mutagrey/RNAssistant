@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.17-dev
+
+- Повторная проверка input receipt и pending-очереди больше не перечитывает все
+  переходы ввода: точный receipt берётся из существующего индекса, а текущая очередь
+  ограничена её актуальными элементами. Recovery и lost ACK сохраняют исходные
+  operation, fingerprint и accepted revision.
+
 ### 17.3.16-dev
 
 - Обычное обновление чата Workspace/plugin больше не перечитывает всю историю:

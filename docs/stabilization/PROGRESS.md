@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Bounded inbox receipt and pending reads — 2026-11-17
+
+Implemented host-neutral / In Review, `17.3.17-dev`. `ConversationInboxService` now
+uses an explicit `IConversationInputReadStore` capability for the native journal.
+Exact acceptance reads resolve the original and current transition through
+`input_state`/`input_transition`; current pending/delivering reads return only the
+bounded queue at the supplied chat revision. Stale snapshots resolve their prior
+state from the indexed transition prefix, and control/pause state remains attached to
+the projection. The ChatStore adapter keeps its explicit legacy replay path; no second
+queue, cache or durable store is introduced.
+
+`journal input: bounded current and receipt reads` covers 100 accepted inputs, removals,
+12 edits, stale revision lookup, exact removed receipt and rebuild. The exact receipt
+performed 7 journal record reads and zero input-body reads; the current 50-item pending
+projection performed 53 journal record reads and hydrated exactly 50 bodies. Full
+`journal input:` 6/6 and `inbox:` 12/12 pass, as does the shared ProjectChat history test.
+Windows/WebView2 latency remains an open platform gate.
+
 ## Bounded ProjectChat state polling — 2026-11-17
 
 Implemented host-neutral / In Review, `17.3.16-dev`. `PluginApplicationService.ProjectChat`

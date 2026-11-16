@@ -10,6 +10,14 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## Bounded inbox receipt and pending reads — 2026-11-17
+
+`journal input: bounded current and receipt reads` creates 100 accepted inputs, removals
+and repeated edits, then checks exact receipt, current queue, stale revision and rebuild
+costs. In the fixture a receipt stays at 7 journal records and zero body reads; 50
+current pending inputs take 53 records and exactly 50 body reads. It runs with the full
+`journal input:` filter; `inbox:` verifies application scheduling and recovery behavior.
+
 ## Bounded journal index admission — 2026-11-16
 
 Filter `storage optimization: journal index admission is bounded` holds the shared

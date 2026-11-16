@@ -15,7 +15,8 @@ namespace RNAssistant.Core.Storage
     // Permanent composition for multiple exact conversation scopes over the one
     // canonical index. It owns no facts and delegates every operation to the
     // existing per-scope ConversationJournal.
-    internal sealed class ConversationJournalRouter : IConversationStore, IEventStore, IConversationContextStore
+    internal sealed class ConversationJournalRouter : IConversationStore, IEventStore, IConversationContextStore,
+        IConversationInputReadStore
     {
         private readonly AppDataPaths _paths;
         private readonly StorageProtector _protector;
@@ -311,6 +312,18 @@ namespace RNAssistant.Core.Storage
 
         public IReadOnlyList<SessionEvent> Read(ConversationMetadata session, SessionEventReadMode mode)
         { return Events(ForAddress(session)).Read(session, mode); }
+
+        IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> IConversationInputReadStore.ReadCurrentInputs(
+            ConversationMetadata session, long throughSequence, InputDelivery? delivery)
+        { return ((IConversationInputReadStore)ForAddress(session)).ReadCurrentInputs(session, throughSequence, delivery); }
+
+        IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> IConversationInputReadStore.ReadInputChanges(
+            ConversationMetadata session, long afterSequence, long throughSequence)
+        { return ((IConversationInputReadStore)ForAddress(session)).ReadInputChanges(session, afterSequence, throughSequence); }
+
+        IReadOnlyList<RNAssistant.Core.Services.ConversationInputRecord> IConversationInputReadStore.ReadInputReceipt(
+            ConversationMetadata session, string operationId, long throughSequence)
+        { return ((IConversationInputReadStore)ForAddress(session)).ReadInputReceipt(session, operationId, throughSequence); }
 
         public IReadOnlyList<AgentRequestReference> ReadAgentRequests(ConversationMetadata session,
             IReadOnlyList<string> messageIds)

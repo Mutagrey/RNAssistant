@@ -266,12 +266,187 @@ namespace RNAssistant.Core.Storage
             return record;
         }
 
+        IReadOnlyList<ConversationInputRecord> IConversationInputReadStore.ReadCurrentInputs(
+            ConversationMetadata session, long throughSequence, InputDelivery? delivery)
+        {
+            return ReadInputProjection(session, throughSequence, delivery);
+        }
+
+        IReadOnlyList<ConversationInputRecord> IConversationInputReadStore.ReadInputChanges(
+            ConversationMetadata session, long afterSequence, long throughSequence)
+        {
+            if (afterSequence < 0 || throughSequence < afterSequence)
+                throw new ArgumentOutOfRangeException(nameof(afterSequence));
+            if (afterSequence == throughSequence) return new ConversationInputRecord[0];
+            RequireTextRoot();
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                return Access((db, cursor) => {
+                    var current = TextChat(db, session.Id); RequireInputReadPrefix(session, current, throughSequence);
+                    var messages = new List<string>();
+                    using (var command = Command(db, "SELECT t.message FROM input_transition t JOIN input_state i ON i.stream=t.stream AND i.message=t.message " +
+                        "WHERE t.stream=$stream AND i.recipient=$chat AND t.sequence>$after AND t.sequence<=$through " +
+                        "UNION SELECT message FROM input_state WHERE stream=$stream AND recipient=$chat AND accepted_sequence>$after AND accepted_sequence<=$through ORDER BY message LIMIT 129"))
+                    {
+                        command.Parameters.AddWithValue("$chat", session.Id); command.Parameters.AddWithValue("$after", afterSequence); command.Parameters.AddWithValue("$through", throughSequence);
+                        using (var reader = command.ExecuteReader()) while (reader.Read()) messages.Add(reader.GetString(0));
+                    }
+                    if (messages.Count > 128) throw new InvalidOperationException("Input change projection exceeds its bound.");
+                    var control = ControlAt(db, session.Id, throughSequence);
+                    var result = messages.Select(message => ProjectInputRecord(db, session, message,
+                        InputAt(db, message, throughSequence), control)).Where(item => item != null).ToList();
+                    if (control != null && control.Item2.Sequence > afterSequence)
+                        result.Add(ProjectInputRecord(db, session, null, null, control));
+                    return (IReadOnlyList<ConversationInputRecord>)result.OrderBy(item => item.Event.Sequence).ToArray();
+                }, CancellationToken.None);
+            }
+        }
+
+        IReadOnlyList<ConversationInputRecord> IConversationInputReadStore.ReadInputReceipt(
+            ConversationMetadata session, string operationId, long throughSequence)
+        {
+            if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128)
+                throw new ArgumentException("A bounded operation ID is required.", nameof(operationId));
+            RequireTextRoot();
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                return Access((db, cursor) => {
+                    var current = TextChat(db, session.Id);
+                    if (current == null && throughSequence == 0 && IsTransientInputRead(db, session))
+                        return (IReadOnlyList<ConversationInputRecord>)new ConversationInputRecord[0];
+                    RequireInputReadPrefix(session, current, throughSequence);
+                    string message = null; long acceptedSequence = 0;
+                    using (var command = Command(db, "SELECT message,accepted_sequence FROM input_state WHERE stream=$stream AND recipient=$chat AND request_id=$request"))
+                    {
+                        command.Parameters.AddWithValue("$chat", session.Id); command.Parameters.AddWithValue("$request", operationId);
+                        using (var reader = command.ExecuteReader()) if (reader.Read()) { message = reader.GetString(0); acceptedSequence = reader.GetInt64(1); }
+                    }
+                    if (message == null || acceptedSequence <= 0 || acceptedSequence > throughSequence)
+                        return (IReadOnlyList<ConversationInputRecord>)new ConversationInputRecord[0];
+                    var initialPosition = ChatPosition(db, session.Id, acceptedSequence);
+                    if (initialPosition == null) throw new InvalidDataException("Input receipt lost its accepted operation.");
+                    var initial = DecodeInputState(Journal.Read(initialPosition), message);
+                    var currentState = InputAt(db, message, throughSequence);
+                    if (currentState == null || initial?.Header == null || currentState.Item1?.Header == null ||
+                        initial.Header.OperationId != operationId || currentState.Item1.Header.OperationId != operationId)
+                        throw new InvalidDataException("Input receipt identity is unavailable.");
+                    ConversationInputJournal.RequireSameIdentity(initial.Header, currentState.Item1.Header);
+                    var control = ControlAt(db, session.Id, throughSequence);
+                    return (IReadOnlyList<ConversationInputRecord>)new[] {
+                        ProjectInputRecord(db, session, message, Tuple.Create(initial, Journal.Read(initialPosition), initialPosition), control, hydrateText: false),
+                        ProjectInputRecord(db, session, message, currentState, control, hydrateText: false) };
+                }, CancellationToken.None);
+            }
+        }
+
+        private static void RequireInputReadPrefix(ConversationMetadata metadata, ConversationChatReceipt current,
+            long throughSequence)
+        {
+            if (metadata == null || current == null || throughSequence < 0 || throughSequence > current.Position.Sequence ||
+                metadata.Id != current.Fact.Card.ChatId || !MatchesAddress(current, metadata.Host, metadata.DocumentKey) ||
+                metadata.WorkspaceId != current.Fact.Card.Address.WorkspaceId ||
+                metadata.DocumentAuthorityId != current.Fact.Card.Address.DocumentAuthorityId)
+                throw new ChatConcurrencyException("The input read requires an exact observed chat prefix and scope.");
+        }
+
+        private IReadOnlyList<ConversationInputRecord> ReadInputProjection(ConversationMetadata session,
+            long throughSequence, InputDelivery? delivery)
+        {
+            RequireTextRoot();
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                return Access((db, cursor) => {
+                    var current = TextChat(db, session.Id);
+                    if (current == null && throughSequence == 0 && IsTransientInputRead(db, session))
+                        return (IReadOnlyList<ConversationInputRecord>)new ConversationInputRecord[0];
+                    RequireInputReadPrefix(session, current, throughSequence);
+                    var messages = new List<string>();
+                    using (var command = Command(db, "SELECT message FROM input_state WHERE stream=$stream AND recipient=$chat AND " +
+                        "((status IN ('Pending','Delivering') AND sequence<=$through) OR sequence>$through) ORDER BY accepted_sequence LIMIT 129"))
+                    {
+                        command.Parameters.AddWithValue("$chat", session.Id); command.Parameters.AddWithValue("$through", throughSequence);
+                        using (var reader = command.ExecuteReader()) while (reader.Read()) messages.Add(reader.GetString(0));
+                    }
+                    if (messages.Count > 128) throw new InvalidOperationException("Pending input projection exceeds its bound.");
+                    var control = ControlAt(db, session.Id, throughSequence);
+                    var result = new List<ConversationInputRecord>();
+                    foreach (var message in messages)
+                    {
+                        var state = InputAt(db, message, throughSequence);
+                        if (state?.Item1?.Header == null ||
+                            state.Item1.Status != ConversationInputStatus.Pending && state.Item1.Status != ConversationInputStatus.Delivering ||
+                            delivery.HasValue && state.Item1.Header.Delivery != delivery.Value) continue;
+                        result.Add(ProjectInputRecord(db, session, message, state, control));
+                    }
+                    if (control != null) result.Add(ProjectInputRecord(db, session, null, null, control));
+                    return (IReadOnlyList<ConversationInputRecord>)result.OrderBy(item => item.Event.Sequence).ToArray();
+                }, CancellationToken.None);
+            }
+        }
+
+        private Tuple<ConversationInputState, JournalRecord, JournalCursor> InputAt(SqliteConnection db,
+            string message, long throughSequence)
+        {
+            JournalCursor currentPosition;
+            var current = InputRecord(db, message, null, out currentPosition);
+            if (current == null) return null;
+            if (currentPosition.Sequence <= throughSequence)
+                return Tuple.Create(DecodeInputState(current, message), current, currentPosition);
+            using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM input_transition " +
+                "WHERE stream=$stream AND message=$message AND sequence<=$through ORDER BY sequence DESC LIMIT 1"))
+            {
+                command.Parameters.AddWithValue("$message", message); command.Parameters.AddWithValue("$through", throughSequence);
+                JournalCursor position; var record = LocatedRecord(command, out position);
+                return record == null ? null : Tuple.Create(DecodeInputState(record, message), record, position);
+            }
+        }
+
+        private Tuple<ConversationQueueControl, JournalCursor> ControlAt(SqliteConnection db, string chat, long throughSequence)
+        {
+            string operation;
+            using (var command = Command(db, "SELECT operation FROM control_fact WHERE stream=$stream AND chat=$chat AND sequence<=$through ORDER BY sequence DESC LIMIT 1"))
+            {
+                command.Parameters.AddWithValue("$chat", chat); command.Parameters.AddWithValue("$through", throughSequence);
+                operation = command.ExecuteScalar() as string;
+            }
+            var receipt = operation == null ? null : FindControl(db, operation);
+            return receipt == null ? null : Tuple.Create(receipt.Fact, receipt.Position);
+        }
+
+        private ConversationInputRecord ProjectInputRecord(SqliteConnection db, ConversationMetadata session,
+            string message, Tuple<ConversationInputState, JournalRecord, JournalCursor> selected,
+            Tuple<ConversationQueueControl, JournalCursor> control, bool hydrateText = true)
+        {
+            var state = selected?.Item1;
+            var record = selected?.Item2;
+            var position = selected?.Item3 ?? control?.Item2;
+            if (position == null) return null;
+            if (state?.Recipient != null && state.Recipient != session.Id) throw new InvalidDataException("Foreign input recipient.");
+            var change = control == null ? new ConversationInputEvent { Input = state?.Header } : ProjectQueueControl(control.Item1, state?.Header);
+            if (change.Input != null && hydrateText)
+                change.Input.Text = ReadChatBody(state.Body);
+            return new ConversationInputRecord(new SessionEvent {
+                SessionId = session.Id, Sequence = position.Sequence, EventId = record?.Operation,
+                CreatedUtc = state?.Header != null ? state.Header.CreatedUtc :
+                    control?.Item1?.Origin != null ? control.Item1.Origin.CreatedUtc :
+                    control?.Item1?.CreatedUtc ?? DateTime.UtcNow, Hash = position.Hash,
+                Type = SessionEventTypes.ConversationInputChanged, Payload = state?.Body?.ToBlobReference(),
+                RunId = state?.RunId, TurnId = state?.RunId, Data = JObject.FromObject(change)
+            }, change);
+        }
+
         private JournalRecord InputRecord(SqliteConnection db, string message, long? through = null)
+        {
+            JournalCursor ignored;
+            return InputRecord(db, message, through, out ignored);
+        }
+
+        private JournalRecord InputRecord(SqliteConnection db, string message, long? through, out JournalCursor position)
         {
             using (var command = Command(db, "SELECT operation,fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM input_state WHERE stream=$stream AND message=$message"))
             {
                 command.Parameters.AddWithValue("$message", message);
-                JournalCursor position; var record = LocatedRecord(command, out position);
+                var record = LocatedRecord(command, out position);
                 if (through.HasValue && position?.Sequence > through.Value) throw new InvalidDataException("Input is beyond the observed chat revision.");
                 return record;
             }
@@ -280,6 +455,11 @@ namespace RNAssistant.Core.Storage
         private ConversationInputState InputState(SqliteConnection db, string message, long? through = null)
         {
             var record = InputRecord(db, message, through);
+            return DecodeInputState(record, message);
+        }
+
+        private static ConversationInputState DecodeInputState(JournalRecord record, string message)
+        {
             if (record == null) return null;
             ConversationInputState state;
             if (record.Kind == "agent.accepted" || record.Kind == "agent.spawned")
@@ -291,6 +471,7 @@ namespace RNAssistant.Core.Storage
             if (state.MessageId != message) throw new InvalidDataException("Foreign input state.");
             return state;
         }
+
 
         private bool Participant(SqliteConnection db, string chain, string chat)
         {

@@ -49,5 +49,78 @@ namespace RNAssistant.Harness
                 RuntimeThrows<ChatConcurrencyException>(() => events.Read(initial, SessionEventReadMode.RequireCompleteInputJournal));
             });
         }
+
+        private static void JournalBoundedInputReads()
+        {
+            WithTempPaths(paths => {
+                var journal = new ConversationJournal(paths, "workspace:bounded-inputs");
+                IConversationStore store = journal;
+                var session = store.CreateTransient("Workspace", "bounded-inputs", "Bounded inputs", "Bounded inputs");
+                store.Commit(session, new ConversationCommit());
+                var inbox = new ConversationInboxService(journal);
+                var fingerprints = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
+                for (var index = 0; index < 100; index++)
+                {
+                    var operation = "input-" + index;
+                    var input = InboxInput(operation, "Pending " + index, InputDelivery.Queue);
+                    fingerprints[operation] = input.RequestFingerprint;
+                    inbox.Submit(session, input);
+                }
+                var allPendingRevision = session.Revision;
+                for (var index = 0; index < 100; index += 2)
+                    inbox.Update(session, new ConversationInputUpdate { InputId = "input-" + index,
+                        ExpectedRevision = 1, Text = null }, "remove");
+                var edited = inbox.Find(session, "input-1");
+                for (var revision = 1; revision <= 12; revision++)
+                {
+                    var update = inbox.Update(session, new ConversationInputUpdate { InputId = "input-1",
+                        ExpectedRevision = revision, Text = "Edited " + revision }, "edit-" + revision);
+                    edited = update;
+                }
+
+                var port = (IConversationInputReadStore)journal;
+                var reads = journal.Journal.ReadRecords;
+                var bodies = journal.ChatBodyReads;
+                var receipt = port.ReadInputReceipt(ConversationMetadata.From(session), "input-74", session.Revision);
+                AssertEqual(2, receipt.Count, "exact receipt returns only the accepted and current versions");
+                AssertEqual(1L, receipt[0].Change.Input.Revision, "receipt preserves the original accepted revision");
+                AssertEqual(ConversationInputStatus.Removed, receipt[1].Change.Input.Status,
+                    "receipt observes the current terminal transition");
+                var receiptRecords = journal.Journal.ReadRecords - reads;
+                var receiptBodies = journal.ChatBodyReads - bodies;
+                AssertEqual(0L, receiptBodies, "receipt metadata does not hydrate historical input text");
+                AssertTrue(receiptRecords <= 8,
+                    "receipt reads exact indexed transitions instead of all input history");
+
+                reads = journal.Journal.ReadRecords; bodies = journal.ChatBodyReads;
+                var current = port.ReadCurrentInputs(ConversationMetadata.From(session), session.Revision)
+                    .Where(item => item.Change.Input != null).ToArray();
+                AssertEqual(50, current.Length, "current projection contains only undelivered inputs");
+                AssertTrue(current.All(item => item.Change.Input.Status == ConversationInputStatus.Pending),
+                    "removed inputs stay outside the pending projection");
+                var pendingBodies = journal.ChatBodyReads - bodies;
+                var pendingRecords = journal.Journal.ReadRecords - reads;
+                AssertEqual(50L, pendingBodies, "pending projection hydrates one body per current input");
+                AssertTrue(pendingRecords <= 300,
+                    "pending reads stay proportional to the queue rather than transition history");
+                Console.WriteLine("journal-input-reads H=100: receiptRecords={0}, receiptBodies={1}, pendingRecords={2}, pendingBodies={3}",
+                    receiptRecords, receiptBodies, pendingRecords, pendingBodies);
+
+                var stale = port.ReadCurrentInputs(ConversationMetadata.From(session), allPendingRevision)
+                    .Where(item => item.Change.Input != null).ToArray();
+                AssertEqual(100, stale.Length, "a stale revision reads its exact pending prefix");
+                AssertEqual(1L, stale.Single(item => item.Change.Input.Id == "input-0").Change.Input.Revision,
+                    "stale projection does not expose later removal");
+
+                journal.Rebuild();
+                var reopened = (IConversationInputReadStore)new ConversationJournal(paths, "workspace:bounded-inputs");
+                var restored = reopened.ReadInputReceipt(ConversationMetadata.From(session), "input-1", session.Revision);
+                AssertEqual(13L, restored[1].Change.Input.Revision,
+                    "rebuild preserves the exact current input revision");
+                AssertEqual("Edited 12", reopened.ReadCurrentInputs(ConversationMetadata.From(session), session.Revision)
+                    .Single(item => item.Change.Input?.Id == "input-1").Change.Input.Text,
+                    "bounded pending read hydrates the current body after rebuild");
+            });
+        }
     }
 }
