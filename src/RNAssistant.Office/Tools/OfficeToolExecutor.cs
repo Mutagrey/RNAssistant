@@ -758,7 +758,13 @@ namespace RNAssistant.Office.Tools
                     false, false, new[] { "agent" }, 1)), id, id, id, DateTime.UtcNow, true, 1);
             var observer = new ResourceMutationAuthorityObserver(_resourceAuthority, _resourceMutationJournal, session, Payloads,
                 captureCatalog: _catalogPublication.CaptureReadBack);
-            var attempt = observer.Prepare(context, args);
+            string attempt;
+            try { attempt = observer.Prepare(context, args); }
+            catch (ResourceAuthorityConflictException)
+            {
+                throw new ResourceRequestException("The catalog changed. Refresh before saving.",
+                    "RESOURCE_REVISION_CHANGED", false);
+            }
             var publicationStarted = false;
             var dispatched = false;
             try

@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.10-dev
+
+- Сохранение устаревшей редакторской версии prompt/catalog снова возвращает typed
+  `RESOURCE_REVISION_CHANGED` вместо необёрнутого authority-conflict. UI получает
+  точную причину обновить source и не повторяет запись автоматически.
+
 ### 17.3.9-dev
 
 - Workspace-продолжения используют общий validator принятой конфигурации запуска

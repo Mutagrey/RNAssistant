@@ -34,6 +34,7 @@ namespace RNAssistant.Harness
                 AssertTrue(JObject.FromObject(new InitResponse { Settings = controls, Prompts = metadata })["settings"]["PlanSystemPrompt"] == null,
                     "initialization uses the same body-free control type");
                 var expectedControls = JObject.FromObject(settings);
+                expectedControls.Remove(nameof(AppSettings.DiagnosticLogs));
                 foreach (var key in PromptSettingsService.TemplateKeys.Where(key => key != "systemPromptRole"))
                     expectedControls.Remove(char.ToUpperInvariant(key[0]) + key.Substring(1));
                 AssertTrue(JToken.DeepEquals(expectedControls, JObject.FromObject(controls)), "all non-body settings controls are retained");
@@ -111,7 +112,9 @@ namespace RNAssistant.Harness
                     AssertEqual(0, settings.AgentPromptSchemaVersion, "ordinary save does not acknowledge prompt review");
                     AssertTrue(executor.GetPromptLibrary().Publication.Revision != metadata.Publication.Revision, "verified save publishes its new exact root");
                     var count = executor.ResourceAuthority.CaptureMany(new[] { CatalogPublicationService.ScopeId }).Get(CatalogPublicationService.ScopeId).Generation;
-                    RuntimeThrows<ResourceRequestException>(() => executor.SaveSettingsControls(settings, request, parsed, value => saves++));
+                    AssertEqual("RESOURCE_REVISION_CHANGED",
+                        RuntimeThrows<ResourceRequestException>(() => executor.SaveSettingsControls(settings, request, parsed, value => saves++)).ErrorCode,
+                        "stale prompt publication returns the typed refresh error");
                     AssertEqual(1, saves, "stale snapshot never dispatches another write");
                     AssertEqual(count, executor.ResourceAuthority.CaptureMany(new[] { CatalogPublicationService.ScopeId }).Get(CatalogPublicationService.ScopeId).Generation, "stale refusal does not poison the head");
                     AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "refused preparation is abandoned before dispatch");
