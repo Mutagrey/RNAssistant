@@ -342,6 +342,30 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void JournalIndexAdmissionBoundedWait()
+        {
+            WithTempPaths(paths => {
+                var lockPath = Path.Combine(paths.Root, "locks", "index-sections.lck");
+                Directory.CreateDirectory(Path.GetDirectoryName(lockPath));
+                using (var held = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                {
+                    var clock = Stopwatch.StartNew();
+                    WorkspaceFileException refused = null;
+                    try { JournalIndexAdmission.Enter(paths, CancellationToken.None, TimeSpan.FromMilliseconds(50)).Dispose(); }
+                    catch (WorkspaceFileException error) { refused = error; }
+                    clock.Stop();
+                    AssertEqual("index_sections_busy", refused == null ? null : refused.Code,
+                        "a blocked index section has a typed bounded failure");
+                    AssertTrue(clock.ElapsedMilliseconds < 5000, "commit admission cannot wait indefinitely for a held section");
+                }
+                using (JournalIndexAdmission.Enter(paths, CancellationToken.None, TimeSpan.FromMilliseconds(50)))
+                {
+                    AssertTrue(File.Exists(Path.Combine(paths.Root, "locks", "index-repair.lck")),
+                        "the intent lease is released after a bounded section failure");
+                }
+            });
+        }
+
         private static void StorageJournalDurability()
         {
             foreach (var encrypted in new[] { false, true })

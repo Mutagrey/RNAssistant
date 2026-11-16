@@ -845,6 +845,7 @@ namespace RNAssistant.Harness
                 Test("journal text: bounded metadata header and append", JournalTextChatCostCurve),
                 Test("storage optimization: retained results queries and context", RetainedResultsQueriesAndContext),
                 Test("storage optimization: shared index repair and processes", ConversationJournalRepairAndProcesses),
+                Test("storage optimization: journal index admission is bounded", JournalIndexAdmissionBoundedWait),
                 Test("storage optimization: resource publication and late outcome", ResourceJournalPublicationAndLateOutcome),
                 Test("storage optimization: atomic agent delivery and wait", ConversationJournalDeliveryAndWait),
                 Test("storage optimization: agent delivery process races", ConversationJournalDeliveryProcessRaces),

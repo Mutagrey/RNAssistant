@@ -8,31 +8,36 @@ namespace RNAssistant.Core.Storage
     // run, a CAS activity or a resource effect gate. Repair drains only sections.
     internal static class JournalIndexAdmission
     {
-        internal static IDisposable Enter(AppDataPaths paths, CancellationToken token)
+        internal static IDisposable Enter(AppDataPaths paths, CancellationToken token,
+            TimeSpan? timeout = null)
         {
-            using (WaitForLock(Intent(paths), token))
-                return new FileStream(Sections(paths), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
+            using (WaitForLock(Intent(paths), token, timeout))
+                return WaitForLock(Sections(paths), token, timeout);
         }
 
         internal static IDisposable Repair(AppDataPaths paths, CancellationToken token)
         {
-            var intent = WaitForLock(Intent(paths), token);
-            try { return new RepairLease(intent, WaitForLock(Sections(paths), token)); }
+            var intent = WaitForLock(Intent(paths), token, null);
+            try { return new RepairLease(intent, WaitForLock(Sections(paths), token, null)); }
             catch { intent.Dispose(); throw; }
         }
 
         private static string Intent(AppDataPaths paths) { return Path.Combine(paths.Root, "locks", "index-repair.lck"); }
         private static string Sections(AppDataPaths paths) { return Path.Combine(paths.Root, "locks", "index-sections.lck"); }
 
-        private static IDisposable WaitForLock(string path, CancellationToken token)
+        private static IDisposable WaitForLock(string path, CancellationToken token, TimeSpan? timeout)
         {
             StorageFileSystem.EnsureRegularDirectory(Path.GetDirectoryName(path));
+            var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(30));
             while (true)
             {
                 token.ThrowIfCancellationRequested();
                 try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
                 catch (IOException error) when (IsSharingConflict(error))
                 {
+                    if (DateTime.UtcNow >= deadline)
+                        throw new WorkspaceFileException("index_sections_busy",
+                            "Не удалось получить доступ к секциям индекса. Повторите после завершения другой операции.");
                     // A full streaming repair may exceed the short append-lock
                     // timeout. Park with cancellation; unrelated I/O errors surface.
                     if (token.CanBeCanceled) token.WaitHandle.WaitOne(20); else Thread.Sleep(20);
@@ -43,7 +48,7 @@ namespace RNAssistant.Core.Storage
         private static bool IsSharingConflict(IOException error)
         {
             var code = error.HResult & 0xffff;
-            return code == 32 || code == 33 || Environment.OSVersion.Platform != PlatformID.Win32NT && (code == 11 || code == 35);
+            return code == 32 || code == 33 || Environment.OSVersion.Platform != PlatformID.Win32NT && (code == 11 || code == 13 || code == 35);
         }
 
         private sealed class RepairLease : IDisposable

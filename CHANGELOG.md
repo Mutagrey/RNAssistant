@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.13-dev
+
+- Ожидание доступа к секциям индекса журнала больше не бесконечно: обычные commit/read
+  операции получают typed `index_sections_busy` после bounded deadline. Полный repair
+  по-прежнему не ограничивается этим сроком; сама durable запись остаётся обязательной.
+
 ### 17.3.12-dev
 
 - Редактирование существующих tools/skills/prompts снова публикуется после точной
