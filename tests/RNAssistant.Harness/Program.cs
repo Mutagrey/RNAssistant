@@ -717,7 +717,7 @@ namespace RNAssistant.Harness
                 Test("native tools: routed VBA delete and explicit restore", NativeToolsVbaDeleteRestore),
                 Test("native tools: catalog skill mutation", NativeCatalogSkillMutation),
                 Test("native tools: self rename and no-op", NativeCatalogSelfRename),
-                Test("native tools: addressed rename refuses before mutation", NativeCatalogAddressedRenameRefused),
+                Test("native tools: addressed rename retains exact target receipt", NativeCatalogAddressedRename),
                 Test("journal mutation: unknown and authority acknowledgement", JournalMutationUnknown),
                 Test("journal mutation: terminal acknowledgement", JournalMutationTerminalReceipt),
                 Test("journal HTML: Office kernel and selected projection", JournalHtmlRuntime),

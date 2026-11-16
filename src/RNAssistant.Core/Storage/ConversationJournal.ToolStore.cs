@@ -156,17 +156,38 @@ namespace RNAssistant.Core.Storage
             [JsonProperty("agent_id")] public string AgentId { get; set; }
         }
 
-        private bool ValidateSelfRename(SqliteConnection db, ConversationChatCommit fact, Dictionary<string, ContextCallKey> keys)
+        private bool ValidateRename(SqliteConnection db, ConversationChatCommit fact, Dictionary<string, ContextCallKey> keys)
         {
             if (fact.Tools.ToolName != ChatRenameToolHandler.ToolId ||
                 fact.Tools.Terminal.Result.ExecutionProgress.Outcome != ToolExecutionOutcome.Ok) return false;
             var call = AcceptedRuntimeCall(db, fact, keys);
             var args = JsonConvert.DeserializeObject<RenameArguments>(call.ArgumentsJson);
             var title = args?.Title?.Trim();
+            ToolResultWireReadResult wire; string wireError; ChatRenameResult result;
+            try { result = ToolResultHistoryReader.TryRead(fact.Tools.Terminal.Result, out wire, out wireError)
+                    ? JsonConvert.DeserializeObject<ChatRenameResult>(wire.Result.DataJson) : null; }
+            catch (JsonException) { result = null; }
+            if (call.Name != ChatRenameToolHandler.ToolId || string.IsNullOrWhiteSpace(title) || title.Length > 200 ||
+                title.Any(char.IsControl) || result == null || result.Title != title)
+                throw new InvalidDataException("Rename requires its exact accepted target and result title.");
+            if (!string.IsNullOrWhiteSpace(args.AgentId) && args.AgentId != AgentChatAddress.IdFor(fact.Card.ChatId))
+            {
+                var expectedOperation = ChatRenameToolHandler.AddressedOperationId(fact.Card.ChatId,
+                    fact.Run.RunId, fact.Tools.CallId, args.AgentId, title);
+                var target = FindChatWrite(db, expectedOperation);
+                if (result.AgentId != args.AgentId || result.TargetOperationId != expectedOperation ||
+                    !result.TargetRevision.HasValue ||
+                    target == null || target.Fact.Card.ChatId == fact.Card.ChatId ||
+                    AgentChatAddress.IdFor(target.Fact.Card.ChatId) != args.AgentId ||
+                    target.Fact.Card.Title != title || !target.Fact.Card.TitleAssignedByAgent ||
+                    target.Position.Sequence != result.TargetRevision.Value ||
+                    fact.Tools.Terminal.ResourceOutcome != null || fact.Tools.Terminal.Result.ResourceEffect != null)
+                    throw new InvalidDataException("Addressed rename requires its exact target metadata receipt.");
+                return true;
+            }
             var prior = TextChat(db, fact.Card.ChatId)?.Fact.Card;
             var changed = prior != null && (prior.Title != title || !prior.TitleAssignedByAgent);
-            if (call.Name != ChatRenameToolHandler.ToolId || string.IsNullOrWhiteSpace(title) || title.Length > 200 || title.Any(char.IsControl) ||
-                args.AgentId != null && args.AgentId != AgentChatAddress.IdFor(fact.Card.ChatId) || prior == null ||
+            if (args.AgentId != null && args.AgentId != AgentChatAddress.IdFor(fact.Card.ChatId) || prior == null ||
                 fact.Card.Title != title || !fact.Card.TitleAssignedByAgent || fact.Tools.NoEffect == changed ||
                 fact.Tools.Terminal.ResourceOutcome != null || fact.Tools.Terminal.Result.ResourceEffect != null)
                 throw new InvalidDataException("Rename requires its exact accepted self target and atomic metadata change.");
@@ -210,7 +231,7 @@ namespace RNAssistant.Core.Storage
                     tools.Terminal.Result.ResultStepId != tools.StepId) throw new InvalidDataException("Foreign kernel terminal.");
                 ValidateResult(db, tools.Terminal, record.Operation, true); ValidateOutcome(tools.Terminal, outcome);
                 var progress = tools.Terminal.Result.ExecutionProgress;
-                var selfRename = ValidateSelfRename(db, fact, keys);
+                var rename = ValidateRename(db, fact, keys);
                 if (tools.Terminal.Result.ResourceEffect?.Targets != null)
                 {
                     var call = AcceptedRuntimeCall(db, fact, keys);
@@ -240,7 +261,7 @@ namespace RNAssistant.Core.Storage
                 if (peer != null && (peer.Fact.Input == null || peer.Position.Sequence > fact.ExpectedRevision ||
                     tools.NoEffect || progress.Outcome == ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Peer terminal contradicts its exact accepted delivery.");
-                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null : peer == null && spawn == null && control == null && !selfRename &&
+                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null : peer == null && spawn == null && control == null && !rename &&
                     !tools.NoEffect && progress.Outcome != ToolExecutionOutcome.Unknown && progress.Outcome != ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Possible resource effects require exact linked proof or an unknown terminal.");
                 if (progress.Outcome != ToolExecutionOutcome.NotDispatched && StartedOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) == null)

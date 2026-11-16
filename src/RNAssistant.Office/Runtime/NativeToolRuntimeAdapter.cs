@@ -263,7 +263,7 @@ namespace RNAssistant.Office.Runtime
                 {
                     binding = ChatRenameToolHandler.Binding;
                     handler = new ChatRenameToolHandler(session, chatCatalog.Rename,
-                        (mutationObserver as ResourceMutationAuthorityObserver)?.HasConversationOrigin != true);
+                        (mutationObserver as ResourceMutationAuthorityObserver)?.HasConversationOrigin == true);
                 }
                 else if (AgentCommunicationToolCatalog.Owns(registration.Descriptor.Id))
                 {

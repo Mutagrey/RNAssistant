@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.15-dev
+
+- Native `chat.rename` снова поддерживает точное переименование другой вкладки.
+  Исходный tool result хранит детерминированный target OperationId и revision;
+  journal принимает успех только после проверки самого target metadata commit.
+  Source chat не меняется, stale/busy target отклоняется до dispatch.
+
 ### 17.3.14-dev
 
 - Вход в полный repair индекса журнала теперь тоже имеет bounded ожидание (5 минут);

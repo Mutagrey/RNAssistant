@@ -27,13 +27,7 @@ Remaining work, in order:
    failure, stale second target, lost ACK before/after publication, restart and no
    replay. Do not replace the receipts with a synthetic aggregate or a tool-name
    exception; increase the advertised limit only with that proof.
-2. ConversationCatalogAccess / ConversationJournal: addressed `chat.rename` needs
-   an exact target metadata commit receipt linked to the source call. Native
-   schema currently exposes self only and handler rejects stale addressed calls
-   before mutation. Acceptance: current/foreign workspace scope, observed revision,
-   busy target, target deletion, lost ACK and both chat rebuilds; no source-chat
-   substitution. Same-chat atomic rename is covered by the corrective patch.
-3. Add a production-composition execution matrix for the remaining published
+2. Add a production-composition execution matrix for the remaining published
    mutation families (Word/PowerPoint, move/copy, prompt/catalog and plugin owners).
    A descriptor or fake legacy adapter test alone is insufficient. Verify
    prepare → source dispatch → exact owner publication → terminal → reopen/rebuild,
@@ -45,6 +39,10 @@ import; use photos only. Legacy import and bounded native context-port wiring ar
 already in `06664fc`; do not reopen them as missing implementation. Full mixed
 application backup, bounded full-session/inbox reads and existing Workspace missing
 chat polling tasks remain independent.
+
+Addressed `chat.rename` is closed host-neutral in `17.3.15-dev`: exact target metadata
+receipts cover observed revision, busy/deleted/stale refusal, lost acknowledgement and
+source/target rebuild isolation.
 
 ## Remaining storage consumers after native cutover — audit 2026-11-16
 

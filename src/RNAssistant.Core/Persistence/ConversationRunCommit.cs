@@ -38,6 +38,14 @@ namespace RNAssistant.Core.Persistence
                 throw new ArgumentException("Message writes and removals require distinct exact identities.");
         }
 
+        internal ConversationCommit(string operationId, IEnumerable<ChatMessage> updated = null,
+            IEnumerable<string> removed = null) : this(updated, removed)
+        {
+            if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 128)
+                throw new ArgumentException("A bounded operation identity is required.", nameof(operationId));
+            OperationId = operationId;
+        }
+
         public static ConversationCommit UserInput(ChatMessage message, IEnumerable<ChatMessage> updated = null)
         { return Append(SessionOperationTypes.UserMessageAppended, message, updated); }
 

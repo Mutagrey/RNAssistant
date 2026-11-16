@@ -17,13 +17,13 @@ follow an explicit rename request. Use a concise, specific title in the user's
 language; preserve explicitly user-chosen names unless the user requests a rename,
 and avoid per-step or cosmetic renames. This does not require loading a skill.
 
-`chat.rename` v2 takes `title` (trimmed, nonempty single line, at most 200 characters).
-The current native Office/Workspace/plugin profile exposes only that self-title field;
-Core `ChatRenameToolHandler` updates the bound session and the kernel persists the result.
-The generic v2 handler retains its non-native addressed path for existing consumers,
-but native descriptors remove `agent_id` and reject a stale addressed request before
-any mutation. Addressed native rename remains unavailable until its exact target
-metadata commit receipt is implemented; it must not rename the source chat as a fallback.
+`chat.rename` v2 takes `title` (trimmed, nonempty single line, at most 200 characters)
+and optional `agent_id`. Native Office/Workspace/plugin profiles require the target chat
+to be observed through `core.read` first. The target must be idle, current and in the
+same document/project scope. The source terminal retains a deterministic target
+OperationId and revision; the journal accepts it only after validating that exact target
+metadata commit. A stale, busy, unavailable or substituted target never renames the
+source as a fallback.
 
 The shared Application owner acquires the existing exact chat reservation, rejects
 live/queued workers, unavailable or incompatible chats and stale observations,
@@ -31,10 +31,11 @@ then uses `ChatStore.SetAgentTitle` / `CommitScalarMetadata`. It appends only ti
 TitleAssignedByAgent and UpdatedUtc; it never saves a detached whole history over a
 Run. The target is not started, stopped or resumed. A race at persistence still
 uses existing CAS; a storage failure after dispatch stays unknown and is not retried.
-A saved rename with failed UI notification returns a refresh warning.
+A saved rename with failed UI notification returns a refresh warning. Lost target
+acknowledgement is read back from the deterministic operation and is not replayed.
 Exact binding `conversation.chat.rename.v2` permits this metadata write in Agent
 and Plan without confirmation, independently of document mutation policy.
-The non-native addressed path also obeys the current agent-enabled setting and bound scope.
+The addressed path also obeys the current agent-enabled setting and bound scope.
 
 Runtime draft/smart naming remains available until the agent assigns a title.
 The durable `TitleAssignedByAgent` metadata then prevents fallback or late smart

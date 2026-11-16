@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Addressed native chat rename — 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.15-dev`. Native Office/Workspace/plugin
+profiles expose addressed `chat.rename` again. The source tool call derives one bounded
+target OperationId from the exact source chat/run/call, target agent address and title.
+The target metadata commit is written first; the source kernel terminal retains that
+OperationId and target revision. `ConversationJournal` accepts the terminal only after
+locating the exact target commit, title/ownership, agent address and revision. Lost
+target acknowledgement is recovered from the committed metadata without replaying the
+rename. Stale, busy, unavailable or source-substituting targets remain rejected before
+dispatch.
+
+`native tools: addressed rename retains exact target receipt`, ChatStore addressed
+guards and the Office/Workspace rename paths pass. The journal rebuild preserves the
+target title. Windows/Office/WebView2 qualification remains separate.
+
 ## Bounded journal index admission — 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.14-dev`. Normal conversation/resource

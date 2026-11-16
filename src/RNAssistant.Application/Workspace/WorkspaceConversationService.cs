@@ -1319,8 +1319,8 @@ namespace RNAssistant.Runtime
                 }
                 if (agentCommunication != null && agentCommunication.IsEnabled(settings.MaxCollaborationAgents)) foreach (var entry in AgentCommunicationToolCatalog.GetTools())
                     Register(registry, entries, entry, new AgentCommunicationToolHandler(agentCommunication, agentInbox, session, settings.MaxCollaborationAgents));
-                Register(registry, entries, ChatRenameToolHandler.Entry(mutationOrigin == null),
-                    new ChatRenameToolHandler(session, chatCatalog.Rename, mutationOrigin == null));
+                Register(registry, entries, ChatRenameToolHandler.Entry(mutationOrigin != null),
+                    new ChatRenameToolHandler(session, chatCatalog.Rename, mutationOrigin != null));
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);

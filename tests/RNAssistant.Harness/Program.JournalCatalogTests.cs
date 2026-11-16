@@ -51,10 +51,10 @@ namespace RNAssistant.Harness
                 access.Read(OverviewContext(target.Id, !office), 10000, CancellationToken.None);
                 AssertTrue(loaded == 0 && started == 0, "catalog/read never load execution state or start work");
                 store.SetTitle(target, "Concurrent title");
-                AssertEqual("chat_rename_stale", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Stale title", () => dispatches++)).ErrorCode,
+                AssertEqual("chat_rename_stale", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Stale title", "test-stale-rename", () => dispatches++)).ErrorCode,
                     "rename requires the exact observed revision");
                 access.Read(OverviewContext(target.Id, !office, "metadata"), 10000, CancellationToken.None);
-                access.Rename(id, "Addressed native title", () => dispatches++);
+                access.Rename(id, "Addressed native title", "test-addressed-native-title", () => dispatches++);
                 AssertEqual(1, dispatches, "only a fresh observed mutation dispatches");
                 target = store.Load(target.Id);
                 AssertTrue(target.TitleAssignedByAgent && target.Title == "Addressed native title", "native metadata preserves agent title attribution");

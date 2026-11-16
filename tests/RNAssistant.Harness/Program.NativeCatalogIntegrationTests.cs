@@ -2,9 +2,12 @@ using System;
 using System.Linq;
 using System.Threading;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 
@@ -80,7 +83,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void NativeCatalogAddressedRenameRefused()
+        private static void NativeCatalogAddressedRename()
         {
             WithNativeToolFixture(fixture => {
                 IConversationStore store = fixture.Router;
@@ -89,9 +92,40 @@ namespace RNAssistant.Harness
                 store.Commit(target, new ConversationCommit());
                 var targetRevision = target.Revision;
                 var sourceTitle = fixture.Session.Title;
+                var inbox = new ConversationInboxService(fixture.Router);
+                var agents = new AgentCommunicationService();
+                agents.Register(OverviewScope(store, inbox, fixture.Session, fixture.Paths));
+                fixture.Executor.AgentCommunication = agents; fixture.Executor.AgentInbox = inbox;
                 var published = fixture.Executor.GetControllerTools().Single(entry => entry.Id == ChatRenameToolHandler.ToolId);
-                AssertTrue(JObject.Parse(published.ArgumentSchemaJson)["properties"]["agent_id"] == null,
-                    "the native catalog exposes only self rename");
+                AssertTrue(JObject.Parse(published.ArgumentSchemaJson)["properties"]["agent_id"] != null,
+                    "the native catalog exposes addressed rename");
+                var address = AgentChatAddress.IdFor(target.Id);
+                const string addressedTitle = "Chess research";
+                RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.find", new JObject { ["scope"] = "chats", ["query"] = address }),
+                    NativeCall("core.read", new JObject { ["target"] = ConversationCatalogAccess.TargetPrefix + address }),
+                    NativeCall(ChatRenameToolHandler.ToolId, new JObject { ["title"] = addressedTitle, ["agent_id"] = address })
+                }, () => ScriptedVerifiedFinish(fixture.Session, "The exact other chat was renamed.",
+                    "Renamed another chat.", "Addressed chat renamed.", ChatRenameToolHandler.ToolId));
+
+                var renamed = store.Load(target.Id);
+                AssertEqual(addressedTitle, renamed.Title, "the native target metadata commit stores the addressed title");
+                AssertTrue(renamed.TitleAssignedByAgent, "addressed rename records agent naming ownership");
+                AssertTrue(renamed.Revision > targetRevision, "addressed rename appends one target metadata commit");
+                AssertEqual(sourceTitle, store.Load(fixture.Session.Id).Title, "addressed rename does not rename the source");
+                var terminal = NativeTerminal(fixture, ChatRenameToolHandler.ToolId);
+                ToolResultWireReadResult wire; string wireError;
+                AssertTrue(ToolResultHistoryReader.TryRead(terminal, out wire, out wireError), wireError);
+                var receipt = Newtonsoft.Json.JsonConvert.DeserializeObject<ChatRenameResult>(wire.Result.DataJson);
+                var expectedOperation = ChatRenameToolHandler.AddressedOperationId(fixture.Session.Id,
+                    terminal.RunId, terminal.ToolCallId, address, addressedTitle);
+                AssertEqual(expectedOperation, receipt.TargetOperationId,
+                    "source terminal retains the exact deterministic target operation");
+                AssertEqual(renamed.Revision, receipt.TargetRevision, "source terminal pins the exact target revision");
+                fixture.Journal.Rebuild();
+                AssertEqual(addressedTitle, store.Load(target.Id).Title, "rebuild preserves the exact target metadata commit");
+                AssertEqual(sourceTitle, store.Load(fixture.Session.Id).Title, "rebuild does not merge target history into source");
+                targetRevision = renamed.Revision;
 
                 // A stale or crafted registration must not bypass the native
                 // handler's refusal even if it still accepts the old argument.
@@ -107,7 +141,6 @@ namespace RNAssistant.Harness
                         return new ChatRenameResult { Title = target.Title, AgentId = agentId };
                     }, addressedRenameEnabled: false));
                 var runtime = new ToolRuntime(registry, ChatModes.Agent, false, false);
-                var address = AgentChatAddress.IdFor(target.Id);
                 var call = new ToolCall("native_addressed_rename", stale.Id,
                     new JObject { ["title"] = "Must not be applied", ["agent_id"] = address }.ToString());
                 var result = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call),
@@ -121,11 +154,9 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolEffectEvidence.None, result.Evidence.Effect, "refused rename has no effect evidence");
                 var retained = store.Load(target.Id);
                 AssertEqual(targetRevision, retained.Revision, "addressed refusal appends no target commit");
-                AssertEqual("Observed target", retained.Title, "addressed refusal preserves the target title");
-                AssertTrue(!retained.TitleAssignedByAgent, "addressed refusal preserves target naming ownership");
+                AssertEqual(addressedTitle, retained.Title, "addressed refusal preserves the exact target title");
+                AssertTrue(retained.TitleAssignedByAgent, "addressed refusal preserves target naming ownership");
                 AssertEqual(sourceTitle, store.Load(fixture.Session.Id).Title, "addressed refusal does not rename the source instead");
-                fixture.Journal.Rebuild();
-                AssertEqual(targetRevision, store.Load(target.Id).Revision, "rebuild cannot manufacture the refused metadata mutation");
             });
         }
     }

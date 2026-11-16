@@ -1,5 +1,12 @@
 # Current-to-target migration map
 
+## Addressed native chat rename — 2026-11-16
+
+Owner: `ConversationCatalogAccess`, `ChatRenameToolHandler` and
+`ConversationJournal.ToolStore`. The deterministic target commit is linked from the
+exact source tool terminal; no source-chat fallback, detached target history or second
+metadata store is used. Lost target ACK resolves against the same operation.
+
 ## Bounded journal index admission — 2026-11-16
 
 Owner: `JournalIndexAdmission`. Normal `Enter` now uses a bounded section wait and
@@ -31,14 +38,14 @@ optional immutable terminal witness in the existing prepared fact, not a new sto
 or retry registry. Old facts without the witness keep their existing fingerprint;
 new facts require the matching reader. No execution replay or legacy dual write.
 
-Two explicitly temporary capability bounds remain in native descriptors/handlers:
+One explicitly temporary capability bound remains in native descriptors/handlers:
 
 | Bound | Owner / removal criterion |
 | --- | --- |
 | One resource per `core.patch` call | ResourceJournal call-outcome binding + ConversationJournal terminal proof: retain every owner attempt/receipt per accepted call, prove exact per-target aggregation and restart/lost-ACK/partial behavior before increasing the native schema limit. |
-| `chat.rename` changes only the current chat | ConversationCatalogAccess + ConversationJournal: retain the exact target metadata commit linked to the source accepted call, including target scope/revision/lease and lost-ACK proof, before exposing `agent_id` again. |
 
-Self-title proof uses metadata in the same conversation terminal. The generic batch
+Self-title and addressed-title proof use exact metadata commits; addressed rename
+also verifies target address/revision from the source terminal. The generic batch
 handler and legacy fixture defaults are retained as existing consumers, not used
 as fallback by production. `06664fc` already contains explicit legacy import and
 `IConversationContextStore.RestoreWorkingSet` wiring; neither is replaced here.

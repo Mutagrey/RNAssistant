@@ -14,12 +14,18 @@ namespace RNAssistant.Core.Tools
         public const string ToolId = "chat.rename";
         public static readonly ToolBinding Binding = new ToolBinding("conversation.chat.rename.v2");
         private readonly ChatSession _session;
-        private readonly Func<string, string, Action, ChatRenameResult> _renameOther;
+        private readonly Func<string, string, string, Action, ChatRenameResult> _renameOther;
         private readonly bool _addressedRenameEnabled;
 
-        public ChatRenameToolHandler(ChatSession session, Func<string, string, Action, ChatRenameResult> renameOther = null,
+        public ChatRenameToolHandler(ChatSession session, Func<string, string, string, Action, ChatRenameResult> renameOther = null,
             bool addressedRenameEnabled = true)
         { _session = session; _renameOther = renameOther; _addressedRenameEnabled = addressedRenameEnabled; }
+
+        public ChatRenameToolHandler(ChatSession session, Func<string, string, Action, ChatRenameResult> renameOther,
+            bool addressedRenameEnabled = true)
+            : this(session, renameOther == null ? (Func<string, string, string, Action, ChatRenameResult>)null :
+                (agentId, title, operationId, dispatch) =>
+                renameOther(agentId, title, dispatch), addressedRenameEnabled) { }
 
         public static ToolCatalogEntry Entry(bool addressedRenameEnabled = true)
         {
@@ -64,7 +70,10 @@ namespace RNAssistant.Core.Tools
                 var dispatched = false;
                 try
                 {
-                    var result = _renameOther(agentId, title, () => { dispatched = true; context.MarkDispatchPossible(); });
+                    var operationId = AddressedOperationId(_session.Id, context.Execution.RunId,
+                        context.Execution.Call.Id, agentId, title);
+                    var result = _renameOther(agentId, title, operationId,
+                        () => { dispatched = true; context.MarkDispatchPossible(); });
                     return Task.FromResult(context.Complete(new ToolHandlerResult(
                         RuntimeResult.Ok("Название чата: " + result.Title, JsonConvert.SerializeObject(result)),
                         result.Changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange)));
@@ -87,6 +96,14 @@ namespace RNAssistant.Core.Tools
                 changed ? ToolEffectEvidence.VerifiedChange : ToolEffectEvidence.VerifiedNoChange)));
         }
 
+        internal static string AddressedOperationId(string sourceChatId, string runId, string callId,
+            string agentId, string title)
+        {
+            return "rename:" + TextPatternEngine.Sha256(string.Join("\n",
+                sourceChatId ?? string.Empty, runId ?? string.Empty, callId ?? string.Empty,
+                agentId ?? string.Empty, title ?? string.Empty));
+        }
+
         private static Task<ToolHandlerResult> Rejected(string message)
         {
             return Task.FromResult(new ToolHandlerResult(RuntimeResult.Error(message), ToolEffectEvidence.None,
@@ -99,6 +116,8 @@ namespace RNAssistant.Core.Tools
     {
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("agent_id", NullValueHandling = NullValueHandling.Ignore)] public string AgentId { get; set; }
+        [JsonProperty("target_operation_id", NullValueHandling = NullValueHandling.Ignore)] public string TargetOperationId { get; set; }
+        [JsonProperty("target_revision", NullValueHandling = NullValueHandling.Ignore)] public long? TargetRevision { get; set; }
         [JsonProperty("warning", NullValueHandling = NullValueHandling.Ignore)] public string Warning { get; set; }
         [JsonIgnore] public bool Changed { get; set; }
     }

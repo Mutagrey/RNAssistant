@@ -24,7 +24,24 @@ namespace RNAssistant.Application.Conversations
         internal ChatOverview Read(ChatSession scope, string id, bool metadataOnly)
         { return _store.ReadOverview(scope, id, metadataOnly); }
 
-        internal void Rename(ChatSession session, string title) { _store.SetAgentTitle(session, title); }
+        internal ChatRenameResult Rename(ChatSession session, string title, string operationId)
+        {
+            var changed = !string.Equals(session.Title, title, StringComparison.Ordinal) || !session.TitleAssignedByAgent;
+            var before = session.Revision;
+            session.Title = title; session.TitleAssignedByAgent = true;
+            var commit = new ConversationCommit(operationId);
+            try { _store.Commit(session, commit); }
+            catch (IOException)
+            {
+                var saved = _store.Load(session.Id);
+                if (saved == null || saved.Revision <= before || saved.Title != title || !saved.TitleAssignedByAgent)
+                    throw;
+                session.Revision = saved.Revision; session.StorageHeadHash = saved.StorageHeadHash;
+                session.UpdatedUtc = saved.UpdatedUtc;
+            }
+            return new ChatRenameResult { Title = session.Title, Changed = changed,
+                TargetOperationId = commit.OperationId, TargetRevision = session.Revision };
+        }
 
         internal ResourceReadObservation Capture(ChatSession source, ChatOverview overview, string text, string representation)
         {
@@ -120,7 +137,7 @@ namespace RNAssistant.Application.Conversations
                 ToolEffectEvidence.None, resourceEvidence: read.Evidence);
         }
 
-        internal ChatRenameResult Rename(string agentId, string title, Action dispatch)
+        internal ChatRenameResult Rename(string agentId, string title, string operationId, Action dispatch)
         {
             RequireAvailable();
             ConversationCatalogService catalog;
@@ -145,19 +162,25 @@ namespace RNAssistant.Application.Conversations
                     throw Error("The target chat is unavailable in this scope.", "chat_unavailable");
                 if (current.Revision != observed.Revision || !current.UsesCurrentProtocol)
                     throw Error("The chat changed after the overview read. Read it again before renaming.", "chat_rename_stale");
-                var changed = current.Title != title || !current.TitleAssignedByAgent;
                 string warning = null;
-                if (changed)
+                ChatRenameResult result = null;
+                if (current.Title != title || !current.TitleAssignedByAgent)
                 {
                     dispatch();
-                    catalog.Rename(current, title);
-                    _observed.Remove(agentId);
-                    // Notification failure must not turn a durable rename into false failure.
-                    try { endpoint.Changed?.Invoke(current); }
-                    catch (Exception error) when (error is InvalidOperationException || error is IOException)
-                    { warning = "Title saved; the UI notification was unavailable. Refresh the chat list."; }
+                    result = catalog.Rename(current, title, operationId);
                 }
-                return new ChatRenameResult { Title = current.Title, AgentId = agentId, Changed = changed, Warning = warning };
+                else
+                {
+                    dispatch();
+                    result = catalog.Rename(current, title, operationId);
+                }
+                _observed.Remove(agentId);
+                // Notification failure must not turn a durable rename into false failure.
+                try { endpoint.Changed?.Invoke(current); }
+                catch (Exception error) when (error is InvalidOperationException || error is IOException)
+                { warning = "Title saved; the UI notification was unavailable. Refresh the chat list."; }
+                result.AgentId = agentId; result.Warning = warning;
+                return result;
             }
         }
 

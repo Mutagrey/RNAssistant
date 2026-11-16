@@ -49,13 +49,14 @@ not become authority proof. Later UI/model result projection receives the same
 canonical effect and receipt as the terminal.
 
 Current-chat `chat.rename` validates the accepted title, self target and changed/
-no-op status against metadata in that same terminal commit. It does not fabricate
-a document resource receipt. Native Office/Workspace descriptors expose only self
-rename; a stale addressed request is rejected before the other chat is changed.
+no-op status against metadata in that same terminal commit. Addressed rename writes
+the exact target metadata first and stores a deterministic target OperationId/revision
+in the source terminal; the journal validates that target commit before acceptance.
+A stale, busy, unavailable or substituted target is rejected before mutation. Neither
+self nor addressed rename fabricates a document resource receipt.
 Native `core.patch` exposes one resource per call and refuses a larger package
 before preparation or dispatch. Multiple edits within that resource are supported.
-Multiple resource receipts per accepted call and a source-call-to-other-chat
-metadata receipt remain explicit follow-up work in
+Multiple resource receipts per accepted call remain explicit follow-up work in
 [BACKLOG](stabilization/BACKLOG.md#native-mutation-receipt-completeness--2026-11-16).
 
 Focused integration cases use the actual router, resource journal and Office tool

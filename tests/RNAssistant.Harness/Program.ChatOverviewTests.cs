@@ -123,7 +123,7 @@ namespace RNAssistant.Harness
                 var access = new ConversationCatalogAccess(agents, a, 8); var id = AgentChatAddress.IdFor(b.Id);
                 AssertEqual(2, access.Find(null).Items.Count, "catalog is scoped and includes unopened chats");
                 var dispatches = 0;
-                AssertEqual("chat_rename_unobserved", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Changed", () => dispatches++)).ErrorCode,
+                AssertEqual("chat_rename_unobserved", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Changed", "test-unobserved-rename", () => dispatches++)).ErrorCode,
                     "rename requires explicit prior observation");
                 var read = access.Read(OverviewContext(b.Id), 10000, CancellationToken.None);
                 var evidence = read.ResourceEvidence.Single();
@@ -133,14 +133,14 @@ namespace RNAssistant.Harness
                 AssertEqual("chat_unavailable", RuntimeThrows<ResourceRequestException>(() => access.Read(OverviewContext(foreign.Id), 10000, CancellationToken.None)).ErrorCode,
                     "known address is not cross-document access");
                 using (ConversationLeaseService.ForOffice(paths).Reserve(b.Id))
-                    AssertEqual("chat_busy", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Changed", () => dispatches++)).ErrorCode,
+                    AssertEqual("chat_busy", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Changed", "test-busy-rename", () => dispatches++)).ErrorCode,
                         "live/external lease rejects a rename without waiting");
                 b.Messages.Add(new ChatMessage { Role = "user", Content = "Concurrent input" }); store.Save(b);
-                AssertEqual("chat_rename_stale", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Changed", () => dispatches++)).ErrorCode,
+                AssertEqual("chat_rename_stale", RuntimeThrows<ResourceRequestException>(() => access.Rename(id, "Changed", "test-stale-rename", () => dispatches++)).ErrorCode,
                     "a new message invalidates the observed source revision");
                 AssertEqual(0, dispatches, "all preflight refusals are no effect");
                 access.Read(OverviewContext(b.Id, representation: "metadata"), 10000, CancellationToken.None);
-                var changed = access.Rename(id, "Chess game", () => dispatches++);
+                var changed = access.Rename(id, "Chess game", "test-addressed-rename", () => dispatches++);
                 var saved = store.Load(b.Id);
                 AssertTrue(changed.Changed && saved.TitleAssignedByAgent && saved.Title == "Chess game" && saved.Messages.Count == b.Messages.Count,
                     "only exact metadata changes; concurrent input is preserved");
@@ -154,12 +154,12 @@ namespace RNAssistant.Harness
                 var call = new ToolCall("rename-fault", entry.Id, new JObject { ["title"] = "Committed before fault", ["agent_id"] = id }.ToString());
                 var writes = 0;
                 store.AppendFaultPoint = point => { if (point == "after-record") { writes++; throw new IOException("Injected append fault"); } };
-                ToolExecutionRecord failed;
-                try { failed = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step",
+                ToolExecutionRecord recovered;
+                try { recovered = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step",
                     DateTime.UtcNow, false, 5), CancellationToken.None).GetAwaiter().GetResult(); }
                 finally { store.AppendFaultPoint = null; }
-                AssertTrue(failed.Outcome == ToolExecutionOutcome.Unknown && failed.MayHaveDispatched && writes == 1,
-                    "post-dispatch failure stays unknown, without automatic replay or a no-effect claim");
+                AssertTrue(recovered.Outcome == ToolExecutionOutcome.Ok && recovered.Evidence.Effect == ToolEffectEvidence.VerifiedChange && writes == 1,
+                    "lost target acknowledgement is recovered from the exact durable metadata without replay");
                 AssertEqual("Committed before fault", store.Load(b.Id).Title, "unknown response does not roll back durable title metadata");
                 enabled = false;
                 RuntimeThrows<AgentCommunicationException>(() => access.Find(null));

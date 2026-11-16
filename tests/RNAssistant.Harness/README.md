@@ -50,9 +50,10 @@ VBA backend. It covers sequential Excel writes with automatic and explicit appro
 normal-return macro repetition, genuine Unknown with the same and different next
 arguments, exact latest-producer/terminal witness fences, routed VBA replace and
 one-target patch, publication failure before/after the authority frame, delete and
-explicit restore, skill catalog publication and self-title/no-op metadata. Native
-rebuild verifies retained receipts and cannot dispatch. Capability checks cover the
-single-target patch schema/pre-dispatch limit and stale addressed-rename refusal.
+explicit restore, skill catalog publication, self-title/no-op metadata and addressed
+rename with a deterministic target commit receipt. Native rebuild verifies retained
+receipts and cannot dispatch. Capability checks cover the single-target patch schema/
+pre-dispatch limit, stale/busy addressed-rename refusal and source/target isolation.
 
 Run these integration cases alongside `journal mutation:`, `journal resources:`,
 `journal runtime:`, `legacy chat import:`, `legacy plugin import:` and the existing
@@ -843,7 +844,8 @@ Filter `chat overview:` covers bounded SQLite samples/bytes, private content fil
 existing published summary, incompatible metadata-only reads, restart/stable projection,
 model budget, unsupported history selectors, exact scope/disabled/delete guards,
 no implicit execution load/wake, busy lease/stale revision, metadata preservation,
-post-write unknown/no replay, and immutable evidence retention through replay/CAS GC.
+lost target acknowledgement recovery without replay, and immutable evidence retention
+through replay/CAS GC.
 Scripted Office and Workspace model loops exercise core.find/read + chat.rename v2.
 Regressions: `chat rename:`, `agent groups:`, `tool pack: core and atomic`.
 Cold full-index rebuild cost, live-model classification and native Office/controller/
