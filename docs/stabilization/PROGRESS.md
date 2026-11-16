@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Catalog editor authority mapping — 2026-11-16
+
+Implemented host-neutral / In Review, `17.3.12-dev`. Manual catalog mutations now
+bind `ResourceJournal` preparation to the exact current catalog-root revision while
+the existing tool/skill/prompt authoring owner continues to validate the UI/library
+revision. Previously a valid tool-editor update compared its library hash with the
+resource authority revision and failed with a false stale conflict.
+
+`tool editor:` passes 6/6 and `prompt editor:` 3/3. A stale library revision still
+returns `RESOURCE_REVISION_CHANGED`; valid updates retain their owner, read-back and
+revision guards. Windows/Office/WebView2 qualification remains separate.
+
 ## Office edit continuation lifecycle — W5, 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.11-dev`. The public Office

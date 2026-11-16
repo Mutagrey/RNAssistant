@@ -519,7 +519,8 @@ namespace RNAssistant.Office.Services
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority, operation, HtmlWorkspaceCommand.Read(preparedStateJson))
                         : ResourceMutationDomains.Impacts(scope, operation, arguments, snapshot);
                 var target = impacts[0].Identity;
-                if (ResourceMutationDomains.IsDocumentArtifactOperation(operation) || TaskListToolCatalog.Owns(operation))
+                if (ResourceMutationDomains.IsDocumentArtifactOperation(operation) || TaskListToolCatalog.Owns(operation) ||
+                    CatalogResourceMutationDomain.OwnsOperation(operation))
                     expected = snapshot.GetHead(target)?.Revision?.Revision;
                 var payload = PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json"));
                 var attempt = _journal.Prepare(scope, operation, target, expected, payload, intendedImpacts: impacts, origin: _origin?.Invoke(context));

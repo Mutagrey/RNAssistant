@@ -139,11 +139,12 @@ namespace RNAssistant.Office.Services
 
     internal sealed class CatalogResourceMutationDomain : IResourceMutationDomain
     {
-        public bool Owns(string operation)
+        internal static bool OwnsOperation(string operation)
         {
             return operation.StartsWith("tools.", StringComparison.Ordinal) ||
                 operation.StartsWith("skills.", StringComparison.Ordinal) || operation.StartsWith("prompts.", StringComparison.Ordinal);
         }
+        public bool Owns(string operation) { return OwnsOperation(operation); }
         public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope, string operation,
             IDictionary<string, object> arguments, ResourceAuthoritySnapshot snapshot)
         {

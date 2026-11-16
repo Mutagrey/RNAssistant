@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.12-dev
+
+- Редактирование существующих tools/skills/prompts снова публикуется после точной
+  проверки: resource journal привязывается к текущему catalog-root revision, а
+  library revision продолжает проверять профильный authoring owner. Валидное
+  обновление больше не отклоняется как ложный stale conflict.
+
 ### 17.3.11-dev
 
 - Прямое редактирование сообщения Office теперь выполняется в общем application worker
