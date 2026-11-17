@@ -375,6 +375,39 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void NativeToolsPowerPointReplaceReceipt()
+        {
+            WithNativeToolFixture("PowerPoint", ".pptx", fixture => {
+                var result = RunNativeToolScript(fixture, new[] {
+                    LoadToolSchemaResponse(PowerPointToolIds.ReplaceText),
+                    NativeCall(PowerPointToolIds.ReplaceText, new JObject { ["find"] = "Revenue", ["replace"] = "Sales",
+                        ["scope"] = "deck", ["mode"] = "literal", ["replaceAll"] = true, ["maxReplacements"] = 10 })
+                }, () => NativeUnverifiedFinish(fixture, PowerPointToolIds.ReplaceText, true));
+                var text = fixture.Adapter.ReadTextTargets(new RNAssistant.Office.Domains.PowerPoint.PowerPointTextScopeRequest {
+                    Scope = "deck", IncludeNotes = true, MaxSlides = 10, MaxShapesPerSlide = 100,
+                    MaxTargets = 100, MaxCharacters = 100000 });
+                AssertTrue(text.Any(item => item.Text.Contains("Sales")), "PowerPoint owner publishes replacement text");
+                AssertTrue(text.All(item => !item.Text.Contains("Revenue")), "PowerPoint owner removes the bounded original matches");
+                AssertEqual(1, fixture.Adapter.PowerPointBackendCalls.Count(item => item == FakeOfficeAdapter.PowerPointReplaceOperation),
+                    "PowerPoint replace dispatches exactly once");
+                var terminal = NativeTerminal(fixture, PowerPointToolIds.ReplaceText);
+                AssertEqual(ToolExecutionOutcome.Ok, terminal.ExecutionProgress.Outcome, "PowerPoint owner reports verified execution");
+                AssertTrue(!string.IsNullOrWhiteSpace(terminal.AuthorityCommitId), "PowerPoint terminal retains its exact authority commit");
+                var proof = fixture.Journal.LinkedResourceOutcome(fixture.Session.Id, terminal.RunId, terminal.ToolCallId);
+                AssertTrue(proof != null, "PowerPoint terminal links its existing resource receipt");
+                AssertEqual(terminal.AuthorityCommitId, proof.CommitId, "PowerPoint conversation and resource receipts agree");
+                AssertEqual(1, result.RunViewState.VerifiedWrites, "PowerPoint replacement survives the shared run projection");
+                var revision = fixture.Session.Revision;
+                fixture.Journal.Rebuild();
+                var restored = ((IConversationStore)fixture.Router).Load(fixture.Session.Id);
+                AssertEqual(revision, restored.Revision, "PowerPoint receipt rebuilds without replay");
+                AssertEqual(1, fixture.Adapter.PowerPointBackendCalls.Count(item => item == FakeOfficeAdapter.PowerPointReplaceOperation),
+                    "rebuild does not repeat the PowerPoint replacement");
+                AssertEqual(terminal.AuthorityCommitId, fixture.Journal.LinkedResourceOutcome(fixture.Session.Id,
+                    terminal.RunId, terminal.ToolCallId).CommitId, "PowerPoint receipt survives rebuild");
+            });
+        }
+
         private static void NativeToolsVbaDeleteRestore()
         {
             WithNativeToolFixture(fixture => {

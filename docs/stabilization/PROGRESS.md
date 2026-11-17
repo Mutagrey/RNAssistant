@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Native PowerPoint production matrix — 2026-11-18
+
+Host-neutral test coverage now exercises `powerpoint.text.replace` through schema
+discovery, the production native runtime and the PowerPoint owner. It verifies bounded
+live text replacement, exact authority/resource linkage, shared run projection and
+rebuild without redispatch. This is matrix coverage only; product version is unchanged.
+Full `native tools:` passes 17/17. Real Windows/PowerPoint COM qualification remains open.
+
 ## Native Word production matrix — 2026-11-18
 
 Host-neutral test coverage now exercises `word.text.replace` through schema discovery,

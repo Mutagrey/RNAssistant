@@ -10,6 +10,13 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## Native PowerPoint replacement receipt — 2026-11-18
+
+`native tools: PowerPoint replacement retains owner receipt` loads the published schema,
+replaces bounded deck text through the production owner, and verifies live text,
+authority/resource linkage, shared run projection and rebuild without redispatch. Full
+`native tools:` passes 17/17.
+
 ## Native Word replacement receipt — 2026-11-18
 
 `native tools: Word replacement retains owner receipt` loads the published Word schema,
