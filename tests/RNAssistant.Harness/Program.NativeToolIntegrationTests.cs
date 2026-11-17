@@ -408,6 +408,34 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void NativeToolsPromptCatalogReceipt()
+        {
+            WithNativeToolFixture(fixture => {
+                fixture.Settings.SystemPrompt = "# Prompt\nold\n";
+                var result = RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.read", new JObject { ["target"] = "prompt: systemPrompt", ["representation"] = "text" }),
+                    NativeCall(ResourceMutationToolCatalog.Patch, PatchArguments("prompt: systemPrompt",
+                        EditSet(Edit("old", "new", new[] { "# Prompt" }, null))))
+                }, () => NativeUnverifiedFinish(fixture, ResourceMutationToolCatalog.Patch, true));
+                var promptRef = fixture.Executor.ResourceGateway.ResolveIntentTarget(fixture.Session, "prompt: systemPrompt").Reference;
+                var currentPrompt = fixture.Executor.ResourceGateway.ReadWhole(fixture.Session, promptRef, "text").Result.Text;
+                AssertEqual("# Prompt\nnew\n", currentPrompt, "prompt owner publishes the exact edited value");
+                var terminal = NativeTerminal(fixture, ResourceMutationToolCatalog.Patch);
+                AssertEqual(ToolExecutionOutcome.Ok, terminal.ExecutionProgress.Outcome, "prompt mutation reports verified execution");
+                AssertTrue(!string.IsNullOrWhiteSpace(terminal.AuthorityCommitId), "prompt terminal retains its exact authority commit");
+                var proof = fixture.Journal.LinkedResourceOutcome(fixture.Session.Id, terminal.RunId, terminal.ToolCallId);
+                AssertTrue(proof != null, "prompt terminal links its catalog resource receipt");
+                AssertEqual(terminal.AuthorityCommitId, proof.CommitId, "prompt conversation and catalog receipts agree");
+                AssertEqual(1, result.RunViewState.VerifiedWrites, "prompt save survives the shared run projection");
+                var revision = fixture.Session.Revision;
+                fixture.Journal.Rebuild();
+                var restored = ((IConversationStore)fixture.Router).Load(fixture.Session.Id);
+                AssertEqual(revision, restored.Revision, "prompt receipt rebuilds without replay");
+                AssertEqual(terminal.AuthorityCommitId, fixture.Journal.LinkedResourceOutcome(fixture.Session.Id,
+                    terminal.RunId, terminal.ToolCallId).CommitId, "prompt receipt survives rebuild");
+            });
+        }
+
         private static void NativeToolsVbaDeleteRestore()
         {
             WithNativeToolFixture(fixture => {

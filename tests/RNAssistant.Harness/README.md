@@ -10,6 +10,13 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## Native prompt catalog mutation receipt — 2026-11-18
+
+`native tools: prompt catalog mutation retains owner receipt` discovers and reads one
+published prompt, applies the prepared source edit through the catalog owner, then
+verifies the exact republished value, authority/resource linkage, shared run projection
+and rebuild without replay/republish. Full `native tools:` passes 18/18.
+
 ## Native PowerPoint replacement receipt — 2026-11-18
 
 `native tools: PowerPoint replacement retains owner receipt` loads the published schema,

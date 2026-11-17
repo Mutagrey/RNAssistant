@@ -720,6 +720,7 @@ namespace RNAssistant.Harness
                 Test("native tools: routed VBA copy and move retain owner receipts", NativeToolsVbaCopyMoveReceipts),
                 Test("native tools: Word replacement retains owner receipt", NativeToolsWordReplaceReceipt),
                 Test("native tools: PowerPoint replacement retains owner receipt", NativeToolsPowerPointReplaceReceipt),
+                Test("native tools: prompt catalog mutation retains owner receipt", NativeToolsPromptCatalogReceipt),
                 Test("native tools: catalog skill mutation", NativeCatalogSkillMutation),
                 Test("native tools: self rename and no-op", NativeCatalogSelfRename),
                 Test("native tools: addressed rename retains exact target receipt", NativeCatalogAddressedRename),

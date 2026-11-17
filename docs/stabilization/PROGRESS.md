@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Native prompt catalog production matrix — 2026-11-18
+
+Host-neutral test coverage now exercises a prompt source edit through catalog discovery,
+exact read, prepared `core.patch`, settings publication and rebuild. It verifies the
+republished value, authority/resource linkage and shared run projection without a
+second settings adapter. This is matrix coverage only; product version is unchanged.
+Full `native tools:` passes 18/18. Windows/Office settings/DPAPI qualification remains open.
+
 ## Native PowerPoint production matrix — 2026-11-18
 
 Host-neutral test coverage now exercises `powerpoint.text.replace` through schema

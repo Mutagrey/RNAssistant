@@ -25,9 +25,9 @@ owner failure stops the package and rebuild performs no replay.
 Remaining work, in order:
 
 1. Add a production-composition execution matrix for the remaining published
-   mutation families (prompt/catalog and plugin owners). Word and PowerPoint
-   replacement are covered by their native owner-receipt matrix cases; VBA copy/move
-   is covered by its routed native case.
+   mutation family for plugin source owners. Prompt/catalog publication is covered by
+   `native tools: prompt catalog mutation retains owner receipt`; Word and PowerPoint
+   replacement and VBA copy/move also have routed native owner-receipt cases.
    A descriptor or fake legacy adapter test alone is insufficient. Verify
    prepare → source dispatch → exact owner publication → terminal → reopen/rebuild,
    confirmation and failure after dispatch. This is a qualification gap, not a
