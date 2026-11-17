@@ -71,8 +71,8 @@ namespace RNAssistant.Runtime
             try
             {
                 ReconcileUnderLease();
-                var snapshot = _authority.Capture(Scope);
                 var impacts = PlanDocumentPublication.Prepare(_session, context, _owner, prepared.Operation, prepared.Command);
+                var snapshot = _authority.CaptureAddressed(Scope, new[] { impacts[0].Identity });
                 _operationKey = PlanDocumentService.CreationId(_session, context);
                 _attempt = _journal.Prepare(Scope, prepared.Operation, impacts[0].Identity,
                     snapshot.GetHead(impacts[0].Identity)?.Revision?.Revision,
@@ -206,8 +206,9 @@ namespace RNAssistant.Runtime
                 artifact = _owner.Read(ConversationMetadata.From(_session), reference);
                 if (artifact.InlineText.Length > PlanDocumentService.MaximumMarkdownCharacters)
                     throw Error("read_too_large", "The Plan exceeds the complete read bound.");
-                var frozen = _authority.Capture(Scope);
-                var logical = frozen.GetHead(DocumentArtifactStore.PlanIdentity(_session, planId));
+                var logicalIdentity = DocumentArtifactStore.PlanIdentity(_session, planId);
+                var frozen = _authority.CaptureAddressed(Scope, new[] { logicalIdentity });
+                var logical = frozen.GetHead(logicalIdentity);
                 var body = representation == "source" ? PlanSourceDocument.Serialize(artifact) : artifact.InlineText;
                 var payload = representation == "source" ? PayloadRef.FromBlob(_payloads.StoreText(body, "text/plain")) : _revisions.GetRevision(Scope, reference).Payload;
                 _revisions.RegisterView(Scope, new ResourceRevisionView(reference, representation, payload.Sha256, payload, ResourceCoverage.Whole()));
@@ -238,10 +239,18 @@ namespace RNAssistant.Runtime
             if (_journal.Unresolved().Any(item => item.ScopeId.Equals(Scope) && PlanDocumentToolCatalog.Owns(item.Operation) &&
                 item.State == MutationAttemptState.DispatchMayHaveOccurred))
                 return new WorkspacePlanState { Available = false };
-            return Project(_authority.CaptureMany(new[] { Scope }));
+            if (string.IsNullOrWhiteSpace(_session.ActivePlanDocumentArtifactId)) return null;
+            var artifact = _owner.ReadPlanSelection(_session, _session.ActivePlanDocumentArtifactId, false);
+            var identity = DocumentArtifactStore.PlanIdentity(_session, DocumentArtifactStore.PlanIdFromArtifact(artifact));
+            return Project(_authority.CaptureAddressed(Scope, new[] { identity }));
         }
 
         internal WorkspacePlanState Project(ResourceAuthoritySnapshotSet frozen)
+        {
+            return Project(frozen?.Get(Scope));
+        }
+
+        internal WorkspacePlanState Project(ResourceAuthoritySnapshot frozen)
         {
             // All independent reads in one accepted model step use this same
             // implicit target. A read's new selection applies to the next step.
@@ -251,7 +260,7 @@ namespace RNAssistant.Runtime
             try
             {
                 var artifact = _owner.ReadPlanSelection(_session, _session.ActivePlanDocumentArtifactId, false);
-                var head = frozen.Get(Scope).GetHead(DocumentArtifactStore.PlanIdentity(_session, DocumentArtifactStore.PlanIdFromArtifact(artifact)));
+                var head = frozen?.GetHead(DocumentArtifactStore.PlanIdentity(_session, DocumentArtifactStore.PlanIdFromArtifact(artifact)));
                 var reference = ChatResourceUri.CreateArtifactRevision(_session, artifact);
                 var dependencies = head?.Knowledge == HeadKnowledge.Known ? _revisions.GetRevision(Scope, head.Revision)?.Dependencies : null;
                 var available = !PlanDocumentService.IsTombstone(artifact) && dependencies?.Any(item =>

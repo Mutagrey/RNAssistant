@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Addressed resource head capture — 2026-11-17
+
+Implemented host-neutral / In Review, `17.3.18-dev`. `IResourceAuthorityStore` now
+exposes `CaptureAddressed` over the existing `resource_head` primary index. It freezes
+scope generation and high-water data while hydrating only requested exact identities;
+missing heads remain absent and `Unknown` remains `Unknown`. Workspace Task List and
+Plan preparation/read/inspection consumers now request their exact identity instead of
+capturing every unrelated head. Broad evidence/catalog consumers retain full capture.
+
+`journal resources: receipts rebuild and restore` compares 300 unrelated heads:
+addressed capture read 3 journal records / 3,453 bytes in 0.786 ms, while full capture
+read 303 records / 351,986 bytes in 19.228 ms. Full `journal resources:`, `journal task
+list:` and `journal Plan:` pass 3/3 each. The legacy `ResourceAuthorityStore` adapter
+filters its already retained projection explicitly; Windows/WebView2 latency remains an
+open platform gate.
+
 ## Bounded inbox receipt and pending reads — 2026-11-17
 
 Implemented host-neutral / In Review, `17.3.17-dev`. `ConversationInboxService` now

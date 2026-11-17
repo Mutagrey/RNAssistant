@@ -629,6 +629,7 @@ namespace RNAssistant.Harness
             internal DiscoveryPageStore(ResourceAuthorityStore inner) { _inner = inner; }
             public event EventHandler<ResourceAuthorityChangedEventArgs> Changed { add { _inner.Changed += value; } remove { _inner.Changed -= value; } }
             public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
+            public ResourceAuthoritySnapshot CaptureAddressed(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceIdentity> identities) { throw new InvalidOperationException("Discovery must not copy a broad authority."); }
             public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
             public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _inner.GetHead(scope, identity); }
             public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)

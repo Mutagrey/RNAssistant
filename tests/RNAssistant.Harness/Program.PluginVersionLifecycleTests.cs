@@ -225,6 +225,7 @@ namespace RNAssistant.Harness
             internal VersionReceiptFault(IResourceAuthorityStore inner) { _inner = inner; }
             public event EventHandler<ResourceAuthorityChangedEventArgs> Changed { add { _inner.Changed += value; } remove { _inner.Changed -= value; } }
             public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope) { return _inner.Capture(scope); }
+            public ResourceAuthoritySnapshot CaptureAddressed(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceIdentity> identities) { return _inner.CaptureAddressed(scope, identities); }
             public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes) { return _inner.CaptureMany(scopes); }
             public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _inner.GetHead(scope, identity); }
             public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)

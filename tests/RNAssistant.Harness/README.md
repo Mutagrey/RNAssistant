@@ -10,6 +10,13 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## Addressed resource head capture — 2026-11-17
+
+`journal resources: receipts rebuild and restore` publishes 300 unrelated heads and
+compares `CaptureAddressed` with full capture at the same generation. The addressed path
+stays at 3 journal records while the full path scales with every head. `journal task
+list:` and `journal Plan:` cover the switched Workspace consumers and Unknown recovery.
+
 ## Bounded inbox receipt and pending reads — 2026-11-17
 
 `journal input: bounded current and receipt reads` creates 100 accepted inputs, removals

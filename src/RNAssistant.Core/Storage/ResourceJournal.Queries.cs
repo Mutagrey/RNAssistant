@@ -40,25 +40,45 @@ namespace RNAssistant.Core.Storage
         public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope)
         {
             if (scope == null) throw new ArgumentNullException(nameof(scope));
-            return Access((db, cursor) => Capture(db, scope), CancellationToken.None);
+            return Access((db, cursor) => Capture(db, scope, null), CancellationToken.None);
+        }
+
+        public ResourceAuthoritySnapshot CaptureAddressed(ResourceAuthorityScopeId scope,
+            IReadOnlyList<ResourceIdentity> identities)
+        {
+            if (scope == null) throw new ArgumentNullException(nameof(scope));
+            if (identities == null || identities.Count > 128 || identities.Any(identity => identity == null))
+                throw new ArgumentException("A bounded set of exact resource identities is required.", nameof(identities));
+            var requested = identities.Select(identity => identity.Uri).Distinct(StringComparer.Ordinal).ToArray();
+            return Access((db, cursor) => Capture(db, scope, requested), CancellationToken.None);
         }
 
         public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes)
         {
             return Access((db, cursor) => new ResourceAuthoritySnapshotSet((scopes ?? new ResourceAuthorityScopeId[0])
                 .Where(scope => scope != null).Distinct().OrderBy(scope => scope.ToString(), StringComparer.Ordinal)
-                .Select(scope => Capture(db, scope))), CancellationToken.None);
+                .Select(scope => Capture(db, scope, null))), CancellationToken.None);
         }
 
         // Heads are frozen now. Optional history is pinned to this generation and
         // loaded only when requested; mutation recovery has an exact index lookup.
-        private ResourceAuthoritySnapshot Capture(SqliteConnection db, ResourceAuthorityScopeId scope)
+        private ResourceAuthoritySnapshot Capture(SqliteConnection db, ResourceAuthorityScopeId scope,
+            IReadOnlyList<string> addressedUris)
         {
-            var heads = new List<ResourceHeadState>();
             var locations = new List<KeyValuePair<string, string>>();
-            using (var command = Command(db, "SELECT uri,operation FROM resource_head WHERE scope=$scope ORDER BY uri", scope))
-            using (var reader = command.ExecuteReader())
-                while (reader.Read()) locations.Add(new KeyValuePair<string, string>(reader.GetString(0), reader.GetString(1)));
+            if (addressedUris == null)
+                using (var command = Command(db, "SELECT uri,operation FROM resource_head WHERE scope=$scope ORDER BY uri", scope))
+                using (var reader = command.ExecuteReader())
+                    while (reader.Read()) locations.Add(new KeyValuePair<string, string>(reader.GetString(0), reader.GetString(1)));
+            else
+                foreach (var uri in addressedUris)
+                    using (var command = Command(db, "SELECT uri,operation FROM resource_head WHERE scope=$scope AND uri=$uri", scope))
+                    {
+                        command.Parameters.AddWithValue("$uri", uri);
+                        using (var reader = command.ExecuteReader())
+                            if (reader.Read()) locations.Add(new KeyValuePair<string, string>(reader.GetString(0), reader.GetString(1)));
+                    }
+            var heads = new List<ResourceHeadState>(locations.Count);
             foreach (var item in locations) heads.Add(HeadOf(Find(db, scope, item.Value)?.Fact, item.Key) ??
                 throw new InvalidDataException("Resource head locator is unavailable."));
             long generation = 0, effects = 0; string operation = null;

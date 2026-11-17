@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -169,6 +170,49 @@ namespace RNAssistant.Harness
                 AssertEqual(1001L, reopened.Capture(scope).Generation, "restore retains authority generation");
                 AssertEqual(terminal.CommitId, reopened.Capture(scope).FindMutationCommit(attempt.AttemptId).CommitId, "restore retains exact terminal receipt");
                 AssertEqual(body.Sha256, reopened.GetView(scope, exact, "text").Payload.Sha256, "registered views remain CAS roots");
+
+                var generation = reopened.CaptureAddressed(scope, new ResourceIdentity[0]).Generation;
+                for (var index = 0; index < 300; index++)
+                {
+                    var unrelated = new ResourceIdentity("rna://file/resource-ports/unrelated-" + index);
+                    var unrelatedRef = new ResourceRef(unrelated.Uri, "r1");
+                    reopened.RegisterRevision(scope, new ResourceRevisionMetadata(unrelatedRef, body.Sha256, body));
+                    reopened.Publish(ResourceAuthorityCommit.Create(scope, generation, null,
+                        new[] { new ResourceHeadChange(unrelated, null, ResourceHeadState.Known(unrelatedRef, generation + 1)) },
+                        AuthorityCommitReason.InitialObservation));
+                    generation++;
+                }
+                var addressedRecords = reopened.Journal.ReadRecords; var addressedReadBytes = reopened.Journal.ReadBytes;
+                var addressedTimer = Stopwatch.StartNew();
+                var addressed = reopened.CaptureAddressed(scope, new[] { target });
+                addressedTimer.Stop();
+                AssertEqual(target.Uri, addressed.Heads.Values.Single().Identity.Uri, "addressed capture hydrates only its exact head");
+                AssertEqual(generation, addressed.Generation, "addressed capture freezes the current authority generation");
+                var addressedRecordCount = reopened.Journal.ReadRecords - addressedRecords;
+                var addressedByteCount = reopened.Journal.ReadBytes - addressedReadBytes;
+                AssertTrue(addressedRecordCount <= 5,
+                    "addressed head capture ignores unrelated head count");
+                var fullRecords = reopened.Journal.ReadRecords; var fullBytes = reopened.Journal.ReadBytes;
+                var fullTimer = Stopwatch.StartNew();
+                var full = reopened.Capture(scope);
+                fullTimer.Stop();
+                AssertEqual(301, full.Heads.Count, "full capture remains available for consumers that require the whole scope");
+                AssertTrue(reopened.Journal.ReadRecords - fullRecords > 250,
+                    "comparison proves unrelated heads grow the full capture");
+                Console.WriteLine("RESOURCE_ADDRESSED heads=300 addressedRecords=" + addressedRecordCount +
+                    " addressedBytes=" + addressedByteCount +
+                    " addressedMs=" + addressedTimer.Elapsed.TotalMilliseconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) +
+                    " fullRecords=" + (reopened.Journal.ReadRecords - fullRecords) + " fullBytes=" +
+                    (reopened.Journal.ReadBytes - fullBytes) + " fullMs=" +
+                    fullTimer.Elapsed.TotalMilliseconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture));
+                AssertEqual(null, addressed.GetHead(new ResourceIdentity("rna://file/resource-ports/absent")),
+                    "an unrequested or absent exact head is not synthesized");
+                var unknown = new ResourceIdentity("rna://file/resource-ports/unknown");
+                reopened.Publish(ResourceAuthorityCommit.Create(scope, generation, null,
+                    new[] { new ResourceHeadChange(unknown, null, ResourceHeadState.Unknown(unknown, generation + 1, "unresolved-test-effect")) },
+                    AuthorityCommitReason.DerivedPublication));
+                AssertEqual(HeadKnowledge.Unknown, reopened.CaptureAddressed(scope, new[] { unknown }).GetHead(unknown).Knowledge,
+                    "addressed capture preserves Unknown instead of guessing current content");
                 AssertEqual(0, reopened.Unresolved().Count, "restore never resurrects resolved or abandoned work");
                 File.Delete(bodies.PathFor(body.Sha256));
                 RuntimeThrows<InvalidDataException>(() => resources.Publish(ResourceAuthorityCommit.Create(scope, 1001, null,

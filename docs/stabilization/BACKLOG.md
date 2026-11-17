@@ -53,6 +53,10 @@ Bounded inbox receipt and pending reads are closed for the native journal in
 transitions, while current pending reads are bounded by the live queue. The legacy
 ChatStore adapter retains its explicit validated replay until its scheduled removal.
 
+Addressed resource-head capture is closed in `17.3.18-dev` for Workspace Task List and
+Plan consumers. Exact identities freeze the same scope generation without materializing
+unrelated heads; broad discovery/evidence consumers intentionally retain full capture.
+
 ## Remaining storage consumers after native cutover — audit 2026-11-16
 
 These are bounded follow-ups to the current composition, not a second migration
@@ -63,7 +67,6 @@ backup must be retained.
 | Priority / owner | Current boundary | Acceptance |
 | --- | --- | --- |
 | P1 / CasMaintenanceService.Backup + application owners | Internal native backup refuses retained legacy/VBA/resource files; it does not promise a complete mixed profile or external project/manifest/trash closure. VbaJournalStore still writes its own journal. | Inventory every claimed owner and coordinate writers; restore a mixed profile into a separate root without original folders. Verify identity, bytes, receipts and CAS closure, interruption and no replay. Keep unsupported scopes explicit. Existing Office/Workspace identity backup is already implemented. |
-| P2 / ResourceJournal.Queries.Capture | Every capture hydrates all heads in the scope under the append lock; model snapshots and mutation preparation call it. Commit history itself is already lazy. | Addressed heads or required ranges through the existing index with a frozen generation, currentness and Unknown guards. Measure unrelated-head growth and lock hold time; no second authority cache/store. |
 
 The Workspace missing-chat observer case is closed above. `17.3.6-dev` corrects
 new-run `session_changed` filtering, not the already corrected missing-target polling.

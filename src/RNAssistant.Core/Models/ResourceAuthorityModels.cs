@@ -358,6 +358,10 @@ namespace RNAssistant.Core.Models
     {
         event EventHandler<ResourceAuthorityChangedEventArgs> Changed;
         ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope);
+        // Freeze one generation while hydrating only the exact requested head
+        // identities. Missing rows remain absent, preserving null/Unknown guards.
+        ResourceAuthoritySnapshot CaptureAddressed(ResourceAuthorityScopeId scope,
+            IReadOnlyList<ResourceIdentity> identities);
         ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes);
         ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity);
         ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit);

@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.18-dev
+
+- Подготовка Workspace Task List и Plan теперь читает из resource journal только
+  адресованные heads при сохранении общей generation. Большое число несвязанных
+  ресурсов больше не увеличивает стоимость этих операций; Unknown и missing
+  остаются явными.
+
 ### 17.3.17-dev
 
 - Повторная проверка input receipt и pending-очереди больше не перечитывает все

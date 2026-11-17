@@ -56,7 +56,7 @@ namespace RNAssistant.Runtime
             var scope = TaskListPublication.Scope(_session);
             using (_journal.AcquireScope(scope))
             {
-                if (_authority.Capture(scope).Generation != 0)
+                if (_authority.CaptureAddressed(scope, new ResourceIdentity[0]).Generation != 0)
                     throw new InvalidOperationException("Task fork authority already exists.");
                 var expected = TaskListPublication.Capture(_session, _payloads);
                 var state = new ForkState { ParentId = _session.ParentSessionId, ParentRevision = _session.ParentSessionRevision.Value,
@@ -82,7 +82,8 @@ namespace RNAssistant.Runtime
             using (_journal.AcquireScope(scope))
             {
                 ReconcileUnderLease();
-                var head = _authority.Capture(scope).GetHead(TaskListPublication.Identity(_session));
+                var taskIdentity = TaskListPublication.Identity(_session);
+                var head = _authority.CaptureAddressed(scope, new[] { taskIdentity }).GetHead(taskIdentity);
                 if (head == null || head.Knowledge == HeadKnowledge.Unavailable)
                 { _chats.Commit(_session, commit); return; }
                 var state = new HistoryResetState { BeforeRevision = _session.Revision,
@@ -183,7 +184,9 @@ namespace RNAssistant.Runtime
                 OwnsPending(item) &&
                 item.State == MutationAttemptState.DispatchMayHaveOccurred))
                 return new TaskListStateProjection { Available = false };
-            return Project(_authority.CaptureMany(new[] { scope }));
+            var identity = TaskListPublication.Identity(_session);
+            return Project(new ResourceAuthoritySnapshotSet(new[] {
+                _authority.CaptureAddressed(scope, new[] { identity }) }));
         }
 
         public string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null)
@@ -195,9 +198,9 @@ namespace RNAssistant.Runtime
             {
                 ReconcileUnderLease();
                 var scope = TaskListPublication.Scope(_session);
-                var snapshot = _authority.Capture(scope);
-                TaskListPublication.RequireCurrent(_session, snapshot, _revisions, _payloads);
                 var identity = TaskListPublication.Identity(_session);
+                var snapshot = _authority.CaptureAddressed(scope, new[] { identity });
+                TaskListPublication.RequireCurrent(_session, snapshot, _revisions, _payloads);
                 _previousArtifacts = new HashSet<string>(_session.Artifacts.Select(item => item.Id), StringComparer.Ordinal);
                 _attempt = _journal.Prepare(scope, context.Call.Name, identity,
                     snapshot.GetHead(identity)?.Revision?.Revision,

@@ -45,6 +45,23 @@ namespace RNAssistant.Core.Storage
             using (AcquireLock()) return Snapshot(Load(scope));
         }
 
+        public ResourceAuthoritySnapshot CaptureAddressed(ResourceAuthorityScopeId scope,
+            IReadOnlyList<ResourceIdentity> identities)
+        {
+            if (scope == null) throw new ArgumentNullException(nameof(scope));
+            if (identities == null || identities.Count > 128 || identities.Any(identity => identity == null))
+                throw new ArgumentException("A bounded set of exact resource identities is required.", nameof(identities));
+            var requested = new HashSet<string>(identities.Select(identity => identity.Uri), StringComparer.Ordinal);
+            lock (_sync)
+            using (AcquireLock())
+            {
+                var state = Load(scope);
+                return new ResourceAuthoritySnapshot(state.Scope, state.Generation, state.HighWaterCommitId,
+                    state.EffectHighWaterMark, state.Heads.Values.Where(head => requested.Contains(head.Identity.Uri)),
+                    state.Commits);
+            }
+        }
+
         public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes)
         {
             lock (_sync)
