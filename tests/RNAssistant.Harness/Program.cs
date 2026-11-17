@@ -717,6 +717,7 @@ namespace RNAssistant.Harness
                 Test("native tools: patch batch refuses before any target", NativeToolsPatchBatchRejected),
                 Test("native tools: patch publication failure remains unknown", NativeToolsPatchPublicationFailure),
                 Test("native tools: routed VBA delete and explicit restore", NativeToolsVbaDeleteRestore),
+                Test("native tools: routed VBA copy and move retain owner receipts", NativeToolsVbaCopyMoveReceipts),
                 Test("native tools: catalog skill mutation", NativeCatalogSkillMutation),
                 Test("native tools: self rename and no-op", NativeCatalogSelfRename),
                 Test("native tools: addressed rename retains exact target receipt", NativeCatalogAddressedRename),

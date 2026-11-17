@@ -296,6 +296,51 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void NativeToolsVbaCopyMoveReceipts()
+        {
+            WithNativeToolFixture(fixture => {
+                const string source = "Sub Main()\nDebug.Print \"copy-move\"\nEnd Sub";
+                fixture.Adapter.SetVbaModule("CopySource", source, "StdModule");
+                var results = new List<ChatTurnResult>();
+                results.Add(RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.read", new JObject { ["target"] = "VBA module: CopySource" }),
+                    LoadToolSchemaResponse(ResourceMutationToolCatalog.Copy),
+                    NativeCall(ResourceMutationToolCatalog.Copy, new JObject { ["target"] = "VBA module: CopySource",
+                        ["destination"] = "VBA module: CopiedModule" })
+                }, () => NativeUnverifiedFinish(fixture, "core.read", false)));
+                AssertEqual(source, fixture.Adapter.GetVbaModuleCode("CopySource"), "copy preserves the source module");
+                AssertEqual(source, fixture.Adapter.GetVbaModuleCode("CopiedModule"), "copy publishes the exact destination source");
+                var copyTerminal = NativeTerminal(fixture, ResourceMutationToolCatalog.Copy);
+                var copyOutcome = fixture.Journal.LinkedResourceOutcome(fixture.Session.Id, copyTerminal.RunId, copyTerminal.ToolCallId);
+                AssertTrue(copyOutcome != null && copyOutcome.Effect != null && copyOutcome.Effect.Impacts.Count >= 1,
+                    "copy retains an exact owner outcome with destination publication evidence");
+
+                results.Add(RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.read", new JObject { ["target"] = "VBA module: CopiedModule" }),
+                    LoadToolSchemaResponse(ResourceMutationToolCatalog.Move),
+                    NativeCall(ResourceMutationToolCatalog.Move, new JObject { ["target"] = "VBA module: CopiedModule",
+                        ["destination"] = "VBA module: MovedModule" })
+                }, () => NativeUnverifiedFinish(fixture, "core.read", false)));
+                AssertTrue(string.IsNullOrEmpty(fixture.Adapter.GetVbaModuleCode("CopiedModule")), "move removes the old destination");
+                AssertEqual(source, fixture.Adapter.GetVbaModuleCode("MovedModule"), "move publishes the same source at its destination");
+                var moveTerminal = NativeTerminal(fixture, ResourceMutationToolCatalog.Move);
+                var moveOutcome = fixture.Journal.LinkedResourceOutcome(fixture.Session.Id, moveTerminal.RunId, moveTerminal.ToolCallId);
+                AssertTrue(moveOutcome != null && moveOutcome.Effect != null, "move retains an exact owner outcome");
+                var revision = fixture.Session.Revision;
+                var copyVbaCalls = fixture.Adapter.CountVbaCalls(FakeVbaOperation.CreateModule);
+                var renameVbaCalls = fixture.Adapter.CountVbaCalls(FakeVbaOperation.RenameModule);
+                fixture.Journal.Rebuild();
+                var restored = ((IConversationStore)fixture.Router).Load(fixture.Session.Id);
+                AssertEqual(revision, restored.Revision, "copy/move receipts rebuild without replay");
+                AssertEqual(copyVbaCalls, fixture.Adapter.CountVbaCalls(FakeVbaOperation.CreateModule), "rebuild does not repeat copy");
+                AssertEqual(renameVbaCalls, fixture.Adapter.CountVbaCalls(FakeVbaOperation.RenameModule), "rebuild does not repeat move");
+                AssertEqual(copyOutcome.CommitId, fixture.Journal.LinkedResourceOutcome(fixture.Session.Id,
+                    copyTerminal.RunId, copyTerminal.ToolCallId).CommitId, "copy receipt survives rebuild");
+                AssertEqual(moveOutcome.CommitId, fixture.Journal.LinkedResourceOutcome(fixture.Session.Id,
+                    moveTerminal.RunId, moveTerminal.ToolCallId).CommitId, "move receipt survives rebuild");
+            });
+        }
+
         private static void NativeToolsVbaDeleteRestore()
         {
             WithNativeToolFixture(fixture => {

@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.20-dev
+
+- Повторная публикация одного и того же exact resource view больше не блокирует
+  последующее чтение или move/copy только из-за различий внутренней parts-раскладки.
+  View принимается как duplicate лишь при совпадении exact reference, view,
+  coverage и content hash; исходная immutable запись не переписывается.
+
 ### 17.3.19-dev
 
 - Native `core.patch` снова принимает несколько независимых targets в одном

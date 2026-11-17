@@ -108,7 +108,11 @@ namespace RNAssistant.Core.Storage
                     var prior = Find(db, fact.Scope, operation);
                     if (prior != null)
                     {
-                        if (prior.Fingerprint != fingerprint) throw new InvalidOperationException("Resource operation identity was reused with different content.");
+                        if (prior.Fingerprint != fingerprint)
+                        {
+                            if (SameResourceView(prior.Fact, fact)) { prior.Duplicate = true; return prior; }
+                            throw new InvalidOperationException("Resource operation identity was reused with different content.");
+                        }
                         prior.Duplicate = true;
                         return prior;
                     }
@@ -391,6 +395,14 @@ namespace RNAssistant.Core.Storage
             if (fact.Kind != "resource.published" && (fact.Publication != null || fact.Generation != 0 || fact.AdvancesHead || fact.Head != null) ||
                 fact.Kind != "resource.dispatch" && fact.AttemptId != null)
                 throw new InvalidDataException("Resource fact contains fields of a different transition.");
+        }
+
+        private static bool SameResourceView(ResourceJournalFact prior, ResourceJournalFact next)
+        {
+            var left = prior?.View; var right = next?.View;
+            return prior?.Kind == "resource.view" && next?.Kind == "resource.view" && left?.Reference?.Uri == right?.Reference?.Uri &&
+                left.Reference.Revision == right.Reference.Revision && left.View == right.View &&
+                left.ContentSha256 == right.ContentSha256 && JToken.DeepEquals(JObject.FromObject(left.Coverage), JObject.FromObject(right.Coverage));
         }
 
         private static string Fingerprint(ResourceJournalFact fact)

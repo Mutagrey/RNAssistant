@@ -10,6 +10,13 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## VBA copy/move production receipts — 2026-11-17
+
+`native tools: routed VBA copy and move retain owner receipts` executes the published
+copy and move calls through the native runtime, then verifies exact owner outcomes,
+source/destination state and rebuild without redispatch. It also covers the immutable
+view duplicate rule when storage parts differ but exact content does not.
+
 ## Multi-target native patch receipts — 2026-11-17
 
 `native tools:` now covers the shared 16-target native schema, two VBA owners in one

@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Immutable view duplicate for copy/move — 2026-11-17
+
+Implemented host-neutral / In Review, `17.3.20-dev`. Re-registering the same exact
+resource view with a different storage-parts layout incorrectly raised a tool defect.
+`ResourceJournal` now treats it as a duplicate only when reference URI/revision, view,
+coverage and content SHA-256 match; the original immutable view remains canonical.
+Any content or coverage change still conflicts.
+
+`native tools: routed VBA copy and move retain owner receipts` reproduces copy followed
+by move, verifies exact source/destination state, owner receipts and rebuild without
+replaying either mutation. Full `native tools:` 15/15 and `journal resources:` 3/3 pass.
+Windows/Office/WebView2 qualification remains separate.
+
 ## Multi-target native patch receipts — 2026-11-17
 
 Implemented host-neutral / In Review, `17.3.19-dev`. Native Office and Workspace
