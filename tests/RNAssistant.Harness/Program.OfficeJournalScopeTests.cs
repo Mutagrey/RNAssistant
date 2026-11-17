@@ -13,11 +13,15 @@ namespace RNAssistant.Harness
     {
         private static void WithOfficeJournalScope(Action<AppDataPaths, FakeOfficeAdapter, DocumentAuthorityRegistry,
             ConversationJournalRouter, ChatSessionService> test)
+        { WithOfficeJournalScope("Excel", ".xlsx", test); }
+
+        private static void WithOfficeJournalScope(string officeHost, string extension,
+            Action<AppDataPaths, FakeOfficeAdapter, DocumentAuthorityRegistry, ConversationJournalRouter, ChatSessionService> test)
         {
             WithTempPaths(paths => {
-                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var adapter = FakeOfficeAdapter.ForHost(officeHost);
                 adapter.DocumentKeyValue = "doc-a"; adapter.RuntimeDocumentKeyValue = "runtime-a";
-                adapter.DocumentPathValue = Path.Combine(paths.Root, "a.xlsx");
+                adapter.DocumentPathValue = Path.Combine(paths.Root, "a" + extension);
                 var identities = new DocumentAuthorityRegistry(paths);
                 ChatSessionService sessions = null;
                 var router = new ConversationJournalRouter(paths, (host, key) => sessions.ResolveConversationScope(host, key));

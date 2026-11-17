@@ -32,8 +32,11 @@ namespace RNAssistant.Harness
         }
 
         private static void WithNativeToolFixture(Action<NativeToolFixture> test)
+        { WithNativeToolFixture("Excel", ".xlsx", test); }
+
+        private static void WithNativeToolFixture(string host, string extension, Action<NativeToolFixture> test)
         {
-            WithOfficeJournalScope((paths, adapter, identities, router, sessions) => {
+            WithOfficeJournalScope(host, extension, (paths, adapter, identities, router, sessions) => {
                 var settings = new AppSettings { Model = "native-tool-integration", StreamResponses = false,
                     SmartChatTitles = false, AutoCompressContext = false, AutoConfirmToolActions = true,
                     AgentResponseMode = AgentResponseModes.JsonSchema, ContextWindowOverrideTokens = 65536,
@@ -338,6 +341,37 @@ namespace RNAssistant.Harness
                     copyTerminal.RunId, copyTerminal.ToolCallId).CommitId, "copy receipt survives rebuild");
                 AssertEqual(moveOutcome.CommitId, fixture.Journal.LinkedResourceOutcome(fixture.Session.Id,
                     moveTerminal.RunId, moveTerminal.ToolCallId).CommitId, "move receipt survives rebuild");
+            });
+        }
+
+        private static void NativeToolsWordReplaceReceipt()
+        {
+            WithNativeToolFixture("Word", ".docx", fixture => {
+                fixture.Adapter.Write(new RNAssistant.Office.Domains.Word.WordWriteRequest { Mode = "replaceselection",
+                    Text = "alpha beta alpha" }, () => { });
+                var result = RunNativeToolScript(fixture, new[] {
+                    LoadToolSchemaResponse(WordToolIds.ReplaceText),
+                    NativeCall(WordToolIds.ReplaceText, new JObject { ["find"] = "alpha", ["replace"] = "omega",
+                        ["scope"] = "main", ["mode"] = "literal", ["replaceAll"] = true, ["maxReplacements"] = 10 })
+                }, () => NativeUnverifiedFinish(fixture, WordToolIds.ReplaceText, true));
+                AssertEqual("omega beta omega", fixture.Adapter.WordText, "Word owner replaces the bounded live scope");
+                AssertEqual(1, fixture.Adapter.WordBackendCalls.Count(item => item == FakeOfficeAdapter.WordReplaceOperation),
+                    "Word replace dispatches exactly once");
+                var terminal = NativeTerminal(fixture, WordToolIds.ReplaceText);
+                AssertEqual(ToolExecutionOutcome.Ok, terminal.ExecutionProgress.Outcome, "Word owner reports verified execution");
+                AssertTrue(!string.IsNullOrWhiteSpace(terminal.AuthorityCommitId), "Word terminal retains its exact authority commit");
+                var proof = fixture.Journal.LinkedResourceOutcome(fixture.Session.Id, terminal.RunId, terminal.ToolCallId);
+                AssertTrue(proof != null, "Word terminal links its existing resource receipt");
+                AssertEqual(terminal.AuthorityCommitId, proof.CommitId, "Word conversation and resource receipts agree");
+                AssertEqual(1, result.RunViewState.VerifiedWrites, "Word replacement survives the shared run projection");
+                var revision = fixture.Session.Revision;
+                fixture.Journal.Rebuild();
+                var restored = ((IConversationStore)fixture.Router).Load(fixture.Session.Id);
+                AssertEqual(revision, restored.Revision, "Word receipt rebuilds without replay");
+                AssertEqual(1, fixture.Adapter.WordBackendCalls.Count(item => item == FakeOfficeAdapter.WordReplaceOperation),
+                    "rebuild does not repeat the Word replacement");
+                AssertEqual(terminal.AuthorityCommitId, fixture.Journal.LinkedResourceOutcome(fixture.Session.Id,
+                    terminal.RunId, terminal.ToolCallId).CommitId, "Word receipt survives rebuild");
             });
         }
 

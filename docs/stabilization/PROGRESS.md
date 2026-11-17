@@ -1,5 +1,13 @@
 # Stabilization progress
 
+## Native Word production matrix — 2026-11-18
+
+Host-neutral test coverage now exercises `word.text.replace` through schema discovery,
+the production native runtime and the Word owner. It verifies exact live text, authority
+commit linkage, shared run projection and rebuild without redispatch. This is matrix
+coverage only; product version is unchanged. Full `native tools:` passes 16/16. Real
+Windows/Word COM qualification remains open.
+
 ## Immutable view duplicate for copy/move — 2026-11-17
 
 Implemented host-neutral / In Review, `17.3.20-dev`. Re-registering the same exact

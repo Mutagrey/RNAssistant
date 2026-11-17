@@ -10,6 +10,13 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## Native Word replacement receipt — 2026-11-18
+
+`native tools: Word replacement retains owner receipt` loads the published Word schema,
+performs one bounded replacement through the production executor/runtime, and verifies
+the exact live text, authority commit, resource linkage, shared run projection and
+rebuild without redispatch. Full `native tools:` passes 16/16.
+
 ## VBA copy/move production receipts — 2026-11-17
 
 `native tools: routed VBA copy and move retain owner receipts` executes the published
