@@ -15,9 +15,10 @@ namespace RNAssistant.Core.Storage
 {
     internal sealed partial class ConversationJournal
     {
-        private ConversationRuntimeTools PrepareChatTools(ChatSession session, ConversationRunCommit command, out ResourceJournalReceipt outcome)
+        private ConversationRuntimeTools PrepareChatTools(ChatSession session, ConversationRunCommit command,
+            out IReadOnlyList<ResourceJournalReceipt> outcomes)
         {
-            outcome = null;
+            outcomes = new ResourceJournalReceipt[0];
             if (command == null) return null;
             var context = command.ToolContext; var execution = command.Execution;
             if (context != null && (context.RunId != command.RunId || context.TurnId != session.LastRun.TurnId))
@@ -55,24 +56,32 @@ namespace RNAssistant.Core.Storage
             {
                 if (execution == null) throw new InvalidOperationException("A kernel terminal requires execution evidence.");
                 if (context.Policy.MayHaveSideEffects && !IsPeerMutation(context.Call.Name))
-                    outcome = new ResourceJournal(_paths, _protector).CallOutcome(MutationOrigin(session, context));
+                {
+                    var origin = MutationOrigin(session, context);
+                    var resources = new ResourceJournal(_paths, _protector);
+                    outcomes = context.Call.Name == ResourceMutationToolCatalog.Patch
+                        ? resources.CallOutcomes(origin).Where(item => item.Fact.Authority != null ||
+                            item.Fact.Publication != null && item.Fact.Attempt?.State == MutationAttemptState.Resolved).ToArray()
+                        : new[] { resources.CallOutcome(origin) }.Where(item => item != null).ToArray();
+                }
                 var effect = execution.ResourceEffect;
-                if (!MatchesResourceOutcome(context.Call.Name, effect, outcome) && IsUnconfirmedPatch(context, execution))
+                if (!MatchesResourceOutcomes(context.Call.Name, effect, outcomes) && outcomes.Count == 1 && IsUnconfirmedPatch(context, execution))
                 {
                     // An owner can lose its publication acknowledgement after a
                     // write. Keep the handler's Unknown report, but retain only
                     // canonical effect proof (if it exists), never its synthetic
                     // diagnostic impact as a successful owner receipt.
-                    effect = outcome?.Effect;
+                    effect = outcomes[0].Effect;
                 }
-                if (execution.AuthorityCommitId != null && execution.AuthorityCommitId != outcome?.CommitId ||
-                    effect != null && !MatchesResourceOutcome(context.Call.Name, effect, outcome))
+                if (execution.AuthorityCommitId != null && !outcomes.Any(item => item.CommitId == execution.AuthorityCommitId) ||
+                    effect != null && !MatchesResourceOutcomes(context.Call.Name, effect, outcomes))
                     throw new InvalidDataException("Execution refers to a foreign or unavailable resource outcome.");
+                var authorityCommitId = execution.AuthorityCommitId ?? (outcomes.Count == 1 ? outcomes[0].CommitId : null);
                 var materialized = new ToolResultMaterialization(ToolResultPersistence.Terminal(execution),
-                    resourceEvidence: execution.ResourceEvidence, resourceEffect: effect ?? outcome?.Effect, authorityCommitId: outcome?.CommitId)
-                    { ExecutionProgress = ToolExecutionProgress.Capture(execution) };
+                    resourceEvidence: execution.ResourceEvidence, resourceEffect: effect ?? (outcomes.Count == 1 ? outcomes[0].Effect : null),
+                    authorityCommitId: authorityCommitId) { ExecutionProgress = ToolExecutionProgress.Capture(execution) };
                 terminal = new ConversationResultFact(session.Id, ToolResultPersistence.Create(context.Call.Id,
-                    context.Call.Name, context.StepId, materialized, _bodies, context.RunId), outcome == null ? null : ResourceOutcomeLink.From(outcome));
+                    context.Call.Name, context.StepId, materialized, _bodies, context.RunId), resourceOutcomes: outcomes.Select(ResourceOutcomeLink.From).ToArray());
             }
             return new ConversationRuntimeTools(command.FactKind, context?.Call.Id, context?.Call.Name, context?.StepId,
                 command.ActivityId, command.ResultProjection, context?.Policy.MayHaveSideEffects == true, terminal,
@@ -84,9 +93,46 @@ namespace RNAssistant.Core.Storage
         private static string PreparationHash(string value)
         { return value == null ? null : TextPatternEngine.Sha256(value); }
 
-        // A one-target patch retains its existing typed aggregate for changes UI,
-        // but its only child must be the exact owner receipt of this accepted call.
-        // A multi-target aggregate cannot stand in for one durable owner outcome.
+        private static bool MatchesResourceOutcomes(string tool, ResourceEffect effect,
+            IReadOnlyList<ResourceJournalReceipt> receipts)
+        {
+            if (receipts.Count == 1) return MatchesResourceOutcome(tool, effect, receipts[0]);
+            if (receipts.Count == 0)
+            {
+                if (tool != ResourceMutationToolCatalog.Patch || effect?.Operation != tool || effect.Targets == null) return false;
+                if (effect.Outcome == ResourceEffectOutcome.UnknownAfterDispatch)
+                    return effect.Targets.All(item => item.Status == ResourceTargetStatus.Unknown && item.WriteStarted && item.After == null);
+                return effect.Outcome == ResourceEffectOutcome.FailedNoEffect &&
+                    effect.Targets.All(item => !item.WriteStarted && (item.Status == ResourceTargetStatus.Rejected || item.Status == ResourceTargetStatus.NotStarted));
+            }
+            if (tool != ResourceMutationToolCatalog.Patch || effect?.Operation != tool || effect.Targets == null ||
+                effect.Targets.Count < 2 || receipts.Count > effect.Targets.Count || receipts.Any(item => item?.Fact.Call?.Origin.TargetOrdinal == null))
+                return false;
+            var expectedOutcome = effect.Targets.Any(item => item.Status == ResourceTargetStatus.Unknown) ? ResourceEffectOutcome.UnknownAfterDispatch :
+                effect.Targets.All(item => item.Status == ResourceTargetStatus.Changed || item.Status == ResourceTargetStatus.Unchanged) ?
+                    effect.Targets.Any(item => item.Status == ResourceTargetStatus.Changed) ? ResourceEffectOutcome.VerifiedChanged : ResourceEffectOutcome.VerifiedNoChange :
+                effect.Targets.Any(item => item.Status == ResourceTargetStatus.Changed) ? ResourceEffectOutcome.VerifiedChanged : ResourceEffectOutcome.FailedNoEffect;
+            if (effect.Outcome != expectedOutcome) return false;
+            var byOrdinal = new Dictionary<int, ResourceJournalReceipt>();
+            foreach (var receipt in receipts)
+            {
+                var ordinal = receipt.Fact.Call.Origin.TargetOrdinal.Value;
+                if (ordinal < 0 || ordinal >= effect.Targets.Count || byOrdinal.ContainsKey(ordinal)) return false;
+                if (!MatchesTargetOutcome(effect.Targets[ordinal], receipt)) return false;
+                if (receipt.Effect?.Impacts != null && receipt.Effect.Impacts.Any(impact => !effect.Impacts.Any(item => SameRunValue(item, impact)))) return false;
+                byOrdinal.Add(ordinal, receipt);
+            }
+            for (var index = 0; index < effect.Targets.Count; index++)
+            {
+                var target = effect.Targets[index];
+                var requiresReceipt = target.Status == ResourceTargetStatus.Changed || target.Status == ResourceTargetStatus.Unchanged;
+                if (requiresReceipt && !byOrdinal.ContainsKey(index)) return false;
+                if (target.Status == ResourceTargetStatus.Unknown && !byOrdinal.ContainsKey(index) && !target.WriteStarted) return false;
+            }
+            return true;
+        }
+
+        // Patch aggregates retain one exact owner receipt per dispatched target.
         private static bool MatchesResourceOutcome(string tool, ResourceEffect effect, ResourceJournalReceipt receipt)
         {
             var owner = receipt?.Effect;
@@ -96,23 +142,37 @@ namespace RNAssistant.Core.Storage
             var target = effect.Targets[0];
             if (target?.Source?.IsExact != true || string.IsNullOrWhiteSpace(target.Target) ||
                 !SameRunValue(target.Effect, owner) || !SameRunValue(effect.Impacts, owner?.Impacts ?? new ResourceImpact[0])) return false;
+            if (!MatchesTargetOutcome(target, receipt)) return false;
+            return target.Status == ResourceTargetStatus.Changed && effect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
+                target.Status == ResourceTargetStatus.Unchanged && effect.Outcome == ResourceEffectOutcome.VerifiedNoChange ||
+                target.Status == ResourceTargetStatus.Unknown && effect.Outcome == ResourceEffectOutcome.UnknownAfterDispatch ||
+                (target.Status == ResourceTargetStatus.Rejected || target.Status == ResourceTargetStatus.NotStarted) &&
+                    effect.Outcome == ResourceEffectOutcome.FailedNoEffect;
+        }
+
+        private static bool MatchesTargetOutcome(ResourceTargetEffect target, ResourceJournalReceipt receipt)
+        {
+            if (target?.Source?.IsExact != true || string.IsNullOrWhiteSpace(target.Target) ||
+                !SameRunValue(target.Effect, receipt?.Effect)) return false;
+            var owner = receipt.Effect;
             switch (target.Status)
             {
                 case ResourceTargetStatus.Changed:
-                    return target.WriteStarted && owner != null &&
+                    return target.WriteStarted &&
                         (owner.Outcome == ResourceEffectOutcome.VerifiedChanged || owner.Outcome == ResourceEffectOutcome.Restored) &&
-                        effect.Outcome == ResourceEffectOutcome.VerifiedChanged && PatchAfterIsPublished(target, receipt);
+                        PatchAfterIsPublished(target, receipt);
                 case ResourceTargetStatus.Unchanged:
-                    return (owner == null ? !target.WriteStarted : owner.Outcome == ResourceEffectOutcome.VerifiedNoChange) &&
-                        effect.Outcome == ResourceEffectOutcome.VerifiedNoChange && SameRunValue(target.After, target.Source);
+                    return (owner.Outcome == ResourceEffectOutcome.VerifiedNoChange) && SameRunValue(target.After, target.Source);
                 case ResourceTargetStatus.Unknown:
-                    return target.WriteStarted && target.After == null && owner != null &&
+                    return target.WriteStarted && target.After == null &&
                         (owner.Outcome == ResourceEffectOutcome.UnknownAfterDispatch || owner.Outcome == ResourceEffectOutcome.VerifiedChanged ||
-                         owner.Outcome == ResourceEffectOutcome.Restored) && effect.Outcome == ResourceEffectOutcome.UnknownAfterDispatch;
+                         owner.Outcome == ResourceEffectOutcome.Restored);
                 case ResourceTargetStatus.Rejected:
+                    if (!target.WriteStarted) return target.After == null && owner.Outcome == ResourceEffectOutcome.FailedNoEffect;
+                    return owner.Outcome == ResourceEffectOutcome.VerifiedNoChange && SameRunValue(target.After, target.Source) ||
+                        owner.Outcome == ResourceEffectOutcome.FailedNoEffect && target.After == null;
                 case ResourceTargetStatus.NotStarted:
-                    return target.After == null && (owner == null ? !target.WriteStarted : owner.Outcome == ResourceEffectOutcome.FailedNoEffect) &&
-                        effect.Outcome == ResourceEffectOutcome.FailedNoEffect;
+                    return target.After == null && owner.Outcome == ResourceEffectOutcome.FailedNoEffect;
                 default: return false;
             }
         }
@@ -210,7 +270,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private void ValidateChatTools(SqliteConnection db, JournalRecord record, ConversationChatCommit fact,
-            Dictionary<string, ContextCallKey> keys, ResourceJournalReceipt outcome)
+            Dictionary<string, ContextCallKey> keys, Dictionary<string, ResourceJournalReceipt> outcomes)
         {
             var tools = fact.Tools;
             if (tools != null && fact.Checkpoint == null) throw new InvalidDataException("Runtime facts require an atomic checkpoint.");
@@ -229,23 +289,25 @@ namespace RNAssistant.Core.Storage
                     tools.Terminal.ChatId != fact.Card.ChatId || tools.Terminal.Result.RunId != fact.Run.RunId ||
                     tools.Terminal.Result.ToolCallId != tools.CallId || tools.Terminal.Result.ToolName != tools.ToolName ||
                     tools.Terminal.Result.ResultStepId != tools.StepId) throw new InvalidDataException("Foreign kernel terminal.");
-                ValidateResult(db, tools.Terminal, record.Operation, true); ValidateOutcome(tools.Terminal, outcome);
+                ValidateResult(db, tools.Terminal, record.Operation, true);
+                var terminalOutcomes = tools.Terminal.ResourceOutcomes.Select(link => OutcomeFor(link, outcomes)).ToArray();
+                ValidateOutcome(tools.Terminal, terminalOutcomes);
                 var progress = tools.Terminal.Result.ExecutionProgress;
                 var rename = ValidateRename(db, fact, keys);
                 if (tools.Terminal.Result.ResourceEffect?.Targets != null)
                 {
-                    var call = AcceptedRuntimeCall(db, fact, keys);
-                    var targets = call.Name == ResourceMutationToolCatalog.Patch ? ResourcePatch.Parse(call.ArgumentsJson) : null;
                     var aggregate = tools.Terminal.Result.ResourceEffect;
-                    if (targets?.Count != 1 || tools.Terminal.Result.ResourceEffect.Targets.Count != 1 ||
-                        targets[0].Target != tools.Terminal.Result.ResourceEffect.Targets[0].Target ||
-                        !MatchesResourceOutcome(tools.ToolName, aggregate, outcome) ||
+                    var partialVerified = tools.ToolName == ResourceMutationToolCatalog.Patch &&
+                        aggregate.Targets.Any(item => item.Status == ResourceTargetStatus.Changed) &&
+                        aggregate.Targets.Any(item => item.Status == ResourceTargetStatus.Rejected || item.Status == ResourceTargetStatus.NotStarted) &&
+                        aggregate.Targets.All(item => item.Status != ResourceTargetStatus.Unknown);
+                    if (!MatchesResourceOutcomes(tools.ToolName, aggregate, terminalOutcomes) ||
                         aggregate.Outcome == ResourceEffectOutcome.UnknownAfterDispatch && progress.Outcome != ToolExecutionOutcome.Unknown ||
-                        (aggregate.Outcome == ResourceEffectOutcome.VerifiedChanged || aggregate.Outcome == ResourceEffectOutcome.VerifiedNoChange) &&
-                            progress.Outcome != ToolExecutionOutcome.Ok ||
+                        aggregate.Outcome == ResourceEffectOutcome.VerifiedChanged && progress.Outcome != ToolExecutionOutcome.Ok && !partialVerified ||
+                        aggregate.Outcome == ResourceEffectOutcome.VerifiedNoChange && progress.Outcome != ToolExecutionOutcome.Ok ||
                         aggregate.Outcome == ResourceEffectOutcome.FailedNoEffect && progress.Outcome != ToolExecutionOutcome.Error &&
                             progress.Outcome != ToolExecutionOutcome.NotDispatched)
-                        throw new InvalidDataException("Patch aggregate differs from its sole accepted owner target.");
+                        throw new InvalidDataException("Patch aggregate differs from its accepted owner targets.");
                 }
                 var peer = IsPeerDelivery(tools.ToolName) ? DeliveryForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
                 var spawn = tools.ToolName == AgentCommunicationToolCatalog.Spawn ? SpawnForCall(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) : null;
@@ -261,7 +323,7 @@ namespace RNAssistant.Core.Storage
                 if (peer != null && (peer.Fact.Input == null || peer.Position.Sequence > fact.ExpectedRevision ||
                     tools.NoEffect || progress.Outcome == ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Peer terminal contradicts its exact accepted delivery.");
-                if (tools.MayHaveSideEffects && (tools.Terminal.ResourceOutcome != null ? outcome?.Fact.Call == null : peer == null && spawn == null && control == null && !rename &&
+                if (tools.MayHaveSideEffects && (terminalOutcomes.Length > 0 ? terminalOutcomes.Any(item => item?.Fact.Call == null) : peer == null && spawn == null && control == null && !rename &&
                     !tools.NoEffect && progress.Outcome != ToolExecutionOutcome.Unknown && progress.Outcome != ToolExecutionOutcome.NotDispatched))
                     throw new InvalidDataException("Possible resource effects require exact linked proof or an unknown terminal.");
                 if (progress.Outcome != ToolExecutionOutcome.NotDispatched && StartedOperation(db, fact.Card.ChatId, fact.Run.RunId, tools.CallId) == null)

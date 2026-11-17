@@ -10,6 +10,7 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
 {
@@ -126,26 +127,28 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        internal ResourceJournalReceipt LinkedResourceOutcome(string chat, string run, string call,
+        internal IReadOnlyList<ResourceJournalReceipt> LinkedResourceOutcomes(string chat, string run, string call,
             CancellationToken token = default(CancellationToken))
         {
-            var link = Access((db, cursor) => {
-                string operation = null; long sequence = -1;
-                using (var command = Command(db, "SELECT operation,sequence FROM resource_link WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call ORDER BY sequence DESC LIMIT 1"))
+            var links = Access((db, cursor) => {
+                var result = new List<ResourceOutcomeLink>();
+                using (var command = Command(db, "SELECT operation FROM resource_link WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call ORDER BY sequence"))
                 {
                     AddCallKey(command, chat, run, call);
-                    using (var reader = command.ExecuteReader()) if (reader.Read()) { operation = reader.GetString(0); sequence = reader.GetInt64(1); }
+                    using (var reader = command.ExecuteReader())
+                        while (reader.Read()) result.Add(FindResourceLink(db, reader.GetString(0)).Outcome);
                 }
                 var terminal = TerminalOperation(db, chat, run, call) as string;
-                var result = terminal == null ? null : Find(db, terminal);
-                if (result?.Fact.ResourceOutcome != null && result.Position.Sequence > sequence) return result.Fact.ResourceOutcome;
-                if (operation == null) return null;
-                var linked = FindResourceLink(db, operation);
-                if (linked.ChatId != chat || linked.RunId != run || linked.CallId != call) throw new InvalidDataException("Foreign resource linkage row.");
-                return linked.Outcome;
+                var terminalFact = terminal == null ? null : Find(db, terminal)?.Fact;
+                if (terminalFact != null) result.AddRange(terminalFact.ResourceOutcomes);
+                return result.GroupBy(OutcomeKey, StringComparer.Ordinal).Select(group => group.Last()).OrderBy(item => item.Position.Sequence).ToArray();
             }, token);
-            return link == null ? null : new ResourceJournal(_paths, _protector).ReadOutcome(link);
+            return links.Select(link => new ResourceJournal(_paths, _protector).ReadOutcome(link)).ToArray();
         }
+
+        internal ResourceJournalReceipt LinkedResourceOutcome(string chat, string run, string call,
+            CancellationToken token = default(CancellationToken))
+        { return LinkedResourceOutcomes(chat, run, call, token).LastOrDefault(); }
 
         internal JournalCursor CommitCall(string chatId, string operationId, ChatMessage call,
             CancellationToken token = default(CancellationToken), ConversationResourceBinding resourceBinding = null)
@@ -224,20 +227,22 @@ namespace RNAssistant.Core.Storage
         internal void ReplayInto(string indexPath, CancellationToken token, bool recover = true)
         {
             var verified = new HashSet<string>(StringComparer.Ordinal);
-            ResourceJournalReceipt outcome = null; var contextKeys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
+            var outcomes = new Dictionary<string, ResourceJournalReceipt>(StringComparer.Ordinal);
+            var contextKeys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
             while (true)
             {
-                IReadOnlyList<PayloadRef> required = null; ResourceOutcomeLink requiredOutcome = null; ContextCallKeyNeeded requiredCall = null;
+                IReadOnlyList<PayloadRef> required = null; IReadOnlyList<ResourceOutcomeLink> requiredOutcomes = null; ContextCallKeyNeeded requiredCall = null;
                 using (Journal.AcquireAppendLock(token))
                 using (var db = OpenIndex(indexPath))
                 {
-                    try { CatchUp(db, verified, outcome, contextKeys, token, recover); return; }
+                    try { CatchUp(db, verified, outcomes, contextKeys, token, recover); return; }
                     catch (TailReferenceNeeded error) { required = error.References; }
-                    catch (OutcomeNeeded error) { requiredOutcome = error.Link; }
+                    catch (OutcomeNeeded error) { requiredOutcomes = error.Links; }
                     catch (ContextCallKeyNeeded error) { requiredCall = error; }
                 }
                 if (requiredCall != null) contextKeys[requiredCall.Fingerprint] = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
-                else if (requiredOutcome != null) outcome = new ResourceJournal(_paths, _protector).ReadOutcome(requiredOutcome);
+                else if (requiredOutcomes != null)
+                    foreach (var link in requiredOutcomes) outcomes[OutcomeKey(link)] = new ResourceJournal(_paths, _protector).ReadOutcome(link);
                 else foreach (var reference in required) VerifyReference(reference, verified);
             }
         }
@@ -248,21 +253,21 @@ namespace RNAssistant.Core.Storage
             using (RuntimeStorageActivity.Acquire(_paths, token))
             {
                 var verified = new HashSet<string>(StringComparer.Ordinal);
-                ResourceJournalReceipt outcome = null;
+                var outcomes = new Dictionary<string, ResourceJournalReceipt>(StringComparer.Ordinal);
                 var contextKeys = preparedCallKeys ?? new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
                 var repairAttempted = false;
                 while (true)
                 {
-                    IReadOnlyList<PayloadRef> required = null; ResourceOutcomeLink requiredOutcome = null; ContextCallKeyNeeded requiredCall = null;
+                    IReadOnlyList<PayloadRef> required = null; IReadOnlyList<ResourceOutcomeLink> requiredOutcomes = null; ContextCallKeyNeeded requiredCall = null;
                     try
                     {
                         using (JournalIndexAdmission.Enter(_paths, token))
                         using (Journal.AcquireAppendLock(token))
                         using (var db = OpenIndex())
                         {
-                            try { return action(db, CatchUp(db, verified, outcome, contextKeys, token)); }
+                            try { return action(db, CatchUp(db, verified, outcomes, contextKeys, token)); }
                             catch (TailReferenceNeeded error) { required = error.References; }
-                            catch (OutcomeNeeded error) { requiredOutcome = error.Link; }
+                            catch (OutcomeNeeded error) { requiredOutcomes = error.Links; }
                             catch (ContextCallKeyNeeded error) { requiredCall = error; }
                         }
                     }
@@ -273,7 +278,8 @@ namespace RNAssistant.Core.Storage
                     // Recovery verifies the one unresolved tail body outside all
                     // append/SQL locks, while the existing GC activity remains held.
                     if (requiredCall != null) contextKeys[requiredCall.Fingerprint] = PrepareContextCallKey(requiredCall.Call, requiredCall.Fingerprint);
-                    else if (requiredOutcome != null) outcome = new ResourceJournal(_paths, _protector).ReadOutcome(requiredOutcome);
+                    else if (requiredOutcomes != null)
+                        foreach (var link in requiredOutcomes) outcomes[OutcomeKey(link)] = new ResourceJournal(_paths, _protector).ReadOutcome(link);
                     else foreach (var reference in required) VerifyReference(reference, verified);
                 }
             }
@@ -287,24 +293,25 @@ namespace RNAssistant.Core.Storage
         }
 
 
-        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, ResourceJournalReceipt outcome, Dictionary<string, ContextCallKey> contextKeys, CancellationToken token, bool recover = true)
+        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, IReadOnlyDictionary<string, ResourceJournalReceipt> outcomes, Dictionary<string, ContextCallKey> contextKeys, CancellationToken token, bool recover = true)
         {
             var cursor = JournalIndex.LoadCursor(db, _scope);
             var applied = cursor;
             var current = Journal.CatchUp(cursor, (record, position) => {
-                if (IsChatFact(record.Kind)) ApplyChatFact(db, record, position, contextKeys, outcome);
+                if (IsChatFact(record.Kind)) ApplyChatFact(db, record, position, contextKeys, new Dictionary<string, ResourceJournalReceipt>(outcomes, StringComparer.Ordinal));
                 else if (record.Kind == "queue.control") ApplyControl(db, record, position);
                 else if (record.Kind == "run.checkpoint") ApplyRun(db, record, position);
                 else if (IsDeliveryFact(record.Kind)) ApplyDeliveryRecord(db, record, position);
                 else if (record.Kind == "tool.accepted") ApplyCall(db, DecodeCall(record), record.Operation, record.Fingerprint, position, LookupCallKey(contextKeys, record.Fingerprint));
                 else if (record.Kind == "resource.linked")
                 {
-                    var fact = DecodeLink(record); RequireOutcome(fact.Outcome, outcome);
-                    ApplyLink(db, record.Operation, record.Fingerprint, fact, position, outcome);
+                    var fact = DecodeLink(record); var proof = OutcomeFor(fact.Outcome, outcomes);
+                    ApplyLink(db, record.Operation, record.Fingerprint, fact, position, proof);
                 }
                 else
                 {
-                    var fact = Decode(record); ValidateOutcome(fact, outcome);
+                    var fact = Decode(record);
+                    ValidateOutcome(fact, fact.ResourceOutcomes.Select(link => OutcomeFor(link, outcomes)).ToArray());
                     Apply(db, fact, record.Operation, record.Fingerprint, position);
                 }
                 applied = position; contextKeys.Clear();
@@ -317,7 +324,8 @@ namespace RNAssistant.Core.Storage
                     var missing = LegacyImportReferences(DecodeChatCommit(record)).Where(reference => !verified.Contains(ReferenceKey(reference))).ToArray();
                     if (missing.Length != 0) throw new TailReferenceNeeded(missing);
                 }
-                if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record, contextKeys, outcome);
+                if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record, contextKeys,
+                    new Dictionary<string, ResourceJournalReceipt>(outcomes, StringComparer.Ordinal));
                 else if (record.Kind == "queue.control")
                 { var control = DecodeControl(record); ValidateControl(db, record.Operation, control);
                     ValidatePeerControl(db, record, control); references = new PayloadRef[0]; }
@@ -333,12 +341,13 @@ namespace RNAssistant.Core.Storage
                 }
                 else if (record.Kind == "resource.linked")
                 {
-                    var fact = DecodeLink(record); RequireOutcome(fact.Outcome, outcome); ValidateLink(db, record.Operation, fact, outcome);
+                    var fact = DecodeLink(record); var proof = OutcomeFor(fact.Outcome, outcomes); ValidateLink(db, record.Operation, fact, proof);
                     references = new PayloadRef[0];
                 }
                 else
                 {
-                    var fact = Decode(record); ValidateOutcome(fact, outcome); ValidateResult(db, fact, record.Operation); references = ResultReferences(fact.Result);
+                    var fact = Decode(record); ValidateOutcome(fact, fact.ResourceOutcomes.Select(link => OutcomeFor(link, outcomes)).ToArray());
+                    ValidateResult(db, fact, record.Operation); references = ResultReferences(fact.Result);
                 }
                 foreach (var reference in references)
                     if (!verified.Contains(ReferenceKey(reference))) throw new TailReferenceNeeded(reference);
@@ -588,31 +597,52 @@ namespace RNAssistant.Core.Storage
 
         private static void ValidateResourceBinding(ConversationResourceBinding binding, ConversationResultFact fact, bool callOrigin = false)
         {
-            if (fact.ResourceOutcome != null && (binding == null ? !callOrigin : !binding.Matches(fact.ResourceOutcome)))
+            if (binding != null && fact.ResourceOutcomes.Count == 1 && !binding.Matches(fact.ResourceOutcomes[0]) ||
+                binding == null && !callOrigin && fact.ResourceOutcomes.Count == 1)
                 throw new InvalidDataException("Result refers to another resource attempt.");
-            if (binding != null && fact.ResourceOutcome == null &&
+            if (binding != null && fact.ResourceOutcomes.Count == 0 &&
                 fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown &&
                 fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.NotDispatched)
                 throw new InvalidDataException("An effectful terminal requires its exact resource receipt.");
-            if (binding != null && fact.ResourceOutcome == null && fact.Result.ExecutionProgress.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown &&
+            if (binding != null && fact.ResourceOutcomes.Count == 0 && fact.Result.ExecutionProgress.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown &&
                 fact.Result.ExecutionProgress.EvidenceEligibility != RNAssistant.Core.Tools.EvidenceEligibility.None)
                 throw new InvalidDataException("Unresolved resource effect has no eligible success evidence.");
         }
 
-        private void ValidateOutcome(ConversationResultFact fact, ResourceJournalReceipt outcome)
+        private void ValidateOutcome(ConversationResultFact fact, IReadOnlyList<ResourceJournalReceipt> outcomes)
         {
-            var link = fact.ResourceOutcome;
-            if (link == null) return;
-            RequireOutcome(link, outcome);
-            var origin = outcome.Fact.Call?.Origin;
-            if (origin != null && (origin.ConversationScope != _scope || origin.ChatId != fact.ChatId ||
-                origin.RunId != fact.Result.RunId || origin.CallId != fact.Result.ToolCallId || origin.StepId != fact.Result.ResultStepId))
-                throw new InvalidDataException("Resource outcome belongs to another accepted runtime call.");
-            if (fact.Result.AuthorityCommitId != outcome.CommitId || fact.Result.ResourceEffect == null ||
-                !MatchesResourceOutcome(fact.Result.ToolName, fact.Result.ResourceEffect, outcome))
-                throw new InvalidDataException("Conversation effect disagrees with its exact resource receipt.");
-            if (outcome.Unknown && (fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown ||
-                outcome.Fact.Call == null && fact.Result.EvidenceReference != null)) throw new InvalidDataException("Unknown resource outcome has no success evidence.");
+            if (fact.ResourceOutcomes.Count == 0) return;
+            if (outcomes == null || outcomes.Count != fact.ResourceOutcomes.Count)
+                throw new OutcomeNeeded(fact.ResourceOutcomes);
+            for (var index = 0; index < outcomes.Count; index++)
+            {
+                var outcome = outcomes[index];
+                RequireOutcome(fact.ResourceOutcomes[index], outcome);
+                var origin = outcome.Fact.Call?.Origin;
+                if (origin != null && (origin.ConversationScope != _scope || origin.ChatId != fact.ChatId ||
+                    origin.RunId != fact.Result.RunId || origin.CallId != fact.Result.ToolCallId || origin.StepId != fact.Result.ResultStepId ||
+                    origin.TargetOrdinal.HasValue != string.Equals(fact.Result.ToolName,
+                        ResourceMutationToolCatalog.Patch, StringComparison.Ordinal)))
+                    throw new InvalidDataException("Resource outcome belongs to another accepted runtime call.");
+            }
+            if (outcomes.Count == 1 && fact.Result.AuthorityCommitId != outcomes[0].CommitId ||
+                outcomes.Count > 1 && fact.Result.AuthorityCommitId != null ||
+                fact.Result.ResourceEffect == null || !MatchesResourceOutcomes(fact.Result.ToolName, fact.Result.ResourceEffect, outcomes))
+                throw new InvalidDataException("Conversation effect disagrees with its exact resource receipts.");
+            if (outcomes.Any(item => item.Unknown) && (fact.Result.ExecutionProgress.Outcome != RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown ||
+                outcomes.Any(item => item.Fact.Call == null) && fact.Result.EvidenceReference != null))
+                throw new InvalidDataException("Unknown resource outcome has no success evidence.");
+        }
+
+        private static string OutcomeKey(ResourceOutcomeLink link)
+        { return link.Scope + "\n" + link.AttemptId + "\n" + link.Operation + "\n" + link.Fingerprint; }
+
+        private static ResourceJournalReceipt OutcomeFor(ResourceOutcomeLink link,
+            IReadOnlyDictionary<string, ResourceJournalReceipt> outcomes)
+        {
+            ResourceJournalReceipt outcome;
+            if (link == null || outcomes == null || !outcomes.TryGetValue(OutcomeKey(link), out outcome)) throw new OutcomeNeeded(link);
+            return outcome;
         }
 
         private static void RequireOutcome(ResourceOutcomeLink link, ResourceJournalReceipt outcome)
@@ -683,7 +713,11 @@ namespace RNAssistant.Core.Storage
             internal TailReferenceNeeded(IReadOnlyList<PayloadRef> references) { References = references; }
         }
         private sealed class OutcomeNeeded : Exception
-        { internal readonly ResourceOutcomeLink Link; internal OutcomeNeeded(ResourceOutcomeLink link) { Link = link; } }
+        {
+            internal readonly IReadOnlyList<ResourceOutcomeLink> Links;
+            internal OutcomeNeeded(ResourceOutcomeLink link) : this(new[] { link }) { }
+            internal OutcomeNeeded(IReadOnlyList<ResourceOutcomeLink> links) { Links = links ?? new ResourceOutcomeLink[0]; }
+        }
     }
 
     internal sealed class ConversationResourceOutcomeFact
@@ -734,9 +768,13 @@ namespace RNAssistant.Core.Storage
     {
         public string ChatId { get; private set; }
         public ChatMessage Result { get; private set; }
+        // Retained for compatibility with existing single-owner facts.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public ResourceOutcomeLink ResourceOutcome { get; private set; }
+        public IReadOnlyList<ResourceOutcomeLink> ResourceOutcomes { get; private set; }
         [JsonConstructor]
-        internal ConversationResultFact(string chatId, ChatMessage result, ResourceOutcomeLink resourceOutcome = null)
+        internal ConversationResultFact(string chatId, ChatMessage result, ResourceOutcomeLink resourceOutcome = null,
+            IReadOnlyList<ResourceOutcomeLink> resourceOutcomes = null)
         {
             if (string.IsNullOrWhiteSpace(chatId) || result == null || !result.ProtocolMessage || result.Activity != null ||
                 result.Role != ToolResultRoles.User || result.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
@@ -744,7 +782,13 @@ namespace RNAssistant.Core.Storage
                 result.AcceptedCallOrigin != null || string.IsNullOrWhiteSpace(result.ToolName) || string.IsNullOrWhiteSpace(result.ResultStepId) ||
                 string.IsNullOrWhiteSpace(result.ToolCallId) || string.IsNullOrWhiteSpace(result.RunId) ||
                 result.ResultBody != null && result.ResultPayload == null) throw new ArgumentException("Invalid typed terminal fact.");
-            ChatId = chatId; Result = result; ResourceOutcome = resourceOutcome;
+            var links = (resourceOutcomes ?? (resourceOutcome == null ? new ResourceOutcomeLink[0] : new[] { resourceOutcome })).ToArray();
+            if (links.Any(link => link == null) || links.GroupBy(link => link.AttemptId, StringComparer.Ordinal).Any(group => group.Count() != 1) ||
+                links.Length > ResourcePatch.MaximumTargets || links.Length > 1 && resourceOutcome != null)
+                throw new ArgumentException("Invalid exact resource outcome set.");
+            ChatId = chatId; Result = result;
+            ResourceOutcomes = Array.AsReadOnly(links);
+            ResourceOutcome = links.Length == 1 ? links[0] : null;
         }
     }
 

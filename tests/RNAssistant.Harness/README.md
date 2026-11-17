@@ -10,6 +10,14 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## Multi-target native patch receipts — 2026-11-17
+
+`native tools:` now covers the shared 16-target native schema, two VBA owners in one
+accepted `core.patch`, rejection before the first write, partial owner failure, ordered
+target ordinal receipts and rebuild without replay. Full `native tools:` passes 14/14.
+The broader `universal mutations:` multi-owner guard fixtures remain the domain-level
+complement.
+
 ## Addressed resource head capture — 2026-11-17
 
 `journal resources: receipts rebuild and restore` publishes 300 unrelated heads and

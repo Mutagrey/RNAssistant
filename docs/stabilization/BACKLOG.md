@@ -18,16 +18,13 @@ verified mutation or a separately accepted normal-return opaque invocation. Genu
 Unknown remains guarded. These checks use production journal composition, not only
 the older ChatStore-backed macro fixtures.
 
+Multi-target native `core.patch` receipts are closed in `17.3.19-dev`: two real VBA
+owners retain separate exact outcomes, preflight rejection writes nothing, a partial
+owner failure stops the package and rebuild performs no replay.
+
 Remaining work, in order:
 
-1. ResourceJournal / ConversationJournal: several exact owner attempts and outcome
-   receipts for one accepted `core.patch` call. Native schema/handler currently
-   permit one target and refuse larger packages before any write. Acceptance:
-   at least two real domain owners, every target's exact retained outcome, partial
-   failure, stale second target, lost ACK before/after publication, restart and no
-   replay. Do not replace the receipts with a synthetic aggregate or a tool-name
-   exception; increase the advertised limit only with that proof.
-2. Add a production-composition execution matrix for the remaining published
+1. Add a production-composition execution matrix for the remaining published
    mutation families (Word/PowerPoint, move/copy, prompt/catalog and plugin owners).
    A descriptor or fake legacy adapter test alone is insufficient. Verify
    prepare → source dispatch → exact owner publication → terminal → reopen/rebuild,

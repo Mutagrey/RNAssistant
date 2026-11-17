@@ -14,7 +14,8 @@ namespace RNAssistant.Core.Storage
         {
             if (session?.LastRun == null || context == null || session.LastRun.RunId != context.RunId || session.LastRun.TurnId != context.TurnId)
                 throw new InvalidOperationException("Mutation belongs to another conversation run.");
-            return new ResourceMutationOrigin(_scope, session.Id, context.RunId, context.Call.Id, context.StepId);
+            return new ResourceMutationOrigin(_scope, session.Id, context.RunId, context.Call.Id,
+                context.StepId, context.TargetOrdinal);
         }
 
         internal ResourceCallLink BindMutation(ResourceMutationOrigin origin)

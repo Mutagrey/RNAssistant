@@ -193,7 +193,7 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools, AgentCommunicationToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, new[] { ChatRenameToolHandler.Entry(_resourceOrigin != null) });
             RegisterControllerTools(controllerTools, new[] { SkillLoadToolHandler.Entry() });
-            RegisterControllerTools(controllerTools, ResourceMutationToolCatalog.GetTools(_resourceOrigin != null ? 1 : ResourcePatch.MaximumTargets));
+            RegisterControllerTools(controllerTools, ResourceMutationToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
                 UserQuestionToolCatalog.GetTools());
             _controllerTools = controllerTools.ToArray();

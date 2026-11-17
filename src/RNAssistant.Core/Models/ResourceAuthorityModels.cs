@@ -387,13 +387,18 @@ namespace RNAssistant.Core.Models
         public string RunId { get; private set; }
         public string CallId { get; private set; }
         public string StepId { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? TargetOrdinal { get; private set; }
         [JsonConstructor]
-        public ResourceMutationOrigin(string conversationScope, string chatId, string runId, string callId, string stepId)
+        public ResourceMutationOrigin(string conversationScope, string chatId, string runId, string callId, string stepId,
+            int? targetOrdinal = null)
         {
             if (string.IsNullOrWhiteSpace(conversationScope) || string.IsNullOrWhiteSpace(chatId) ||
-                string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(stepId))
+                string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(stepId) ||
+                targetOrdinal < 0)
                 throw new ArgumentException("An exact accepted runtime call is required.");
             ConversationScope = conversationScope; ChatId = chatId; RunId = runId; CallId = callId; StepId = stepId;
+            TargetOrdinal = targetOrdinal;
         }
     }
 

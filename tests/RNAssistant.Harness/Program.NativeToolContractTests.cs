@@ -111,24 +111,22 @@ namespace RNAssistant.Harness
         {
             WithNativeToolFixture(fixture => {
                 var published = fixture.Executor.GetControllerTools().Single(entry => entry.Id == ResourceMutationToolCatalog.Patch);
-                AssertEqual(1, (int)JObject.Parse(published.ArgumentSchemaJson)["properties"]["targets"]["maxItems"],
-                    "the native published schema advertises its one-outcome limit");
+                AssertEqual(ResourcePatch.MaximumTargets,
+                    (int)JObject.Parse(published.ArgumentSchemaJson)["properties"]["targets"]["maxItems"],
+                    "the native published schema advertises the shared patch bound");
                 const string source = "Sub Main()\nDebug.Print \"before\"\nEnd Sub";
                 fixture.Adapter.SetVbaModule("FirstPatchTarget", source, "StdModule");
                 fixture.Adapter.SetVbaModule("SecondPatchTarget", source, "StdModule");
-                // Exercise the real native dispatcher with an older broad schema:
-                // the handler limit must still reject before preparing any owner.
                 var stale = ResourceMutationToolCatalog.GetTools().Single(entry => entry.Id == ResourceMutationToolCatalog.Patch);
                 var runtime = fixture.Executor.CreateNativeRuntime(fixture.Session, new[] { stale }, fixture.Settings, ChatModes.Agent, false);
-                var args = new JObject { ["targets"] = PatchTargets(
-                    PatchSection("VBA module: FirstPatchTarget", EditSet(Edit("before", "after"))),
-                    PatchSection("VBA module: SecondPatchTarget", EditSet(Edit("before", "after")))) };
+                var args = new JObject { ["targets"] = PatchTargets(Enumerable.Range(0, ResourcePatch.MaximumTargets + 1)
+                    .Select(index => PatchSection("VBA module: Limit" + index, EditSet(Edit("before", "after")))).ToArray()) };
                 var call = new ToolCall("native-multiple-targets", stale.Id, args.ToString(Formatting.None));
                 var result = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call),
                     "batch-rejection-run", "batch-rejection-turn", "batch-rejection-step", DateTime.UtcNow, false, 5),
                     System.Threading.CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Error, result.Outcome, "multi-target native call receives a typed no-effect refusal");
-                AssertContains(result.Result.DataJson, "patch_target_limit", "the refusal comes from the native target bound");
+                AssertContains(result.Result.DataJson, "more items than maxItems", "the refusal comes from the shared patch schema bound");
                 AssertTrue(!result.MayHaveDispatched, "batch refusal precedes every dispatch boundary");
                 AssertEqual(ToolFailureKind.RejectedNoEffect, result.Recovery.FailureKind, "no partial effect is reported as an ordinary retry");
                 AssertEqual(0, fixture.Adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "neither source is written");

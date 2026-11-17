@@ -712,6 +712,8 @@ namespace RNAssistant.Harness
                 Test("native tools: Excel unknown effect is not replayed", NativeToolsExcelUnknownNoReplay),
                 Test("native tools: routed VBA replacement", NativeToolsVbaReplace),
                 Test("native tools: single patch retains exact owner receipt", NativeToolsSinglePatch),
+                Test("native tools: multi-target patch retains every owner receipt", NativeToolsMultiPatch),
+                Test("native tools: multi-target patch stops after owner rejection", NativeToolsMultiPatchStopsAfterOwnerRejection),
                 Test("native tools: patch batch refuses before any target", NativeToolsPatchBatchRejected),
                 Test("native tools: patch publication failure remains unknown", NativeToolsPatchPublicationFailure),
                 Test("native tools: routed VBA delete and explicit restore", NativeToolsVbaDeleteRestore),

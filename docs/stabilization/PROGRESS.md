@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Multi-target native patch receipts — 2026-11-17
+
+Implemented host-neutral / In Review, `17.3.19-dev`. Native Office and Workspace
+`core.patch` descriptors now advertise the shared 16-target schema. Each target
+prepares under its own target ordinal and existing domain owner; the resource-call index
+retains every published owner outcome for the accepted conversation call. The terminal
+stores the ordered exact outcome set, validates each aggregate target against its owner
+effect, and keeps Unknown/partial outcomes from becoming success. A rebuild reads those
+receipts without redispatch.
+
+`native tools: single patch retains exact owner receipt`,
+`native tools: multi-target patch retains every owner receipt`,
+`native tools: multi-target patch stops after owner rejection`,
+`native tools: patch batch refuses before any target`, full `native tools:` 14/14,
+`journal mutation:` 3/3 and the focused universal multi-owner guards pass. Windows/
+Office/WebView2 dispatch and visual qualification remain separate.
+
 ## Addressed resource head capture — 2026-11-17
 
 Implemented host-neutral / In Review, `17.3.18-dev`. `IResourceAuthorityStore` now

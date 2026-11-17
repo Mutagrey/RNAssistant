@@ -303,7 +303,7 @@ namespace RNAssistant.Core.Tools
         private ToolPreparationResult TargetLimit()
         {
             return InvalidArguments(PatchDiagnostic.Create("patch_target_limit",
-                "This runtime can retain one exact patch outcome per call. Submit one target per call; no target was changed."));
+                "The patch package exceeds the shared target bound. Split it into smaller calls; no target was changed."));
         }
         private static ToolPreparationResult RejectPreparation(PatchBatchResult result, int index, PatchDiagnostic diagnostic, ToolRecoveryContract recovery = null,
             IReadOnlyList<ResourceEvidence> resourceEvidence = null)

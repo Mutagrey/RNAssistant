@@ -38,13 +38,10 @@ optional immutable terminal witness in the existing prepared fact, not a new sto
 or retry registry. Old facts without the witness keep their existing fingerprint;
 new facts require the matching reader. No execution replay or legacy dual write.
 
-One explicitly temporary capability bound remains in native descriptors/handlers:
-
-| Bound | Owner / removal criterion |
-| --- | --- |
-| One resource per `core.patch` call | ResourceJournal call-outcome binding + ConversationJournal terminal proof: retain every owner attempt/receipt per accepted call, prove exact per-target aggregation and restart/lost-ACK/partial behavior before increasing the native schema limit. |
-
-Self-title and addressed-title proof use exact metadata commits; addressed rename
+Native `core.patch` no longer has a one-target temporary bound. `resource_call` indexes
+each target ordinal/attempt, and the conversation terminal retains the ordered exact
+owner outcomes. Partial/rejected/Unknown targets cannot substitute an aggregate for a
+missing owner receipt. Self-title and addressed-title proof use exact metadata commits; addressed rename
 also verifies target address/revision from the source terminal. The generic batch
 handler and legacy fixture defaults are retained as existing consumers, not used
 as fallback by production. `06664fc` already contains explicit legacy import and

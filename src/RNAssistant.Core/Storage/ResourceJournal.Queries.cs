@@ -6,6 +6,7 @@ using System.Threading;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
 {
@@ -29,6 +30,32 @@ namespace RNAssistant.Core.Storage
                 if (receipt?.Fact.Call == null || JsonConvert.SerializeObject(receipt.Fact.Call.Origin) != JsonConvert.SerializeObject(origin))
                     throw new InvalidDataException("Resource origin locator mismatch.");
                 return receipt.Fact.Authority == null && receipt.Fact.Publication == null ? null : receipt;
+            }, CancellationToken.None);
+        }
+
+        internal IReadOnlyList<ResourceJournalReceipt> CallOutcomes(ResourceMutationOrigin origin)
+        {
+            if (origin == null || origin.TargetOrdinal.HasValue) throw new ArgumentException("An aggregate call origin is required.");
+            return Access((db, cursor) => {
+                var rows = new List<Tuple<string, string>>();
+                using (var command = db.CreateCommand())
+                {
+                    command.CommandText = "SELECT scope,attempt FROM resource_call WHERE stream=$stream AND conversation_scope=$conversation AND chat=$chat AND run=$run AND call=$call AND step=$step AND target_ordinal IS NOT NULL ORDER BY target_ordinal";
+                    command.Parameters.AddWithValue("$stream", "resources");
+                    command.Parameters.AddWithValue("$conversation", origin.ConversationScope);
+                    command.Parameters.AddWithValue("$chat", origin.ChatId); command.Parameters.AddWithValue("$run", origin.RunId);
+                    command.Parameters.AddWithValue("$call", origin.CallId); command.Parameters.AddWithValue("$step", origin.StepId);
+                    using (var reader = command.ExecuteReader()) while (reader.Read()) rows.Add(Tuple.Create(reader.GetString(0), reader.GetString(1)));
+                }
+                if (rows.Count > ResourcePatch.MaximumTargets) throw new InvalidDataException("Patch call outcome index exceeds its bound.");
+                return (IReadOnlyList<ResourceJournalReceipt>)rows.Select(row => {
+                    var attempt = FindAttempt(db, ParseScope(row.Item1), row.Item2);
+                    var call = attempt?.Fact.Call?.Origin;
+                    if (call == null || call.ConversationScope != origin.ConversationScope || call.ChatId != origin.ChatId ||
+                        call.RunId != origin.RunId || call.CallId != origin.CallId || call.StepId != origin.StepId || !call.TargetOrdinal.HasValue)
+                        throw new InvalidDataException("Resource call outcome locator mismatch.");
+                    return attempt;
+                }).ToArray();
             }, CancellationToken.None);
         }
 

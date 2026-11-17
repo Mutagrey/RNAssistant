@@ -1327,7 +1327,7 @@ namespace RNAssistant.Runtime
                         Schema("entryPath", true), false,
                         new WebVerifierHandler(webHost.Create(_resources, webSnapshots, workspace), session?.Id, acceptance?.WebChecks), requiresConfirmation: true, independentRead: false, executesCode: true);
                 {
-                    foreach (var entry in ResourceMutationToolCatalog.GetTools(mutationOrigin != null ? 1 : ResourcePatch.MaximumTargets))
+                    foreach (var entry in ResourceMutationToolCatalog.GetTools())
                     {
                         var handler = new FileHandler(files, workspace,
                             entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered, _plans.Handler(_delivered), mutationOrigin);

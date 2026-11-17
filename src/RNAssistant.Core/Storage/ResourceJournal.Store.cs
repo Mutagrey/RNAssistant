@@ -229,6 +229,17 @@ namespace RNAssistant.Core.Storage
                     command.Parameters.AddWithValue("$origin", fact.Call == null ? (object)DBNull.Value : JsonConvert.SerializeObject(fact.Call.Origin));
                     command.Parameters.AddWithValue("$state", (int)fact.Attempt.State); command.Parameters.AddWithValue("$ticks", fact.Attempt.PreparedAt.Ticks); command.ExecuteNonQuery();
                 }
+            if (fact.Attempt != null && fact.Call != null)
+                using (var command = Command(db, "INSERT OR REPLACE INTO resource_call VALUES($stream,$scope,$conversation,$chat,$run,$call,$step,$target,$attempt)", fact.Scope, tx))
+                {
+                    var origin = fact.Call.Origin;
+                    command.Parameters.AddWithValue("$stream", "resources");
+                    command.Parameters.AddWithValue("$conversation", origin.ConversationScope);
+                    command.Parameters.AddWithValue("$chat", origin.ChatId); command.Parameters.AddWithValue("$run", origin.RunId);
+                    command.Parameters.AddWithValue("$call", origin.CallId); command.Parameters.AddWithValue("$step", origin.StepId);
+                    command.Parameters.AddWithValue("$target", (object)origin.TargetOrdinal ?? DBNull.Value);
+                    command.Parameters.AddWithValue("$attempt", fact.Attempt.AttemptId); command.ExecuteNonQuery();
+                }
             var authority = AuthorityOf(fact);
             if (authority != null)
             {

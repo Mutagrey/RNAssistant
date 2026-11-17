@@ -105,7 +105,8 @@ namespace RNAssistant.Core.Storage
                 throw new InvalidDataException("Chat address is outside this exact journal scope.");
         }
 
-        private IEnumerable<PayloadRef> ValidateChatFact(SqliteConnection db, JournalRecord record, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
+        private IEnumerable<PayloadRef> ValidateChatFact(SqliteConnection db, JournalRecord record,
+            Dictionary<string, ContextCallKey> keys = null, Dictionary<string, ResourceJournalReceipt> outcomes = null)
         {
             if (OperationExists(db, record.Operation)) throw new InvalidDataException("Duplicate chat operation.");
             if (IsChatMove(record.Kind)) { ValidateChatMove(db, record); return new PayloadRef[0]; }
@@ -176,16 +177,17 @@ namespace RNAssistant.Core.Storage
             }
             ValidateChatInput(db, record, fact);
             ValidateChatRun(db, record, fact);
-            ValidateChatTools(db, record, fact, keys, outcome);
+            ValidateChatTools(db, record, fact, keys, outcomes);
             return ChatReferences(record);
         }
 
-        private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position, Dictionary<string, ContextCallKey> keys = null, ResourceJournalReceipt outcome = null)
+        private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position,
+            Dictionary<string, ContextCallKey> keys = null, Dictionary<string, ResourceJournalReceipt> outcomes = null)
         {
             if (record.Kind == "chat.imported") { ApplyLegacyImport(db, record, position); return; }
             if (IsChatMove(record.Kind)) { ApplyChatMove(db, record, position); return; }
             if (record.Kind == "document.deleted") { ApplyDocumentDeletion(db, record, position); return; }
-            ValidateChatFact(db, record, keys, outcome);
+            ValidateChatFact(db, record, keys, outcomes);
             var committed = record.Kind == "chat.committed" ? DecodeChatCommit(record) : null;
             var history = committed?.History == null ? null : ReadHistory(committed.History);
             long lastActivity = 0;
@@ -282,8 +284,9 @@ namespace RNAssistant.Core.Storage
                 ValidatePublishedArtifacts(session, messages);
                 if (queueControl?.Input != null)
                     queueControl.Input.Attachments = AttachmentHeaders(queueControl.Input.Attachments);
-                ResourceJournalReceipt outcome;
-                var tools = PrepareChatTools(session, commit as ConversationRunCommit, out outcome);
+                IReadOnlyList<ResourceJournalReceipt> outcomes;
+                var tools = PrepareChatTools(session, commit as ConversationRunCommit, out outcomes);
+                var outcomesByKey = outcomes.ToDictionary(item => OutcomeKey(ResourceOutcomeLink.From(item)), item => item, StringComparer.Ordinal);
                 var keys = new Dictionary<string, ContextCallKey>(StringComparer.Ordinal);
                 foreach (var message in messages.Where(item => !creatingFork && item.Header.AcceptedCallOrigin != null))
                 { var call = new ConversationCallFact(session.Id, message.Header); var key = CallFingerprint(call); keys[key] = PrepareContextCallKey(call.Call, key); }
@@ -322,9 +325,9 @@ namespace RNAssistant.Core.Storage
                         return prior;
                     }
                     var record = DeliveryRecord(commit.OperationId, "chat.committed", fact, fingerprint);
-                    ValidateChatFact(db, record, keys, outcome);
+                    ValidateChatFact(db, record, keys, outcomesByKey);
                     var position = Journal.Append(cursor, record.Operation, fingerprint, record.Kind, record.Data);
-                    try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position, keys, outcome); }
+                    try { Fault?.Invoke("before_index"); ApplyChatFact(db, record, position, keys, outcomesByKey); }
                     catch (Exception error) when (error is IOException || error is SqliteException) { /* canonical receipt remains accepted */ }
                     return new ConversationChatReceipt(fact, record.Operation, position);
                 }, CancellationToken.None, keys);

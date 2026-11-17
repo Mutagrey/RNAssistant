@@ -223,6 +223,79 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void NativeToolsMultiPatch()
+        {
+            WithNativeToolFixture(fixture => {
+                fixture.Adapter.SetVbaModule("NativePatchA", "Sub Main()\nDebug.Print \"before-a\"\nEnd Sub", "StdModule");
+                fixture.Adapter.SetVbaModule("NativePatchB", "Sub Main()\nDebug.Print \"before-b\"\nEnd Sub", "StdModule");
+                var targetA = "VBA module: NativePatchA"; var targetB = "VBA module: NativePatchB";
+                JObject Patch(string first, string second) { return new JObject { ["targets"] = new JArray(
+                    new JObject { ["target"] = targetA, ["edits"] = new JArray(new JObject { ["old"] = first, ["new"] = first.Replace("before", "after") }) },
+                    new JObject { ["target"] = targetB, ["edits"] = new JArray(new JObject { ["old"] = second, ["new"] = second.Replace("before", "after") }) }) }; }
+                var result = RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.read", new JObject { ["target"] = targetA }),
+                    NativeCall("core.patch", Patch("before-a", "before-b")),
+                    NativeCall("core.read", new JObject { ["target"] = targetB }),
+                    NativeCall("core.patch", Patch("before-a", "before-b"))
+                }, () => ScriptedVerifiedFinish(fixture.Session, "Both prepared sources have verified after-state.", "Both sources patched.",
+                    "Patch both observed sources.", "core.patch"));
+                var terminals = fixture.Session.Messages.Where(item => item.ToolName == "core.patch" && item.Activity == null &&
+                    item.AcceptedCallOrigin == null && item.ExecutionProgress != null).ToArray();
+                AssertEqual(ToolExecutionOutcome.Error, terminals[0].ExecutionProgress.Outcome, "unobserved second target rejects the package before any write");
+                AssertEqual(null, terminals[0].ResourceEffect, "rejected multi-target package retains no mutation effect");
+                AssertContains(fixture.Adapter.GetVbaModuleCode("NativePatchA"), "after-a", "first target receives its owner write");
+                AssertContains(fixture.Adapter.GetVbaModuleCode("NativePatchB"), "after-b", "second target receives its owner write");
+                AssertEqual(2, fixture.Adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "exactly two target dispatches");
+                var terminal = NativeTerminal(fixture, "core.patch");
+                AssertEqual(2, terminal.ResourceEffect.Targets.Count, "multi-target terminal retains both addressed results");
+                AssertEqual(1, result.RunViewState.VerifiedWrites, "the shared run projection counts one accepted patch operation");
+                var outcomes = fixture.Journal.LinkedResourceOutcomes(fixture.Session.Id, terminal.RunId, terminal.ToolCallId);
+                AssertEqual(2, outcomes.Count, "both exact owner receipts are linked to one accepted call");
+                AssertEqual(2, outcomes.Select(item => item.Fact.Call.Origin.TargetOrdinal).Distinct().Count(), "each owner receipt retains its target ordinal");
+                var revision = fixture.Session.Revision;
+                fixture.Journal.Rebuild();
+                var restored = ((IConversationStore)fixture.Router).Load(fixture.Session.Id);
+                AssertEqual(revision, restored.Revision, "multi-owner receipts rebuild without replay");
+                AssertEqual(2, fixture.Journal.LinkedResourceOutcomes(fixture.Session.Id, terminal.RunId, terminal.ToolCallId).Count,
+                    "rebuild retains every linked owner receipt");
+            });
+        }
+
+        private static void NativeToolsMultiPatchStopsAfterOwnerRejection()
+        {
+            WithNativeToolFixture(fixture => {
+                fixture.Adapter.SetVbaModule("PartialA", "Sub Main()\nDebug.Print \"before-a\"\nEnd Sub", "StdModule");
+                fixture.Adapter.SetVbaModule("PartialB", "Sub Main()\nDebug.Print \"before-b\"\nEnd Sub", "StdModule");
+                var targetA = "VBA module: PartialA"; var targetB = "VBA module: PartialB";
+                fixture.Adapter.BeforeVbaBackendCall = call => {
+                    if (call.Operation == FakeVbaOperation.ReplaceModule && fixture.Adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule) == 2)
+                        throw new InvalidOperationException("second target dispatch lost its acknowledgement");
+                };
+                var patch = new JObject { ["targets"] = new JArray(
+                    new JObject { ["target"] = targetA, ["edits"] = new JArray(new JObject { ["old"] = "before-a", ["new"] = "after-a" }) },
+                    new JObject { ["target"] = targetB, ["edits"] = new JArray(new JObject { ["old"] = "before-b", ["new"] = "after-b" }) }) };
+                RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.read", new JObject { ["target"] = targetA }),
+                    NativeCall("core.read", new JObject { ["target"] = targetB }),
+                    NativeCall("core.patch", patch)
+                }, () => NativeUnverifiedFinish(fixture, "core.patch", false));
+                AssertContains(fixture.Adapter.GetVbaModuleCode("PartialA"), "after-a", "first target remains verified");
+                AssertContains(fixture.Adapter.GetVbaModuleCode("PartialB"), "before-b", "second target was not silently retried");
+                var terminal = NativeTerminal(fixture, "core.patch");
+                AssertEqual(ToolExecutionOutcome.Error, terminal.ExecutionProgress.Outcome, "partial owner failure remains an error");
+                AssertEqual(ResourceTargetStatus.Changed, terminal.ResourceEffect.Targets[0].Status, "first target retains Changed");
+                AssertEqual(ResourceTargetStatus.Rejected, terminal.ResourceEffect.Targets[1].Status, "second target retains Rejected after verified no-change");
+                var outcomes = fixture.Journal.LinkedResourceOutcomes(fixture.Session.Id, terminal.RunId, terminal.ToolCallId);
+                AssertTrue(outcomes.Count >= 1 && outcomes.All(item => item.Fact.Call.Origin.TargetOrdinal.HasValue),
+                    "only owner receipts tied to target ordinals are linked");
+                var revision = fixture.Session.Revision;
+                fixture.Journal.Rebuild();
+                var restored = ((IConversationStore)fixture.Router).Load(fixture.Session.Id);
+                AssertEqual(revision, restored.Revision, "partial multi-target terminal rebuilds without replay");
+                AssertEqual(2, fixture.Adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "rebuild does not dispatch either target again");
+            });
+        }
+
         private static void NativeToolsVbaDeleteRestore()
         {
             WithNativeToolFixture(fixture => {

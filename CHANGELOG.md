@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.3.19-dev
+
+- Native `core.patch` снова принимает несколько независимых targets в одном
+  подтверждённом пакете. Каждый фактически выполненный target сохраняет собственный
+  exact owner receipt и target ordinal; частичный сбой останавливает пакет без
+  повторного запуска уже изменённых целей.
+
 ### 17.3.18-dev
 
 - Подготовка Workspace Task List и Plan теперь читает из resource journal только
