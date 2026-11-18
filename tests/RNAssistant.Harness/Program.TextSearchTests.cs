@@ -30,7 +30,7 @@ namespace RNAssistant.Harness
                     System.Reflection.BindingFlags.NonPublic);
                 var schema = (string)ports.GetMethod("ResourceSchema",
                     System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
-                    .Invoke(null, new object[] { true, true, false, 2000 });
+                    .Invoke(null, new object[] { true, true, false, 2000, false });
                 var provider = new WorkspaceFileResourceProvider(new WorkspaceFileService(paths), workspace);
                 var handler = new RNAssistant.Runtime.WorkspaceResourceHandler(provider, null, () => null, true, null, 2000);
                 var fixture = new ToolRuntimeFixture(RuntimeRegistration("core.find", schema: schema));

@@ -1,10 +1,11 @@
 # Markdig 0.37.0
 
-Pinned managed Markdown dependency. The source tree contains references and this
-license notice; package binaries are restored locally before compiling and the
-`packages/Markdig.0.37.0/` directory is intentionally ignored by Git.
+Pinned managed Markdown dependency. The repository contains the official
+`packages/Markdig.0.37.0/` package, references and this license notice so a clean
+checkout builds without network access.
 
-From the repository root, with NuGet CLI 4.4 or newer:
+If the package is missing from a damaged or partial checkout, restore it from the
+repository root with NuGet CLI 4.4 or newer:
 
 ```powershell
 nuget install Markdig -Version 0.37.0 -OutputDirectory packages -DependencyVersion Ignore -NonInteractive -Source https://api.nuget.org/v3/index.json
@@ -16,7 +17,8 @@ and extract its contents into `packages/Markdig.0.37.0/`. Expected SHA-256:
 `9cfa31d3a2eb694d3164f1a3fab41a040c698a22e784cd4d76e50489d5698335`.
 
 Keep the official package contents under `packages/Markdig.0.37.0`, including
-package metadata. Do not add `-ExcludeVersion`; the project references are exact:
+package metadata, tracked by Git. Do not add `-ExcludeVersion`; the project
+references are exact:
 
 - `lib/net462/Markdig.dll`: production .NET Framework 4.8 Core and deployment.
 - `lib/net8.0/Markdig.dll`: Core.Net8, Harness and MockDemo.

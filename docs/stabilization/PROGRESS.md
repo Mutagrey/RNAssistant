@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Harness regression sweep and Markdig packaging — In Review, 2026-11-18
+
+On `e5190c97` the Harness and MockDemo builds pass, as do focused `markdown analysis:`,
+`markdown resources:` and the JS vendor gate. The full Harness is not green: seven
+older failures reproduce on `650aa2d6`/`7294e45d`, and the admitted-run cancellation
+case blocks past the local 60-second bound even in isolation. One fixture-arity bug
+and one null legacy-migration fixture parent were corrected; the remaining owners and
+exact failure evidence are in [BACKLOG](BACKLOG.md#current-harness-regression-sweep--observed-2026-11-18).
+No publication or persistence guard was relaxed. The completed packaging fix commits
+the official Markdig 0.37.0 package, advances the product to `17.4.1-dev` and keeps
+clean-checkout/offline builds independent of a manual package restore.
+
 ## Shared Markdown analysis and MaterialSurface — In Review, 2026-11-17
 
 Implemented host-neutral / In Review, `17.4.0-dev`. Saved Markdown now uses one

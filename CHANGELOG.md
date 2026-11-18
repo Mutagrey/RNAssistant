@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.4.1-dev
+
+- Исправлена воспроизводимость обычной и offline-сборки: закреплённый пакет
+  Markdig 0.37.0 теперь входит в репозиторий и не требует ручного локального
+  восстановления после чистого clone.
+
 ### 17.4.0-dev
 
 - Markdown-документы теперь используют один ограниченный разбор Markdig для

@@ -74,8 +74,8 @@ current pending inputs take 53 records and exactly 50 body reads. It runs with t
 Focused filter `markdown analysis:` exercises the shared Core Markdig pipeline:
 ATX/Setext hierarchy, fenced examples, duplicate and empty headings, HTML/outline
 anchor parity, exact UTF-16/CRLF/BOM ranges, reference links, autolinks, images, raw HTML
-escaping, parse-only results and explicit analysis bounds. Restore the pinned
-`packages/Markdig.0.37.0` dependency before building; Harness and MockDemo use its
+escaping, parse-only results and explicit analysis bounds. Use the committed pinned
+`packages/Markdig.0.37.0` dependency; Harness and MockDemo use its
 `net8.0` assembly, production Core and offline deployment use `net462`.
 
 Run `dotnet run --project tests/RNAssistant.Harness -- "markdown analysis:"`.

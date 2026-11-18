@@ -1,5 +1,41 @@
 # RNAssistant backlog
 
+## Current Harness regression sweep — observed 2026-11-18
+
+Owner: Harness fixtures, Workspace steering and plugin run lifetime. On `e5190c97`
+the Harness and MockDemo builds pass; focused `markdown analysis:`,
+`markdown resources:` and the JS vendor gate pass. The full Harness reproduces seven
+failures, then `plugins: admitted run cancellation and shutdown belong to application`
+does not complete even when run alone; the process remains blocked in a wait past the
+local 60-second check. This is not Windows evidence and does not yet distinguish a
+runtime deadlock from a fixture wait.
+
+The seven failures also reproduce on `650aa2d6` and the UI parent `7294e45d`, so they
+are older than the Markdig and Power Query commits:
+
+- `universal mutations: public Office routing`: the HTML helper calls
+  `ArtifactWorkingSetService.Change` before the new workspace snapshot has crossed its
+  authority publication barrier.
+- `text search: Office parity`: the fixture still writes the retired bare
+  `HTML file: index.html` target instead of creating an explicit HTML workspace.
+- `plugin versions: catalog migration save activation deletion and restart`: after
+  correcting a null fixture parent, migration still yields zero entries instead of the
+  expected two. Runtime versus fixture ownership remains open.
+- `plugins: project chat edit replaces history before rerun`: the fixture creates a
+  session through the journal composition, then writes it through a fresh `ChatStore`
+  without first persisting that storage; the guard correctly refuses it.
+- `workspace: steer uses active run owner`: the established tool-scenario gap still
+  reproduces (`tool executes before steer` is false); the model-wait scenario passes.
+- `workspace: steer recovery preserves delivery evidence`: the fixture appends input
+  events before persisting its synthetic chat, so trace admission correctly fails.
+- `text search: default directory browse through runtime`: the fixture invoked the
+  changed private `ResourceSchema` signature with four instead of five parameters;
+  this fixture drift was corrected and the focused case now passes.
+
+Do not weaken the publication, persistence or concurrency guards to make these
+fixtures pass. Re-check each owner after migrating the fixture to the current
+explicit-workspace and journal-native contracts.
+
 ## Markdown truncated fixture — observed 2026-11-16
 
 Owner: `tests/RNAssistant.Harness/Program.ResourceDiscoveryTests.cs`. The case

@@ -110,7 +110,7 @@ namespace RNAssistant.Harness
             var exact = new ResourceRef(ResourceUri.Create("plugin", id, "registration", "current"), "legacy_" + Guid.NewGuid().ToString("N"));
             var payload = PayloadRef.FromBlob(new ChatBlobStore(paths).StoreText(Newtonsoft.Json.JsonConvert.SerializeObject(registration), "application/json"));
             var frozen = authority.Capture(scope); var before = frozen.GetHead(exact.Identity);
-            authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload, parent: before.Revision));
+            authority.RegisterRevision(scope, new ResourceRevisionMetadata(exact, payload.Sha256, payload, parent: before?.Revision));
             authority.RegisterView(scope, new ResourceRevisionView(exact, "plugin-registration", payload.Sha256, payload, ResourceCoverage.Whole()));
             authority.Publish(ResourceAuthorityCommit.Create(scope, frozen.Generation, null,
                 new[] { new ResourceHeadChange(exact.Identity, before, ResourceHeadState.Known(exact, frozen.Generation + 1, "plugin-registration")) }, AuthorityCommitReason.CatalogResourcePublication));
