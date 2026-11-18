@@ -338,8 +338,22 @@ identity; pageSession остаётся runtime-only. Единственный hi
 LocalBrowserPageRuntime; UI не хранит собственный стек. Источники читают existing
 domain owners через typed ReadBrowserSource, bounded text viewer и revision guard.
 PreviewSurface владеет toolbar/combobox. Исполнение закрыто B02 до qualification;
-Shell iframe с авторским HTML не является fallback. Provider routes мигрируют
-по следующему срезу versions, редактор остаётся прежним владельцем dirty buffer.
+Shell iframe внутри этого route не является fallback для native Browser. Provider
+routes мигрируют по следующему срезу versions, редактор остаётся прежним владельцем
+dirty buffer. Отдельный inline HTML preview сообщения описан ниже и не открывает
+local Browser execution.
+
+## Inline HTML в чате — In Review, 2026-11-18
+
+Owner — общий Markdown enhancer и `app-chat-visuals`; Office, Workspace и plugin
+используют один renderer. Завершённый `html` fence после появления в viewport
+открывается в preview по умолчанию. Play/перезапуск, source, copy и expand работают
+с одним exact iframe; переключение source не сбрасывает состояние. Высота первый
+раз следует `postMessage` из iframe и ограничена 300–680 px / 72% viewport, после
+чего остаётся вертикально resizable. iframe имеет `allow-scripts` без same-origin,
+fixed CSP запрещает сеть, внешние assets, frames, forms и workers; HTML ограничен
+200 000 символов. Это presentation transient message content, не artifact/store/
+Browser route. CPU isolation и Windows/WebView2 qualification остаются открытыми.
 
 
 ## Local Browser / Settings — In Review, 2026-11-13

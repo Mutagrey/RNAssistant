@@ -41,7 +41,11 @@
     doc.head.appendChild(style);
     if (interactive) {
       var report = doc.createElement("script");
-      report.textContent = "addEventListener('error',function(e){parent.postMessage({type:'rna.chatPreview.error',message:String(e.message).slice(0,500)},'*')});addEventListener('unhandledrejection',function(){parent.postMessage({type:'rna.chatPreview.error',message:'Ошибка асинхронного JavaScript'},'*')});";
+      report.textContent = "addEventListener('error',function(e){parent.postMessage({type:'rna.chatPreview.error',message:String(e.message).slice(0,500)},'*')});" +
+        "addEventListener('unhandledrejection',function(){parent.postMessage({type:'rna.chatPreview.error',message:'Ошибка асинхронного JavaScript'},'*')});" +
+        "function rnaReportSize(){try{var d=document.documentElement,b=document.body,h=Math.ceil(Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0));" +
+        "if(h)parent.postMessage({type:'rna.chatPreview.size',height:h},'*')}catch(ignore){}}" +
+        "addEventListener('load',function(){requestAnimationFrame(rnaReportSize)});";
       doc.head.insertBefore(report, meta.nextSibling);
     }
     if (script) {
@@ -60,14 +64,16 @@
   function mount(pre, language, source) {
     if (!pre.parentNode || pre.closest(".chat-visual")) return false;
     var wrap = document.createElement("section"); wrap.className = "chat-visual";
+    if (language === "html") wrap.classList.add("kind-html");
     var tools = document.createElement("div"); tools.className = "block-tools";
     wrap.setAttribute("aria-label", language === "mermaid" ? "Схема" : "Интерактивный пример");
     var surface = document.createElement("div"); surface.className = "chat-visual-surface";
     var status = document.createElement("div"); status.className = "chat-visual-status"; status.setAttribute("role", "status");
-    var token = 0, disposed = false, seen = false, htmlStarted = false, intersection;
+    var token = 0, disposed = false, seen = false, htmlStarted = false, frameSized = false, intersection;
     function stop() {
       token += 1; surface.replaceChildren();
-      htmlStarted = false;
+      surface.style.height = ""; htmlStarted = false; frameSized = false;
+      if (play) { play.disabled = false; buttonLabel(play, "Запустить", "play"); }
     }
     function showCode(value) {
       pre.hidden = !value;
@@ -79,6 +85,7 @@
     }
     function fail(error) { status.textContent = "Не удалось показать: " + (error.message || error); showCode(true); }
     function showSource() { showCode(pre.hidden); }
+    var play = language === "html" ? button("Запустить", "play", function () { startHtml(); }) : null;
     var codeButton = button("Показать код", "code", showSource); codeButton.setAttribute("aria-expanded", "false");
     var copyButton = button("Копировать", "copy", function () { window.copyText(source); });
     var zoom = button("Увеличить", "external", function () {
@@ -90,15 +97,32 @@
     wrap.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && wrap.classList.contains("chat-visual-expanded")) { zoom.click(); zoom.focus(); }
     });
+    if (play) tools.appendChild(play);
     tools.appendChild(codeButton); tools.appendChild(copyButton); tools.appendChild(zoom);
     pre.parentNode.insertBefore(wrap, pre);
     wrap.appendChild(tools); wrap.appendChild(status); wrap.appendChild(surface); wrap.appendChild(pre); pre.hidden = true;
     status.textContent = language === "html" ? "Подготовка просмотра…" : "Схема ожидает просмотра…";
     async function startHtml() {
-      if (disposed || htmlStarted) return;
-      htmlStarted = true;
-      status.textContent = RNAssistantBrowser.unavailable;
-      showCode(true);
+      if (disposed) return;
+      // Message HTML is transient chat presentation. Its readiness must never be
+      // inferred from the separate native Browser host or reuse Browser fallback text.
+      stop(); var current = token; htmlStarted = true; play.disabled = true;
+      buttonLabel(play, "Подготовка…", "play"); status.textContent = "Подготовка просмотра…"; showCode(false);
+      try {
+        if (source.length > 200000) throw new Error("HTML превышает лимит 200 000 символов.");
+        var js = "";
+        // Only the checked-in ECharts runtime is admitted; authored vendor directives
+        // and every external asset remain blocked by the fixed CSP below.
+        if (/\becharts\s*\./.test(source)) {
+          var runtime = window.RNAssistantHtmlVendorRuntime;
+          if (!runtime) throw new Error("Локальный runtime для ECharts недоступен.");
+          var files = [{ kind: "script", content: "echarts.init" }];
+          await runtime.ensure(files); js = runtime.source(runtime.used(files)[0]).js;
+        }
+        if (disposed || current !== token) return;
+        surface.appendChild(makeFrame("HTML-превью без доступа к сети", frameDocument(source, js, true), true));
+        play.disabled = false; buttonLabel(play, "Перезапустить", "play"); status.textContent = "";
+      } catch (error) { if (!disposed && current === token) { stop(); fail(error); } }
     }
 
     function diagram() {
@@ -130,15 +154,21 @@
         } catch (error) { if (!disposed && current === token) fail(error); }
       });
     }
-    function frameError(event) {
+    function frameMessage(event) {
       var frame = surface.querySelector("iframe");
-      if (!disposed && frame && event.source === frame.contentWindow && event.data && event.data.type === "rna.chatPreview.error") {
+      if (disposed || !frame || event.source !== frame.contentWindow || !event.data) return;
+      if (event.data.type === "rna.chatPreview.size" && !frameSized && Number.isFinite(event.data.height)) {
+        var minimum = window.innerWidth <= 480 ? 300 : 360;
+        var maximum = Math.max(minimum, Math.min(680, Math.round(window.innerHeight * 0.72)));
+        surface.style.height = Math.max(minimum, Math.min(maximum, Math.round(event.data.height))) + "px";
+        frameSized = true;
+      } else if (event.data.type === "rna.chatPreview.error") {
         status.textContent = "Ошибка превью: " + String(event.data.message || "JavaScript").slice(0, 500);
       }
     }
-    window.addEventListener("message", frameError);
+    window.addEventListener("message", frameMessage);
     var item = { node: wrap, dispose: function () {
-      if (disposed) return; disposed = true; window.removeEventListener("message", frameError); stop(); if (intersection) intersection.disconnect(); mounted.delete(item);
+      if (disposed) return; disposed = true; window.removeEventListener("message", frameMessage); stop(); if (intersection) intersection.disconnect(); mounted.delete(item);
     }, theme: function () { if (language === "mermaid" && seen) diagram(); } };
     wrap.__disposeChatVisual = item.dispose;
     mounted.add(item);

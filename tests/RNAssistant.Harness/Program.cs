@@ -1228,6 +1228,7 @@ namespace RNAssistant.Harness
                 Test("context composition: selected skill exact materialization", ContextCompositionMaterializesSelectedSkillOnce),
                 Test("skill packages: selection deduplication compaction budget and scope", SkillPackagesSelectionAndBudget),
                 Test("skill packages: built-ins load for every Office host", BuiltInSkillPackagesLoadForEveryOfficeHost),
+                Test("skill packages: visualization preview guidance", VisualizationSkillAutomaticPreviewGuidance),
                 Test("excel report: acceptance rejects incomplete state", ExcelReportAcceptanceRejectsIncompleteState),
                 Test("skill packages: dependencies conflicts updates and revocation", SkillPackagesDependencyFailures),
                 Test("skill packages: exact request dispatch and next-step loading", SkillPackagesExactDispatch),

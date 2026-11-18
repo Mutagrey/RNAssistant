@@ -445,6 +445,20 @@ CSS zoom к retained overlay нет; размеры bubbles, шрифты и tok
 Проверяются реальные bounds root/messages/composer относительно своей группы, а не
 только отсутствие overflow внутри уже неверно увеличенного root.
 
+## Inline HTML block — In Review, 2026-11-18
+
+Completed HTML card использует те же `chat-visual`/`block-tools`, `icon-btn compact`
+и SVG 15 px: play/restart, code, copy, expand. Новых tokens или отдельной кнопки
+Play с текстом не вводится. Preview является default view; source скрыт до выбора
+code. Toolbar остаётся 28 px (40 px coarse pointer), доступные title/aria-label и
+`aria-expanded` сохраняются.
+
+Карточка не получает фиксированную высоту экрана: первый `postMessage` из iframe
+задаёт высоту по содержимому в пределах 300–680 px и 72% viewport, затем пользователь
+меняет её вертикальной ручкой. Expand занимает существующий viewport; source и
+preview никогда не показываются одновременно. На 360 px ширина не увеличивает Shell,
+а preview остаётся внутри width группы.
+
 ## Выбор участников для продолжения — In Review, 2026-11-04
 
 Срез использует существующий composer menu и portalled ActionMenu, без нового dialog,

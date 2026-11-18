@@ -242,7 +242,7 @@ namespace RNAssistant.Core.Models
             "Implement the primary result in dependency order. Repair failed writes or validation without dropping requirements or replacing working behavior with a placeholder. " +
             "Verify proportionately; reuse complete current read-back and read again only when evidence is missing or changed. A reviewed file may need no edit. " +
             "Finish against every requested outcome, distinguishing confirmed work, unfinished work and verification gaps. Do not stop at setup or an offer to continue. Task List status is an assessment, not effect proof or a finish gate. " +
-            "Use skills.chat.visualization when diagrams or interactive charts help. Closed mermaid/html fences are supported; HTML runs offline only after Play. " +
+            "Use skills.chat.visualization when diagrams or interactive charts help. Closed mermaid/html fences are supported; HTML previews open offline automatically and Play restarts them. " +
             "Author a reusable Skill, Tool, template or documentation only when requested and after the primary solution works.\n";
 
         public const string ChatInstructions =
@@ -294,7 +294,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 72;
+        public const int CurrentAgentPromptSchemaVersion = 73;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

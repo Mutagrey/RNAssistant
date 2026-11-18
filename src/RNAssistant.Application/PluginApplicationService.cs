@@ -703,6 +703,24 @@ namespace RNAssistant.Application
                 return ProjectChat(new ProjectChatRequest { WorkspaceId = workspace.WorkspaceId, SessionId = sessionId });
             }
         }
+        internal static ChatMessageViewDto PresentWorkspaceMessage(ChatMessage message, ChatBlobStore payloads)
+        {
+            if (message?.AcceptedCallPayload != null)
+            {
+                if (message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion &&
+                    AcceptedCallPayloadService.IsExternalizedCall(message) && message.AcceptedCallOrigin.CallCount.HasValue &&
+                    !string.IsNullOrEmpty(message.ResponseReason) && message.AcceptedCallNarration != null)
+                    return AcceptedMessage(message, ConversationResponse.ExecuteAction,
+                        message.ResponseReason, message.AcceptedCallNarration);
+                try { message = AcceptedCallPayloadService.Hydrate(message, payloads); }
+                catch (Exception error) when (error is InvalidOperationException || error is IOException ||
+                    error is UnauthorizedAccessException || error is CryptographicException ||
+                    error is System.Text.DecoderFallbackException || error is JsonSerializationException)
+                { return IncompleteAcceptedMessage(message); }
+            }
+            return PresentWorkspaceMessage(message);
+        }
+
         internal static ChatMessageViewDto PresentWorkspaceMessage(ChatMessage message)
         {
             // JSON-profile tool results use the user role. Keep the same hidden
@@ -713,31 +731,9 @@ namespace RNAssistant.Application
             {
                 var accepted = ConversationResponseHistoryReader.Read(message);
                 if (!accepted.Success)
-                    return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
-                        Content = "Сообщение модели не удалось отобразить: запись принятого вызова неполная." };
-                return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
-                    StepId = message.AcceptedCallOrigin?.StepId,
-                    CreatedUtc = message.CreatedUtc, Content = accepted.Response.Message,
-                    PromptTokens = message.PromptTokens, CompletionTokens = message.CompletionTokens,
-                    TotalTokens = message.TotalTokens,
-                    Activity = accepted.Response.Action == ConversationResponse.FinishAction ? null : new ChatActivity
-                    {
-                        Kind = "step", RunId = message.RunId, StepId = message.AcceptedCallOrigin?.StepId,
-                        StepReason = accepted.Response.Reason,
-                        StepMessage = !string.IsNullOrWhiteSpace(accepted.Response.Message)
-                            ? accepted.Response.Message : accepted.Response.Decision,
-                        Title = accepted.Response.Action == ConversationResponse.ReflectionAction
-                            ? "Промежуточное решение" : "Выполняю действие",
-                        Status = "completed"
-                    },
-                    RunViewState = message.RunViewState,
-                    ReasoningContent = message.ReasoningContent, ReasoningTokens = message.ReasoningTokens,
-                    ReasoningTruncated = message.ReasoningTruncated,
-                    ReflectionDecision = accepted.Response.Action == ConversationResponse.ReflectionAction
-                        ? accepted.Response.Decision : null,
-                    Results = accepted.Response.Action == ConversationResponse.FinishAction
-                        ? accepted.Response.Results.Select(claim => new ModelResultViewState(
-                            claim.Criterion, claim.AssessmentName, claim.Evidence)).ToArray() : null };
+                    return IncompleteAcceptedMessage(message);
+                return AcceptedMessage(message, accepted.Response.Action, accepted.Response.Reason,
+                    accepted.Response.Message, accepted.Response.Decision, accepted.Response.Results);
             }
             if (message.Role != "assistant" && message.Role != "user")
                 return new ChatMessageViewDto { Id = message.Id, Role = message.Role,
@@ -747,6 +743,39 @@ namespace RNAssistant.Application
                     StepId = message.AcceptedCallOrigin?.StepId,
                     Content = "Сообщение использует неподдерживаемый протокол и пропущено. Исходная запись сохранена." };
             return ChatMessageViewDto.From(message);
+        }
+
+        private static ChatMessageViewDto AcceptedMessage(ChatMessage message, string action, string reason,
+            string text, string decision = null, IReadOnlyList<ConversationResultClaim> results = null)
+        {
+            return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
+                StepId = message.AcceptedCallOrigin?.StepId,
+                CreatedUtc = message.CreatedUtc, Content = text,
+                PromptTokens = message.PromptTokens, CompletionTokens = message.CompletionTokens,
+                TotalTokens = message.TotalTokens,
+                Activity = action == ConversationResponse.FinishAction ? null : new ChatActivity
+                {
+                    Kind = "step", RunId = message.RunId, StepId = message.AcceptedCallOrigin?.StepId,
+                    StepReason = reason,
+                    StepMessage = !string.IsNullOrWhiteSpace(text) ? text : decision,
+                    Title = action == ConversationResponse.ReflectionAction
+                        ? "Промежуточное решение" : "Выполняю действие",
+                    Status = "completed"
+                },
+                RunViewState = message.RunViewState,
+                ReasoningContent = message.ReasoningContent, ReasoningTokens = message.ReasoningTokens,
+                ReasoningTruncated = message.ReasoningTruncated,
+                ReflectionDecision = action == ConversationResponse.ReflectionAction ? decision : null,
+                Results = action == ConversationResponse.FinishAction
+                    ? results.Select(claim => new ModelResultViewState(
+                        claim.Criterion, claim.AssessmentName, claim.Evidence)).ToArray() : null };
+        }
+
+        private static ChatMessageViewDto IncompleteAcceptedMessage(ChatMessage message)
+        {
+            return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
+                RunViewState = message.RunViewState,
+                Content = "Сообщение модели не удалось отобразить: запись принятого вызова неполная." };
         }
         private ChatMessageWindowViewDto PresentWorkspaceWindow(WorkspaceDescriptor workspace, ChatSession session, int beforeIndex)
         {
@@ -773,7 +802,7 @@ namespace RNAssistant.Application
         {
             var attachments = new AttachmentStore(_paths);
             return messages.Select(message => {
-                var view = PresentWorkspaceMessage(message);
+                var view = PresentWorkspaceMessage(message, Conversations.Payloads);
                 if (view?.Attachments == null) return view;
                 for (var index = 0; index < view.Attachments.Count; index++)
                 {

@@ -37,6 +37,7 @@ namespace RNAssistant.Core.Storage
             var body = new AcceptedCallBody { Content = message.Content, ToolCalls = message.ToolCalls };
             message.AcceptedCallPayload = PayloadRef.FromBlob(payloads.StoreText(JsonConvert.SerializeObject(body),
                 ContentType));
+            message.ResponseReason = accepted.Response.Reason;
             message.AcceptedCallNarration = accepted.Response.Message;
             message.Content = "ACCEPTED_TOOL_CALL: " + message.ToolName + " (exact arguments retained in resource payload)";
             message.ToolCalls = new List<LlmToolCall>();

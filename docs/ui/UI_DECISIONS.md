@@ -1,5 +1,17 @@
 # Решения по UI RNAssistant
 
+## 2026-11-18 — HTML в чате: preview по умолчанию — Approved behavior
+
+Пользователь уточнил: завершённый HTML в сообщении должен сразу показываться
+страницей, а не исходником; нужна явная кнопка Play/перезапуска и удобный размер.
+Решение: completed `html` fence автоматически открывает sandboxed preview при
+появлении в ленте, source остаётся отдельным режимом. Play перезапускает точный
+iframe, существующие code/copy/expand controls сохраняются; высота следует
+содержимому в bounded диапазоне и может изменяться пользователем. CSP запрещает
+сеть и внешние зависимости, sandbox не получает same-origin. Это заменяет
+source-only поведение B02 только для inline chat presentation; local Browser
+execution и Windows/WebView2 isolation qualification остаются открытыми.
+
 ## 2026-11-18 — Browser header всегда одна строка: Approved behavior
 
 Пользователь уточнил: верхняя панель Shell и Browser никогда не должна становиться

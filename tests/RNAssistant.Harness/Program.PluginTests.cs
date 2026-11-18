@@ -870,6 +870,20 @@ namespace RNAssistant.Harness
                     "project and plugin chats retain accepted provider usage in the shared feed");
                 AssertTrue(!JsonConvert.SerializeObject(presented).Contains("README.md"),
                     "workspace browser view never exposes accepted call arguments");
+                var payloads = new ChatBlobStore(paths);
+                var externalized = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(wire));
+                externalized.ArgumentPayload = PayloadRef.FromBlob(payloads.StoreText(
+                    "{\"target\":\"README.md\"}", "application/json"));
+                AcceptedCallPayloadService.Externalize(externalized, payloads);
+                var headerView = PluginApplicationService.PresentWorkspaceMessage(externalized, null);
+                AssertEqual("Читаю исходник", headerView.Content,
+                    "plugin chat presents an externalized browser/tool call from its lightweight header");
+                AssertTrue(!JsonConvert.SerializeObject(headerView).Contains("README.md"),
+                    "lightweight presentation still keeps accepted arguments private");
+                externalized.ResponseReason = null;
+                AssertEqual("Читаю исходник",
+                    PluginApplicationService.PresentWorkspaceMessage(externalized, payloads).Content,
+                    "older externalized calls without a lightweight reason hydrate for presentation");
                 var result = new ChatMessage { Role = ToolResultRoles.User, ProtocolMessage = true,
                     RunId = "protocol-run", ToolCallId = "call-1", ToolName = "core.read",
                     ToolResultProtocolVersion = ToolResultWire.CurrentVersion, Content = "private tool_results" };

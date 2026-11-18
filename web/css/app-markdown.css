@@ -265,11 +265,20 @@
 .chat-visual-status { padding: 8px 12px; font-size: 12px; color: var(--ink-muted); }
 .chat-visual-status:empty { display: none; }
 .chat-visual-frame { display: block; width: 100%; height: 360px; border: 0; background: transparent; }
+.chat-visual.kind-html .chat-visual-surface {
+  height: clamp(360px, 52vh, 620px);
+  min-height: 260px;
+  max-height: 70vh;
+  overflow: hidden;
+  resize: vertical;
+}
+.chat-visual.kind-html .chat-visual-frame { height: 100%; }
 .chat-visual-expanded {
   position: fixed; inset: 16px; z-index: 1100; margin: 0;
   display: flex; flex-direction: column; box-shadow: 0 12px 60px #0006;
 }
 .chat-visual-expanded .chat-visual-surface { flex: 1; min-height: 0; }
+.chat-visual-expanded.kind-html .chat-visual-surface { height: auto; max-height: none; resize: none; }
 .chat-visual-expanded .chat-visual-frame { height: 100% !important; }
 .chat-visual-expanded > pre { max-height: 35%; flex-shrink: 0; }
 .markdown .table-wrap { overflow-x: auto; padding: 6px 12px 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-subtle); }
@@ -282,5 +291,7 @@
 .markdown .table-wrap tr:last-child td { border-bottom: 0; }
 @media (max-width: 480px) {
   .chat-visual-frame { height: 300px; }
+  .chat-visual.kind-html .chat-visual-surface { height: 330px; min-height: 240px; max-height: 64vh; }
   .chat-visual-expanded { inset: 6px; }
+  .chat-visual-expanded.kind-html .chat-visual-surface { height: auto; max-height: none; }
 }

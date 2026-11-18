@@ -784,6 +784,29 @@ HtmlWorkspaceView также исправлен: reload перечитывает
 История HTML/plugin теперь использует общий portalled ActionMenu; прежние version
 popover DOM/CSS удалены. Exact guards и загрузка порциями сохранены.
 
+### Inline HTML preview — In Review, 2026-11-18
+
+Пользователь потребовал вернуть HTML в чате как страницу по умолчанию с Play и
+удобным размером. Срез переключает только completed fenced HTML presentation:
+тот же sandboxed iframe, fixed CSP без сети, source/copy/expand controls, Play
+перезапускает exact frame, высота следует содержимому и остаётся resizable. Не
+добавлены Browser route, artifact/store, vendor allowlist или bridge capability;
+B02 для local Browser execution, CPU isolation и Windows/WebView2 qualification
+не закрыты.
+
+Локальный Chromium visual check на 750×800 подтвердил preview по умолчанию,
+видимый Play, полный дом без source-кода и bounded высоту. DevTools smoke проверил
+source toggle, Play restart и expand; на 420 px / 125% layout не имел horizontal
+overflow. `chat-visuals.test.js` обновлён для autoplay, restart, source toggle,
+resize, CSP и lifecycle; Playwright в workspace не установлен, поэтому fixture не
+исполнялся. Для ревью: открыть чат с HTML house → увидеть preview → Play → source
+→ Play → expand; отдельно подтвердить отсутствие сети и Windows/WebView2 на target
+host.
+
+Предупреждение «Native Browser недоступен» из фото было ложной диагностикой
+inline HTML stub, а не состоянием native Browser host. Regression fixture теперь
+запрещает показывать строку Browser fallback внутри HTML-сообщения.
+
 2026-11-10: saved HTML history отвязана от captured chat head/revision. Typed query
 читает актуальную document history без смены exact snapshot; меню обновляется при
 каждом открытии, stale cursor начинает чтение заново. Пройдены host-neutral CAS history

@@ -1,5 +1,43 @@
 # Stabilization progress
 
+## Inline HTML preview in chat — In Review, 2026-11-18
+
+Implemented host-neutral / In Review, `17.6.6-dev`. Completed fenced HTML in
+Office, Workspace and plugin chats now opens as a page by default when it enters the
+viewport. The existing sandboxed visual owner keeps `allow-scripts` without
+same-origin and the fixed CSP without network, nested frames, forms or workers. A
+Play control restarts the exact iframe; source, copy and expand remain available.
+Its first height follows a bounded message from the frame, then remains vertically
+resizable up to the local viewport limit. The built-in visualization skill and
+default agent guidance now describe automatic preview plus explicit restart;
+agent prompt schema is 73.
+
+Local Chromium visually confirmed the 750×800 house fixture without source code,
+with Play visible and all content inside the card. A DevTools smoke confirmed the
+default preview, source toggle, Play restart and expand; the 420 px / 125% layout
+had no horizontal overflow. Node syntax checks pass; the updated Playwright fixture
+was not executed because Playwright is not installed. CPU isolation and Windows x64 /
+Office x64 / WebView2 acceptance remain open.
+
+The former “Native Browser недоступен” line in the chat photo was not emitted by a
+native Browser page. It was the B02 source-only stub inside the inline HTML visual;
+that path now renders the sandboxed page and the regression fixture forbids that
+Browser fallback text from appearing in a message preview.
+
+## Externalized accepted calls in project/plugin chats — In Review, 2026-11-18
+
+Implemented host-neutral / In Review, `17.6.5-dev`. Project and plugin chat
+presentation no longer treats an accepted call whose arguments were externalized to
+CAS as incomplete history. New call headers retain the short accepted reason alongside
+the existing narration, so the shared feed can project the exact execute step without
+reading large browser/HTML arguments. Older externalized headers without that reason
+hydrate through the existing exact CAS service; unavailable payloads keep the explicit
+incomplete-record notice and the saved run outcome.
+
+Focused `plugins: immutable publications and independent grants` covers the lightweight
+header path, payload privacy and the older-header hydration fallback. Windows x64 /
+Office x64 / WebView2 visual acceptance remains open.
+
 ## Workspace/plugin live activity in the shared chat — In Review, 2026-11-18
 
 Implemented host-neutral / In Review, `17.6.4-dev`. Workspace/plugin progress now

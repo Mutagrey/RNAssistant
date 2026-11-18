@@ -544,10 +544,12 @@ viewer: 32K страницы, guarded revisions, local completion с generations
 B02 принудительно закрывает исполнение, live reads/actions/media и новые аннотации.
 Старый native singleton и Shell plugin-frame transport удалены; hidden plugin
 commands имеют ту же обязательную admission и отдельную lazy local environment,
-без Shell/Edge profile. Авторский inline HTML в чате также source-only; inert
-Mermaid SVG остаётся. Это поддерживаемый fallback, **не квалифицированный native
-renderer/input/network**. Provider source/versions routes ещё объединяются в F3/F4;
-старые iframe-specific web fixtures заменяются вместе с их consumers.
+без Shell/Edge profile. Авторский inline HTML в чате вынесен отдельно от local
+Browser execution: с 2026-11-18 completed fenced HTML показывается в bounded
+sandboxed preview без same-origin и network, с Play/restart. B02 для Browser
+actions/media по-прежнему закрыт; это **не квалифицированный native renderer/input/
+network**. Provider source/versions routes ещё объединяются в F3/F4; старые
+iframe-specific web fixtures заменяются вместе с их consumers.
 
 Проверки: Harness local browser 3/3, exact target 1/1, typed bridge 1/1;
 MockDemo host-neutral build — 0 errors. Production Chrome: exact owner/attach,

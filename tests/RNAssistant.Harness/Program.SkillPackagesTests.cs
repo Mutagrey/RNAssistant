@@ -199,6 +199,18 @@ namespace RNAssistant.Harness
             AssertTrue(preparation.MessageBudget(required) > strictBudget, "json_object releases strict schema budget");
         }
 
+        private static void VisualizationSkillAutomaticPreviewGuidance()
+        {
+            var visual = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
+            AssertEqual("1.0.2", visual.Version, "automatic HTML preview guidance has its own skill version");
+            AssertContains(visual.BodyMarkdown, "opens automatically",
+                "completed HTML preview is described as automatic");
+            AssertTrue(!visual.BodyMarkdown.Contains("HTML still requires Play", StringComparison.Ordinal),
+                "visual guidance does not require an extra Play step");
+            AssertContains(AgentPromptDefaults.GeneralInstructions, "HTML previews open offline automatically",
+                "the common agent prompt matches automatic preview behavior");
+        }
+
         private static void BuiltInSkillPackagesLoadForEveryOfficeHost()
         {
             var visual = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
