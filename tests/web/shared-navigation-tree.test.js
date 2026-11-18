@@ -97,6 +97,11 @@ const root=path.resolve(__dirname,'../..');
   await standalone.evaluate(()=>pane.setState({message:'Модули недоступны',retry:true,more:true}));
   await standalone.getByRole('button',{name:'Повторить загрузку'}).click();await standalone.getByRole('button',{name:'Показать ещё',exact:true}).click();
   assert.deepEqual(await standalone.evaluate(()=>[calls.retry,calls.more]),[1,1]);
+  assert.deepEqual(await standalone.evaluate(()=>{
+   const nav=document.getElementById('nav'),heading=nav.querySelector('.product-nav-heading strong'),state=nav.querySelector('.navigation-pane-state');
+   const left=node=>node.getBoundingClientRect().left-nav.getBoundingClientRect().left;
+   return [left(heading),left(state.querySelector('p')),left(state.querySelector('button:not([hidden])'))];
+  }),[12,12,12],'navigation loading/error controls share the heading inset');
   await standalone.evaluate(()=>{pane.setState({busy:true,message:'Загрузка…',retry:true,more:true});});
   assert.equal(await standalone.getByRole('button',{name:'Повторить загрузку'}).isDisabled(),true);
   await standalone.evaluate(()=>{pane.dispose();document.querySelector('#paneQuery').dispatchEvent(new Event('input'));});

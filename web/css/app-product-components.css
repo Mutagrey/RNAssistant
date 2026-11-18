@@ -292,7 +292,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .product-nav-heading { display: flex; align-items: center; min-height: var(--navigation-heading-height); padding: 0 var(--space-3); margin: 0; border-bottom: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 400; }
 .product-nav-heading strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; font-weight: inherit; }
 .navigation-pane-heading .tree-toolbar { --control: var(--shell-control); }
-.navigation-pane-state { padding: var(--space-2) 0; }
+.navigation-pane-state { padding: var(--space-2) var(--space-3); }
 .navigation-pane-state p { margin: 0 0 var(--space-2); overflow-wrap: anywhere; }
 .navigation-pane-state .is-error { color: var(--danger); }
 .navigation-pane-state [hidden], .navigation-pane-state[hidden] { display: none; }
