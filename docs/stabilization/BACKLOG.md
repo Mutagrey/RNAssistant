@@ -36,6 +36,16 @@ Do not weaken the publication, persistence or concurrency guards to make these
 fixtures pass. Re-check each owner after migrating the fixture to the current
 explicit-workspace and journal-native contracts.
 
+## JS tool fixture uses an invalid new id — observed 2026-11-18
+
+Owner: `tests/RNAssistant.Harness/Program.ToolStoreTests.cs`. The focused case
+`tools: read-only JS source and policy` fails at `JS source validates was false` on
+clean `daa20a63` as well as this working tree. Its fixture creates the new id
+`common.count_rows_js`, while `CapabilityNaming.ValidNewId` now requires lower-case
+dotted segments and rejects the underscore. The WebView2 executor cutover does not
+touch this validation path. Move the fixture to a valid new id, or persist it first
+as an exact legacy custom id, without weakening the new-id guard.
+
 ## Markdown truncated fixture — observed 2026-11-16
 
 Owner: `tests/RNAssistant.Harness/Program.ResourceDiscoveryTests.cs`. The case
@@ -333,17 +343,15 @@ resolve/wait, not assignment listing. No claim of a fix or stable qualification.
 Retain the next failing inner exception and identify the competing writer/guard
 before changing storage behavior; do not hide this by repeated full-suite runs.
 
-## JS tools on WebView2 — 2026-11-13
+## JS tools on WebView2 — In Review, 2026-11-18
 
-Согласованное направление, реализация не начата. Owner: Application execution /
-native WebView2 adapter. После интерактивного native Browser перенести `js.run` и
-`executor=js` packages с отдельного `RNAssistant.JsWorker.exe`/Jint на скрытый
-WebView2 с отдельным Web Worker, сохранив существующий Resource Data Plane и права.
-[Контракт, этапы и условия удаления старого пути](../tool-library.md#planned-webview2-executor--2026-11-13).
-До переключения проверить runaway/cancel/OOM, сеть, lease cleanup, отсутствие влияния
-на Shell/Browser и явно определить замену Jint budgets. Не считать общий JS-движок
-гарантией общей изоляции или сохранения прежнего memory limit. Docs-only фиксация
-направления не запускает реализацию, сборку или release.
+The JS executor cutover replaces the standalone Jint process with a dedicated
+WebView2 Web Worker. Source/build/deployment worker references are removed.
+The resource contract and read-only tool policy stay unchanged. **Not yet Windows
+qualified:** runaway loop, cancellation during late controller creation,
+renderer crash/OOM, loopback/WebSocket/WebRTC, resource lease drain and Office
+host stability. No claim of the old Jint memory or instruction quotas.
+See [qualification matrix](../implementation/js-webview2-migration.md).
 
 ## Send batch parser/fixture mismatch — 2026-11-13
 

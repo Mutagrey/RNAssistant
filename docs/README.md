@@ -98,6 +98,9 @@
   [аудит описаний](audits/skills-tools-description-review.md),
   [матрица результатов](audits/tool-result-presentation-matrix.md),
   [broad/compact пилот](audits/tool-profile-comparison.md).
+- JS executor: [WebView2 cutover и Windows acceptance](implementation/js-webview2-migration.md) —
+  In Review; owner — Office tool runtime; удалить после закрытия матрицы и переноса
+  устойчивого контракта в Tool Library.
 - V8 architecture: [аудит](audits/v8-architecture-drift-2026-10-26.md),
   [карта зависимостей](audits/v8-ownership-dependency-matrix.md),
   [ограниченный план](proposals/v8-stabilization-execution-plan.md).

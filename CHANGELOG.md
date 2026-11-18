@@ -11,6 +11,14 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.4.5-dev
+
+- JavaScript-инструменты теперь выполняются в отдельном скрытом WebView2
+  Controller и Dedicated Web Worker вместо процесса `RNAssistant.JsWorker.exe`
+  на Jint. Ресурсные привязки, read-only policy и ограниченный JSON-результат
+  сохранены; сетевые, runaway и lifecycle-сценарии остаются открытой
+  Windows-квалификацией.
+
 ### 17.4.4-dev
 
 - Исправлена совместимость journal replay с .NET Framework 4.8: outcomes больше

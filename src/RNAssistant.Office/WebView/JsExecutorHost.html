@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>RNAssistant JS executor</title></head><body>
+<script>
+'use strict';
+(() => {
+    const bridge = globalThis.chrome && globalThis.chrome.webview;
+    if (!bridge) return;
+    const send = message => bridge.postMessage(JSON.stringify(message));
+    let worker;
+    let started = false;
+    try {
+        worker = new Worker('worker.js', { name: 'rnassistant-js' });
+        worker.onmessage = event => {
+            const data = event.data;
+            if (!data || !['request', 'result', 'error'].includes(data.type)) {
+                send({ type: 'error', message: 'Invalid JS worker message.' });
+                worker.terminate();
+                return;
+            }
+            send(data);
+        };
+        worker.onerror = () => {
+            send({ type: 'error', message: 'JS worker terminated unexpectedly.' });
+            worker.terminate();
+        };
+        bridge.addEventListener('message', event => {
+            const message = event.data;
+            if (!message || typeof message !== 'object') return;
+            if (message.type === 'start' && !started) {
+                started = true;
+                worker.postMessage(message);
+            } else if (message.type === 'reply' && started && Number.isSafeInteger(message.seq)) {
+                worker.postMessage(message);
+            } else if (message.type === 'stop') {
+                worker.terminate();
+            }
+        });
+        send({ type: 'ready' });
+    } catch (error) {
+        send({ type: 'error', message: String(error && error.message || error) });
+    }
+})();
+</script>
+</body></html>

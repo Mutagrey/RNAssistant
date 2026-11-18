@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## JavaScript executor on WebView2 — In Review, 2026-11-18
+
+`js.run` and authored `executor=js` tools now share one hidden WebView2 controller
+and Dedicated Web Worker. The standalone `RNAssistant.JsWorker.exe` path, Jint and
+Acornima packages, build targets and portable requirements are removed; resource
+bindings, exact revision evidence, read-only policy and the 1 MiB result bound remain
+owned by the existing handler and Resource Data Plane. The executor has a 15-second
+total deadline, one process-wide invocation, isolated in-private profile and
+fail-closed cleanup.
+
+The worker protocol test and Harness build pass; the executor also passes a targeted
+C# 7.3/net48 compiler check against WebView2 SDK 1.0.2903.40. Windows x64/Office x64
+runtime, cancellation, renderer/OOM and network-isolation qualification remains open
+in the [acceptance matrix](../implementation/js-webview2-migration.md). No product
+release qualification is implied by the `17.4.5-dev` development bump.
+
 ## Bounded tool-search context and semantic continuation — In Review, 2026-11-18
 
 Implemented host-neutral / In Review, `17.4.2-dev`. `core.search` now supports bounded

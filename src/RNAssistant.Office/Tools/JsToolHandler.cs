@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -11,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Runtime;
+using RNAssistant.Office.WebView;
 using RNAssistant.Office.Services;
 using RuntimeResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
@@ -111,7 +110,7 @@ namespace RNAssistant.Office.Tools
                 arguments.Remove("code");
                 arguments.Remove("resources");
                 context.MarkDispatchPossible();
-                var result = await RunWorkerAsync(code, arguments, resources, cancellationToken).ConfigureAwait(false);
+                var result = await RunInWebViewAsync(code, arguments, resources, cancellationToken).ConfigureAwait(false);
                 return new ToolHandlerResult(RuntimeResult.Ok("JavaScript completed.", result),
                     ToolEffectEvidence.None, resourceEvidence: evidence);
             }
@@ -123,61 +122,19 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        private async Task<string> RunWorkerAsync(string code, JObject arguments,
+        private async Task<string> RunInWebViewAsync(string code, JObject arguments,
             IDictionary<string, Input> resources, CancellationToken cancellationToken)
         {
-            var worker = Path.Combine(Path.GetDirectoryName(typeof(JsToolHandler).Assembly.Location),
-                "RNAssistant.JsWorker.exe");
-            if (!File.Exists(worker)) throw new FileNotFoundException("JS worker is not deployed.", worker);
             using (var plane = new ResourceDataPlaneService(_gateway))
-            using (var process = new Process { StartInfo = new ProcessStartInfo(worker) {
-                UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true,
-                CreateNoWindow = true } })
-            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
-                deadline.CancelAfter(TimeSpan.FromSeconds(12));
-                if (!process.Start()) throw new InvalidOperationException("JS worker could not start.");
-                try
+                var leases = new Dictionary<string, long>(StringComparer.Ordinal);
+                var names = resources.Keys.OrderBy(value => value, StringComparer.Ordinal).ToArray();
+                return await JsWebViewExecutor.ExecuteAsync(code, arguments, names, (request, token) =>
                 {
-                    using (deadline.Token.Register(() => { try { if (!process.HasExited) process.Kill(); } catch (InvalidOperationException) { } }))
-                    {
-                        var start = new JObject { ["code"] = code, ["args"] = arguments,
-                            ["names"] = new JArray(resources.Keys.OrderBy(value => value, StringComparer.Ordinal)) };
-                        var startJson = start.ToString(Formatting.None);
-                        await process.StandardInput.WriteLineAsync(startJson).ConfigureAwait(false);
-                        await process.StandardInput.FlushAsync().ConfigureAwait(false);
-                        var leases = new Dictionary<string, long>(StringComparer.Ordinal);
-                        while (true)
-                        {
-                            deadline.Token.ThrowIfCancellationRequested();
-                            var line = await process.StandardOutput.ReadLineAsync().ConfigureAwait(false);
-                            if (line == null)
-                            {
-                                deadline.Token.ThrowIfCancellationRequested();
-                                throw new InvalidOperationException("JS worker stopped before returning a result.");
-                            }
-                            if (line.Length > 2 * 1024 * 1024) throw new InvalidDataException("JS worker response exceeds its limit.");
-                            var message = JObject.Parse(line);
-                            var type = (string)message["type"];
-                            if (type == "result")
-                            {
-                                var result = (string)message["json"];
-                                if (result == null || Encoding.UTF8.GetByteCount(result) > 1024 * 1024)
-                                    throw new InvalidDataException("JS result exceeds 1 MiB.");
-                                JToken.Parse(result);
-                                return result;
-                            }
-                            if (type == "error") throw new InvalidOperationException((string)message["message"] ?? "JS failed.");
-                            if (type != "request") throw new InvalidDataException("Invalid JS worker message.");
-                            JObject response;
-                            try { response = HandleRequest(plane, resources, leases, message["body"] as JObject, deadline.Token); }
-                            catch (Exception ex) { response = new JObject { ["ok"] = false, ["error"] = ex.Message }; }
-                            await process.StandardInput.WriteLineAsync(response.ToString(Formatting.None)).ConfigureAwait(false);
-                            await process.StandardInput.FlushAsync().ConfigureAwait(false);
-                        }
-                    }
-                }
-                finally { try { if (!process.HasExited) process.Kill(); } catch (InvalidOperationException) { } }
+                    try { return HandleRequest(plane, resources, leases, request, token); }
+                    catch (Exception error)
+                    { return new JObject { ["ok"] = false, ["error"] = error.Message ?? "Resource operation failed." }; }
+                }, cancellationToken).ConfigureAwait(false);
             }
         }
 

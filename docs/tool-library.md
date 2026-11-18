@@ -681,24 +681,33 @@ This switch does not affect JavaScript inside an HTML workspace/WebView page.
 There is no dedicated built-in JS skill; the existing Tool Authoring skill describes
 VBA packages only, so disabling the switch leaves no JS skill instructions active.
 
-Source text has no separate character or request-byte ceiling; the worker's execution
-memory, deadline, statement and result budgets still apply.
-`js.run` runs one async JavaScript function body in a separate local .NET Framework
-worker. It accepts named `{name,target,view,path?}` resource bindings and exposes
+Source text is limited to 1 MiB UTF-8. `js.run` runs one async JavaScript function
+body behind a dedicated hidden WebView2 controller and a Dedicated Web Worker. It
+accepts named `{name,target,view,path?}` resource bindings and exposes
 `RN.resources.names()`, `await RN.resources.open(name)`, bounded `read()` and
 `for await (const batch of handle.stream())`. The Office resource Gateway resolves
 semantic targets and pins exact view revisions before the worker starts; each
 subsequent batch uses the existing Resource Data Plane cursor and gate. Scripts
-receive no Office, CLR, filesystem, network or WebView bridge object. The return
-value must be JSON-serializable and at most 1 MiB. Execution is read-only, limited
-to 10 seconds in Jint, with a 12-second worker deadline and process termination on
-cancellation. A closed or incomplete resource read fails explicitly.
+receive no Office, Shell, CLR, filesystem, DOM or WebView bridge object. The return
+value must be JSON-serializable and at most 1 MiB. Execution is read-only with a
+15-second total deadline including cold startup. A closed or incomplete resource
+read fails explicitly.
+
+One process-wide admission runs one invocation at a time. The executor tries the
+bundled Fixed Version Runtime and then the installed Runtime, requires Chromium 152
+or newer, serves only its two embedded assets from one in-memory HTTPS origin, and
+rejects every other resource request with 403. CSP, `Connection-Allowlist` and
+Chromium network arguments reinforce that boundary. Cleanup failure refuses further
+work until host restart; there is no Jint fallback. WebView2 does not reproduce the
+former Jint heap, statement or recursion limits, so timeout and close are not a
+proven hard V8 resource or crash-isolation boundary. Windows acceptance remains
+open in the [qualification matrix](implementation/js-webview2-migration.md).
 
 The worker does not run the page's `app.js` or inherit its named HTML bindings.
 For an HTML data member, read its binding metadata to obtain `sourceTarget` and
 pass that source explicitly. Worker success alone is not WebView/render evidence.
 
-Custom `executor=js` tools use the same worker and ToolPack snapshot as a one-off
+Custom `executor=js` tools use the same executor and ToolPack snapshot as a one-off
 call. Their strict argument schema must require a `resources` array of named
 semantic bindings; callers select targets on every invocation. Tool Library stores
 the JS source in the package metadata and applies runtime-owned read-only policy.
@@ -809,39 +818,6 @@ delete mutation DTOs through the same `ToolAuthoringService` as model authoring.
 Controller-owned catalog reconciliation, `StoragePath` identity, generic execution
 and unversioned response fallback are absent. This does not make the flat store
 immutable history.
-
-#### Planned WebView2 executor — 2026-11-13
-
-Согласованное направление: заменить `RNAssistant.JsWorker.exe` и Jint исполнением
-JS-инструментов в WebView2. Это отдельный срез после работающего интерактивного native
-Browser; реализация перехода ещё не начата. Текущий контракт выше остаётся действующим.
-Owner: Application execution / native WebView2 adapter; `JsToolHandler` и Resource
-Data Plane сохраняют владение вызовом, входными ресурсами и evidence.
-
-Целевая схема — скрытый WebView2 и отдельный Web Worker для каждого выполнения.
-Сохраняются `js.run`, пользовательские `executor=js` packages, `RN.resources`,
-явные named inputs, exact revision/owner, bounded streaming, read-only policy и
-JSON-результат до 1 МиБ. Код не получает Shell bridge, Office/CLR, произвольную
-файловую систему, DOM открытых Browser tabs или неявные HTML bindings.
-
-Отмена/deadline должны завершать вычисление и закрывать его resource leases,
-включая бесконечный цикл, позднее создание controller и ответ после закрытия.
-`Connection-Allowlist` и native local routes используются по общему сетевому
-контракту Browser; они не заменяют управление памятью и изоляцию сбоев.
-Текущие Jint budgets (64 МиБ, миллион инструкций, recursion 100, 10 секунд исполнения
-и 12 секунд process deadline) нельзя объявлять автоматически сохранёнными в V8.
-До переключения явно определить новые memory/deadline/concurrency bounds и проверить
-влияние runaway/OOM на Shell и интерактивные страницы. WebView2 может разделять
-renderer-процессы; общий движок не требует общего execution context или process group.
-[Модель процессов WebView2](https://learn.microsoft.com/microsoft-edge/webview2/concepts/process-model).
-
-Последовательность: подключить новый executor к существующему ресурсному контракту;
-проверить результаты, потоковое чтение, отмену, сеть, cleanup и стоимость холодного/
-повторного запуска; затем переключить оба consumers и удалить `.exe`, pipe transport,
-Jint/Acornima и лишние build/deployment references после проверки их consumers.
-Скрытый fallback на Jint не является целевой архитектурой. Windows/WebView2 evidence
-фиксируется отдельно; предварительная оценка сложности — средняя, основной риск
-сосредоточен в lifecycle и ресурсных ограничениях.
 
 ### Model source reads
 

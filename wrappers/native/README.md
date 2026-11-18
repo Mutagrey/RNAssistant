@@ -37,7 +37,7 @@ sending remain qualification gates despite the complete package wiring. See the 
 Each publish replaces current product files and removes stale files recorded in
 `.rnassistant-portable-files`. It preserves unrelated files and directories,
 including user-created add-ins and `logs`. On the first migration from the old
-flat layout, named product DLLs and worker files are removed from the root after
+flat layout, named product DLLs are removed from the root after
 their new copies reach `lib`; unrelated root files remain. The existing
 obsolete `panel-owner-mode.txt` is left untouched but is no longer read. Close Office before rebuilding
 because loaded DLLs cannot be replaced.
@@ -56,8 +56,6 @@ artifacts\portable\Release\x64\
     RNAssistant.Core.dll
     RNAssistant.Office.dll
     RNAssistant.OfficeHosts.dll
-    RNAssistant.JsWorker.exe
-    RNAssistant.JsWorker.exe.config
     Microsoft.Office.Interop.*.dll
     Microsoft.Web.WebView2.*.dll
     Newtonsoft.Json.dll

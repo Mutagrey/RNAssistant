@@ -413,6 +413,9 @@
     <Compile Include="Tools\ExternalBrowserToolHandler.Open.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.Input.cs" />
     <Compile Include="WebView\TabularWebViewExecutor.cs" />
+    <Compile Include="WebView\JsWebViewExecutor.cs" />
+    <EmbeddedResource Include="WebView\JsExecutorHost.html"><LogicalName>RNAssistant.Office.WebView.JsExecutorHost.html</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="WebView\JsExecutorWorker.js"><LogicalName>RNAssistant.Office.WebView.JsExecutorWorker.js</LogicalName></EmbeddedResource>
     <Compile Include="WebView\PowerQueryWebViewAnalyzer.cs" />
     <Compile Include="Services\ExcelPowerQuerySyntaxService.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
