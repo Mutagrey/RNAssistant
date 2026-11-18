@@ -18,6 +18,12 @@
       if (restoreFocus && popupTrigger.isConnected) popupTrigger.focus({ preventScroll: true });
     }
     popupTrigger = null;
+    overlayChanged();
+  }
+
+  function overlayChanged() {
+    if (typeof CustomEvent === "function" && typeof document.dispatchEvent === "function")
+      document.dispatchEvent(new CustomEvent("rnassistant:overlay-change"));
   }
 
   // Portalled variant for headers inside Dockview's clipped tab container.
@@ -74,6 +80,7 @@
     }
     render(items);
     document.body.appendChild(popup); trigger.setAttribute("aria-expanded", "true");
+    overlayChanged();
     function position() {
       var rect = trigger.getBoundingClientRect(), styles = getComputedStyle(menu);
       var scale = menu.getBoundingClientRect().width / menu.offsetWidth || 1;

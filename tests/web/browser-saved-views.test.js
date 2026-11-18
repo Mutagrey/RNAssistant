@@ -9,6 +9,7 @@ const {withPreviewPage} = require('./preview-session');
     await page.evaluate(() => {
       const original = send, scope = {kind:'Workspace',scopeId:'project'};
       window.versionProbe = {calls:[], pages:new Map(), active:'v3', revision:1, ordinal:3, lost:false, receipts:new Map(),
+        holdState:false, releaseState:null,
         entries:[1,2,3].map(n=>({versionId:'v'+n,ordinal:n,label:'',createdUtc:'2026-11-13T10:00:00Z',releaseId:n===2?'different':'same-bytes',removed:false}))};
       const p=versionProbe;
       function target(locator) {
@@ -23,7 +24,7 @@ const {withPreviewPage} = require('./preview-session');
       window.send=(type, payload,...rest)=>{
         if(!['browserCommand','readBrowserSource','getBrowserVersionState','getBrowserVersions','browserVersionCommand'].includes(type))return original(type,payload,...rest);
         p.calls.push({type,...structuredClone(payload)});
-        if(type==='getBrowserVersionState')return Promise.resolve(state(payload.target));
+        if(type==='getBrowserVersionState'){const value=state(payload.target);return p.holdState?new Promise(resolve=>{p.releaseState=()=>resolve(value);}):Promise.resolve(value);}
         if(type==='getBrowserVersions')return Promise.resolve({items:p.entries.filter(e=>!e.removed).slice().reverse().map(entry),stateRevision:String(p.revision)});
         if(type==='browserVersionCommand'){
           if(p.receipts.has(payload.operationId))return Promise.resolve(p.receipts.get(payload.operationId));
@@ -50,6 +51,12 @@ const {withPreviewPage} = require('./preview-session');
     async function openVersions(){if(!await page.locator('.rna-action-menu-popup:visible').count())await versions.click();}
     async function saveVersion(){await openVersions();const item=page.getByRole('menuitem',{name:'Сохранить версию проекта',exact:true});await item.waitFor();await item.click();}
     await versions.waitFor();
+    await page.evaluate(()=>{versionProbe.holdState=true;});
+    await versions.click();
+    await page.getByRole('menuitem',{name:'Обновление версий…',exact:true}).waitFor();
+    await page.evaluate(()=>{versionProbe.holdState=false;versionProbe.releaseState();});
+    await page.getByRole('menuitem',{name:'Сохранить версию проекта',exact:true}).waitFor();
+    await page.keyboard.press('Escape');
     assert.equal(await root.locator('.material-surface-title').isVisible(),false,'Browser identity comes from the address, not a duplicate title/meta');
     assert.equal(await root.getByRole('button',{name:'Действия страницы',exact:true}).count(),1,'Browser has one page overflow');
     assert.equal(await root.getByRole('button',{name:'Инструменты страницы',exact:true}).count(),0);

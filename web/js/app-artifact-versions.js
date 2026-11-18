@@ -71,6 +71,7 @@
     var versions = RNAssistantActionMenu.createTrigger("Версии проекта");
     versions.classList.add("compact"); versions.innerHTML = RNAssistantIcons.render("clock"); root.appendChild(versions);
     var state = null, chosen = null, epoch = 0, busy = false, menu = null, rows = [], cursor = null, pending = null, disposed = false;
+    var loadingState = false, loadingRows = false, stateError = "";
     function target() { return context.target(); }
     function controls() {
       var value = target(), caps = state && state.capabilities || value && value.capabilities || {};
@@ -79,16 +80,18 @@
     }
     function valid(serial) { return !disposed && context.isCurrent() && epoch === serial; }
     function supported(value) { return value && (value.pluginId || value.kind === "WorkspaceHtmlProject" || value.kind === "HtmlArtifact" || value.kind === "HtmlWorkspace"); }
+    function paint() { if (menu && menu.isOpen()) menu.update(entries()); }
     async function refresh(force) {
       if (busy && !force) return;
-      var serial = ++epoch, value = target(); state = null; controls();
-      if (!supported(value) || !value.capabilities || !value.capabilities.versions) return;
+      var serial = ++epoch, value = target(); state = null; stateError = ""; loadingState = true; controls(); paint();
+      if (!supported(value) || !value.capabilities || !value.capabilities.versions) { loadingState = false; controls(); paint(); return; }
       try {
         var result = await context.request("getBrowserVersionState", { target: value });
         if (!valid(serial)) return;
         state = result; controls();
         if (result.target && result.target.state === "Removed" && value.state !== "Removed") context.removed();
-      } catch (error) { if (valid(serial)) { controls(); context.error(error); } }
+      } catch (error) { if (valid(serial)) { stateError = error.detail || error.message || "Не удалось обновить версии."; controls(); context.error(error); } }
+      finally { if (valid(serial)) { loadingState = false; controls(); paint(); } }
     }
     function command(action, entry) {
       var value = target(), active = state && state.activeSavedVersion;
@@ -145,6 +148,10 @@
       var caps = state && state.capabilities || value && value.capabilities || {};
       var saveBlocked = busy || !!pending || !state || !caps.saveVersion || !state.capabilities.saveVersion || !state.contentRevision;
       var applyBlocked = busy || !!pending || !state || !(value && value.savedVersionId || chosen) || value.state === "Removed";
+      if (loadingState) items.push({ label: "Обновление версий…", icon: false, disabled: true });
+      else if (stateError) items.push({ label: "Повторить обновление версий", status: stateError, icon: "refresh", keepOpen: true, onSelect: async function () {
+        await refresh(); if (!disposed && context.isCurrent() && menu && menu.isOpen() && state) await load(null);
+      } });
       items.push({ label: pending ? "Проверить сохранение версии" : "Сохранить версию проекта", icon: pending ? "refresh" : "save",
         disabled: busy || !state || !caps.saveVersion || (!pending && saveBlocked),
         status: saveBlocked ? busy ? "Дождитесь операции" : !caps.saveVersion ?
@@ -168,26 +175,31 @@
             onSelect: function () { if (window.confirm("Удалить сохранённую версию " + entry.ordinal + "? Исторические ссылки и исходники сохранятся.")) return execute(command("Delete", entry)); } } });
       });
       if (cursor) items.push({ label: "Показать ещё 12", icon: "down", keepOpen: true, onSelect: function () { return load(cursor); } });
-      if (!rows.length) items.push({ label: "Сохранённых версий нет", icon: false, disabled: true });
+      if (loadingRows) items.push({ label: "Загрузка версий…", icon: false, disabled: true });
+      else if (!rows.length && !loadingState && !stateError) items.push({ label: "Сохранённых версий нет", icon: false, disabled: true });
       return items;
     }
     async function load(next) {
       var serial = epoch, owner = menu;
+      loadingRows = true; stateError = ""; if (owner && owner.isOpen()) owner.update(entries());
       try {
         var page = await context.request("getBrowserVersions", { target: target(), cursor: next, limit: 12 });
         if (!valid(serial) || menu !== owner || !owner.isOpen()) return;
         if (next && state && page.stateRevision !== state.stateRevision) throw new Error("Список изменился. Откройте его заново.");
         if (state) state.stateRevision = page.stateRevision;
-        rows = next ? rows.concat(page.items || []) : page.items || []; cursor = page.cursor; owner.update(entries());
-      } catch (error) { if (valid(serial) && owner.isOpen()) owner.update([{ label: "Обновить список", status: error.message, icon: "refresh", onSelect: function () { return refresh(); } }]); }
+        rows = next ? rows.concat(page.items || []) : page.items || []; cursor = page.cursor; loadingRows = false; owner.update(entries());
+      } catch (error) { if (valid(serial) && owner.isOpen()) { loadingRows = false; stateError = error.detail || error.message || "Не удалось загрузить версии."; owner.update(entries()); } }
+      finally { if (valid(serial)) loadingRows = false; }
     }
     versions.onclick = async function () {
       if (menu && menu.isOpen()) { menu.close(); return; }
-      await refresh(); if (!context.isCurrent() || disposed) return;
-      rows = []; cursor = null; menu = RNAssistantActionMenu.open(versions, entries()); await load(null);
+      rows = []; cursor = null; loadingRows = false; stateError = ""; loadingState = true;
+      var owner = menu = RNAssistantActionMenu.open(versions, entries());
+      await refresh(); if (!context.isCurrent() || disposed || menu !== owner || !owner.isOpen() || !state) return;
+      await load(null);
     };
     controls();
-    return { refresh: refresh, reset: function () { epoch++; state = null; chosen = null; pending = null; if (menu) menu.close(); controls(); },
+    return { refresh: refresh, reset: function () { epoch++; state = null; chosen = null; pending = null; loadingState = false; loadingRows = false; stateError = ""; if (menu) menu.close(); controls(); },
       deactivate: function () { epoch++; if (menu) menu.close(); }, dispose: function () { disposed = true; epoch++; if (menu) menu.close(); versions.remove(); } };
   }
   window.RNAssistantArtifactVersions = { append: append, mountBrowser: mountBrowser };

@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Browser single-row header and overlay restore — In Review, 2026-11-18
+
+Implemented the user-requested one-row Shell/Browser header. The Browser address now
+contracts to 64 px while compact annotation/discussion and, where needed, search move
+into the existing page overflow; no second provider row remains. The version menu opens
+immediately with a loading row. Native visibility now considers only overlays that
+intersect the exact Browser viewport, and a shared ActionMenu open/close signal forces
+the final visible `Layout` after dismissal. A token-based `Starting` status replaces the
+blank page slot until the accepted `Ready` snapshot arrives.
+
+Chromium reviewed a synthetic 420 px Browser surface: one 52 px header, no second row,
+and compact controls still reachable. A runtime-mocked native Browser ended on
+`Layout visible=true` after dismissing the page menu. Node syntax checks pass. The focused
+Playwright fixture was updated for immediate version loading, compact overflow and
+overlay-restore visibility, but Playwright is not installed in this workspace, so it was
+not executed; `prompt-review` passes 13/13 for the shared ActionMenu path. Windows x64 /
+Office x64 / WebView2 native airspace and 125% visual
+acceptance remain open. Product version is `17.6.2-dev`.
+
 ## Background legacy chat migration and reliable window shutdown — In Review, 2026-11-18
 
 Implemented host-neutral / In Review, `17.6.0-dev`. Office now owns one background

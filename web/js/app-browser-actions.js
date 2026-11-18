@@ -37,6 +37,11 @@
     more.onclick = function () {
       var target = context.target(); if (!target || target.state !== "Ready") return;
       var caps = target.capabilities, copy = operation(target), items = [];
+      if (context.compact && context.compact()) {
+        if (context.annotate && target.capabilities.annotations) items.push({ label: "Аннотировать страницу", icon: "selection", onSelect: context.annotate });
+        if (context.discuss) items.push({ label: "Обсудить в чате рядом", icon: "chat", onSelect: context.discuss });
+        if (items.length) items.push({ separator: true });
+      }
       if (context.canHome && context.canHome()) items.push({ label: "Главная", icon: "home", onSelect: context.home });
       if (context.compareAvailable && context.compareAvailable()) items.push({ label: "Сравнение", icon: "diff", onSelect: context.compare });
       if (context.canScreenshot) items.push({ label: "Скачать снимок страницы", icon: "image", disabled: !context.canScreenshot(), onSelect: function () {

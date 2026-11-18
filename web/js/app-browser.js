@@ -25,7 +25,8 @@
     var source = document.createElement("div"); source.className = "browser-document-source product-viewer";
     var empty = document.createElement("div"); empty.className = "empty-state";
     var viewport = document.createElement("div"); viewport.className = "browser-native-viewport"; viewport.setAttribute("aria-label", "Интерактивная страница");
-    content.append(source, viewport, empty);
+    var loading = document.createElement("div"); loading.className = "browser-view-loading"; loading.setAttribute("role", "status"); loading.setAttribute("aria-live", "polite");
+    content.append(source, viewport, loading, empty);
     var mount = document.createElement("div"); mount.className = "browser-view";
     var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell"), onLayout: layoutNative, onEnter: function () { if (session && selectedMode === "preview" && current.status === "Ready") { command("Focus").catch(fail); return true; } return false; } });
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
@@ -133,7 +134,7 @@
       isCurrent: function () { return active && !disposed && selectedMode === "preview"; }, layout: layoutNative,
       focus: function () { selectMode("preview"); RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: target.browserTabId,
         ownerScope: current.ownerScope, locator: current.url, title: current.title }); } });
-    var placementKey = "", placementQueued = 0;
+    var placementKey = "", placementQueued = 0, placementForce = false;
     function outsideBrowserControl(target) {
       return !!target && !root.contains(target) && !(target.closest && target.closest('.rna-action-menu-popup, dialog[open], [aria-modal="true"]'));
     }
@@ -160,33 +161,51 @@
     document.addEventListener("focusin", function (event) {
       if (outsideBrowserControl(event.target)) requestHandover(); else if (root.contains(event.target)) handoverRequested = false;
     }, { capture: true, signal: handoverListeners.signal });
+    function overlaps(first, second) {
+      return first.width > 0 && first.height > 0 && second.width > 0 && second.height > 0 && first.left < second.right &&
+        first.right > second.left && first.top < second.bottom && first.bottom > second.top;
+    }
+    function nativeOverlayOpen(rect) {
+      var selector = 'dialog[open], [aria-modal="true"], .rna-action-menu-popup, .preview-surface-completion:not([hidden]), .visual-annotation-editor';
+      return Array.prototype.some.call(document.querySelectorAll(selector), function (node) {
+        return overlaps(node.getBoundingClientRect(), rect);
+      });
+    }
     function nativeBounds(attachment) {
       var fallback = attachment && current && current.status === "Unavailable";
-      var rect = (fallback ? content : viewport).getBoundingClientRect(), overlay = document.querySelector('dialog[open], [aria-modal="true"], .rna-action-menu-popup') || root.querySelector('.preview-surface-toolbar.is-address-focused, .preview-surface-completion:not([hidden]), .visual-annotation-editor');
+      var rect = (fallback ? content : viewport).getBoundingClientRect(), overlay = nativeOverlayOpen(rect);
       var visible = active && mount.isConnected && !root.hidden && selectedMode === "preview" && current &&
         !["Home", "Removed", "Closed", "Unavailable", "Failed"].includes(current.status) && !overlay;
       return { visible: !!(visible || fallback && active && mount.isConnected) && rect.width > 0 && rect.height > 0,
         x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.max(0, Math.min(rect.width, innerWidth - Math.max(0, rect.x))),
         height: Math.max(0, Math.min(rect.height, innerHeight - Math.max(0, rect.y))), viewportWidth: innerWidth, viewportHeight: innerHeight };
     }
-    function layoutNative() {
-      if (disposed || placementQueued) return;
+    function layoutNative(force) {
+      if (disposed) return;
+      if (placementQueued) { placementForce = placementForce || !!force; return; }
       placementQueued = requestAnimationFrame(function () {
         placementQueued = 0;
         if (disposed || !session || !current || !current.attached) return;
         var bounds = nativeBounds(), key = JSON.stringify(bounds);
-        if (key === placementKey) return; placementKey = key;
-        command("Layout", { bounds: bounds }).catch(fail);
+        if (key === placementKey && !placementForce) return;
+        placementForce = false; placementKey = key;
+        command("Layout", { bounds: bounds }).catch(function (error) {
+          if (placementKey === key) placementKey = "";
+          fail(error);
+        });
       });
     }
-    var nativeSize = new ResizeObserver(layoutNative); nativeSize.observe(viewport);
+    var nativeSize = new ResizeObserver(function () { layoutNative(); }); nativeSize.observe(viewport);
+    var overlayListeners = new AbortController();
+    document.addEventListener("rnassistant:overlay-change", function () { layoutNative(true); }, { signal: overlayListeners.signal });
     var overlays = new MutationObserver(function (changes) {
-      var selector = 'dialog, [aria-modal], .rna-action-menu-popup';
+      var selector = 'dialog, [aria-modal], .rna-action-menu-popup, .preview-surface-completion, .visual-annotation-editor';
       if (changes.some(function (change) {
-        return change.type === "attributes" && (change.target.matches(selector) || root.contains(change.target)) || Array.from(change.addedNodes).concat(Array.from(change.removedNodes)).some(function (node) {
+        if (change.type === "attributes") return change.target.matches(selector);
+        return Array.from(change.addedNodes).concat(Array.from(change.removedNodes)).some(function (node) {
           return node.nodeType === 1 && (node.matches(selector) || !!node.querySelector(selector));
         });
-      })) layoutNative();
+      })) layoutNative(true);
     }); overlays.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open", "aria-modal", "hidden", "class"] });
     var comparison = null;
     var pageFind = RNAssistantBrowserFind.create({ root: shell.workspace, content: content, command: command, layout: layoutNative,
@@ -201,6 +220,8 @@
     var providerActions = RNAssistantBrowserActions.mount(surface.actions, { target: function () { return current && current.target; },
       generation: function () { return current && current.documentGeneration; }, isCurrent: function () { return active && !disposed; },
       status: surface.status, error: fail, changeDiscussion: changeDiscussion, find: pageFind.open, canFind: pageFind.enabled,
+      compact: function () { return root.clientWidth > 0 && root.clientWidth <= 600; },
+      annotate: function () { var button = surface.annotationButton(); if (button && !button.disabled) button.click(); }, discuss: discuss,
       canHome: surface.canHome, home: surface.goHome,
       compareAvailable: function () { return !!comparison && current && current.status !== "Home" && current.status !== "Removed"; },
       compare: function () { return selectMode("diff"); },
@@ -417,6 +438,8 @@
       if (comparison) { if (content.hidden) { comparison.activate(); layoutNative(); return; } comparison.deactivate(); }
       var nativeReady = !home && !removed && ["Starting", "Ready"].includes(current.status);
       viewport.hidden = selectedMode !== "preview" || !nativeReady;
+      loading.hidden = selectedMode !== "preview" || current.status !== "Starting";
+      loading.textContent = loading.hidden ? "" : (current.message || "Открытие страницы…");
       empty.hidden = !home && !removed && (selectedMode === "source" || selectedMode === "preview" && nativeReady);
       layoutNative();
       source.hidden = home || removed || selectedMode !== "source";
@@ -472,6 +495,7 @@
       }
       annotationHost.update(value);
       if (value.status === "Closed") { session = null; sourcePage = null; fileNavigation.reset(); syncFileNavigationAvailability();
+        loading.hidden = true; loading.textContent = "";
         stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
         fileNavigation.reset();
@@ -547,7 +571,7 @@
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
       deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads();
+      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); overlayListeners.abort(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads();
         if (live.get(target.browserTabId) === apply) live.delete(target.browserTabId);
         if (versionViews.get(target.browserTabId) === versionView) versionViews.delete(target.browserTabId);
         versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();

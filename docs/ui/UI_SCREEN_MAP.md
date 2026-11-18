@@ -1,5 +1,20 @@
 # Карта экранов, навигации и состояний
 
+## Browser: одна строка header — In Review, 2026-11-18
+
+Верхняя строка Shell и MaterialSurface никогда не переносится на вторую строку.
+Browser держит back/forward/reload, сжимаемый адрес, режимы, версии и одно меню `…`
+в одной строке при 420 px и 125%. На compact-ширине аннотация и «Обсудить» доступны
+пунктами того же `…`; поиск также уходит туда, если для него нет места. Адрес
+сохраняет минимум 64 px и показывает усечённый locator с полным title.
+Пока точная страница находится в `Starting`, вместо пустого HTML-поля виден общий
+статус «Открытие страницы…»; он скрывается только принятым `Ready` snapshot.
+
+Меню версий открывается сразу и сначала показывает «Обновление версий…», затем
+актуальные действия и историю. Закрытие любого portalled-меню принудительно
+пересчитывает видимость точного native viewport, поэтому HTML не остаётся скрытым
+после отмены или выбора пункта.
+
 ## MaterialSurface and Markdown modes — In Review, 2026-11-17
 
 Material and Browser objects use the same shell: optional left navigation, one header,
@@ -49,8 +64,8 @@ panel the frameless viewer fills the available content and height; the outline a
 rendered body scroll inside that surface rather than making a short card. Crossing
 into the narrow width closes an open outline; the navigation button reopens it as a
 local overlay. PDF thumbnails, image/collection rails and text/Markdown search/status
-use the same slots. At narrow width Browser may place its address/provider row below
-the modes/search/action row to avoid overlap; Markdown normally remains one row. Tree
+use the same slots. Browser keeps its address/provider row in the same single header
+line at narrow width; lower-priority actions move into the existing overflow. Tree
 and viewer insets are owned by shared MaterialSurface spacing rather than nested
 toolbars or per-view wrappers.
 

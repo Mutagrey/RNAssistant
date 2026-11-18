@@ -1,5 +1,27 @@
 # План модернизации production UI
 
+## Browser single-row header and native visibility — In Review, 2026-11-18
+
+Scope: existing `MaterialSurface`, `PreviewSurface`, Browser version menu and
+`ActionMenu`; no runtime, storage or Browser contract change. The shared header keeps
+one row, folds compact annotate/discuss/search actions into the existing page menu and
+lets the address contract to 64 px. Version state opens as a loading menu before its
+bridge request. Native Browser layout now reacts to the common overlay event, ignores
+menus outside its viewport and forces the final placement after close.
+The content slot keeps a token-based `Starting` status visible until the accepted
+`Ready` snapshot; this is feedback, not an execution or load-success claim.
+
+Local evidence: Chromium at a synthetic 420 px Browser surface measured a single
+52 px header with the address at 254 px in the fixture and no second row; `node --check`
+passes all changed scripts and `prompt-review` passes 13/13 after the ActionMenu event.
+A runtime-mocked native Browser opened and dismissed the page
+menu and ended on `Layout visible=true`, so the HTML slot was not left hidden; the loading
+status was inspected separately. The focused Playwright fixture now asserts one-row geometry,
+compact action access, immediate version loading and final visible Layout after close,
+but Playwright is unavailable in this workspace, so it was not executed here. Windows x64
+/ Office x64 / WebView2 native airspace and 125% visual acceptance remain open. Rollback
+is the scoped Web CSS/JS diff.
+
 ## Legacy migration progress in the shared StatusBar — In Review, 2026-11-18
 
 Scope: existing Diagnostics legacy controls, one Shell StatusBar operation slot and

@@ -1,5 +1,24 @@
 # Universal Browser: статус
 
+## Single-row header and overlay restore — In Review, 2026-11-18
+
+Browser no longer creates a second provider row at compact width. The location shrinks
+to a 64 px floor while modes, versions and the one page menu remain in the header;
+annotate/discussion move into that menu at 600 px and search at 480 px. The version menu
+opens immediately with a loading row instead of waiting for `getBrowserVersionState`.
+The content slot likewise keeps «Открытие страницы…» visible until `Ready` instead of a
+blank area while WebView2 builds and navigates the exact page.
+
+The native viewport now hides only for overlays intersecting its exact bounds. ActionMenu
+publishes one shared open/close event and Browser forces a final `Layout` after close;
+mutation tracking is restricted to real overlay nodes. Chromium reviewed a synthetic
+420 px Browser surface (one 52 px header, no second row), and a runtime-mocked native page
+ended on `Layout visible=true` after the page menu closed. Syntax checks pass. The focused
+`prompt-review` suite passes 13/13, including the ActionMenu-dependent settings flow. The
+focused Playwright assertions were updated but could not run because Playwright is not installed
+locally. Windows/WebView2 native airspace, menu-close rendering and 125% visual acceptance
+remain open.
+
 ## Repeated reset ownership — 2026-11-16
 
 `17.3.3-dev` fixes a tab-generation ownership race. `live` source delivery and saved

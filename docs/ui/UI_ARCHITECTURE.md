@@ -1,5 +1,27 @@
 # Архитектура UI RNAssistant
 
+## Browser one-line header and overlay stability — In Review, 2026-11-18
+
+`MaterialSurface` and the Shell topbar remain single-row flex layouts at every width.
+Browser address/navigation stay in the same header row as modes, versions and the one
+page-action overflow; the address keeps a 64 px minimum and truncates identity instead
+of growing the header. At compact Browser widths annotation/discussion are folded into
+that existing overflow, and search is folded only when its own affordance still remains
+available there. `app-artifact-versions` opens its menu immediately with a bounded
+loading row while the exact state refreshes; it no longer waits for bridge I/O before
+showing any feedback.
+While the first exact page is still starting, the Browser content slot exposes the shared
+`status` surface instead of a blank HTML area; it disappears on the accepted `Ready`
+snapshot. This is presentation feedback only and does not claim that the native renderer
+has loaded.
+
+Native visibility is driven by the existing exact Browser bounds. `ActionMenu` publishes
+one overlay-change event, and `app-browser` requests a final forced `Layout` after close;
+the MutationObserver is restricted to actual dialogs, menus, completions and annotation
+editors that intersect this Browser viewport. Opening an unrelated menu no longer hides
+the page, and the last accepted placement restores the visible native viewport. No new
+registry, store or navigation authority is introduced.
+
 ## Markdown document structure and MaterialSurface — In Review, 2026-11-17
 
 Saved Markdown presentation stays in `app-text-viewer.js` / `ViewerRegistry`.

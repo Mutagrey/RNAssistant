@@ -1,5 +1,21 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Browser header geometry — In Review, 2026-11-18
+
+`workspace-topbar`, `material-surface-header` and the Browser preview toolbar use
+`flex-wrap: nowrap`; responsive behavior only removes optional controls from the row.
+The Browser location is the flex item that contracts, with a 64 px floor and ellipsis,
+so modes, the version trigger and the single `…` stay reachable. At 600 px and below the
+annotation and discussion buttons move into that same page menu; at 480 px search does
+too when the Browser exposes its existing page-find command there. No provider-specific
+row, popup or duplicate menu is introduced.
+
+The version menu may show one shared loading row before exact state arrives. ActionMenu
+emits the common overlay-change signal on open/close, allowing native Browser placement
+to hide only for intersecting overlays and force one final visible layout afterwards.
+The Browser content slot uses the common typography/color tokens for its temporary
+`Starting` status; once `Ready` arrives the native viewport replaces that status.
+
 ## MaterialSurface shell — In Review, 2026-11-17
 
 `app-material-surface.js` is one presentation component for Material and Browser

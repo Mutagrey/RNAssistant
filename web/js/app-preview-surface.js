@@ -5,6 +5,7 @@
   function attach(root, options) {
     var bar = document.createElement("div"); bar.className = "preview-surface-bar"; bar.hidden = true;
     var toolbar = document.createElement("div"); toolbar.className = "preview-surface-toolbar";
+    if (options.singleOverflow) toolbar.classList.add("is-single-overflow");
     toolbar.setAttribute("role", "group"); toolbar.setAttribute("aria-label", "Браузер");
     var navigation = document.createElement("div"); navigation.className = "preview-surface-navigation";
     var location = document.createElement("div"); location.className = "rna-form-control compact preview-surface-location";
@@ -60,7 +61,7 @@
     var reload = options.reloadButton || iconButton("refresh", options.reloadLabel || "Обновить предпросмотр");
     reload.classList.add("compact"); reload.title = options.reloadLabel || "Обновить предпросмотр"; reload.setAttribute("aria-label", reload.title);
     if (!options.reloadButton) reload.onclick = function () { invoke(options.reload); };
-    var annotate = iconButton("selection", "Аннотировать"); annotate.disabled = true;
+    var annotate = iconButton("selection", "Аннотировать"); annotate.disabled = true; annotate.classList.add("preview-surface-annotation");
     annotate.title = options.annotationUnavailable || "Выбор элементов недоступен для этого просмотра";
     var home = iconButton("home", "Главная"), stop = iconButton("stop", "Остановить загрузку");
     home.hidden = stop.hidden = true;
@@ -131,6 +132,7 @@
     var discuss = null;
     if (options.discuss) {
       discuss = iconButton("chat", "Обсудить в чате рядом");
+      discuss.classList.add("preview-surface-discuss");
       discuss.onclick = function () { invoke(options.discuss); }; actions.appendChild(discuss);
     }
     var modes = null, modeButtons = {};
@@ -190,9 +192,10 @@
     }
     function closeMenus() { RNAssistantActionMenu.closeWithin(bar); RNAssistantActionMenu.closeWithin(actions); }
     return { actions: actions, discussButton: discuss, refresh: refresh, status: setStatus,
+      annotationButton: function () { return annotate; },
       canHome: function () { return !!(presentation && presentation.home); },
       goHome: function () { if (presentation && presentation.home) return presentation.home(); },
-      setAnnotation: function (button) { annotate.replaceWith(button); annotate = button; button.classList.add("icon-btn", "compact"); },
+      setAnnotation: function (button) { annotate.replaceWith(button); annotate = button; button.classList.add("icon-btn", "compact", "preview-surface-annotation"); },
       updateLabel: function (value) { currentLabel = Object.assign({}, currentLabel, value); if (typeof options.onLabel === "function") options.onLabel(currentLabel); updateAddress(); updateInfo(); },
       bar: bar, toolbar: toolbar, statusElement: status,
       collapse: function () { expand(false); closeMenus(); },
