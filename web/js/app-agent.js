@@ -575,13 +575,13 @@ function renderAgentRunArticle(run, presentation) {
     section.agentReconcileKey = step.id;
     section.agentReconcileSignature = JSON.stringify([step.message, step.reason, step.items, step.ambient, step.marker,
       stepIndex === updates.length - 1, !!run.hasLiveDraft, !!run.live,
-      runViewState && runViewState.lifecycle]);
+      !!run.suppressAmbient, runViewState && runViewState.lifecycle]);
     var reasoningMessage = step.marker && (step.marker.reasoningMessage || step.marker.message);
     var hasStepReasoning = typeof messageHasReasoning === "function" && messageHasReasoning(reasoningMessage);
     if (hasStepReasoning && typeof appendMessageReasoning === "function") appendMessageReasoning(section, reasoningMessage);
     appendAgentStepMessage(section, step.message, step.marker);
     appendAgentStepReason(section, step);
-    if (expanded) appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
+    if (expanded) appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.suppressAmbient, false,
       !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, hasStepReasoning, presentation);
     if (section.childNodes.length) process.appendChild(section);
   });

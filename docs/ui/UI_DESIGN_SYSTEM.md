@@ -176,6 +176,9 @@ Context meter по уточнению пользователя остаётся 
 не рисуется. Office/Workspace используют один markup; проверены 420 px и 125%.
 Исправление перехода между queued Workspace runs от 2026-11-16 использует те же
 loading/running/terminal состояния. Геометрия, кнопки и tokens не меняются.
+Workspace/plugin live tool activity использует те же activity rows, что Office;
+refresh не дублирует сохранённую строку и не возвращает поздний статус после
+terminal. Новых карточек, значков успеха или source-specific CSS нет.
 
 ## Browser screenshot — In Review, 2026-11-14
 

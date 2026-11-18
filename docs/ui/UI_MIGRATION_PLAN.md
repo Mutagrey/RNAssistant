@@ -1,5 +1,19 @@
 # План модернизации production UI
 
+## Workspace/plugin live activity — In Review, 2026-11-18
+
+Scope: existing `WorkspaceConversationService`, `AssistantWebBridge.Plugins`,
+`ProgressPayload.activity`, Workspace run observer and shared
+`renderAgentRunArticle`. Application projects the same browser-safe `ChatActivity`
+used by both chat sources; the Workspace adapter keeps only an addressed transient
+tail for the exact running RunId. Durable messages remain the authority, snapshot
+refresh deduplicates the same `ToolCallId`, and terminal views reject late activity.
+`workspace-run-observer.test.js` checks one-row updates, no extra read, refresh
+preservation and terminal rejection; Harness builds and the focused plugin-source
+bridge case passes. Chromium/WebView2 wide/narrow/125% and real Workspace tool/model
+visual acceptance remain open. Rollback is this scoped adapter/bridge diff; no durable
+cache, data migration or second store is introduced.
+
 ## Browser single-row header and native visibility — In Review, 2026-11-18
 
 Scope: existing `MaterialSurface`, `PreviewSurface`, Browser version menu and

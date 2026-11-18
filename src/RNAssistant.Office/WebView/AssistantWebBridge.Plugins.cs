@@ -122,15 +122,17 @@ namespace RNAssistant.Office.WebView
         private void ReportWorkspaceProgress(string id, ProjectChatRequest request, WorkspaceRunEvent progress)
         {
             if (_disposed || _postMessageJson == null || progress == null ||
-                progress.ModelProgress == null && progress.Receipt == null && progress.Cursor == null) return;
+                progress.ModelProgress == null && progress.Receipt == null && progress.ProgressActivity == null &&
+                progress.Cursor == null) return;
             _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(new ProgressMessage
             {
                 Type = "progress", Id = id,
                 Payload = new ProgressPayload { WorkspaceId = request.WorkspaceId, SessionId = request.SessionId,
                     Phase = progress.Receipt != null ? "input_receipt" :
-                        progress.ModelProgress != null ? "model_progress" : "session_changed",
+                        progress.ModelProgress != null ? "model_progress" :
+                        progress.ProgressActivity != null ? "activity" : "session_changed",
                     RunId = progress.Receipt?.RunId ?? progress.ModelProgress?.RunId ?? progress.Summary?.RunId,
-                    ModelProgress = progress.ModelProgress, InputReceipt = progress.Receipt,
+                    ModelProgress = progress.ModelProgress, InputReceipt = progress.Receipt, Activity = progress.ProgressActivity,
                     Cursor = progress.Cursor }
             }));
         }

@@ -213,6 +213,9 @@ Office/Workspace/plugin используют одну ленту, live-блок 
 кнопки отсутствуют в tab order. Контекст, Stop/модель/reasoning остаются у composer.
 Подтверждения и вопросы находятся в общем dock над вводом во всех sources.
 Полная ошибка сохранённого run видна один раз в ленте; header ведёт к его Inspector.
+Office/Workspace/plugin показывают live tool activity одной общей строкой;
+Workspace snapshot заменяет её durable сообщением без второго row, а поздняя
+activity завершённого run игнорируется.
 
 Initial failure показывает причину и «Повторить загрузку» вместо пустого чата.
 Refresh failure оставляет историю, draft, раскрытия и позицию чтения; retry

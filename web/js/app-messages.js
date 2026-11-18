@@ -639,7 +639,8 @@ function liveAgentRun(presentation) {
     }
   });
   return { live: true, runId: presentation.data.live.runId, items: items, finalMessage: null,
-    executionQueued: !!presentation.data.live.executionQueued, hasLiveDraft: hasLiveAgentDraft(presentation) };
+    executionQueued: !!presentation.data.live.executionQueued, hasLiveDraft: hasLiveAgentDraft(presentation),
+    suppressAmbient: hasLiveAgentModelOutput(presentation) };
 }
 
 function renderLiveAgentRun(presentation, run) {
@@ -657,6 +658,11 @@ function renderLiveAgentRun(presentation, run) {
 
 function hasLiveAgentOutput(presentation) {
   return !!(presentation.data.live.reasoning || presentation.data.live.showStatus || presentation.data.live.executionQueued || hasLiveAgentDraft(presentation));
+}
+
+function hasLiveAgentModelOutput(presentation) {
+  var live = presentation.data.live;
+  return !!(live.content || live.reasoning || live.retrying || live.showStatus);
 }
 
 function hasLiveAgentDraft(presentation) {
@@ -912,7 +918,8 @@ function buildLiveMessageUnits(presentation, pendingUnits) {
   if (run) {
     appendMessageUnit(units, cache.liveUnitKey,
       JSON.stringify({ stream: "agent", runId: presentation.data.live.runId, value: activities,
-        base: cache.liveBaseSignature, hasOutput: hasLiveAgentOutput(presentation), hasDraft: hasLiveAgentDraft(presentation) }),
+        base: cache.liveBaseSignature, hasOutput: hasLiveAgentOutput(presentation),
+        hasDraft: hasLiveAgentDraft(presentation), suppressAmbient: hasLiveAgentModelOutput(presentation) }),
       function () { return renderLiveAgentRun(presentation, run); }, "", null, function (node) { refreshLiveAgentOutput(node, presentation); });
     units[units.length - 1].transient = true;
     units[units.length - 1].patch = function (node) {

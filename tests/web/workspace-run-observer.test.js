@@ -7,7 +7,7 @@ const context = {
   requestAnimationFrame(fn) { frames.set(++sequence, fn); return sequence; }, cancelAnimationFrame(id) { frames.delete(id); }
 };
 context.window = context; vm.createContext(context);
-for (const name of ["app-run-view-state", "app-conversation-state", "app-conversation-observer", "app-conversation-view", "app-workspace-chat"])
+for (const name of ["app-run-view-state", "app-conversation-state", "app-agent-model", "app-conversation-observer", "app-conversation-view", "app-workspace-chat"])
   vm.runInContext(fs.readFileSync("web/js/" + name + ".js", "utf8"), context, { filename: name + ".js" });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function snapshot(sessionId, runId, status, revision) {
@@ -58,9 +58,30 @@ function setup(initial) {
   assert.equal(current.pending.length, 1, "foreign addresses and unchanged cursors cause no reads");
   assert.equal(current.paints.length, 1, "a previous run's model progress cannot repaint the current run");
   assert.equal(current.snapshot().state.modelProgress.message, "Current answer");
+  const runningTool = { RunId: "queued-run", StepId: "step", Kind: "tool", ToolId: "core.read", ToolCallId: "read-1",
+    Title: "core.read", Subtitle: "README.md", Status: "running", ArgumentsJson: "{\"path\":\"README.md\"}" };
+  current.observer.acceptProgress({ workspaceId: "workspace", sessionId: "chat", runId: "queued-run",
+    phase: "activity", cursor: "cursor-tool", activity: runningTool });
+  assert.equal(current.pending.length, 1, "live activity does not add a full snapshot read");
+  assert.equal(current.paints.length, 2, "live activity paints the existing run");
+  assert.equal(current.snapshot().state.liveActivities[0].Status, "running");
+  assert.equal(context.RNAssistantWorkspaceChat.transcriptData(current.snapshot()).live.activities.length, 1,
+    "Workspace transcript borrows the same live activity timeline");
+  current.observer.acceptProgress({ workspaceId: "workspace", sessionId: "chat", runId: "queued-run", phase: "activity",
+    cursor: "cursor-tool", activity: Object.assign({}, runningTool, { Status: "completed", ResultMessage: "Read complete" }) });
+  assert.equal(current.snapshot().state.liveActivities.length, 1, "one tool call keeps one timeline row");
+  assert.equal(current.snapshot().state.liveActivities[0].Status, "completed");
   current.observer.acceptProgress(notice("chat", "queued-run", "cursor-3")); await tick();
-  current.pending[1].resolve(snapshot("chat", "queued-run", "completed", 3)); await tick();
+  assert.equal(current.pending.length, 2);
+  current.pending[1].resolve(snapshot("chat", "queued-run", "running", 3)); await tick();
+  assert.equal(current.snapshot().state.liveActivities[0].Status, "completed", "snapshot refresh keeps the same-run live tail");
+  current.observer.acceptProgress(notice("chat", "queued-run", "cursor-4")); await tick();
+  current.pending[2].resolve(snapshot("chat", "queued-run", "completed", 4)); await tick();
   assert.equal(timers.size, 0, "terminal refresh stops polling without an idle timer");
+  current.observer.acceptProgress({ workspaceId: "workspace", sessionId: "chat", runId: "queued-run", phase: "activity",
+    cursor: "cursor-late", activity: Object.assign({}, runningTool, { Status: "running" }) });
+  assert.equal(current.paints.length, 3, "activity delivered after terminal cannot repaint the completed run");
+  assert.equal(current.pending.length, 3, "late activity starts no read after terminal");
   current.view.dispose();
 
   const hidden = setup(snapshot("hidden-chat", "finished-run", "completed", 1));

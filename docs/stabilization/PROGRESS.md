@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Workspace/plugin live activity in the shared chat — In Review, 2026-11-18
+
+Implemented host-neutral / In Review, `17.6.4-dev`. Workspace/plugin progress now
+carries the existing browser-safe `ChatActivity` through the current bridge/activity
+field and appends it to the exact running chat's transient timeline. The common run
+renderer paints tool calls while they execute, snapshot refresh preserves the same-run
+tail and deduplicates it by runtime identity, and terminal chats reject late activity.
+No second activity store or source-specific renderer was added.
+
+Checks: `workspace-run-observer.test.js` passes with no extra snapshot read, one-row
+start/completion, refresh preservation and late-terminal rejection; Harness builds with
+the two existing PDF platform warnings, and `plugins: source chat excludes Office`
+passes. Chromium wide/narrow/125%, real Workspace tool/model and Windows/WebView2 visual
+qualification remain open.
+
 ## Browser single-row header and overlay restore — In Review, 2026-11-18
 
 Implemented the user-requested one-row Shell/Browser header. The Browser address now

@@ -48,6 +48,9 @@
         ["completed", "failed", "cancelled"].indexOf(currentStatus) >= 0 &&
         incomingStatus === "running") return current;
     var currentPreview = field(currentState, "modelProgress"), incomingPreview = field(incomingState, "modelProgress");
+    var liveActivities = currentStatus === "running" && incomingStatus === "running" &&
+      field(currentState, "runId") && field(currentState, "runId") === field(incomingState, "runId")
+      ? (field(currentState, "liveActivities") || []).slice() : [];
     if (previousRevision === nextRevision && currentStatus === "running" &&
         incomingStatus === "running" && field(currentState, "runId") === field(incomingState, "runId") &&
         currentPreview && !field(incomingState, "modelProgressUnavailable") &&
@@ -55,6 +58,8 @@
       incomingState.modelProgress = currentPreview;
     var merged = window.RNAssistantConversationState.messageWindow(current, incoming,
       Number.isSafeInteger(previousRevision) && previousRevision === nextRevision, !!(options && options.latestMessages));
+    merged.state = merged.state || {};
+    merged.state.liveActivities = liveActivities;
     RNAssistantConversationState.retainUnsavedAttempt(merged, field(incomingPreview, "runId"),
       field(incomingPreview, "unsavedAttempt"), field(incomingPreview, "stepId"));
     return RNAssistantConversationState.preserveUnsavedAttempts(current, merged);
@@ -102,7 +107,7 @@
         var owner = view.projection(), selected = owner && owner.snapshot();
         if (!view.matches(conversationTarget(selected)) || !target || target.workspaceId !== field(payload, "workspaceId") ||
             target.sessionId !== field(payload, "sessionId")) return;
-        var preview = field(payload, "modelProgress"), state = field(selected, "state");
+        var preview = field(payload, "modelProgress"), activity = field(payload, "activity"), state = field(selected, "state");
         // A chat invalidation may announce the next queued run. Only its canonical
         // snapshot can replace the current run; model progress stays run-scoped.
         if (field(payload, "phase") === "session_changed") {
@@ -113,6 +118,20 @@
         if (field(state, "runId") && field(payload, "runId") &&
             field(state, "runId") !== field(payload, "runId")) return;
         lastPushAt = Date.now();
+        if (activity) {
+          var activityRunId = field(activity, "runId"), payloadRunId = field(payload, "runId");
+          if (activityRunId && payloadRunId && activityRunId !== payloadRunId) return;
+          if (state && activityRunId && field(state, "runId") === activityRunId && runStatus(state) !== "running") return;
+          if (!state || !activityRunId || field(state, "runId") !== activityRunId || runStatus(state) !== "running") {
+            observer.refresh(); return;
+          }
+          var activities = field(state, "liveActivities");
+          if (!Array.isArray(activities)) state.liveActivities = activities = [];
+          if (typeof recordActivityTimeline === "function") recordActivityTimeline(activities, activity);
+          else activities.push(activity);
+          if (progressChanged) progressChanged(selected); else changed(selected);
+          return;
+        }
         if (field(preview, "unsavedAttempt")) {
           RNAssistantConversationState.retainUnsavedAttempt(selected, field(preview, "runId"),
             field(preview, "unsavedAttempt"), field(preview, "stepId"));
@@ -148,7 +167,8 @@
     if (queued || status !== "running" || field(preview, "runId") !== field(snapshot, "runId")) preview = null;
     return { messages: chat.messages || [], start: field(chat, "messageStartIndex") || 0,
       total: field(chat, "messageTotalCount") || (chat.messages || []).length, emptyOptions: emptyOptions,
-      live: Object.assign(RNAssistantConversationState.modelOutput(preview), { activities: [],
+      live: Object.assign(RNAssistantConversationState.modelOutput(preview), {
+        activities: status === "running" ? field(snapshot, "liveActivities") || [] : [],
         runId: status === "running" ? field(snapshot, "runId") || "" : "", executionQueued: queued },
         queued ? { statusText: "Ожидаю свободный слот выполнения…" } : {}) };
   }

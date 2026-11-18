@@ -492,6 +492,14 @@ Office progress phase queued_execution и Workspace typed executionQueued исп
 Нет дополнительных сообщений, stores, LLM calls, CSS или registry. Close/hide не
 отменяет выполнение; restored snapshot без live owner не показывает старую очередь.
 
+Workspace/plugin live activity — In Review, 2026-11-18: Application публикует
+browser-safe `ChatActivityViewProjector` через существующий
+`ProgressPayload.activity`. `app-workspace-chat` добавляет её в transient
+`liveActivities` точного run и передаёт в общий `renderAgentRunArticle`; refresh
+сохраняет хвост только для того же running RunId, а сохранённый snapshot остаётся
+authority и дедуплицирует activity по `ToolCallId`. Событие после terminal не
+перерисовывает чат. Второй activity journal/store не создаётся.
+
 ## Максимум участников — In Review, 2026-11-05
 
 Core `MaxCollaborationAgents` проходит прежний SettingsControlsDto; Web не считает

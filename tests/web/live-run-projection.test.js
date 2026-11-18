@@ -316,6 +316,18 @@ console.log("PASS live projection: silent steps fold below commentary while acti
 
 // Streamed text belongs to the current run, with cheap leaf-only token paints.
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-reasoning.js"), "utf8"), ctx);
+ctx.state.messages = []; ctx.state.messageStartIndex = 0; ctx.state.messageTotalCount = 0;
+ctx.state.chatRuns.chat = { runId: "status-only", activities: [ctx.normalizeProgressActivity({ runId: "status-only", phase: "thinking" })],
+  stream: "", reasoning: "", modelAttemptActive: true,
+  modelProgress: { RunId: "status-only", AttemptId: "attempt", Sequence: 1, Message: "", Reasoning: "" } };
+ctx.publishOfficeChatRun("chat", ctx.state.chatRuns.chat);
+ctx.resetRenderedMessageUnits(box); render();
+const waitingRun = box.firstChild;
+assert.equal(waitingRun.textContent.split("Получаю ответ модели…").length - 1, 1,
+  "model progress owns one visible waiting status");
+assert.doesNotMatch(waitingRun.textContent, /Думаю/,
+  "the superseded ambient notice does not duplicate the model status");
+
 ctx.state.messages = [message(action("s1", "a", "completed", '{}'), 0)];
 ctx.state.chatRuns.chat = { runId: "r", activities: [marker("s1"), action("s1", "a", "completed", '{}'),
   ctx.normalizeProgressActivity({ runId: "r", phase: "thinking" })], streamRetrying: false,

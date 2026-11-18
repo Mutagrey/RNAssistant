@@ -2122,7 +2122,8 @@ namespace RNAssistant.Runtime
                     };
                     _progress(new WorkspaceRunEvent(fact.Kind.ToString(), fact.Summary,
                         fact.ToolContext?.Call.Name ?? record?.Context.Call.Name,
-                        ConversationEventFeed.Cursor(_session), activity: toolActivity));
+                        ConversationEventFeed.Cursor(_session), activity: toolActivity,
+                        progressActivity: ChatActivityViewProjector.From(activity?.Activity)));
                 }
                 return Task.FromResult(_cursor);
             }
@@ -2495,10 +2496,13 @@ namespace RNAssistant.Runtime
         public string Cursor { get; private set; }
         public WorkspaceInputReceipt Receipt { get; private set; }
         public WorkspaceToolActivity Activity { get; private set; }
+        public ChatActivity ProgressActivity { get; private set; }
         public ConversationModelProgress ModelProgress { get; private set; }
         public WorkspaceRunEvent(string kind, RunSummary summary, string toolId, string cursor = null,
-            WorkspaceInputReceipt receipt = null, WorkspaceToolActivity activity = null, ConversationModelProgress modelProgress = null)
-        { Kind = kind; Summary = summary; ToolId = toolId; Cursor = cursor; Receipt = receipt; Activity = activity; ModelProgress = modelProgress; }
+            WorkspaceInputReceipt receipt = null, WorkspaceToolActivity activity = null, ConversationModelProgress modelProgress = null,
+            ChatActivity progressActivity = null)
+        { Kind = kind; Summary = summary; ToolId = toolId; Cursor = cursor; Receipt = receipt; Activity = activity;
+          ProgressActivity = progressActivity; ModelProgress = modelProgress; }
     }
 
     public sealed class WorkspaceRunResult
